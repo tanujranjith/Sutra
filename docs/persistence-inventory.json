@@ -27,6 +27,8 @@
     "focusTemplates",
     "splitPaneContexts",
     "pinnedPages",
+    "notificationsState",
+    "assistantChatHistory",
     "settings",
     "ui",
     "globalTheme",

@@ -33,6 +33,36 @@ loads from static hosting or directly from a local file.
   Because `app.js` runs at global scope, top-level names share one namespace —
   worth keeping in mind when reading or extending it.
 
+### Core safety layer (loaded before everything else)
+
+These small, dependency-free classic scripts load right after `safe-storage.js`
+in `Sutra.html`, before any feature module or `app.js`, so their globals exist
+at first render and can capture boot-time failures. They are also the first
+incremental **extraction** of cross-cutting utilities out of `app.js`:
+
+- **`src/core/safe-storage.js`** — `window.SutraSafeStorage`: defensive wrapper
+  around `localStorage`/`sessionStorage` (quota/security/serialize handling,
+  durable degraded banner). The approved channel for non-canonical storage.
+- **`src/core/error-reporter.js`** — `window.reportError(error, context,
+  severity)` plus global `error` / `unhandledrejection` nets and an exportable,
+  in-memory diagnostics ring buffer (`window.SutraDiagnostics`). One funnel for
+  "something went wrong" instead of bare `catch (e) {}`. Never blocks the user;
+  toasts only when a `userMessage` is supplied.
+- **`src/core/dom-safety.js`** — `window.SutraDOMSafety`: the central
+  render/sanitize layer. `setText` (plain text), `setTrustedHTML` (audited,
+  developer-only static markup), `sanitizeUserHTML` / `setUserHTML` (allowlist
+  sanitizer for user/imported content), `isSafeUrl`, and `renderUserHTMLToFrame`
+  (sandboxed-iframe isolation for canvas / htmlEmbed-style blocks). User-authored
+  HTML is **never** injected raw — it is sanitized or sandboxed.
+- **`src/core/feature-guard.js`** — `window.SutraFeatureGuard.run(name, fn)`:
+  feature-level runtime isolation. A broken feature is reported and shown a small
+  degraded badge; the rest of the app still boots. The `DOMContentLoaded` boot
+  sequence in `app.js` runs each step through this guard.
+
+New unsafe patterns (raw `innerHTML =`, direct `localStorage.setItem`,
+unregistered `window.*`, un-inventoried workspace fields) are blocked in CI by
+`scripts/sutra-guardrails-check.mjs` — see [section 9](#9-test-scripts).
+
 ---
 
 ## 3. Feature modules
@@ -182,9 +212,21 @@ Run with Node from the project root:
 - `npm run check:persistence` - centralized persistence-health guard.
 - `npm run check:modal` - modal accessibility primitive guard.
 - `npm run check:network` - approved-origin and startup-network guard.
+- `npm run check:guardrails` - architecture guardrails: fails CI when a change
+  adds a new raw `innerHTML =` / `insertAdjacentHTML` / `document.write`, a new
+  direct `localStorage.setItem` / `sessionStorage.setItem`, an unregistered
+  `window.*` global, or a top-level workspace field missing from
+  `docs/persistence-inventory.json`. Baseline lives in
+  `scripts/guardrail-baseline.json`; reviewed exceptions use an inline
+  `// sutra-allow-html:` / `// sutra-allow-storage:` marker, or
+  `npm run check:guardrails:update` to deliberately re-baseline.
+  `npm run check:guardrails:selftest` proves the detectors fire on hostile
+  fixtures (`scripts/sutra-guardrails.selftest.mjs`).
 - `npm run test:e2e` - Chromium, Firefox, and WebKit Playwright matrix for
-  persistence, CSP, modal keyboard, reduced-motion, offline-startup, and
-  encrypted backup/export and mocked Drive sync regressions.
+  persistence, CSP, modal keyboard, reduced-motion, offline-startup,
+  encrypted backup/export and mocked Drive sync regressions, the central
+  DOM-safety sanitizer against hostile payloads (`dom-safety.spec.mjs`), and
+  feature-isolation / error-reporting (`error-isolation.spec.mjs`).
 
 - `node scripts/smoke-check.mjs` — core invariants.
 - `node scripts/round-trip-check.mjs` — save/export/import field parity, secret

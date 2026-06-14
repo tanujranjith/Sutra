@@ -8542,7 +8542,7 @@ function populateProgressDashboard() {
                 theme: (typeof globalTheme !== 'undefined' ? globalTheme : 'default')
             };
             pages.push(newPage);
-            try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+            try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
             try { renderPagesList && renderPagesList(); } catch (err) {}
             try { setActiveView('notes'); loadPage && loadPage(newPage.id); } catch (err) {}
             return newPage;
@@ -53613,29 +53613,43 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
+            // Feature-level runtime isolation: every boot step runs through the
+            // guard so one broken feature degrades (reported + badge) instead of
+            // white-screening the whole app. Falls back to a local reporter if
+            // feature-guard.js somehow failed to load. `badge:false` keeps
+            // background/plumbing steps silent in the UI but still diagnosable.
+            const guard = (window.SutraFeatureGuard && window.SutraFeatureGuard.run)
+                ? window.SutraFeatureGuard.run
+                : (name, fn) => {
+                    try { return fn(); }
+                    catch (e) { try { window.reportError && window.reportError(e, { feature: name, where: 'boot' }, 'error'); } catch (_) {} }
+                };
+
+            // Canonical workspace load keeps its own failure pipeline (the core
+            // IndexedDB save-failure UI), so it is intentionally not guarded here.
             await initAppData();
-            hydrateStateFromAppData();
-            bindSutraPersistenceHealthUi();
-            try { initSutraBackupFolder(); } catch (e) { /* folder restore must never block startup */ }
-            try { SutraModalManager.init(); } catch (e) { console.warn('Sutra modal manager failed to initialize', e); }
-            try { restoreFocusSessionIfActive(); } catch (e) { /* non-critical */ }
-            try { initFocusSessionKeyboard(); } catch (e) { /* non-critical */ }
-            initApp();
-            initWorkspaceUI();
-            initTimeline();
+            guard('workspace-state', hydrateStateFromAppData, { label: 'Workspace data', severity: 'critical' });
+            guard('persistence-health-ui', bindSutraPersistenceHealthUi, { label: 'Save health', badge: false });
+            guard('backup-folder', initSutraBackupFolder, { label: 'Backup folder', badge: false }); // folder restore must never block startup
+            guard('modal-manager', () => SutraModalManager.init(), { label: 'Dialogs' });
+            guard('focus-restore', restoreFocusSessionIfActive, { label: 'Focus session', badge: false });
+            guard('focus-keyboard', initFocusSessionKeyboard, { label: 'Focus shortcuts', badge: false });
+            guard('core-ui', initApp, { label: 'Workspace', severity: 'critical' });
+            guard('workspace-routing', initWorkspaceUI, { label: 'Navigation' });
+            guard('timeline', initTimeline, { label: 'Timeline' });
             if (typeof window.hydrateApStudyWorkspaceState === 'function') {
-                window.hydrateApStudyWorkspaceState();
+                guard('ap-study', window.hydrateApStudyWorkspaceState, { label: 'AP Study' });
             }
-            autoCreateTimelineBlocksFromEvents({ silent: true });
-            renderTaskViews();
-            try { populateProgressDashboard(); } catch (e) { console.warn('populateProgressDashboard failed after init', e); }
+            guard('timeline-sync', () => autoCreateTimelineBlocksFromEvents({ silent: true }), { label: 'Timeline sync', badge: false });
+            guard('tasks', renderTaskViews, { label: 'Tasks' });
+            guard('progress-dashboard', populateProgressDashboard, { label: 'Progress dashboard', badge: false });
             // Unified onboarding runs first. The tutorial only auto-fires
             // when the user opted in from the final onboarding step (which
             // the controller launches itself, bypassing maybeStart…).
-            try { syncOnboardingStatusUi(); } catch (e) { /* non-critical */ }
-            maybeStartInteractiveTutorial();
+            guard('onboarding-status', syncOnboardingStatusUi, { label: 'Onboarding', badge: false });
+            guard('tutorial', maybeStartInteractiveTutorial, { label: 'Tutorial', badge: false });
             // Inspirational quote rotation (Sections 25 + user request)
-            if (typeof rotateAtelierQuote === 'function') rotateAtelierQuote();
+            if (typeof rotateAtelierQuote === 'function') guard('daily-quote', rotateAtelierQuote, { label: 'Daily quote', badge: false });
         });
 
         window.addEventListener('beforeunload', () => {
@@ -60865,7 +60879,7 @@ function submitQuickCapture() {
                         updatedAt: now,
                         theme: (typeof globalTheme !== 'undefined' ? globalTheme : 'default')
                     });
-                    try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+                    try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
                     try { renderPagesList && renderPagesList(); } catch (err) {}
                     if (typeof showToast === 'function') showToast('Note captured.');
                 }
@@ -60881,7 +60895,7 @@ function submitQuickCapture() {
                         name: title,
                         category: 'general'
                     });
-                    try { saveTimeBlocks && saveTimeBlocks(); } catch (err) {}
+                    try { saveTimeBlocks && saveTimeBlocks(); } catch (err) { window.reportError && window.reportError(err, 'persist:saveTimeBlocks', 'warning'); }
                     try { if (activeView === 'timeline' && typeof renderTimeline === 'function') renderTimeline(); } catch (err) {}
                     if (typeof showToast === 'function') showToast('Block scheduled.');
                 }
@@ -60927,7 +60941,7 @@ function submitQuickCapture() {
                         if (typeof window.syncApStudySessionsIntoTaskStore === 'function') {
                             try { window.syncApStudySessionsIntoTaskStore({ persist: true }); } catch (err) {}
                         } else if (typeof persistAppData === 'function') {
-                            try { persistAppData(); } catch (err) {}
+                            try { persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
                         }
                         if (typeof window.renderApStudyWorkspace === 'function') {
                             try { window.renderApStudyWorkspace(); } catch (err) {}
@@ -60949,7 +60963,7 @@ function submitQuickCapture() {
                         category: 'AP Study',
                         createdAt: new Date().toISOString()
                     });
-                    try { persistAppData && persistAppData(); } catch (err) {}
+                    try { persistAppData && persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
                     try { renderTaskViews && renderTaskViews(); } catch (err) {}
                     if (typeof showToast === 'function') showToast('Add an AP subject to enable native AP sessions. Captured as task.');
                 }
@@ -60975,7 +60989,7 @@ function submitQuickCapture() {
                             wordLimit: '',
                             notes: 'Captured via Quick Capture.'
                         });
-                        try { persistAppData && persistAppData(); } catch (err) {}
+                        try { persistAppData && persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
                         try { if (typeof renderCollegeApp === 'function') renderCollegeApp(); } catch (err) {}
                         routed = true;
                         if (typeof showToast === 'function') showToast('Essay added to College Plan.');
@@ -60994,7 +61008,7 @@ function submitQuickCapture() {
                         category: 'College',
                         createdAt: new Date().toISOString()
                     });
-                    try { persistAppData && persistAppData(); } catch (err) {}
+                    try { persistAppData && persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
                     try { renderTaskViews && renderTaskViews(); } catch (err) {}
                     if (typeof showToast === 'function') showToast('College task captured. (Tip: include “essay” to route into College essays.)');
                 }
@@ -61015,7 +61029,7 @@ function submitQuickCapture() {
                         category: 'General',
                         createdAt: new Date().toISOString()
                     });
-                    try { persistAppData && persistAppData(); } catch (err) {}
+                    try { persistAppData && persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
                     try { renderTaskViews && renderTaskViews(); } catch (err) {}
                     if (typeof showToast === 'function') showToast('Task captured.');
                 }
@@ -61256,7 +61270,7 @@ function getCommandPaletteCommands() {
         { id: 'add-ap-subject', label: 'Add AP subject', hint: 'AP Study add subject', hidden: modeHides('apstudy'), run: () => { try { setActiveView('apstudy'); if (typeof window.openApStudyAddSubject === 'function') window.openApStudyAddSubject(); } catch (err) {} } },
         { id: 'start-focus', label: 'Start focus timer', hint: 'Focus timer', run: () => { try { startTimer && startTimer(); } catch (err) {} } },
         { id: 'toggle-theme-panel', label: 'Toggle theme panel', hint: 'Theme switcher', run: () => { try { toggleThemePanel && toggleThemePanel(); } catch (err) {} } },
-        { id: 'export-atelier', label: 'Export encrypted .sutra backup', hint: 'Full workspace backup', run: async () => { closeCommandPalette(); try { if (exportWorkspaceAsAtelierPackage) await exportWorkspaceAsAtelierPackage(); } catch (err) {} } },
+        { id: 'export-atelier', label: 'Export encrypted .sutra backup', hint: 'Full workspace backup', run: async () => { closeCommandPalette(); try { if (exportWorkspaceAsAtelierPackage) await exportWorkspaceAsAtelierPackage(); } catch (err) { window.reportError && window.reportError(err, { where: 'command:export-atelier', userMessage: 'Backup export failed — please try again.' }, 'error'); } } },
         { id: 'create-weekly-review', label: 'Create Weekly Review note', hint: 'Summarize your week', run: () => { closeCommandPalette(); createWeeklyReviewNote(); } },
         { id: 'rerun-onboarding', label: 'Restart Sutra Setup', hint: 'Re-open onboarding wizard', run: () => { closeCommandPalette(); try { markStudentOnboardingCompleted(false); showStudentOnboarding(); } catch (err) {} } },
         // Sutra Assistant commands — contextual workspace assistant. Each command
@@ -61545,7 +61559,7 @@ function createWeeklyReviewNote() {
                 theme: (typeof globalTheme !== 'undefined' ? globalTheme : 'default')
             };
             pages.push(page);
-            try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+            try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
             try { renderPagesList && renderPagesList(); } catch (err) {}
             try { setActiveView('notes'); loadPage && loadPage(page.id); } catch (err) {}
             if (typeof showToast === 'function') showToast('Weekly Review note created.');
@@ -62218,7 +62232,7 @@ function linkCurrentNoteToClass(pageId, courseId) {
     if (!page) return false;
     page.classLinkId = courseId ? String(courseId) : '';
     page.updatedAt = new Date().toISOString();
-    try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+    try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
     try { renderPagesList && renderPagesList(); } catch (err) {}
     return true;
 }
@@ -62246,7 +62260,7 @@ function createNoteLinkedToClass(courseId, titleSeed) {
         classLinkId: String(courseId || '')
     };
     pages.push(newPage);
-    try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+    try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
     try { renderPagesList && renderPagesList(); } catch (err) {}
     try { setActiveView('notes'); loadPage && loadPage(newPage.id); } catch (err) {}
     return newPage;
@@ -62285,7 +62299,7 @@ function createApStudySessionFromBattlePlan(plan) {
         if (typeof window.syncApStudySessionsIntoTaskStore === 'function') {
             try { window.syncApStudySessionsIntoTaskStore({ persist: true }); } catch (err) {}
         } else if (typeof persistAppData === 'function') {
-            try { persistAppData(); } catch (err) {}
+            try { persistAppData(); } catch (err) { window.reportError && window.reportError(err, 'persist:persistAppData', 'warning'); }
         }
         if (typeof window.renderApStudyWorkspace === 'function') {
             try { window.renderApStudyWorkspace(); } catch (err) {}
@@ -62315,7 +62329,7 @@ function createApUnitNoteFromBattlePlan(plan) {
         apUnitId: (plan.weakUnits && plan.weakUnits[0] && plan.weakUnits[0].id) || ''
     };
     pages.push(page);
-    try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+    try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
     try { renderPagesList && renderPagesList(); } catch (err) {}
     try { setActiveView('notes'); loadPage && loadPage(page.id); } catch (err) {}
     return page;
@@ -62400,7 +62414,7 @@ function applyNotesSplitPreset(presetId) {
             return false;
     }
 
-    try { savePagesToLocal && savePagesToLocal(); } catch (err) {}
+    try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
     try { renderPagesList && renderPagesList(); } catch (err) {}
 
     try {

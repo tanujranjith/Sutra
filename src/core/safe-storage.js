@@ -209,7 +209,7 @@
       return { ok: false, classification: 'unavailable' };
     }
     try {
-      window.localStorage.setItem(key, str);
+      window.localStorage.setItem(key, str); // sutra-allow-storage: this IS the SutraSafeStorage wrapper
       clearDegraded(key);
       return { ok: true };
     } catch (e) {
@@ -249,7 +249,7 @@
     }
     if (!storageAvailable('session')) return { ok: false, classification: 'unavailable' };
     try {
-      window.sessionStorage.setItem(key, str);
+      window.sessionStorage.setItem(key, str); // sutra-allow-storage: this IS the SutraSafeStorage wrapper
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e, classification: classify(e) };
