@@ -167,13 +167,13 @@
 
   function initStartupIntro() {
     /* Skip if already played during this browser session */
-    if (sessionStorage.getItem(SESSION_KEY)) return;
+    if (window.SutraSafeStorage && window.SutraSafeStorage.sessionGet(SESSION_KEY)) return;
 
     var overlay = document.getElementById('sutraStartupIntro');
     if (!overlay) return;
 
     /* Mark immediately — prevents race-condition double-play on rapid reload */
-    sessionStorage.setItem(SESSION_KEY, '1');
+    if (window.SutraSafeStorage) window.SutraSafeStorage.session(SESSION_KEY, '1');
 
     var reduced    = isMotionReduced();
     var totalMs    = reduced ? REDUCED_MS : TOTAL_MS;
@@ -211,13 +211,29 @@
       setTimeout(function () {
         overlay.style.display = 'none';
         overlay.setAttribute('aria-hidden', 'true');
-        var target = document.querySelector(
-          '#sidebarToggle, ' +
-          '.app-container [tabindex="0"], ' +
-          '.app-container button:not([disabled]):not([aria-hidden="true"])'
-        );
-        if (target) {
-          try { target.focus({ preventScroll: true }); } catch (_) {}
+        // Move focus into the app once the intro clears — but ONLY if focus is
+        // currently lost (on body / the hidden overlay) and no modal is open.
+        // The intro auto-dismisses on a timer, so by the time this fires the user
+        // may already have opened the command palette, quick capture, or focused
+        // something; stealing focus to the sidebar toggle there is a real bug.
+        var active = document.activeElement;
+        var focusLost = !active || active === document.body ||
+                        active === document.documentElement || overlay.contains(active);
+        var modalOpen = false;
+        try {
+          modalOpen = !!(window.SutraModalManager &&
+                         typeof window.SutraModalManager.getActiveCount === 'function' &&
+                         window.SutraModalManager.getActiveCount() > 0);
+        } catch (_) { modalOpen = false; }
+        if (focusLost && !modalOpen) {
+          var target = document.querySelector(
+            '#sidebarToggle, ' +
+            '.app-container [tabindex="0"], ' +
+            '.app-container button:not([disabled]):not([aria-hidden="true"])'
+          );
+          if (target) {
+            try { target.focus({ preventScroll: true }); } catch (_) {}
+          }
         }
       }, dur + 30);
     }
@@ -259,7 +275,7 @@
    */
   window.SutraStartupIntro = {
     replay: function () {
-      sessionStorage.removeItem(SESSION_KEY);
+      if (window.SutraSafeStorage) window.SutraSafeStorage.sessionRemove(SESSION_KEY);
       var overlay = document.getElementById('sutraStartupIntro');
       if (!overlay) { console.warn('[SutraStartupIntro] overlay element not found'); return; }
       overlay.style.cssText = '';

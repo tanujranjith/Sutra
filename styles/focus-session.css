@@ -1,0 +1,540 @@
+        /* ==========================================================================
+           FOCUS SESSION OVERLAY
+           ========================================================================== */
+
+        .focus-session-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            /* Use visibility so the element is paint-ready before opacity animates */
+            visibility: hidden;
+            transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.38s;
+        }
+        .focus-session-overlay.fs-visible {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+            transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0s;
+        }
+
+        /* --- Ambient Backgrounds --- */
+        .fs-ambient-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            transition: background 1s ease;
+        }
+        .fs-ambient-bg[data-ambient="gradient"] {
+            background: linear-gradient(145deg, #080810 0%, #0e0e1a 45%, #0a0a12 100%);
+        }
+        .fs-ambient-bg[data-ambient="fireplace"] {
+            background: linear-gradient(170deg, #0c0503 0%, #1c0a06 35%, #2b0f08 65%, #130605 100%);
+        }
+        .fs-ambient-bg[data-ambient="fireplace"]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 70% 45% at 50% 100%, rgba(210, 70, 10, 0.16) 0%, transparent 70%),
+                radial-gradient(ellipse 35% 25% at 38% 85%, rgba(180, 40, 5, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse 25% 18% at 62% 80%, rgba(230, 90, 15, 0.08) 0%, transparent 55%);
+            animation: fs-fire-glow 5s ease-in-out infinite;
+        }
+        .fs-ambient-bg[data-ambient="nightsky"] {
+            background: radial-gradient(ellipse at 25% 15%, #0e1628 0%, #060c18 55%, #020610 100%);
+        }
+        .fs-ambient-bg[data-ambient="nightsky"]::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle 1.5px at 15% 18%, rgba(255,255,255,0.55) 0%, transparent 100%),
+                radial-gradient(circle 1px at 78% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                radial-gradient(circle 2px at 55% 8%, rgba(255,255,255,0.35) 0%, transparent 100%),
+                radial-gradient(circle 1px at 8% 55%, rgba(255,255,255,0.45) 0%, transparent 100%),
+                radial-gradient(circle 1.5px at 92% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                radial-gradient(circle 1px at 42% 65%, rgba(255,255,255,0.25) 0%, transparent 100%),
+                radial-gradient(circle 1px at 68% 50%, rgba(255,255,255,0.3) 0%, transparent 100%),
+                radial-gradient(circle 1px at 30% 80%, rgba(255,255,255,0.2) 0%, transparent 100%),
+                radial-gradient(ellipse 50% 20% at 50% 5%, rgba(80, 110, 200, 0.07) 0%, transparent 100%);
+        }
+        .fs-ambient-bg[data-ambient="nightsky"]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 40% 30% at 50% 0%, rgba(60, 90, 180, 0.12) 0%, transparent 70%);
+            animation: fs-ambient-breathe 12s ease-in-out infinite;
+        }
+        .fs-ambient-bg[data-ambient="rain"] {
+            background: linear-gradient(175deg, #060810 0%, #090c18 40%, #070a14 100%);
+        }
+        .fs-ambient-bg[data-ambient="rain"]::before {
+            content: '';
+            position: absolute;
+            inset: -100px 0 0;
+            background-image: repeating-linear-gradient(
+                97deg,
+                transparent 0px, transparent 6px,
+                rgba(140, 175, 220, 0.028) 6px, rgba(140, 175, 220, 0.028) 7px
+            );
+            animation: fs-rain-fall 2.8s linear infinite;
+            will-change: background-position;
+        }
+        .fs-ambient-bg[data-ambient="rain"]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 55% 30% at 50% 100%, rgba(60, 100, 190, 0.09) 0%, transparent 80%),
+                radial-gradient(ellipse 100% 15% at 50% 0%, rgba(40, 70, 140, 0.06) 0%, transparent 100%);
+        }
+        .fs-ambient-bg[data-ambient="library"] {
+            background: linear-gradient(155deg, #0c0b09 0%, #15120e 40%, #0e0c0a 100%);
+        }
+        .fs-ambient-bg[data-ambient="library"]::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 90% 55% at 50% 110%, rgba(170, 125, 40, 0.07) 0%, transparent 75%),
+                radial-gradient(ellipse 40% 22% at 50% 100%, rgba(200, 155, 55, 0.1) 0%, transparent 65%);
+            animation: fs-ambient-breathe 9s ease-in-out infinite;
+        }
+
+        /* Dark blur layer for text readability */
+        .fs-blur-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.38);
+        }
+
+        /* Main content layer */
+        .fs-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 700px;
+            padding: 32px 28px 28px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            min-height: 100vh;
+            justify-content: center;
+        }
+
+        /* Top control bar */
+        .fs-topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+        }
+        .fs-topbar-left { display: flex; align-items: center; gap: 10px; }
+        .fs-topbar-right { display: flex; gap: 6px; }
+
+        .fs-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.13em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.28);
+            user-select: none;
+        }
+
+        .fs-icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.45);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.76rem;
+            transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .fs-icon-btn:hover {
+            background: rgba(255,255,255,0.11);
+            border-color: rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.88);
+            transform: scale(1.07);
+        }
+        .fs-icon-btn:active { transform: scale(0.94); }
+        .fs-icon-btn-close:hover {
+            background: rgba(240, 70, 70, 0.18);
+            border-color: rgba(240, 70, 70, 0.3);
+            color: rgba(255, 110, 110, 0.9);
+        }
+
+        /* Task info */
+        .fs-task-info {
+            text-align: center;
+            margin-bottom: 18px;
+            max-width: 580px;
+            width: 100%;
+        }
+        .fs-task-title {
+            font-family: 'Manrope', 'Sora', 'Inter', sans-serif;
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            font-weight: 700;
+            color: rgba(255,255,255,0.92);
+            margin: 0 0 7px;
+            line-height: 1.18;
+            letter-spacing: -0.025em;
+        }
+        .fs-task-note {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.38);
+            margin: 0;
+            line-height: 1.45;
+        }
+
+        /* Status pill */
+        .fs-status-pill-wrap { margin-bottom: 22px; }
+        .fs-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 15px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.11);
+            color: rgba(255,255,255,0.45);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: background 0.3s, border-color 0.3s, color 0.3s;
+        }
+        .fs-status-pill::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .fs-status-pill.is-focusing {
+            background: rgba(var(--accent-rgb, 80, 190, 110), 0.12);
+            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.28);
+            color: rgba(var(--accent-rgb, 80, 190, 110), 0.92);
+        }
+        .fs-status-pill.is-focusing::before {
+            background: rgb(var(--accent-rgb, 80, 190, 110));
+            animation: fs-pulse-dot 1.9s ease-in-out infinite;
+        }
+        .fs-status-pill.is-done {
+            background: rgba(80, 190, 110, 0.12);
+            border-color: rgba(80, 190, 110, 0.3);
+            color: rgba(110, 220, 140, 0.92);
+        }
+
+        /* Countdown timer */
+        .fs-timer-wrap { margin-bottom: 14px; }
+        .fs-timer {
+            font-family: 'Manrope', 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: clamp(5.5rem, 17vw, 10rem);
+            font-weight: 800;
+            color: rgba(255,255,255,0.94);
+            letter-spacing: -0.045em;
+            line-height: 0.9;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 2px 40px rgba(255,255,255,0.06);
+            user-select: none;
+            cursor: default;
+            transition: color 0.3s;
+        }
+        .fs-timer.is-done { color: rgba(110, 220, 140, 0.9); }
+
+        /* Progress row */
+        .fs-progress-row {
+            width: 100%;
+            max-width: 520px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 30px;
+        }
+        .fs-elapsed, .fs-planned {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.28);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            min-width: 36px;
+            transition: color 0.3s;
+        }
+        .fs-planned { text-align: right; }
+        .fs-progress-track {
+            flex: 1;
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .fs-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0.55));
+            border-radius: 999px;
+            transition: width 0.95s linear;
+            will-change: width;
+        }
+
+        /* Play/pause button */
+        .fs-play-wrap { margin-bottom: 28px; }
+        .fs-play-btn {
+            width: 74px;
+            height: 74px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.09);
+            color: rgba(255,255,255,0.92);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.35rem;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            box-shadow: 0 8px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1);
+            transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+        .fs-play-btn:hover {
+            transform: scale(1.1);
+            background: rgba(255,255,255,0.14);
+            border-color: rgba(255,255,255,0.32);
+            box-shadow: 0 12px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14);
+        }
+        .fs-play-btn:active { transform: scale(0.93); }
+        .fs-play-btn.is-playing {
+            background: rgba(var(--accent-rgb, 80, 190, 110), 0.14);
+            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.38);
+        }
+
+        /* Bottom action row */
+        .fs-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .fs-action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.55);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
+        }
+        .fs-action-btn:hover {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.9);
+            transform: translateY(-1px);
+        }
+        .fs-action-btn:active { transform: translateY(0) scale(0.97); }
+        .fs-action-btn-accent {
+            background: rgba(var(--accent-rgb, 80, 190, 110), 0.13);
+            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.3);
+            color: rgba(var(--accent-rgb, 80, 190, 110), 0.9);
+        }
+        .fs-action-btn-accent:hover {
+            background: rgba(var(--accent-rgb, 80, 190, 110), 0.22);
+            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.48);
+            color: rgba(255,255,255,0.95);
+        }
+
+        /* Ambient chip bar */
+        .fs-ambient-bar {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .fs-ambient-chip {
+            padding: 4px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+            color: rgba(255,255,255,0.26);
+            cursor: pointer;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            transition: background 0.18s, border-color 0.18s, color 0.18s;
+        }
+        .fs-ambient-chip:hover {
+            background: rgba(255,255,255,0.09);
+            border-color: rgba(255,255,255,0.14);
+            color: rgba(255,255,255,0.65);
+        }
+        .fs-ambient-chip.active {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.22);
+            color: rgba(255,255,255,0.82);
+        }
+
+        /* Respect hidden attribute over any display rule in this feature */
+        .fs-notes-panel[hidden] { display: none !important; }
+
+        /* Session notes panel */
+        .fs-notes-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: min(380px, 88vw);
+            z-index: 4;
+            background: rgba(10, 10, 16, 0.92);
+            border-left: 1px solid rgba(255,255,255,0.08);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 20px;
+            gap: 14px;
+            animation: fs-panel-slide-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .fs-notes-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: rgba(255,255,255,0.45);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .fs-notes-textarea {
+            flex: 1;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 12px;
+            color: rgba(255,255,255,0.82);
+            font-size: 0.9rem;
+            line-height: 1.65;
+            padding: 14px;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+            transition: border-color 0.18s, background 0.18s;
+        }
+        .fs-notes-textarea:focus {
+            border-color: rgba(255,255,255,0.18);
+            background: rgba(255,255,255,0.06);
+        }
+        .fs-notes-textarea::placeholder { color: rgba(255,255,255,0.18); }
+
+        /* Sidebar timer "Launch" button */
+        .fs-launch-btn {
+            width: 100%;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+            background: var(--accent-soft, rgba(var(--accent-rgb),0.12));
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            transition: background 0.18s, border-color 0.18s, transform 0.15s;
+        }
+        .fs-launch-btn:hover {
+            transform: translateY(-1px);
+            background: var(--accent-soft);
+            border-color: var(--accent);
+        }
+        .fs-launch-btn:active { transform: translateY(0); }
+        .fs-launch-btn i { font-size: 0.74rem; }
+
+        /* Prevent body scroll when session is open */
+        body.fs-active { overflow: hidden; }
+
+        /* ==========================================================================
+           KEYFRAMES
+           ========================================================================== */
+        @keyframes fs-ambient-breathe {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.82; }
+        }
+        @keyframes fs-fire-glow {
+            0%, 100% { opacity: 0.9; }
+            28% { opacity: 0.65; }
+            55% { opacity: 1; }
+            78% { opacity: 0.75; }
+        }
+        @keyframes fs-rain-fall {
+            0% { background-position: 0 0; }
+            100% { background-position: -80px 360px; }
+        }
+        @keyframes fs-pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.45; transform: scale(1.35); }
+        }
+        @keyframes fs-panel-slide-in {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+
+        /* ==========================================================================
+           RESPONSIVE
+           ========================================================================== */
+        @media (max-width: 768px) {
+            .fs-content { padding: 80px 16px 24px; }
+            .fs-timer { font-size: clamp(4.2rem, 20vw, 6.5rem); }
+            .fs-action-btn span { display: none; }
+            .fs-action-btn { padding: 9px 13px; }
+            .fs-actions { gap: 7px; }
+            .fs-notes-panel { width: 100%; border-left: none; border-top: 1px solid rgba(255,255,255,0.08); height: 55vh; top: auto; }
+        }
+        @media (max-width: 480px) {
+            .fs-task-title { font-size: 1.4rem; }
+            .fs-timer { font-size: clamp(3.8rem, 24vw, 5.5rem); }
+            .fs-play-btn { width: 64px; height: 64px; font-size: 1.2rem; }
+            .fs-progress-row { gap: 10px; }
+        }
+
+        /* Respect reduced-motion preference */
+        @media (prefers-reduced-motion: reduce) {
+            .fs-ambient-bg, .fs-ambient-bg::after, .fs-ambient-bg::before,
+            .fs-progress-fill, .fs-play-btn, .fs-icon-btn, .fs-action-btn,
+            .fs-status-pill::before, .fs-notes-panel {
+                animation: none !important;
+                transition: none !important;
+            }
+        }

@@ -110,9 +110,11 @@
             if (typeof SutraSafeStorage !== 'undefined' && SutraSafeStorage.set) {
                 SutraSafeStorage.set(STORAGE_KEY, payload);
             } else {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+                throw new Error('SutraSafeStorage is unavailable.');
             }
-        } catch (e) { /* non-critical */ }
+        } catch (e) {
+            if (typeof global.reportError === 'function') global.reportError(e, { where: 'notifications._saveState' }, 'warning');
+        }
     }
 
     function _pruneOldDismissed() {

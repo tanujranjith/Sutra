@@ -27897,6 +27897,69 @@ em.review-card-row-empty { color: var(--text-muted, var(--review-text-faint)); f
     color: #c53a4a;
     font-size: 0.88rem;
 }
+/* Generate Review Deck (Phase 2 #8): paste panel + banner + duplicate flags */
+.review-generate-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: var(--radius, 18px);
+    background: color-mix(in srgb, var(--accent, #d8c4a1) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent, #d8c4a1) 24%, transparent);
+}
+.review-generate-panel textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 76px;
+    font: inherit;
+}
+.review-generate-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.review-generate-hint { font-size: 0.8rem; color: var(--text-muted, currentColor); }
+.review-generated-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius, 18px);
+    background: color-mix(in srgb, var(--accent, #d8c4a1) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent, #d8c4a1) 28%, transparent);
+    color: var(--text-primary, currentColor);
+    font-size: 0.88rem;
+}
+.review-generated-banner .review-dup-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #b06a2a;
+    font-weight: 600;
+}
+.review-btn-small { padding: 4px 10px; font-size: 0.78rem; }
+.review-dup-badge {
+    position: absolute;
+    top: 6px;
+    left: 14px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, #e0a030 22%, transparent);
+    color: #8a5a14;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.review-create-row.is-duplicate {
+    position: relative;
+    background: color-mix(in srgb, #e0a030 7%, transparent);
+}
+
 .review-create-actions {
     display: flex;
     gap: 10px;
@@ -32268,7 +32331,6 @@ body.onboarding-open .editor-toolbar {
     border: 1px solid var(--surface-border, var(--border));
     border-radius: 10px;
     overflow: hidden;
-    background: var(--surface-bg, var(--bg-secondary));
     color: var(--text-primary);
 }
 
@@ -32315,10 +32377,8 @@ body.onboarding-open .editor-toolbar {
         flex: 1 1 auto;
         min-height: 0;
         height: auto;
-        margin: 6px -40px 0;
-        border-left: none;
-        border-right: none;
-        border-bottom: none;
+        margin: 0 -40px 0;
+        border: none;
         border-radius: 0;
     }
 }
@@ -32340,6 +32400,65 @@ body.canvas-page-active #view-notes .tags-container {
 body.canvas-page-active #view-notes .page-title-input {
     margin: 2px 0 6px;
     font-size: 22px;
+    background: transparent;
+}
+
+/* Full-bleed grid: apply the canvas background pattern to the entire notes
+   pane (including title + toolbar) when a canvas page is open, so the grid
+   is the only visible background with no white box around it. */
+body.canvas-page-active[data-canvas-background="grid"] #view-notes,
+body.canvas-page-active[data-canvas-background="theme"] #view-notes {
+    background-image:
+        linear-gradient(var(--surface-border, rgba(0,0,0,.07)) 1px, transparent 1px),
+        linear-gradient(90deg, var(--surface-border, rgba(0,0,0,.07)) 1px, transparent 1px);
+    background-size: calc(32px * var(--cvp-zoom, 1)) calc(32px * var(--cvp-zoom, 1));
+    background-position: var(--cvp-x, 0px) var(--cvp-y, 0px);
+    background-color: var(--editor-bg, var(--surface-bg));
+}
+
+body.canvas-page-active[data-canvas-background="dots"] #view-notes {
+    background-image: radial-gradient(var(--surface-border-strong, rgba(0,0,0,.14)) 1px, transparent 1px);
+    background-size: calc(22px * var(--cvp-zoom, 1)) calc(22px * var(--cvp-zoom, 1));
+    background-position: var(--cvp-x, 0px) var(--cvp-y, 0px);
+    background-color: var(--editor-bg, var(--surface-bg));
+}
+
+body.canvas-page-active[data-canvas-background="lined"] #view-notes {
+    background-image: linear-gradient(var(--surface-border, rgba(0,0,0,.08)) 1px, transparent 1px);
+    background-size: 100% calc(28px * var(--cvp-zoom, 1));
+    background-position: var(--cvp-x, 0px) var(--cvp-y, 0px);
+    background-color: var(--editor-bg, var(--surface-bg));
+}
+
+body.canvas-page-active[data-canvas-background="graph"] #view-notes,
+body.canvas-page-active[data-canvas-background="dark-grid"] #view-notes {
+    background-image:
+        linear-gradient(var(--surface-border-strong, rgba(0,0,0,.13)) 1px, transparent 1px),
+        linear-gradient(90deg, var(--surface-border-strong, rgba(0,0,0,.13)) 1px, transparent 1px),
+        linear-gradient(var(--surface-border, rgba(0,0,0,.06)) 1px, transparent 1px),
+        linear-gradient(90deg, var(--surface-border, rgba(0,0,0,.06)) 1px, transparent 1px);
+    background-size:
+        calc(120px * var(--cvp-zoom, 1)) calc(120px * var(--cvp-zoom, 1)),
+        calc(120px * var(--cvp-zoom, 1)) calc(120px * var(--cvp-zoom, 1)),
+        calc(24px * var(--cvp-zoom, 1)) calc(24px * var(--cvp-zoom, 1)),
+        calc(24px * var(--cvp-zoom, 1)) calc(24px * var(--cvp-zoom, 1));
+    background-position: var(--cvp-x, 0px) var(--cvp-y, 0px);
+    background-color: var(--editor-bg, var(--surface-bg));
+}
+
+/* Make the inner canvas layers transparent so the grid on #view-notes shows through. */
+/* Make the inner canvas layers transparent so the grid on #view-notes shows through. */
+body.canvas-page-active .canvas-editor,
+body.canvas-page-active .canvas-stage-shell {
+    background: transparent !important;
+    background-image: none !important;
+}
+
+/* Toolbar becomes frosted glass floating above the grid. */
+body.canvas-page-active .canvas-toolbar {
+    background: color-mix(in srgb, var(--surface-bg, #fff) 80%, transparent) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .canvas-toolbar {
@@ -32516,6 +32635,7 @@ body.canvas-page-active #view-notes .page-title-input {
     overflow: hidden;
     touch-action: none;
     background-color: var(--editor-bg, var(--surface-bg));
+    background-position: var(--cvp-x, 0px) var(--cvp-y, 0px);
 }
 
 .canvas-editor[data-canvas-background="grid"] .canvas-stage-shell,
@@ -32523,17 +32643,17 @@ body.canvas-page-active #view-notes .page-title-input {
     background-image:
         linear-gradient(var(--surface-border, rgba(255,255,255,.09)) 1px, transparent 1px),
         linear-gradient(90deg, var(--surface-border, rgba(255,255,255,.09)) 1px, transparent 1px);
-    background-size: 32px 32px;
+    background-size: calc(32px * var(--cvp-zoom, 1)) calc(32px * var(--cvp-zoom, 1));
 }
 
 .canvas-editor[data-canvas-background="dots"] .canvas-stage-shell {
     background-image: radial-gradient(var(--surface-border-strong, rgba(255,255,255,.18)) 1px, transparent 1px);
-    background-size: 22px 22px;
+    background-size: calc(22px * var(--cvp-zoom, 1)) calc(22px * var(--cvp-zoom, 1));
 }
 
 .canvas-editor[data-canvas-background="lined"] .canvas-stage-shell {
     background-image: linear-gradient(var(--surface-border, rgba(255,255,255,.1)) 1px, transparent 1px);
-    background-size: 100% 28px;
+    background-size: 100% calc(28px * var(--cvp-zoom, 1));
 }
 
 .canvas-editor[data-canvas-background="graph"] .canvas-stage-shell,
@@ -32543,7 +32663,11 @@ body.canvas-page-active #view-notes .page-title-input {
         linear-gradient(90deg, var(--surface-border-strong, rgba(255,255,255,.16)) 1px, transparent 1px),
         linear-gradient(var(--surface-border, rgba(255,255,255,.08)) 1px, transparent 1px),
         linear-gradient(90deg, var(--surface-border, rgba(255,255,255,.08)) 1px, transparent 1px);
-    background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+    background-size:
+        calc(120px * var(--cvp-zoom, 1)) calc(120px * var(--cvp-zoom, 1)),
+        calc(120px * var(--cvp-zoom, 1)) calc(120px * var(--cvp-zoom, 1)),
+        calc(24px * var(--cvp-zoom, 1)) calc(24px * var(--cvp-zoom, 1)),
+        calc(24px * var(--cvp-zoom, 1)) calc(24px * var(--cvp-zoom, 1));
 }
 
 .canvas-world {
@@ -32552,6 +32676,7 @@ body.canvas-page-active #view-notes .page-title-input {
     width: 4000px;
     height: 3000px;
     transform-origin: 0 0;
+    will-change: transform;
 }
 
 .canvas-draw-layer {

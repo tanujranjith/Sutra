@@ -13,7 +13,9 @@ import { execFileSync } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'NoteFlow (classic)', 'test-results', 'playwright-report']);
+const SKIP_DIRS = new Set(['node_modules', '.git', '.deploy', '.tmp', 'coverage', 'dist', 'build', 'NoteFlow (classic)', 'test-results', 'playwright-report']);
+const SOURCE_ROOTS = ['src', 'scripts', 'tests'];
+const ROOT_FILES = ['playwright.config.mjs', 'playwright.bench.config.mjs'];
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -27,7 +29,8 @@ function walk(dir, out = []) {
   return out;
 }
 
-const files = walk(repoRoot);
+const files = SOURCE_ROOTS.flatMap((root) => walk(resolve(repoRoot, root)))
+  .concat(ROOT_FILES.map((file) => resolve(repoRoot, file)));
 const failures = [];
 let checked = 0;
 

@@ -451,7 +451,9 @@
                 // One-time migration from the pre-rebrand Flow activity key.
                 const legacy = localStorage.getItem(LEGACY_ACTIVITY_LOG_KEY);
                 if (legacy !== null && legacy !== undefined) {
-                    try { localStorage.setItem(ACTIVITY_LOG_KEY, legacy); } catch (e) { /* ignore */ }
+                    if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
+                        window.SutraSafeStorage.set(ACTIVITY_LOG_KEY, legacy, { importance: 'important', label: 'Assistant Activity' });
+                    }
                     raw = legacy;
                 }
             }
@@ -460,10 +462,14 @@
         } catch (e) { return []; }
     }
     function writeActivityLog(list) {
-        try {
-            const trimmed = arr(list).slice(0, ACTIVITY_LOG_LIMIT);
-            localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(trimmed));
-        } catch (e) { /* ignore */ }
+        const trimmed = arr(list).slice(0, ACTIVITY_LOG_LIMIT);
+        if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
+            window.SutraSafeStorage.set(ACTIVITY_LOG_KEY, trimmed, { importance: 'important', label: 'Assistant Activity' });
+            return;
+        }
+        if (typeof window.reportError === 'function') {
+            window.reportError(new Error('SutraSafeStorage is unavailable.'), { where: 'flow-intelligence.writeActivityLog' }, 'error');
+        }
     }
     // record: { actionType, summary, userPrompt, provider, model, confidence,
     //   createdObjectIds:[{kind,id}], beforeSnapshot, reversible, status, batchId }

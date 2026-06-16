@@ -523,27 +523,9 @@
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         let count = 0;
         lines.forEach(line => {
-            let prompt = '';
-            let answer = '';
-            if (line.includes('\t')) {
-                const parts = line.split('\t');
-                prompt = parts[0]; answer = parts.slice(1).join(' ');
-            } else if (line.includes(' - ')) {
-                const idx = line.indexOf(' - ');
-                prompt = line.slice(0, idx); answer = line.slice(idx + 3);
-            } else if (line.includes(' = ')) {
-                const idx = line.indexOf(' = ');
-                prompt = line.slice(0, idx); answer = line.slice(idx + 3);
-            } else if (line.includes(',')) {
-                const idx = line.indexOf(',');
-                prompt = line.slice(0, idx); answer = line.slice(idx + 1);
-            } else {
-                prompt = line; answer = '';
-            }
-            prompt = prompt.trim();
-            answer = answer.trim();
-            if (!prompt) return;
-            createItem({ deckId, prompt, answer });
+            const card = splitCardLine(line, false);
+            if (!card.prompt) return;
+            createItem({ deckId, prompt: card.prompt, answer: card.answer });
             count += 1;
         });
         return count;
@@ -728,6 +710,152 @@
     }
 
     // ------------------------------------------------------------------
+    // Review-card generation (Phase 2 #8)
+    // Turn pasted material, notes, AP units, or assistant responses into
+    // candidate cards that the student reviews and edits in the existing
+    // create-set table before saving. Pure + deterministic — no AI, no
+    // network. Linked source metadata rides on the card's existing source
+    // fields, so nothing new persists and the .sutra round-trip is unchanged.
+    // ------------------------------------------------------------------
+    function normalizeCardKey(text) {
+        return String(text || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .replace(/[\s'"“”‘’.,;:!?()\[\]\-]+$/g, '')
+            .trim();
+    }
+
+    // Split a single line into a {prompt, answer} pair. Shared by bulk
+    // import (allowColon=false, preserves legacy behavior exactly) and the
+    // generator (allowColon=true, also recognizes "Term: definition").
+    function splitCardLine(line, allowColon) {
+        if (line.includes('\t')) {
+            const parts = line.split('\t');
+            return { prompt: parts[0].trim(), answer: parts.slice(1).join(' ').trim() };
+        }
+        if (line.includes(' - ')) {
+            const idx = line.indexOf(' - ');
+            return { prompt: line.slice(0, idx).trim(), answer: line.slice(idx + 3).trim() };
+        }
+        if (line.includes(' = ')) {
+            const idx = line.indexOf(' = ');
+            return { prompt: line.slice(0, idx).trim(), answer: line.slice(idx + 3).trim() };
+        }
+        if (allowColon) {
+            const m = line.match(/^(.{1,80}?):\s+(.+)$/);
+            if (m) return { prompt: m[1].trim(), answer: m[2].trim() };
+        }
+        if (line.includes(',')) {
+            const idx = line.indexOf(',');
+            return { prompt: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
+        }
+        return { prompt: line.trim(), answer: '' };
+    }
+
+    function generateReviewCandidates(raw, options) {
+        const opts = options || {};
+        const max = Number.isFinite(opts.max) ? opts.max : 200;
+        const out = [];
+        const seen = new Set();
+        String(raw || '').split(/\r?\n/).forEach(rawLine => {
+            if (out.length >= max) return;
+            // Strip common bullet / numbering prefixes ("- ", "* ", "1. ", "2) ").
+            const line = rawLine.trim().replace(/^(?:[-*•]|\d{1,3}[.)])\s+/, '').trim();
+            if (!line) return;
+            const card = splitCardLine(line, true);
+            if (!card.prompt) return;
+            const key = normalizeCardKey(card.prompt);
+            if (!key || seen.has(key)) return; // intra-batch de-dupe
+            seen.add(key);
+            out.push({ prompt: card.prompt, answer: card.answer });
+        });
+        return out;
+    }
+
+    // Flag candidates whose prompt already exists. Scope defaults to every
+    // deck so the warning catches cross-set duplicates; pass deckId to narrow.
+    function markDuplicateCandidates(candidates, options) {
+        const opts = options || {};
+        const existing = new Set();
+        (opts.deckId ? getItems(opts.deckId) : getItems()).forEach(it => {
+            const k = normalizeCardKey(it.prompt);
+            if (k) existing.add(k);
+        });
+        let duplicates = 0;
+        const rows = (Array.isArray(candidates) ? candidates : []).map(c => {
+            const isDup = existing.has(normalizeCardKey(c.prompt));
+            if (isDup) duplicates += 1;
+            return { prompt: c.prompt, answer: c.answer, duplicate: isDup };
+        });
+        return { rows, duplicates };
+    }
+
+    // Open the create-set editor pre-filled with generated rows so the
+    // student can edit, drop duplicates, and confirm before anything saves.
+    // Always builds a NEW-set draft (deckId stays null) to avoid the
+    // edit-mode full-sync that would delete a deck's existing cards.
+    function openReviewGenerator(options) {
+        const opts = options || {};
+        const candidates = generateReviewCandidates(opts.rawText || opts.text || '', { max: opts.max });
+        const marked = markDuplicateCandidates(candidates, { deckId: opts.dedupeDeckId || null });
+        const rows = marked.rows.length
+            ? marked.rows.map(c => ({ rowId: makeId('row'), prompt: c.prompt, answer: c.answer, duplicate: !!c.duplicate }))
+            : [makeBlankCreateRow(), makeBlankCreateRow(), makeBlankCreateRow()];
+        viewState.createDraft = {
+            deckId: null,
+            title: String(opts.title || ''),
+            description: String(opts.description || ''),
+            subject: String(opts.subject || ''),
+            source: String(opts.source || ''),
+            rows,
+            error: '',
+            generated: true,
+            dupCount: marked.duplicates
+        };
+        viewState.view = 'create';
+        try { if (typeof setActiveView === 'function') setActiveView('review'); } catch (err) { /* non-critical */ }
+        if (!reviewUiBound) { try { initReviewWorkspaceUI(); } catch (err) { /* non-critical */ } }
+        render();
+        try {
+            const titleEl = document.getElementById('reviewCreateTitle');
+            if (titleEl) titleEl.focus();
+        } catch (err) { /* non-critical */ }
+        return { total: marked.rows.length, duplicates: marked.duplicates };
+    }
+
+    function removeDuplicateDraftRows() {
+        const draft = viewState.createDraft;
+        if (!draft) return;
+        captureCreateDraftInputs();
+        draft.rows = draft.rows.filter(r => !r.duplicate);
+        if (!draft.rows.length) draft.rows.push(makeBlankCreateRow());
+        draft.dupCount = 0;
+    }
+
+    // In-view entry: parse the paste box into rows, de-duping against both the
+    // current draft and saved decks, and append them to the editable table.
+    function appendGeneratedRowsFromText(rawText) {
+        const draft = viewState.createDraft;
+        if (!draft) return { added: 0 };
+        captureCreateDraftInputs();
+        const inDraft = new Set(draft.rows.map(r => normalizeCardKey(r.prompt)).filter(Boolean));
+        const fresh = generateReviewCandidates(rawText).filter(c => {
+            const k = normalizeCardKey(c.prompt);
+            if (!k || inDraft.has(k)) return false;
+            inDraft.add(k);
+            return true;
+        });
+        const marked = markDuplicateCandidates(fresh, { deckId: draft.deckId || null });
+        const newRows = marked.rows.map(c => ({ rowId: makeId('row'), prompt: c.prompt, answer: c.answer, duplicate: !!c.duplicate }));
+        const kept = draft.rows.filter(r => String(r.prompt || '').trim() || String(r.answer || '').trim());
+        draft.rows = kept.concat(newRows);
+        if (!draft.rows.length) draft.rows.push(makeBlankCreateRow());
+        draft.generated = true;
+        draft.dupCount = draft.rows.filter(r => r.duplicate).length;
+        return { added: newRows.length, duplicates: marked.duplicates };
+    }
+
+    // ------------------------------------------------------------------
     // Rendering — top-level dispatcher
     // ------------------------------------------------------------------
     function render() {
@@ -853,6 +981,7 @@
                 </div>
                 <div class="review-page-actions">
                     <button type="button" class="review-btn-primary" data-review-action="open-create-set">＋ Create set</button>
+                    <button type="button" class="review-btn-ghost" data-review-action="open-generate">✨ Generate cards</button>
                     <button type="button" class="review-btn-ghost" data-review-action="quick-create-card">＋ Add card</button>
                     <button type="button" class="review-btn-ghost" data-review-action="open-analytics">Analytics</button>
                 </div>
@@ -1546,6 +1675,35 @@
                 removeCreateDraftRow(ctx.cardId);
                 render();
                 break;
+            case 'create-remove-duplicates':
+                removeDuplicateDraftRows();
+                render();
+                break;
+            case 'open-generate': {
+                const draft = startCreateDraft(null);
+                draft.generateMode = true;
+                draft.rows = [makeBlankCreateRow()];
+                viewState.createDraft = draft;
+                viewState.view = 'create';
+                render();
+                setTimeout(() => {
+                    const el = document.getElementById('reviewGenerateInput');
+                    if (el) try { el.focus(); } catch (err) { /* non-critical */ }
+                }, 30);
+                break;
+            }
+            case 'create-generate-from-text': {
+                const input = document.getElementById('reviewGenerateInput');
+                const text = input ? input.value : '';
+                if (!String(text || '').trim()) {
+                    notify('Paste some material first.');
+                    return;
+                }
+                const res = appendGeneratedRowsFromText(text);
+                render();
+                notify(res.added ? `Generated ${res.added} card${res.added === 1 ? '' : 's'}. Review before saving.` : 'No new cards detected.');
+                break;
+            }
             case 'create-submit':
                 submitCreateDraft();
                 break;
@@ -1960,6 +2118,21 @@
                     </div>
                 </section>
 
+                ${(draft.generateMode || draft.generated) && !draft.deckId ? `
+                <section class="review-generate-panel" aria-label="Generate cards from material">
+                    <label class="review-field" for="reviewGenerateInput"><span>Paste notes, a study guide, or assistant text — one item per line ("Term: definition", "Term - definition", or "Term, definition")</span></label>
+                    <textarea id="reviewGenerateInput" rows="4" placeholder="Photosynthesis: the process plants use to convert light into energy&#10;Mitochondria - the powerhouse of the cell"></textarea>
+                    <div class="review-generate-panel-actions">
+                        <button type="button" class="review-btn-primary review-btn-small" data-review-action="create-generate-from-text">✨ Generate cards</button>
+                        <span class="review-generate-hint">Cards land in the table below for review before you save.</span>
+                    </div>
+                </section>` : ''}
+
+                ${draft.generated ? `<div class="review-generated-banner" role="status">
+                    <span>✨ Generated ${draft.rows.filter(r => String(r.prompt || '').trim()).length} card${draft.rows.filter(r => String(r.prompt || '').trim()).length === 1 ? '' : 's'}. Review and edit before saving.</span>
+                    ${draft.dupCount ? `<span class="review-dup-warning">⚠ ${draft.dupCount} possible duplicate${draft.dupCount === 1 ? '' : 's'} <button type="button" class="review-btn-ghost review-btn-small" data-review-action="create-remove-duplicates">Remove duplicates</button></span>` : ''}
+                </div>` : ''}
+
                 <section class="review-create-cards-card" aria-label="Cards builder">
                     <header class="review-create-cards-header">
                         <h2>Cards</h2>
@@ -1967,8 +2140,8 @@
                     </header>
                     <div class="review-create-rows" id="reviewCreateRows">
                         ${draft.rows.map((row, idx) => `
-                            <div class="review-create-row" data-create-row="${escapeHtml(row.rowId)}">
-                                <div class="review-create-row-num">${idx + 1}</div>
+                            <div class="review-create-row${row.duplicate ? ' is-duplicate' : ''}" data-create-row="${escapeHtml(row.rowId)}">
+                                <div class="review-create-row-num">${idx + 1}${row.duplicate ? '<span class="review-dup-badge" title="A card with a similar prompt already exists">Duplicate</span>' : ''}</div>
                                 <label class="review-create-field"><span>Term / Prompt</span>
                                     <textarea data-create-field="prompt" rows="2" placeholder="Term, question, or what to remember">${escapeHtml(row.prompt)}</textarea>
                                 </label>
@@ -3091,6 +3264,19 @@
     };
     window.bulkImportReviewCards = function (deckId, raw) {
         try { return bulkImportCards(deckId, raw); } catch (err) { console.warn('bulkImportReviewCards failed', err); return 0; }
+    };
+    // Phase 2 #8: Generate Review Deck — parse material into candidate cards,
+    // flag duplicates, and open the editable review table before saving.
+    window.SutraReviewGen = {
+        generate: function (raw, options) {
+            try { return generateReviewCandidates(raw, options); } catch (err) { console.warn('SutraReviewGen.generate failed', err); return []; }
+        },
+        markDuplicates: function (candidates, options) {
+            try { return markDuplicateCandidates(candidates, options); } catch (err) { console.warn('SutraReviewGen.markDuplicates failed', err); return { rows: [], duplicates: 0 }; }
+        },
+        openGenerator: function (options) {
+            try { return openReviewGenerator(options); } catch (err) { console.warn('SutraReviewGen.openGenerator failed', err); return { total: 0, duplicates: 0 }; }
+        }
     };
     // Lets Flow Assistant's undo path remove a deck it just created.
     window.deleteReviewDeck = function (deckId) {

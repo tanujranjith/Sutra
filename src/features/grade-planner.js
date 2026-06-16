@@ -178,7 +178,7 @@
 
     /**
      * Compute the course grade from categories + entries.
-     * Returns { percent, letter, mode, byCategory: [...], missingCount, gradedCount }.
+     * Returns { percent, letter, mode, byCategory: [...], missingCount, gradedCount, pendingCount, excusedCount }.
      * percent is null when there is no countable work yet.
      */
     function computeCourseGrade(courseData, options) {
@@ -188,6 +188,8 @@
         var allEntries = Array.isArray(data.entries) ? data.entries : [];
         var missingCount = allEntries.filter(function (e) { return e.status === 'missing'; }).length;
         var gradedCount = allEntries.filter(function (e) { return e.status === 'graded'; }).length;
+        var pendingCount = allEntries.filter(function (e) { return e.status === 'pending'; }).length;
+        var excusedCount = allEntries.filter(function (e) { return e.status === 'excused'; }).length;
         var categories = (Array.isArray(data.categories) ? data.categories : []).filter(function (c) { return c.weight > 0; });
 
         var result = {
@@ -196,7 +198,9 @@
             mode: categories.length ? 'weighted' : 'points',
             byCategory: [],
             missingCount: missingCount,
-            gradedCount: gradedCount
+            gradedCount: gradedCount,
+            pendingCount: pendingCount,
+            excusedCount: excusedCount
         };
 
         if (!categories.length) {

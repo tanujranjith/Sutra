@@ -5,7 +5,8 @@
       "name": "Sutra Static Server",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "serve"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

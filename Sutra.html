@@ -42,7 +42,7 @@
     <!-- Defensive browser-storage wrapper. Loaded before all feature modules so
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
-    <script src="src/core/safe-storage.js?v=20260605-safestorage"></script>
+    <script src="src/core/safe-storage.js?v=20260614-safestorage2"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
          first render and can capture boot-time failures.
@@ -52,6 +52,7 @@
     <script src="src/core/error-reporter.js?v=20260613-harden1"></script>
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
+    <script src="src/core/migrations.js?v=20260614-migrations1"></script>
     <script src="src/components/icons/icon-paths.js?v=20260504-lock-icons" defer></script>
     <script src="src/components/icons/index.js?v=20260504-lock-icons" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
@@ -78,12 +79,12 @@
         .view.active { display: block; }
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
-    <script src="src/features/startup-intro.js?v=20260603-sound2" defer></script>
+    <script src="src/features/startup-intro.js?v=20260614-storage1" defer></script>
     <script src="src/ui/select-enhancer.js?v=20260501-skip-hidden" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
     <script src="src/data/emoji-keywords.generated.js" defer></script>
-    <style>
+    <style data-sutra-inline-style-legacy="app-shell-base">
         /* -- Homework panel styles -- */
         .hw-setup-overlay{position:fixed;inset:0;z-index:8000;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;opacity:1;transition:opacity .4s ease;}
         .hw-setup-overlay.fade-out{opacity:0;pointer-events:none;}
@@ -210,548 +211,7 @@
     </style>
 
     <!-- Focus Session Overlay Styles -->
-    <style id="focus-session-styles">
-        /* ==========================================================================
-           FOCUS SESSION OVERLAY
-           ========================================================================== */
-
-        .focus-session-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 9600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            opacity: 0;
-            pointer-events: none;
-            /* Use visibility so the element is paint-ready before opacity animates */
-            visibility: hidden;
-            transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0.38s;
-        }
-        .focus-session-overlay.fs-visible {
-            opacity: 1;
-            pointer-events: auto;
-            visibility: visible;
-            transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1), visibility 0s linear 0s;
-        }
-
-        /* --- Ambient Backgrounds --- */
-        .fs-ambient-bg {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            transition: background 1s ease;
-        }
-        .fs-ambient-bg[data-ambient="gradient"] {
-            background: linear-gradient(145deg, #080810 0%, #0e0e1a 45%, #0a0a12 100%);
-        }
-        .fs-ambient-bg[data-ambient="fireplace"] {
-            background: linear-gradient(170deg, #0c0503 0%, #1c0a06 35%, #2b0f08 65%, #130605 100%);
-        }
-        .fs-ambient-bg[data-ambient="fireplace"]::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 70% 45% at 50% 100%, rgba(210, 70, 10, 0.16) 0%, transparent 70%),
-                radial-gradient(ellipse 35% 25% at 38% 85%, rgba(180, 40, 5, 0.1) 0%, transparent 60%),
-                radial-gradient(ellipse 25% 18% at 62% 80%, rgba(230, 90, 15, 0.08) 0%, transparent 55%);
-            animation: fs-fire-glow 5s ease-in-out infinite;
-        }
-        .fs-ambient-bg[data-ambient="nightsky"] {
-            background: radial-gradient(ellipse at 25% 15%, #0e1628 0%, #060c18 55%, #020610 100%);
-        }
-        .fs-ambient-bg[data-ambient="nightsky"]::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(circle 1.5px at 15% 18%, rgba(255,255,255,0.55) 0%, transparent 100%),
-                radial-gradient(circle 1px at 78% 12%, rgba(255,255,255,0.4) 0%, transparent 100%),
-                radial-gradient(circle 2px at 55% 8%, rgba(255,255,255,0.35) 0%, transparent 100%),
-                radial-gradient(circle 1px at 8% 55%, rgba(255,255,255,0.45) 0%, transparent 100%),
-                radial-gradient(circle 1.5px at 92% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
-                radial-gradient(circle 1px at 42% 65%, rgba(255,255,255,0.25) 0%, transparent 100%),
-                radial-gradient(circle 1px at 68% 50%, rgba(255,255,255,0.3) 0%, transparent 100%),
-                radial-gradient(circle 1px at 30% 80%, rgba(255,255,255,0.2) 0%, transparent 100%),
-                radial-gradient(ellipse 50% 20% at 50% 5%, rgba(80, 110, 200, 0.07) 0%, transparent 100%);
-        }
-        .fs-ambient-bg[data-ambient="nightsky"]::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(ellipse 40% 30% at 50% 0%, rgba(60, 90, 180, 0.12) 0%, transparent 70%);
-            animation: fs-ambient-breathe 12s ease-in-out infinite;
-        }
-        .fs-ambient-bg[data-ambient="rain"] {
-            background: linear-gradient(175deg, #060810 0%, #090c18 40%, #070a14 100%);
-        }
-        .fs-ambient-bg[data-ambient="rain"]::before {
-            content: '';
-            position: absolute;
-            inset: -100px 0 0;
-            background-image: repeating-linear-gradient(
-                97deg,
-                transparent 0px, transparent 6px,
-                rgba(140, 175, 220, 0.028) 6px, rgba(140, 175, 220, 0.028) 7px
-            );
-            animation: fs-rain-fall 2.8s linear infinite;
-            will-change: background-position;
-        }
-        .fs-ambient-bg[data-ambient="rain"]::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 55% 30% at 50% 100%, rgba(60, 100, 190, 0.09) 0%, transparent 80%),
-                radial-gradient(ellipse 100% 15% at 50% 0%, rgba(40, 70, 140, 0.06) 0%, transparent 100%);
-        }
-        .fs-ambient-bg[data-ambient="library"] {
-            background: linear-gradient(155deg, #0c0b09 0%, #15120e 40%, #0e0c0a 100%);
-        }
-        .fs-ambient-bg[data-ambient="library"]::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(ellipse 90% 55% at 50% 110%, rgba(170, 125, 40, 0.07) 0%, transparent 75%),
-                radial-gradient(ellipse 40% 22% at 50% 100%, rgba(200, 155, 55, 0.1) 0%, transparent 65%);
-            animation: fs-ambient-breathe 9s ease-in-out infinite;
-        }
-
-        /* Dark blur layer for text readability */
-        .fs-blur-layer {
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            background: rgba(0, 0, 0, 0.38);
-        }
-
-        /* Main content layer */
-        .fs-content {
-            position: relative;
-            z-index: 2;
-            width: 100%;
-            max-width: 700px;
-            padding: 32px 28px 28px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0;
-            min-height: 100vh;
-            justify-content: center;
-        }
-
-        /* Top control bar */
-        .fs-topbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 3;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px 24px;
-        }
-        .fs-topbar-left { display: flex; align-items: center; gap: 10px; }
-        .fs-topbar-right { display: flex; gap: 6px; }
-
-        .fs-label {
-            font-size: 0.7rem;
-            font-weight: 700;
-            letter-spacing: 0.13em;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.28);
-            user-select: none;
-        }
-
-        .fs-icon-btn {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.05);
-            color: rgba(255,255,255,0.45);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.76rem;
-            transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-        .fs-icon-btn:hover {
-            background: rgba(255,255,255,0.11);
-            border-color: rgba(255,255,255,0.2);
-            color: rgba(255,255,255,0.88);
-            transform: scale(1.07);
-        }
-        .fs-icon-btn:active { transform: scale(0.94); }
-        .fs-icon-btn-close:hover {
-            background: rgba(240, 70, 70, 0.18);
-            border-color: rgba(240, 70, 70, 0.3);
-            color: rgba(255, 110, 110, 0.9);
-        }
-
-        /* Task info */
-        .fs-task-info {
-            text-align: center;
-            margin-bottom: 18px;
-            max-width: 580px;
-            width: 100%;
-        }
-        .fs-task-title {
-            font-family: 'Manrope', 'Sora', 'Inter', sans-serif;
-            font-size: clamp(1.5rem, 4vw, 2.2rem);
-            font-weight: 700;
-            color: rgba(255,255,255,0.92);
-            margin: 0 0 7px;
-            line-height: 1.18;
-            letter-spacing: -0.025em;
-        }
-        .fs-task-note {
-            font-size: 0.9rem;
-            color: rgba(255,255,255,0.38);
-            margin: 0;
-            line-height: 1.45;
-        }
-
-        /* Status pill */
-        .fs-status-pill-wrap { margin-bottom: 22px; }
-        .fs-status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 5px 15px;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-            background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.11);
-            color: rgba(255,255,255,0.45);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: background 0.3s, border-color 0.3s, color 0.3s;
-        }
-        .fs-status-pill::before {
-            content: '';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.3);
-            flex-shrink: 0;
-            transition: background 0.3s;
-        }
-        .fs-status-pill.is-focusing {
-            background: rgba(var(--accent-rgb, 80, 190, 110), 0.12);
-            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.28);
-            color: rgba(var(--accent-rgb, 80, 190, 110), 0.92);
-        }
-        .fs-status-pill.is-focusing::before {
-            background: rgb(var(--accent-rgb, 80, 190, 110));
-            animation: fs-pulse-dot 1.9s ease-in-out infinite;
-        }
-        .fs-status-pill.is-done {
-            background: rgba(80, 190, 110, 0.12);
-            border-color: rgba(80, 190, 110, 0.3);
-            color: rgba(110, 220, 140, 0.92);
-        }
-
-        /* Countdown timer */
-        .fs-timer-wrap { margin-bottom: 14px; }
-        .fs-timer {
-            font-family: 'Manrope', 'Inter', system-ui, -apple-system, sans-serif;
-            font-size: clamp(5.5rem, 17vw, 10rem);
-            font-weight: 800;
-            color: rgba(255,255,255,0.94);
-            letter-spacing: -0.045em;
-            line-height: 0.9;
-            font-variant-numeric: tabular-nums;
-            text-shadow: 0 2px 40px rgba(255,255,255,0.06);
-            user-select: none;
-            cursor: default;
-            transition: color 0.3s;
-        }
-        .fs-timer.is-done { color: rgba(110, 220, 140, 0.9); }
-
-        /* Progress row */
-        .fs-progress-row {
-            width: 100%;
-            max-width: 520px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 30px;
-        }
-        .fs-elapsed, .fs-planned {
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: rgba(255,255,255,0.28);
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-            min-width: 36px;
-            transition: color 0.3s;
-        }
-        .fs-planned { text-align: right; }
-        .fs-progress-track {
-            flex: 1;
-            height: 2px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 999px;
-            overflow: hidden;
-        }
-        .fs-progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0.55));
-            border-radius: 999px;
-            transition: width 0.95s linear;
-            will-change: width;
-        }
-
-        /* Play/pause button */
-        .fs-play-wrap { margin-bottom: 28px; }
-        .fs-play-btn {
-            width: 74px;
-            height: 74px;
-            border-radius: 50%;
-            border: 1.5px solid rgba(255,255,255,0.18);
-            background: rgba(255,255,255,0.09);
-            color: rgba(255,255,255,0.92);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.35rem;
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            box-shadow: 0 8px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1);
-            transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s, box-shadow 0.2s;
-        }
-        .fs-play-btn:hover {
-            transform: scale(1.1);
-            background: rgba(255,255,255,0.14);
-            border-color: rgba(255,255,255,0.32);
-            box-shadow: 0 12px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14);
-        }
-        .fs-play-btn:active { transform: scale(0.93); }
-        .fs-play-btn.is-playing {
-            background: rgba(var(--accent-rgb, 80, 190, 110), 0.14);
-            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.38);
-        }
-
-        /* Bottom action row */
-        .fs-actions {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 22px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .fs-action-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 16px;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.1);
-            background: rgba(255,255,255,0.06);
-            color: rgba(255,255,255,0.55);
-            cursor: pointer;
-            font-size: 0.8rem;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
-        }
-        .fs-action-btn:hover {
-            background: rgba(255,255,255,0.12);
-            border-color: rgba(255,255,255,0.2);
-            color: rgba(255,255,255,0.9);
-            transform: translateY(-1px);
-        }
-        .fs-action-btn:active { transform: translateY(0) scale(0.97); }
-        .fs-action-btn-accent {
-            background: rgba(var(--accent-rgb, 80, 190, 110), 0.13);
-            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.3);
-            color: rgba(var(--accent-rgb, 80, 190, 110), 0.9);
-        }
-        .fs-action-btn-accent:hover {
-            background: rgba(var(--accent-rgb, 80, 190, 110), 0.22);
-            border-color: rgba(var(--accent-rgb, 80, 190, 110), 0.48);
-            color: rgba(255,255,255,0.95);
-        }
-
-        /* Ambient chip bar */
-        .fs-ambient-bar {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .fs-ambient-chip {
-            padding: 4px 12px;
-            border-radius: 999px;
-            border: 1px solid rgba(255,255,255,0.07);
-            background: rgba(255,255,255,0.03);
-            color: rgba(255,255,255,0.26);
-            cursor: pointer;
-            font-size: 0.7rem;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-            transition: background 0.18s, border-color 0.18s, color 0.18s;
-        }
-        .fs-ambient-chip:hover {
-            background: rgba(255,255,255,0.09);
-            border-color: rgba(255,255,255,0.14);
-            color: rgba(255,255,255,0.65);
-        }
-        .fs-ambient-chip.active {
-            background: rgba(255,255,255,0.1);
-            border-color: rgba(255,255,255,0.22);
-            color: rgba(255,255,255,0.82);
-        }
-
-        /* Respect hidden attribute over any display rule in this feature */
-        .fs-notes-panel[hidden] { display: none !important; }
-
-        /* Session notes panel */
-        .fs-notes-panel {
-            position: fixed;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            width: min(380px, 88vw);
-            z-index: 4;
-            background: rgba(10, 10, 16, 0.92);
-            border-left: 1px solid rgba(255,255,255,0.08);
-            backdrop-filter: blur(28px);
-            -webkit-backdrop-filter: blur(28px);
-            display: flex;
-            flex-direction: column;
-            padding: 24px 20px;
-            gap: 14px;
-            animation: fs-panel-slide-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .fs-notes-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 0.72rem;
-            font-weight: 700;
-            color: rgba(255,255,255,0.45);
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-        }
-        .fs-notes-textarea {
-            flex: 1;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.09);
-            border-radius: 12px;
-            color: rgba(255,255,255,0.82);
-            font-size: 0.9rem;
-            line-height: 1.65;
-            padding: 14px;
-            resize: none;
-            outline: none;
-            font-family: inherit;
-            transition: border-color 0.18s, background 0.18s;
-        }
-        .fs-notes-textarea:focus {
-            border-color: rgba(255,255,255,0.18);
-            background: rgba(255,255,255,0.06);
-        }
-        .fs-notes-textarea::placeholder { color: rgba(255,255,255,0.18); }
-
-        /* Sidebar timer "Launch" button */
-        .fs-launch-btn {
-            width: 100%;
-            margin-top: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 7px;
-            padding: 8px 14px;
-            border-radius: 10px;
-            border: 1px solid var(--glass-border);
-            background: var(--accent-soft, rgba(var(--accent-rgb),0.12));
-            color: var(--accent);
-            cursor: pointer;
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            transition: background 0.18s, border-color 0.18s, transform 0.15s;
-        }
-        .fs-launch-btn:hover {
-            transform: translateY(-1px);
-            background: var(--accent-soft);
-            border-color: var(--accent);
-        }
-        .fs-launch-btn:active { transform: translateY(0); }
-        .fs-launch-btn i { font-size: 0.74rem; }
-
-        /* Prevent body scroll when session is open */
-        body.fs-active { overflow: hidden; }
-
-        /* ==========================================================================
-           KEYFRAMES
-           ========================================================================== */
-        @keyframes fs-ambient-breathe {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.82; }
-        }
-        @keyframes fs-fire-glow {
-            0%, 100% { opacity: 0.9; }
-            28% { opacity: 0.65; }
-            55% { opacity: 1; }
-            78% { opacity: 0.75; }
-        }
-        @keyframes fs-rain-fall {
-            0% { background-position: 0 0; }
-            100% { background-position: -80px 360px; }
-        }
-        @keyframes fs-pulse-dot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.45; transform: scale(1.35); }
-        }
-        @keyframes fs-panel-slide-in {
-            from { transform: translateX(100%); }
-            to { transform: translateX(0); }
-        }
-
-        /* ==========================================================================
-           RESPONSIVE
-           ========================================================================== */
-        @media (max-width: 768px) {
-            .fs-content { padding: 80px 16px 24px; }
-            .fs-timer { font-size: clamp(4.2rem, 20vw, 6.5rem); }
-            .fs-action-btn span { display: none; }
-            .fs-action-btn { padding: 9px 13px; }
-            .fs-actions { gap: 7px; }
-            .fs-notes-panel { width: 100%; border-left: none; border-top: 1px solid rgba(255,255,255,0.08); height: 55vh; top: auto; }
-        }
-        @media (max-width: 480px) {
-            .fs-task-title { font-size: 1.4rem; }
-            .fs-timer { font-size: clamp(3.8rem, 24vw, 5.5rem); }
-            .fs-play-btn { width: 64px; height: 64px; font-size: 1.2rem; }
-            .fs-progress-row { gap: 10px; }
-        }
-
-        /* Respect reduced-motion preference */
-        @media (prefers-reduced-motion: reduce) {
-            .fs-ambient-bg, .fs-ambient-bg::after, .fs-ambient-bg::before,
-            .fs-progress-fill, .fs-play-btn, .fs-icon-btn, .fs-action-btn,
-            .fs-status-pill::before, .fs-notes-panel {
-                animation: none !important;
-                transition: none !important;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="styles/focus-session.css?v=20260614-extract1">
 
     <!-- Analytics removed for the public beta. Sutra is local-first: the
          workspace shell makes no third-party tracking requests on load. If
@@ -759,6 +219,37 @@
          the user explicitly consents. -->
 </head>
 <body class="no-parallax">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         Glass theme refraction filter.
+         Consumed by styles/glass.css (filter: url(#sutra-glass-distortion))
+         on DECORATIVE background/pseudo-element layers only — never on text,
+         inputs, or icons, so content stays crisp. Hidden, zero-footprint, and
+         same-document so it is CSP-safe (no external resource). The unique id
+         avoids colliding with any generic "glass-distortion" filter.
+         ═══════════════════════════════════════════════════════════ -->
+    <svg class="sutra-glass-defs" width="0" height="0" aria-hidden="true" focusable="false"
+         style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;">
+      <defs>
+        <filter id="sutra-glass-distortion" x="-25%" y="-25%" width="150%" height="150%"
+                color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.009 0.013" numOctaves="2"
+                        seed="11" stitchTiles="stitch" result="noise"/>
+          <feGaussianBlur in="noise" stdDeviation="1.2" result="softNoise"/>
+          <feSpecularLighting in="softNoise" surfaceScale="2.4" specularConstant="0.62"
+                              specularExponent="22" lighting-color="#ffffff" result="spec">
+            <feDistantLight azimuth="228" elevation="62"/>
+          </feSpecularLighting>
+          <feComposite in="spec" in2="SourceGraphic" operator="in" result="specClip"/>
+          <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="18"
+                             xChannelSelector="R" yChannelSelector="G" result="warp"/>
+          <feMerge>
+            <feMergeNode in="warp"/>
+            <feMergeNode in="specClip"/>
+          </feMerge>
+        </filter>
+      </defs>
+    </svg>
 
     <!-- ═══════════════════════════════════════════════════════════
          Sutra Startup Intro — position:fixed, z-index 99999.
@@ -4746,6 +4237,34 @@
                             <button class="cc-btn cc-btn-ghost" id="exportWorkspaceBtn" onclick="exportToFile()">Export Workspace JSON (unencrypted)</button>
                             <button class="cc-btn cc-btn-ghost" id="importWorkspaceBtn" onclick="importFromFile()">Import Workspace / Docs</button>
                         </div>
+                        <div class="sutra-data-safety-grid" aria-label="Backup health and data safety">
+                            <article class="sutra-data-safety-card">
+                                <span class="sutra-data-safety-label">Last .sutra export</span>
+                                <strong id="sutraDataSafetyLastExport">Never</strong>
+                                <small>Encrypted backups stay local unless you choose Drive sync.</small>
+                            </article>
+                            <article class="sutra-data-safety-card">
+                                <span class="sutra-data-safety-label">Storage health</span>
+                                <strong id="sutraDataSafetyStorage">Checking</strong>
+                                <small id="sutraDataSafetyStorageDetail">IndexedDB + localStorage</small>
+                            </article>
+                            <article class="sutra-data-safety-card">
+                                <span class="sutra-data-safety-label">Degraded storage</span>
+                                <strong id="sutraDataSafetyDegraded">None</strong>
+                                <small>Warnings appear before local writes become risky.</small>
+                            </article>
+                            <article class="sutra-data-safety-card">
+                                <span class="sutra-data-safety-label">Drive sync</span>
+                                <strong id="sutraDataSafetyDrive">Off</strong>
+                                <small>Optional encrypted snapshots only.</small>
+                            </article>
+                        </div>
+                        <div class="cc-stacked-actions sutra-data-safety-actions">
+                            <button class="cc-btn cc-btn-ghost" id="sutraDataSafetyExportBtn" type="button">Export backup</button>
+                            <button class="cc-btn cc-btn-ghost" id="sutraDataSafetyEmergencyBtn" type="button">Emergency export</button>
+                            <button class="cc-btn cc-btn-ghost" id="sutraDataSafetyRestoreBtn" type="button">Restore / import</button>
+                            <button class="cc-btn cc-btn-ghost" id="sutraDataSafetyDiagnosticsBtn" type="button">Diagnostics</button>
+                        </div>
                         <div class="cc-data-health atelier-data-health-card">
                             <div class="cc-data-health-row"><span>Storage mode</span><span>Local-first (IndexedDB + localStorage)</span></div>
                             <div class="cc-data-health-row"><span>Last confirmed save</span><span id="sutraHealthLastConfirmedSave">Never</span></div>
@@ -5324,7 +4843,7 @@
                     </div>
                     <div class="hw-dashboard-body" id="hwDataTable"></div>
                 </div>
-                <script src="src/features/homework.js?v=20260602-audit"></script>
+                <script src="src/features/homework.js?v=20260614-storage1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5434,7 +4953,7 @@
     </div>
 
     <div id="commandPaletteModal" class="command-palette-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="commandPaletteTitle">
-        <div class="command-palette-backdrop"></div>
+        <div class="command-palette-backdrop" data-modal-close aria-hidden="true"></div>
         <div class="command-palette-card glass-card">
             <div class="command-palette-head">
                 <label class="eyebrow" for="commandPaletteInput" id="commandPaletteTitle">Command Palette · Ctrl/⌘ + K</label>
@@ -5479,7 +4998,7 @@
                 <small id="quickCaptureApSubjectHelp" class="quick-capture-helper">Choose the AP subject before saving.</small>
             </label>
             <div class="quick-capture-actions">
-                <button type="button" class="neumo-btn" onclick="closeQuickCaptureModal()">Cancel</button>
+                <button type="button" class="neumo-btn" data-modal-close onclick="closeQuickCaptureModal()">Cancel</button>
                 <button type="button" class="neumo-btn active" onclick="submitQuickCapture()">Capture</button>
             </div>
             <p class="quick-capture-note">Parsing is lightweight — correct the type/date/time before capturing if needed.</p>
@@ -5748,13 +5267,13 @@
                     <div class="preset-name">Rosewater</div>
                 </div>
 
-                <div class="preset-card" onclick="applyPresetTheme('liquidglass')" data-theme="liquidglass">
+                <div class="preset-card" onclick="applyPresetTheme('glass')" data-theme="glass">
                     <div class="preset-preview">
-                        <div class="preset-color" style="background: linear-gradient(135deg, #fbfbfd, #e6e8ed)"></div>
-                        <div class="preset-color" style="background: rgba(255, 255, 255, 0.75); border: 1px solid rgba(0, 0, 0, 0.08)"></div>
+                        <div class="preset-color" style="background: linear-gradient(135deg, #fbfdff, #dfe6f0)"></div>
+                        <div class="preset-color" style="background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9)"></div>
                         <div class="preset-color" style="background: #0a84ff"></div>
                     </div>
-                    <div class="preset-name">Liquid Glass</div>
+                    <div class="preset-name">Glass</div>
                 </div>
 
                 <div class="preset-card" onclick="applyPresetTheme('windows11')" data-theme="windows11">
@@ -5850,14 +5369,19 @@
                 </div>
             </div>
 
-            <div class="liquid-glass-options" id="liquidGlassOptions" hidden>
-                <div class="liquid-glass-options-title">Liquid Glass</div>
-                <div class="liquid-glass-blur-row">
-                    <label for="liquidGlassBlurSlider">Glass blur</label>
-                    <input type="range" id="liquidGlassBlurSlider" min="0" max="40" step="1" value="18" aria-label="Liquid Glass blur amount">
-                    <span class="liquid-glass-blur-value" id="liquidGlassBlurValue">18px</span>
+            <div class="glass-options" id="glassOptions" hidden>
+                <div class="glass-options-title">Glass</div>
+                <div class="glass-blur-row">
+                    <label for="glassBlurSlider">Glass intensity</label>
+                    <input type="range" id="glassBlurSlider" min="0" max="40" step="1" value="18" aria-label="Glass intensity (frost amount)">
+                    <span class="glass-blur-value" id="glassBlurValue">18px</span>
                 </div>
-                <div class="liquid-glass-options-hint">How frosted the glass surfaces look. 0px is clear glass, 40px is heavy frost.</div>
+                <div class="glass-blur-row">
+                    <label for="glassRefractionSlider">Refraction</label>
+                    <input type="range" id="glassRefractionSlider" min="0" max="40" step="1" value="18" aria-label="Glass refraction strength">
+                    <span class="glass-blur-value" id="glassRefractionValue">18</span>
+                </div>
+                <div class="glass-options-hint">Intensity is the frost (blur) on glass surfaces. Refraction is how much the background light ripples like water — 0 is flat, 40 is strong.</div>
             </div>
         </div>
 
@@ -7097,7 +6621,7 @@
     
 
     <!-- Small Chatbot (local-only, uses user's own provider API keys) -->
-    <style>
+    <style data-sutra-inline-style-legacy="workspace-overrides">
         .chatbot-btn {
             position: fixed;
             bottom: 20px;
@@ -8412,7 +7936,7 @@
         <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button onclick="closeChatInfo()">Got it</button></div>
     </div>
 
-    <style id="mobile-global-override">
+    <style id="mobile-global-override" data-sutra-inline-style-legacy="mobile-global">
         @media (max-width: 1024px) {
             html, body {
                 overflow-x: hidden;
@@ -8974,7 +8498,7 @@
         }
     </style>
 
-    <style id="ui-refresh-overrides">
+    <style id="ui-refresh-overrides" data-sutra-inline-style-legacy="ui-refresh">
         .top-nav,
         .tabs-shell,
         .view-tabs {
@@ -9715,7 +9239,7 @@
         }
     </style>
 
-    <style id="refinement-pass-overrides">
+    <style id="refinement-pass-overrides" data-sutra-inline-style-legacy="refinement">
         @media (min-width: 1025px) {
             .sidebar.collapsed {
                 display: flex !important;
@@ -9790,7 +9314,7 @@
             display: grid !important;
         }
     </style>
-    <style id="responsive-display-hardening-20260406">
+    <style id="responsive-display-hardening-20260406" data-sutra-inline-style-legacy="responsive-hardening">
         :root {
             --responsive-shell-gutter: clamp(8px, 1.5vw, 20px);
             --responsive-bottom-clearance: clamp(116px, 17vh, 172px);
@@ -10060,8 +9584,8 @@
 
     <script src="src/features/business-workspace.js"></script>
     <script src="src/features/model-capabilities.js?v=20260610-intel1"></script>
-    <script src="src/features/flow-intelligence.js?v=20260602-sutra1"></script>
-    <script src="src/features/flow-assistant.js?v=20260610-intel1"></script>
+    <script src="src/features/flow-intelligence.js?v=20260614-storage1"></script>
+    <script src="src/features/flow-assistant.js?v=20260614-dom1"></script>
     <!-- Mods & handwriting engines: pure, dependency-free modules exposed on window.
          Loaded BEFORE app.js so the core can wire blocks / settings into them. -->
     <script src="src/features/handwriting.js?v=20260601-handwriting"></script>
@@ -10072,19 +9596,20 @@
          appData, backups, and import normalization. -->
     <script src="src/features/school-schedule.js?v=20260610-academic1"></script>
     <script src="src/features/grade-planner.js?v=20260610-academic1"></script>
-    <script src="src/features/assignment-studio.js?v=20260610-academic1"></script>
-    <script src="src/features/semester-setup.js?v=20260610-academic1"></script>
+    <script src="src/features/assignment-studio.js?v=20260614-storage1"></script>
+    <script src="src/features/semester-setup.js?v=20260614-storage1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
     <script src="src/features/command-center.js?v=20260613-cc1"></script>
+    <script src="src/features/academic-command-center.js?v=20260614-acc1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
-<script src="src/core/app.js?v=20260611-mobile-polish"></script>
+<script src="src/core/app.js?v=20260614-stabilize1"></script>
     <script src="src/features/ap-study.js?v=20260602-audit2"></script>
     <script src="src/features/review.js?v=20260528-flow-upgrade"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/daily-lock-in-quote.js?v=20260605-quotes1"></script>
-    <script src="src/features/notifications.js?v=20260605-notif1"></script>
+    <script src="src/features/notifications.js?v=20260614-storage1"></script>
     <script>
         (function () {
             var FEEDBACK_EMBED_STORAGE_KEY = 'noteflow.feedback.googleEmbed.v1';
@@ -10446,8 +9971,8 @@
         })();
     </script>
     <!-- storage/taskbar measurement script removed because the taskbar was deleted -->
-    <link rel="stylesheet" href="styles/macos26-redesign.css?v=20260612-liquidglass-merge">
-    <link rel="stylesheet" href="styles/liquid-glass.css?v=20260612-liquidglass-merge">
+    <link rel="stylesheet" href="styles/macos26-redesign.css?v=20260615b-glass-uniform">
+    <link rel="stylesheet" href="styles/glass.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/microinteractions.css?v=20260424-opaque-modals">
     <link rel="stylesheet" href="styles/mobile.css?v=20260611-mobile-polish">
     <link rel="stylesheet" href="styles/settings-redesign.css?v=20260427-cc-visible-scrollbars">
@@ -10455,6 +9980,7 @@
     <link rel="stylesheet" href="styles/notifications.css?v=20260605-notif1">
     <link rel="stylesheet" href="styles/academic-planning.css?v=20260610-academic1">
     <link rel="stylesheet" href="styles/command-center.css?v=20260613-cc1">
+    <link rel="stylesheet" href="styles/academic-command-center.css?v=20260614-acc1">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

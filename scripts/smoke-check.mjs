@@ -614,7 +614,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260611-mobile-polish', 'app.js cache-busted so the latest repairs ship');
+mustContain('Sutra.html', 'src/core/app.js?v=20260614-stabilize1', 'app.js cache-busted so the latest repairs ship');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------
@@ -904,6 +904,17 @@ mustContain('styles/settings-redesign.css', 'body[data-theme="sutra"]', 'Sutra d
 // ---- Shortcut label migration --------------------------------------------
 mustContain('src/core/app.js', 'NoteFlowAtelier GitHub repo', 'legacy shortcut label migration present');
 mustContain('src/core/app.js', 'Sutra GitHub repo', 'migration target label present');
+
+// ---- Stabilization pass: migrations, app shell, academic command center --
+mustContain('Sutra.html', 'src/core/migrations.js', 'workspace migration registry loaded before app');
+mustContain('src/core/app.js', 'SutraMigrations.migrateWorkspace', 'workspace hydrate path runs versioned migrations');
+mustContain('Sutra.html', 'styles/focus-session.css', 'focus-session CSS extracted from the app shell');
+mustNotContain('Sutra.html', 'id="focus-session-styles"', 'large focus-session style block removed from app shell');
+mustContain('Sutra.html', 'src/features/academic-command-center.js', 'academic command center module loaded');
+mustContain('Sutra.html', 'styles/academic-command-center.css', 'academic command center styles loaded');
+mustContain('src/core/app.js', 'SutraAcademicCommandCenter.renderHtml', 'Course Hub composes the academic command center');
+mustContain('src/features/academic-command-center.js', 'function rankActions', 'deterministic next-action ranking present');
+mustContain('src/core/safe-storage.js', 'sessionGet: sessionGet', 'safe storage exposes session reads');
 
 if (failures.length) {
     console.error('SMOKE CHECK FAILED:');

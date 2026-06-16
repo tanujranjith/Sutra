@@ -2989,6 +2989,43 @@ function populateProgressDashboard() {
                     ? JSON.stringify({ failure, state: { ...state, lastFailure: undefined } }, null, 2)
                     : (warnings.length ? warnings.join('\n') : 'No persistence warnings recorded.');
             }
+            const dataHealth = (appSettings && appSettings.dataHealth) || {};
+            const lastExportEl = document.getElementById('sutraDataSafetyLastExport');
+            const storageHealthEl = document.getElementById('sutraDataSafetyStorage');
+            const storageDetailEl = document.getElementById('sutraDataSafetyStorageDetail');
+            const degradedEl = document.getElementById('sutraDataSafetyDegraded');
+            const driveEl = document.getElementById('sutraDataSafetyDrive');
+            if (lastExportEl) lastExportEl.textContent = formatSutraHealthDate(dataHealth.lastAtelierExportAt);
+            if (storageHealthEl) storageHealthEl.textContent = failure ? 'Needs attention' : 'Healthy';
+            if (storageDetailEl) {
+                storageDetailEl.textContent = [
+                    state.lastConfirmedSaveAt ? `saved ${formatSutraHealthDate(state.lastConfirmedSaveAt)}` : 'no confirmed save yet',
+                    state.lastSerializedBytes ? formatByteCount(state.lastSerializedBytes) : ''
+                ].filter(Boolean).join(' / ');
+            }
+            if (degradedEl) {
+                let degraded = null;
+                try {
+                    degraded = window.SutraSafeStorage && typeof window.SutraSafeStorage.getDegraded === 'function'
+                        ? window.SutraSafeStorage.getDegraded()
+                        : null;
+                } catch (e) { degraded = null; }
+                degradedEl.textContent = degraded && (degraded.active || degraded.reason || degraded.message)
+                    ? (degraded.reason || degraded.message || 'Active')
+                    : 'None';
+            }
+            if (driveEl) {
+                let driveText = '';
+                try {
+                    const driveStatusEl = document.getElementById('sutraDriveSyncStatus');
+                    driveText = driveStatusEl ? driveStatusEl.textContent : '';
+                    if (!driveText && typeof loadSutraDriveSyncMetadata === 'function') {
+                        const meta = loadSutraDriveSyncMetadata();
+                        driveText = meta && meta.enabled ? 'Enabled' : 'Off';
+                    }
+                } catch (e) { driveText = ''; }
+                driveEl.textContent = driveText || 'Off';
+            }
             if (detailsEl) {
                 detailsEl.textContent = failure ? JSON.stringify(failure, null, 2) : '';
             }
@@ -3032,6 +3069,37 @@ function populateProgressDashboard() {
             }
             const storageBtn = document.getElementById('sutraStorageHealthBtn');
             if (storageBtn) storageBtn.addEventListener('click', openSutraStorageHealthPanel);
+            const dataSafetyExportBtn = document.getElementById('sutraDataSafetyExportBtn');
+            if (dataSafetyExportBtn && dataSafetyExportBtn.dataset.bound !== 'true') {
+                dataSafetyExportBtn.dataset.bound = 'true';
+                dataSafetyExportBtn.addEventListener('click', () => { exportWorkspaceAsAtelierPackage(); });
+            }
+            const dataSafetyEmergencyBtn = document.getElementById('sutraDataSafetyEmergencyBtn');
+            if (dataSafetyEmergencyBtn && dataSafetyEmergencyBtn.dataset.bound !== 'true') {
+                dataSafetyEmergencyBtn.dataset.bound = 'true';
+                dataSafetyEmergencyBtn.addEventListener('click', () => { exportEmergencySutraBackup(); });
+            }
+            const dataSafetyRestoreBtn = document.getElementById('sutraDataSafetyRestoreBtn');
+            if (dataSafetyRestoreBtn && dataSafetyRestoreBtn.dataset.bound !== 'true') {
+                dataSafetyRestoreBtn.dataset.bound = 'true';
+                dataSafetyRestoreBtn.addEventListener('click', () => { importFromFile(); });
+            }
+            const dataSafetyDiagnosticsBtn = document.getElementById('sutraDataSafetyDiagnosticsBtn');
+            if (dataSafetyDiagnosticsBtn && dataSafetyDiagnosticsBtn.dataset.bound !== 'true') {
+                dataSafetyDiagnosticsBtn.dataset.bound = 'true';
+                dataSafetyDiagnosticsBtn.addEventListener('click', () => {
+                    let ok = null;
+                    try {
+                        ok = typeof verifyWorkspaceRoundTrip === 'function' ? verifyWorkspaceRoundTrip() : null;
+                    } catch (e) { ok = { ok: false, summary: e && e.message ? e.message : 'Diagnostics failed.' }; }
+                    const details = document.getElementById('sutraHealthTechnicalDetails');
+                    if (details && ok) {
+                        details.textContent = JSON.stringify(ok, null, 2);
+                        details.focus();
+                    }
+                    showToast(ok && ok.ok ? 'Workspace diagnostics passed.' : 'Workspace diagnostics need review.');
+                });
+            }
             updateSutraPersistenceHealthUi();
         }
 
@@ -6203,7 +6271,8 @@ function populateProgressDashboard() {
                 settings: {
                     theme: 'default',
                     atelierTheme: 'light',
-                    liquidGlassBlur: 18,
+                    glassBlur: 18,
+                    glassRefraction: 18,
                     motionEnabled: true,
                     quickAppLaunchersEnabled: false,
                     focusModeEnabled: false,
@@ -6470,6 +6539,25 @@ function populateProgressDashboard() {
         }
 
         function mergeAppDataDefaults(stored) {
+            if (typeof window !== 'undefined' && window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function') {
+                try {
+                    const migration = window.SutraMigrations.migrateWorkspace(stored, { targetVersion: APP_SCHEMA_VERSION });
+                    stored = migration.workspace;
+                    if (migration.applied.length && typeof window.reportError === 'function') {
+                        window.reportError('Workspace schema upgraded', {
+                            where: 'mergeAppDataDefaults',
+                            fromVersion: migration.fromVersion,
+                            toVersion: migration.toVersion,
+                            migrations: migration.applied
+                        }, 'info');
+                    }
+                } catch (error) {
+                    if (typeof window.reportError === 'function') {
+                        window.reportError(error, { where: 'mergeAppDataDefaults', phase: 'migration' }, 'error');
+                    }
+                    throw error;
+                }
+            }
             const defaults = getDefaultAppData();
             const merged = { ...defaults, ...stored };
             const storedSettings = stored && stored.settings ? stored.settings : {};
@@ -6566,7 +6654,19 @@ function populateProgressDashboard() {
             merged.settings.mobileTodayMode = ['auto', 'on', 'off'].includes(mobileMode) ? mobileMode : 'auto';
             merged.settings.recentSearches = normalizeRecentSearches(merged.settings.recentSearches);
             merged.settings.atelierTheme = normalizeAtelierThemeName(merged.settings.atelierTheme);
-            merged.settings.liquidGlassBlur = normalizeLiquidGlassBlur(merged.settings.liquidGlassBlur);
+            // Glass blur migrated from the legacy "liquidGlassBlur" key (2026-06).
+            // Read from the RAW storedSettings (not merged.settings, which already
+            // carries the default glassBlur from the spread above) so a legacy
+            // workspace that only has liquidGlassBlur keeps its tuned value.
+            merged.settings.glassBlur = normalizeGlassBlur(
+                Object.prototype.hasOwnProperty.call(storedSettings, 'glassBlur')
+                    ? storedSettings.glassBlur
+                    : (Object.prototype.hasOwnProperty.call(storedSettings, 'liquidGlassBlur')
+                        ? storedSettings.liquidGlassBlur
+                        : merged.settings.glassBlur)
+            );
+            delete merged.settings.liquidGlassBlur;
+            merged.settings.glassRefraction = normalizeGlassRefraction(merged.settings.glassRefraction);
             const mergedLastView = String(merged.ui.lastActiveView || '').trim();
             merged.ui.lastActiveView = (mergedLastView === 'settings' || OPTIONAL_FEATURE_VIEWS.includes(mergedLastView))
                 ? mergedLastView
@@ -6577,9 +6677,10 @@ function populateProgressDashboard() {
         function normalizeThemeName(name) {
             const normalized = String(name || '').trim().toLowerCase();
             if (!normalized || normalized === 'light') return 'default';
-            // macOS 26 was merged into Liquid Glass (2026-06) — keep pages
-            // saved with the old key on the Apple theme.
-            if (normalized === 'macos26') return 'liquidglass';
+            // The Apple theme was renamed "Liquid Glass" -> "Glass" (2026-06),
+            // and the even older "macOS 26" preset was merged into it earlier.
+            // Keep workspaces saved with either legacy key on the Glass theme.
+            if (normalized === 'liquidglass' || normalized === 'macos26') return 'glass';
             return normalized;
         }
 
@@ -6589,13 +6690,25 @@ function populateProgressDashboard() {
             return ['light', 'dark', 'retro95'].includes(normalized) ? normalized : 'light';
         }
 
-        const LIQUID_GLASS_BLUR_DEFAULT = 18;
-        const LIQUID_GLASS_BLUR_MIN = 0;
-        const LIQUID_GLASS_BLUR_MAX = 40;
-        function normalizeLiquidGlassBlur(value) {
+        const GLASS_BLUR_DEFAULT = 18;
+        const GLASS_BLUR_MIN = 0;
+        const GLASS_BLUR_MAX = 40;
+        function normalizeGlassBlur(value) {
             const parsed = Number(value);
-            if (!Number.isFinite(parsed)) return LIQUID_GLASS_BLUR_DEFAULT;
-            return Math.min(LIQUID_GLASS_BLUR_MAX, Math.max(LIQUID_GLASS_BLUR_MIN, Math.round(parsed)));
+            if (!Number.isFinite(parsed)) return GLASS_BLUR_DEFAULT;
+            return Math.min(GLASS_BLUR_MAX, Math.max(GLASS_BLUR_MIN, Math.round(parsed)));
+        }
+        // Legacy alias kept until the "liquidGlassBlur" key fully ages out of
+        // saved workspaces; both names normalize identically.
+        const normalizeLiquidGlassBlur = normalizeGlassBlur;
+
+        const GLASS_REFRACTION_DEFAULT = 18;
+        const GLASS_REFRACTION_MIN = 0;
+        const GLASS_REFRACTION_MAX = 40;
+        function normalizeGlassRefraction(value) {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) return GLASS_REFRACTION_DEFAULT;
+            return Math.min(GLASS_REFRACTION_MAX, Math.max(GLASS_REFRACTION_MIN, Math.round(parsed)));
         }
 
         function migrateLegacyData() {
@@ -6858,10 +6971,18 @@ function populateProgressDashboard() {
                     || appSettings.customShortcuts
             );
             appSettings.atelierTheme = normalizeAtelierThemeName(appSettings.atelierTheme);
-            appSettings.liquidGlassBlur = normalizeLiquidGlassBlur(
-                Object.prototype.hasOwnProperty.call(storedSettings, 'liquidGlassBlur')
-                    ? storedSettings.liquidGlassBlur
-                    : appSettings.liquidGlassBlur
+            appSettings.glassBlur = normalizeGlassBlur(
+                Object.prototype.hasOwnProperty.call(storedSettings, 'glassBlur')
+                    ? storedSettings.glassBlur
+                    : (Object.prototype.hasOwnProperty.call(storedSettings, 'liquidGlassBlur')
+                        ? storedSettings.liquidGlassBlur
+                        : appSettings.glassBlur)
+            );
+            delete appSettings.liquidGlassBlur;
+            appSettings.glassRefraction = normalizeGlassRefraction(
+                Object.prototype.hasOwnProperty.call(storedSettings, 'glassRefraction')
+                    ? storedSettings.glassRefraction
+                    : appSettings.glassRefraction
             );
             appSettings.enabledViews = normalizeEnabledViews(storedSettings.enabledViews || appSettings.enabledViews);
             if (!Object.prototype.hasOwnProperty.call(storedSettings, 'featureSelectionCompleted')) {
@@ -7295,8 +7416,8 @@ function populateProgressDashboard() {
                 sidebar: '#fbe7ec',
                 button: '#f3d6df'
             },
-            liquidglass: {
-                name: 'Liquid Glass',
+            glass: {
+                name: 'Glass',
                 mode: 'light',
                 accent: '#0a84ff',
                 sidebar: '#f0f1f4',
@@ -16601,10 +16722,13 @@ function populateProgressDashboard() {
                 }
                 card.classList.toggle('active', Boolean(normalized && card.dataset.theme === normalized));
             });
-            const liquidGlassOptions = document.getElementById('liquidGlassOptions');
-            if (liquidGlassOptions) {
-                liquidGlassOptions.hidden = normalized !== 'liquidglass';
-                if (!liquidGlassOptions.hidden) syncLiquidGlassBlurControl();
+            const glassOptions = document.getElementById('glassOptions');
+            if (glassOptions) {
+                glassOptions.hidden = normalized !== 'glass';
+                if (!glassOptions.hidden) {
+                    syncGlassBlurControl();
+                    syncGlassRefractionControl();
+                }
             }
         }
 
@@ -21353,7 +21477,7 @@ function populateProgressDashboard() {
             { key: 'ocean',      label: 'Ocean',      tone: 'Cool blue',   accent: '#2f82a7' },
             { key: 'editorial',  label: 'Editorial',  tone: 'Warm sepia',  accent: '#9d6c3b' },
             { key: 'retro95',    label: 'Retro 95',   tone: 'Classic gray', accent: '#c7ab75' },
-            { key: 'liquidglass', label: 'Liquid Glass', tone: 'Apple glass', accent: '#0a84ff' }
+            { key: 'glass', label: 'Glass', tone: 'Apple glass', accent: '#0a84ff' }
         ];
 
         const ONBOARDING_TODAY_PRIORITIES = [
@@ -23066,6 +23190,7 @@ function populateProgressDashboard() {
         const COURSE_TYPES = ['class', 'ap', 'activity', 'self_study', 'other'];
         const COURSE_FILE_KINDS = ['syllabus', 'rubric', 'worksheet', 'study_guide', 'lecture_notes', 'lab', 'slide_deck', 'image', 'pdf', 'document', 'spreadsheet', 'link', 'other'];
         const COURSE_DUE_RANGES = ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'later'];
+        const STUDENT_INBOX_FILTERS = ['all', 'overdue', 'today', 'thisWeek', 'highRisk', 'unscheduled', 'review', 'ap', 'college', 'course', 'timeline'];
         const COURSE_PALETTE = ['#7c9cf2', '#e0a05f', '#67b08a', '#c98bd0', '#5fb0c9', '#e07a93', '#b3a06a', '#8f8df0', '#6aa6e0', '#d99f6a'];
         const COURSE_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const COURSE_FILE_INLINE_NOTE_BYTES = 100 * 1024 * 1024; // hard reject above this
@@ -23101,6 +23226,7 @@ function populateProgressDashboard() {
                     activeCourseId: null,
                     courseFilter: 'all',
                     allDueFilter: 'overdue',
+                    studentInboxFilter: 'all',
                     allDueCourseFilter: 'all',
                     migratedFromHomeworkAt: null
                 }
@@ -23295,6 +23421,7 @@ function populateProgressDashboard() {
                     activeCourseId,
                     courseFilter: ['all', 'active', 'archived'].includes(s.courseFilter) ? s.courseFilter : 'all',
                     allDueFilter: COURSE_DUE_RANGES.includes(s.allDueFilter) ? s.allDueFilter : 'overdue',
+                    studentInboxFilter: STUDENT_INBOX_FILTERS.includes(s.studentInboxFilter) ? s.studentInboxFilter : 'all',
                     allDueCourseFilter: String(s.allDueCourseFilter || 'all'),
                     migratedFromHomeworkAt: s.migratedFromHomeworkAt || null
                 }
@@ -23310,8 +23437,23 @@ function populateProgressDashboard() {
             } catch (e) { return []; }
         }
         function cwWriteHwArray(key, value) {
-            try { localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : [])); return true; }
-            catch (e) { console.warn('cwWriteHwArray failed', key, e); return false; }
+            const payload = JSON.stringify(Array.isArray(value) ? value : []);
+            try {
+                if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
+                    window.SutraSafeStorage.set(key, payload, { importance: 'important', label: 'Your homework' });
+                    return true;
+                }
+                throw new Error('SutraSafeStorage is unavailable.');
+            } catch (e) {
+                console.warn('cwWriteHwArray failed', key, e);
+                if (typeof window.reportError === 'function') {
+                    window.reportError(e, { where: 'courseHub.cwWriteHwArray', key }, 'error');
+                }
+                if (typeof showToast === 'function') {
+                    showToast('Homework changes are kept in memory but could not be saved. Export a backup to be safe.');
+                }
+                return false;
+            }
         }
         function cwNotifyHomework() {
             try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
@@ -24008,8 +24150,9 @@ function populateProgressDashboard() {
                     : (d.source === 'apexam' ? 'Exam' : (d.source === 'timeline' ? 'Event' : cwClassifyAssignmentType(d.title)));
                 out.push({
                     id: d.id || `${d.source}:${d.sourceId}`,
-                    source: d.source === 'apexam' ? 'apStudy' : (d.source === 'task' ? 'homework' : d.source),
+                    source: cwInboxSource(d.source),
                     sourceId: String(d.sourceId || ''),
+                    milestoneId: String(d.milestoneId || ''),
                     title: String(d.title || 'Untitled'),
                     courseId,
                     courseName,
@@ -24072,6 +24215,324 @@ function populateProgressDashboard() {
                 .filter(i => !i.completed && i.due && i.due >= startOfDay(now))
                 .filter(i => i.urgency === 'high' || /\b(exam|test|final|frq|dbq|project|build|checkoff|essay)\b/i.test(i.title) || i.type === 'Exam' || i.type === 'Project')
                 .slice(0, 8);
+        }
+
+        // ---- Student Inbox aggregation ------------------------------------
+
+        function cwDateKey(date) {
+            const d = date instanceof Date ? date : new Date(date);
+            if (isNaN(d)) return '';
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function cwAddDaysKey(offset) {
+            const d = new Date();
+            d.setDate(d.getDate() + (Number(offset) || 0));
+            return cwDateKey(d);
+        }
+
+        function cwInboxSource(source) {
+            const s = String(source || '').toLowerCase();
+            if (s === 'apexam' || s === 'apstudy' || s === 'ap') return 'ap';
+            if (s === 'task' || s === 'planner') return 'planner';
+            if (s === 'collegeapp' || s === 'college') return 'college';
+            if (s === 'milestone') return 'milestone';
+            if (s === 'review') return 'review';
+            if (s === 'timeline' || s === 'conflict' || s === 'overload') return 'timeline';
+            if (s === 'business') return 'business';
+            if (s === 'life') return 'life';
+            if (s === 'note') return 'note';
+            return s || 'homework';
+        }
+
+        function cwInboxSourceLabel(source) {
+            const labels = {
+                homework: 'Homework',
+                planner: 'Planner',
+                milestone: 'Milestone',
+                ap: 'AP',
+                review: 'Review',
+                college: 'College',
+                timeline: 'Timeline',
+                business: 'Work',
+                life: 'Life',
+                note: 'Notes'
+            };
+            return labels[cwInboxSource(source)] || 'Item';
+        }
+
+        function cwIsInboxItemScheduled(item) {
+            if (!item) return false;
+            const id = String(item.sourceId || item.id || '');
+            const title = String(item.title || '').toLowerCase();
+            const itemDate = item.due ? cwDateKey(item.due) : String(item.dueDate || '');
+            return (Array.isArray(timeBlocks) ? timeBlocks : []).some(block => {
+                if (!block) return false;
+                if (id && (String(block.linkedTaskId || '') === id
+                    || String(block.linkedHomeworkId || '') === id
+                    || String(block.sourceId || '') === id
+                    || String(block.taskId || '') === id)) return true;
+                const name = String(block.name || block.title || '').toLowerCase();
+                if (title && name && (name.includes(title.slice(0, 32)) || title.includes(name.slice(0, 32)))) {
+                    if (!itemDate || !block.date || String(block.date) === itemDate) return true;
+                }
+                return false;
+            });
+        }
+
+        function cwInboxFlags(item) {
+            const due = item && item.due instanceof Date ? item.due : null;
+            const now = new Date();
+            const today = startOfDay(now);
+            const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
+            const d = due ? startOfDay(due) : null;
+            const source = cwInboxSource(item && item.source);
+            const flags = {
+                overdue: !!(due && due < now && d < today),
+                today: !!(d && d.getTime() === today.getTime()),
+                thisWeek: !!(d && d >= today && d < weekEnd),
+                highRisk: item && (item.urgency === 'high' || item.risk === 'high' || item.riskScore >= 4),
+                unscheduled: item && item.unscheduled === true,
+                review: source === 'review',
+                ap: source === 'ap',
+                college: source === 'college',
+                course: !!(item && item.courseId) || source === 'homework' || source === 'milestone',
+                timeline: source === 'timeline',
+                business: source === 'business',
+                note: source === 'note'
+            };
+            return flags;
+        }
+
+        function cwNormalizeInboxItem(raw, extra = {}) {
+            if (!raw) return null;
+            const due = raw.due instanceof Date
+                ? raw.due
+                : normalizeDeadlineDate(raw.dueDate || raw.date || raw.deadline || '', raw.dueTime || raw.start || '');
+            const source = cwInboxSource(extra.source || raw.source);
+            const courseId = String(extra.courseId || raw.sourceCourseId || raw.courseId || '');
+            const courseName = extra.courseName || raw.subtitle || (courseId && getCourseById(courseId) ? getCourseById(courseId).name : '') || '';
+            const id = String(extra.id || raw.id || `${source}:${raw.sourceId || raw.id || cwId('inbox')}`);
+            const item = {
+                id,
+                source,
+                sourceId: String(extra.sourceId || raw.sourceId || raw.id || ''),
+                milestoneId: String(extra.milestoneId || raw.milestoneId || ''),
+                title: String(extra.title || raw.title || 'Untitled'),
+                courseId,
+                courseName,
+                dueDate: extra.dueDate || raw.dueDate || (due ? cwDateKey(due) : ''),
+                dueTime: extra.dueTime || raw.dueTime || '',
+                due,
+                type: String(extra.type || raw.type || (source === 'ap' ? 'Exam' : (source === 'timeline' ? 'Schedule' : cwClassifyAssignmentType(raw.title)))),
+                urgency: extra.urgency || cwUrgencyFor(raw, due),
+                priority: String(extra.priority || raw.priority || 'medium'),
+                status: String(extra.status || raw.status || 'open'),
+                completed: raw.status === 'done' || raw.completed === true,
+                unscheduled: extra.unscheduled === true,
+                risk: extra.risk || '',
+                riskScore: Number(extra.riskScore || raw.risk || 0),
+                signal: String(extra.signal || raw.signal || ''),
+                metadata: Object.assign({}, raw.metadata || {}, extra.metadata || {}, { originalSource: raw.source })
+            };
+            item.flags = cwInboxFlags(item);
+            if (!item.flags.timeline && !['timeline', 'review'].includes(item.source)) {
+                item.unscheduled = item.unscheduled || !cwIsInboxItemScheduled(item);
+                item.flags.unscheduled = item.unscheduled;
+            }
+            return item;
+        }
+
+        function cwSignalDue(dateKey, time) {
+            return normalizeDeadlineDate(dateKey || cwDateKey(new Date()), time || '20:00') || new Date();
+        }
+
+        function cwBuildStudentSignals() {
+            try {
+                if (window.sutraIntelligence && typeof window.sutraIntelligence.deriveStudentContext === 'function') {
+                    return window.sutraIntelligence.deriveStudentContext({ source: 'student-inbox' }) || {};
+                }
+            } catch (e) { /* non-critical */ }
+            return {};
+        }
+
+        function getStudentInboxItems(filters = {}) {
+            let items = [];
+            let base = [];
+            try { base = collectWorkspaceDeadlines({ includeBusiness: true }); } catch (e) { base = []; }
+            base.forEach(d => {
+                const item = cwNormalizeInboxItem(d, {
+                    source: d.source,
+                    type: d.source === 'apexam' ? 'Exam' : (d.source === 'milestone' ? 'Milestone' : undefined)
+                });
+                if (item) items.push(item);
+            });
+
+            const byRef = new Map();
+            const indexItem = (item) => {
+                if (!item) return;
+                byRef.set(`${cwInboxSource(item.source)}:${String(item.sourceId || '')}`, item);
+                if (item.source === 'milestone' && item.milestoneId) byRef.set(`milestone:${item.sourceId}:${item.milestoneId}`, item);
+            };
+            items.forEach(indexItem);
+
+            const signals = cwBuildStudentSignals();
+            const upsertSignal = (ref, raw) => {
+                const existing = byRef.get(ref);
+                if (existing) {
+                    Object.assign(existing, raw);
+                    existing.flags = cwInboxFlags(existing);
+                    return;
+                }
+                const item = cwNormalizeInboxItem(raw, raw);
+                if (item) {
+                    items.push(item);
+                    indexItem(item);
+                }
+            };
+
+            (signals.unscheduledHighPriority || []).forEach(sig => {
+                const source = cwInboxSource(sig.kind);
+                upsertSignal(`${source}:${String(sig.id || '')}`, {
+                    source,
+                    sourceId: sig.id,
+                    title: sig.title,
+                    dueDate: sig.dueDate,
+                    due: cwSignalDue(sig.dueDate, '18:00'),
+                    priority: sig.priority || 'high',
+                    urgency: 'high',
+                    unscheduled: true,
+                    risk: 'high',
+                    riskScore: 4,
+                    signal: 'Unscheduled high priority'
+                });
+            });
+            (signals.highRiskAssignments || []).forEach(sig => {
+                const source = cwInboxSource(sig.kind);
+                upsertSignal(`${source}:${String(sig.id || '')}`, {
+                    source,
+                    sourceId: sig.id,
+                    title: sig.title,
+                    dueDate: sig.dueDate,
+                    due: cwSignalDue(sig.dueDate, '18:00'),
+                    priority: sig.priority || 'high',
+                    urgency: 'high',
+                    risk: 'high',
+                    riskScore: Number(sig.risk || 4),
+                    signal: 'High risk'
+                });
+            });
+
+            const reviewDebt = signals.reviewDebt || (() => {
+                try { return (typeof window.getReviewTodayStats === 'function') ? window.getReviewTodayStats() : null; }
+                catch (e) { return null; }
+            })();
+            if (reviewDebt && ((reviewDebt.due || 0) > 0 || (reviewDebt.overdue || 0) > 0)) {
+                const dueCount = Number(reviewDebt.due || 0);
+                const overdue = Number(reviewDebt.overdue || 0);
+                items.push(cwNormalizeInboxItem({
+                    id: 'review:due',
+                    source: 'review',
+                    sourceId: 'due',
+                    title: overdue ? `${overdue} overdue review card${overdue === 1 ? '' : 's'}` : `${dueCount} review card${dueCount === 1 ? '' : 's'} due`,
+                    due: cwSignalDue(cwDateKey(new Date()), '20:00'),
+                    dueDate: cwDateKey(new Date()),
+                    priority: overdue ? 'high' : 'medium',
+                    status: 'open'
+                }, { source: 'review', type: 'Review', urgency: overdue ? 'high' : 'medium', signal: 'Review debt' }));
+            }
+
+            (signals.lowConfidenceApSubjects || []).forEach(sig => {
+                items.push(cwNormalizeInboxItem({
+                    id: `ap:low-confidence:${sig.id || sig.name}`,
+                    source: 'ap',
+                    sourceId: sig.id || '',
+                    title: `Low AP confidence: ${sig.name || 'Subject'}`,
+                    due: cwSignalDue(sig.examDate, '18:00'),
+                    dueDate: sig.examDate,
+                    priority: 'high'
+                }, { source: 'ap', type: 'AP Prep', urgency: 'high', risk: 'high', signal: 'Low confidence' }));
+            });
+            (signals.missingExamBlocks || []).forEach(sig => {
+                items.push(cwNormalizeInboxItem({
+                    id: `ap:missing-block:${sig.id || sig.name}`,
+                    source: 'ap',
+                    sourceId: sig.id || '',
+                    title: `Create AP study block: ${sig.name || 'Subject'}`,
+                    due: cwSignalDue(sig.examDate, '18:00'),
+                    dueDate: sig.examDate,
+                    priority: 'high'
+                }, { source: 'ap', type: 'Study Block', urgency: 'high', unscheduled: true, signal: 'No study block' }));
+            });
+            (signals.overloadedDays || []).forEach(day => {
+                items.push(cwNormalizeInboxItem({
+                    id: `timeline:overload:${day.date}`,
+                    source: 'timeline',
+                    sourceId: day.date,
+                    title: `Overloaded day: ${day.date}`,
+                    due: cwSignalDue(day.date, '08:00'),
+                    dueDate: day.date,
+                    priority: 'high'
+                }, { source: 'timeline', type: 'Overload', urgency: 'high', risk: 'high', signal: `${day.dueItems || 0} due, ${day.blocks || 0} blocks` }));
+            });
+            (signals.conflictingBlocks || []).forEach(conflict => {
+                items.push(cwNormalizeInboxItem({
+                    id: `timeline:conflict:${conflict.date}:${conflict.a}:${conflict.b}`,
+                    source: 'timeline',
+                    sourceId: conflict.date,
+                    title: `Timeline conflict: ${conflict.a || 'Block'} + ${conflict.b || 'Block'}`,
+                    due: cwSignalDue(conflict.date, '08:00'),
+                    dueDate: conflict.date,
+                    priority: 'high'
+                }, { source: 'timeline', type: 'Conflict', urgency: 'high', risk: 'high', signal: 'Overlapping blocks' }));
+            });
+            (signals.staleNotes || []).forEach(note => {
+                items.push(cwNormalizeInboxItem({
+                    id: `note:stale:${note.id}`,
+                    source: 'note',
+                    sourceId: note.id,
+                    title: `Review stale note: ${note.title || 'Untitled'}`,
+                    due: cwSignalDue(cwDateKey(new Date()), '19:00'),
+                    dueDate: cwDateKey(new Date()),
+                    priority: 'medium'
+                }, { source: 'note', type: 'Note', urgency: 'medium', signal: `${note.ageDays || 0} days old` }));
+            });
+
+            const seen = new Set();
+            items = items.filter(item => {
+                if (!item || item.completed) return false;
+                const key = String(item.id || `${item.source}:${item.sourceId}:${item.title}`);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                item.flags = cwInboxFlags(item);
+                return true;
+            });
+
+            const courseFilter = String(filters.courseId || filters.courseFilter || 'all');
+            if (courseFilter && courseFilter !== 'all') {
+                items = items.filter(i => String(i.courseId) === courseFilter);
+            }
+            const activeFilter = String(filters.filter || (courseWorkspace.settings && courseWorkspace.settings.studentInboxFilter) || 'all');
+            if (activeFilter && activeFilter !== 'all') {
+                items = items.filter(i => i.flags && i.flags[activeFilter]);
+            }
+            const q = String(filters.search || '').trim().toLowerCase();
+            if (q) {
+                items = items.filter(i =>
+                    String(i.title || '').toLowerCase().includes(q)
+                    || String(i.courseName || '').toLowerCase().includes(q)
+                    || String(i.type || '').toLowerCase().includes(q)
+                    || String(i.signal || '').toLowerCase().includes(q)
+                );
+            }
+            items.sort((a, b) => {
+                const ad = a.due instanceof Date ? a.due.getTime() : Number.MAX_SAFE_INTEGER;
+                const bd = b.due instanceof Date ? b.due.getTime() : Number.MAX_SAFE_INTEGER;
+                if (ad !== bd) return ad - bd;
+                const riskOrder = { high: 0, medium: 1, low: 2 };
+                return (riskOrder[a.urgency] ?? 1) - (riskOrder[b.urgency] ?? 1);
+            });
+            return items;
         }
 
         // ---- Attachment storage (isolated IndexedDB) -----------------------
@@ -24719,6 +25180,94 @@ function populateProgressDashboard() {
                 </div>`;
         }
 
+        function cwGetGradePlannerSummary(course) {
+            if (!course || !window.SutraGradePlanner) return null;
+            try {
+                const planner = typeof window.SutraGradePlanner.getPlanner === 'function' ? window.SutraGradePlanner.getPlanner() : null;
+                const engine = window.SutraGradePlanner.engine || window.SutraGradePlanner.Engine || window.SutraGradePlanner;
+                if (!planner || !engine || typeof engine.computeCourseGrade !== 'function') return null;
+                const raw = planner.courses && planner.courses[String(course.id)];
+                if (!raw) return null;
+                const data = typeof engine.normalizeCourseGrades === 'function' ? engine.normalizeCourseGrades(raw) : raw;
+                const grade = engine.computeCourseGrade(data, planner.settings || {});
+                const impact = typeof engine.rankImpact === 'function' ? engine.rankImpact(data, planner.settings || {}).slice(0, 3) : [];
+                return { data, grade, impact };
+            } catch (e) { return null; }
+        }
+
+        function cwGradeSnapshotHtml(course) {
+            const summary = cwGetGradePlannerSummary(course);
+            if (summary && summary.grade) {
+                const grade = summary.grade;
+                const target = summary.data && summary.data.targetPercent != null ? `${summary.data.targetPercent}%` : (course.targetGrade || 'Set target');
+                const missing = Number(grade.missingCount || 0);
+                return `
+                    <div class="cw-grade-row">
+                        <div><div class="cw-grade-label">Current</div><div class="cw-grade-val">${grade.percent == null ? 'No scores' : cwEsc(`${grade.letter} ${grade.percent.toFixed(1)}%`)}</div></div>
+                        <div><div class="cw-grade-label">Target</div><div class="cw-grade-val">${cwEsc(target)}</div></div>
+                    </div>
+                    <div class="cw-grade-engine-note">Local grade engine${missing ? ` · ${missing} missing` : ''}</div>
+                    ${summary.impact && summary.impact.length ? `<div class="cw-next-list">${summary.impact.map(i => `<button type="button" class="cw-next-action" onclick="cwSetCourseTab('grades')"><span>${cwEsc(i.title)}</span><small>+${cwEsc(i.delta)} pts if finished</small></button>`).join('')}</div>` : ''}`;
+            }
+            const cats = course.gradingCategories || [];
+            return `
+                <div class="cw-grade-row"><div><div class="cw-grade-label">Current</div><div class="cw-grade-val">${cwEsc(course.currentGrade || '—')}</div></div><div><div class="cw-grade-label">Target</div><div class="cw-grade-val">${cwEsc(course.targetGrade || '—')}</div></div></div>
+                ${cats.length ? `<div class="cw-grade-cats">${cats.map(c => `<div class="cw-grade-cat"><span class="cw-grade-cat-name">${cwEsc(c.name)}</span><span class="cw-grade-bar"><span style="width:${Math.max(0, Math.min(100, c.currentPercent == null ? 0 : c.currentPercent))}%;background:${cwEsc(c.color)}"></span></span><span class="cw-grade-cat-pct">${c.currentPercent == null ? '—' : c.currentPercent + '%'}</span></div>`).join('')}</div>` : '<div class="cw-empty-line">No grade categories yet.</div>'}`;
+        }
+
+        function cwSchoolPeriodsForCourse(courseId) {
+            try {
+                if (!window.SutraSchoolSchedule || typeof window.SutraSchoolSchedule.resolveDayInfo !== 'function') return [];
+                const info = window.SutraSchoolSchedule.resolveDayInfo(cwDateKey(new Date()));
+                if (!info || !Array.isArray(info.periods)) return [];
+                return info.periods.filter(p => String(p.courseId || '') === String(courseId));
+            } catch (e) { return []; }
+        }
+
+        function cwNextActionsHtml(course) {
+            const actions = getStudentInboxItems({ courseId: course.id, filter: 'all', search: '' }).slice(0, 4);
+            if (!actions.length) return '<div class="cw-empty-line">No urgent next actions for this course.</div>';
+            return `<div class="cw-next-list">${actions.map(item => {
+                const meta = cwDueMeta(item.due);
+                return `<button type="button" class="cw-next-action" onclick="cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')"><span>${cwEsc(item.title)}</span><small>${cwEsc(meta.label)} · ${cwEsc(cwInboxSourceLabel(item.source))}</small></button>`;
+            }).join('')}</div>`;
+        }
+
+        function cwCreateReviewDeckForCourse(courseId) {
+            const course = getCourseById(courseId);
+            if (!course) return null;
+            let deck = null;
+            if (typeof window.createReviewDeck === 'function') {
+                deck = window.createReviewDeck({
+                    name: `${course.name} Review`,
+                    description: `Linked Course Hub deck for ${course.name}.`,
+                    subject: course.name,
+                    sourceType: 'course',
+                    sourceId: course.id
+                });
+            }
+            if (deck && deck.id) {
+                if (!courseWorkspace.relationships) courseWorkspace.relationships = [];
+                courseWorkspace.relationships.push(normalizeRelationship({ courseId: course.id, entityType: 'reviewDeck', entityId: deck.id }));
+                persistAppData();
+                showToast('Review deck created.');
+                renderCourseHubView();
+                return deck;
+            }
+            setActiveView('review');
+            return null;
+        }
+
+        function cwScheduleStudyBlockForCourse(courseId) {
+            const course = getCourseById(courseId);
+            if (!course) return false;
+            const ok = typeof scheduleGenericItemAsBlock === 'function'
+                ? scheduleGenericItemAsBlock({ title: `Study: ${course.name}`, dueDate: cwDateKey(new Date()), dueTime: '18:00', category: 'study', courseId: course.id, source: 'course', sourceId: course.id })
+                : false;
+            if (ok) showToast('Study block scheduled.');
+            return ok;
+        }
+
         function cwRenderOverview(course) {
             const assignments = getAssignmentsForCourse(course.id);
             const openAssigns = assignments.filter(a => !a.done).slice(0, 5);
@@ -24727,9 +25276,13 @@ function populateProgressDashboard() {
             const decks = getReviewDecksForCourse(course.id);
             const apSubjects = getApSubjectsForCourse(course.id);
             const nextClass = cwComputeNextClass(course);
-            const cats = course.gradingCategories || [];
+            const schoolPeriods = cwSchoolPeriodsForCourse(course.id);
             return `
                 <div class="cw-ov-grid">
+                    <section class="cw-panel cw-panel-span student-os-next-actions">
+                        <div class="cw-panel-head"><h3>Next Actions</h3><button type="button" class="cw-link" onclick="setActiveView('alldue')">Open Inbox</button></div>
+                        ${cwNextActionsHtml(course)}
+                    </section>
                     <section class="cw-panel">
                         <div class="cw-panel-head"><h3>Upcoming Assignments</h3><button type="button" class="cw-link" onclick="cwSetCourseTab('assignments')">View all</button></div>
                         ${openAssigns.length ? openAssigns.map(a => cwAssignmentRowHtml(a, course)).join('') : '<div class="cw-empty-line">Nothing due — you\'re caught up.</div>'}
@@ -24751,16 +25304,17 @@ function populateProgressDashboard() {
                     <section class="cw-panel">
                         <div class="cw-panel-head"><h3>Study</h3><button type="button" class="cw-link" onclick="cwSetCourseTab('study')">Open</button></div>
                         ${decks.length ? decks.slice(0, 3).map(d => `<div class="cw-study-row"><span>${cwEsc(d.name || d.title || 'Deck')}</span><button type="button" class="cw-mini-btn" onclick="setActiveView('review')">Open deck</button></div>`).join('') : '<div class="cw-empty-line">No review decks linked.</div>'}
-                        ${apSubjects.length ? `<div class="cw-topic-chips">${apSubjects.slice(0, 1).flatMap(s => (s.tags || [])).slice(0, 6).map(t => `<span class="cw-topic-chip">${cwEsc(t)}</span>`).join('') || apSubjects.map(s => `<span class="cw-topic-chip">${cwEsc(s.name)}</span>`).join('')}</div>` : ''}
+                        ${apSubjects.length ? `<div class="cw-topic-chips">${apSubjects.map(s => `<span class="cw-topic-chip">${cwEsc(s.name)}${s.examDate ? ' · ' + cwEsc(s.examDate) : ''}</span>`).join('')}</div>` : '<div class="cw-empty-line">No AP subject linked yet.</div>'}
+                        <button type="button" class="cw-add-inline" onclick="cwCreateReviewDeck('${cwEsc(course.id)}')"><i class="fas fa-layer-group" aria-hidden="true"></i> Create review deck</button>
                     </section>
                     <section class="cw-panel">
                         <div class="cw-panel-head"><h3>Grade Snapshot</h3><button type="button" class="cw-link" onclick="cwSetCourseTab('grades')">Edit</button></div>
-                        <div class="cw-grade-row"><div><div class="cw-grade-label">Current</div><div class="cw-grade-val">${cwEsc(course.currentGrade || '—')}</div></div><div><div class="cw-grade-label">Target</div><div class="cw-grade-val">${cwEsc(course.targetGrade || '—')}</div></div></div>
-                        ${cats.length ? `<div class="cw-grade-cats">${cats.map(c => `<div class="cw-grade-cat"><span class="cw-grade-cat-name">${cwEsc(c.name)}</span><span class="cw-grade-bar"><span style="width:${Math.max(0, Math.min(100, c.currentPercent == null ? 0 : c.currentPercent))}%;background:${cwEsc(c.color)}"></span></span><span class="cw-grade-cat-pct">${c.currentPercent == null ? '—' : c.currentPercent + '%'}</span></div>`).join('')}</div>` : '<div class="cw-empty-line">No grade categories yet.</div>'}
+                        ${cwGradeSnapshotHtml(course)}
                     </section>
                     <section class="cw-panel">
-                        <div class="cw-panel-head"><h3>Next Class</h3></div>
+                        <div class="cw-panel-head"><h3>School Schedule</h3><button type="button" class="cw-link" onclick="if(window.SutraSchoolSchedule)window.SutraSchoolSchedule.open()">Setup</button></div>
                         ${nextClass ? `<div class="cw-nextclass"><div class="cw-nextclass-time">${cwEsc(nextClass.dayLabel)}${nextClass.timeLabel ? ' · ' + cwEsc(nextClass.timeLabel) : ''}</div><div class="cw-nextclass-room">${cwEsc(nextClass.room || course.room || 'Room TBD')}</div></div>` : '<div class="cw-empty-line">No schedule set. Add meeting days in Settings.</div>'}
+                        ${schoolPeriods.length ? `<div class="cw-next-list">${schoolPeriods.map(p => `<div class="cw-next-action is-static"><span>${cwEsc(p.label || 'Period')}</span><small>${cwEsc(cwFormatTime12(p.start))} - ${cwEsc(cwFormatTime12(p.end))}</small></div>`).join('')}</div>` : ''}
                     </section>
                     <section class="cw-panel">
                         <div class="cw-panel-head"><h3>Quick Resources</h3></div>
@@ -24768,6 +25322,8 @@ function populateProgressDashboard() {
                             <button type="button" class="cw-res-card" onclick="cwSetCourseTab('calendar')"><i class="fas fa-calendar" aria-hidden="true"></i> Course Calendar</button>
                             <button type="button" class="cw-res-card" onclick="cwSetCourseTab('files')"><i class="fas fa-folder-open" aria-hidden="true"></i> Class Materials</button>
                             <button type="button" class="cw-res-card" onclick="setActiveView('apstudy')"><i class="fas fa-graduation-cap" aria-hidden="true"></i> AP Resources</button>
+                            <button type="button" class="cw-res-card" onclick="cwSetCourseTab('grades')"><i class="fas fa-chart-line" aria-hidden="true"></i> Grade Planner</button>
+                            <button type="button" class="cw-res-card" onclick="cwScheduleStudyBlock('${cwEsc(course.id)}')"><i class="fas fa-clock" aria-hidden="true"></i> Study Block</button>
                         </div>
                     </section>
                 </div>`;
@@ -24892,6 +25448,10 @@ function populateProgressDashboard() {
                         <button type="button" class="cw-btn cw-btn-primary" onclick="cwAddAssignment('${cwEsc(course.id)}')"><i class="fas fa-plus" aria-hidden="true"></i> Add Assignment</button>
                         <button type="button" class="cw-btn cw-btn-ghost" onclick="cwAddFile('${cwEsc(course.id)}')"><i class="fas fa-upload" aria-hidden="true"></i> Add File</button>
                         <button type="button" class="cw-btn cw-btn-ghost" onclick="cwNewNote('${cwEsc(course.id)}')"><i class="fas fa-note-sticky" aria-hidden="true"></i> New Note</button>
+                        <button type="button" class="cw-btn cw-btn-ghost" onclick="cwAddResourceLink('${cwEsc(course.id)}')"><i class="fas fa-link" aria-hidden="true"></i> Resource</button>
+                        <button type="button" class="cw-btn cw-btn-ghost" onclick="cwCreateReviewDeck('${cwEsc(course.id)}')"><i class="fas fa-layer-group" aria-hidden="true"></i> Review Deck</button>
+                        <button type="button" class="cw-btn cw-btn-ghost" onclick="cwSetCourseTab('grades')"><i class="fas fa-chart-line" aria-hidden="true"></i> Grades</button>
+                        <button type="button" class="cw-btn cw-btn-ghost" onclick="cwScheduleStudyBlock('${cwEsc(course.id)}')"><i class="fas fa-clock" aria-hidden="true"></i> Study Block</button>
                         <button type="button" class="cw-icon-btn" aria-label="Course actions" onclick="cwSetCourseTab('settings')"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
                     </div>
                 </div>
@@ -24939,8 +25499,19 @@ function populateProgressDashboard() {
                     ${cwStatCard('fa-note-sticky', stats.linkedNotes, 'Linked Notes')}
                 </div>`;
 
+            let academicCommandCenter = '';
+            try {
+                if (window.SutraAcademicCommandCenter && typeof window.SutraAcademicCommandCenter.renderHtml === 'function') {
+                    academicCommandCenter = window.SutraAcademicCommandCenter.renderHtml();
+                }
+            } catch (error) {
+                if (typeof window.reportError === 'function') {
+                    window.reportError(error, { where: 'renderCourseHubView', feature: 'academic-command-center' }, 'warning');
+                }
+            }
+
             if (!allCourses.length) {
-                mount.innerHTML = `${header}${statRow}
+                window.SutraDOMSafety.setTrustedHTML(mount, `${header}${statRow}
                     <div class="cw-empty-state">
                         <div class="cw-empty-icon"><i class="fas fa-graduation-cap" aria-hidden="true"></i></div>
                         <h2>No courses yet</h2>
@@ -24950,7 +25521,7 @@ function populateProgressDashboard() {
                             <button type="button" class="cw-btn cw-btn-ghost" onclick="cwNewCourse()"><i class="fas fa-plus" aria-hidden="true"></i> Create Course</button>
                             <button type="button" class="cw-btn cw-btn-ghost" onclick="cwSeedExamples()">Load example courses</button>
                         </div>
-                    </div>`;
+                    </div>`);
                 return;
             }
 
@@ -24958,13 +25529,14 @@ function populateProgressDashboard() {
                 ? list.map(c => cwCourseCardHtml(c, activeId)).join('')
                 : '<div class="cw-empty-line" style="padding:18px">No courses match your search.</div>';
 
-            mount.innerHTML = `
+            window.SutraDOMSafety.setTrustedHTML(mount, `
                 ${header}
                 ${statRow}
+                ${academicCommandCenter}
                 <div class="cw-layout">
                     <div class="cw-course-list" role="list">${listHtml}</div>
                     <div class="cw-detail">${activeCourse ? cwRenderCourseDetail(activeCourse) : '<div class="cw-empty-line" style="padding:24px">Select a course.</div>'}</div>
-                </div>`;
+                </div>`);
 
             cwAfterCourseRender(opts);
         }
@@ -25036,6 +25608,11 @@ function populateProgressDashboard() {
             persistAppData();
             renderAllDueView();
         }
+        function cwSetStudentInboxFilter(filter) {
+            courseWorkspace.settings.studentInboxFilter = STUDENT_INBOX_FILTERS.includes(filter) ? filter : 'all';
+            persistAppData();
+            renderAllDueView();
+        }
         function cwSetAllDueCourse(value) {
             courseWorkspace.settings.allDueCourseFilter = String(value || 'all');
             persistAppData();
@@ -25048,9 +25625,21 @@ function populateProgressDashboard() {
                 setActiveView('homework');
                 return;
             }
-            if (s === 'apStudy') { setActiveView('apstudy'); return; }
+            if (s === 'planner') { setActiveView('today'); return; }
+            if (s === 'milestone') {
+                if (window.SutraAssignmentStudio && typeof window.SutraAssignmentStudio.open === 'function') {
+                    try { window.SutraAssignmentStudio.open(String(sourceId)); return; } catch (e) { /* fall through */ }
+                }
+                setActiveView('homework');
+                return;
+            }
+            if (s === 'apStudy' || s === 'ap') { setActiveView('apstudy'); return; }
+            if (s === 'review') { setActiveView('review'); return; }
             if (s === 'timeline') { setActiveView('timeline'); return; }
             if (s === 'collegeapp' || s === 'college') { setActiveView('collegeapp'); return; }
+            if (s === 'note' && sourceId) { try { setActiveView('notes'); if (typeof loadPage === 'function') loadPage(sourceId); return; } catch (e) { /* fall through */ } }
+            if (s === 'business') { setActiveView('business'); return; }
+            if (s === 'life') { setActiveView('life'); return; }
             setActiveView('homework');
         }
         function cwQuickAction(action) {
@@ -25070,19 +25659,188 @@ function populateProgressDashboard() {
             }
         }
 
+        function cwFindInboxItem(source, sourceId, milestoneId) {
+            const s = cwInboxSource(source);
+            const sid = String(sourceId || '');
+            const mid = String(milestoneId || '');
+            return getStudentInboxItems({ filter: 'all', courseId: 'all', search: '' }).find(item => {
+                if (!item || cwInboxSource(item.source) !== s) return false;
+                if (sid && String(item.sourceId || '') !== sid) return false;
+                if (mid && String(item.milestoneId || '') !== mid) return false;
+                return true;
+            }) || null;
+        }
+
+        function cwRefreshStudentInboxSurfaces() {
+            try { renderAllDueView(); } catch (e) { /* non-critical */ }
+            try { renderCourseHubView(); } catch (e) { /* non-critical */ }
+            try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (e) { /* non-critical */ }
+        }
+
+        function cwMarkInboxDone(source, sourceId, milestoneId) {
+            const s = cwInboxSource(source);
+            const sid = String(sourceId || '');
+            if (!sid && s !== 'review') return false;
+            if (s === 'homework') {
+                const hwTasks = cwReadHwArray('hwTasks:v2');
+                const task = hwTasks.find(t => String(t && t.id) === sid);
+                if (!task) return false;
+                task.done = true;
+                task.completedAt = new Date().toISOString();
+                task.updatedAt = new Date().toISOString();
+                cwWriteHwArray('hwTasks:v2', hwTasks);
+                cwNotifyHomework();
+                showToast('Marked homework done.');
+                cwRefreshStudentInboxSurfaces();
+                return true;
+            }
+            if (s === 'planner') {
+                const task = (Array.isArray(tasks) ? tasks : []).find(t => String(t && t.id) === sid);
+                if (!task) return false;
+                task.completed = true;
+                task.completedAt = new Date().toISOString();
+                task.isActive = false;
+                persistAppData();
+                try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
+                showToast('Marked task done.');
+                cwRefreshStudentInboxSurfaces();
+                return true;
+            }
+            if (s === 'milestone') {
+                const hwTasks = cwReadHwArray('hwTasks:v2');
+                const task = hwTasks.find(t => String(t && t.id) === sid);
+                if (!task || !task.studio || !Array.isArray(task.studio.milestones)) return false;
+                const milestone = task.studio.milestones.find(m => String(m && m.id) === String(milestoneId || ''));
+                if (!milestone) return false;
+                milestone.done = true;
+                task.studio.updatedAt = new Date().toISOString();
+                task.updatedAt = new Date().toISOString();
+                cwWriteHwArray('hwTasks:v2', hwTasks);
+                cwNotifyHomework();
+                showToast('Marked milestone done.');
+                cwRefreshStudentInboxSurfaces();
+                return true;
+            }
+            if (s === 'review') {
+                cwOpenDueItem('review', sid);
+                return false;
+            }
+            cwOpenDueItem(s, sid);
+            return false;
+        }
+
+        function cwUpdateInboxDue(source, sourceId, milestoneId, dueDate) {
+            const s = cwInboxSource(source);
+            const nextDate = String(dueDate || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) return false;
+            const sid = String(sourceId || '');
+            if (s === 'homework') {
+                const hwTasks = cwReadHwArray('hwTasks:v2');
+                const task = hwTasks.find(t => String(t && t.id) === sid);
+                if (!task) return false;
+                task.dueDate = nextDate;
+                task.due = nextDate;
+                task.updatedAt = new Date().toISOString();
+                cwWriteHwArray('hwTasks:v2', hwTasks);
+                cwNotifyHomework();
+                return true;
+            }
+            if (s === 'planner') {
+                const task = (Array.isArray(tasks) ? tasks : []).find(t => String(t && t.id) === sid);
+                if (!task) return false;
+                task.dueDate = nextDate;
+                task.updatedAt = new Date().toISOString();
+                persistAppData();
+                try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
+                return true;
+            }
+            if (s === 'milestone') {
+                const hwTasks = cwReadHwArray('hwTasks:v2');
+                const task = hwTasks.find(t => String(t && t.id) === sid);
+                if (!task || !task.studio || !Array.isArray(task.studio.milestones)) return false;
+                const milestone = task.studio.milestones.find(m => String(m && m.id) === String(milestoneId || ''));
+                if (!milestone) return false;
+                milestone.dueDate = nextDate;
+                task.studio.updatedAt = new Date().toISOString();
+                task.updatedAt = new Date().toISOString();
+                cwWriteHwArray('hwTasks:v2', hwTasks);
+                cwNotifyHomework();
+                return true;
+            }
+            return false;
+        }
+
+        async function cwDeferInboxItem(source, sourceId, milestoneId) {
+            const item = cwFindInboxItem(source, sourceId, milestoneId);
+            const suggested = item && item.due ? (() => { const d = new Date(item.due); d.setDate(d.getDate() + 1); return cwDateKey(d); })() : cwAddDaysKey(1);
+            const prompt = window.atelierPrompt
+                ? window.atelierPrompt('Move this due date to', suggested, { title: 'Defer or reschedule' })
+                : Promise.resolve(suggested);
+            const nextDate = String(await Promise.resolve(prompt) || '').trim();
+            if (!nextDate) return false;
+            const ok = cwUpdateInboxDue(source, sourceId, milestoneId, nextDate);
+            if (ok) {
+                showToast(`Rescheduled to ${nextDate}.`);
+                cwRefreshStudentInboxSurfaces();
+                return true;
+            }
+            cwOpenDueItem(source, sourceId);
+            return false;
+        }
+
+        function cwScheduleInboxItem(source, sourceId, milestoneId, mode) {
+            const item = cwFindInboxItem(source, sourceId, milestoneId);
+            if (!item) {
+                cwOpenDueItem(source, sourceId);
+                return false;
+            }
+            const payload = Object.assign({}, item, {
+                title: mode === 'study' ? `Study: ${item.title}` : item.title,
+                dueTime: mode === 'study' ? '18:00' : (item.dueTime || '18:00'),
+                category: mode === 'study' ? 'study' : 'general',
+                source: item.source,
+                sourceId: item.sourceId
+            });
+            const ok = typeof scheduleGenericItemAsBlock === 'function'
+                ? scheduleGenericItemAsBlock(payload)
+                : false;
+            if (ok) cwRefreshStudentInboxSurfaces();
+            return ok;
+        }
+
+        function cwInboxActionButtons(item) {
+            const source = cwEsc(item.source);
+            const sourceId = cwEsc(item.sourceId);
+            const milestoneId = cwEsc(item.milestoneId || '');
+            const mutable = ['homework', 'planner', 'milestone'].includes(item.source);
+            return `
+                <span class="ad-row-actions" aria-label="Inbox actions">
+                    <button type="button" class="cw-icon-btn" title="Open source" aria-label="Open source" onclick="event.stopPropagation();cwOpenDueItem('${source}','${sourceId}')"><i class="fas fa-up-right-from-square" aria-hidden="true"></i></button>
+                    <button type="button" class="cw-icon-btn" title="Schedule this" aria-label="Schedule this" onclick="event.stopPropagation();cwScheduleInboxItem('${source}','${sourceId}','${milestoneId}','schedule')"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>
+                    ${mutable ? `<button type="button" class="cw-icon-btn" title="Mark done" aria-label="Mark done" onclick="event.stopPropagation();cwMarkInboxDone('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-check" aria-hidden="true"></i></button>` : ''}
+                    ${mutable ? `<button type="button" class="cw-icon-btn" title="Defer or reschedule" aria-label="Defer or reschedule" onclick="event.stopPropagation();cwDeferInboxItem('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i></button>` : ''}
+                    <button type="button" class="cw-icon-btn" title="Create study block" aria-label="Create study block" onclick="event.stopPropagation();cwScheduleInboxItem('${source}','${sourceId}','${milestoneId}','study')"><i class="fas fa-book-open-reader" aria-hidden="true"></i></button>
+                </span>`;
+        }
+
         function cwAllDueRow(item) {
             const course = item.courseId ? getCourseById(item.courseId) : null;
             const meta = cwDueMeta(item.due);
             const courseColor = course ? getCourseColor(course) : 'var(--text-muted)';
+            const badges = [
+                item.signal ? `<span class="cw-type-pill ad-signal-pill">${cwEsc(item.signal)}</span>` : '',
+                item.flags && item.flags.unscheduled ? '<span class="cw-type-pill ad-unscheduled-pill">Unscheduled</span>' : ''
+            ].filter(Boolean).join('');
             return `
-                <button type="button" class="ad-row" onclick="cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')">
+                <div class="ad-row student-inbox-row" role="button" tabindex="0" onclick="cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')}">
                     <span class="ad-row-dot ad-dot-${cwEsc(item.urgency)}" aria-hidden="true"></span>
-                    <span class="ad-row-title">${cwEsc(item.title)}</span>
+                    <span class="ad-row-title">${cwEsc(item.title)}${badges ? `<span class="ad-row-badges">${badges}</span>` : ''}</span>
                     <span class="ad-row-course">${course ? `<span class="cw-chip-dot" style="background:${cwEsc(courseColor)}" aria-hidden="true"></span>` : ''}${cwEsc(item.courseName || '—')}</span>
                     <span class="ad-row-due ad-due-${meta.tone}">${cwEsc(meta.label)}</span>
-                    <span class="ad-row-type"><span class="cw-type-pill">${cwEsc(item.type)}</span></span>
+                    <span class="ad-row-type"><span class="cw-type-pill">${cwEsc(item.type || cwInboxSourceLabel(item.source))}</span></span>
                     <span class="ad-row-urgency">${cwUrgencyPill(item.urgency)}</span>
-                </button>`;
+                    ${cwInboxActionButtons(item)}
+                </div>`;
         }
 
         function cwTodayScheduleItems() {
@@ -25115,23 +25873,26 @@ function populateProgressDashboard() {
             const mount = document.getElementById('allDueMount');
             if (!mount) return;
             const courseFilter = courseWorkspace.settings.allDueCourseFilter || 'all';
-            const allItems = getAllDueItems({ courseId: courseFilter, search: cwAllDueSearchQuery });
+            const inboxFilter = courseWorkspace.settings.studentInboxFilter || 'all';
+            const allInboxItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: 'all' });
+            const allItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: inboxFilter });
             const groups = groupDueItemsByRange(allItems);
+            const allGroups = groupDueItemsByRange(allInboxItems);
             const now = new Date();
 
-            const overdueCount = groups.overdue.length;
-            const overdueNeedAttn = groups.overdue.filter(i => i.urgency === 'high').length;
-            const todayCount = groups.today.length;
-            const weekItems = [...groups.today, ...groups.tomorrow, ...groups.thisWeek];
+            const overdueCount = allGroups.overdue.length;
+            const overdueNeedAttn = allGroups.overdue.filter(i => i.urgency === 'high').length;
+            const todayCount = allGroups.today.length;
+            const weekItems = [...allGroups.today, ...allGroups.tomorrow, ...allGroups.thisWeek];
             const weekCount = weekItems.length;
             const examItems = weekItems.filter(i => i.type === 'Exam' || /\b(exam|test|final|midterm)\b/i.test(i.title));
-            const examTomorrow = groups.tomorrow.filter(i => i.type === 'Exam' || /\b(exam|test|final)\b/i.test(i.title)).length;
-            const openItems = allItems.filter(i => !i.completed);
+            const examTomorrow = allGroups.tomorrow.filter(i => i.type === 'Exam' || /\b(exam|test|final)\b/i.test(i.title)).length;
+            const openItems = allInboxItems.filter(i => !i.completed);
             const courseCount = new Set(openItems.map(i => i.courseId).filter(Boolean)).size;
 
             // Next upcoming today.
             let nextLabel = '—';
-            const upcomingToday = groups.today.filter(i => i.due && i.due > now).sort((a, b) => a.due - b.due)[0];
+            const upcomingToday = allGroups.today.filter(i => i.due && i.due > now).sort((a, b) => a.due - b.due)[0];
             if (upcomingToday) {
                 const diffMin = Math.round((upcomingToday.due - now) / 60000);
                 nextLabel = diffMin < 60 ? `in ${Math.max(1, diffMin)}m` : `in ${Math.round(diffMin / 60)}h`;
@@ -25141,10 +25902,24 @@ function populateProgressDashboard() {
             const weekRange = `${cwFmtDate(weekStart)} – ${cwFmtDate(weekEndD)}`;
 
             const courseOptions = getCourses({ filter: 'all' }).map(c => `<option value="${cwEsc(c.id)}" ${String(c.id) === courseFilter ? 'selected' : ''}>${cwEsc(c.name)}</option>`).join('');
+            const inboxFilters = [
+                ['all', 'All', allInboxItems.length],
+                ['overdue', 'Overdue', allInboxItems.filter(i => i.flags && i.flags.overdue).length],
+                ['today', 'Today', allInboxItems.filter(i => i.flags && i.flags.today).length],
+                ['thisWeek', 'This Week', allInboxItems.filter(i => i.flags && i.flags.thisWeek).length],
+                ['highRisk', 'High Risk', allInboxItems.filter(i => i.flags && i.flags.highRisk).length],
+                ['unscheduled', 'Unscheduled', allInboxItems.filter(i => i.flags && i.flags.unscheduled).length],
+                ['review', 'Review', allInboxItems.filter(i => i.flags && i.flags.review).length],
+                ['ap', 'AP', allInboxItems.filter(i => i.flags && i.flags.ap).length],
+                ['college', 'College', allInboxItems.filter(i => i.flags && i.flags.college).length],
+                ['course', 'Course', allInboxItems.filter(i => i.flags && i.flags.course).length],
+                ['timeline', 'Timeline', allInboxItems.filter(i => i.flags && i.flags.timeline).length]
+            ];
+            const inboxFilterTabs = inboxFilters.map(f => `<button type="button" class="ad-filter-chip ${f[0] === inboxFilter ? 'is-active' : ''}" onclick="cwSetStudentInboxFilter('${f[0]}')" aria-pressed="${f[0] === inboxFilter}">${cwEsc(f[1])}<span>${f[2]}</span></button>`).join('');
 
             const header = `
                 <div class="ad-header">
-                    <div class="ad-header-titles"><h1 class="cw-h1">All Due</h1><p class="cw-sub">Everything you need to get done across all your classes.</p></div>
+                    <div class="ad-header-titles"><h1 class="cw-h1">All Due / Student Inbox</h1><p class="cw-sub">One command center for deadlines, review debt, AP prep, conflicts, stale notes, and course work.</p></div>
                     <div class="cw-header-controls">
                         <div class="cw-search"><i class="fas fa-search" aria-hidden="true"></i><input id="cwAllDueSearch" type="search" placeholder="Search assignments, notes, files..." value="${cwEsc(cwAllDueSearchQuery)}" aria-label="Search due items"></div>
                         <select class="cw-filter" aria-label="Filter by course" onchange="cwSetAllDueCourse(this.value)"><option value="all" ${courseFilter === 'all' ? 'selected' : ''}>All Courses</option>${courseOptions}</select>
@@ -25160,13 +25935,14 @@ function populateProgressDashboard() {
                     <div class="cw-stat ad-stat"><div class="cw-stat-icon"><i class="fas fa-file-pen" aria-hidden="true"></i></div><div class="cw-stat-body"><div class="cw-stat-value">${examItems.length}</div><div class="cw-stat-label">Exams This Week</div><div class="ad-stat-sub">${examTomorrow} Tomorrow</div></div></div>
                     <div class="cw-stat ad-stat"><div class="cw-stat-icon"><i class="fas fa-list-check" aria-hidden="true"></i></div><div class="cw-stat-body"><div class="cw-stat-value">${openItems.length}</div><div class="cw-stat-label">Open Assignments</div><div class="ad-stat-sub">Across ${courseCount} course${courseCount === 1 ? '' : 's'}</div></div></div>
                 </div>`;
+            const filterBar = `<div class="ad-filter-bar" role="toolbar" aria-label="Student Inbox filters">${inboxFilterTabs}</div>`;
 
             if (!allItems.length) {
-                mount.innerHTML = `${header}${statRow}
+                mount.innerHTML = `${header}${statRow}${filterBar}
                     <div class="cw-empty-state">
                         <div class="cw-empty-icon"><i class="fas fa-circle-check" aria-hidden="true"></i></div>
-                        <h2>Nothing due right now</h2>
-                        <p>You're all caught up. Add an assignment, plan a study block, or set up a course to get started.</p>
+                        <h2>No Student Inbox items here</h2>
+                        <p>Try another filter, add an assignment, plan a study block, or set up a course to get started.</p>
                         <div class="cw-empty-actions">
                             <button type="button" class="cw-btn cw-btn-primary" onclick="cwAddAssignment('')"><i class="fas fa-plus" aria-hidden="true"></i> Add Assignment</button>
                             <button type="button" class="cw-btn cw-btn-ghost" onclick="cwQuickAction('studyTimer')">Start Study Block</button>
@@ -25187,7 +25963,7 @@ function populateProgressDashboard() {
             const rows = (groups[activeRange] || []);
             const tableHtml = rows.length
                 ? `<div class="ad-table">
-                        <div class="ad-table-head"><span>Assignment</span><span>Course</span><span>Due</span><span>Type</span><span>Urgency</span></div>
+                        <div class="ad-table-head ad-table-head-inbox"><span>Item</span><span>Course</span><span>Due</span><span>Type</span><span>Urgency</span><span>Actions</span></div>
                         ${rows.map(cwAllDueRow).join('')}
                    </div>`
                 : '<div class="cw-empty-line" style="padding:20px">Nothing in this range.</div>';
@@ -25230,9 +26006,10 @@ function populateProgressDashboard() {
             mount.innerHTML = `
                 ${header}
                 ${statRow}
+                ${filterBar}
                 <div class="ad-main-grid">
                     <section class="cw-panel ad-everything">
-                        <div class="cw-panel-head"><h3>Everything Due</h3></div>
+                        <div class="cw-panel-head"><h3>Student Inbox</h3><span class="ad-filter-caption">${cwEsc(inboxFilters.find(f => f[0] === inboxFilter)?.[1] || 'All')}</span></div>
                         <div class="ad-range-tabs">${rangeTabs}</div>
                         ${tableHtml}
                         <button type="button" class="ad-viewall" onclick="setActiveView('homework')">View all ${openItems.length} assignments <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
@@ -25287,6 +26064,8 @@ function populateProgressDashboard() {
             window.cwNewNote = cwNewNoteForCourse;
             window.cwAddTag = cwAddCourseTag;
             window.cwAddResourceLink = cwAddResourceLinkForCourse;
+            window.cwCreateReviewDeck = cwCreateReviewDeckForCourse;
+            window.cwScheduleStudyBlock = cwScheduleStudyBlockForCourse;
             window.cwToggleAssignment = cwToggleAssignment;
             window.cwDeleteAssignment = cwDeleteAssignment;
             window.cwOpenFile = openCourseFile;
@@ -25301,9 +26080,13 @@ function populateProgressDashboard() {
             window.cwAddGradeCategory = cwAddGradeCategory;
             window.cwUnlinkNote = cwUnlinkNote;
             window.cwSetAllDueRange = cwSetAllDueRange;
+            window.cwSetStudentInboxFilter = cwSetStudentInboxFilter;
             window.cwSetAllDueCourse = cwSetAllDueCourse;
             window.cwAllDueSearch = cwAllDueSearch;
             window.cwOpenDueItem = cwOpenDueItem;
+            window.cwMarkInboxDone = cwMarkInboxDone;
+            window.cwDeferInboxItem = cwDeferInboxItem;
+            window.cwScheduleInboxItem = cwScheduleInboxItem;
             window.cwQuickAction = cwQuickAction;
             // Service surface for Sutra Assistant + external callers.
             window.courseHub = {
@@ -25311,7 +26094,7 @@ function populateProgressDashboard() {
                 getAssignmentsForCourse, createAssignmentForCourse, getFilesForCourse, addCourseResourceLink,
                 linkNoteToCourse, unlinkNoteFromCourse, getLinkedNotesForCourse, getReviewDecksForCourse,
                 getCalendarEventsForCourse, getCourseWorkloadStats, calculateCourseStats,
-                getAllDueItems, groupDueItemsByRange, getUpcomingMajorDeadlines, getCourseColor, getCourseDisplayName
+                getAllDueItems, getStudentInboxItems, groupDueItemsByRange, getUpcomingMajorDeadlines, getCourseColor, getCourseDisplayName
             };
         }
 
@@ -27705,16 +28488,30 @@ function populateProgressDashboard() {
             bindCustomThemeGrid();
             bindAiThemeCard();
             bindAiThemeUi();
-            const liquidGlassBlurSlider = document.getElementById('liquidGlassBlurSlider');
-            if (liquidGlassBlurSlider && liquidGlassBlurSlider.dataset.bound !== 'true') {
-                liquidGlassBlurSlider.dataset.bound = 'true';
-                liquidGlassBlurSlider.addEventListener('input', () => {
+            const glassBlurSlider = document.getElementById('glassBlurSlider');
+            if (glassBlurSlider && glassBlurSlider.dataset.bound !== 'true') {
+                glassBlurSlider.dataset.bound = 'true';
+                glassBlurSlider.addEventListener('input', () => {
                     if (!appSettings) return;
-                    appSettings.liquidGlassBlur = normalizeLiquidGlassBlur(liquidGlassBlurSlider.value);
-                    applyLiquidGlassBlur();
-                    syncLiquidGlassBlurControl();
+                    appSettings.glassBlur = normalizeGlassBlur(glassBlurSlider.value);
+                    applyGlassBlur();
+                    syncGlassBlurControl();
                 });
-                liquidGlassBlurSlider.addEventListener('change', () => {
+                glassBlurSlider.addEventListener('change', () => {
+                    if (!appSettings) return;
+                    persistAppData();
+                });
+            }
+            const glassRefractionSlider = document.getElementById('glassRefractionSlider');
+            if (glassRefractionSlider && glassRefractionSlider.dataset.bound !== 'true') {
+                glassRefractionSlider.dataset.bound = 'true';
+                glassRefractionSlider.addEventListener('input', () => {
+                    if (!appSettings) return;
+                    appSettings.glassRefraction = normalizeGlassRefraction(glassRefractionSlider.value);
+                    applyGlassRefraction();
+                    syncGlassRefractionControl();
+                });
+                glassRefractionSlider.addEventListener('change', () => {
                     if (!appSettings) return;
                     persistAppData();
                 });
@@ -28304,12 +29101,12 @@ function populateProgressDashboard() {
             const normalizedTheme = normalizeStoredThemeKey(themeName, DEFAULT_THEME_KEY);
             const themeEntry = themes[normalizedTheme] || themes[DEFAULT_THEME_KEY];
             const root = document.documentElement;
-            if (normalizedTheme === 'liquidglass') {
-                // Liquid Glass owns every surface in styles/liquid-glass.css —
-                // inline derived values would sit on top of the stylesheet and
-                // defeat the backdrop-filter translucency stack.
+            if (normalizedTheme === 'glass') {
+                // Glass owns every surface in styles/glass.css — inline derived
+                // values would sit on top of the stylesheet and defeat the
+                // backdrop-filter translucency stack.
                 ['--theme-gradient-start', '--theme-gradient-mid', '--theme-gradient-end', '--sidebar-bg', '--button-bg', '--button-bg-hover', '--button-border', '--button-text'].forEach(v => root.style.removeProperty(v));
-                applyLiquidGlassBlur();
+                applyGlassBlur();
                 return;
             }
             const computed = getComputedStyle(root);
@@ -31450,9 +32247,16 @@ function populateProgressDashboard() {
                     // the Review modals) opt out via data-sutra-no-escape. The manager
                     // still provides Tab-trapping, scroll-lock, and focus restoration.
                     if (root.getAttribute('data-sutra-no-escape') === 'true') return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    closeViaExistingControl(root);
+                    // Only swallow Escape when we can actually dismiss the modal via one
+                    // of its own close controls. If none is found, let the event keep
+                    // propagating so a self-managed modal (e.g. the command palette,
+                    // which closes from its own input/list keydown handlers) can still
+                    // handle Escape. Swallowing an event we can't act on left such
+                    // modals impossible to close with the keyboard.
+                    if (closeViaExistingControl(root)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
                     // Focus restoration is owned solely by onClose (it fires when the
                     // modal's open-signal is removed). One owner => no timing race.
                     return;
@@ -31471,7 +32275,10 @@ function populateProgressDashboard() {
                 if (event.shiftKey && (active === first || !root.contains(active))) {
                     event.preventDefault();
                     last.focus();
-                } else if (!event.shiftKey && active === last) {
+                } else if (!event.shiftKey && (active === last || !root.contains(active))) {
+                    // Symmetric with the Shift+Tab branch: if focus has drifted
+                    // outside the open modal, pull it back to the first focusable
+                    // instead of letting a forward Tab escape the trap.
                     event.preventDefault();
                     first.focus();
                 }
@@ -32898,28 +33705,65 @@ function populateProgressDashboard() {
 
         function loadAtelierTheme() {
             if (!appSettings) return;
-            applyLiquidGlassBlur();
+            applyGlassBlur();
+            applyGlassRefraction();
             applyAtelierTheme(normalizeAtelierThemeName(appSettings.atelierTheme));
         }
 
-        // ===== LIQUID GLASS THEME OPTIONS =====
-        function getLiquidGlassBlur() {
-            return normalizeLiquidGlassBlur(appSettings && appSettings.liquidGlassBlur);
+        // ===== GLASS THEME OPTIONS =====
+        function getGlassBlur() {
+            return normalizeGlassBlur(appSettings && appSettings.glassBlur);
         }
 
-        function applyLiquidGlassBlur() {
-            // Only the liquidglass stylesheet reads this variable, so it is safe
-            // to keep it set while other themes are active.
-            document.documentElement.style.setProperty('--liquid-glass-blur', `${getLiquidGlassBlur()}px`);
+        function applyGlassBlur() {
+            // Only the Glass stylesheet reads these variables, so it is safe to
+            // keep them set while other themes are active. `--glass-blur-amount`
+            // is the canonical live value (the theme's `--glass-blur` token reads
+            // it); `--liquid-glass-blur` is written too so the not-yet-renamed
+            // skin selectors in macos26-redesign.css keep tracking the slider.
+            const px = `${getGlassBlur()}px`;
+            const rootStyle = document.documentElement.style;
+            rootStyle.setProperty('--glass-blur-amount', px);
+            rootStyle.setProperty('--liquid-glass-blur', px);
         }
 
-        function syncLiquidGlassBlurControl() {
-            const slider = document.getElementById('liquidGlassBlurSlider');
-            const valueLabel = document.getElementById('liquidGlassBlurValue');
-            const blur = getLiquidGlassBlur();
+        function syncGlassBlurControl() {
+            const slider = document.getElementById('glassBlurSlider');
+            const valueLabel = document.getElementById('glassBlurValue');
+            const blur = getGlassBlur();
             if (slider) slider.value = String(blur);
             if (valueLabel) valueLabel.textContent = `${blur}px`;
         }
+
+        function getGlassRefraction() {
+            return normalizeGlassRefraction(appSettings && appSettings.glassRefraction);
+        }
+
+        function applyGlassRefraction() {
+            // Drive the #sutra-glass-distortion SVG filter's displacement scale
+            // directly (CSS variables can't reach feDisplacementMap@scale), and
+            // mirror the value into a CSS token for any rule that wants it. The
+            // filter only paints on the decorative body::after canvas layer, so
+            // this never touches text, inputs, or icons.
+            const scale = getGlassRefraction();
+            document.documentElement.style.setProperty('--glass-refraction', String(scale));
+            const map = document.querySelector('#sutra-glass-distortion feDisplacementMap');
+            if (map) map.setAttribute('scale', String(scale));
+        }
+
+        function syncGlassRefractionControl() {
+            const slider = document.getElementById('glassRefractionSlider');
+            const valueLabel = document.getElementById('glassRefractionValue');
+            const refraction = getGlassRefraction();
+            if (slider) slider.value = String(refraction);
+            if (valueLabel) valueLabel.textContent = String(refraction);
+        }
+
+        // Legacy aliases retained for any external/in-browser callers that still
+        // reference the pre-rename names; both point at the new implementations.
+        const getLiquidGlassBlur = getGlassBlur;
+        const applyLiquidGlassBlur = applyGlassBlur;
+        const syncLiquidGlassBlurControl = syncGlassBlurControl;
 
         // ===========================================================================
         // CRAM HUB (Section 31)
@@ -38806,8 +39650,18 @@ function getActiveEditor() {
             const canvas = normalizeCanvasModel(page && page.canvas);
             const els = getCanvasEls();
             if (!els.world) return;
-            els.world.style.transform = `translate(${canvas.viewport.x}px, ${canvas.viewport.y}px) scale(${canvas.viewport.zoom})`;
-            if (els.zoom) els.zoom.textContent = `${Math.round(canvas.viewport.zoom * 100)}%`;
+            const { x, y, zoom } = canvas.viewport;
+            els.world.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+            if (els.zoom) els.zoom.textContent = `${Math.round(zoom * 100)}%`;
+            const shell = els.root && els.root.querySelector('.canvas-stage-shell');
+            if (shell) {
+                shell.style.setProperty('--cvp-x', `${x}px`);
+                shell.style.setProperty('--cvp-y', `${y}px`);
+                shell.style.setProperty('--cvp-zoom', zoom);
+            }
+            document.documentElement.style.setProperty('--cvp-x', `${x}px`);
+            document.documentElement.style.setProperty('--cvp-y', `${y}px`);
+            document.documentElement.style.setProperty('--cvp-zoom', zoom);
         }
 
         function canvasObjectPath(points, smooth) {
@@ -38963,7 +39817,9 @@ function getActiveEditor() {
             if (!els.root || !els.objects || !els.svg) return;
             page.canvas = normalizeCanvasModel(page.canvas);
             els.root.hidden = false;
-            els.root.dataset.canvasBackground = page.canvas.background || 'grid';
+            const canvasBg = page.canvas.background || 'grid';
+            els.root.dataset.canvasBackground = canvasBg;
+            document.body.dataset.canvasBackground = canvasBg;
             els.root.dataset.canvasTool = runtime.tool || 'select';
             els.objects.innerHTML = '';
             page.canvas.objects
@@ -38999,6 +39855,7 @@ function getActiveEditor() {
             const tags = document.getElementById('tagsContainer');
             if (tags) tags.hidden = false;
             document.body.classList.remove('canvas-page-active');
+            delete document.body.dataset.canvasBackground;
             if (activeCanvasRuntime) activeCanvasRuntime.drag = null;
         }
 
@@ -39179,8 +40036,20 @@ function getActiveEditor() {
             if (!page || !runtime) return;
             // Viewport pan (drag-to-move-around) takes precedence over object drag.
             if (runtime.panning) {
-                page.canvas.viewport.x = runtime.panning.originX + (event.clientX - runtime.panning.startX);
-                page.canvas.viewport.y = runtime.panning.originY + (event.clientY - runtime.panning.startY);
+                const p = runtime.panning;
+                const now = performance.now();
+                const dt = now - p.lastTime;
+                if (dt > 0 && dt < 100) {
+                    const rawVx = (event.clientX - p.lastX) / dt;
+                    const rawVy = (event.clientY - p.lastY) / dt;
+                    p.vx = 0.7 * rawVx + 0.3 * p.vx;
+                    p.vy = 0.7 * rawVy + 0.3 * p.vy;
+                }
+                p.lastX = event.clientX;
+                p.lastY = event.clientY;
+                p.lastTime = now;
+                page.canvas.viewport.x = p.originX + (event.clientX - p.startX);
+                page.canvas.viewport.y = p.originY + (event.clientY - p.startY);
                 applyCanvasTransform(page);
                 return;
             }
@@ -39207,15 +40076,40 @@ function getActiveEditor() {
             const runtime = ensureCanvasRuntime(page);
             if (!page || !runtime) return;
             if (runtime.panning) {
+                const vx = runtime.panning.vx;
+                const vy = runtime.panning.vy;
                 runtime.panning = null;
                 const shell = document.getElementById('canvasStageShell');
                 if (shell) shell.classList.remove('is-panning');
-                saveCanvasPage(page, { persist: true });
+                if (Math.sqrt(vx * vx + vy * vy) > 0.05) {
+                    startCanvasPanInertia(page, runtime, vx * 16, vy * 16);
+                } else {
+                    saveCanvasPage(page, { persist: true });
+                }
                 return;
             }
             if (!runtime.drag) return;
             runtime.drag = null;
             saveCanvasPage(page, { persist: true });
+        }
+
+        function startCanvasPanInertia(page, runtime, vx, vy) {
+            const decay = 0.91;
+            const minSpeed = 0.4;
+            function step() {
+                vx *= decay;
+                vy *= decay;
+                if (Math.abs(vx) < minSpeed && Math.abs(vy) < minSpeed) {
+                    runtime.inertiaRaf = null;
+                    saveCanvasPage(page, { persist: true });
+                    return;
+                }
+                page.canvas.viewport.x += vx;
+                page.canvas.viewport.y += vy;
+                applyCanvasTransform(page);
+                runtime.inertiaRaf = requestAnimationFrame(step);
+            }
+            runtime.inertiaRaf = requestAnimationFrame(step);
         }
 
         function canvasDeleteSelected() {
@@ -39573,11 +40467,18 @@ function getActiveEditor() {
                     if (event.target && event.target.closest && event.target.closest('textarea, input, button, .canvas-card-open')) return;
                     event.preventDefault();
                     runtime.drag = null;
+                    if (runtime.inertiaRaf) { cancelAnimationFrame(runtime.inertiaRaf); runtime.inertiaRaf = null; }
+                    const now = performance.now();
                     runtime.panning = {
                         startX: event.clientX,
                         startY: event.clientY,
                         originX: page.canvas.viewport.x,
-                        originY: page.canvas.viewport.y
+                        originY: page.canvas.viewport.y,
+                        lastX: event.clientX,
+                        lastY: event.clientY,
+                        lastTime: now,
+                        vx: 0,
+                        vy: 0
                     };
                     try { stageShell.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
                     stageShell.classList.add('is-panning');
@@ -42361,6 +43262,10 @@ function getActiveEditor() {
                     } else if (themes[rawTheme]) {
                         themeColor = themes[rawTheme].accent;
                         themeIndicatorTitle = `Theme: ${themes[rawTheme].name}`;
+                    } else if (rawTheme === 'liquidglass' || rawTheme === 'macos26') {
+                        // Legacy keys for the renamed "Glass" theme.
+                        themeColor = themes.glass.accent;
+                        themeIndicatorTitle = `Theme: ${themes.glass.name}`;
                     }
                 }
                 const pageItem = document.createElement('div');
@@ -53407,15 +54312,24 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function getEditorAnchorScrollContainer(editor, targetEl) {
+            // A container only qualifies if it can ACTUALLY scroll its overflow.
+            // (The Glass theme makes #view-notes overflow:visible and lets
+            // .main-content scroll instead — without this guard the detector
+            // would pick the unscrollable #view-notes and "Back to top" no-ops.)
+            const canScrollY = (el) => {
+                if (!el) return false;
+                const oy = window.getComputedStyle(el).overflowY;
+                return oy === 'auto' || oy === 'scroll' || oy === 'overlay';
+            };
             const viewContainer = editor && editor.closest
                 ? (editor.closest('.view.active') || editor.closest('.view'))
                 : null;
-            if (viewContainer && viewContainer.scrollHeight > viewContainer.clientHeight + 2) {
+            if (viewContainer && canScrollY(viewContainer) && viewContainer.scrollHeight > viewContainer.clientHeight + 2) {
                 return viewContainer;
             }
 
             const editorContainer = editor && editor.closest ? editor.closest('.editor-container') : null;
-            if (editorContainer && editorContainer.scrollHeight > editorContainer.clientHeight + 2) {
+            if (editorContainer && canScrollY(editorContainer) && editorContainer.scrollHeight > editorContainer.clientHeight + 2) {
                 return editorContainer;
             }
 
@@ -61048,8 +61962,8 @@ function submitQuickCapture() {
 // ---------- Global Search ----------
 function globalSearchAll(query) {
     const q = String(query || '').trim().toLowerCase();
-    if (!q) return { notes: [], tasks: [], homework: [], apstudy: [], college: [], timeline: [], review: [], trackers: [] };
-    const results = { notes: [], tasks: [], homework: [], apstudy: [], college: [], timeline: [], review: [], trackers: [] };
+    if (!q) return { notes: [], tasks: [], homework: [], courses: [], resources: [], apstudy: [], college: [], timeline: [], review: [], trackers: [], assistant: [], settings: [] };
+    const results = { notes: [], tasks: [], homework: [], courses: [], resources: [], apstudy: [], college: [], timeline: [], review: [], trackers: [], assistant: [], settings: [] };
     const MAX = 10;
 
     // Notes. Locked pages (not unlocked in session) only match on title — no content snippets.
@@ -61103,6 +62017,40 @@ function globalSearchAll(query) {
                         title: h.title || h.text || 'Homework',
                         context: [cmap.get(String(h.courseId || '')) || '', h.dueDate || ''].filter(Boolean).join(' · '),
                         action: () => { setActiveView('homework'); }
+                    });
+                }
+            });
+        }
+    } catch (err) {}
+
+    // Courses and Course Hub resources.
+    try {
+        if (window.courseHub && typeof window.courseHub.getCourses === 'function') {
+            const courseList = window.courseHub.getCourses({ filter: 'all' }) || [];
+            courseList.forEach(course => {
+                if (results.courses.length < MAX) {
+                    const haystack = [course.name, course.shortName, course.teacherName, course.room, course.subjectArea, (course.tags || []).join(' ')].join(' ').toLowerCase();
+                    if (haystack.includes(q)) {
+                        results.courses.push({
+                            id: course.id,
+                            title: `Course: ${course.name || 'Untitled course'}`,
+                            context: [course.teacherName || '', course.room || '', course.archived ? 'Archived' : 'Active'].filter(Boolean).join(' · '),
+                            action: () => { try { setActiveView('courses'); if (window.cwSelectCourse) window.cwSelectCourse(course.id); } catch (err) {} }
+                        });
+                    }
+                }
+                if (results.resources.length < MAX && typeof window.courseHub.getFilesForCourse === 'function') {
+                    (window.courseHub.getFilesForCourse(course.id) || []).forEach(file => {
+                        if (results.resources.length >= MAX) return;
+                        const fileText = [file.name, file.originalName, file.kind, file.description, file.url].join(' ').toLowerCase();
+                        if (fileText.includes(q)) {
+                            results.resources.push({
+                                id: file.id,
+                                title: `Resource: ${file.name || 'Course file'}`,
+                                context: [course.name || '', file.kind || 'file'].filter(Boolean).join(' · '),
+                                action: () => { try { setActiveView('courses'); if (window.cwSelectCourse) window.cwSelectCourse(course.id); if (window.cwSetCourseTab) window.cwSetCourseTab('files'); } catch (err) {} }
+                            });
+                        }
                     });
                 }
             });
@@ -61219,6 +62167,51 @@ function globalSearchAll(query) {
                     title: `Reading: ${book.title || book.name || 'Untitled'}`,
                     context: book.author || book.status || '',
                     action: () => { try { setActiveView('life'); } catch (err) {} }
+                });
+            }
+        });
+    } catch (err) {}
+
+    // Assistant activity history.
+    try {
+        const activity = window.SutraAssistantActions && typeof window.SutraAssistantActions.getActivityLog === 'function'
+            ? window.SutraAssistantActions.getActivityLog()
+            : [];
+        activity.forEach(record => {
+            if (results.assistant.length >= MAX) return;
+            const haystack = [record.actionType, record.summary, record.userPrompt, record.provider, record.model, record.status].join(' ').toLowerCase();
+            if (haystack.includes(q)) {
+                results.assistant.push({
+                    id: record.id,
+                    title: `Assistant: ${record.summary || record.actionType || 'Activity'}`,
+                    context: [record.status || '', record.risk || '', record.timestamp ? new Date(record.timestamp).toLocaleString() : ''].filter(Boolean).join(' · '),
+                    action: () => { try { if (window.SutraAssistantActions && window.SutraAssistantActions.openActivityLog) window.SutraAssistantActions.openActivityLog(); } catch (err) {} }
+                });
+            }
+        });
+    } catch (err) {}
+
+    // Settings and data-safety surfaces.
+    try {
+        [
+            { id: 'settings-data', title: 'Settings: Data & backups', context: 'Backup Health, export, restore, diagnostics', category: 'data' },
+            { id: 'settings-assistant', title: 'Settings: Assistant', context: 'Context, confirmation, providers, memory', category: 'assistant' },
+            { id: 'settings-customization', title: 'Settings: Glass & appearance', context: 'Themes, density, custom CSS', category: 'appearance' },
+            { id: 'settings-school', title: 'Settings: School schedule', context: 'Weekly, A/B, rotating cycle schedule setup', category: 'academic' }
+        ].forEach(row => {
+            if (results.settings.length >= MAX) return;
+            const haystack = `${row.title} ${row.context}`.toLowerCase();
+            if (haystack.includes(q)) {
+                results.settings.push({
+                    id: row.id,
+                    title: row.title,
+                    context: row.context,
+                    action: () => {
+                        try {
+                            setActiveView('settings');
+                            if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory(row.category, { skipSearch: false });
+                        } catch (err) {}
+                    }
                 });
             }
         });
@@ -61381,9 +62374,15 @@ function renderCommandPalette(query) {
         html += renderGroup('Notes', results.notes);
         html += renderGroup('Tasks', results.tasks);
         html += renderGroup('Homework', results.homework);
+        html += renderGroup('Courses', results.courses);
+        html += renderGroup('Resources', results.resources);
         html += renderGroup('AP Study', results.apstudy);
+        html += renderGroup('Review', results.review);
+        html += renderGroup('Trackers', results.trackers);
         html += renderGroup('College', results.college);
         html += renderGroup('Timeline', results.timeline);
+        html += renderGroup('Assistant', results.assistant);
+        html += renderGroup('Settings', results.settings);
 
         // Attach search results for event handlers.
         modal._searchResults = results;
@@ -61411,7 +62410,20 @@ function renderCommandPalette(query) {
         node.addEventListener('click', () => {
             const key = node.getAttribute('data-search-key');
             const idx = Number(node.getAttribute('data-search-idx') || '0');
-            const groupMap = { 'Notes': 'notes', 'Tasks': 'tasks', 'Homework': 'homework', 'AP Study': 'apstudy', 'College': 'college', 'Timeline': 'timeline' };
+            const groupMap = {
+                'Notes': 'notes',
+                'Tasks': 'tasks',
+                'Homework': 'homework',
+                'Courses': 'courses',
+                'Resources': 'resources',
+                'AP Study': 'apstudy',
+                'Review': 'review',
+                'Trackers': 'trackers',
+                'College': 'college',
+                'Timeline': 'timeline',
+                'Assistant': 'assistant',
+                'Settings': 'settings'
+            };
             const groupKey = groupMap[key];
             const r = modal._searchResults && modal._searchResults[groupKey] && modal._searchResults[groupKey][idx];
             if (r && typeof r.action === 'function') {
@@ -62512,11 +63524,15 @@ function openGlobalSearchPanel(initialQuery) {
         if (modeAllows('notes')) groups.push(['Notes', data.notes]);
         groups.push(['Tasks', data.tasks]);
         if (modeAllows('homework')) groups.push(['Homework', data.homework]);
+        if (modeAllows('courses')) groups.push(['Courses', data.courses]);
+        groups.push(['Resources', data.resources]);
         if (modeAllows('apstudy')) groups.push(['AP Study', data.apstudy]);
         if (modeAllows('review')) groups.push(['Review', data.review]);
         groups.push(['Trackers', data.trackers]);
         if (modeAllows('collegeapp')) groups.push(['College', data.college]);
         if (modeAllows('timeline')) groups.push(['Timeline', data.timeline]);
+        groups.push(['Assistant', data.assistant]);
+        groups.push(['Settings', data.settings]);
         // Persist a compact recent-search trail so command-palette/global-search
         // can show recent queries when the input is empty.
         try {
@@ -62552,7 +63568,20 @@ function openGlobalSearchPanel(initialQuery) {
                 const group = node.getAttribute('data-gs-group');
                 const idx = Number(node.getAttribute('data-gs-idx'));
                 const current = modal._searchResults || {};
-                const map = { 'Notes': 'notes', 'Tasks': 'tasks', 'Homework': 'homework', 'AP Study': 'apstudy', 'Review': 'review', 'Trackers': 'trackers', 'College': 'college', 'Timeline': 'timeline' };
+                const map = {
+                    'Notes': 'notes',
+                    'Tasks': 'tasks',
+                    'Homework': 'homework',
+                    'Courses': 'courses',
+                    'Resources': 'resources',
+                    'AP Study': 'apstudy',
+                    'Review': 'review',
+                    'Trackers': 'trackers',
+                    'College': 'college',
+                    'Timeline': 'timeline',
+                    'Assistant': 'assistant',
+                    'Settings': 'settings'
+                };
                 const arr = current[map[group] || ''] || [];
                 const hit = arr[idx];
                 if (hit && typeof hit.action === 'function') {

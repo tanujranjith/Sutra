@@ -130,7 +130,21 @@ assignments gain a Studio. Everything else extends a surface that already exists
 
 ---
 
-## 5. Platform limits (stated honestly)
+## 5. Unified Academic Command Center
+
+Course Hub now starts with a read-only command center built by
+`src/features/academic-command-center.js`. It consumes the existing Course Hub,
+Homework, Grade Planner, School Schedule, Review, AP Study, Notes, files, and
+Timeline stores; it does not persist a parallel model.
+
+The deterministic ranking engine scores open work using due status, priority,
+difficulty, grade risk, and whether the work is already scheduled. Review debt
+and low-confidence AP subjects can also enter the ranked list. Students get one
+top recommendation, a short explained ranking, and direct Open, Schedule, and
+Focus actions. The engine is covered by `npm run check:academic` and focused
+Playwright tests.
+
+## 6. Platform limits (stated honestly)
 
 Sutra is local-first with no server, which constrains background behavior. The
 notification Settings panel says this plainly:
@@ -150,7 +164,7 @@ notification Settings panel says this plainly:
 
 ---
 
-## 6. Tests
+## 7. Tests
 
 - `npm run check:academic` — executes all four engines in Node (rotation math,
   grade math, syllabus extraction, studio progress).

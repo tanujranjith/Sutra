@@ -35,6 +35,12 @@ loads from static hosting or directly from a local file.
 
 ### Core safety layer (loaded before everything else)
 
+The safety layer also includes **`src/core/migrations.js`**
+(`window.SutraMigrations`), a pure versioned workspace migration registry.
+Hydration applies each registered `vN -> vN+1` step before defaults and feature
+normalizers. Migrations preserve unknown fields so old backups and plugin-owned
+data are not silently truncated.
+
 These small, dependency-free classic scripts load right after `safe-storage.js`
 in `Sutra.html`, before any feature module or `app.js`, so their globals exist
 at first render and can capture boot-time failures. They are also the first
@@ -98,6 +104,12 @@ planning layer (the last four modules above + reminders).
 ---
 
 ## 4. UI enhancers and styles
+
+Large feature styles are being moved out of the app shell. Focus-session styles
+now live in `styles/focus-session.css`, and the academic command center uses
+`styles/academic-command-center.css`. `npm run check:shell` blocks new large
+inline `<style>` blocks and ratchets the remaining explicitly marked legacy
+blocks.
 
 - **`src/ui/*.js`** — UI helper / enhancer modules layered on top of the core.
 - **`styles/`** — the stylesheets:
@@ -205,6 +217,13 @@ For the broader privacy stance, see
 ---
 
 ## 9. Test scripts
+
+- `npm run check:shell` - blocks new large inline styles in `Sutra.html`.
+- `npm run check:migrations` - executes old-workspace migration fixtures,
+  idempotence, and unknown-field preservation.
+- `npm run check:syntax` - checks first-party `src/`, `scripts/`, tests, and
+  Playwright configs while excluding `.deploy`, build, coverage, vendor, and
+  generated documentation output.
 
 Run with Node from the project root:
 

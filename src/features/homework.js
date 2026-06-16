@@ -84,13 +84,10 @@
     if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
       return window.SutraSafeStorage.set(key, payload, { importance: 'important', label: 'Your homework' });
     }
-    try {
-      localStorage.setItem(key, payload);
-      return { ok: true };
-    } catch (error) {
-      showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
-      return { ok: false, error };
-    }
+    const error = new Error('SutraSafeStorage is unavailable.');
+    if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
+    showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
+    return { ok: false, error };
   }
 
   function formatDateKey(date) {
@@ -366,8 +363,6 @@
     // Schema marker is a low-stakes optional write; never let it throw.
     if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
       window.SutraSafeStorage.set(SCHEMA_KEY, '3', { importance: 'optional' });
-    } else {
-      try { localStorage.setItem(SCHEMA_KEY, '3'); } catch (error) { /* optional marker */ }
     }
     // Always notify so the UI re-renders the in-memory state, even when the
     // persistence write above failed.

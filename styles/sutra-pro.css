@@ -5798,6 +5798,9 @@ body.theme-retro .th2-resource-card {
 
 /* ---- All Due specifics ---- */
 .ad-main-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+/* Allow grid items to shrink below their min-content so wide inbox tables wrap
+   instead of overflowing the track (prevents the mobile grid blowout). */
+.ad-main-grid > * { min-width: 0; }
 .ad-range-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ad-range-tab { display: inline-flex; align-items: center; gap: 7px; background: var(--surface-bg); border: 1px solid var(--surface-border); border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; font-family: inherit; }
 .ad-range-tab:hover { background: var(--surface-bg-hover); }
@@ -5876,6 +5879,21 @@ body.theme-retro .th2-resource-card {
     .ad-row-course { grid-column: 1 / 3; }
     .ad-row-due { grid-column: 1 / 2; }
     .ad-row-type { grid-column: 2 / 3; justify-self: end; }
+    /* Student Inbox rows reuse the .ad-row base but have their own column model.
+       Reset the legacy .ad-row mobile placements so inbox children stack in a
+       single column instead of spilling into an implicit 2nd column. */
+    .student-inbox-row { grid-template-columns: 1fr; row-gap: 6px; }
+    .student-inbox-row > .ad-row-title,
+    .student-inbox-row > .ad-row-course,
+    .student-inbox-row > .ad-row-due,
+    .student-inbox-row > .ad-row-type,
+    .student-inbox-row > .ad-row-urgency,
+    .student-inbox-row > .ad-row-actions {
+        grid-column: 1 / -1;
+        grid-row: auto;
+        justify-self: start;
+        min-width: 0;
+    }
     .cw-detail-actions { width: 100%; }
 }
 @media (max-width: 440px) {
@@ -6110,6 +6128,215 @@ body.sutra-modal-lock {
     outline: none;
 }
 
+/* Student OS Phase 1: Inbox, Course Hub, Assistant Review, Data Safety */
+.ad-filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0 16px;
+}
+
+.ad-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 36px;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    background: var(--surface-bg);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+.ad-filter-chip span {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--surface-bg-active);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.ad-filter-chip.is-active {
+    background: var(--accent-soft);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    color: var(--accent-strong);
+}
+
+.ad-table-head-inbox,
+.student-inbox-row {
+    grid-template-columns: minmax(180px, 2.4fr) minmax(110px, 1.1fr) minmax(92px, 0.8fr) minmax(88px, 0.8fr) minmax(88px, 0.8fr) minmax(168px, 1.2fr);
+}
+.student-inbox-row {
+    display: grid;
+    align-items: center;
+}
+.ad-row-actions {
+    display: flex;
+    gap: 5px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+.ad-row-badges {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+.ad-signal-pill { background: rgba(var(--accent-rgb), 0.10); color: var(--accent-strong); }
+.ad-unscheduled-pill { background: rgba(194, 135, 44, 0.16); color: #b06a2a; }
+.ad-filter-caption {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.student-os-next-actions .cw-panel-head h3::after {
+    content: "Student Inbox";
+    display: inline-flex;
+    margin-left: 8px;
+    font-size: 10px;
+    color: var(--accent-strong);
+    background: var(--accent-soft);
+    border-radius: 999px;
+    padding: 2px 8px;
+    vertical-align: middle;
+}
+.cw-next-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.cw-next-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    text-align: left;
+    font: inherit;
+}
+button.cw-next-action { cursor: pointer; }
+button.cw-next-action:hover { background: var(--surface-bg-hover); }
+.cw-next-action small {
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.cw-next-action.is-static { cursor: default; }
+.cw-grade-engine-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: -4px 0 4px;
+}
+
+.sutra-data-safety-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+}
+.sutra-data-safety-card {
+    padding: 12px 14px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: var(--surface-bg);
+}
+.sutra-data-safety-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.sutra-data-safety-card strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+.sutra-data-safety-card small {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+.sutra-data-safety-actions { margin-bottom: 10px; }
+
+.flow-action-review-head,
+.flow-act-batch-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    background: var(--surface-bg);
+}
+.flow-action-review-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.flow-action-review-title span,
+.flow-act-batch-head span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+.flow-action-review-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.flow-action-select-btn,
+.flow-action-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.flow-action-select-btn { cursor: pointer; }
+.flow-action-select input { accent-color: var(--accent-strong); }
+.flow-before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+}
+.flow-before-after span {
+    border: 1px solid var(--surface-border);
+    border-radius: 9px;
+    padding: 7px 9px;
+    background: var(--surface-bg);
+}
+.flow-before-after-danger span:last-child {
+    color: var(--danger, #c0564f);
+}
+.flow-act-batch {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 8px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.flow-action-review-modal { width: min(720px, 96vw); }
+
 @media (max-width: 720px) {
     .sutra-save-failure-banner {
         grid-template-columns: 1fr;
@@ -6142,4 +6369,20 @@ body.sutra-modal-lock {
     .sutra-drive-conflict-actions .btn {
         flex: 1 1 100%;
     }
+
+    .ad-table-head-inbox { display: none; }
+    .student-inbox-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 12px;
+    }
+    .ad-row-actions {
+        justify-content: flex-start;
+    }
+    .cw-next-action {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .cw-next-action small { white-space: normal; }
+    .flow-before-after { grid-template-columns: 1fr; }
 }

@@ -31,8 +31,9 @@
         if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
             return window.SutraSafeStorage.set(key, jsonString, { importance: 'important', label: 'Your homework' });
         }
-        try { localStorage.setItem(key, jsonString); return { ok: true }; }
-        catch (error) { return { ok: false, error }; }
+        const error = new Error('SutraSafeStorage is unavailable.');
+        if (typeof window.reportError === 'function') window.reportError(error, { where: 'flow-assistant.safeHwWrite', key }, 'error');
+        return { ok: false, error };
     }
 
     // --------------------------------------------------------------
@@ -45,6 +46,24 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function setTrustedHtml(element, html) {
+        if (!element) return;
+        if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
+            window.SutraDOMSafety.setTrustedHTML(element, html);
+        } else {
+            element.textContent = String(html || '');
+        }
+    }
+
+    function setUserHtml(element, html) {
+        if (!element) return;
+        if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setUserHTML === 'function') {
+            window.SutraDOMSafety.setUserHTML(element, html);
+        } else {
+            element.textContent = String(html || '');
+        }
     }
 
     function getPref(path, fallback) {
@@ -216,7 +235,7 @@
                 };
             }
             const tmp = document.createElement('div');
-            tmp.innerHTML = String(page.content || page.body || '');
+            setUserHtml(tmp, String(page.content || page.body || ''));
             const text = (tmp.textContent || '').replace(/\s+/g, ' ').trim();
             return {
                 id: page.id,
@@ -2469,6 +2488,47 @@
         return getPref('assistant.requireConfirmation', true) === false ? 'auto_low' : 'always';
     }
 
+    function buildBeforeAfterSummaryHtml(action) {
+        const type = String(action && action.type || '');
+        if (type === 'update_task_status') {
+            return `<div class="flow-before-after"><span>Before: task remains open</span><span>After: task is ${esc(action.status || 'updated')}</span></div>`;
+        }
+        if (type === 'reschedule_tasks') {
+            const target = action.newDate || `${Number(action.shiftDays) || 1} day shift`;
+            return `<div class="flow-before-after"><span>Before: current due date</span><span>After: due ${esc(target)}</span></div>`;
+        }
+        if (type === 'change_task_priority') {
+            return `<div class="flow-before-after"><span>Before: current priority</span><span>After: ${esc(action.priority || 'new')} priority</span></div>`;
+        }
+        if (type === 'update_timeline_block') {
+            return `<div class="flow-before-after"><span>Before: existing timeline block</span><span>After: ${esc([action.date, action.start, action.end].filter(Boolean).join(' ') || 'edited block')}</span></div>`;
+        }
+        if (type === 'delete_timeline_block') {
+            return '<div class="flow-before-after flow-before-after-danger"><span>Before: block exists</span><span>After: block removed; undo can restore it from Activity</span></div>';
+        }
+        if (/^create_/.test(type) || type === 'plan_week' || type === 'plan_day' || type === 'create_recovery_plan') {
+            return '<div class="flow-before-after"><span>Before: no new object</span><span>After: selected objects are added locally</span></div>';
+        }
+        if (type === 'append_note_text' || type === 'insert_text' || type === 'replace_selection') {
+            return '<div class="flow-before-after"><span>Before: current note text</span><span>After: note text is updated; Activity keeps an undo snapshot where possible</span></div>';
+        }
+        return '';
+    }
+
+    async function confirmHighRiskAction(action, label) {
+        if (classifyRisk(action) !== 'high') return true;
+        if (typeof window.showCustomConfirmDialog === 'function') {
+            return window.showCustomConfirmDialog({
+                title: 'Confirm high-risk assistant action',
+                message: `${describeAction(action)}\n\nReview the preview before applying. Undo is available only where the action says so.`,
+                confirmText: label || actionApplyLabel(action),
+                cancelText: 'Keep reviewing',
+                confirmVariant: 'danger'
+            });
+        }
+        return false;
+    }
+
     function renderActionCards(hostEl, actions, opts) {
         if (!hostEl || !Array.isArray(actions) || actions.length === 0) return;
         const showPreviews = getPref('assistant.showActionPreviews', true) !== false;
@@ -2484,6 +2544,65 @@
         wrap.className = 'flow-action-cards';
         wrap.setAttribute('role', 'group');
         wrap.setAttribute('aria-label', 'Proposed actions');
+        const batchId = makeId('batch');
+
+        if (isBatch) {
+            const riskCounts = actions.reduce((acc, raw) => {
+                const risk = classifyRisk(normalizeActionFields(raw));
+                acc[risk] = (acc[risk] || 0) + 1;
+                return acc;
+            }, {});
+            const reviewHead = document.createElement('div');
+            reviewHead.className = 'flow-action-review-head';
+            reviewHead.innerHTML = `
+                <div class="flow-action-review-title">
+                    <strong>Action Review Center</strong>
+                    <span>${actions.length} proposed action${actions.length === 1 ? '' : 's'} · ${riskCounts.high || 0} high risk</span>
+                </div>
+                <div class="flow-action-review-controls">
+                    <button type="button" class="flow-action-select-btn" data-flow-batch="selected">Apply selected</button>
+                    <button type="button" class="flow-action-select-btn" data-flow-batch="decline">Decline selected</button>
+                    <button type="button" class="flow-action-select-btn" data-flow-batch="all">Apply all</button>
+                    <button type="button" class="flow-action-select-btn" data-flow-batch="history">History</button>
+                </div>`;
+            wrap.appendChild(reviewHead);
+            reviewHead.querySelector('[data-flow-batch="selected"]').addEventListener('click', async () => {
+                const selected = Array.from(wrap.querySelectorAll('.flow-action-select input:checked'))
+                    .map(input => input.closest('.flow-action-card'))
+                    .filter(Boolean);
+                const highRisk = selected.filter(card => card.dataset.risk === 'high' && card.dataset.confirmed !== 'true');
+                if (highRisk.length) {
+                    const ok = await (typeof window.showCustomConfirmDialog === 'function'
+                        ? window.showCustomConfirmDialog({
+                            title: 'Apply selected high-risk actions?',
+                            message: `${highRisk.length} selected action${highRisk.length === 1 ? '' : 's'} can delete, overwrite, or move existing work. Review each preview before applying.`,
+                            confirmText: 'Apply selected',
+                            cancelText: 'Keep reviewing',
+                            confirmVariant: 'danger'
+                        })
+                        : Promise.resolve(false));
+                    if (!ok) return;
+                    highRisk.forEach(card => { card.dataset.confirmed = 'true'; });
+                }
+                selected.forEach(card => {
+                    const btn = card.querySelector('.flow-action-apply');
+                    if (btn && !btn.disabled) btn.click();
+                });
+            });
+            reviewHead.querySelector('[data-flow-batch="decline"]').addEventListener('click', () => {
+                wrap.querySelectorAll('.flow-action-select input:checked').forEach(input => {
+                    const card = input.closest('.flow-action-card');
+                    const btn = card && card.querySelector('.flow-action-decline');
+                    if (btn && !btn.disabled) btn.click();
+                });
+            });
+            reviewHead.querySelector('[data-flow-batch="all"]').addEventListener('click', () => {
+                wrap.querySelectorAll('.flow-action-select input').forEach(input => { input.checked = true; });
+                const selectedBtn = reviewHead.querySelector('[data-flow-batch="selected"]');
+                if (selectedBtn) selectedBtn.click();
+            });
+            reviewHead.querySelector('[data-flow-batch="history"]').addEventListener('click', () => { try { openActivityLog(); } catch (e) {} });
+        }
 
         // Remember what was proposed so conversational references like
         // "the blocks you just proposed" resolve against real objects.
@@ -2513,9 +2632,9 @@
                     const result = applyAction(action);
                     const md = result.resultMarkdown || result.message || '';
                     const renderer = (bridge() && bridge().renderMarkdown) || window.renderMarkdown;
-                    body.innerHTML = (typeof renderer === 'function') ? renderer(md) : esc(md);
+                    setUserHtml(body, (typeof renderer === 'function') ? renderer(md) : esc(md));
                 } else {
-                    body.innerHTML = `<div class="flow-action-error">${esc(valid.error)}</div>`;
+                    setTrustedHtml(body, `<div class="flow-action-error">${esc(valid.error)}</div>`);
                 }
                 card.appendChild(body);
                 wrap.appendChild(card);
@@ -2527,6 +2646,9 @@
             header.className = 'flow-action-card-head';
             header.innerHTML = `<span class="flow-action-risk flow-risk-${esc(risk)}" title="Risk level">${esc(risk)}</span>`
                 + `<span class="flow-action-label">${esc(label)}</span>`;
+            if (isBatch) {
+                header.insertAdjacentHTML('afterbegin', `<label class="flow-action-select"><input type="checkbox" checked aria-label="Select action: ${esc(label)}"><span>Select</span></label>`);
+            }
             card.appendChild(header);
 
             if (showPreviews) {
@@ -2536,12 +2658,19 @@
                 if (previewHtml) {
                     const readable = document.createElement('div');
                     readable.className = 'flow-action-readable';
-                    readable.innerHTML = previewHtml;
+                    setTrustedHtml(readable, previewHtml);
                     card.appendChild(readable);
+                }
+                const beforeAfterHtml = valid.ok ? buildBeforeAfterSummaryHtml(action) : '';
+                if (beforeAfterHtml) {
+                    const beforeAfter = document.createElement('div');
+                    beforeAfter.className = 'flow-action-before-after-wrap';
+                    setTrustedHtml(beforeAfter, beforeAfterHtml);
+                    card.appendChild(beforeAfter);
                 }
                 const preview = document.createElement('details');
                 preview.className = 'flow-action-preview';
-                preview.innerHTML = `<summary>Technical details</summary><pre>${esc(JSON.stringify(action, null, 2))}</pre>`;
+                setTrustedHtml(preview, `<summary>Technical details</summary><pre>${esc(JSON.stringify(action, null, 2))}</pre>`);
                 card.appendChild(preview);
             }
 
@@ -2560,9 +2689,14 @@
             applyBtn.className = 'flow-action-apply';
             applyBtn.textContent = actionApplyLabel(action);
             applyBtn.disabled = !valid.ok;
-            const doApply = () => {
+            const doApply = async () => {
+                if (risk === 'high' && card.dataset.confirmed !== 'true') {
+                    const ok = await confirmHighRiskAction(action, actionApplyLabel(action));
+                    if (!ok) return;
+                    card.dataset.confirmed = 'true';
+                }
                 applyBtn.disabled = true;
-                const result = applyActionLogged(action, opts && opts.meta);
+                const result = applyActionLogged(action, Object.assign({ batchId }, opts && opts.meta || {}));
                 const status = document.createElement('div');
                 status.className = result.ok ? 'flow-action-ok' : 'flow-action-error';
                 status.textContent = result.ok ? `✓ ${result.message}` : `✗ ${result.message}`;
@@ -4302,7 +4436,7 @@
         overlay.id = 'flowActivityOverlay';
         overlay.className = 'flow-modal-overlay';
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-        const rows = log.map(r => `
+        const flatRows = log.map(r => `
             <div class="flow-act-row" data-id="${esc(r.id)}">
                 <div class="flow-act-main">
                     <span class="flow-act-type">${esc(r.actionType)}</span>
@@ -4315,6 +4449,38 @@
                     ${(r.reversible && r.status !== 'undone') ? `<button type="button" class="flow-act-undo" data-undo="${esc(r.id)}">Undo</button>` : (r.reversible ? '' : '<span class="flow-act-noundo">not reversible</span>')}
                 </div>
             </div>`).join('');
+        const grouped = [];
+        const groupMap = {};
+        log.forEach((record, index) => {
+            const key = record.batchId || record.id || `single_${index}`;
+            if (!groupMap[key]) {
+                groupMap[key] = { key, items: [] };
+                grouped.push(groupMap[key]);
+            }
+            groupMap[key].items.push(record);
+        });
+        const rows = grouped.length ? grouped.map(group => {
+            const riskLabels = Array.from(new Set(group.items.map(r => r.risk || 'medium'))).join(', ');
+            const highCount = group.items.filter(r => r.risk === 'high').length;
+            const body = group.items.map(r => `
+                <div class="flow-act-row" data-id="${esc(r.id)}">
+                    <div class="flow-act-main">
+                        <span class="flow-act-type">${esc(r.actionType)}</span>
+                        <span class="flow-act-summary">${esc(r.summary || '')}</span>
+                    </div>
+                    <div class="flow-act-meta">
+                        <span>${esc(new Date(r.timestamp).toLocaleString())}</span>
+                        ${r.provider ? `<span>${esc(r.provider)}${r.model ? ' · ' + esc(r.model) : ''}</span>` : ''}
+                        <span class="flow-action-risk flow-risk-${esc(r.risk || 'medium')}">${esc(r.risk || 'medium')}</span>
+                        <span class="flow-act-status flow-act-${esc(r.status)}">${esc(r.status)}</span>
+                        ${(r.reversible && r.status !== 'undone') ? `<button type="button" class="flow-act-undo" data-undo="${esc(r.id)}">Undo</button>` : (r.reversible ? '' : '<span class="flow-act-noundo">not reversible</span>')}
+                    </div>
+                </div>`).join('');
+            return `<section class="flow-act-batch" data-batch="${esc(group.key)}">
+                <div class="flow-act-batch-head"><strong>${group.items.length > 1 ? `Batch: ${group.items.length} actions` : 'Single action'}</strong><span>${esc(riskLabels)}${highCount ? ` · ${highCount} high-risk` : ''}</span></div>
+                ${body}
+            </section>`;
+        }).join('') : flatRows;
         overlay.innerHTML = `
             <div class="flow-modal" role="dialog" aria-label="Assistant Activity">
                 <div class="flow-modal-head">
@@ -4337,6 +4503,40 @@
                 openActivityLog();
             });
         });
+    }
+
+    function openActionReviewCenter(actions, opts) {
+        let overlay = document.getElementById('flowActionReviewOverlay');
+        if (overlay) overlay.remove();
+        overlay = document.createElement('div');
+        overlay.id = 'flowActionReviewOverlay';
+        overlay.className = 'flow-modal-overlay';
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        overlay.innerHTML = `
+            <div class="flow-modal flow-action-review-modal" role="dialog" aria-modal="true" aria-label="Assistant Action Review Center">
+                <div class="flow-modal-head">
+                    <strong>Assistant Action Review Center</strong>
+                    <div>
+                        <button type="button" class="flow-modal-clear" id="flowReviewHistory">Activity</button>
+                        <button type="button" class="flow-modal-close" id="flowReviewClose">Close</button>
+                    </div>
+                </div>
+                <div class="flow-modal-body" id="flowReviewBody"></div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const body = overlay.querySelector('#flowReviewBody');
+        const list = Array.isArray(actions) ? actions : [];
+        if (list.length) {
+            renderActionCards(body, list, opts || {});
+        } else {
+            body.innerHTML = '<div class="flow-act-empty">No pending assistant actions. Open Activity to undo or review recent applied actions.</div>';
+        }
+        overlay.querySelector('#flowReviewClose').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('#flowReviewHistory').addEventListener('click', () => { openActivityLog(); });
+        overlay.addEventListener('keydown', (event) => { if (event.key === 'Escape') overlay.remove(); });
+        const closeBtn = overlay.querySelector('#flowReviewClose');
+        if (closeBtn) setTimeout(() => closeBtn.focus(), 20);
+        return overlay;
     }
 
     // --------------------------------------------------------------
@@ -4749,9 +4949,9 @@
     function updateAttachmentChips() {
         const host = document.getElementById('flowAttachmentChips');
         if (!host) return;
-        if (!pendingAttachments.length) { host.innerHTML = ''; host.hidden = true; return; }
+        if (!pendingAttachments.length) { host.innerHTML = ''; host.hidden = true; return; } // sutra-allow-html: clearing host
         host.hidden = false;
-        host.innerHTML = pendingAttachments.map((a, idx) => {
+        host.innerHTML = pendingAttachments.map((a, idx) => { // sutra-allow-html: all dynamic values escaped via esc()
             const stateClass = a.blocked ? 'is-blocked' : (a.compatible ? 'is-ok' : 'is-incompatible');
             const srLabel = `${a.name}, ${formatAttachmentSize(a.sizeBytes) || 'unknown size'}, ${a.planLabel}${a.compatible ? '' : '. ' + (a.reason || 'Incompatible with the selected model.')}`;
             return `<span class="flow-attach-chip ${stateClass}" title="${esc(a.reason || a.planLabel || '')}">
@@ -4772,7 +4972,7 @@
         if (studySourceIdx !== -1 && window.SutraStudyMaterials && typeof window.SutraStudyMaterials.openGenerator === 'function') {
             const genWrap = document.createElement('div');
             genWrap.className = 'flow-attach-generate-row';
-            genWrap.innerHTML = `<button type="button" class="flow-chip-btn flow-attach-generate" id="flowGenerateStudyBtn">✨ Generate Study Materials <span class="sutra-exp-badge" role="note">Experimental<span class="sr-only"> feature</span></span></button>`;
+            genWrap.innerHTML = `<button type="button" class="flow-chip-btn flow-attach-generate" id="flowGenerateStudyBtn">✨ Generate Study Materials <span class="sutra-exp-badge" role="note">Experimental<span class="sr-only"> feature</span></span></button>`; // sutra-allow-html: static markup, no interpolation
             host.appendChild(genWrap);
             genWrap.querySelector('#flowGenerateStudyBtn').addEventListener('click', () => {
                 const att = pendingAttachments[studySourceIdx];
@@ -5141,7 +5341,7 @@
                 </section>`);
         }
 
-        host.innerHTML = parts.join('');
+        host.innerHTML = parts.join(''); // sutra-allow-html: parts built from esc()-escaped local signals
 
         // Wire interactions.
         host.querySelectorAll('[data-flow-grid]').forEach(btn => {
@@ -5281,6 +5481,7 @@
         handleOutgoing,
         renderImportReview,
         openActivityLog,
+        openActionReviewCenter,
         showContextModal,
         buildInspectableContext,
         // File attachments (registry-driven; see model-capabilities.js)
@@ -5403,7 +5604,11 @@
         getActivityLog() {
             const i = intel();
             return i ? i.getActivityLog() : [];
-        }
+        },
+        openReviewCenter(actions, opts) {
+            return openActionReviewCenter(actions, opts || {});
+        },
+        openActivityLog
     };
 
     // One-time backfill: tasks created by earlier Flow versions (or other

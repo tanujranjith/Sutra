@@ -190,6 +190,27 @@ ok(AS.normalizeStudio({ milestones: [{ title: '' }] }).milestones.length === 0, 
 ok(AS.normalizeStudio(null) === null, 'null studio stays null (no phantom payloads)');
 
 // ---------------------------------------------------------------------------
+console.log('\nAcademic Command Center - deterministic action ranking');
+const ACC = require('../src/features/academic-command-center.js');
+const commandModel = ACC.buildModel({
+  now: new Date(2026, 5, 14, 12, 0, 0),
+  courses: [{ id: 'chem', name: 'Chemistry', currentGrade: '68%', targetGrade: '85%', schedule: [{ day: 'Mon', startTime: '09:00' }] }],
+  homeworkTasks: [
+    { id: 'late-lab', courseId: 'chem', title: 'Lab conclusion', dueDate: '2026-06-13', priority: 'high', difficulty: 'hard', done: false },
+    { id: 'reading', courseId: 'chem', title: 'Chapter reading', dueDate: '2026-06-18', priority: 'medium', difficulty: 'easy', done: false }
+  ],
+  pages: [{ id: 'note-1', title: 'Acids and bases', classLinkId: 'chem', updatedAt: '2026-06-14T10:00:00Z' }],
+  timeBlocks: [],
+  gradePlanner: { courses: {} },
+  apSubjects: [],
+  reviewStats: { due: 12, overdue: 3 }
+});
+ok(commandModel.courses.length === 1 && commandModel.courses[0].risk === 'danger', 'course summary marks a large grade gap as at risk', commandModel.courses[0]);
+ok(commandModel.topAction && commandModel.topAction.id === 'late-lab', 'overdue high-impact work ranks first', commandModel.topAction);
+ok(commandModel.topAction.reason.includes('overdue') && commandModel.topAction.reason.includes('grade at risk'), 'recommendation explains its deterministic factors', commandModel.topAction.reason);
+ok(commandModel.courses[0].recentNote && commandModel.courses[0].recentNote.id === 'note-1', 'recent linked note surfaces in the course summary');
+
+// ---------------------------------------------------------------------------
 if (failures) {
   console.error(`\nAcademic engines check FAILED (${failures} issue${failures === 1 ? '' : 's'}).`);
   process.exit(1);

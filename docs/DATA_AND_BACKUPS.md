@@ -16,6 +16,11 @@ is only an identifier; the data is always local.
 
 ### Primary store — the workspace (IndexedDB)
 
+Before defaults and feature normalizers run, stored workspaces pass through the
+versioned registry in `src/core/migrations.js`. Each migration is pure and
+lossless, preserves unknown fields, and is executed against old-workspace
+fixtures by `npm run check:migrations`.
+
 - Your entire workspace is a single `appData` object held in **IndexedDB**.
 - **Database:** `noteflow_atelier_db` · **store:** `workspace` · **key:** `root`.
 - It is hydrated through one merge/normalize path on load and written through one

@@ -763,10 +763,13 @@
             if (global.SutraSafeStorage && global.SutraSafeStorage.set) {
                 global.SutraSafeStorage.set('hwCourses:v2', payload, { importance: 'important', label: 'Your homework' });
             } else {
-                localStorage.setItem('hwCourses:v2', payload);
+                throw new Error('SutraSafeStorage is unavailable.');
             }
             return id;
-        } catch (e) { return ''; }
+        } catch (e) {
+            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.ensureHwCourse' }, 'error');
+            return '';
+        }
     }
 
     function createHomeworkTask(item, isExam) {
@@ -795,10 +798,13 @@
             if (global.SutraSafeStorage && global.SutraSafeStorage.set) {
                 global.SutraSafeStorage.set('hwTasks:v2', payload, { importance: 'important', label: 'Your homework' });
             } else {
-                localStorage.setItem('hwTasks:v2', payload);
+                throw new Error('SutraSafeStorage is unavailable.');
             }
             return true;
-        } catch (e) { return false; }
+        } catch (e) {
+            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.createHomeworkTask' }, 'error');
+            return false;
+        }
     }
 
     function applyDraft() {

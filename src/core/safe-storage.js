@@ -219,6 +219,22 @@
     }
   }
 
+  function get(key, opts) {
+    opts = opts || {};
+    if (!storageAvailable('local')) return opts.fallback;
+    try {
+      var raw = window.localStorage.getItem(key);
+      if (raw === null) return opts.fallback;
+      if (opts.parseJson === false) return raw;
+      try { return JSON.parse(raw); } catch (error) { return raw; }
+    } catch (e) {
+      if (opts.importance === 'important' || opts.importance === 'critical') {
+        warn(key, classify(e), opts.importance, opts.label || key);
+      }
+      return opts.fallback;
+    }
+  }
+
   function remove(key, opts) {
     opts = opts || {};
     if (!storageAvailable('local')) return { ok: false, classification: 'unavailable' };
@@ -256,6 +272,19 @@
     }
   }
 
+  function sessionGet(key, opts) {
+    opts = opts || {};
+    if (!storageAvailable('session')) return opts.fallback;
+    try {
+      var raw = window.sessionStorage.getItem(key);
+      if (raw === null) return opts.fallback;
+      if (opts.parseJson !== true) return raw;
+      try { return JSON.parse(raw); } catch (error) { return opts.fallback; }
+    } catch (e) {
+      return opts.fallback;
+    }
+  }
+
   function sessionRemove(key) {
     if (!storageAvailable('session')) return { ok: false, classification: 'unavailable' };
     try {
@@ -267,8 +296,10 @@
   }
 
   window.SutraSafeStorage = {
+    get: get,
     set: set,
     remove: remove,
+    sessionGet: sessionGet,
     session: session,
     sessionRemove: sessionRemove,
     classify: classify,

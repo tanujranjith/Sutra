@@ -122,7 +122,8 @@
         if (global.SutraSafeStorage && typeof global.SutraSafeStorage.set === 'function') {
             global.SutraSafeStorage.set(TASKS_KEY, payload, { importance: 'important', label: 'Your homework' });
         } else {
-            try { localStorage.setItem(TASKS_KEY, payload); } catch (e) { /* banner handled upstream */ }
+            var error = new Error('SutraSafeStorage is unavailable.');
+            if (typeof global.reportError === 'function') global.reportError(error, { where: 'assignment-studio.writeTasks' }, 'error');
         }
         try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
     }
