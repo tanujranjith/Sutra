@@ -3187,9 +3187,11 @@
     }
 
     function getReviewTodayStats() {
+        const ws = safeWorkspace();
         return {
             due: getDueItems().length,
             overdue: getOverdueItems().length,
+            total: ws && Array.isArray(ws.items) ? ws.items.length : 0,
             reviewedThisWeek: getReviewedThisWeek(),
             decks: getDecks(false).length
         };

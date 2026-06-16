@@ -2311,6 +2311,89 @@
     </div>
   </nav>
 
+  <style id="sutra-shot-styles">
+    /* Browser-chrome frame used for real product screenshots on the dark page. */
+    .shot-frame {
+      position: relative;
+      margin: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border-light);
+      background: rgba(8, 11, 18, 0.6);
+      box-shadow: 0 40px 110px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(100, 130, 220, 0.05);
+    }
+    .shot-bar {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 15px;
+      background: linear-gradient(180deg, rgba(22, 27, 40, 0.96), rgba(13, 17, 27, 0.96));
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .shot-bar i { width: 11px; height: 11px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); }
+    .shot-bar i:nth-child(1) { background: rgba(255, 95, 86, 0.7); }
+    .shot-bar i:nth-child(2) { background: rgba(255, 189, 46, 0.7); }
+    .shot-bar i:nth-child(3) { background: rgba(39, 201, 63, 0.62); }
+    .shot-bar-title {
+      margin-left: 10px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: rgba(200, 212, 238, 0.62);
+    }
+    .shot-frame img { display: block; width: 100%; height: auto; }
+    .shot-caption {
+      margin: 16px 2px 0;
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .assistant-shot { width: 100%; }
+
+    /* Responsive / mobile preview */
+    .responsive-section { padding: 100px 0; position: relative; }
+    .responsive-layout {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 72px;
+      align-items: center;
+    }
+    .responsive-copy h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.4vw, 2.9rem);
+      line-height: 1.12;
+      letter-spacing: -0.01em;
+      margin-bottom: 18px;
+    }
+    .responsive-copy h2 span { color: var(--accent); }
+    .responsive-copy > p { color: var(--text-muted); font-size: 1.06rem; line-height: 1.75; max-width: 48ch; }
+    .responsive-points { list-style: none; padding-left: 0; margin-top: 26px; display: flex; flex-direction: column; gap: 12px; }
+    .responsive-visual { display: flex; justify-content: center; }
+    .phone-frame {
+      width: 296px;
+      max-width: 78vw;
+      padding: 12px;
+      border-radius: 46px;
+      background: linear-gradient(165deg, rgba(28, 33, 48, 0.95), rgba(10, 13, 22, 0.95));
+      border: 1px solid rgba(130, 160, 240, 0.16);
+      box-shadow: 0 50px 120px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .phone-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 34px;
+      border: 1px solid rgba(0, 0, 0, 0.4);
+    }
+    @media (max-width: 860px) {
+      .responsive-layout { grid-template-columns: 1fr; gap: 44px; text-align: center; }
+      .responsive-copy > p { margin-left: auto; margin-right: auto; }
+      .responsive-points { align-items: center; }
+      .trust-point { text-align: left; }
+    }
+  </style>
+
   <main>
     <section id="hero" class="hero container">
       <span class="hero-eyebrow">PRIVATE · LOCAL-FIRST · STUDENT-BUILT</span>
@@ -2332,29 +2415,29 @@
 
       <div class="hero-mockup-wrapper" id="heroScaleTarget">
         <div class="hero-mockup hero-marquee" id="heroCarousel">
-          <!-- Recommended sequence: Today → Daily View → Homework → Rich Notes →
-               Testing Hub → AP Review → Habit Tracker → Deadline Radar → Weekly View.
-               Academic Planning / Grade Planner screenshot not yet available — add here
-               once assets/ss/Grade Planner.png is captured from the real UI.
-               Sutra Assistant screenshot omitted until a clean real screenshot exists. -->
+          <!-- Sequence: Today → Daily View → Homework → Rich Notes → Testing Hub →
+               Review → Sutra Assistant → Themes → Deadline Radar → Weekly View.
+               All shots are captured from the real app via scripts/capture-final.mjs. -->
           <div class="carousel-track">
-            <div class="carousel-card"><span class="carousel-label">Today</span><img src="assets/ss/Today page.png" alt="Today — daily thread, deadlines, and schedule in one view" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Daily View</span><img src="assets/ss/Timeline daily view.png" alt="Timeline daily view — work blocks and schedule" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Homework</span><img src="assets/ss/Homework page.png" alt="Homework planner — classes, due dates, and priorities" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Rich Notes</span><img src="assets/ss/Physics notes.png" alt="Rich notes editor — structured notes with linked context" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Testing Hub</span><img src="assets/ss/Testing hub general review page.png" alt="Testing Hub — exam resources and review progress" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">AP Review</span><img src="assets/ss/Testing page review function showing ap physics review section.png" alt="AP Review — targeted AP Physics review session" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Habit Tracker</span><img src="assets/ss/Habit Tracker.png" alt="Habit Tracker — streaks and daily commitments" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Deadline Radar</span><img src="assets/ss/Radar.png" alt="Deadline Radar — upcoming deadlines grouped by timeframe" class="carousel-slide"></div>
-            <div class="carousel-card"><span class="carousel-label">Weekly View</span><img src="assets/ss/Timeline weekly view.png" alt="Timeline weekly view — the full week at a glance" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Today</span><img src="assets/ss/Today page.png" alt="Sutra Today dashboard — daily thread, deadlines, and schedule in one view" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Daily View</span><img src="assets/ss/Timeline daily view.png" alt="Timeline day view — class periods and study blocks laid out by hour" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Homework</span><img src="assets/ss/Homework page.png" alt="Homework Organizer — assignments grouped by class with due dates and priorities" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Rich Notes</span><img src="assets/ss/Physics notes.png" alt="Rich notes editor — a structured calculus study sheet with formatting and tags" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Testing Hub</span><img src="assets/ss/Testing hub general review page.png" alt="Testing Hub — exams, review, and study progress in one dashboard" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Review</span><img src="assets/ss/Testing page review function showing ap physics review section.png" alt="Spaced-repetition review — study sets and cards due today" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Assistant</span><img src="assets/ss/Sutra Assistant.png" alt="Sutra Assistant — a workspace pulse and reviewable suggestions beside the Today view" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Themes</span><img src="assets/ss/Themes and customization.png" alt="Workspace settings — appearance, density, and theme controls with a live preview" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Deadline Radar</span><img src="assets/ss/Radar.png" alt="Deadline Radar — every upcoming deadline grouped by timeframe" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Weekly View</span><img src="assets/ss/Timeline weekly view.png" alt="Timeline week view — the full week of classes and work at a glance" class="carousel-slide"></div>
             <!-- Duplicate set for seamless loop (aria-hidden so screen readers skip the copies) -->
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Today</span><img src="assets/ss/Today page.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Daily View</span><img src="assets/ss/Timeline daily view.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Homework</span><img src="assets/ss/Homework page.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Rich Notes</span><img src="assets/ss/Physics notes.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Testing Hub</span><img src="assets/ss/Testing hub general review page.png" alt="" class="carousel-slide"></div>
-            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">AP Review</span><img src="assets/ss/Testing page review function showing ap physics review section.png" alt="" class="carousel-slide"></div>
-            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Habit Tracker</span><img src="assets/ss/Habit Tracker.png" alt="" class="carousel-slide"></div>
+            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Review</span><img src="assets/ss/Testing page review function showing ap physics review section.png" alt="" class="carousel-slide"></div>
+            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Assistant</span><img src="assets/ss/Sutra Assistant.png" alt="" class="carousel-slide"></div>
+            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Themes</span><img src="assets/ss/Themes and customization.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Deadline Radar</span><img src="assets/ss/Radar.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Weekly View</span><img src="assets/ss/Timeline weekly view.png" alt="" class="carousel-slide"></div>
           </div>
@@ -2663,38 +2746,13 @@
             </ul>
           </div>
 
-          <!-- Panel mockup — purely visual, full description in copy column above -->
-          <div class="assistant-panel reveal" aria-hidden="true">
-            <div class="ap-header">
-              <div class="ap-header-title">
-                <span class="ap-icon">✦</span>
-                Sutra Assistant
-              </div>
-            </div>
-            <div class="ap-badge">
-              <span class="ap-badge-icon">◈</span>
-              <div>
-                <div class="ap-badge-title">Powered by Sutra Intelligence</div>
-                <div class="ap-badge-sub">Local signals from your workspace.</div>
-              </div>
-            </div>
-            <div class="ap-chips">
-              <span class="ap-chip"><span class="ap-chip-dot"></span>Current screen</span>
-              <span class="ap-chip"><span class="ap-chip-dot"></span>3 overdue tasks</span>
-              <span class="ap-chip"><span class="ap-chip-dot"></span>Exam in 4 days</span>
-            </div>
-            <div class="ap-body">
-              <div class="ap-user-msg">What should I focus on today?</div>
-              <div class="ap-action-card">
-                <div class="ap-action-label">Suggested action</div>
-                <div class="ap-action-text">Create a study block for AP Physics (90 min) and mark "Lab report intro" as your first task — it is overdue and has the highest grade impact.</div>
-                <div class="ap-action-btns">
-                  <span class="ap-btn ap-btn-apply">Apply</span>
-                  <span class="ap-btn ap-btn-decline">Decline</span>
-                </div>
-              </div>
-            </div>
-            <div class="ap-optional-note">AI is optional — Sutra works fully without it.</div>
+          <!-- Real screenshot of Sutra Assistant in a browser-chrome frame -->
+          <div class="assistant-shot reveal">
+            <figure class="shot-frame">
+              <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span class="shot-bar-title">Sutra Assistant</span></div>
+              <img src="assets/ss/Sutra Assistant.png" alt="The Sutra Assistant panel open beside the Today view, showing a workspace pulse — one overdue assignment, an overloaded day, and an unscheduled high-priority task — with quick actions you apply or decline." width="1600" height="1000" loading="lazy" decoding="async">
+            </figure>
+            <p class="shot-caption">AI is optional — Sutra works fully without it.</p>
           </div>
 
         </div>
@@ -2749,6 +2807,27 @@
           <div class="bento-content">
             <h3>Sutra Modes</h3>
             <p>Promote the views you need right now — Student, AP Crunch, Writing, and more — without losing the rest.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECTION 5b · RESPONSIVE / MOBILE PREVIEW ============ -->
+    <section id="responsive" class="responsive-section">
+      <div class="container responsive-layout">
+        <div class="responsive-copy reveal">
+          <span class="section-eyebrow">EVERY SCREEN</span>
+          <h2>The same workspace, <span>from laptop to phone.</span></h2>
+          <p>Sutra is a single local-first web app — the same workspace runs in your phone's browser, with the Today view, deadlines, notes, and review laid out for a smaller screen. Each device keeps its own local copy; move a workspace between devices with an encrypted <code>.sutra</code> export, or turn on optional Google&nbsp;Drive sync.</p>
+          <ul class="responsive-points">
+            <li class="trust-point"><span class="trust-dot" aria-hidden="true"></span><span>Touch-friendly Today, tasks, and capture</span></li>
+            <li class="trust-point"><span class="trust-dot" aria-hidden="true"></span><span>Stored locally on each device — no account required</span></li>
+            <li class="trust-point"><span class="trust-dot" aria-hidden="true"></span><span>Install to the home screen as a PWA</span></li>
+          </ul>
+        </div>
+        <div class="responsive-visual reveal">
+          <div class="phone-frame">
+            <img src="assets/ss/Mobile today.png" alt="Sutra running on a phone — the Today view with a daily summary, quick actions, and the day's due work in a single-column mobile layout." width="390" height="844" loading="lazy" decoding="async">
           </div>
         </div>
       </div>
