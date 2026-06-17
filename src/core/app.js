@@ -59690,6 +59690,8 @@ ${cspMeta}
             const _origOpenTaskModal = (typeof openTaskModal === 'function') ? openTaskModal : null;
             const _origExportAtelier = (typeof exportWorkspaceAsAtelier === 'function') ? exportWorkspaceAsAtelier
                 : ((typeof exportWorkspaceAsAtelierPackage === 'function') ? exportWorkspaceAsAtelierPackage : null);
+            const _origFreeWindows = (typeof getFreeWindowsForDateKey === 'function') ? getFreeWindowsForDateKey : null;
+            const _origAddCalendarBlock = (typeof addCalendarBlockForTemplate === 'function') ? addCalendarBlockForTemplate : null;
 
             window.flowAtelier = {
                 get tasks() { return tasks; },
@@ -59726,6 +59728,9 @@ ${cspMeta}
                 // Reused canonical workflows (undefined return = unavailable).
                 openQuickCaptureModal: (text) => (_origQuickCapture ? (_origQuickCapture(text), true) : undefined),
                 scheduleGenericItemAsBlock: (item) => (_origScheduleGeneric ? (_origScheduleGeneric(item), true) : undefined),
+                getFreeWindowsForDateKey: (dateKey, supplemental, options) => (_origFreeWindows ? _origFreeWindows(dateKey, supplemental, options) : []),
+                addCalendarBlockForTemplate: (payload) => (_origAddCalendarBlock ? _origAddCalendarBlock(payload) : null),
+                getStudentPreferences: () => ((appSettings && appSettings.studentPreferences) ? appSettings.studentPreferences : null),
                 openDeadlineRadar: () => (_origOpenDeadlineRadar ? (_origOpenDeadlineRadar(), true) : undefined),
                 openClassDashboardDrawer: (id) => (_origOpenClassDashboard ? (_origOpenClassDashboard(id), true) : undefined),
                 createWeeklyReviewNote: () => (_origWeeklyReview ? (_origWeeklyReview(), true) : undefined),
@@ -62999,6 +63004,46 @@ function parseHomeworkPasteText(text) {
         }
         return '';
     };
+
+    // For column-structured input (markdown/pipe tables, CSV/TSV with a header
+    // row) the column ORDER varies, so defer to the name-aware multi-format
+    // parser in flow-intelligence; map its rows back through the richer date
+    // parser here. Plain per-line text keeps the legacy path below.
+    try {
+        const fi = (typeof window !== 'undefined') && (window.sutraIntelligence || window.flowIntelligence);
+        const rawLines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        // Markdown tables carry a |---|---| separator row.
+        const hasMdSeparator = rawLines.some(l => l.includes('|') && /^[\s|:\-–—]+$/.test(l) && /[-–—]/.test(l));
+        // A pipe table whose first row names its columns (any order).
+        let pipeHeader = false;
+        const firstPipe = rawLines.find(l => l.includes('|'));
+        if (firstPipe) {
+            const cells = firstPipe.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.toLowerCase().trim());
+            pipeHeader = cells.some(c => /^(title|assignment|task|name)$/.test(c)) && cells.some(c => /^(due|due ?date|date|deadline|due on|when|course|class|subject)$/.test(c));
+        }
+        const firstLower = (rawLines[0] || '').toLowerCase();
+        const csvHeader = /(title|assignment|task)\b/.test(firstLower)
+            && /(due|date|deadline|course|class)\b/.test(firstLower)
+            && (rawLines[0].includes(',') || rawLines[0].includes('\t'));
+        if (fi && typeof fi.parseAssignmentText === 'function' && (hasMdSeparator || pipeHeader || csvHeader)) {
+            const structured = fi.parseAssignmentText(raw);
+            if (structured.length) {
+                return structured.map(r => {
+                    const dd = parseDateAnywhere(r.dueDate || '') || '';
+                    const dt = parseTimeAnywhere(`${r.dueTime || ''} ${r.dueDate || ''}`) || '';
+                    const klass = r.course || detectClass(r.title) || '';
+                    return {
+                        className: String(klass).replace(/\s+/g, ' ').trim(),
+                        title: String(r.title || '').replace(/\s+/g, ' ').trim(),
+                        dueDate: dd, dueTime: dt,
+                        difficulty: /^(easy|medium|hard)$/.test(r.difficulty) ? r.difficulty : detectDifficulty(r.sourceText || r.title || ''),
+                        priority: /^(low|medium|high)$/.test(r.priority) ? r.priority : detectPriority(r.sourceText || r.title || ''),
+                        raw: r.sourceText || r.title || ''
+                    };
+                }).filter(x => x.title);
+            }
+        }
+    } catch (e) { /* fall through to the legacy per-line parser */ }
 
     lines.forEach(rawLine => {
         if (!rawLine) return;

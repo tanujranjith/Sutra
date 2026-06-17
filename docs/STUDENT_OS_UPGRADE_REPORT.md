@@ -127,6 +127,193 @@ Remaining Phase 2 and Phase 3 work:
 - Capped object-level revision history.
 - Full design-system pass and remaining visible "Liquid Glass" rename cleanup if any legacy copy remains in older surfaces.
 
+## Phase 3 — Studio 2.0, Plan/Repair, Import Wizard, Grade Risk, PWA (implemented)
+
+This pass added four deterministic engines (all Node-tested in
+`scripts/sutra-academic-engines-check.mjs`) plus a minimal service worker, and
+wired each into the UI and the assistant. No new top-level `appData` keys were
+introduced, so `.sutra` export/import and the round-trip check are unchanged.
+
+### Assignment Studio 2.0 (priority #3)
+- Extended the milestone model in `src/features/assignment-studio.js` with
+  `type` (research/outline/draft/revise/submit/study/rehearse/build/solve/
+  review/other), `status` (not_started/in_progress/done, kept in lock-step with
+  the legacy `done` boolean so old data and `computeProgress` are unaffected),
+  `linkedNoteId`, and `linkedBlockIds[]`. Milestones ride `task.studio` inside
+  `hwTasks:v2`, so the new fields round-trip through `.sutra` automatically
+  (verified by `tests/e2e/student-os-phase3.spec.mjs`).
+- Added a deterministic, AI-free plan generator: `generateMilestones(kind)`
+  (essay/project/presentation/lab/test/reading/generic templates),
+  `scheduleMilestonesBackward(milestones, dueDate)` (spreads work back from the
+  deadline, never schedules past it, flags `compressed`/`pressure` crunch plans),
+  and `buildPlan()`/`applyPlanToTask()`.
+- UI: a "✨ Generate plan / ↻ Regenerate plan" button + per-milestone type
+  selector in the Studio modal; a "Next: …" milestone chip on homework cards.
+- Assistant: `create_assignment_plan` now attaches real Studio milestones
+  (work-backward scheduled) instead of loose planner tasks, with a graceful
+  fallback to tasks when Studio is unavailable.
+
+### Conflict-aware Plan / Repair engine (priority #2)
+- New module `src/features/planning-engine.js` — a pure core (`planWork`,
+  `analyzePlan`) plus a browser adapter. `planWork` places non-overlapping
+  study blocks into the day's free windows (carving each placed slot out so
+  later blocks can't collide), respects a per-day block cap and inter-block
+  buffer, never schedules past a due date, chunks large/hard work into
+  milestone-sized pieces, ranks overdue/high-priority first, and gives every
+  block a plain-language reason. `analyzePlan` flags overlaps, missing buffers,
+  overloaded days, unscheduled high-priority work, AP exams within 21 days with
+  no study, and review backlog with no session.
+- The adapter gathers real free windows (`getFreeWindowsForDateKey`, now exposed
+  on `flowAtelier`), school periods, and `deriveStudentContext` signals, then
+  renders a **preview-before-apply** modal: nothing touches the timeline until
+  the student approves a block (Add / Add all). The repair modal lists issues
+  with suggested fixes.
+- Today entry points: "Suggest plan", "Plan week", and "Check my plan" buttons.
+- Assistant: new read-only `repair_plan` action runs the analysis locally and
+  reports issues; the model never invents them. (`plan_day`/`plan_week` already
+  existed.)
+
+### Import wizard — multi-format parser (priority #4)
+- `src/features/flow-intelligence.js` gains `parseAssignmentText(text)`: a
+  deterministic parser for markdown/pipe tables, CSV/TSV with a header row
+  (columns mapped by NAME, any order), dash/positional rows (splitting combined
+  date+time tokens), and syllabus prose (one row per dated sentence). It feeds
+  the existing `normalizeImportBatch` pipeline (confidence, ambiguity flags,
+  suggested destinations, duplicate detection against homework/tasks/timeline).
+  The module now exports for Node so the parser is engine-tested.
+- The manual paste-import modal (`parseHomeworkPasteText`) now routes
+  header-structured input through the new parser — gated strictly on a detected
+  header (markdown separator row, named pipe header, or CSV/TSV header) so the
+  legacy per-line behavior for plain `class | title | date` rows is unchanged.
+  The rich editable review table with multi-destination checkboxes already
+  exists for the assistant (`import_assignments`) path.
+
+### Grade-risk classification (priority #6)
+- `src/features/grade-planner.js` gains `computeGradeRisk(courseData, options)`,
+  a deterministic classifier returning `safe | watch | risk | danger | unknown`
+  (gap-to-target when a target is set, absolute thresholds otherwise; missing
+  work pulls an otherwise-safe grade down a notch; no graded work → `unknown`,
+  never a fabricated number). Surfaced as a colored "On track / Watch / At risk /
+  Danger" badge with a "Why?" tooltip in the Grades tab. All grade math remains
+  local and deterministic — the assistant never computes it.
+
+### PWA / offline (priority #13)
+- New `sw.js` (was none): versioned cache, **network-first navigations** (a
+  freshly deployed `Sutra.html` is never shadowed by a stale cache), cache-first
+  for versioned sub-assets, and **zero interception of cross-origin requests**
+  so AI-provider and Google Drive traffic is untouched and never cached. Non-GET
+  requests and `.sutra` downloads are never cached. No telemetry.
+- `src/config/sw-register.js`: registration is **protocol-gated to http(s)** and
+  skips `file://` entirely (so the "just open the file" path is unaffected),
+  fails silently, and adds an in-app offline indicator.
+- `scripts/sutra-sw-check.mjs` (wired into `npm run check:all`) asserts all of
+  the above safety properties.
+
+### Tests added this pass
+- `scripts/sutra-academic-engines-check.mjs`: Studio 2.0 (extended-field
+  backward-compat, per-type generation, work-backward scheduling incl. crunch
+  and past-due cases), Planning engine (non-overlap, class avoidance, ordering,
+  never-past-due, every-block-has-a-reason; repair overlap/no-buffer/AP/review
+  detection + severity sort), Import parser (markdown/CSV/TSV/dash/syllabus +
+  normalization ambiguity flags + title similarity), and Grade risk
+  (safe/danger/unknown/no-target/missing-drag).
+- `tests/e2e/student-os-phase3.spec.mjs` (3 tests, chromium green): Studio plan
+  generation + extended-field round-trip through `hwTasks:v2`; planning globals
+  wired + preview modal opens without auto-applying; import parser + grade-risk
+  globals exposed in the browser.
+- `scripts/sutra-sw-check.mjs` for the service worker.
+
+### Commands run (Phase 3)
+- `npm run check:all` — **passed** (EXIT 0), now including the new academic
+  engine assertions and the service-worker safety check.
+- `npx playwright test --project=chromium tests/e2e/student-os-phase3.spec.mjs`
+  — **3 passed**.
+- Regression: `academic-upgrade.spec.mjs` (**7 passed**) and
+  `student-os-phase1.spec.mjs` (**4 passed**) still green.
+
+### Already present from earlier passes (not re-implemented)
+- #1 Academic Command Center engine + Course Hub academic dashboard + Today
+  student hub; #5 `convert_note_to_study_system` + `SutraReviewGen`; #7/#9 Data
+  Health metadata + Backup Health cards + emergency export; #10 Assistant Action
+  Review Center + activity log + undo; #12 expanded universal search.
+
+### Intentionally deferred (clear gaps, not claimed done)
+- #8 Mobile "Right Now" mode — a dedicated phone-first action dashboard (the app
+  is responsive and the Student Inbox is mobile-checked, but the bespoke
+  Right-Now surface is not built).
+- #11 Course Resource Vault tabbed view — course objects already hold
+  teacher/room/grading data and link to files/notes/decks, but the dedicated
+  multi-tab vault UI is not built.
+- #14 User-configurable reminder *rules* engine — `notifications.js` has
+  category thresholds/quiet-hours/snooze, but a rule builder UI is not added.
+- #15 Import-first onboarding upgrade — a student onboarding overlay exists; the
+  full mode-picker + guided multi-step setup is not rebuilt.
+- A dedicated multi-tab "Assignment Plan" modal (the Studio modal covers
+  milestones/notes/effort/scheduling today).
+
+## Bug-check / regression pass (post-implementation)
+
+An adversarial bug-hunt across the new code and the systems it touches found and
+fixed the following real defects (21 targeted regression tests added to
+`scripts/sutra-academic-engines-check.mjs`):
+
+- **CRITICAL — import date corruption.** `flow-intelligence.toISODate`/`parseDateOnly`
+  fell back to `new Date('6/22')`, which V8 parses as the **year 2001**, silently
+  corrupting any imported date lacking a 4-digit year — and flagging it as
+  high-confidence/non-ambiguous. Rewrote the parser to handle ISO, M/D, M/D/Y,
+  month-name, and relative words explicitly, with a year-guarded native fallback
+  that can never invent a year. `tomorrow`/weekday names now resolve too.
+- **HIGH — `looksLikeDate` over-greedy weekday match.** `(mon|tue|…|sun)[a-z]*`
+  matched "Sunny", "Wednesday Wars", etc., so titles containing weekday letters
+  were mis-parsed as dates (and the real title shifted into the course slot).
+  Tightened to match weekday/relative words only when they dominate a short cell.
+- **HIGH — two-word `Due Date` header false-negative routing.** The app.js manual
+  import gate's pipe-header regex didn't match `due date` (with a space), so such
+  tables fell to the legacy positional parser and swapped title/class. Gate now
+  mirrors the full header vocabulary (`due date`, `deadline`, `when`, …).
+- **HIGH — Studio `done`/`status` could drop a completion.** `done` was derived
+  strictly from `status`, so an imported/assistant milestone with `done:true` but
+  `status:'in_progress'` came back **not done** (corrupting `computeProgress`).
+  The two fields are now reconciled so a completion from either is never lost.
+- **HIGH — grade risk on a NaN target.** A non-numeric `targetPercent` (un-normalized
+  Engine input) became `NaN` (since `Number('A')` is NaN, and `Number(null)` is 0),
+  fell through every threshold, and mislabeled a strong grade as **danger** with
+  `NaN` in the reason. Now guarded (null/undefined/non-finite → no target).
+- **MAJOR — planner ignored due *time*.** `planWork` filtered candidate dates by
+  due *date* only and could schedule a block after the assignment's due time on
+  the due date. It now caps the slot end by the due time on the due date.
+- **MEDIUM — Studio silent-success on failed write.** `writeTasks` never reported
+  failure, so a degraded `SutraSafeStorage` write returned a false "saved". It now
+  returns the real persist status (`{ok}` from SafeStorage), so callers don't claim
+  success on a lost edit.
+- **MEDIUM — import parser data-quality fixes:** a second date token is no longer
+  filed as the course; a header row with no title column is no longer imported as
+  a junk assignment (header detected when ≥2 columns are named); a valid dateless
+  line (e.g. "Read chapter 5") is kept instead of silently dropped.
+- **MINOR — planner block HH:MM/minute desync.** A free window ending at minute
+  1440 produced `end:'23:59'` while `endMin:1440`; window bounds are now clamped
+  into `[0, 1439]`. Overdue work placed after its past due date is now flagged
+  `conflict:true` (catch-up, not on-time). Grade math hardened against `null`
+  entries (no throw → `unknown`).
+
+**Verified NON-bug:** undoing `create_assignment_plan` does not orphan milestones —
+they live inside `task.studio` on the homework row, and `deleteObject('homework')`
+removes the whole row (milestones included). Confirmed by reading `deleteObject`.
+
+**Known minor items intentionally left as-is:** `cache.addAll` in `sw.js` is atomic
+(a 404 on one core asset skips precaching the other) — mitigated because
+network-first navigation re-caches on the next online load; `milestone.linkedBlockIds`
+is a persisted-but-not-yet-populated field (scheduling creates the block but
+doesn't store its id back yet); the SW safety check is a keyword/host tripwire,
+not a behavioral proof.
+
+### Bug-check commands run
+- `npm run check:all` — **passed** (EXIT 0), now with 21 added regression assertions.
+- `npx playwright test --project=chromium` over student-os-phase1/2/3, academic-upgrade,
+  assistant-action-harness, sutra-intelligence-harness, encrypted-backups —
+  **41 passed** (incl. "exports never contain API keys" and legacy
+  `.atelier`/`.sutra`/JSON import round-trips).
+
 ## Known Risks
 
 - The new e2e spec has parser coverage but could not be executed in Chromium because Playwright output cleanup was blocked by the sandbox and escalation was rejected by the usage-limit gate.

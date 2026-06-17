@@ -151,6 +151,7 @@
     function countableEntries(entries, options) {
         var missingAsZero = !options || options.missingCountsAsZero !== false;
         return entries.filter(function (e) {
+            if (!e || typeof e !== 'object') return false;
             if (e.status === 'graded') return true;
             if (e.status === 'missing') return missingAsZero;
             return false; // pending + excused never count
@@ -185,12 +186,12 @@
         var data = courseData || { categories: [], entries: [] };
         var opts = options || {};
         var entries = countableEntries(Array.isArray(data.entries) ? data.entries : [], opts);
-        var allEntries = Array.isArray(data.entries) ? data.entries : [];
+        var allEntries = (Array.isArray(data.entries) ? data.entries : []).filter(function (e) { return e && typeof e === 'object'; });
         var missingCount = allEntries.filter(function (e) { return e.status === 'missing'; }).length;
         var gradedCount = allEntries.filter(function (e) { return e.status === 'graded'; }).length;
         var pendingCount = allEntries.filter(function (e) { return e.status === 'pending'; }).length;
         var excusedCount = allEntries.filter(function (e) { return e.status === 'excused'; }).length;
-        var categories = (Array.isArray(data.categories) ? data.categories : []).filter(function (c) { return c.weight > 0; });
+        var categories = (Array.isArray(data.categories) ? data.categories : []).filter(function (c) { return c && c.weight > 0; });
 
         var result = {
             percent: null,
@@ -362,6 +363,61 @@
         };
     }
 
+    /**
+     * Deterministic risk classification for a course. Status is one of
+     * safe | watch | risk | danger | unknown. When a target is set we measure
+     * the gap to target; otherwise we fall back to absolute thresholds. Missing
+     * work nudges the rating down. Returns { status, label, reason, percent,
+     * target, delta, missingCount }. No AI — pure local math.
+     */
+    function computeGradeRisk(courseData, options) {
+        var data = courseData || {};
+        var grade = computeCourseGrade(data, options);
+        var percent = grade.percent;
+        // Guard against a non-numeric/NaN target (e.g. un-normalized Engine input):
+        // an unguarded Number('A') = NaN would fall through every threshold and
+        // mislabel a strong grade as "danger" with NaN in the reason. Note null/
+        // undefined must stay null (Number(null) === 0 would invent a 0% target).
+        var rawTarget = data.targetPercent;
+        var target = (rawTarget === null || rawTarget === undefined || !Number.isFinite(Number(rawTarget)))
+            ? null : Number(rawTarget);
+        var missingCount = grade.missingCount || 0;
+        if (percent === null) {
+            return {
+                status: 'unknown', label: 'No data',
+                reason: missingCount ? (missingCount + ' item' + (missingCount === 1 ? '' : 's') + ' missing, but no graded work yet to compute a grade.') : 'No graded work entered yet — add scores to see your standing.',
+                percent: null, target: target, delta: null, missingCount: missingCount
+            };
+        }
+        var delta = target === null ? null : round2(percent - target);
+        var status;
+        if (target !== null) {
+            if (delta >= 2) status = 'safe';
+            else if (delta >= -1) status = 'watch';
+            else if (delta >= -5) status = 'risk';
+            else status = 'danger';
+        } else {
+            if (percent >= 90) status = 'safe';
+            else if (percent >= 80) status = 'watch';
+            else if (percent >= 70) status = 'risk';
+            else status = 'danger';
+        }
+        // Missing work pulls an otherwise-comfortable grade down a notch.
+        var order = ['safe', 'watch', 'risk', 'danger'];
+        if (missingCount >= 2 && status === 'safe') status = 'watch';
+        if (missingCount >= 4 && order.indexOf(status) < 2) status = order[Math.min(order.length - 1, order.indexOf(status) + 1)];
+
+        var labels = { safe: 'On track', watch: 'Watch', risk: 'At risk', danger: 'Danger' };
+        var bits = [percent.toFixed(1) + '%' + (grade.letter ? ' (' + grade.letter + ')' : '')];
+        if (target !== null) bits.push(delta >= 0 ? ('+' + delta + ' vs target ' + target + '%') : (delta + ' vs target ' + target + '%'));
+        if (missingCount) bits.push(missingCount + ' missing');
+        return {
+            status: status, label: labels[status] || 'Watch',
+            reason: bits.join(' · '),
+            percent: percent, target: target, delta: delta, missingCount: missingCount
+        };
+    }
+
     var Engine = {
         getDefaultGradePlanner: getDefaultGradePlanner,
         normalizeGradePlanner: normalizeGradePlanner,
@@ -370,6 +426,7 @@
         scoreNeededForTarget: scoreNeededForTarget,
         whatIfScore: whatIfScore,
         rankImpact: rankImpact,
+        computeGradeRisk: computeGradeRisk,
         computeGpa: computeGpa,
         letterFromPercent: letterFromPercent
     };
@@ -479,6 +536,9 @@
                 : '<span class="gp-delta gp-delta-gap">' + delta + ' pts to target</span>';
         }
 
+        var risk = computeGradeRisk(data, planner.settings);
+        var riskHtml = '<span class="gp-risk-badge gp-risk-' + risk.status + '" title="' + esc(risk.reason) + '">' + esc(risk.label) + '</span>';
+
         var categoryRows = data.categories.map(function (cat) {
             var byCat = null;
             grade.byCategory.forEach(function (b) { if (b.id === cat.id) byCat = b; });
@@ -527,7 +587,7 @@
 
             + '<div class="gp-summary-row">'
             + '<div class="gp-summary-main"><span class="gp-grade-big">' + (grade.percent === null ? '—' : grade.percent.toFixed(1) + '%') + '</span>'
-            + '<span class="gp-grade-letter">' + esc(grade.letter || 'No scores yet') + '</span>' + deltaHtml + '</div>'
+            + '<span class="gp-grade-letter">' + esc(grade.letter || 'No scores yet') + '</span>' + riskHtml + deltaHtml + '</div>'
             + '<label class="gp-target-field"><span>Target</span>'
             + '<input type="number" min="0" max="110" step="0.5" data-gp-field="target" value="' + (data.targetPercent === null ? '' : esc(data.targetPercent)) + '" placeholder="93"></label>'
             + '</div>'
@@ -769,6 +829,7 @@
         setPlanner: setPlanner,
         renderGradesTabHtml: renderGradesTabHtml,
         computeCourseGrade: computeCourseGrade,
+        computeGradeRisk: computeGradeRisk,
         computeGpa: computeGpa,
         addEntryForCourse: function (courseId, entry) {
             var planner = getPlanner();

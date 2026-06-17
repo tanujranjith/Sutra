@@ -63,6 +63,7 @@ const SCAN_FILES = [
   'src/features/homework.js',
   'src/features/model-capabilities.js',
   'src/features/notifications.js',
+  'src/features/planning-engine.js',
   'src/features/plugin-system.js',
   'src/features/review.js',
   'src/features/school-schedule.js',

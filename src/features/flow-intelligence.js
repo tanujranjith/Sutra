@@ -50,14 +50,58 @@
         return d;
     }
 
+    function mkLocalDate(y, mo, d) {
+        if (!(mo >= 1 && mo <= 12) || !(d >= 1 && d <= 31)) return null;
+        const dt = new Date(y, mo - 1, d);
+        return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+
+    // Deterministic, format-aware date parser. Deliberately does NOT fall back to
+    // bare `new Date(str)` for ambiguous input — `new Date('6/22')` yields the
+    // YEAR 2001 in V8, silently corrupting imported assignment dates. A native
+    // parse is only used when the string carries an explicit 4-digit year that
+    // the parsed result agrees with, so a year can never be invented.
     function parseDateOnly(value) {
         if (!value) return null;
         try {
-            const s = String(value);
-            const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
-            const d = new Date(s);
-            return Number.isNaN(d.getTime()) ? null : d;
+            if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+            const s = String(value).trim();
+            if (!s) return null;
+            const now = new Date();
+            let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);            // ISO (date prefix)
+            if (m) return mkLocalDate(+m[1], +m[2], +m[3]);
+            m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/); // M/D or M/D/Y
+            if (m) {
+                let yy = m[3] ? Number(m[3]) : now.getFullYear();
+                if (yy < 100) yy += 2000;
+                return mkLocalDate(yy, +m[1], +m[2]);
+            }
+            const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            m = s.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,?\s*(\d{4}))?/);
+            if (m) {                                                     // Month name D[, YYYY]
+                const mi = months.indexOf(m[1].slice(0, 3));
+                const yy = m[3] ? Number(m[3]) : now.getFullYear();
+                return mkLocalDate(yy, mi + 1, +m[2]);
+            }
+            if (/\btoday\b/i.test(s)) return mkLocalDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+            if (/\btomorrow\b/i.test(s)) { const t = new Date(now); t.setDate(t.getDate() + 1); return mkLocalDate(t.getFullYear(), t.getMonth() + 1, t.getDate()); }
+            const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const wm = s.toLowerCase().match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+            if (wm) {
+                const target = weekdays.indexOf(wm[1]);
+                const delta = ((target - now.getDay() + 7) % 7) || 7;
+                const t = new Date(now); t.setDate(t.getDate() + delta);
+                return mkLocalDate(t.getFullYear(), t.getMonth() + 1, t.getDate());
+            }
+            // Year-guarded native fallback (never invents a year for bare M/D).
+            const ym = s.match(/\b(\d{4})\b/);
+            if (ym) {
+                const d2 = new Date(s);
+                if (!Number.isNaN(d2.getTime()) && String(d2.getFullYear()) === ym[1]) {
+                    return mkLocalDate(d2.getFullYear(), d2.getMonth() + 1, d2.getDate());
+                }
+            }
+            return null;
         } catch (e) { return null; }
     }
 
@@ -622,6 +666,181 @@
     }
 
     // --------------------------------------------------------------
+    // Multi-format text → raw import rows (deterministic, no AI).
+    // Handles: markdown/pipe tables, CSV/TSV with a header, dash/pipe/tab
+    // per-line rows, and syllabus-style paragraphs. The returned rows are
+    // raw field bags; run them through normalizeImportBatch() to get
+    // confidence, ambiguity flags, suggested destinations, and dedup.
+    // --------------------------------------------------------------
+    const HEADER_FIELD_PATTERNS = [
+        ['title', /^(title|assignment|task|name|work|description|item|topic)$/],
+        ['course', /^(course|class|subject|period|section)$/],
+        ['dueTime', /^(time|due ?time|at)$/],
+        ['dueDate', /^(due|due ?date|date|deadline|due on|when)$/],
+        ['type', /^(type|category|kind)$/],
+        ['priority', /^(priority|urgency)$/],
+        ['difficulty', /^(difficulty|effort|level)$/]
+    ];
+
+    const WEEKDAY_DATE_RE = /^(due\s+|by\s+|on\s+)?(today|tonight|tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat)\b\.?(\s+\d{1,2}(:\d{2})?\s*(?:am|pm)?)?$/i;
+    function looksLikeDate(tok) {
+        const s = String(tok || '');
+        if (/\d{4}-\d{1,2}-\d{1,2}/.test(s)) return true;
+        if (/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/.test(s)) return true;
+        if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}/i.test(s)) return true;
+        // Weekday / relative words only count when they DOMINATE a short token, so
+        // a real title like "The Wednesday Wars essay" or "Sunny day poem" — which
+        // merely contains weekday letters — is never mistaken for a date.
+        return s.trim().length <= 20 && WEEKDAY_DATE_RE.test(s.trim());
+    }
+    function looksLikeTime(tok) {
+        return /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(tok) || /\b\d{1,2}\s*(am|pm)\b/i.test(tok);
+    }
+    function isTableSeparator(line) {
+        return /^[\s|:\-–—]+$/.test(line) && /[-–—]/.test(line);
+    }
+    function splitDelim(line, delim) {
+        let parts;
+        if (delim === '|') {
+            parts = line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|');
+        } else if (delim === '\t') {
+            parts = line.split('\t');
+        } else if (delim === ',') {
+            // tolerate simple double-quoted cells with embedded commas
+            parts = []; let cur = ''; let q = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (ch === '"') { q = !q; continue; }
+                if (ch === ',' && !q) { parts.push(cur); cur = ''; continue; }
+                cur += ch;
+            }
+            parts.push(cur);
+        } else {
+            parts = line.split(delim);
+        }
+        return parts.map(p => p.trim());
+    }
+    function mapHeader(cells) {
+        const map = {};
+        cells.forEach((cell, idx) => {
+            const norm = String(cell || '').toLowerCase().trim();
+            for (const [field, re] of HEADER_FIELD_PATTERNS) {
+                if (map[field] === undefined && re.test(norm)) { map[field] = idx; break; }
+            }
+        });
+        return map;
+    }
+    function rowFromCells(cells, map, sourceLine) {
+        const at = (f) => (map[f] !== undefined ? (cells[map[f]] || '').trim() : '');
+        return {
+            title: at('title'), course: at('course'),
+            dueDate: at('dueDate'), dueTime: at('dueTime'),
+            type: at('type').toLowerCase(), priority: at('priority').toLowerCase(),
+            difficulty: at('difficulty').toLowerCase(),
+            sourceText: sourceLine
+        };
+    }
+    // Positional fallback when a line has delimiters but no header: pull out a
+    // date and a time token, then the first remaining cell is the title and the
+    // next (if any) is the course.
+    function rowFromPositional(cells, sourceLine) {
+        const remaining = [];
+        let dueDate = '', dueTime = '';
+        const timeRe = /\b\d{1,2}:\d{2}\s*(am|pm)?\b|\b\d{1,2}\s*(am|pm)\b/i;
+        cells.forEach(c => {
+            if (!dueDate && looksLikeDate(c)) {
+                const tm = c.match(timeRe);
+                if (tm) { if (!dueTime) dueTime = tm[0].trim(); dueDate = c.replace(timeRe, '').trim(); }
+                else { dueDate = c; }
+                return;
+            }
+            if (!dueTime && looksLikeTime(c)) { dueTime = c; return; }
+            // A second date-like token is NOT the course — drop it rather than
+            // filing "6/22" as the class name.
+            if (dueDate && looksLikeDate(c)) return;
+            if (c) remaining.push(c);
+        });
+        return {
+            title: remaining[0] || '', course: remaining[1] || '',
+            dueDate: dueDate, dueTime: dueTime, sourceText: sourceLine
+        };
+    }
+    // Syllabus paragraph: split a free sentence on the first date phrase; text
+    // before becomes the title, the date phrase is the due date.
+    function rowFromSyllabusLine(line) {
+        const dateRe = /\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s*\d{4})?)\b/i;
+        const m = line.match(dateRe);
+        if (!m) return null;
+        let title = line.slice(0, m.index).replace(/[\s,:;\-–—(]*(due|deadline|on|by)?[\s,:;\-–—(]*$/i, '').trim();
+        if (!title) title = line.replace(dateRe, '').replace(/\b(due|deadline|on|by)\b/ig, '').trim();
+        return { title: title, course: '', dueDate: m[0], dueTime: (line.match(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/i) || [''])[0], sourceText: line };
+    }
+
+    function parseAssignmentText(text) {
+        const lines = String(text || '').split(/\r?\n/).map(l => l.replace(/\s+$/, '')).filter(l => l.trim());
+        if (!lines.length) return [];
+        const rows = [];
+
+        // 1) Pipe / markdown table — two or more lines containing '|'.
+        const pipeLines = lines.filter(l => l.includes('|'));
+        if (pipeLines.length >= 2) {
+            const dataLines = pipeLines.filter(l => !isTableSeparator(l));
+            const headerMap = mapHeader(splitDelim(dataLines[0], '|'));
+            // First row is a header when it names at least two known columns; this
+            // keeps the header (e.g. "Course | Due") out of the imported rows even
+            // when no title column is present.
+            const hasHeader = Object.keys(headerMap).length >= 2;
+            dataLines.forEach((l, idx) => {
+                if (hasHeader && idx === 0) return;
+                const cells = splitDelim(l, '|');
+                rows.push(hasHeader ? rowFromCells(cells, headerMap, l) : rowFromPositional(cells, l));
+            });
+            return rows.filter(r => r.title);
+        }
+
+        // 2) CSV / TSV with a recognizable header on the first line.
+        const firstLine = lines[0].toLowerCase();
+        const looksHeader = /(title|assignment|task)\b/.test(firstLine) && /(due|date|deadline|course|class)\b/.test(firstLine);
+        const delim = lines[0].includes('\t') ? '\t' : (lines[0].includes(',') ? ',' : '');
+        if (looksHeader && delim) {
+            const headerMap = mapHeader(splitDelim(lines[0], delim));
+            if (Object.keys(headerMap).length >= 2) {
+                for (let i = 1; i < lines.length; i++) {
+                    rows.push(rowFromCells(splitDelim(lines[i], delim), headerMap, lines[i]));
+                }
+                return rows.filter(r => r.title);
+            }
+        }
+
+        // 3) Per-line: delimiter rows OR syllabus sentences.
+        lines.forEach(l => {
+            let lineDelim = '';
+            if (l.includes('\t')) lineDelim = '\t';
+            else if (l.includes('|')) lineDelim = '|';
+            else if (/\s[-–—]\s/.test(l)) lineDelim = '__dash__';
+            else if (l.includes(',') && l.split(',').length >= 3) lineDelim = ',';
+            if (lineDelim) {
+                const cells = lineDelim === '__dash__' ? l.split(/\s[-–—]\s/).map(s => s.trim()) : splitDelim(l, lineDelim);
+                if (cells.filter(Boolean).length >= 2) { rows.push(rowFromPositional(cells, l)); return; }
+            }
+            // Syllabus prose: one line can hold several dated sentences.
+            let produced = 0;
+            l.split(/(?<=[.;])\s+/).forEach(sentence => {
+                const syllabus = rowFromSyllabusLine(sentence.trim());
+                if (syllabus && syllabus.title) { rows.push(syllabus); produced++; }
+            });
+            // A plain, short, dateless line (e.g. "Read chapter 5") is still a real
+            // assignment — keep it as a titled, undated row rather than dropping it.
+            const trimmed = l.trim();
+            if (!produced && trimmed.length >= 3 && trimmed.length <= 100
+                && /[a-z]/i.test(trimmed) && !/:$/.test(trimmed) && !looksLikeDate(trimmed)) {
+                rows.push({ title: trimmed, course: '', dueDate: '', dueTime: '', sourceText: l });
+            }
+        });
+        return rows.filter(r => r.title);
+    }
+
+    // --------------------------------------------------------------
     // Public surface
     // --------------------------------------------------------------
     const api = {
@@ -639,6 +858,7 @@
         // import pipeline
         normalizeImportedAssignment,
         normalizeImportBatch,
+        parseAssignmentText,
         detectDuplicate,
         ASSIGNMENT_TYPES,
         // small utilities reused by flow-assistant
@@ -646,6 +866,11 @@
         toISODate
     };
 
+    if (typeof module !== 'undefined' && module.exports) {
+        // Node export for engine tests (parser, normalization, similarity). The
+        // browser globals below remain the canonical runtime surface.
+        module.exports = api;
+    }
     if (typeof window !== 'undefined') {
         // Canonical post-rebrand global. The legacy alias is retained so any
         // existing code or plugins referencing window.flowIntelligence keep working.

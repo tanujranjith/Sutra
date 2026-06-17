@@ -641,6 +641,7 @@
         { type: 'create_assignment_plan', desc: 'A linked assignment plan: homework item + task breakdown + timeline blocks + outline note', risk: 'high', fields: { title: 'string', courseName: 'string?', dueDate: 'YYYY-MM-DD?', steps: 'string[]', blocks: '[{name,date,start,end}]?', note: 'markdown?' } },
         { type: 'plan_week', desc: 'Propose timeline blocks across the coming week from open work', risk: 'high', fields: { blocks: '[{name,date,start,end,category}]' } },
         { type: 'plan_day', desc: 'Propose timeline blocks for a single day', risk: 'high', fields: { date: 'YYYY-MM-DD?', blocks: '[{name,start,end,category}]' } },
+        { type: 'repair_plan', desc: 'READ-ONLY: deterministically check the next 7 days for overlaps, missing buffers, overloaded days, unscheduled priorities, AP exams without study, and review backlog. Computed locally — never invent the issues yourself.', risk: 'read_only', fields: {} },
         { type: 'triage_deadlines', desc: 'Schedule blocks and/or create tasks to recover overdue or due-soon work', risk: 'high', fields: { blocks: '[{name,date,start,end}]?', tasks: '[{title,dueDate,priority}]?' } },
         { type: 'convert_note_to_study_system', desc: 'Turn the current note into a review deck (+ optional study blocks)', risk: 'high', fields: { deck: '{name,cards}', blocks: '[{name,date,start,end}]?' } },
         { type: 'link_workspace_objects', desc: 'Link existing objects together (page↔task/homework/deck/block)', risk: 'low', fields: { pageId: 'string', taskIds: 'string[]?', homeworkIds: 'string[]?', deckId: 'string?', blockIds: 'string[]?' } },
@@ -2127,6 +2128,23 @@
         return { ok: true, message: 'Grade explained.', resultMarkdown: lines.join('\n') };
     }
 
+    function runRepairPlan() {
+        const pe = (typeof window !== 'undefined') && window.SutraPlanningEngine;
+        if (!pe || typeof pe.analyzeCurrent !== 'function') return { ok: false, message: 'Planning engine is not available.' };
+        const report = pe.analyzeCurrent();
+        const issues = (report && report.issues) || [];
+        if (!issues.length) {
+            return { ok: true, message: 'Plan checked.', resultMarkdown: '**Plan check (next 7 days)** — computed locally\n\nNo overlaps, buffers respected, and nothing high-priority is left unscheduled. Your plan looks healthy.' };
+        }
+        const sev = { high: '🔴', medium: '🟡', low: '⚪' };
+        const lines = ['**Plan check — ' + issues.length + ' issue' + (issues.length === 1 ? '' : 's') + ' (next 7 days, computed locally)**', ''];
+        issues.slice(0, 12).forEach(i => {
+            lines.push(`- ${sev[i.severity] || ''} **${i.title}** — ${i.detail} _${i.suggestion}_`);
+        });
+        lines.push('', 'Ask me to "plan my day" to schedule fixes — you’ll approve each block.');
+        return { ok: true, message: 'Plan checked.', resultMarkdown: lines.join('\n') };
+    }
+
     function applyGradeReadOnly(action) {
         try {
             if (action.type === 'run_grade_what_if') return runGradeWhatIf(action);
@@ -2206,6 +2224,7 @@
             case 'solve_target_grade':
             case 'rank_missing_work_by_grade_impact':
             case 'explain_grade_risk': return applyGradeReadOnly(action);
+            case 'repair_plan': return runRepairPlan(action);
             // import_assignments has no atomic applier — it is applied row-by-row
             // through the dedicated review table (see renderImportReview).
             default: return { ok: false, message: 'Unknown action.' };
@@ -2280,6 +2299,7 @@
             case 'solve_target_grade': return `Score needed in ${action.courseName} to reach ${action.targetPercent}%`;
             case 'rank_missing_work_by_grade_impact': return `Rank missing work by grade impact${action.courseName ? ` (${action.courseName})` : ''}`;
             case 'explain_grade_risk': return `Explain grade standing${action.courseName ? ` for ${action.courseName}` : ''}`;
+            case 'repair_plan': return 'Check the next 7 days for plan problems';
             default: return `Unknown: ${action.type}`;
         }
     }
@@ -3245,20 +3265,41 @@
         const noteBody = action.note || `# ${action.title}\n\n## Steps\n` + (action.steps || []).map(s => `- [ ] ${s}`).join('\n');
         const pageRes = applyCreatePage({ type: 'create_page', title: `${action.title} — plan`, body: noteBody });
         if (pageRes.ok && pageRes.payload) { pageId = pageRes.payload.pageId; mergeCreated(created, pageRes); }
-        // 3) Task breakdown (linked to the note).
+        // 3) Milestone breakdown on the homework's Studio (deterministic, work-backward
+        //    scheduled). Studio milestones ride hwTasks:v2 and surface in All Due —
+        //    they are the assignment's real work plan, not loose planner tasks.
         const taskIds = [];
-        (action.steps || []).forEach(step => {
-            const title = typeof step === 'string' ? step : (step && step.title) || '';
-            if (!title) return;
-            const r = applyCreateTask({ type: 'create_task', title, dueDate: action.dueDate || '', priority: 'medium', linkPageId: pageId });
-            if (r.ok && r.payload) { taskIds.push(r.payload.taskId); mergeCreated(created, r); }
-        });
+        let milestoneCount = 0;
+        const studio = (typeof window !== 'undefined') && window.SutraAssignmentStudio;
+        const studioOk = homeworkId && studio && typeof studio.addMilestones === 'function';
+        if (studioOk) {
+            const steps = (Array.isArray(action.steps) ? action.steps : [])
+                .map(s => (typeof s === 'string' ? s : (s && s.title) || '')).filter(Boolean);
+            let milestones;
+            if (steps.length && typeof studio.scheduleMilestonesBackward === 'function') {
+                const scheduled = studio.scheduleMilestonesBackward(steps.map(t => ({ title: t })), action.dueDate || '');
+                milestones = scheduled.milestones;
+            } else if (typeof studio.buildPlan === 'function') {
+                milestones = studio.buildPlan({ kind: action.courseName || action.title, dueDate: action.dueDate || '' }).milestones;
+            }
+            if (milestones && milestones.length) milestoneCount = studio.addMilestones(homeworkId, milestones);
+        }
+        if (!studioOk || !milestoneCount) {
+            // Fallback: no Studio available — create linked planner tasks as before.
+            (action.steps || []).forEach(step => {
+                const title = typeof step === 'string' ? step : (step && step.title) || '';
+                if (!title) return;
+                const r = applyCreateTask({ type: 'create_task', title, dueDate: action.dueDate || '', priority: 'medium', linkPageId: pageId });
+                if (r.ok && r.payload) { taskIds.push(r.payload.taskId); mergeCreated(created, r); }
+            });
+        }
         // 4) Optional timeline blocks.
         const { created: blkCreated, blockIds } = applyBlocksList(action.blocks);
         blkCreated.forEach(o => created.push(o));
         if (pageId) addPageLinks(pageId, { taskIds, homeworkIds: homeworkId ? [homeworkId] : [], blockIds });
         refreshAll();
-        return { ok: created.length > 0, message: `Assignment plan created (${created.length} object${created.length === 1 ? '' : 's'}).`, payload: { createdObjectIds: created, pageId } };
+        const extra = milestoneCount ? `, ${milestoneCount} milestone${milestoneCount === 1 ? '' : 's'}` : '';
+        return { ok: created.length > 0, message: `Assignment plan created (${created.length} object${created.length === 1 ? '' : 's'}${extra}).`, payload: { createdObjectIds: created, pageId } };
     }
 
     function applyBlockBatch(action) {

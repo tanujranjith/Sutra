@@ -658,6 +658,19 @@
     }
   }
 
+  // The next unfinished, soonest-dated milestone for an assignment (Studio 2.0).
+  function renderNextMilestoneChip(task) {
+    if (!task.studio || !window.SutraAssignmentStudio) return '';
+    const studio = window.SutraAssignmentStudio.normalizeStudio(task.studio);
+    if (!studio || !studio.milestones || !studio.milestones.length) return '';
+    const pending = studio.milestones.filter(m => !m.done);
+    if (!pending.length) return '';
+    pending.sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+    const next = pending[0];
+    const dateLabel = next.dueDate ? ` · ${escHtml(next.dueDate)}` : '';
+    return `<span class="hw-meta-chip hw-meta-milestone" title="Next milestone"><i class="fas fa-flag-checkered" aria-hidden="true"></i>Next: ${escHtml(next.title)}${dateLabel}</span>`;
+  }
+
   function renderHomeworkTaskRow(task) {
     const dueState = getTaskDueState(task);
     const difficulty = normalizeDifficulty(task.difficulty);
@@ -695,6 +708,7 @@
           <span class="hw-meta-chip hw-meta-time"><i class="fas fa-clock" aria-hidden="true"></i>${escHtml(dueState.dueTimeLabel)}</span>
           ${recurrenceText ? `<span class="hw-meta-chip hw-meta-recurrence"><i class="fas fa-repeat" aria-hidden="true"></i>${escHtml(recurrenceText)}</span>` : ''}
           ${task.studio && window.SutraAssignmentStudio ? `<span class="hw-meta-chip hw-meta-studio"><i class="fas fa-diagram-project" aria-hidden="true"></i>Studio ${window.SutraAssignmentStudio.computeProgress(window.SutraAssignmentStudio.normalizeStudio(task.studio))}%</span>` : ''}
+          ${renderNextMilestoneChip(task)}
           <span class="hw-meta-chip hw-meta-difficulty">Difficulty: ${escHtml(difficulty.charAt(0).toUpperCase() + difficulty.slice(1))}</span>
           <span class="hw-meta-chip hw-meta-priority">Urgency: ${escHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span>
           <span class="hw-status-chip ${escHtml(dueState.stateClass)}">${escHtml(dueState.statusText)}</span>

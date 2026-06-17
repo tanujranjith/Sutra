@@ -19,6 +19,8 @@
     var TASKS_KEY = 'hwTasks:v2';
     var COURSES_KEY = 'hwCourses:v2';
     var STUDIO_KINDS = ['essay', 'lab', 'research', 'presentation', 'engineering', 'project', 'other'];
+    var MILESTONE_TYPES = ['research', 'outline', 'draft', 'revise', 'submit', 'study', 'rehearse', 'build', 'solve', 'review', 'other'];
+    var MILESTONE_STATUSES = ['not_started', 'in_progress', 'done'];
 
     function uid(prefix) {
         return (prefix || 'st') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -30,13 +32,28 @@
         var title = String(raw.title || '').trim();
         if (!title) return null;
         var estimate = Number(raw.estimateMinutes);
+        // Status & done are reconciled so neither field's completion is ever lost:
+        // a `done:true` from legacy/imported/assistant data still reads as done even
+        // if `status` says otherwise, and `status:'done'` implies done. This keeps
+        // computeProgress (which reads m.done) correct for any writer.
+        var status = MILESTONE_STATUSES.indexOf(String(raw.status)) !== -1 ? String(raw.status) : '';
+        var done = raw.done === true;
+        if (!status) status = done ? 'done' : 'not_started';
+        if (status === 'done') done = true;
+        else if (done) status = 'done';
+        var linkedBlockIds = (Array.isArray(raw.linkedBlockIds) ? raw.linkedBlockIds : [])
+            .map(String).filter(Boolean).slice(0, 40);
         return {
             id: String(raw.id || uid('ms')),
             title: title,
+            type: MILESTONE_TYPES.indexOf(String(raw.type)) !== -1 ? String(raw.type) : 'other',
             dueDate: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.dueDate || '')) ? String(raw.dueDate) : '',
             dueTime: /^\d{2}:\d{2}$/.test(String(raw.dueTime || '')) ? String(raw.dueTime) : '',
-            done: raw.done === true,
-            estimateMinutes: Number.isFinite(estimate) ? Math.max(0, Math.min(6000, Math.round(estimate))) : 0
+            status: status,
+            done: done,
+            estimateMinutes: Number.isFinite(estimate) ? Math.max(0, Math.min(6000, Math.round(estimate))) : 0,
+            linkedNoteId: String(raw.linkedNoteId || ''),
+            linkedBlockIds: linkedBlockIds
         };
     }
 
@@ -100,7 +117,158 @@
         return Math.round((done / total) * 100);
     }
 
-    var Engine = { normalizeStudio: normalizeStudio, computeProgress: computeProgress };
+    // ---- Deterministic milestone generation (no AI) ----------------------------
+    // Each template entry: { title, type, weight } where weight biases how far
+    // before the deadline it lands and a baseline estimate in minutes.
+    var PLAN_TEMPLATES = {
+        essay: [
+            { title: 'Research & gather sources', type: 'research', estimateMinutes: 45 },
+            { title: 'Outline', type: 'outline', estimateMinutes: 30 },
+            { title: 'Rough draft', type: 'draft', estimateMinutes: 60 },
+            { title: 'Revise', type: 'revise', estimateMinutes: 45 },
+            { title: 'Final proofread', type: 'review', estimateMinutes: 20 },
+            { title: 'Submit', type: 'submit', estimateMinutes: 10 }
+        ],
+        project: [
+            { title: 'Define scope', type: 'outline', estimateMinutes: 30 },
+            { title: 'Gather materials', type: 'research', estimateMinutes: 30 },
+            { title: 'Build', type: 'build', estimateMinutes: 90 },
+            { title: 'Test', type: 'review', estimateMinutes: 30 },
+            { title: 'Revise', type: 'revise', estimateMinutes: 45 },
+            { title: 'Submit', type: 'submit', estimateMinutes: 10 }
+        ],
+        presentation: [
+            { title: 'Outline', type: 'outline', estimateMinutes: 30 },
+            { title: 'Build slides', type: 'build', estimateMinutes: 60 },
+            { title: 'Speaker notes', type: 'draft', estimateMinutes: 30 },
+            { title: 'Rehearse', type: 'rehearse', estimateMinutes: 30 },
+            { title: 'Final polish', type: 'review', estimateMinutes: 20 }
+        ],
+        lab: [
+            { title: 'Pre-lab', type: 'research', estimateMinutes: 30 },
+            { title: 'Data collection', type: 'build', estimateMinutes: 60 },
+            { title: 'Analysis', type: 'solve', estimateMinutes: 45 },
+            { title: 'Write-up', type: 'draft', estimateMinutes: 45 },
+            { title: 'Submit', type: 'submit', estimateMinutes: 10 }
+        ],
+        test: [
+            { title: 'Review weak topics', type: 'study', estimateMinutes: 45 },
+            { title: 'Practice questions', type: 'solve', estimateMinutes: 45 },
+            { title: 'Error review', type: 'review', estimateMinutes: 30 },
+            { title: 'Final review', type: 'study', estimateMinutes: 30 }
+        ],
+        reading: [
+            { title: 'Read — first chunk', type: 'study', estimateMinutes: 40 },
+            { title: 'Read — second chunk', type: 'study', estimateMinutes: 40 },
+            { title: 'Take notes', type: 'draft', estimateMinutes: 25 },
+            { title: 'Review', type: 'review', estimateMinutes: 20 }
+        ],
+        generic: [
+            { title: 'First pass', type: 'build', estimateMinutes: 45 },
+            { title: 'Check work', type: 'review', estimateMinutes: 20 },
+            { title: 'Submit', type: 'submit', estimateMinutes: 10 }
+        ]
+    };
+
+    // Map free-form assignment kinds/types to a template key.
+    function resolvePlanKey(kind) {
+        var k = String(kind || '').toLowerCase().trim();
+        if (!k) return 'generic';
+        if (/(essay|paper|writ|report)/.test(k)) return 'essay';
+        if (/(present|slide|speech|talk)/.test(k)) return 'presentation';
+        if (/lab/.test(k)) return 'lab';
+        if (/(test|quiz|exam|midterm|final)/.test(k)) return 'test';
+        if (/(read|chapter|textbook)/.test(k)) return 'reading';
+        if (/(project|build|engineer|design|research)/.test(k)) return 'project';
+        if (PLAN_TEMPLATES[k]) return k;
+        return 'generic';
+    }
+
+    function generateMilestones(kind) {
+        var key = resolvePlanKey(kind);
+        return (PLAN_TEMPLATES[key] || PLAN_TEMPLATES.generic).map(function (t) {
+            return { title: t.title, type: t.type, estimateMinutes: t.estimateMinutes };
+        });
+    }
+
+    // ---- Work-backward scheduling ----------------------------------------------
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function toISODateLocal(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+    function parseISO(iso) { var d = new Date(String(iso) + 'T00:00:00'); return isNaN(d.getTime()) ? null : d; }
+    function addDaysISO(iso, n) {
+        var d = parseISO(iso);
+        if (!d) return '';
+        d.setDate(d.getDate() + n);
+        return toISODateLocal(d);
+    }
+    function daysBetweenISO(a, b) {
+        var da = parseISO(a), db = parseISO(b);
+        if (!da || !db) return 0;
+        return Math.round((db.getTime() - da.getTime()) / 86400000);
+    }
+
+    /**
+     * Spread milestones across the days leading up to (and ending on) dueDate,
+     * working backward so the last item lands on the deadline and earlier items
+     * are distributed before it. Returns { milestones, compressed, pressure }.
+     *   - compressed: not enough days to give each milestone its own day.
+     *   - pressure:   due date is today/past or only a day or two away.
+     */
+    function scheduleMilestonesBackward(milestones, dueDate, opts) {
+        opts = opts || {};
+        var list = (Array.isArray(milestones) ? milestones : []).map(function (m) {
+            return normalizeMilestone(m) || normalizeMilestone({ title: 'Step', type: 'other' });
+        }).filter(Boolean);
+        var n = list.length;
+        if (!n) return { milestones: [], compressed: false, pressure: false };
+        var due = /^\d{4}-\d{2}-\d{2}$/.test(String(dueDate || '')) ? String(dueDate) : '';
+        if (!due) return { milestones: list, compressed: false, pressure: false };
+        var start = /^\d{4}-\d{2}-\d{2}$/.test(String(opts.startDate || '')) ? String(opts.startDate) : toISODateLocal(new Date());
+        var available = daysBetweenISO(start, due);
+        var compressed = available < n;
+        var pressure = available <= 2;
+        if (available <= 0) {
+            // Due today or already past — compressed crunch plan, everything on the due date.
+            list.forEach(function (m) { m.dueDate = due; });
+            return { milestones: list, compressed: true, pressure: true };
+        }
+        for (var i = 0; i < n; i++) {
+            var offset = Math.round(((i + 1) / n) * available);
+            if (offset > available) offset = available;
+            if (offset < 1 && i < n - 1) offset = 1; // never pile non-final milestones on the start day
+            list[i].dueDate = addDaysISO(start, offset);
+        }
+        // Guarantee the final milestone lands exactly on the deadline.
+        list[n - 1].dueDate = due;
+        return { milestones: list, compressed: compressed, pressure: pressure };
+    }
+
+    /**
+     * Full plan builder: pick a template from the assignment kind, then schedule
+     * it backward from the due date. Pure — returns data only, persists nothing.
+     */
+    function buildPlan(opts) {
+        opts = opts || {};
+        var generated = generateMilestones(opts.kind);
+        var scheduled = scheduleMilestonesBackward(generated, opts.dueDate, { startDate: opts.startDate });
+        return {
+            kind: resolvePlanKey(opts.kind),
+            milestones: scheduled.milestones,
+            compressed: scheduled.compressed,
+            pressure: scheduled.pressure
+        };
+    }
+
+    var Engine = {
+        normalizeStudio: normalizeStudio,
+        computeProgress: computeProgress,
+        generateMilestones: generateMilestones,
+        scheduleMilestonesBackward: scheduleMilestonesBackward,
+        buildPlan: buildPlan,
+        resolvePlanKey: resolvePlanKey,
+        MILESTONE_TYPES: MILESTONE_TYPES,
+        MILESTONE_STATUSES: MILESTONE_STATUSES
+    };
     if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
     if (typeof window === 'undefined') return;
 
@@ -117,15 +285,24 @@
             return Array.isArray(parsed) ? parsed : [];
         } catch (e) { return []; }
     }
+    // Returns true only when the write actually persisted, so callers never report
+    // a false success (and silently lose the user's edit) when storage is degraded.
     function writeTasks(tasks) {
         var payload = JSON.stringify(Array.isArray(tasks) ? tasks : []);
+        var ok = false;
         if (global.SutraSafeStorage && typeof global.SutraSafeStorage.set === 'function') {
-            global.SutraSafeStorage.set(TASKS_KEY, payload, { importance: 'important', label: 'Your homework' });
+            try {
+                var res = global.SutraSafeStorage.set(TASKS_KEY, payload, { importance: 'important', label: 'Your homework' });
+                ok = !!(res && res.ok); // SafeStorage.set returns { ok: true|false }
+            } catch (e) {
+                if (typeof global.reportError === 'function') global.reportError(e, { where: 'assignment-studio.writeTasks' }, 'error');
+            }
         } else {
             var error = new Error('SutraSafeStorage is unavailable.');
             if (typeof global.reportError === 'function') global.reportError(error, { where: 'assignment-studio.writeTasks' }, 'error');
         }
-        try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
+        if (ok) { try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ } }
+        return ok;
     }
 
     function getTask(taskId) {
@@ -150,8 +327,8 @@
                 break;
             }
         }
-        if (found) writeTasks(tasks);
-        return found;
+        if (!found) return false;
+        return writeTasks(tasks); // false if the persist failed → caller can warn
     }
 
     // ---- Deadlines bridge: milestones become first-class deadlines -------------
@@ -197,6 +374,30 @@
             });
         });
         return ok ? added : 0;
+    }
+
+    /**
+     * Generate a structured, work-backward plan for an existing homework task and
+     * write the milestones onto its Studio. Returns the plan metadata (or null).
+     * options.kind overrides the inferred type; options.replace clears existing
+     * generated milestones first. Used by the UI "Generate plan" button and the
+     * Sutra Assistant create_assignment_plan action.
+     */
+    function applyPlanToTask(taskId, options) {
+        options = options || {};
+        var task = getTask(taskId);
+        if (!task) return null;
+        var existing = normalizeStudio(task.studio);
+        var kind = options.kind || (existing && existing.kind) || task.type || task.title || 'generic';
+        var plan = buildPlan({ kind: kind, dueDate: options.dueDate || task.dueDate, startDate: options.startDate });
+        var ok = updateTaskStudio(taskId, function (studio) {
+            if (options.replace) studio.milestones = [];
+            plan.milestones.forEach(function (m) { studio.milestones.push(normalizeMilestone(m)); });
+            studio.milestones = studio.milestones.slice(0, 60);
+            if (STUDIO_KINDS.indexOf(plan.kind) !== -1) studio.kind = plan.kind;
+        });
+        if (!ok) return null;
+        return { kind: plan.kind, count: plan.milestones.length, compressed: plan.compressed, pressure: plan.pressure };
     }
 
     // ---- UI ---------------------------------------------------------------------
@@ -318,10 +519,16 @@
         var fileById = {};
         files.forEach(function (f) { fileById[String(f.id)] = f; });
 
+        var typeOptions = function (sel) {
+            return MILESTONE_TYPES.map(function (t) {
+                return '<option value="' + t + '"' + (t === sel ? ' selected' : '') + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>';
+            }).join('');
+        };
         var milestonesHtml = studio.milestones.map(function (m) {
             return '<div class="studio-ms-row' + (m.done ? ' is-done' : '') + '" data-milestone="' + esc(m.id) + '">'
                 + '<input type="checkbox" data-studio-field="ms-done"' + (m.done ? ' checked' : '') + ' aria-label="Milestone done">'
                 + '<input type="text" data-studio-field="ms-title" value="' + esc(m.title) + '" aria-label="Milestone title">'
+                + '<select data-studio-field="ms-type" aria-label="Milestone type" title="Type">' + typeOptions(m.type) + '</select>'
                 + '<input type="date" data-studio-field="ms-date" value="' + esc(m.dueDate) + '" aria-label="Milestone due date">'
                 + '<input type="number" min="0" step="15" data-studio-field="ms-estimate" value="' + (m.estimateMinutes || '') + '" placeholder="min" aria-label="Estimated minutes" title="Estimated minutes">'
                 + '<button type="button" class="studio-mini-btn" data-studio-action="schedule-milestone" data-milestone-id="' + esc(m.id) + '" title="Schedule on Timeline" aria-label="Schedule milestone">📅</button>'
@@ -401,9 +608,12 @@
             + '<button type="button" class="studio-mini-btn" data-studio-action="add-milestone">Add</button>'
             + '</div>'
             + '<div class="studio-section-actions">'
+            + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="generate-plan">' + (studio.milestones.length ? '↻ Regenerate plan' : '✨ Generate plan') + '</button>'
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="schedule-remaining">Schedule remaining work</button>'
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="ask-assistant">Ask Sutra to break this down</button>'
-            + '</div></section>'
+            + '</div>'
+            + '<div class="studio-empty-line studio-plan-hint">A plan splits the work into dated milestones working back from ' + (task.dueDate ? 'your ' + esc(task.dueDate) + ' due date' : 'the due date') + ' — review and edit before scheduling.</div>'
+            + '</section>'
 
             + '<section class="studio-section"><h4>Checklist</h4>'
             + (subtasksHtml || '<div class="studio-empty-line">Small steps that don’t deserve a date.</div>')
@@ -470,8 +680,9 @@
                 if (!row) return;
                 studio.milestones.forEach(function (m) {
                     if (m.id !== row.dataset.milestone) return;
-                    if (field === 'ms-done') m.done = el.checked;
+                    if (field === 'ms-done') { m.done = el.checked; m.status = el.checked ? 'done' : 'not_started'; }
                     if (field === 'ms-title') m.title = el.value;
+                    if (field === 'ms-type') m.type = el.value;
                     if (field === 'ms-date') m.dueDate = el.value;
                     if (field === 'ms-estimate') m.estimateMinutes = Number(el.value) || 0;
                 });
@@ -531,6 +742,22 @@
                 });
             } else {
                 toast('Scheduling is not available.');
+            }
+        } else if (action === 'generate-plan') {
+            var existingStudio = normalizeStudio(task.studio);
+            var hadMilestones = existingStudio && existingStudio.milestones.length > 0;
+            if (hadMilestones && typeof global.confirm === 'function'
+                && !global.confirm('Replace the current milestones with a freshly generated plan?')) {
+                return;
+            }
+            var planResult = applyPlanToTask(activeTaskId, { replace: hadMilestones });
+            if (planResult) {
+                var msg = 'Generated a ' + planResult.count + '-step ' + planResult.kind + ' plan.';
+                if (planResult.pressure) msg += ' Heads up — the deadline is close, so this is a compressed plan.';
+                toast(msg);
+                rerender();
+            } else {
+                toast('Could not generate a plan for this assignment.');
             }
         } else if (action === 'schedule-remaining') {
             scheduleRemaining(task);
@@ -666,13 +893,17 @@
     }
 
     global.SutraAssignmentStudio = {
-        VERSION: 1,
+        VERSION: 2,
         engine: Engine,
         normalizeStudio: normalizeStudio,
         computeProgress: computeProgress,
         open: open,
         close: close,
         addMilestones: addMilestones,
+        generateMilestones: generateMilestones,
+        scheduleMilestonesBackward: scheduleMilestonesBackward,
+        buildPlan: buildPlan,
+        applyPlanToTask: applyPlanToTask,
         getMilestoneDeadlines: getMilestoneDeadlines
     };
 
