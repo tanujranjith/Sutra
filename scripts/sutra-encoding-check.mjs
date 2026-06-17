@@ -38,7 +38,7 @@ const SKIP_FILES = new Set([
 ]);
 const SKIP_PREFIXES = [
   'scripts/_',              // local throwaway analysis helpers, never committed
-  'NoteFlow (classic)/',    // archived, frozen legacy app -- not part of the Sutra runtime
+  'noteflow-classic/',    // archived, frozen legacy app -- not part of the Sutra runtime
 ];
 
 // Minimal justified allowlist: findings inside these regions are intentional.

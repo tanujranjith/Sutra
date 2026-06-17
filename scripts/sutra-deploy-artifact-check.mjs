@@ -158,7 +158,7 @@ const FORBIDDEN_TOP = [
   'package-lock.json',
   'playwright.config.mjs',
   'README.md',
-  'NoteFlow (classic)'
+  'noteflow-classic'
 ];
 const present = new Set(readdirSync(outDir));
 for (const name of FORBIDDEN_TOP) {
@@ -191,8 +191,8 @@ for (const entry of HTML_ENTRY) {
   const file = join(outDir, entry);
   if (!existsSync(file)) continue;
   const html = readFileSync(file, 'utf8');
-  if (/NoteFlow \(classic\)/i.test(html)) {
-    fail(`${entry} still links to the legacy "NoteFlow (classic)" page`);
+  if (/noteflow-classic/i.test(html)) {
+    fail(`${entry} still links to the legacy "noteflow-classic" page`);
   }
   if (/href\s*=\s*["'][^"']*\/tests\//i.test(html) || /href\s*=\s*["'][^"']*\/scripts\//i.test(html)) {
     fail(`${entry} references a dev path (/tests/ or /scripts/)`);

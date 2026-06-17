@@ -125,7 +125,7 @@ Sutra/
 ├─ tests/                # Playwright: e2e/ bench/ fixtures/ (see tests/README.md)
 ├─ docs/                 # architecture/ features/ privacy-security/ release/ archive/ (see docs/README.md)
 ├─ examples/plugins/     # Example plugin bundle
-├─ NoteFlow (classic)/   # The separate legacy app (NoteFlow Classic)
+├─ noteflow-classic/   # The separate legacy app (NoteFlow Classic)
 ├─ LICENSE / NOTICE      # Apache License 2.0
 └─ TRADEMARK.md          # Brand usage guidelines
 ```
@@ -438,6 +438,6 @@ You may use, modify, and distribute this project under Apache 2.0. When redistri
 
 The Sutra name, logo, and official branding should not be used in a way that implies endorsement or official affiliation with the original project. See [`TRADEMARK.md`](TRADEMARK.md) for brand usage guidelines.
 
-> **NoteFlow Classic** is a separate legacy app that lives under `NoteFlow (classic)/`. It is not Sutra and is maintained independently.
+> **NoteFlow Classic** is a separate legacy app that lives under `noteflow-classic/`. It is not Sutra and is maintained independently.
 
 Copyright 2026 Tanuj Ranjith.

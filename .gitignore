@@ -19,15 +19,15 @@ scripts/_*.js
 security-artifacts/
 
 # Marketing / investor material (not part of the app or the GitHub Pages deploy)
-Pitch Decks/
-Sutra_Product_Documentation_Package/
+pitch-decks/
+product-documentation/
 
 # Stale pre-rebrand assets (no longer referenced by any page; brand checks assert this)
-assets/Mascot.png
-assets/NoteFlow Atelier Daily view.png
-assets/NoteFlow Atelier favicon-64.png
-assets/NoteFlow Atelier favicon.png
-assets/NoteFlow Atelier text editing.png
+assets/legacy/mascot.png
+assets/legacy/noteflow-daily-view.png
+assets/legacy/noteflow-favicon-64.png
+assets/legacy/noteflow-favicon.png
+assets/legacy/noteflow-text-editing.png
 
 # OS / editor cruft
 .DS_Store

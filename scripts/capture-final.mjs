@@ -1,7 +1,7 @@
 // Final landing-page screenshot capture for Sutra.
 // Boots the app, seeds a believable late-spring junior workspace, captures each
 // marketable surface in the premium light theme, downscales to a web-friendly
-// width via an in-page canvas, and writes optimized PNGs into assets/ss/.
+// width via an in-page canvas, and writes optimized PNGs into assets/screenshots/.
 //
 // Usage:
 //   node scripts/serve-static.mjs 5173   (in another shell)
@@ -11,7 +11,7 @@ import { writeFileSync } from 'node:fs';
 import { SEED_SRC } from './demo-seed.mjs';
 
 const BASE = process.env.SUTRA_BASE_URL || 'http://127.0.0.1:5173';
-const SS = 'assets/ss';
+const SS = 'assets/screenshots';
 const MAX_W = 1600;       // downscaled output width (source is 1440 @ DPR2 = 2880)
 const errors = [];
 const written = [];
@@ -79,7 +79,7 @@ await theme('default');
 
 // Today
 await go('today');
-await capture('Today page');
+await capture('today');
 
 // Timeline — Day view, scrolled to morning so the empty pre-dawn hours are hidden.
 await go('timeline');
@@ -94,7 +94,7 @@ await page.evaluate(() => {
   if (sec) sec.scrollTop = 0;
 });
 await page.waitForTimeout(300);
-await capture('Timeline daily view');
+await capture('timeline-daily');
 
 // Timeline — Week view
 await page.evaluate(() => {
@@ -102,7 +102,7 @@ await page.evaluate(() => {
   if (wk) wk.click();
 });
 await page.waitForTimeout(700);
-await capture('Timeline weekly view');
+await capture('timeline-weekly');
 
 // Notes — open a seeded content note
 await go('notes');
@@ -111,31 +111,31 @@ await page.evaluate(() => {
   if (item) item.click();
 });
 await page.waitForTimeout(700);
-await capture('Physics notes');
+await capture('notes-editor');
 
 // Homework
 await go('homework');
-await capture('Homework page');
+await capture('homework');
 
 // Testing Hub dashboard
 await go('apstudy');
-await capture('Testing hub general review page');
+await capture('testing-hub');
 
 // Testing Hub — Review (study sets / flashcards)
 await page.evaluate(() => { try { window.switchTestingHubSection && window.switchTestingHubSection('review'); } catch (e) {} });
 await page.waitForTimeout(650);
-await capture('Testing page review function showing ap physics review section');
+await capture('testing-hub-review');
 
 // Deadline Radar (modal over Today)
 await go('today');
 await page.evaluate(() => { try { (window.openDeadlineRadar || window.OpenDeadlineRadar) && (window.openDeadlineRadar || window.OpenDeadlineRadar)(); } catch (e) {} });
 await page.waitForTimeout(650);
-await capture('Radar');
+await capture('deadline-radar');
 await page.evaluate(() => { try { window.closeDeadlineRadar && window.closeDeadlineRadar(); } catch (e) {} const o = document.querySelector('.deadline-radar-overlay, #deadlineRadarOverlay'); if (o) o.remove(); });
 
 // Settings — appearance + themes (customization)
 await go('settings');
-await capture('Themes and customization');
+await capture('themes-customization');
 
 // Sutra Assistant — panel open over Today, AI onboarding skipped to reveal pulse
 await go('today');
@@ -143,7 +143,7 @@ await page.evaluate(() => { const b = document.getElementById('chatbotBtn'); if 
 await page.waitForTimeout(500);
 await page.evaluate(() => { const s = document.querySelector('[data-flow-skip-ai]'); if (s) s.click(); });
 await page.waitForTimeout(700);
-await capture('Sutra Assistant');
+await capture('assistant');
 await page.evaluate(() => { const b = document.getElementById('chatbotBtn'); if (b) b.click(); });
 await page.close();
 
@@ -165,7 +165,7 @@ await mobile.evaluate(() => { document.body.setAttribute('data-theme', 'default'
 await mobile.waitForTimeout(700);
 {
   const buf = await mobile.screenshot({ fullPage: false });
-  await downscaleAndSave(buf, `${SS}/Mobile today.png`);
+  await downscaleAndSave(buf, `${SS}/mobile-today.png`);
 }
 await mobile.close();
 

@@ -50,7 +50,7 @@ const DIRS = [
   { path: 'src' }, // all runtime JS + generated data modules
   { path: 'assets/brand/sutra/generated' }, // icons, favicon, social preview
   { path: 'assets/vendor' }, // locally vendored libraries (JSZip)
-  { path: 'assets/ss' } // marketing screenshots used by HomePage.html
+  { path: 'assets/screenshots' } // marketing screenshots used by HomePage.html
 ];
 
 /**

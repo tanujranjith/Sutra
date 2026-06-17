@@ -83,7 +83,7 @@ record(
 );
 
 // 4. No stale NoteFlow public-facing labels.
-record(!/NoteFlow \(classic\)/i.test(home.text), 'no "NoteFlow (classic)" link on landing');
+record(!/noteflow-classic/i.test(home.text), 'no "noteflow-classic" link on landing');
 record(!/NoteFlow Atelier/i.test(home.text), 'no "NoteFlow Atelier" brand on landing');
 record(!/<title>[^<]*NoteFlow/i.test(app.text), 'app <title> is not NoteFlow-branded');
 

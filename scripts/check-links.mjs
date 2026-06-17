@@ -32,7 +32,7 @@ const repoRoot = resolve(__dirname, '..');
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.deploy', '.tmp', 'coverage', 'dist', 'build',
-  'test-results', 'playwright-report', 'NoteFlow (classic)'
+  'test-results', 'playwright-report', 'noteflow-classic'
 ]);
 
 const problems = [];

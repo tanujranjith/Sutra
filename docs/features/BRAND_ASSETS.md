@@ -28,10 +28,10 @@ This document is the canonical reference for all Sutra brand assets: what they a
 
 Two approved master PNGs are the canonical source of truth. **Never** regenerate them as SVG, redraw them, or alter their geometry, colors, or transparency.
 
-2026 update: the approved source lockups remain preserved in `assets/New Sutra logos/`:
+2026 update: the approved source lockups remain preserved in `assets/logos/`:
 
-- `assets/New Sutra logos/Sutra.png` - source main Sutra lockup.
-- `assets/New Sutra logos/Sutra assistant.png` - source Sutra Assistant lockup.
+- `assets/logos/sutra.png` - source main Sutra lockup.
+- `assets/logos/sutra-assistant.png` - source Sutra Assistant lockup.
 
 Production derivatives now include transparent emblem masters:
 
