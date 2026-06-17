@@ -40,7 +40,7 @@ while ((match = styleRe.exec(html)) !== null) {
 }
 
 if (/id=["']focus-session-styles["']/.test(html)) failures.push('focus-session styles must stay extracted from Sutra.html');
-if (!html.includes('styles/focus-session.css')) failures.push('focus-session.css link missing from Sutra.html');
+if (!html.includes('styles/views/focus-session.css')) failures.push('focus-session.css link missing from Sutra.html');
 
 console.log(`App shell check - ${count} inline style block(s) inspected.`);
 notes.forEach((note) => console.log(' - ' + note));

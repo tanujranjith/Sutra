@@ -35,7 +35,7 @@ if (sw) {
     ok(!/\.sutra\b/.test(swCode), 'sw code does not special-case .sutra exports (downloads are never fetched/cached)');
 }
 
-const reg = read('src/config/sw-register.js');
+const reg = read('src/boot/sw-register.js');
 ok(!!reg, 'sw-register.js exists');
 if (reg) {
     ok(/'serviceWorker'\s*in\s*navigator/.test(reg), 'registration checks for serviceWorker support');
@@ -46,7 +46,7 @@ if (reg) {
 }
 
 const html = read('Sutra.html');
-ok(!!html && /src=["']src\/config\/sw-register\.js/.test(html), 'Sutra.html loads sw-register.js');
+ok(!!html && /src=["']src\/boot\/sw-register\.js/.test(html), 'Sutra.html loads sw-register.js');
 
 if (failures) {
     console.error(`\nService worker check FAILED (${failures} issue${failures === 1 ? '' : 's'}).`);

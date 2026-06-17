@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const appJs = readFileSync(resolve(repoRoot, 'src/core/app.js'), 'utf8');
-const persistenceInventory = JSON.parse(readFileSync(resolve(repoRoot, 'docs/persistence-inventory.json'), 'utf8'));
+const persistenceInventory = JSON.parse(readFileSync(resolve(repoRoot, 'docs/architecture/persistence-inventory.json'), 'utf8'));
 
 const failures = [];
 const warnings = [];

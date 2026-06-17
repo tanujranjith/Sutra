@@ -250,7 +250,7 @@ from the app workspace.
 Run through the following at each width — **1440, 1280, 1024, 900, 768, 640, 480, 390,
 360, 320** — using a browser's device toolbar. (You can also run
 `node scripts/sutra-responsive-check.mjs` as a static guard; see
-[TESTING_AND_RELEASE_CHECKLIST.md](TESTING_AND_RELEASE_CHECKLIST.md).)
+[TESTING_AND_RELEASE_CHECKLIST.md](../release/TESTING_AND_RELEASE_CHECKLIST.md).)
 
 - [ ] **No horizontal page scroll** at any width.
 - [ ] **Navigation** collapses to the mobile view menu ≤768px; every destination

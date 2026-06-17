@@ -188,10 +188,10 @@ mustContain('Sutra.html', 'id="onboardingSteps"', 'unified onboarding step list 
 mustContain('Sutra.html', 'id="onboardingMainPanel"', 'unified onboarding main panel anchor');
 mustContain('Sutra.html', 'id="resetOnboardingBtn"', 'reset-onboarding-for-testing button in Settings');
 mustContain('Sutra.html', 'rerunAtelierOnboarding()', 'rerun-onboarding wired to controller');
-mustContain('styles/styles.css', '.atelier-onboarding-shell', 'unified onboarding shell stylesheet');
-mustContain('styles/styles.css', '.atelier-onboarding-rail', 'unified onboarding rail stylesheet');
-mustContain('styles/styles.css', '.atelier-onboarding-card.is-selected', 'unified onboarding selection state stylesheet');
-mustContain('styles/styles.css', '.legacy-overlay-hidden', 'legacy overlay neutralizer stylesheet');
+mustContain('styles/base/styles.css', '.atelier-onboarding-shell', 'unified onboarding shell stylesheet');
+mustContain('styles/base/styles.css', '.atelier-onboarding-rail', 'unified onboarding rail stylesheet');
+mustContain('styles/base/styles.css', '.atelier-onboarding-card.is-selected', 'unified onboarding selection state stylesheet');
+mustContain('styles/base/styles.css', '.legacy-overlay-hidden', 'legacy overlay neutralizer stylesheet');
 
 // Legacy overlays must be permanently neutralized — no separate user-mode or
 // feature-setup modal can render.
@@ -201,10 +201,10 @@ mustContain('Sutra.html', 'feature-setup-overlay legacy-overlay-hidden', 'legacy
 // Fresh-install defaults + existing-user preservation (Phase 8).
 // Fresh installs emphasize the student-first modules; secondary modules stay
 // opt-in. Existing users keep whatever enabled-view choices they already stored.
-mustContain('src/core/app.js', "STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'timeline', 'notes', 'homework', 'apstudy', 'review', 'cramhub'])", 'fresh-install defaults emphasize the student-first modules');
-mustContain('src/core/app.js', 'function getDefaultEnabledViews', 'default enabled-views factory present');
-mustContain('src/core/app.js', 'function normalizeEnabledViews', 'enabled-views normalizer present');
-mustContain('src/core/app.js', 'normalized[view] = raw[view] !== false', 'existing-user enabled-view choices are preserved on load');
+mustContain('src/state/workspace-normalizers.js', "STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'timeline', 'notes', 'homework', 'apstudy', 'review', 'cramhub'])", 'fresh-install defaults emphasize the student-first modules');
+mustContain('src/state/workspace-normalizers.js', 'function getDefaultEnabledViews', 'default enabled-views factory present');
+mustContain('src/state/workspace-normalizers.js', 'function normalizeEnabledViews', 'enabled-views normalizer present');
+mustContain('src/state/workspace-normalizers.js', 'normalized[view] = raw[view] !== false', 'existing-user enabled-view choices are preserved on load');
 
 // Help/tutorial references
 mustContainAny('src/core/app.js', ['Daily Brief', 'Deadline Radar', 'Workspace Mode', '.atelier'], 'tutorial mentions new features');
@@ -243,8 +243,8 @@ mustContain('Sutra.html', 'id="apBattlePlanCard"', 'AP Battle Plan card markup')
 mustContain('src/core/app.js', 'openClassDashboardDrawer', 'class dashboard opener');
 mustContain('src/core/app.js', 'closeClassDashboardDrawer', 'class dashboard closer');
 mustContain('Sutra.html', 'id="classDashboardDrawer"', 'class dashboard markup');
-mustContain('src/features/homework.js', 'data-task-dashboard', 'homework assignment class dashboard entry');
-mustContain('src/features/ap-study.js', 'data-ap-action="open-class-dashboard"', 'AP Study class dashboard entry');
+mustContain('src/features/study/homework.js', 'data-task-dashboard', 'homework assignment class dashboard entry');
+mustContain('src/features/study/ap-study.js', 'data-ap-action="open-class-dashboard"', 'AP Study class dashboard entry');
 mustContain('src/core/app.js', 'breadcrumb-class-chip', 'notes class chip entry point');
 mustContain('src/core/app.js', 'data-brief-open-class', 'daily brief class dashboard entry');
 mustContain('src/core/app.js', 'data-deadline-open-class', 'deadline radar class dashboard entry');
@@ -291,7 +291,7 @@ mustContain('src/core/app.js', 'collegeTracker.essays', 'Quick Capture college e
 
 // Schedule-this helpers
 mustContain('src/core/app.js', 'scheduleGenericItemAsBlock', 'generic schedule helper');
-mustContain('src/features/homework.js', 'data-task-schedule', 'Schedule this button in homework menu');
+mustContain('src/features/study/homework.js', 'data-task-schedule', 'Schedule this button in homework menu');
 mustContain('src/core/app.js', "'college-action': 'schedule'", 'college sheet schedule action');
 mustContain('src/core/app.js', "'collegeapp-action': 'schedule'", 'college app schedule action');
 mustContain('src/core/app.js', 'createCollegeEssayNoteFromContext', 'college essay note creator');
@@ -321,8 +321,8 @@ mustContainAny('src/core/app.js', ['lw.journals', 'lw.spending'], 'life data vis
 // ----------------------------------------------------------------------
 
 // Review tab + scheduling module (Quizlet-style with 5 study modes)
-mustContain('src/core/app.js', "OPTIONAL_FEATURE_VIEWS = ['today'", 'feature-views array exists');
-mustContain('src/core/app.js', "'review'", 'review view registered in OPTIONAL_FEATURE_VIEWS');
+mustContain('src/state/workspace-normalizers.js', "OPTIONAL_FEATURE_VIEWS = ['today'", 'feature-views array exists');
+mustContain('src/state/workspace-normalizers.js', "'review'", 'review view registered in OPTIONAL_FEATURE_VIEWS');
 mustContain('src/core/app.js', 'getDefaultReviewWorkspace', 'review workspace defaults helper');
 mustContain('src/core/app.js', 'normalizeReviewWorkspace', 'review workspace normalizer');
 mustContain('src/core/app.js', 'reviewWorkspace = getDefaultReviewWorkspace()', 'review workspace runtime variable');
@@ -330,26 +330,26 @@ mustContain('src/core/app.js', 'appData.reviewWorkspace = normalizeReviewWorkspa
 mustContain('src/core/app.js', "defaultStudyMode: 'flashcards'", 'review settings default study mode');
 mustContain('src/core/app.js', 'testQuestionCount', 'review settings test question count');
 mustContain('src/core/app.js', 'matchPairCount', 'review settings match pair count');
-mustContain('src/features/review.js', 'function applyGrade', 'review SM-2 grader');
-mustContain('src/features/review.js', 'function promoteMastery', 'review mastery promoter');
-mustContain('src/features/review.js', 'function bulkImportCards', 'review bulk import helper');
-mustContain('src/features/review.js', "function buildLearnChoices", 'review learn-mode choice builder');
-mustContain('src/features/review.js', 'function buildTestQuestions', 'review test-mode question builder');
-mustContain('src/features/review.js', 'function buildMatchTiles', 'review match-mode tile builder');
-mustContain('src/features/review.js', "function fuzzyEqual", 'review fuzzy answer comparator');
-mustContain('src/features/review.js', "STUDY_MODES = ['flashcards', 'learn', 'write', 'test', 'match']", 'review study modes list');
-mustContain('src/features/review.js', 'window.renderReviewWorkspace', 'review render exposed on window');
-mustContain('src/features/review.js', 'window.getReviewTodayStats', 'review today stats exposed on window');
-mustContain('src/features/review.js', 'window.getReviewSearchResults', 'review search bridge exposed on window');
-mustContain('src/features/review.js', 'window.openReviewDeck', 'review open-deck bridge exposed on window');
+mustContain('src/features/study/review.js', 'function applyGrade', 'review SM-2 grader');
+mustContain('src/features/study/review.js', 'function promoteMastery', 'review mastery promoter');
+mustContain('src/features/study/review.js', 'function bulkImportCards', 'review bulk import helper');
+mustContain('src/features/study/review.js', "function buildLearnChoices", 'review learn-mode choice builder');
+mustContain('src/features/study/review.js', 'function buildTestQuestions', 'review test-mode question builder');
+mustContain('src/features/study/review.js', 'function buildMatchTiles', 'review match-mode tile builder');
+mustContain('src/features/study/review.js', "function fuzzyEqual", 'review fuzzy answer comparator');
+mustContain('src/features/study/review.js', "STUDY_MODES = ['flashcards', 'learn', 'write', 'test', 'match']", 'review study modes list');
+mustContain('src/features/study/review.js', 'window.renderReviewWorkspace', 'review render exposed on window');
+mustContain('src/features/study/review.js', 'window.getReviewTodayStats', 'review today stats exposed on window');
+mustContain('src/features/study/review.js', 'window.getReviewSearchResults', 'review search bridge exposed on window');
+mustContain('src/features/study/review.js', 'window.openReviewDeck', 'review open-deck bridge exposed on window');
 mustContain('Sutra.html', 'id="view-review"', 'review view section in HTML');
 mustContain('Sutra.html', 'id="tabReview"', 'review tab button in HTML');
 mustContain('Sutra.html', 'id="reviewMount"', 'review mount point in HTML');
 mustContain('Sutra.html', 'id="reviewCreateItemForm"', 'legacy review form retained for back-compat');
-mustContain('Sutra.html', 'src/features/review.js', 'review.js script included');
-mustContain('styles/styles.css', '.review-bigcard', 'review big-card flashcard style present');
-mustContain('styles/styles.css', '.review-match-grid', 'review match-mode grid style present');
-mustContain('styles/styles.css', '.review-mastery-bar', 'review mastery bar style present');
+mustContain('Sutra.html', 'src/features/study/review.js', 'review.js script included');
+mustContain('styles/base/styles.css', '.review-bigcard', 'review big-card flashcard style present');
+mustContain('styles/base/styles.css', '.review-match-grid', 'review match-mode grid style present');
+mustContain('styles/base/styles.css', '.review-mastery-bar', 'review mastery bar style present');
 
 // Focus templates
 mustContain('src/core/app.js', 'getDefaultFocusTemplates', 'focus templates defaults helper');
@@ -379,8 +379,8 @@ mustContain('Sutra.html', 'id="todayMobileShell"', 'today mobile shell host in H
 mustContain('src/core/app.js', 'function shouldUseMobileTodayMode', 'mobile today mode decider');
 mustContain('src/core/app.js', 'function applyMobileTodayModeClass', 'mobile today mode class applier');
 mustContain('src/core/app.js', "mobileTodayMode: 'auto'", 'mobile today mode default in settings');
-mustContain('styles/styles.css', '.today-mobile-shell', 'mobile today shell stylesheet block');
-mustContain('styles/styles.css', 'body.mobile-today-mode', 'mobile today mode CSS scope');
+mustContain('styles/base/styles.css', '.today-mobile-shell', 'mobile today shell stylesheet block');
+mustContain('styles/base/styles.css', 'body.mobile-today-mode', 'mobile today mode CSS scope');
 
 // Extended Global Search + recent-searches persistence
 mustContain('src/core/app.js', 'review: []', 'global search now indexes review');
@@ -426,14 +426,14 @@ mustContain('Sutra.html', 'id="newPageDueDate"', 'new page due date input in HTM
 mustContain('Sutra.html', 'id="newPageExamDate"', 'new page exam date input in HTML');
 mustContain('Sutra.html', 'id="newPageDeadline"', 'new page deadline input in HTML');
 mustContain('Sutra.html', 'id="templatePreviewConnections"', 'connections preview chips in HTML');
-mustContain('styles/styles.css', '.template-card-grid', 'template card grid stylesheet');
-mustContain('styles/styles.css', '.template-card.selected', 'selected card style');
-mustContain('styles/styles.css', '.new-page-context-panel', 'context panel style');
+mustContain('styles/base/styles.css', '.template-card-grid', 'template card grid stylesheet');
+mustContain('styles/base/styles.css', '.template-card.selected', 'selected card style');
+mustContain('styles/base/styles.css', '.new-page-context-panel', 'context panel style');
 
 // ----------------------------------------------------------------------
 // Flow Assistant — contextual workspace assistant layer.
 // ----------------------------------------------------------------------
-mustContain('Sutra.html', 'src/features/flow-assistant.js', 'Flow Assistant script included');
+mustContain('Sutra.html', 'src/features/assistant/flow-assistant.js', 'Flow Assistant script included');
 mustContain('Sutra.html', 'id="chatbotBtn"', 'Flow Assistant mascot button present');
 mustContain('Sutra.html', 'id="chatbotPanel"', 'Flow Assistant panel present');
 
@@ -449,24 +449,24 @@ mustContain('Sutra.html', 'data-pref-path="assistant.contextDepth"', 'Assistant 
 mustContain('Sutra.html', 'data-pref-path="assistant.showActionPreviews"', 'Assistant show-action-previews setting in HTML');
 mustContain('Sutra.html', 'data-pref-path="assistant.requireConfirmation"', 'Assistant require-confirmation setting in HTML');
 
-mustContain('src/features/flow-assistant.js', 'function getFlowAssistantContext', 'Flow context gatherer');
-mustContain('src/features/flow-assistant.js', 'function buildSystemPrompt', 'Flow system prompt builder');
-mustContain('src/features/flow-assistant.js', 'function parseActions', 'Flow action parser');
-mustContain('src/features/flow-assistant.js', 'function applyAction', 'Flow action dispatcher');
-mustContain('src/features/flow-assistant.js', 'function renderActionCards', 'Flow action-card renderer');
-mustContain('src/features/flow-assistant.js', 'function injectViewFlowRows', 'Flow per-view Ask-Flow row injector');
-mustContain('src/features/flow-assistant.js', "'flow-context/1'", 'Flow context schema marker');
-mustContain('src/features/flow-assistant.js', 'flow-actions', 'Flow action fence token');
-mustContain('src/features/flow-assistant.js', 'window.flowAssistant', 'Flow Assistant exposed on window (legacy alias)');
-mustContain('src/features/flow-assistant.js', 'window.sutraAssistant', 'Sutra Assistant exposed on window (canonical)');
+mustContain('src/features/assistant/flow-assistant.js', 'function getFlowAssistantContext', 'Flow context gatherer');
+mustContain('src/features/assistant/flow-assistant.js', 'function buildSystemPrompt', 'Flow system prompt builder');
+mustContain('src/features/assistant/flow-assistant.js', 'function parseActions', 'Flow action parser');
+mustContain('src/features/assistant/flow-assistant.js', 'function applyAction', 'Flow action dispatcher');
+mustContain('src/features/assistant/flow-assistant.js', 'function renderActionCards', 'Flow action-card renderer');
+mustContain('src/features/assistant/flow-assistant.js', 'function injectViewFlowRows', 'Flow per-view Ask-Flow row injector');
+mustContain('src/features/assistant/flow-assistant.js', "'flow-context/1'", 'Flow context schema marker');
+mustContain('src/features/assistant/flow-assistant.js', 'flow-actions', 'Flow action fence token');
+mustContain('src/features/assistant/flow-assistant.js', 'window.flowAssistant', 'Flow Assistant exposed on window (legacy alias)');
+mustContain('src/features/assistant/flow-assistant.js', 'window.sutraAssistant', 'Sutra Assistant exposed on window (canonical)');
 
 mustContain('src/core/app.js', 'window.flowAtelier', 'Flow Assistant bridge exposed from app.js');
 mustContain('src/core/app.js', 'buildRequestEnrichment', 'sendChat calls Flow request enrichment');
 mustContain('src/core/app.js', "contextDepth: normalizeSettingChoice", 'assistant.contextDepth normalized in settings');
 mustContain('src/core/app.js', "contextDepth: 'currentView'", 'assistant.contextDepth default registered');
 
-mustContain('src/features/review.js', 'window.createReviewDeck', 'review.js exposes createReviewDeck for Flow actions');
-mustContain('src/features/review.js', 'window.bulkImportReviewCards', 'review.js exposes bulkImportReviewCards for Flow actions');
+mustContain('src/features/study/review.js', 'window.createReviewDeck', 'review.js exposes createReviewDeck for Flow actions');
+mustContain('src/features/study/review.js', 'window.bulkImportReviewCards', 'review.js exposes bulkImportReviewCards for Flow actions');
 
 mustContain('src/core/app.js', "'flow-ask'", 'Flow command palette entry: Ask Flow');
 mustContain('src/core/app.js', "'flow-plan-day'", 'Flow command palette entry: Plan my day');
@@ -486,57 +486,57 @@ mustContainAny('src/core/app.js', ['Intentionally NOT exported', 'sessionStorage
 // ----------------------------------------------------------------------
 
 // New intelligence module is loaded and exposes its surface.
-mustContain('Sutra.html', 'src/features/flow-intelligence.js', 'Flow Intelligence script included');
-mustContain('src/features/flow-intelligence.js', 'window.flowIntelligence', 'Flow Intelligence exposed on window');
-mustContain('src/features/flow-intelligence.js', 'function deriveStudentContext', 'student intelligence layer present');
-mustContain('src/features/flow-intelligence.js', 'function pickNextBestAction', 'next-best-action picker present');
-mustContain('src/features/flow-intelligence.js', 'function logActivity', 'Flow activity log writer present');
-mustContain('src/features/flow-intelligence.js', 'function getActivityLog', 'Flow activity log reader present');
-mustContain('src/features/flow-intelligence.js', 'function normalizeImportBatch', 'assignment import normalizer present');
-mustContain('src/features/flow-intelligence.js', 'function detectDuplicate', 'assignment dedupe present');
-mustContain('src/features/flow-intelligence.js', "ACTIVITY_LOG_KEY = 'sutra:activityLog:v1'", 'canonical Sutra activity log storage key present');
-mustContain('src/features/flow-intelligence.js', "LEGACY_ACTIVITY_LOG_KEY = 'flow:activityLog:v1'", 'legacy Flow activity log key retained for migration');
-mustContain('src/features/flow-intelligence.js', 'window.sutraIntelligence', 'Sutra Intelligence exposed on window');
+mustContain('Sutra.html', 'src/features/assistant/flow-intelligence.js', 'Flow Intelligence script included');
+mustContain('src/features/assistant/flow-intelligence.js', 'window.flowIntelligence', 'Flow Intelligence exposed on window');
+mustContain('src/features/assistant/flow-intelligence.js', 'function deriveStudentContext', 'student intelligence layer present');
+mustContain('src/features/assistant/flow-intelligence.js', 'function pickNextBestAction', 'next-best-action picker present');
+mustContain('src/features/assistant/flow-intelligence.js', 'function logActivity', 'Flow activity log writer present');
+mustContain('src/features/assistant/flow-intelligence.js', 'function getActivityLog', 'Flow activity log reader present');
+mustContain('src/features/assistant/flow-intelligence.js', 'function normalizeImportBatch', 'assignment import normalizer present');
+mustContain('src/features/assistant/flow-intelligence.js', 'function detectDuplicate', 'assignment dedupe present');
+mustContain('src/features/assistant/flow-intelligence.js', "ACTIVITY_LOG_KEY = 'sutra:activityLog:v1'", 'canonical Sutra activity log storage key present');
+mustContain('src/features/assistant/flow-intelligence.js', "LEGACY_ACTIVITY_LOG_KEY = 'flow:activityLog:v1'", 'legacy Flow activity log key retained for migration');
+mustContain('src/features/assistant/flow-intelligence.js', 'window.sutraIntelligence', 'Sutra Intelligence exposed on window');
 
 // New action catalog entries (workflows) + risk classification.
-mustContain('src/features/flow-assistant.js', 'function classifyRisk', 'action risk classifier present');
-mustContain('src/features/flow-assistant.js', "type: 'import_assignments'", 'import_assignments action registered');
-mustContain('src/features/flow-assistant.js', "type: 'create_study_plan'", 'create_study_plan action registered');
-mustContain('src/features/flow-assistant.js', "type: 'create_exam_plan'", 'create_exam_plan action registered');
-mustContain('src/features/flow-assistant.js', "type: 'create_assignment_plan'", 'create_assignment_plan action registered');
-mustContain('src/features/flow-assistant.js', "type: 'plan_week'", 'plan_week action registered');
-mustContain('src/features/flow-assistant.js', "type: 'plan_day'", 'plan_day action registered');
-mustContain('src/features/flow-assistant.js', "type: 'triage_deadlines'", 'triage_deadlines action registered');
-mustContain('src/features/flow-assistant.js', "type: 'convert_note_to_study_system'", 'convert_note action registered');
-mustContain('src/features/flow-assistant.js', "type: 'link_workspace_objects'", 'link_workspace_objects action registered');
-mustContain('src/features/flow-assistant.js', "type: 'start_focus_session'", 'start_focus_session action registered');
-mustContain('src/features/flow-assistant.js', "type: 'change_context_depth'", 'change_context_depth action registered');
+mustContain('src/features/assistant/flow-assistant.js', 'function classifyRisk', 'action risk classifier present');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'import_assignments'", 'import_assignments action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'create_study_plan'", 'create_study_plan action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'create_exam_plan'", 'create_exam_plan action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'create_assignment_plan'", 'create_assignment_plan action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'plan_week'", 'plan_week action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'plan_day'", 'plan_day action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'triage_deadlines'", 'triage_deadlines action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'convert_note_to_study_system'", 'convert_note action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'link_workspace_objects'", 'link_workspace_objects action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'start_focus_session'", 'start_focus_session action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'change_context_depth'", 'change_context_depth action registered');
 
 // Object linking helper.
-mustContain('src/features/flow-assistant.js', 'function addPageLinks', 'object linking helper present');
-mustContain('src/features/flow-assistant.js', 'linkedReviewDeckId', 'workflow links page to review deck');
+mustContain('src/features/assistant/flow-assistant.js', 'function addPageLinks', 'object linking helper present');
+mustContain('src/features/assistant/flow-assistant.js', 'linkedReviewDeckId', 'workflow links page to review deck');
 
 // Activity logging + undo on apply.
-mustContain('src/features/flow-assistant.js', 'function applyActionLogged', 'logged apply wrapper present');
-mustContain('src/features/flow-assistant.js', 'function undoActivity', 'undo helper present');
-mustContain('src/features/flow-assistant.js', 'function getConfirmationMode', 'trust-level confirmation mode present');
-mustContain('src/features/flow-assistant.js', 'flow-action-risk', 'risk badge rendered on action cards');
+mustContain('src/features/assistant/flow-assistant.js', 'function applyActionLogged', 'logged apply wrapper present');
+mustContain('src/features/assistant/flow-assistant.js', 'function undoActivity', 'undo helper present');
+mustContain('src/features/assistant/flow-assistant.js', 'function getConfirmationMode', 'trust-level confirmation mode present');
+mustContain('src/features/assistant/flow-assistant.js', 'flow-action-risk', 'risk badge rendered on action cards');
 
 // Assignment import review table + context transparency + activity UI.
-mustContain('src/features/flow-assistant.js', 'function renderImportReview', 'assignment import review table present');
-mustContain('src/features/flow-assistant.js', 'function showContextModal', 'context transparency modal present');
-mustContain('src/features/flow-assistant.js', 'function openActivityLog', 'activity log UI present');
-mustContain('src/features/flow-assistant.js', 'function buildInspectableContext', 'inspectable context builder present');
+mustContain('src/features/assistant/flow-assistant.js', 'function renderImportReview', 'assignment import review table present');
+mustContain('src/features/assistant/flow-assistant.js', 'function showContextModal', 'context transparency modal present');
+mustContain('src/features/assistant/flow-assistant.js', 'function openActivityLog', 'activity log UI present');
+mustContain('src/features/assistant/flow-assistant.js', 'function buildInspectableContext', 'inspectable context builder present');
 
 // Data-aware quick actions + command layer.
-mustContain('src/features/flow-assistant.js', 'function buildContextualQuickActions', 'data-aware quick actions present');
-mustContain('src/features/flow-assistant.js', 'function tryHandleCommand', 'natural-language command layer present');
+mustContain('src/features/assistant/flow-assistant.js', 'function buildContextualQuickActions', 'data-aware quick actions present');
+mustContain('src/features/assistant/flow-assistant.js', 'function tryHandleCommand', 'natural-language command layer present');
 
 // File attachment plumbing (registry-driven; images + PDFs + local extraction).
-mustContain('src/features/flow-assistant.js', 'function getVisionCapability', 'provider vision capability detection present');
-mustContain('src/features/flow-assistant.js', 'function addAttachmentFromFile', 'attachment intake present');
-mustContain('src/features/flow-assistant.js', 'function validateAttachmentsForSend', 'attachment send gate present');
-mustContain('src/features/model-capabilities.js', 'determineAttachmentProcessingPlan', 'model-capability registry present');
+mustContain('src/features/assistant/flow-assistant.js', 'function getVisionCapability', 'provider vision capability detection present');
+mustContain('src/features/assistant/flow-assistant.js', 'function addAttachmentFromFile', 'attachment intake present');
+mustContain('src/features/assistant/flow-assistant.js', 'function validateAttachmentsForSend', 'attachment send gate present');
+mustContain('src/features/assistant/model-capabilities.js', 'determineAttachmentProcessingPlan', 'model-capability registry present');
 mustContain('src/core/app.js', 'validateAttachmentsForSend', 'sendChat enforces the attachment compatibility gate');
 mustContain('src/core/app.js', 'performIntelligenceRequest', 'centralized intelligence request core present');
 mustContain('src/core/app.js', "type: 'image_url'", 'OpenAI-compatible image payload present');
@@ -574,17 +574,17 @@ mustContain('Sutra.html', 'id="localApiKeyInput"', 'local endpoint key input in 
 mustContain('Sutra.html', '<option value="local">Local endpoint</option>', 'local provider option in Flow panel');
 
 // New Flow CSS surfaces.
-mustContain('styles/styles.css', '.flow-import-review', 'import review table stylesheet');
-mustContain('styles/styles.css', '.flow-modal-overlay', 'Flow modal stylesheet');
-mustContain('styles/styles.css', '.flow-action-risk', 'risk badge stylesheet');
+mustContain('styles/base/styles.css', '.flow-import-review', 'import review table stylesheet');
+mustContain('styles/base/styles.css', '.flow-modal-overlay', 'Flow modal stylesheet');
+mustContain('styles/base/styles.css', '.flow-action-risk', 'risk badge stylesheet');
 
 // Undo wiring: review-deck removal must go through an exposed helper, and the
 // Homework view must be refreshed via the event homework.js actually listens
 // for (there is no global renderHomeworkWorkspace). Both were live-verified.
-mustContain('src/features/review.js', 'window.deleteReviewDeck', 'review.js exposes deleteReviewDeck for Flow undo');
-mustContain('src/features/flow-assistant.js', "new CustomEvent('homework:updated')", 'Flow refreshes Homework view via homework:updated event');
-mustContain('src/features/homework.js', "'homework:updated'", 'homework.js listens for homework:updated');
-mustContain('Sutra.html', 'src/features/review.js?v=', 'review.js cache-busted so undo fix ships');
+mustContain('src/features/study/review.js', 'window.deleteReviewDeck', 'review.js exposes deleteReviewDeck for Flow undo');
+mustContain('src/features/assistant/flow-assistant.js', "new CustomEvent('homework:updated')", 'Flow refreshes Homework view via homework:updated event');
+mustContain('src/features/study/homework.js', "'homework:updated'", 'homework.js listens for homework:updated');
+mustContain('Sutra.html', 'src/features/study/review.js?v=', 'review.js cache-busted so undo fix ships');
 
 // Syntax check already covers all .js files via check:syntax.
 
@@ -631,9 +631,9 @@ mustContain('Sutra.html', 'id="docBgDim"', 'dim background slider present');
 mustContain('Sutra.html', 'openDocumentBackgroundModal()', 'Document Background toolbar button wired');
 
 // CSS surfaces.
-mustContain('styles/sutra-pro.css', '.cw-course-card', 'course card stylesheet');
-mustContain('styles/sutra-pro.css', '.ad-row', 'All Due table row stylesheet');
-mustContain('styles/sutra-pro.css', '.cw-dropzone', 'file dropzone stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.cw-course-card', 'course card stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.ad-row', 'All Due table row stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.cw-dropzone', 'file dropzone stylesheet');
 
 // view registry.
 mustContain('src/core/app.js', "'courses', 'alldue'", 'courses + alldue registered as feature views');
@@ -646,11 +646,11 @@ mustContain('src/core/app.js', 'courseHubEnabled: layoutSource.courseHubEnabled 
 mustContain('Sutra.html', 'data-pref-path="layout.courseHubEnabled"', 'Course Hub settings toggle in Layout');
 
 // Flow Assistant integration.
-mustContain('src/features/flow-assistant.js', 'create_assignment_for_course', 'Flow course-assignment action');
-mustContain('src/features/flow-assistant.js', 'create_course', 'Flow create-course action');
-mustContain('src/features/flow-assistant.js', 'function summarizeCourses', 'Flow course context');
-mustContain('src/features/flow-assistant.js', 'function summarizeAllDue', 'Flow all-due context');
-mustContain('src/features/flow-assistant.js', 'navigate_to_all_due', 'Flow navigate-to-all-due action');
+mustContain('src/features/assistant/flow-assistant.js', 'create_assignment_for_course', 'Flow course-assignment action');
+mustContain('src/features/assistant/flow-assistant.js', 'create_course', 'Flow create-course action');
+mustContain('src/features/assistant/flow-assistant.js', 'function summarizeCourses', 'Flow course context');
+mustContain('src/features/assistant/flow-assistant.js', 'function summarizeAllDue', 'Flow all-due context');
+mustContain('src/features/assistant/flow-assistant.js', 'navigate_to_all_due', 'Flow navigate-to-all-due action');
 
 // ----------------------------------------------------------------------
 // Version History (Section 17) — repaired snapshot lifecycle, restore
@@ -709,22 +709,22 @@ mustContain('Sutra.html', 'onclick="openVersionHistory()"', 'visible Version His
 mustContain('src/core/app.js', "e.shiftKey && e.key === 'H'", 'Ctrl/Cmd+Shift+H opens version history');
 
 // Polished CSS surfaces.
-mustContain('styles/sutra-pro.css', '.version-history-toolbar', 'version history toolbar stylesheet');
-mustContain('styles/sutra-pro.css', '.version-history-empty', 'version history empty-state stylesheet');
-mustContain('styles/sutra-pro.css', '.version-current-chip', 'current-version marker stylesheet');
-mustContain('styles/sutra-pro.css', '.version-restore-btn', 'restore button stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.version-history-toolbar', 'version history toolbar stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.version-history-empty', 'version history empty-state stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.version-current-chip', 'current-version marker stylesheet');
+mustContain('styles/themes/sutra-pro.css', '.version-restore-btn', 'restore button stylesheet');
 
 // =====================================================================
 // HANDWRITING & DRAWING (Phase B)
 // =====================================================================
-mustContain('src/features/handwriting.js', 'global.AtelierHandwriting', 'handwriting engine exposes window.AtelierHandwriting');
-mustContain('src/features/handwriting.js', 'function createController', 'handwriting drawing controller');
-mustContain('src/features/handwriting.js', 'function renderStrokesToCanvas', 'handwriting renderer');
-mustContain('src/features/handwriting.js', 'function strokeAt', 'eraser stroke hit-testing');
-mustContainAny('src/features/handwriting.js', ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], 'handwriting uses Pointer Events');
-mustContain('src/features/handwriting.js', 'getCoalescedEvents', 'handwriting uses coalesced pointer events for smooth ink');
-mustContain('src/features/handwriting.js', 'normalizeStrokes', 'handwriting vector stroke normalization');
-mustContain('Sutra.html', 'src/features/handwriting.js', 'handwriting.js script included before app.js');
+mustContain('src/features/workspace/handwriting.js', 'global.AtelierHandwriting', 'handwriting engine exposes window.AtelierHandwriting');
+mustContain('src/features/workspace/handwriting.js', 'function createController', 'handwriting drawing controller');
+mustContain('src/features/workspace/handwriting.js', 'function renderStrokesToCanvas', 'handwriting renderer');
+mustContain('src/features/workspace/handwriting.js', 'function strokeAt', 'eraser stroke hit-testing');
+mustContainAny('src/features/workspace/handwriting.js', ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'], 'handwriting uses Pointer Events');
+mustContain('src/features/workspace/handwriting.js', 'getCoalescedEvents', 'handwriting uses coalesced pointer events for smooth ink');
+mustContain('src/features/workspace/handwriting.js', 'normalizeStrokes', 'handwriting vector stroke normalization');
+mustContain('Sutra.html', 'src/features/workspace/handwriting.js', 'handwriting.js script included before app.js');
 mustContain('Sutra.html', 'insertDrawingBlock()', 'Draw button in editor toolbar');
 mustContain('src/core/app.js', "DRAWING: 'drawing'", 'DRAWING note block type registered');
 mustContain('src/core/app.js', 'function createDrawingBlock', 'drawing block factory');
@@ -746,24 +746,24 @@ mustContain('src/core/app.js', 'schedulePersist', 'drawing strokes persisted deb
 mustContain('src/core/app.js', 'onCommit: () => { schedulePersist(); refreshControls(); }', 'strokes persisted on each stroke commit');
 mustContain('src/core/app.js', 'function flushAllDrawingControllers', 'last-stroke flush on pagehide/beforeunload');
 mustContain('src/core/app.js', 'function safeCssColorValue', 'drawing swatch colors validated (CSS-injection safe)');
-mustContain('src/features/handwriting.js', "raw.tool === TOOLS.ERASER", 'eraser strokes are not persisted (dropped on import)');
-mustContain('src/features/handwriting.js', 'function refreshTheme', 'ink re-detects surface on theme change');
+mustContain('src/features/workspace/handwriting.js', "raw.tool === TOOLS.ERASER", 'eraser strokes are not persisted (dropped on import)');
+mustContain('src/features/workspace/handwriting.js', 'function refreshTheme', 'ink re-detects surface on theme change');
 mustContain('src/core/app.js', 'function refreshAllDrawingControllersTheme', 'theme change refreshes drawing ink');
 mustContain('src/core/app.js', 'function bindThemeChangeReapply', 'custom CSS + ink re-apply on theme change (MutationObserver)');
-mustContain('styles/customization.css', '.drawing-block', 'handwriting block stylesheet');
-mustContain('Sutra.html', 'styles/customization.css', 'customization stylesheet linked');
+mustContain('styles/features/customization.css', '.drawing-block', 'handwriting block stylesheet');
+mustContain('Sutra.html', 'styles/features/customization.css', 'customization stylesheet linked');
 
 // =====================================================================
 // MODS & CUSTOMIZATION — CSS overrides + Safe Mode (Phase C)
 // =====================================================================
-mustContain('src/features/customization.js', 'global.AtelierCustomization', 'customization engine exposed');
-mustContain('src/features/customization.js', 'function applyCss', 'CSS injection function');
-mustContain('src/features/customization.js', 'function removeAllCss', 'CSS removal function');
-mustContain('src/features/customization.js', 'function validateCss', 'CSS bracket-balance validation');
-mustContain('src/features/customization.js', 'function previewCss', 'CSS live preview');
-mustContain('src/features/customization.js', "ROOT_STYLE_ID = 'atelier-user-css'", 'deterministic user CSS style id');
-mustContain('src/features/customization.js', 'function isSafeMode', 'Safe Mode detection');
-mustContain('src/features/customization.js', '(?:sutra|atelier)SafeMode=1', 'URL-based Safe Mode (Sutra canonical + legacy Atelier)');
+mustContain('src/features/customization/customization.js', 'global.AtelierCustomization', 'customization engine exposed');
+mustContain('src/features/customization/customization.js', 'function applyCss', 'CSS injection function');
+mustContain('src/features/customization/customization.js', 'function removeAllCss', 'CSS removal function');
+mustContain('src/features/customization/customization.js', 'function validateCss', 'CSS bracket-balance validation');
+mustContain('src/features/customization/customization.js', 'function previewCss', 'CSS live preview');
+mustContain('src/features/customization/customization.js', "ROOT_STYLE_ID = 'atelier-user-css'", 'deterministic user CSS style id');
+mustContain('src/features/customization/customization.js', 'function isSafeMode', 'Safe Mode detection');
+mustContain('src/features/customization/customization.js', '(?:sutra|atelier)SafeMode=1', 'URL-based Safe Mode (Sutra canonical + legacy Atelier)');
 mustContain('src/core/app.js', 'function normalizeCustomizationSettings', 'customization settings normalizer');
 mustContain('src/core/app.js', 'function applyCustomizationCss', 'app applies custom CSS');
 mustContain('src/core/app.js', 'function initModsAndCustomization', 'mods boot init');
@@ -779,25 +779,25 @@ mustContain('Sutra.html', 'data-settings-section="mods"', 'Mods settings section
 mustContain('Sutra.html', 'id="modsEnabledToggle"', 'mods master toggle');
 mustContain('Sutra.html', 'Safe Mode lets you recover', 'restrained mods warning copy');
 mustContain('Sutra.html', '__atelierShiftSafeMode', 'Shift-at-load Safe Mode capture');
-mustContain('styles/customization.css', '.atelier-safe-mode-banner', 'Safe Mode banner stylesheet');
+mustContain('styles/features/customization.css', '.atelier-safe-mode-banner', 'Safe Mode banner stylesheet');
 
 // =====================================================================
 // MODS & CUSTOMIZATION — Local plugins (Phase C)
 // =====================================================================
-mustContain('src/features/plugin-system.js', 'global.AtelierPlugins', 'plugin engine exposed');
-mustContain('src/features/plugin-system.js', 'function validateManifest', 'plugin manifest validator');
-mustContain('src/features/plugin-system.js', 'function parseBundle', 'plugin bundle parser');
-mustContain('src/features/plugin-system.js', 'function createRuntimeHost', 'sandboxed plugin runtime host');
-mustContain('src/features/plugin-system.js', 'function markForReviewOnImport', 'imported runtime plugins require re-review');
-mustContain('src/features/plugin-system.js', 'var PERMISSIONS', 'plugin permission allowlist');
-mustContain('src/features/plugin-system.js', 'var BRIDGE_OPS', 'plugin bridge operation allowlist');
-mustContain('src/features/plugin-system.js', "setAttribute('sandbox', 'allow-scripts')", 'plugin iframe sandbox allow-scripts (no allow-same-origin)');
-mustContain('src/features/plugin-system.js', "connect-src 'none'", 'plugin sandbox blocks network');
-mustNotContain('src/features/plugin-system.js', 'new Function(', 'no new Function in plugin runtime');
-mustNotContain('src/features/plugin-system.js', 'eval(', 'no eval() call in plugin runtime');
-mustContain('src/features/plugin-system.js', 'event.source !== entry.iframe.contentWindow', 'plugin bridge validates event.source');
-mustContain('src/features/plugin-system.js', 'd.token !== entry.token', 'plugin bridge validates session token');
-mustContain('src/features/plugin-system.js', 'hasPermission', 'plugin bridge checks permissions');
+mustContain('src/features/customization/plugin-system.js', 'global.AtelierPlugins', 'plugin engine exposed');
+mustContain('src/features/customization/plugin-system.js', 'function validateManifest', 'plugin manifest validator');
+mustContain('src/features/customization/plugin-system.js', 'function parseBundle', 'plugin bundle parser');
+mustContain('src/features/customization/plugin-system.js', 'function createRuntimeHost', 'sandboxed plugin runtime host');
+mustContain('src/features/customization/plugin-system.js', 'function markForReviewOnImport', 'imported runtime plugins require re-review');
+mustContain('src/features/customization/plugin-system.js', 'var PERMISSIONS', 'plugin permission allowlist');
+mustContain('src/features/customization/plugin-system.js', 'var BRIDGE_OPS', 'plugin bridge operation allowlist');
+mustContain('src/features/customization/plugin-system.js', "setAttribute('sandbox', 'allow-scripts')", 'plugin iframe sandbox allow-scripts (no allow-same-origin)');
+mustContain('src/features/customization/plugin-system.js', "connect-src 'none'", 'plugin sandbox blocks network');
+mustNotContain('src/features/customization/plugin-system.js', 'new Function(', 'no new Function in plugin runtime');
+mustNotContain('src/features/customization/plugin-system.js', 'eval(', 'no eval() call in plugin runtime');
+mustContain('src/features/customization/plugin-system.js', 'event.source !== entry.iframe.contentWindow', 'plugin bridge validates event.source');
+mustContain('src/features/customization/plugin-system.js', 'd.token !== entry.token', 'plugin bridge validates session token');
+mustContain('src/features/customization/plugin-system.js', 'hasPermission', 'plugin bridge checks permissions');
 mustContain('src/core/app.js', 'function setPluginEnabled', 'plugin enable/disable lifecycle');
 mustContain('src/core/app.js', 'function uninstallPlugin', 'plugin uninstall lifecycle');
 mustContain('src/core/app.js', 'function applyPluginContributions', 'declarative plugin contributions applied');
@@ -810,8 +810,8 @@ mustContain('src/core/app.js', "case 'timeline.list'", 'timeline.list bridge op 
 mustContain('src/core/app.js', "case 'command.register'", 'command.register bridge op implemented');
 mustContain('src/core/app.js', 'function registerRuntimePluginCommand', 'runtime plugin command registry');
 mustContain('src/core/app.js', 'function createPluginTimeBlock', 'plugin timeline blocks go through the real store');
-mustContain('src/features/plugin-system.js', 'onCommand:function', 'sandbox exposes onCommand for runtime command round-trip');
-mustContain('src/features/plugin-system.js', 'function invoke', 'runtime host can invoke a sandbox command');
+mustContain('src/features/customization/plugin-system.js', 'onCommand:function', 'sandbox exposes onCommand for runtime command round-trip');
+mustContain('src/features/customization/plugin-system.js', 'function invoke', 'runtime host can invoke a sandbox command');
 mustContain('src/core/app.js', "options.includeSensitiveSettings === true", 'export secret-filtering is fail-safe by default');
 mustContain('src/core/app.js', 'markForReviewOnImport', 'import marks runtime plugins for review');
 mustContain('src/core/app.js', 'plugin-import', 'plugin import action');
@@ -819,9 +819,9 @@ mustContain('src/core/app.js', 'plugin-review', 'plugin re-review action');
 mustContain('src/core/app.js', 'window.__atelierPluginCommands', 'plugin commands bridged to command palette');
 mustContain('examples/plugins/study-helper.atelier-plugin', '"id": "example.study-helper"', 'example plugin bundle present');
 mustContain('examples/plugins/study-helper.atelier-plugin', '"schemaVersion": 1', 'example plugin uses documented schema');
-mustContain('docs/MODS_AND_CUSTOMIZATION.md', 'Safe Mode', 'mods docs cover Safe Mode');
-mustContain('docs/PLUGIN_SDK.md', 'atelier-plugin', 'plugin SDK docs present');
-mustContain('docs/HANDWRITING_AND_DRAWING.md', 'highlighter', 'handwriting docs present');
+mustContain('docs/features/MODS_AND_CUSTOMIZATION.md', 'Safe Mode', 'mods docs cover Safe Mode');
+mustContain('docs/features/PLUGIN_SDK.md', 'atelier-plugin', 'plugin SDK docs present');
+mustContain('docs/features/HANDWRITING_AND_DRAWING.md', 'highlighter', 'handwriting docs present');
 
 // =====================================================================
 // LANDING PAGE — scrollytelling redesign (Phase D)
@@ -883,9 +883,9 @@ mustContain('Sutra.html', 'daily-lock-in-quote', 'daily lock-in quote container 
 mustContain('Sutra.html', 'daily-lock-in-quotes.js', 'quote data file loaded');
 mustContain('Sutra.html', 'daily-lock-in-quote.js', 'quote feature file loaded');
 mustContain('src/data/daily-lock-in-quotes.js', 'SutraQuoteBank', 'SutraQuoteBank exported from data file');
-mustContain('src/features/daily-lock-in-quote.js', 'getLocalDayNumber', 'deterministic day-number function present');
-mustContain('src/features/daily-lock-in-quote.js', 'seededShuffle', 'seeded shuffle function present');
-mustContain('src/features/daily-lock-in-quote.js', 'global.SutraQuote', 'SutraQuote public API exported');
+mustContain('src/features/workspace/daily-lock-in-quote.js', 'getLocalDayNumber', 'deterministic day-number function present');
+mustContain('src/features/workspace/daily-lock-in-quote.js', 'seededShuffle', 'seeded shuffle function present');
+mustContain('src/features/workspace/daily-lock-in-quote.js', 'global.SutraQuote', 'SutraQuote public API exported');
 
 // ---- Notification center -------------------------------------------------
 mustContain('Sutra.html', 'notifBellBtn', 'notification bell button present');
@@ -893,13 +893,13 @@ mustContain('Sutra.html', 'notifPanel', 'notification panel present');
 mustContain('Sutra.html', 'notifToastContainer', 'toast container present');
 mustContain('Sutra.html', 'notifications.css', 'notifications CSS loaded');
 mustContain('Sutra.html', 'notifications.js', 'notifications JS loaded');
-mustContain('src/features/notifications.js', 'SutraNotifications', 'SutraNotifications namespace exported');
-mustContain('src/features/notifications.js', 'collectWorkspaceDeadlines', 'notification center uses deadline aggregator');
-mustContain('src/features/notifications.js', 'sutraNotifications:v1', 'notification state storage key');
+mustContain('src/features/workspace/notifications.js', 'SutraNotifications', 'SutraNotifications namespace exported');
+mustContain('src/features/workspace/notifications.js', 'collectWorkspaceDeadlines', 'notification center uses deadline aggregator');
+mustContain('src/features/workspace/notifications.js', 'sutraNotifications:v1', 'notification state storage key');
 mustContain('src/core/app.js', 'sutraNotifications:v1', 'notification key in localStorage snapshot allowlist');
 
 // ---- Settings theme fix --------------------------------------------------
-mustContain('styles/settings-redesign.css', 'body[data-theme="sutra"]', 'Sutra dark theme in settings CC override block');
+mustContain('styles/views/settings-redesign.css', 'body[data-theme="sutra"]', 'Sutra dark theme in settings CC override block');
 
 // ---- Shortcut label migration --------------------------------------------
 mustContain('src/core/app.js', 'NoteFlowAtelier GitHub repo', 'legacy shortcut label migration present');
@@ -908,12 +908,12 @@ mustContain('src/core/app.js', 'Sutra GitHub repo', 'migration target label pres
 // ---- Stabilization pass: migrations, app shell, academic command center --
 mustContain('Sutra.html', 'src/core/migrations.js', 'workspace migration registry loaded before app');
 mustContain('src/core/app.js', 'SutraMigrations.migrateWorkspace', 'workspace hydrate path runs versioned migrations');
-mustContain('Sutra.html', 'styles/focus-session.css', 'focus-session CSS extracted from the app shell');
+mustContain('Sutra.html', 'styles/views/focus-session.css', 'focus-session CSS extracted from the app shell');
 mustNotContain('Sutra.html', 'id="focus-session-styles"', 'large focus-session style block removed from app shell');
-mustContain('Sutra.html', 'src/features/academic-command-center.js', 'academic command center module loaded');
-mustContain('Sutra.html', 'styles/academic-command-center.css', 'academic command center styles loaded');
+mustContain('Sutra.html', 'src/features/academic/academic-command-center.js', 'academic command center module loaded');
+mustContain('Sutra.html', 'styles/features/academic-command-center.css', 'academic command center styles loaded');
 mustContain('src/core/app.js', 'SutraAcademicCommandCenter.renderHtml', 'Course Hub composes the academic command center');
-mustContain('src/features/academic-command-center.js', 'function rankActions', 'deterministic next-action ranking present');
+mustContain('src/features/academic/academic-command-center.js', 'function rankActions', 'deterministic next-action ranking present');
 mustContain('src/core/safe-storage.js', 'sessionGet: sessionGet', 'safe storage exposes session reads');
 
 if (failures.length) {

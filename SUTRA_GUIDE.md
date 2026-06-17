@@ -108,7 +108,7 @@ A few first-session things worth trying:
 
 - **Page Mode** - a clean, document-style presentation of the note surface.
 - **Document Background** - click the *Document Background* button in the toolbar to set a per-page background image (`.png`, `.jpg`, `.jpeg`, `.webp`, up to 6 MB). Tune the **Background Blur** (0-32 px) and **Dim Background** (0-80%) sliders so your text stays readable. The background rides along in your `.sutra` backup, and a *locked* page never shows its background behind the PIN screen.
-- **Handwriting** - insert a handwriting block to sketch a diagram with your mouse, trackpad, touch, or stylus. Strokes are stored as vectors, so they stay crisp. (Full guide: [`docs/HANDWRITING_AND_DRAWING.md`](docs/HANDWRITING_AND_DRAWING.md).)
+- **Handwriting** - insert a handwriting block to sketch a diagram with your mouse, trackpad, touch, or stylus. Strokes are stored as vectors, so they stay crisp. (Full guide: [`docs/features/HANDWRITING_AND_DRAWING.md`](docs/features/HANDWRITING_AND_DRAWING.md).)
 - **Split view** - open a second pane beside your note and use a preset like *Note + Assignment* or *Essay + Research*.
 
 ---
@@ -266,6 +266,6 @@ That's the core of Sutra. Everything else - College, Life, Projects & Work, the 
 
 - The in-app **Help & Docs** page (top of your sidebar) covers the same ground in shorter form, with deep links inside the app.
 - The full feature inventory and architecture are in the [README](README.md).
-- Moving from NoteFlow Atelier? See [Rebrand & Compatibility](docs/REBRAND_AND_COMPATIBILITY.md) - your data loads automatically.
+- Moving from NoteFlow Atelier? See [Rebrand & Compatibility](docs/features/REBRAND_AND_COMPATIBILITY.md) - your data loads automatically.
 
 Welcome to Sutra. One workspace, every thread.

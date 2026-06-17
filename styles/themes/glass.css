@@ -3,7 +3,7 @@
    ------------------------------------------------------------------
    One Apple-flavoured glass theme. The component skin (window chrome,
    segmented tabs, page rows, document editor, float-in animations)
-   lives in styles/macos26-redesign.css §1–§20, re-keyed to this theme.
+   lives in styles/themes/macos26-redesign.css §1–§20, re-keyed to this theme.
    THIS file loads AFTER it and owns: the design tokens, the canvas,
    the layered glass-surface treatment, the dock-like micro-interactions,
    and the user-tunable frost.

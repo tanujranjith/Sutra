@@ -19,12 +19,12 @@ const FILES = [
   'HomePage.html',
   'index.html',
   'src/core/app.js',
-  'src/features/flow-assistant.js',
-  'src/features/flow-intelligence.js',
-  'src/features/homework.js',
-  'src/features/ap-study.js',
-  'src/features/review.js',
-  'src/features/business-workspace.js',
+  'src/features/assistant/flow-assistant.js',
+  'src/features/assistant/flow-intelligence.js',
+  'src/features/study/homework.js',
+  'src/features/study/ap-study.js',
+  'src/features/study/review.js',
+  'src/features/workspace/business-workspace.js',
 ];
 
 // Stale PUBLIC strings that must no longer appear as UI copy.
@@ -82,8 +82,8 @@ mustHave('Sutra.html', '<title>Sutra</title>', 'app title');
 mustHave('Sutra.html', 'aria-label="Sutra Assistant"', 'Sutra Assistant panel');
 mustHave('Sutra.html', 'Powered by Sutra Intelligence', 'intelligence badge');
 mustHave('HomePage.html', 'Sutra', 'landing brand');
-mustHave('src/features/flow-assistant.js', 'window.sutraAssistant', 'sutraAssistant global');
-mustHave('src/features/flow-intelligence.js', 'window.sutraIntelligence', 'sutraIntelligence global');
+mustHave('src/features/assistant/flow-assistant.js', 'window.sutraAssistant', 'sutraAssistant global');
+mustHave('src/features/assistant/flow-intelligence.js', 'window.sutraIntelligence', 'sutraIntelligence global');
 
 // ---- Public metadata, manifest, and exported-format identity (beta) -------
 mustHave('manifest.webmanifest', '"name": "Sutra"', 'web app manifest name is Sutra');
@@ -112,7 +112,7 @@ mustNotHave('HomePage.html', 'fonts.googleapis.com', 'landing page must not requ
 mustNotHave('package.json', 'noteflow-atelier', 'package name must no longer be noteflow-atelier');
 // The production artifact ships no docs/ directory, so user-visible copy must not
 // point at docs/* paths (they 404 in production). Section 17.
-mustNotHave('Sutra.html', 'docs/SUTRA_ASSISTANT.md', 'user-visible reference to docs/ path not shipped in production');
+mustNotHave('Sutra.html', 'docs/features/SUTRA_ASSISTANT.md', 'user-visible reference to docs/ path not shipped in production');
 mustNotHave('Sutra.html', 'noteflow_export_', 'plaintext recovery export must use the labeled sutra_recovery_UNENCRYPTED_ filename');
 mustNotHave('src/core/app.js', 'noteflow_calendar_', 'calendar .ics export must use the sutra_calendar_ filename');
 

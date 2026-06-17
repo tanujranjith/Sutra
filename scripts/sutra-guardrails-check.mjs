@@ -9,7 +9,7 @@
  *      that does not route through SutraSafeStorage and is not allowlisted.
  *   3. A new, unregistered window.* global.
  *   4. A new/moved top-level workspace field missing from
- *      docs/persistence-inventory.json.
+ *      docs/architecture/persistence-inventory.json.
  *
  * Escape hatches (use sparingly, always with a reason):
  *   - Per-line inline marker for a reviewed exception:
@@ -45,30 +45,31 @@ const SCAN_FILES = [
   'src/core/migrations.js',
   'src/core/safe-storage.js',
   'src/config/sutra-runtime-config.js',
+  'src/state/workspace-normalizers.js',
   'src/components/icons/index.js',
   'src/ui/date-enhancer.js',
   'src/ui/time-enhancer.js',
   'src/ui/select-enhancer.js',
-  'src/features/ap-study.js',
-  'src/features/academic-command-center.js',
-  'src/features/assignment-studio.js',
-  'src/features/business-workspace.js',
-  'src/features/command-center.js',
-  'src/features/customization.js',
-  'src/features/daily-lock-in-quote.js',
-  'src/features/flow-assistant.js',
-  'src/features/flow-intelligence.js',
-  'src/features/grade-planner.js',
-  'src/features/handwriting.js',
-  'src/features/homework.js',
-  'src/features/model-capabilities.js',
-  'src/features/notifications.js',
-  'src/features/planning-engine.js',
-  'src/features/plugin-system.js',
-  'src/features/review.js',
-  'src/features/school-schedule.js',
-  'src/features/semester-setup.js',
-  'src/features/startup-intro.js'
+  'src/features/study/ap-study.js',
+  'src/features/academic/academic-command-center.js',
+  'src/features/academic/assignment-studio.js',
+  'src/features/workspace/business-workspace.js',
+  'src/features/academic/command-center.js',
+  'src/features/customization/customization.js',
+  'src/features/workspace/daily-lock-in-quote.js',
+  'src/features/assistant/flow-assistant.js',
+  'src/features/assistant/flow-intelligence.js',
+  'src/features/academic/grade-planner.js',
+  'src/features/workspace/handwriting.js',
+  'src/features/study/homework.js',
+  'src/features/assistant/model-capabilities.js',
+  'src/features/workspace/notifications.js',
+  'src/features/academic/planning-engine.js',
+  'src/features/customization/plugin-system.js',
+  'src/features/study/review.js',
+  'src/features/academic/school-schedule.js',
+  'src/features/academic/semester-setup.js',
+  'src/boot/startup-intro.js'
 ];
 
 // Fields that legitimately appear in persist/export but are not user-data
@@ -185,7 +186,7 @@ if (newGlobals.length) {
 // ---- 4) Persistence-inventory parity ----------------------------------------
 
 const appJs = read('src/core/app.js');
-const inventory = JSON.parse(read('docs/persistence-inventory.json'));
+const inventory = JSON.parse(read('docs/architecture/persistence-inventory.json'));
 const topLevel = new Set(inventory.workspaceTopLevelFields || []);
 const ignore = new Set([...(baseline.inventoryParityIgnore || []), ...INVENTORY_FIELD_IGNORE]);
 
@@ -198,7 +199,7 @@ if (appJs) {
     if (!topLevel.has(field)) {
       failures.push(
         `Top-level workspace field "${field}" is persisted/exported but not listed in\n`
-        + `      docs/persistence-inventory.json (workspaceTopLevelFields). Add it there so\n`
+        + `      docs/architecture/persistence-inventory.json (workspaceTopLevelFields). Add it there so\n`
         + `      round-trip/import/export coverage stays complete.`
       );
     }

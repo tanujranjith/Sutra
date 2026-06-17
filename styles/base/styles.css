@@ -114,11 +114,12 @@
 
         @font-face {
             font-family: "Dune Rise";
+            /* Optional display font. The woff/woff2 files are intentionally not
+               vendored, so resolve only from a locally-installed copy; if the
+               user does not have it, the CSS font stack falls through. */
             src:
                 local("Dune Rise"),
-                local("Dune_Rise"),
-                url("../assets/fonts/DuneRise-Regular.woff2") format("woff2"),
-                url("../assets/fonts/DuneRise-Regular.woff") format("woff");
+                local("Dune_Rise");
             font-weight: 400;
             font-style: normal;
             font-display: swap;

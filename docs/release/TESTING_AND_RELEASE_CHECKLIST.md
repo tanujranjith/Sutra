@@ -23,7 +23,7 @@ browser.
 | `node scripts/version-history-check.mjs` | Notes **Version History** semantics. Extracts the pure version-history helpers and executes them: legacy snapshots normalize without clobbering, rich snapshots capture only the selected editable fields (never secrets), values are deep-cloned, duplicates suppressed / forced snapshots kept, history bounded to the cap, restore recovers state while leaving lock/identity untouched, throttle reads persisted timestamps, and nested history survives JSON round-trip. |
 | `node scripts/sutra-docbg-check.mjs` | **Document Backgrounds.** Executes `normalizeDocumentBackground()` to prove the blur (0-32px) and dim (0-80%) clamps and image validation behave, and statically confirms the render engine, **locked-page gating**, duplicate-copy, and export wiring are present - including that the background rides the existing recursive inline-asset extraction used for `.sutra` / `.atelier` / JSON export. |
 | `node scripts/sutra-rebrand-check.mjs` | **Rebrand guard.** Verifies the NoteFlow Atelier -> Sutra rebrand is consistent across the shipped files (user-facing names, entry points, and renamed assets) while the retained legacy identifiers are left intact. |
-| `node scripts/sutra-responsive-check.mjs` | **Responsive guard.** Statically verifies the responsive structure (breakpoints / mobile affordances) expected across the supported viewport range. See [MOBILE_AND_RESPONSIVE_BEHAVIOR.md](MOBILE_AND_RESPONSIVE_BEHAVIOR.md). |
+| `node scripts/sutra-responsive-check.mjs` | **Responsive guard.** Statically verifies the responsive structure (breakpoints / mobile affordances) expected across the supported viewport range. See [MOBILE_AND_RESPONSIVE_BEHAVIOR.md](../features/MOBILE_AND_RESPONSIVE_BEHAVIOR.md). |
 | `node --check src/core/app.js` (and each `src` JS file) | **Syntax check.** Parses each source file so a syntax error can't ship. Run it on `src/core/app.js` and every file under `src/features/*.js` and `src/ui/*.js`. |
 
 There is also a browser-side QA harness, `scripts/sutra-persistence-qa.js`, for
@@ -174,17 +174,17 @@ Do not ship until every box is checked.
       and cross-format parity.
 - [ ] **Accessibility** (section 5) verified.
 - [ ] **Rebrand** is consistent: user-facing copy says **Sutra**; entry point is
-      `Sutra.html`; renamed assets (`styles/sutra-pro.css`, etc.) are referenced;
+      `Sutra.html`; renamed assets (`styles/themes/sutra-pro.css`, etc.) are referenced;
       retained legacy identifiers (`.atelier` format names, internal DB names,
       `data-atelier-*` / `atelier-*` code identifiers) are intentionally left intact.
 - [ ] **No secrets** in any exported artifact.
 - [ ] **Optional Google Drive sync** is off by default, requests only `https://www.googleapis.com/auth/drive.appdata`, uploads encrypted bytes to `appDataFolder`, stores no token/passphrase/key, handles wrong password and conflict non-destructively, and leaves local saving functional during Drive failure.
 - [ ] **No console errors** on load or while exercising the key surfaces.
-- [ ] Docs reviewed: [CSS_MODS_GUIDE.md](CSS_MODS_GUIDE.md),
-      [MOBILE_AND_RESPONSIVE_BEHAVIOR.md](MOBILE_AND_RESPONSIVE_BEHAVIOR.md),
-      [MODS_AND_CUSTOMIZATION.md](MODS_AND_CUSTOMIZATION.md),
-      [PLUGIN_SDK.md](PLUGIN_SDK.md),
-      [HANDWRITING_AND_DRAWING.md](HANDWRITING_AND_DRAWING.md).
+- [ ] Docs reviewed: [CSS_MODS_GUIDE.md](../features/CSS_MODS_GUIDE.md),
+      [MOBILE_AND_RESPONSIVE_BEHAVIOR.md](../features/MOBILE_AND_RESPONSIVE_BEHAVIOR.md),
+      [MODS_AND_CUSTOMIZATION.md](../features/MODS_AND_CUSTOMIZATION.md),
+      [PLUGIN_SDK.md](../features/PLUGIN_SDK.md),
+      [HANDWRITING_AND_DRAWING.md](../features/HANDWRITING_AND_DRAWING.md).
 
 ---
 

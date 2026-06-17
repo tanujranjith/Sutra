@@ -136,7 +136,7 @@ Try assigning the page an emoji icon (page row icon menu), tagging it (tags inpu
    confirm), **Export as PNG**, or **Delete block**. Drag the bottom handle to resize.
 4. Type above and below the block normally. Drawings autosave as vector strokes and are
    included in JSON and `.sutra` backups. Full guide:
-   [`docs/HANDWRITING_AND_DRAWING.md`](docs/HANDWRITING_AND_DRAWING.md).
+   [`docs/features/HANDWRITING_AND_DRAWING.md`](docs/features/HANDWRITING_AND_DRAWING.md).
 
 ### Temporary pages
 
@@ -652,8 +652,8 @@ For power users only - the calm defaults need none of this. Open
    (`?atelierSafeMode=1`, or hold <kbd>Shift</kbd> while the app loads) to skip all
    mods without losing data, then fix or disable the offending snippet/plugin.
 
-See [`docs/MODS_AND_CUSTOMIZATION.md`](docs/MODS_AND_CUSTOMIZATION.md) and
-[`docs/PLUGIN_SDK.md`](docs/PLUGIN_SDK.md).
+See [`docs/features/MODS_AND_CUSTOMIZATION.md`](docs/features/MODS_AND_CUSTOMIZATION.md) and
+[`docs/features/PLUGIN_SDK.md`](docs/features/PLUGIN_SDK.md).
 
 ---
 

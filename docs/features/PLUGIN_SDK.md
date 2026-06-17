@@ -74,7 +74,7 @@ A command/quick action's `action` string maps to a safe built-in:
 - `template:<templateId>` — new note from a template.
 - `addTask` — open the task modal.
 
-The bundled example, [`examples/plugins/study-helper.atelier-plugin`](../examples/plugins/study-helper.atelier-plugin),
+The bundled example, [`examples/plugins/study-helper.atelier-plugin`](../../examples/plugins/study-helper.atelier-plugin),
 uses only declarative contributions and these verbs.
 
 ## Permission model

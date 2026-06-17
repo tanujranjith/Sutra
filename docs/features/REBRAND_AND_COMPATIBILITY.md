@@ -130,4 +130,4 @@ If anything looks off after upgrading:
 - **Your data didn't appear** - confirm you opened Sutra in the **same browser and profile** where you used NoteFlow Atelier (browser storage is per-browser, per-profile, per-origin). If you switched browsers or machines, import your most recent `.sutra` or `.atelier` backup.
 - **The assistant lost its key** - that's expected. API keys live in sessionStorage only and are never exported; re-enter your key from `Settings -> Assistant`.
 
-For the full backup/format reference, see the [README](../README.md) and [CHANGELOG](CHANGELOG.md).
+For the full backup/format reference, see the [README](../../README.md) and [CHANGELOG](../release/CHANGELOG.md).

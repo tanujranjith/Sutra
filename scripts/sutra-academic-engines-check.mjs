@@ -21,7 +21,7 @@ const near = (a, b, eps = 0.05) => Math.abs(a - b) <= eps;
 
 // ---------------------------------------------------------------------------
 console.log('School Schedule — rotation engine');
-const SS = require('../src/features/school-schedule.js');
+const SS = require('../src/features/academic/school-schedule.js');
 
 const baseSchedule = {
   enabled: true,
@@ -81,7 +81,7 @@ ok(SS.resolveDayInfo(ws, '2026-01-05').labelKey === 'mon', 'weekly rotation keys
 
 // ---------------------------------------------------------------------------
 console.log('\nGrade Planner — deterministic grade math');
-const GP = require('../src/features/grade-planner.js');
+const GP = require('../src/features/academic/grade-planner.js');
 
 const course = GP.normalizeCourseGrades({
   categories: [
@@ -159,7 +159,7 @@ ok(riskMissingDrag.missingCount === 2 && riskMissingDrag.status !== 'safe', 'mis
 
 // ---------------------------------------------------------------------------
 console.log('\nSemester Setup — local extraction');
-const SEM = require('../src/features/semester-setup.js');
+const SEM = require('../src/features/academic/semester-setup.js');
 
 const sample = [
   'AP Biology — Mr. Smith (Room 204)',
@@ -193,7 +193,7 @@ ok(wsState.drafts.length === 1 && wsState.drafts[0].items.length === parsed.item
 
 // ---------------------------------------------------------------------------
 console.log('\nAssignment Studio — progress + normalization');
-const AS = require('../src/features/assignment-studio.js');
+const AS = require('../src/features/academic/assignment-studio.js');
 const studio = AS.normalizeStudio({
   milestones: [{ title: 'Draft', done: true }, { title: 'Final', done: false }],
   subtasks: [{ title: 'Sources', done: false }, { title: 'Outline', done: true }],
@@ -234,7 +234,7 @@ ok(AS.scheduleMilestonesBackward(essayGen, '').milestones.length === 6 && !AS.sc
 
 // ---------------------------------------------------------------------------
 console.log('\nPlanning Engine — deterministic plan + repair');
-const PE = require('../src/features/planning-engine.js');
+const PE = require('../src/features/academic/planning-engine.js');
 // Two items, one overdue & high-priority, into a day with a class 9:00-10:00.
 const plan = PE.planWork({
   today: '2026-06-16',
@@ -291,7 +291,7 @@ ok(repair.issues[0].severity === 'high', 'repair sorts high-severity issues firs
 
 // ---------------------------------------------------------------------------
 console.log('\nImport Wizard — multi-format parser + normalization');
-const FI = require('../src/features/flow-intelligence.js');
+const FI = require('../src/features/assistant/flow-intelligence.js');
 const mdRows = FI.parseAssignmentText('| Title | Course | Due |\n|---|---|---|\n| Essay on WWII | History | 2026-06-20 |\n| Lab report | Chemistry | 2026-06-22 |');
 ok(mdRows.length === 2 && mdRows[0].title === 'Essay on WWII' && mdRows[0].course === 'History' && mdRows[0].dueDate === '2026-06-20', 'markdown table parses title/course/due', mdRows);
 const csvRows = FI.parseAssignmentText('Assignment,Class,Due Date,Priority\nRead ch 5,Bio,2026-06-18,high\nProblem set,Math,2026-06-19,medium');
@@ -365,7 +365,7 @@ ok(clampB.blocks[0].endMin <= 1439 && PE.hhmmToMinutes(clampB.blocks[0].end) ===
 
 // ---------------------------------------------------------------------------
 console.log('\nAcademic Command Center - deterministic action ranking');
-const ACC = require('../src/features/academic-command-center.js');
+const ACC = require('../src/features/academic/academic-command-center.js');
 const commandModel = ACC.buildModel({
   now: new Date(2026, 5, 14, 12, 0, 0),
   courses: [{ id: 'chem', name: 'Chemistry', currentGrade: '68%', targetGrade: '85%', schedule: [{ day: 'Mon', startTime: '09:00' }] }],
