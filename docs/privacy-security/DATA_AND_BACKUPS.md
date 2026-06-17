@@ -3,7 +3,7 @@
 _How Sutra stores your workspace locally, and how the `.sutra` backup format
 exports and restores it. For a verified, implementation-level audit of the
 persistence and round-trip behavior, see the companion
-[`sutra-save-systems-audit.md`](./sutra-save-systems-audit.md)._
+[`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md)._
 
 ---
 
@@ -249,7 +249,7 @@ Drive backup, or cancel. Sutra does not perform blind last-write-wins merging.
 
 Direct `file://` launch remains fully local but may not support Google OAuth.
 Use the hosted HTTPS app or localhost for Drive sync. Deployment setup is
-documented in [`GOOGLE_DRIVE_SYNC_SETUP.md`](./GOOGLE_DRIVE_SYNC_SETUP.md).
+documented in [`GOOGLE_DRIVE_SYNC_SETUP.md`](../features/GOOGLE_DRIVE_SYNC_SETUP.md).
 
 ---
 
@@ -296,7 +296,7 @@ one-way door that discards your prior state with no recourse.
 
 Sutra's persistence and `.sutra`/`.atelier` portability are designed and verified
 to round-trip a rich workspace. As documented in the
-[save-systems audit](./sutra-save-systems-audit.md), a full destructive cycle —
+[save-systems audit](../architecture/sutra-save-systems-audit.md), a full destructive cycle —
 **edit → refresh → reopen → clear in-memory state → export → wipe all storage →
 import → refresh** — restores notes, inline images, tasks and their note links,
 course files **and their binaries**, homework, and the rest of the workspace,
@@ -334,4 +334,4 @@ round-trip in a browser.
 | API keys, chat history | sessionStorage | Secrets + conversation | Never persisted, never exported |
 
 For the authoritative, line-referenced behavior and the verification scripts,
-read [`sutra-save-systems-audit.md`](./sutra-save-systems-audit.md).
+read [`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md).

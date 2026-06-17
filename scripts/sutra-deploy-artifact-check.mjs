@@ -43,7 +43,7 @@ const REQUIRED = [
   'manifest.webmanifest',
   'LICENSE',
   'src/core/app.js',
-  'styles/styles.css',
+  'styles/base/styles.css',
   'assets/brand/sutra/generated/favicon.ico',
   'assets/brand/sutra/generated/social-preview.png',
   'assets/vendor/jszip/jszip.min.js'

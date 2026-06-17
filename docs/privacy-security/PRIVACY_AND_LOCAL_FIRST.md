@@ -92,7 +92,7 @@ The local signal layer - **Sutra Intelligence** - that reads your workspace to
 understand overdue work, workload, conflicts, weak areas, review backlog, and
 next steps **runs entirely on your device and calls no server.** Only the
 content you actually send in a message (bounded by your **Workspace Access**
-setting) reaches the provider. See [`SUTRA_ASSISTANT.md`](./SUTRA_ASSISTANT.md)
+setting) reaches the provider. See [`SUTRA_ASSISTANT.md`](../features/SUTRA_ASSISTANT.md)
 for details and the always-visible privacy badge.
 
 If you want even the AI side to stay on your own machine or network, point Sutra
@@ -108,7 +108,7 @@ A note's **Document Background** is stored as image data on the page itself
 (an inline data URL), alongside your other content on your device. It is never
 uploaded by Sutra and only leaves your device if **you** export a backup or a
 note that includes it. A **locked page never reveals its background behind the
-PIN screen.** See [`DOCUMENT_BACKGROUNDS.md`](./DOCUMENT_BACKGROUNDS.md).
+PIN screen.** See [`DOCUMENT_BACKGROUNDS.md`](../features/DOCUMENT_BACKGROUNDS.md).
 
 ---
 

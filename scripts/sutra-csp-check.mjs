@@ -56,9 +56,9 @@ for (const file of ['Sutra.html', 'HomePage.html', 'index.html']) {
   }
 }
 
-const docs = readFileSync('docs/TESTING_AND_RELEASE_CHECKLIST.md', 'utf8');
+const docs = readFileSync('docs/release/TESTING_AND_RELEASE_CHECKLIST.md', 'utf8');
 if (!docs.includes('frame-ancestors') || !docs.includes('hosting header')) {
-  console.error('FAIL docs/TESTING_AND_RELEASE_CHECKLIST.md: hosting-header CSP follow-up is not documented');
+  console.error('FAIL docs/release/TESTING_AND_RELEASE_CHECKLIST.md: hosting-header CSP follow-up is not documented');
   failures += 1;
 }
 

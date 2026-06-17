@@ -1,5 +1,5 @@
 /* ================================================================
-   Sutra — Startup Intro  (src/features/startup-intro.js)
+   Sutra — Startup Intro  (src/boot/startup-intro.js)
 
    Shows a brief branded overlay once per browser session.
    Dismissed by: clicking, tapping, Escape, or Enter.

@@ -8,7 +8,7 @@ One coherent semester-planning layer across five fronts. All new state lives in
 `appData` (`schoolSchedule`, `gradePlanner`, `semesterSetup`) or existing stores
 (homework `task.studio`, `sutraNotifications:v1`), so everything rides the
 encrypted `.sutra` backup, JSON export, Drive sync, wipe→restore, and legacy
-import paths unchanged. See [`ACADEMIC_PLANNING.md`](./ACADEMIC_PLANNING.md).
+import paths unchanged. See [`ACADEMIC_PLANNING.md`](../features/ACADEMIC_PLANNING.md).
 
 - **Semester Setup & Syllabus Importer** (`src/features/semester-setup.js`) —
   a wizard (Course Hub header, empty state, and Homework first-run) that parses
@@ -164,7 +164,7 @@ Approved raster logos for Sutra and Sutra Assistant integrated across the full p
 
 ## 2026-06 - Rebrand to Sutra + document backgrounds
 
-The app formerly released as **NoteFlow Atelier** is now **Sutra** - a private, local-first workspace for students. This release is a full rebrand plus a new per-document background feature, refreshed AI naming, and a redesigned landing page. **Existing data loads automatically and old backups still import.** See [Rebrand & Compatibility](REBRAND_AND_COMPATIBILITY.md) for the full migration detail.
+The app formerly released as **NoteFlow Atelier** is now **Sutra** - a private, local-first workspace for students. This release is a full rebrand plus a new per-document background feature, refreshed AI naming, and a redesigned landing page. **Existing data loads automatically and old backups still import.** See [Rebrand & Compatibility](../features/REBRAND_AND_COMPATIBILITY.md) for the full migration detail.
 
 ### Rebrand
 
@@ -245,4 +245,4 @@ Workspace Access levels are **Current Screen Only / Current Area / Full Workspac
 
 - New Node guards: `scripts/sutra-docbg-check.mjs` (document-background data model + export), `scripts/sutra-rebrand-check.mjs` (rebrand naming/format guard), and `scripts/sutra-responsive-check.mjs` (responsive guard), alongside the existing `scripts/smoke-check.mjs`, `scripts/round-trip-check.mjs`, and `scripts/version-history-check.mjs`. A `node --check` syntax pass runs over each `src` JS file. Browser QA harness renamed to `scripts/sutra-persistence-qa.js`.
 
-> **Upgrade note:** the rebrand is non-destructive and your data loads automatically, but export a backup before upgrading anyway. See [Rebrand & Compatibility -> Before you upgrade](REBRAND_AND_COMPATIBILITY.md#before-you-upgrade).
+> **Upgrade note:** the rebrand is non-destructive and your data loads automatically, but export a backup before upgrading anyway. See [Rebrand & Compatibility -> Before you upgrade](../features/REBRAND_AND_COMPATIBILITY.md#before-you-upgrade).

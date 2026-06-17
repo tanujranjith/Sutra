@@ -97,28 +97,28 @@ Self-contained feature areas live in **`src/features/*.js`**:
   rubric, linked work) layered onto a Homework task.
 - `semester-setup.js` — the **Semester Setup** syllabus/calendar importer.
 
-See [`SUTRA_ASSISTANT.md`](./SUTRA_ASSISTANT.md) for the Assistant + Intelligence
-split, and [`ACADEMIC_PLANNING.md`](./ACADEMIC_PLANNING.md) for the academic
+See [`SUTRA_ASSISTANT.md`](../features/SUTRA_ASSISTANT.md) for the Assistant + Intelligence
+split, and [`ACADEMIC_PLANNING.md`](../features/ACADEMIC_PLANNING.md) for the academic
 planning layer (the last four modules above + reminders).
 
 ---
 
 ## 4. UI enhancers and styles
 
-Large feature styles are being moved out of the app shell. Focus-session styles
-now live in `styles/focus-session.css`, and the academic command center uses
-`styles/academic-command-center.css`. `npm run check:shell` blocks new large
-inline `<style>` blocks and ratchets the remaining explicitly marked legacy
-blocks.
+`npm run check:shell` blocks new large inline `<style>` blocks in `Sutra.html`
+and ratchets the rest down. The ~2,900 lines of legacy inline CSS have been
+**externalized** into `styles/legacy/` (loaded by `<link>`s at the same cascade
+position, so the result is identical) — see `styles/README.md`.
 
 - **`src/ui/*.js`** — UI helper / enhancer modules layered on top of the core.
-- **`styles/`** — the stylesheets:
-  - `styles.css` — base styles.
-  - `sutra-pro.css` — the "pro" layer (renamed from `atelier-pro.css`).
-  - `mobile.css` — responsive / mobile.
-  - `customization.css` — customization surfaces.
-  - `microinteractions.css`, `macos26-redesign.css`, `settings-redesign.css` —
-    interaction and visual-redesign layers.
+- **`styles/`** — organized by cascade layer (folder ≠ cascade; **order in
+  `Sutra.html` is the cascade**):
+  - `base/` — `styles.css` (core tokens/components/layout), `microinteractions.css`.
+  - `themes/` — `sutra-pro.css` (renamed from `atelier-pro.css`), `glass.css`, `macos26-redesign.css`.
+  - `views/` — `focus-session.css`, `settings-redesign.css`.
+  - `features/` — `sutra-intelligence.css`, `customization.css`, `command-center.css`, `academic-command-center.css`, `academic-planning.css`, `notifications.css`, `startup-intro.css`.
+  - `responsive/` — `mobile.css` (loads late on purpose).
+  - `legacy/` — large blocks extracted 1:1 from inline `<style>`; split down over time.
 
 ---
 
@@ -157,7 +157,7 @@ import, and round-trip verification).
 
 ## 7. How persistence, export, and import wrap together
 
-At a glance (full detail in [`DATA_AND_BACKUPS.md`](./DATA_AND_BACKUPS.md)):
+At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND_BACKUPS.md)):
 
 - **One workspace object** (`appData`) is the in-memory truth; it persists to
   **IndexedDB** (`noteflow_atelier_db`). Course-file binaries persist separately
@@ -193,7 +193,7 @@ Storage names like `noteflow_atelier_db` are **legacy-named compatibility
 identifiers**, kept so existing installs keep working.
 
 For the broader privacy stance, see
-[`PRIVACY_AND_LOCAL_FIRST.md`](./PRIVACY_AND_LOCAL_FIRST.md).
+[`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-security/PRIVACY_AND_LOCAL_FIRST.md).
 
 ---
 
@@ -266,8 +266,135 @@ Browser QA harness: `scripts/sutra-persistence-qa.js` — paste into the console
 
 | Topic | Doc |
 |---|---|
-| Assistant + local Intelligence | [`SUTRA_ASSISTANT.md`](./SUTRA_ASSISTANT.md) |
-| Document Backgrounds | [`DOCUMENT_BACKGROUNDS.md`](./DOCUMENT_BACKGROUNDS.md) |
-| Privacy / local-first | [`PRIVACY_AND_LOCAL_FIRST.md`](./PRIVACY_AND_LOCAL_FIRST.md) |
-| Data + backups | [`DATA_AND_BACKUPS.md`](./DATA_AND_BACKUPS.md) |
+| Assistant + local Intelligence | [`SUTRA_ASSISTANT.md`](../features/SUTRA_ASSISTANT.md) |
+| Document Backgrounds | [`DOCUMENT_BACKGROUNDS.md`](../features/DOCUMENT_BACKGROUNDS.md) |
+| Privacy / local-first | [`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-security/PRIVACY_AND_LOCAL_FIRST.md) |
+| Data + backups | [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND_BACKUPS.md) |
 | Verified persistence audit | [`sutra-save-systems-audit.md`](./sutra-save-systems-audit.md) |
+
+---
+
+## 11. Repository map (2026-06 restructure)
+
+The repo was reorganized by **responsibility**, preserving the static / no-build /
+local-first design. Per-folder READMEs explain what belongs where.
+
+```
+Sutra/
+├─ index.html · HomePage.html · Sutra.html · 404.html   # entry points
+├─ manifest.webmanifest · sw.js                          # PWA shell + service worker
+├─ README.md · SUTRA_GUIDE.md · TUTORIAL.md · LICENSE · NOTICE · TRADEMARK.md
+├─ src/
+│  ├─ boot/        startup-intro.js, sw-register.js       # startup orchestration
+│  ├─ core/        app.js (the runtime) + safety layer    # safe-storage, error-reporter,
+│  │                                                       #   dom-safety, feature-guard, migrations
+│  ├─ state/       workspace-normalizers.js               # pure state normalizers (extracted from app.js)
+│  ├─ config/      sutra-runtime-config.js
+│  ├─ features/    assistant/ academic/ study/            # feature modules, grouped by domain
+│  │               customization/ workspace/              #   (see src/features/README.md)
+│  ├─ ui/          date/time/select enhancers
+│  ├─ components/  icons/
+│  └─ data/        daily-lock-in-quotes, emoji-keywords.generated
+├─ styles/         base/ themes/ views/ features/         # by cascade layer (see styles/README.md)
+│                  responsive/ legacy/
+├─ scripts/        Node checks/build/probes + lib/        # flat; see scripts/README.md
+├─ tests/          e2e/ bench/ fixtures/                  # Playwright (see tests/README.md)
+├─ docs/           architecture/ features/                # by topic (see docs/README.md)
+│                  privacy-security/ release/ archive/
+└─ assets/         brand/ vendor/ ss/
+```
+
+## 12. Sutra.html load order (load-bearing)
+
+`Sutra.html` loads scripts and styles in a deliberate, **scattered** order. The
+cascade and the global-scope execution order both depend on it. Do not reorder.
+
+1. **`<head>`** — `assets/vendor/jszip` → core **safety layer** (`safe-storage` →
+   `error-reporter` → `dom-safety` → `feature-guard` → `migrations`) →
+   **`src/state/workspace-normalizers.js`** → `components/icons/*` →
+   stylesheets `styles/features/startup-intro.css`, `styles/base/styles.css`,
+   `styles/themes/sutra-pro.css`, `styles/features/sutra-intelligence.css` →
+   `boot/startup-intro.js`, `ui/*` enhancers, `data/emoji-keywords`.
+2. **mid-`<body>`** — a few `<link>`s and `study/homework.js` load inline where
+   their markup lives. Several `styles/legacy/*.css` `<link>`s sit at the exact
+   positions their inline `<style>` blocks used to.
+3. **end-of-`<body>`** — the **feature bulk** (`features/**`,
+   `config/sutra-runtime-config.js`) → **`src/core/app.js`** → `boot/sw-register.js`
+   → remaining features → then the **late stylesheets**
+   (`themes/macos26-redesign`, `themes/glass`, `base/microinteractions`,
+   `responsive/mobile`, `views/settings-redesign`, `features/*`). `responsive/mobile.css`
+   loads near the end on purpose.
+
+Rule: a script whose **top-level code** reads a global must load *after* the
+script that defines it. Function bodies run later, so call-time references across
+scripts are always fine. Every `<script>`/`<link>` carries a `?v=` cache-busting
+query the service worker relies on — keep it when you move a file.
+
+## 13. Path-coupling map — what to update when you move a file
+
+This repo's release gate hardcodes many paths. Moving a file means updating its
+coupled references. `npm run check:links` + `npm run check:all` catch most
+breakage; the items marked **(silent)** are prose/strings no check guards.
+
+| Move a… | Also update |
+|---|---|
+| `src/**` runtime JS | `Sutra.html` `<script src>` (+ `?v=`) [link-check]; `SCAN_FILES` in `scripts/sutra-guardrails-check.mjs` then `npm run check:guardrails:update`; `scripts/smoke-check.mjs` content asserts; `scripts/sutra-academic-engines-check.mjs` `require()` paths (academic); `scripts/sutra-{modal-a11y,network,compat,persistence-health}-check.mjs` reads; doc prose **(silent)** |
+| `styles/**.css` | `Sutra.html` `<link href>` (+ `?v=`, **same position**) [link-check]; `scripts/{smoke,responsive,modal-a11y,app-shell}-check.mjs` + `sutra-deploy-artifact-check.mjs` path strings; doc prose **(silent)** |
+| `docs/**` | inter-doc relative links [link-check]; root `README/TUTORIAL/SUTRA_GUIDE` links [link-check]; check scripts that `read('docs/…')` (`smoke`, `csp`, `network`, `guardrails`, `round-trip`); leave `archive/` historical paths **(silent, intentional)** |
+| `scripts/**` | `package.json` (`check:*` + `check:all`) [link-check]; `__dirname`-derived repo root in the script; cross-imports; `playwright*.config.mjs`; ~50 doc run-instructions **(silent)** — this is why scripts stay flat (see §15) |
+| `assets/**` | `Sutra.html`/`HomePage.html`/`404.html`/`index.html` refs + `manifest.webmanifest` + CSS `url()` [all link-check]; `scripts/sutra-brand-assets-check.mjs` |
+| top-level workspace field in `app.js` | `docs/architecture/persistence-inventory.json` (guardrail parity check) |
+
+Tooling: **`npm run check:links`** validates HTML attrs, CSS `url()`, manifest,
+service-worker assets, markdown links, and `package.json` script paths across the
+whole repo. Add it to any move's verification loop.
+
+## 14. Where do I edit X?
+
+| Task | Location |
+|---|---|
+| Boot sequence / SW registration | `src/boot/` |
+| Workspace schema, defaults, enabled-view + shortcut normalizers | `src/state/` then `src/core/app.js` |
+| App state, persistence, export/import, notes, timeline, most views, Drive sync | `src/core/app.js` |
+| Safe storage / error funnel / DOM sanitize / feature isolation / migrations | `src/core/` safety layer |
+| Assistant actions / local Intelligence | `src/features/assistant/` |
+| Academic engines (schedule, grades, studio, semester, planner) | `src/features/academic/` |
+| AP study / review / homework | `src/features/study/` |
+| Themes, CSS overrides, plugins | `src/features/customization/` + `styles/themes/`, `styles/features/customization.css` |
+| Notifications / Projects & Work / handwriting / daily quote | `src/features/workspace/` |
+| Styling | `styles/<layer>/` (preserve `<link>` order) |
+| A check / guardrail | `scripts/` (+ `package.json`) — see `scripts/README.md` |
+| Tests | `tests/e2e/` |
+| Docs | `docs/<topic>/` |
+
+## 15. Staged extraction plan (remaining decomposition)
+
+The restructure deliberately **stopped at green checkpoints**. Remaining work,
+in safe increments:
+
+1. **`app.js` decomposition (begun).** `src/state/workspace-normalizers.js` is the
+   first extraction. Next safe candidates are other *pure, non–check-asserted*
+   top-level normalizers. ⚠️ **Landmine:** some top-level functions call helpers
+   that are **nested inside app.js closures** (e.g. `generateId`,
+   `normalizeExternalUrl` are not global). Before extracting a function, confirm
+   every symbol it references is either global or moved with it, and that no check
+   parses it by name from `app.js`. Target future homes: `src/state/` (normalizers,
+   selectors, defaults), `src/persistence/` (serialize/deserialize, export/import,
+   storage health), `src/views/` (per-view render once view code is teased out).
+2. **`styles/legacy/*` split.** Migrate rules from each `legacy/*.css` into
+   `base/themes/views/features/`, shrinking the legacy files toward zero. Update
+   the selector assertions in `smoke`/`responsive`/`modal-a11y` checks as rules move.
+3. **`scripts/` physical subfoldering (deferred, by judgment).** Grouping into
+   `checks/ build/ probes/ lib/` is desirable but currently poor risk/reward:
+   ~50 doc run-instructions reference `node scripts/<name>` (live **and**
+   historical), no check guards prose paths, and ~14 scripts derive the repo root
+   from `__dirname`. To do it safely: (a) standardize repo-root derivation to
+   `process.cwd()`; (b) move with `git mv`; (c) update `package.json` +
+   cross-imports + `playwright*.config.mjs`; (d) update **live** doc
+   run-instructions only, leaving `archive/` + `CHANGELOG` historical; (e) extend
+   `check-links` to optionally flag inline `scripts/<name>` mentions in live docs;
+   (f) `npm run check:all` + `check:links` to verify. Until then `scripts/README.md`
+   provides the categorization.
+4. **Deeper per-feature folders.** The current grouping
+   (`assistant/academic/study/customization/workspace`) can be split further if a
+   group grows; each move follows the `src/**` row of the §13 coupling map.

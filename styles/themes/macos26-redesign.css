@@ -4,7 +4,7 @@
    Glass"; the even-older macOS 26 preset was merged into it). Both the
    new `[data-theme="glass"]` key and the legacy `[data-theme="liquidglass"]`
    value are matched here. Tokens, canvas, and the tunable frost live in
-   styles/glass.css, which loads AFTER this file and overrides the token
+   styles/themes/glass.css, which loads AFTER this file and overrides the token
    block below.
    §21+: token/wallpaper blocks for windows11, chromeos, ubuntu,
    github, spotify, netflix, and slack.
@@ -128,7 +128,7 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .app-title {
 
 /* ─── §3  BODY SHELL ──────────────────────────────────────────────── */
 /* Canvas (aqueous gradient + drifting light sheens on ::before/::after)
-   is owned by styles/glass.css. */
+   is owned by styles/themes/glass.css. */
 body:is([data-theme="glass"], [data-theme="liquidglass"]) {
     position: relative;
     overflow-x: hidden;

@@ -6,9 +6,9 @@ const files = [
   'HomePage.html',
   'index.html',
   'src/core/app.js',
-  'src/features/plugin-system.js',
-  'docs/PRIVACY_AND_LOCAL_FIRST.md',
-  'docs/TESTING_AND_RELEASE_CHECKLIST.md',
+  'src/features/customization/plugin-system.js',
+  'docs/privacy-security/PRIVACY_AND_LOCAL_FIRST.md',
+  'docs/release/TESTING_AND_RELEASE_CHECKLIST.md',
   'NOTICE'
 ];
 

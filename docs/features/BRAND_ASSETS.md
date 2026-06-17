@@ -188,7 +188,7 @@ The startup loader in `Sutra.html` uses `sutra-icon-256.png`:
 </div>
 ```
 
-The loader respects `prefers-reduced-motion` via `styles/startup-intro.css`.
+The loader respects `prefers-reduced-motion` via `styles/features/startup-intro.css`.
 
 ---
 
@@ -268,7 +268,7 @@ Never scale below the source resolution. The 44 px assistant icon is the minimum
 
 ## Reduced-motion rules
 
-The startup loader CSS (`styles/startup-intro.css`) must include:
+The startup loader CSS (`styles/features/startup-intro.css`) must include:
 
 ```css
 @media (prefers-reduced-motion: reduce) {

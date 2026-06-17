@@ -28,8 +28,8 @@ has('Sutra.html', 'width=device-width', 'app shell viewport scales to device wid
 has('HomePage.html', 'width=device-width', 'landing viewport scales to device width');
 
 console.log('\nMobile stylesheet');
-has('Sutra.html', 'styles/mobile.css', 'mobile stylesheet linked in the app shell');
-const mq = count('styles/mobile.css', /@media[^{]*max-width/gi);
+has('Sutra.html', 'styles/responsive/mobile.css', 'mobile stylesheet linked in the app shell');
+const mq = count('styles/responsive/mobile.css', /@media[^{]*max-width/gi);
 if (mq >= 10) console.log(`  ok: mobile.css has ${mq} max-width media queries`);
 else { failures++; console.error(`  FAIL: mobile.css has too few media queries (${mq})`); }
 
@@ -50,7 +50,7 @@ has('Sutra.html', 'max-height:90vh;overflow-y:auto', 'document-background modal 
 has('HomePage.html', '.problem-cluster::before', 'scrollytelling has a mobile vertical-thread fallback');
 has('HomePage.html', /@media \(max-width: 760px\)[\s\S]*sutra-thread-svg \{ display: none/, 'desktop SVG thread is hidden on phones', true);
 // Assistant panel responsiveness (existing).
-has('styles/mobile.css', 'chatbot-panel', 'Sutra Assistant panel has mobile styles');
+has('styles/responsive/mobile.css', 'chatbot-panel', 'Sutra Assistant panel has mobile styles');
 
 console.log('\nTouch-target + overflow hygiene (new controls)');
 has('Sutra.html', 'min-height:44px', 'document-background buttons meet the 44px touch target', false);
@@ -58,11 +58,11 @@ has('Sutra.html', 'flex-wrap:wrap', 'document-background action rows wrap rather
 
 console.log('\nMobile polish pass (2026-06-11) — phone chrome + editor contract');
 // Storage bar must stay a single compact row on phones (status + 3 buttons).
-has('styles/mobile.css', 'grid-template-columns: auto 1.4fr 1fr 1fr', 'storage bar is a single compact row on phones');
+has('styles/responsive/mobile.css', 'grid-template-columns: auto 1.4fr 1fr 1fr', 'storage bar is a single compact row on phones');
 // Assistant quick-action chips scroll horizontally instead of stacking 2-3 rows.
-has('styles/mobile.css', /\.view-flow-row\s*\{[^}]*flex-wrap:\s*nowrap/, 'assistant chips are a single scrollable row on phones', true);
+has('styles/responsive/mobile.css', /\.view-flow-row\s*\{[^}]*flex-wrap:\s*nowrap/, 'assistant chips are a single scrollable row on phones', true);
 // Notes: the chips row clears the fixed toolbar (prevents the chip/toolbar collision).
-has('styles/mobile.css', /#view-notes \.view-flow-row\s*\{[^}]*margin-top/, 'Notes chips row clears the fixed toolbar', true);
+has('styles/responsive/mobile.css', /#view-notes \.view-flow-row\s*\{[^}]*margin-top/, 'Notes chips row clears the fixed toolbar', true);
 // Editor padding is measured against the container, not the view (no double gap).
 has('src/core/app.js', 'const containerRect = editorContainer.getBoundingClientRect();', 'Notes editor padding measures the container top (no double-reserved gap)');
 // FAB stack floor matches the slim storage bar.
@@ -71,11 +71,11 @@ has('src/core/app.js', 'shortLandscapeViewport', 'FABs lay out side-by-side on s
 // Mobile nav: the More toggle must not echo the visible active tab.
 has('src/core/app.js', /const activeSecondary = \(tabsRow \? Array\.from\(tabsRow\.children\) : \[\]\)/, 'More-menu label derives from strip tabs only (no Today/Today echo)', true);
 // Assistant input: 3-column grid so the textarea is not squeezed to 86px.
-has('Sutra.html', /\.chatbot-input\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/, 'assistant input grid fits attach + textarea + send', true);
+has('styles/legacy/workspace-overrides.css', /\.chatbot-input\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/, 'assistant input grid fits attach + textarea + send', true);
 // Touch-target floors apply on any coarse-pointer device (incl. landscape phones).
-has('styles/mobile.css', /@media \(max-width: 768px\), \(hover: none\) and \(pointer: coarse\)/, 'touch-target floors keyed to coarse pointers, not just width', true);
+has('styles/responsive/mobile.css', /@media \(max-width: 768px\), \(hover: none\) and \(pointer: coarse\)/, 'touch-target floors keyed to coarse pointers, not just width', true);
 // Template-category pills scroll in one row inside the New Page sheet.
-has('styles/mobile.css', '.template-picker-category-tabs', 'New Page template pills have mobile rules');
+has('styles/responsive/mobile.css', '.template-picker-category-tabs', 'New Page template pills have mobile rules');
 
 if (failures) { console.error(`\nResponsive guard FAILED: ${failures} issue${failures === 1 ? '' : 's'}.`); process.exit(1); }
 console.log('\nResponsive guard passed — required mobile hooks present.');

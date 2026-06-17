@@ -1,6 +1,8 @@
 const COMPACT_LAYOUT_MAX_WIDTH = 1024;
 
-const OPTIONAL_FEATURE_VIEWS = ['today', 'timeline', 'notes', 'college', 'homework', 'courses', 'alldue', 'apstudy', 'collegeapp', 'life', 'business', 'review', 'cramhub'];
+// OPTIONAL_FEATURE_VIEWS, STUDENT_DEFAULT_ENABLED_VIEWS, getDefaultEnabledViews,
+// and normalizeEnabledViews now live in src/state/workspace-normalizers.js
+// (loaded before app.js). They remain global, so call sites here are unchanged.
 const FEATURE_VIEW_FALLBACK_ORDER = ['today', 'timeline', 'notes', 'courses', 'alldue', 'apstudy', 'review', 'cramhub', 'collegeapp', 'life', 'business', 'college', 'homework', 'settings'];
 const SECONDARY_NAV_VIEWS = new Set(['collegeapp', 'life', 'settings']);
 const PLANNER_DAY_START_MINUTES = 6 * 60;
@@ -8,32 +10,6 @@ const PLANNER_DAY_END_MINUTES = 22 * 60;
 const PLANNER_DEFAULT_LOOKAHEAD_DAYS = 3;
 const MAX_TRACKED_PAGE_SCROLL_POSITIONS = 300;
 const UI_SCROLL_SESSION_STORAGE_KEY = 'noteflow_ui_scroll_state_v1';
-
-// Public-beta default: a focused, student-first navigation. Core academic views
-// are on; broader optional modules (College planning, Life, Business, Course Hub)
-// are off by default and can be enabled from Settings → Feature tabs (Labs).
-// Existing users keep their saved selections — normalizeEnabledViews only
-// overrides keys actually present in stored preferences. Review/Cram Hub stay
-// "enabled" so their consolidated Testing Hub redirects work even though they
-// render no standalone tab.
-const STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'timeline', 'notes', 'homework', 'apstudy', 'review', 'cramhub']);
-function getDefaultEnabledViews() {
-    return OPTIONAL_FEATURE_VIEWS.reduce((acc, view) => {
-        acc[view] = STUDENT_DEFAULT_ENABLED_VIEWS.has(view);
-        return acc;
-    }, {});
-}
-
-function normalizeEnabledViews(raw) {
-    const normalized = getDefaultEnabledViews();
-    if (!raw || typeof raw !== 'object') return normalized;
-    OPTIONAL_FEATURE_VIEWS.forEach(view => {
-        if (Object.prototype.hasOwnProperty.call(raw, view)) {
-            normalized[view] = raw[view] !== false;
-        }
-    });
-    return normalized;
-}
 
 const SHORTCUT_PLACEMENTS = new Set(['tabs', 'sidebar']);
 const SHORTCUT_TARGET_TYPES = new Set(['url', 'page']);
@@ -540,7 +516,7 @@ const NOTE_BLOCK_TYPES = Object.freeze({
     // Handwriting / drawing block. Stores structured vector strokes (the source
     // of truth) — never a raster snapshot — so drawings scale with note width and
     // round-trip cleanly through save / .atelier export / import. See
-    // src/features/handwriting.js for the engine and normalizeDrawingBlock below.
+    // src/features/workspace/handwriting.js for the engine and normalizeDrawingBlock below.
     DRAWING: 'drawing'
 });
 
@@ -7155,7 +7131,7 @@ function populateProgressDashboard() {
         // section further down for the data model and service helpers.
         let courseWorkspace = getDefaultCourseWorkspace();
         // Academic-planning workspaces (modules own the data model; see
-        // src/features/school-schedule.js, grade-planner.js, semester-setup.js)
+        // src/features/academic/school-schedule.js, grade-planner.js, semester-setup.js)
         let schoolSchedule = getDefaultSchoolScheduleSafe();
         let gradePlanner = getDefaultGradePlannerSafe();
         let semesterSetup = getDefaultSemesterSetupSafe();
@@ -29102,7 +29078,7 @@ function populateProgressDashboard() {
             const themeEntry = themes[normalizedTheme] || themes[DEFAULT_THEME_KEY];
             const root = document.documentElement;
             if (normalizedTheme === 'glass') {
-                // Glass owns every surface in styles/glass.css — inline derived
+                // Glass owns every surface in styles/themes/glass.css — inline derived
                 // values would sit on top of the stylesheet and defeat the
                 // backdrop-filter translucency stack.
                 ['--theme-gradient-start', '--theme-gradient-mid', '--theme-gradient-end', '--sidebar-bg', '--button-bg', '--button-bg-hover', '--button-border', '--button-text'].forEach(v => root.style.removeProperty(v));
@@ -51947,7 +51923,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
          * live in page.blocks and are hydrated into a live <canvas> + drawing
          * toolbar on load. Persistence rides the existing page save/export path.
          * The pure stroke engine + canvas controller is window.AtelierHandwriting
-         * (src/features/handwriting.js). Loaded before app.js.
+         * (src/features/workspace/handwriting.js). Loaded before app.js.
          * ================================================================== */
         const DRAWING_BLOCK_SELECTOR = '.drawing-anchor[data-block-id], .drawing-block[data-block-id], [data-note-block-type="drawing"][data-block-id]';
         // Active live controllers keyed by blockId so we can dispose pointer
@@ -58968,7 +58944,7 @@ ${cspMeta}
         }
 
         // Release notes are surfaced exclusively through the notification center
-        // (see src/features/notifications.js -> _deriveReleaseNotifications, which reads
+        // (see src/features/workspace/notifications.js -> _deriveReleaseNotifications, which reads
         // window.SutraReleaseNotes.notes and calls window.SutraReleaseNotes.open()).
         // The standalone top-bar "What's New" control was removed; this data source and
         // viewer remain so the notification center can still show and open release notes.
@@ -59653,7 +59629,7 @@ ${cspMeta}
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
-        // Sutra Assistant bridge: gives src/features/flow-assistant.js live access to
+        // Sutra Assistant bridge: gives src/features/assistant/flow-assistant.js live access to
         // closure-scoped state and helper functions. Defined here because tasks,
         // timeBlocks, pages, etc. are `let` bindings inside this closure and are
         // reassigned in places — getter properties keep the bridge in sync.

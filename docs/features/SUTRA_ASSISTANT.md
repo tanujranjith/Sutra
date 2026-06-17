@@ -289,7 +289,7 @@ balance.
 - The **Powered by Sutra Intelligence** badge keeps this boundary visible at all
   times.
 
-For the full local-first picture, see [`PRIVACY_AND_LOCAL_FIRST.md`](./PRIVACY_AND_LOCAL_FIRST.md).
+For the full local-first picture, see [`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-security/PRIVACY_AND_LOCAL_FIRST.md).
 
 ---
 
@@ -381,8 +381,8 @@ indicator) to reveal it.
 - **Legacy aliases (retained so existing code/plugins keep working):**
   `window.flowAssistant`, `window.getFlowAssistantContext`, and
   `window.flowIntelligence` point at the same objects.
-- **Source:** `src/features/flow-assistant.js` (panel + actions) and
-  `src/features/flow-intelligence.js` (`deriveStudentContext`).
+- **Source:** `src/features/assistant/flow-assistant.js` (panel + actions) and
+  `src/features/assistant/flow-intelligence.js` (`deriveStudentContext`).
 
 ---
 

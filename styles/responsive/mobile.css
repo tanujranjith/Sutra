@@ -422,7 +422,7 @@
        tab scrolling, which forces `overflow-y` to clip too — so an absolutely
        positioned menu gets cut at the row's bottom edge. Use `position: fixed`
        to escape all ancestor overflow contexts. The exact x/y is computed and
-       applied inline by the JS shim in NoteflowAtelier.html (see
+       applied inline by the JS shim in Sutra.html (see
        bindMoreViewsTouchFallback). */
     .view-more {
         position: relative !important;
@@ -1366,7 +1366,7 @@
 }
 
 /* =========================================================================
-   25. Inline-style modal grids (NoteflowAtelier.html L5735+, L5799, L5825,
+   25. Inline-style modal grids (Sutra.html L5735+, L5799, L5825,
        L5843) — multiple `grid-template-columns: 1fr 1fr` written inline. On
        phones these collapse the inputs to ~140px each which is unusable.
        Stack to a single column. The inline attribute selector targets only

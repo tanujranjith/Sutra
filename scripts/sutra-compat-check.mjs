@@ -3,7 +3,7 @@
 // cross-compatible across the NoteFlow Atelier → Sutra rebrand.
 //
 // This EXECUTES the real code (not just greps):
-//   • loads src/features/plugin-system.js and runs parseBundle on the legacy
+//   • loads src/features/customization/plugin-system.js and runs parseBundle on the legacy
 //     example `.atelier-plugin`, on the same bundle treated as `.sutra-plugin`,
 //     and on a fresh bundle — proving the parser is extension-agnostic and old
 //     bundles still validate; confirms a newer-schema bundle is rejected and a
@@ -37,7 +37,7 @@ function extractFunction(source, name) {
 console.log('Plugins — load the real engine and parse old + new bundles');
 // Shim a browser global so the IIFE (function(global){…})(window||this) exports.
 globalThis.window = globalThis;
-const pluginSrc = readFileSync('src/features/plugin-system.js', 'utf8');
+const pluginSrc = readFileSync('src/features/customization/plugin-system.js', 'utf8');
 (0, eval)(pluginSrc); // indirect eval → runs in global scope; module sets global.AtelierPlugins
 const P = globalThis.AtelierPlugins;
 ok(P && typeof P.parseBundle === 'function', 'plugin engine (AtelierPlugins) loaded in Node');

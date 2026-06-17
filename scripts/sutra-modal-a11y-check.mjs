@@ -2,10 +2,10 @@
 import { readFileSync } from 'node:fs';
 
 const app = readFileSync('src/core/app.js', 'utf8');
-const css = readFileSync('styles/sutra-pro.css', 'utf8');
+const css = readFileSync('styles/themes/sutra-pro.css', 'utf8');
 const html = readFileSync('Sutra.html', 'utf8');
-const review = readFileSync('src/features/review.js', 'utf8');
-const homework = readFileSync('src/features/homework.js', 'utf8');
+const review = readFileSync('src/features/study/review.js', 'utf8');
+const homework = readFileSync('src/features/study/homework.js', 'utf8');
 
 // Core SutraModalManager capabilities (present in app.js or the stylesheet).
 const required = [

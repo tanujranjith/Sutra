@@ -170,7 +170,7 @@ the page, with everything else in your workspace. It only leaves this browser if
 enable encrypted Google Drive sync. In Drive sync, the complete workspace
 snapshot is encrypted in the browser before upload. And, as in section 5, a **locked
 page's background is never revealed behind the PIN screen**. See
-[`PRIVACY_AND_LOCAL_FIRST.md`](./PRIVACY_AND_LOCAL_FIRST.md) for the full
+[`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-security/PRIVACY_AND_LOCAL_FIRST.md) for the full
 local-first model.
 
 ---

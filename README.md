@@ -9,7 +9,7 @@ If you can open an HTML file, you can run Sutra.
 
 > Eyebrow: `PRIVATE · LOCAL-FIRST · STUDENT-BUILT`. Built by Tanuj Ranjith.
 >
-> Sutra was previously released as **NoteFlow Atelier**. It is the same workspace, rebranded. Your existing data loads automatically — see [Rebrand & Compatibility](docs/REBRAND_AND_COMPATIBILITY.md). **NoteFlow Classic** is a *separate* legacy app and is not Sutra.
+> Sutra was previously released as **NoteFlow Atelier**. It is the same workspace, rebranded. Your existing data loads automatically — see [Rebrand & Compatibility](docs/features/REBRAND_AND_COMPATIBILITY.md). **NoteFlow Classic** is a *separate* legacy app and is not Sutra.
 
 ## Table of Contents
 
@@ -103,23 +103,27 @@ Sutra/
 ├─ index.html            # Tiny redirect to HomePage.html
 ├─ HomePage.html         # Landing page with the thread scrollytelling + "Start your session"
 ├─ Sutra.html            # The app shell (views, modals, structural markup)
-├─ assets/               # Brand logos (assets/brand/sutra/), favicon, marketing imagery
-├─ styles/
-│  ├─ styles.css             # Core design tokens, components, themes, layout
-│  ├─ sutra-pro.css          # Pro surface styling
-│  ├─ mobile.css             # Mobile / tablet overrides
-│  ├─ customization.css      # Customization + mods UI
-│  ├─ microinteractions.css  # Hover / press / transition polish
-│  ├─ macos26-redesign.css   # macOS 26 theme surface
-│  └─ settings-redesign.css  # Settings layout
-├─ src/
-│  ├─ core/app.js            # Main runtime (global scope): state, notes, tasks, timeline, settings, AI, etc.
-│  ├─ features/              # ap-study.js, homework.js, review.js, business-workspace.js,
-│  │                         # flow-assistant.js, flow-intelligence.js, handwriting.js,
-│  │                         # customization.js, plugin-system.js
-│  └─ ui/                    # date-enhancer.js, select-enhancer.js, and other UI helpers
-├─ scripts/              # Node test guards (smoke-check, round-trip, doc-background, etc.)
-├─ docs/                 # This documentation set
+├─ manifest.webmanifest · sw.js   # PWA manifest + offline service worker
+├─ assets/               # Brand logos (assets/brand/sutra/), favicon, marketing imagery, vendored JSZip
+├─ styles/               # Stylesheets by cascade layer (see styles/README.md)
+│  ├─ base/              # styles.css (core tokens/components/layout), microinteractions.css
+│  ├─ themes/            # sutra-pro.css, glass.css, macos26-redesign.css
+│  ├─ views/             # focus-session.css, settings-redesign.css
+│  ├─ features/          # per-feature CSS (assistant, customization, notifications, academic, …)
+│  ├─ responsive/        # mobile.css (loads late on purpose)
+│  └─ legacy/            # large blocks externalized 1:1 from inline <style> in Sutra.html
+├─ src/                  # Application source — classic scripts, no build (see src/README.md)
+│  ├─ boot/              # startup-intro.js, sw-register.js
+│  ├─ core/              # app.js (the global runtime) + safety layer (safe-storage, dom-safety, …)
+│  ├─ state/             # workspace-normalizers.js (pure state, extracted from app.js)
+│  ├─ config/            # sutra-runtime-config.js
+│  ├─ features/          # assistant/ academic/ study/ customization/ workspace/ (see src/features/README.md)
+│  ├─ ui/                # date/time/select enhancers
+│  ├─ components/icons/  # icon path data + fallback patcher
+│  └─ data/              # daily-lock-in-quotes.js, emoji-keywords.generated.js
+├─ scripts/              # Node checks/build/probes + lib/ (flat; see scripts/README.md)
+├─ tests/                # Playwright: e2e/ bench/ fixtures/ (see tests/README.md)
+├─ docs/                 # architecture/ features/ privacy-security/ release/ archive/ (see docs/README.md)
 ├─ examples/plugins/     # Example plugin bundle
 ├─ NoteFlow (classic)/   # The separate legacy app (NoteFlow Classic)
 ├─ LICENSE / NOTICE      # Apache License 2.0
@@ -135,9 +139,9 @@ The core runtime in `src/core/app.js` is a single large **global-scope** script 
 | Old | New |
 | --- | --- |
 | `NoteflowAtelier.html` | `Sutra.html` |
-| `styles/atelier-pro.css` | `styles/sutra-pro.css` |
+| `styles/atelier-pro.css` | `styles/themes/sutra-pro.css` |
 | `scripts/atelier-persistence-qa.js` | `scripts/sutra-persistence-qa.js` |
-| `docs/atelier-save-systems-audit.md` | `docs/sutra-save-systems-audit.md` |
+| `docs/atelier-save-systems-audit.md` | `docs/architecture/sutra-save-systems-audit.md` |
 
 ## Product Map
 
@@ -165,8 +169,8 @@ Sutra's writing surface.
 - **Page tree** — hierarchical titles using `::` (e.g. `Projects::Website::Launch`), with search, tag filter, drag-and-drop reordering, favorites, duplicate, rename, delete, emoji icons, and breadcrumbs. Temporary pages can self-expire. A built-in **Help & Docs** page always lives at the top of the tree.
 - **Rich editor** — toolbar formatting (bold, italic, underline, strikethrough, H1–H3, lists, quote, code), an insert menu (link, table, image, video, audio, embed, checklist, collapsible section, page link), a slash menu (`/`), list indent with `Tab` / `Shift+Tab`, live word count, and configurable autosave.
 - **Page Mode** — a document-style page presentation for the note surface.
-- **Document Backgrounds** — a per-page background image set from the editor toolbar's *Document Background* button. Upload a `.png`, `.jpg`, `.jpeg`, or `.webp` (max 6 MB; large images auto-downscale), then tune a **Background Blur** slider (0–32 px) and a **Dim Background** slider (0–80%, default 25%). The dim overlay tints toward the editor surface so text stays readable in light, dark, and custom themes, and blur applies only to the image, never the text. Backgrounds work in the standard editor, Page Mode, split view, on mobile and tablet, and under custom CSS; they survive refresh, page duplication, and `.sutra` export/restore. **Locked pages never show their background behind the PIN screen.** See [the per-document background facts](docs/_SUTRA_DOC_FACTS.md) and [CHANGELOG](docs/CHANGELOG.md).
-- **Handwriting** — insert a handwriting block to write, sketch, or annotate with mouse, trackpad, touch, or stylus (pen, highlighter, eraser; blank / lined / grid / dotted paper). Strokes are stored as vectors and round-trip through backups. Full guide: [`docs/HANDWRITING_AND_DRAWING.md`](docs/HANDWRITING_AND_DRAWING.md).
+- **Document Backgrounds** — a per-page background image set from the editor toolbar's *Document Background* button. Upload a `.png`, `.jpg`, `.jpeg`, or `.webp` (max 6 MB; large images auto-downscale), then tune a **Background Blur** slider (0–32 px) and a **Dim Background** slider (0–80%, default 25%). The dim overlay tints toward the editor surface so text stays readable in light, dark, and custom themes, and blur applies only to the image, never the text. Backgrounds work in the standard editor, Page Mode, split view, on mobile and tablet, and under custom CSS; they survive refresh, page duplication, and `.sutra` export/restore. **Locked pages never show their background behind the PIN screen.** See [Document Backgrounds](docs/features/DOCUMENT_BACKGROUNDS.md) and [CHANGELOG](docs/release/CHANGELOG.md).
+- **Handwriting** — insert a handwriting block to write, sketch, or annotate with mouse, trackpad, touch, or stylus (pen, highlighter, eraser; blank / lined / grid / dotted paper). Strokes are stored as vectors and round-trip through backups. Full guide: [`docs/features/HANDWRITING_AND_DRAWING.md`](docs/features/HANDWRITING_AND_DRAWING.md).
 - **Split view** — a second pane beside the current note, with split presets (Note + Assignment, Note + AP Unit, Essay + Research, Today Plan + Notes, Calendar + Note) and swap/close controls.
 - **Locked pages** — PIN-protect any page (4–8 digits, stored as a salted SHA-256 hash, never as the raw PIN), with auto-lock options.
 
@@ -278,7 +282,7 @@ Apply any theme to the **current page**, **all pages**, or a **custom subset** (
 - **Plugins** — install local plugin bundles. Plugins are **local bundles only** (no marketplace), run **sandboxed in an iframe** behind an explicit permission allowlist, install **disabled**, and are **reviewed before they run** (forced on import). On import to a new device, runtime plugins return disabled and require re-review.
 - **Safe Mode** — skip all custom CSS and plugins without deleting anything.
 
-Guides: [`docs/MODS_AND_CUSTOMIZATION.md`](docs/MODS_AND_CUSTOMIZATION.md) and [`docs/PLUGIN_SDK.md`](docs/PLUGIN_SDK.md).
+Guides: [`docs/features/MODS_AND_CUSTOMIZATION.md`](docs/features/MODS_AND_CUSTOMIZATION.md) and [`docs/features/PLUGIN_SDK.md`](docs/features/PLUGIN_SDK.md).
 
 ### Safe Mode
 
@@ -324,7 +328,7 @@ Google Drive sync is optional and disabled by default. When enabled from **Setti
 
 Sutra stores one encrypted sync file named `sutra-sync-current-v1.sutra` in Drive's hidden `appDataFolder`. The browser storage remains the working copy. Drive failures never block local saving. The Drive sync password and derived key stay in memory only; the access token is also memory-only. The device-local sync metadata key (`sutra:googleDriveSync:v1`) is not included in `.sutra` backups or cloud snapshots.
 
-To configure a hosted deployment, set the public OAuth Web Client ID in `src/config/sutra-runtime-config.js` or by defining `window.SUTRA_CONFIG.googleDriveClientId` before `src/core/app.js` loads. Do not put client secrets, tokens, or passwords in static files. See [`docs/GOOGLE_DRIVE_SYNC_SETUP.md`](docs/GOOGLE_DRIVE_SYNC_SETUP.md).
+To configure a hosted deployment, set the public OAuth Web Client ID in `src/config/sutra-runtime-config.js` or by defining `window.SUTRA_CONFIG.googleDriveClientId` before `src/core/app.js` loads. Do not put client secrets, tokens, or passwords in static files. See [`docs/features/GOOGLE_DRIVE_SYNC_SETUP.md`](docs/features/GOOGLE_DRIVE_SYNC_SETUP.md).
 
 ### Plugins: `.sutra-plugin` (new) and `.atelier-plugin` (still imports)
 
@@ -336,11 +340,11 @@ API keys, provider credentials, tokens, backup passwords, cloud-sync passwords, 
 
 ### Internal storage names
 
-For compatibility, Sutra intentionally **retains** its legacy internal identifiers so existing browser data keeps loading: IndexedDB databases `noteflow_atelier_db` (workspace) and `noteflow_attachments_db` (course/file binaries), plus the localStorage mirrors `hwCourses:v2` / `hwTasks:v2`. Treat these as **legacy-named compatibility identifiers** — the names are historical, not a sign that anything still calls itself "Atelier." Full detail in [Rebrand & Compatibility](docs/REBRAND_AND_COMPATIBILITY.md).
+For compatibility, Sutra intentionally **retains** its legacy internal identifiers so existing browser data keeps loading: IndexedDB databases `noteflow_atelier_db` (workspace) and `noteflow_attachments_db` (course/file binaries), plus the localStorage mirrors `hwCourses:v2` / `hwTasks:v2`. Treat these as **legacy-named compatibility identifiers** — the names are historical, not a sign that anything still calls itself "Atelier." Full detail in [Rebrand & Compatibility](docs/features/REBRAND_AND_COMPATIBILITY.md).
 
 ## Mobile & Tablet Behavior
 
-Sutra is responsive from **1440 px down to 320 px**. Breakpoints in `styles/mobile.css` cover large tablet (1024 px), small tablet (768 px), and phone (640 px).
+Sutra is responsive from **1440 px down to 320 px**. Breakpoints in `styles/responsive/mobile.css` cover large tablet (1024 px), small tablet (768 px), and phone (640 px).
 
 - The sidebar collapses behind a toggle and a tap-overlay; the pages list scrolls inside the drawer.
 - The top tab strip becomes a single **current view** dropdown that expands the full list; overflowing tabs move into a *More* menu.
@@ -407,7 +411,7 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 ## Release Checklist
 
-The canonical pre-release checklist lives at [`docs/TESTING_AND_RELEASE_CHECKLIST.md`](docs/TESTING_AND_RELEASE_CHECKLIST.md). The repository ships Node-based guards you can run with no dependencies:
+The canonical pre-release checklist lives at [`docs/release/TESTING_AND_RELEASE_CHECKLIST.md`](docs/release/TESTING_AND_RELEASE_CHECKLIST.md). The repository ships Node-based guards you can run with no dependencies:
 
 ```bash
 node scripts/smoke-check.mjs            # structural assertions across the app
@@ -422,7 +426,7 @@ npm run check:network                   # approved-origin/CDN guard
 npm run test:e2e                        # Chromium, Firefox, WebKit Playwright matrix
 ```
 
-Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/BRAND_ASSETS.md`](docs/BRAND_ASSETS.md).
+Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/features/BRAND_ASSETS.md`](docs/features/BRAND_ASSETS.md).
 
 Per the release process, the suite also includes rebrand and responsive guards (`scripts/sutra-rebrand-check.mjs`, `scripts/sutra-responsive-check.mjs`) and a `node --check` syntax pass over each `src` JS file. A browser QA harness is provided at `scripts/sutra-persistence-qa.js`.
 

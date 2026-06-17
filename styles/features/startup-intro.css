@@ -4,7 +4,7 @@
    Shown once per browser session on genuine app launch.
    Audio is synthesized via Web Audio API in startup-intro.js —
    no external file is required by default.  To swap in a custom
-   sound file, see the comment in src/features/startup-intro.js.
+   sound file, see the comment in src/boot/startup-intro.js.
 
    Z-index: 99999 — above every modal, panel, and overlay in the app.
    Position: fixed — unaffected by app layout, safe on all viewports.

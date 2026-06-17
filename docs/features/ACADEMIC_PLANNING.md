@@ -7,8 +7,8 @@ finish complex work, understands the real school day, and makes reminders
 dependable — without leaving Sutra's local-first model._
 
 This is a map. For the broader architecture see
-[`SUTRA_ARCHITECTURE.md`](./SUTRA_ARCHITECTURE.md); for persistence see
-[`DATA_AND_BACKUPS.md`](./DATA_AND_BACKUPS.md); for the assistant/intelligence
+[`SUTRA_ARCHITECTURE.md`](../architecture/SUTRA_ARCHITECTURE.md); for persistence see
+[`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND_BACKUPS.md); for the assistant/intelligence
 split see [`SUTRA_ASSISTANT.md`](./SUTRA_ASSISTANT.md).
 
 ---
@@ -133,7 +133,7 @@ assignments gain a Studio. Everything else extends a surface that already exists
 ## 5. Unified Academic Command Center
 
 Course Hub now starts with a read-only command center built by
-`src/features/academic-command-center.js`. It consumes the existing Course Hub,
+`src/features/academic/academic-command-center.js`. It consumes the existing Course Hub,
 Homework, Grade Planner, School Schedule, Review, AP Study, Notes, files, and
 Timeline stores; it does not persist a parallel model.
 
