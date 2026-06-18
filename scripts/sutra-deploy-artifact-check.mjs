@@ -41,6 +41,8 @@ const REQUIRED = [
   'Sutra.html',
   '404.html',
   'manifest.webmanifest',
+  'robots.txt',
+  'sitemap.xml',
   'LICENSE',
   'src/core/app.js',
   'styles/base/styles.css',

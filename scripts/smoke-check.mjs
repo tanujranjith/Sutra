@@ -181,7 +181,7 @@ mustContain('src/core/app.js', 'resetAtelierOnboardingForTesting', 'Settings res
 mustContain('src/core/app.js', 'ONBOARDING_USER_INTENTS', 'unified onboarding user intent options');
 mustContain('src/core/app.js', 'ONBOARDING_WORKSPACE_FOCUS_OPTIONS', 'unified onboarding workspace focus options');
 mustContain('src/core/app.js', 'ONBOARDING_FEATURE_VIEWS', 'unified onboarding feature tile catalog');
-mustContain('src/core/app.js', "ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'tour']", 'unified onboarding 6-step ordering');
+mustContain('src/core/app.js', "ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'cloud', 'tour']", 'unified onboarding 7-step ordering (incl. Sutra Cloud)');
 mustContain('src/core/app.js', 'syncOnboardingStatusUi', 'onboarding status text updater');
 mustContain('Sutra.html', 'atelier-onboarding-rail', 'unified onboarding left rail markup');
 mustContain('Sutra.html', 'id="onboardingSteps"', 'unified onboarding step list anchor');

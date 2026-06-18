@@ -43,6 +43,11 @@ const approved = [
   'https://ai.google.dev',
   'https://local.sutra.invalid',
   'https://tanujranjith.github.io',
+  // SEO/canonical + structured-data references (metadata only, never fetched).
+  'https://sutra-two.vercel.app',
+  'https://note-flow-atelier.vercel.app',
+  'https://schema.org',
+  'https://github.com',
   'http://www.w3.org/2000/svg',
   'http://localhost',
   'http://127.0.0.1'
@@ -60,6 +65,12 @@ for (const file of files) {
       url.startsWith('https://${') ||
       url.includes('${')
     ) {
+      continue;
+    }
+    // Sutra Cloud: any project on the Supabase platform is an approved family.
+    // The exact project origin is pinned in the CSP (no wildcard there); this
+    // lint only needs to confirm the host belongs to *.supabase.co.
+    if (/^https:\/\/[a-z0-9-]+\.supabase\.co\b/i.test(url)) {
       continue;
     }
     if (!approved.some(origin => url.startsWith(origin))) {

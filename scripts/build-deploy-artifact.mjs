@@ -42,6 +42,8 @@ const FILES = [
   'Sutra.html',
   '404.html',
   'manifest.webmanifest',
+  'robots.txt', // SEO: allows crawling + points at the sitemap
+  'sitemap.xml', // SEO: canonical public URLs for search engines
   'LICENSE' // HomePage.html footer links to ./LICENSE (Apache 2.0)
 ];
 
@@ -63,6 +65,8 @@ const REQUIRED_SOURCE = [
   'Sutra.html',
   '404.html',
   'manifest.webmanifest',
+  'robots.txt',
+  'sitemap.xml',
   'src/core/app.js',
   'assets/brand/sutra/generated/favicon.ico',
   'assets/brand/sutra/generated/social-preview.png',

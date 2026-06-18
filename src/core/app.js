@@ -6464,6 +6464,7 @@ function populateProgressDashboard() {
                     });
                 }
                 try { notifySutraDriveLocalSave(reason, summary); } catch (driveSyncError) { /* Drive sync must never block local saving. */ }
+                try { maybeSutraCloudAutoBackup(reason); } catch (cloudAutoError) { /* Sutra Cloud auto-backup must never block local saving. */ }
                 return summary;
             } catch (error) {
                 if (previousHealth && appSettings) {
@@ -21406,7 +21407,7 @@ function populateProgressDashboard() {
 
         const ONBOARDING_VERSION = 1;
 
-        const ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'tour'];
+        const ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'cloud', 'tour'];
 
         const ONBOARDING_STEP_META = {
             welcome:  { label: 'Welcome',     summary: 'How you use Sutra' },
@@ -21414,6 +21415,7 @@ function populateProgressDashboard() {
             features: { label: 'Features',    summary: 'Enabled spaces' },
             setup:    { label: 'Setup',       summary: 'Personalize your setup' },
             ai:       { label: 'AI & Backups', summary: 'Sutra Assistant & data safety' },
+            cloud:    { label: 'Sutra Cloud', summary: 'Optional encrypted cloud backup' },
             tour:     { label: 'Tour',        summary: 'You’re ready to begin' }
         };
 
@@ -21966,6 +21968,7 @@ function populateProgressDashboard() {
                 else if (step === 'features') main.innerHTML = renderFeaturesStep();
                 else if (step === 'setup') main.innerHTML = renderSetupStep();
                 else if (step === 'ai') main.innerHTML = renderAiStep();
+                else if (step === 'cloud') main.innerHTML = renderCloudStep(); // sutra-allow-html: static developer-authored onboarding markup (no user data)
                 else if (step === 'tour') main.innerHTML = renderTourStep();
                 bindMain(step);
             }
@@ -22237,6 +22240,34 @@ function populateProgressDashboard() {
                                 <input type="checkbox" id="onbBackupAck" ${draftRef.backupAcknowledged ? 'checked' : ''}>
                                 <span>I understand Sutra is local-first and that I&rsquo;m responsible for my own exports.</span>
                             </label>
+                        </section>
+                    </div>
+                `;
+            }
+
+            function renderCloudStep() {
+                // Transparency / consent screen. Info-only: it never signs the user
+                // in or makes a network request — that only happens later, when the
+                // user opens Sutra Cloud from the save bar and chooses to.
+                return `
+                    <header class="atelier-onboarding-header">
+                        <h2 class="atelier-onboarding-title">Sutra Cloud. <span class="atelier-onboarding-pill-optional">Optional</span></h2>
+                        <p class="atelier-onboarding-sub">An optional way to back up your workspace to the cloud and restore it on another device.</p>
+                    </header>
+                    <div class="atelier-onboarding-setup-grid">
+                        <section class="atelier-onboarding-setup-section">
+                            <h3 class="atelier-onboarding-setup-h">How it works</h3>
+                            <ul class="atelier-onboarding-setup-help">
+                                <li><strong>Off by default.</strong> Nothing is uploaded unless you turn it on yourself and press &ldquo;Back up now&rdquo;.</li>
+                                <li><strong>End-to-end encrypted.</strong> Your data is locked with your backup password <em>before</em> it leaves this device &mdash; nobody, including us, can read it.</li>
+                                <li><strong>You stay in control.</strong> Sign out or delete your cloud backups anytime. Sutra always works fully offline.</li>
+                            </ul>
+                        </section>
+                        <section class="atelier-onboarding-setup-section">
+                            <h3 class="atelier-onboarding-setup-h">Where to find it</h3>
+                            <p class="atelier-onboarding-setup-help">Look for the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace. You can set it up whenever you like &mdash; there&rsquo;s nothing to do now.</p>
+                            <p class="atelier-onboarding-setup-help">Most people use <strong>Official Sutra Cloud</strong> (recommended). Advanced users can instead connect <strong>their own Supabase project</strong> from the Sutra Cloud panel.</p>
+                            <p class="atelier-onboarding-setup-help atelier-onboarding-cloud-powered">Powered by <strong>Supabase</strong>, which stores only the locked, encrypted backup file.</p>
                         </section>
                     </div>
                 `;
@@ -26696,6 +26727,7 @@ function populateProgressDashboard() {
             bindSutraPersistenceHealthUi();
             try { bindSutraBackupFolderUi(); updateSutraFolderUi(); } catch (e) { /* non-critical */ }
             try { bindSutraDriveSyncUi(); updateSutraDriveSyncUi(); } catch (e) { /* non-critical */ }
+            try { initSutraCloud(); } catch (e) { /* non-critical */ }
             updateAtelierDataHealthUi();
             setActiveSettingsCategory(activeSettingsCategory, { skipSearch: false });
         }
@@ -43803,6 +43835,31 @@ function getActiveEditor() {
             } catch (error) { /* non-critical */ }
         }
 
+        // Lets the browser's own password manager save the backup passphrase so a
+        // forgotten password doesn't mean unrecoverable data. Two cooperating paths:
+        //  • A real <form> + visually-hidden username field (see the password modals'
+        //    markup) triggers the save/autofill heuristic in Safari/Firefox.
+        //  • The Credential Management API below reliably prompts on Chromium-family
+        //    browsers (Chrome/Google, Edge, Vivaldi, Brave, Opera).
+        // Consent-first: the browser's prompt is the opt-in. Sutra stores nothing
+        // itself and the passphrase is still never sent to any server.
+        const SUTRA_PASSWORD_CREDENTIAL_DEFAULT_USER = 'sutra-backup';
+        async function sutraStorePasswordCredential(username, password) {
+            try {
+                if (!password) return;
+                if (typeof window === 'undefined' || typeof window.PasswordCredential !== 'function') return;
+                if (!navigator.credentials || typeof navigator.credentials.store !== 'function') return;
+                const cred = new window.PasswordCredential({
+                    id: String(username || SUTRA_PASSWORD_CREDENTIAL_DEFAULT_USER),
+                    password: String(password),
+                    name: 'Sutra backup password'
+                });
+                await navigator.credentials.store(cred);
+            } catch (error) {
+                // Best-effort only: the browser or user may decline. Never block backup.
+            }
+        }
+
         function openSutraBackupPassphraseModal(options = {}) {
             try {
                 assertSutraEncryptionAvailable();
@@ -43820,6 +43877,8 @@ function getActiveEditor() {
             const cancelBtn = document.getElementById('sutraBackupPasswordCancelBtn');
             const closeBtn = document.getElementById('sutraBackupPasswordCloseBtn');
             const title = document.getElementById('sutraBackupPasswordTitle');
+            const form = document.getElementById('sutraBackupPasswordForm');
+            if (form) form.onsubmit = (event) => { event.preventDefault(); }; // submit still fires the browser's save heuristic; we just prevent navigation
             if (!modal || !passInput || !confirmInput || !submitBtn) {
                 showToast('Backup password dialog is unavailable.');
                 return Promise.resolve(false);
@@ -43904,6 +43963,7 @@ function getActiveEditor() {
                     if (errorEl) errorEl.textContent = '';
                     try {
                         const result = await performEncryptedSutraWorkspaceExport({ ...options, passphrase });
+                        sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
                         if (statusEl) statusEl.textContent = 'Encrypted backup ready.';
                         finish(result || true);
                     } catch (error) {
@@ -43937,6 +43997,8 @@ function getActiveEditor() {
             const cancelBtn = document.getElementById('sutraImportPasswordCancelBtn');
             const closeBtn = document.getElementById('sutraImportPasswordCloseBtn');
             const fileNameEl = document.getElementById('sutraImportPasswordFileName');
+            const form = document.getElementById('sutraImportPasswordForm');
+            if (form) form.onsubmit = (event) => { event.preventDefault(); }; // submit fires the save heuristic; prevent navigation only
             if (!modal || !passInput || !submitBtn || typeof operation !== 'function') {
                 showToast('Backup password dialog is unavailable.');
                 return Promise.resolve(null);
@@ -43999,6 +44061,7 @@ function getActiveEditor() {
                     if (errorEl) errorEl.textContent = '';
                     try {
                         const result = await operation(passphrase);
+                        sutraStorePasswordCredential('sutra-backup', passphrase); // remember the working password for next restore
                         finish(result);
                     } catch (error) {
                         passInput.value = '';
@@ -44280,6 +44343,12 @@ function getActiveEditor() {
             if (helpEl) helpEl.textContent = options.help || 'This password encrypts cloud snapshots before they leave this browser. Google does not receive it, and Sutra cannot recover it.';
             if (confirmField) confirmField.hidden = !requireConfirm;
             submitBtn.textContent = options.submitText || (requireConfirm ? 'Create encrypted vault' : 'Unlock');
+            const form = document.getElementById('sutraCloudSyncPasswordForm');
+            if (form) form.onsubmit = (event) => { event.preventDefault(); }; // submit fires the save heuristic; prevent navigation only
+            // Better autofill: a brand-new password on create, an existing one on unlock.
+            passInput.setAttribute('autocomplete', requireConfirm ? 'new-password' : 'current-password');
+            const usernameField = document.getElementById('sutraCloudSyncUsernameInput');
+            if (usernameField) usernameField.value = (sutraCloudRuntime.user && sutraCloudRuntime.user.email) || 'sutra-cloud';
             passInput.value = '';
             confirmInput.value = '';
             passInput.type = 'password';
@@ -44340,6 +44409,7 @@ function getActiveEditor() {
                     try {
                         const passphrase = validateSutraPassphrase(passInput.value || '');
                         if (requireConfirm && passphrase !== (confirmInput.value || '')) throw new Error('Passwords do not match.');
+                        sutraStorePasswordCredential((sutraCloudRuntime.user && sutraCloudRuntime.user.email) || 'sutra-cloud', passphrase); // offer to save in the browser
                         finish(passphrase);
                     } catch (error) {
                         if (errorEl) errorEl.textContent = error.message || 'Enter a valid password.';
@@ -46201,6 +46271,991 @@ function getActiveEditor() {
             }
             return performEncryptedSutraWorkspaceExport(options);
         }
+
+        // ====================================================================
+        // Sutra Cloud — optional, consent-first, end-to-end-encrypted backup.
+        //
+        // Powered by Supabase (Auth + Storage). Each cloud backup is just a
+        // standard encrypted .sutra envelope uploaded to the user's private
+        // bucket folder, so the server only ever stores CIPHERTEXT plus a little
+        // non-sensitive metadata (label/size/time). It can never read the
+        // workspace. The feature is OFF until BOTH the runtime config is set AND
+        // the user signs in; a cold boot with no saved session makes zero
+        // network requests. See supabase/README.md for setup.
+        // ====================================================================
+        const SUTRA_CLOUD_SESSION_KEY = 'sutra:supabaseSession:v1';
+        const SUTRA_CLOUD_META_KEY = 'sutra:supabaseCloud:v1';
+        // Device-local "Bring Your Own Supabase" backend override. Lets an advanced
+        // user point Sutra Cloud at their OWN Supabase project instead of the
+        // official one. Device-local on purpose so the backend choice is per-device
+        // and never travels inside a .sutra backup.
+        const SUTRA_CLOUD_BACKEND_KEY = 'sutra:supabaseCustomBackend:v1';
+        const SUTRA_CLOUD_BUCKET = 'backups';
+        const SUTRA_CLOUD_KEEP_LAST = 10;
+
+        const sutraCloudRuntime = {
+            accessToken: '',
+            refreshToken: '',
+            expiresAtMs: 0,
+            user: null,          // { id, email }
+            busy: false,
+            refreshing: null,
+            // Held IN MEMORY ONLY for this session so optional auto-backup can run
+            // unattended after one manual backup. Never persisted, never sent.
+            backupPassphrase: ''
+        };
+        let sutraCloudAutoTimer = null;
+        let sutraCloudVisibilityBound = false;
+        const sutraCloudUiState = { awaitingCode: false, pendingEmail: '' };
+        let sutraCloudMeta = null;
+        let sutraCloudBackend = null;
+        let sutraCloudUiBound = false;
+
+        // ---- Backend resolution: Official Sutra Cloud vs Bring-Your-Own Supabase ----
+        function getDefaultSutraCloudBackend(existing) {
+            return {
+                mode: 'official',            // 'official' | 'custom'
+                customSupabaseUrl: '',
+                customSupabaseAnonKey: '',
+                lastConnectionCheckAt: '',
+                lastConnectionStatus: '',    // '' | 'ok' | 'failed' | 'csp-blocked'
+                ...(existing && typeof existing === 'object' ? existing : {})
+            };
+        }
+
+        function loadSutraCloudBackend() {
+            if (sutraCloudBackend) return sutraCloudBackend;
+            const raw = SutraSafeStorage.get(SUTRA_CLOUD_BACKEND_KEY, { fallback: null });
+            sutraCloudBackend = getDefaultSutraCloudBackend(raw);
+            if (sutraCloudBackend.mode !== 'custom') sutraCloudBackend.mode = 'official';
+            return sutraCloudBackend;
+        }
+
+        function persistSutraCloudBackend() {
+            // Never persists the backup passphrase or any service-role key — only the
+            // public URL + public anon key + connection-check status.
+            SutraSafeStorage.set(SUTRA_CLOUD_BACKEND_KEY, loadSutraCloudBackend(), { importance: 'optional', label: 'Sutra Cloud backend' });
+        }
+
+        function isValidSupabaseUrl(url) {
+            return /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(String(url || '').trim());
+        }
+
+        // Reject service-role keys outright — they bypass Row Level Security and must
+        // never live in a browser. Detects both legacy JWT (role:"service_role") and
+        // new-style "sb_secret_..." secret keys.
+        function looksLikeServiceRoleKey(key) {
+            const k = String(key || '').trim();
+            if (!k) return false;
+            if (/^sb_secret_/i.test(k)) return true;
+            const parts = k.split('.');
+            if (parts.length === 3) {
+                try {
+                    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                    if (payload && payload.role === 'service_role') return true;
+                } catch (error) { /* not a decodable JWT */ }
+            }
+            if (/"?service_role"?/.test(k)) return true;
+            return false;
+        }
+
+        // True only if the page CSP's connect-src already permits this origin. The
+        // hosted build pins exact Supabase origins (no wildcards allowed by the CSP
+        // guard), so a BYO origin that isn't pinned will be blocked by the browser
+        // before any request leaves — we detect that up front and explain it.
+        function sutraCloudOriginAllowedByCsp(url) {
+            try {
+                // Browsers match CSP hosts case-insensitively, and URL parsing
+                // lowercases the host — so normalize both sides before comparing.
+                const origin = new URL(url).origin.toLowerCase();
+                const host = new URL(url).host.toLowerCase();
+                const meta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+                const csp = (meta ? (meta.getAttribute('content') || '') : '').toLowerCase();
+                const connect = (csp.match(/connect-src([^;]*)/i) || [])[1] || '';
+                return connect.includes(origin) || connect.includes(host);
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function getSutraCloudConfig() {
+            const backend = loadSutraCloudBackend();
+            if (backend.mode === 'custom') {
+                const url = String(backend.customSupabaseUrl || '').trim().replace(/\/+$/, '');
+                const anonKey = String(backend.customSupabaseAnonKey || '').trim();
+                return { url, anonKey, configured: !!(url && anonKey), mode: 'custom' };
+            }
+            const cfg = (typeof window !== 'undefined' && window.SUTRA_CONFIG) || {};
+            const url = String(cfg.supabaseUrl || '').trim().replace(/\/+$/, '');
+            const anonKey = String(cfg.supabaseAnonKey || '').trim();
+            return { url, anonKey, configured: !!(url && anonKey), mode: 'official' };
+        }
+
+        // Lightweight connection check. Fires ONLY from an explicit user action
+        // (Test connection). Validates URL shape + anon key + CSP, then hits the
+        // public GoTrue settings endpoint. RLS correctness cannot be verified from
+        // the client — we say so plainly rather than implying a clean bill of health.
+        async function sutraCloudCheckConnection(url, anonKey) {
+            const cleanUrl = String(url || '').trim().replace(/\/+$/, '');
+            if (!isValidSupabaseUrl(cleanUrl)) {
+                return { ok: false, status: 'invalid-url', message: 'That does not look like a Supabase URL (https://your-ref.supabase.co).' };
+            }
+            if (!String(anonKey || '').trim()) {
+                return { ok: false, status: 'missing-key', message: 'Paste your project anon (public) key.' };
+            }
+            if (looksLikeServiceRoleKey(anonKey)) {
+                return { ok: false, status: 'service-role', message: 'That looks like a service_role / secret key. Never paste it into Sutra — use the public anon key only.' };
+            }
+            if (!sutraCloudOriginAllowedByCsp(cleanUrl)) {
+                return { ok: false, status: 'csp-blocked', message: 'This build’s security policy (CSP) does not allow that Supabase origin. Custom Supabase needs a self-hosted build with your project ref added to the app CSP. Official Sutra Cloud works in the hosted version.' };
+            }
+            try {
+                const resp = await fetch(`${cleanUrl}/auth/v1/settings`, { headers: { apikey: String(anonKey).trim() } });
+                if (resp.ok) return { ok: true, status: 'ok', message: 'Connected. URL and anon key look valid. Note: Sutra cannot verify your RLS security rules — follow the setup SQL exactly.' };
+                if (resp.status === 401 || resp.status === 403) return { ok: false, status: 'failed', message: 'The anon key was rejected. Double-check the public anon key.' };
+                return { ok: false, status: 'failed', message: `Connection failed (HTTP ${resp.status}).` };
+            } catch (error) {
+                return { ok: false, status: 'failed', message: 'Could not reach that Supabase project (network/CORS/CSP). Check the URL and that the project is running.' };
+            }
+        }
+
+        async function sutraCloudTestConnection(url, anonKey) {
+            let testUrl = url;
+            let testKey = anonKey;
+            if (testUrl == null) { const c = getSutraCloudConfig(); testUrl = c.url; testKey = c.anonKey; }
+            const result = await sutraCloudCheckConnection(testUrl, testKey);
+            const backend = loadSutraCloudBackend();
+            backend.lastConnectionCheckAt = new Date().toISOString();
+            backend.lastConnectionStatus = result.status;
+            persistSutraCloudBackend();
+            updateSutraCloudUi();
+            return result;
+        }
+
+        // Switch the active cloud backend. Signs out of the current Supabase session,
+        // clears it + the old backend's cached backup metadata, and leaves the LOCAL
+        // workspace completely untouched. Sign-in is required again for the new backend.
+        async function switchSutraCloudBackend(target) {
+            const mode = target && target.mode === 'custom' ? 'custom' : 'official';
+            if (mode === 'custom') {
+                const url = String(target.customSupabaseUrl || '').trim().replace(/\/+$/, '');
+                if (!isValidSupabaseUrl(url)) throw new Error('Enter a valid Supabase URL (https://your-ref.supabase.co).');
+                if (!String(target.customSupabaseAnonKey || '').trim()) throw new Error('Enter your project anon (public) key.');
+                if (looksLikeServiceRoleKey(target.customSupabaseAnonKey)) throw new Error('That looks like a service_role / secret key. Use the public anon key only.');
+            }
+            await sutraCloudSignOut();                 // logs out of the OLD backend (no-op if signed out)
+            const meta = loadSutraCloudMeta();
+            meta.lastBackupAt = '';
+            meta.lastError = '';
+            meta.lastAutoBackupAt = '';
+            if (meta.autoBackup) meta.autoBackup.enabled = false;  // re-opt-in per backend
+            persistSutraCloudMeta();
+            const backend = loadSutraCloudBackend();
+            backend.mode = mode;
+            if (mode === 'custom') {
+                backend.customSupabaseUrl = String(target.customSupabaseUrl || '').trim().replace(/\/+$/, '');
+                backend.customSupabaseAnonKey = String(target.customSupabaseAnonKey || '').trim();
+            }
+            backend.lastConnectionCheckAt = '';
+            backend.lastConnectionStatus = '';
+            persistSutraCloudBackend();
+            sutraCloudUiState.awaitingCode = false;
+            sutraCloudUiState.pendingEmail = '';
+            updateSutraCloudUi();
+            try { refreshSutraCloudBackupList(); } catch (error) { /* list refreshes on next open */ }
+            return { switched: true, mode };
+        }
+
+        function getDefaultSutraCloudMeta(existing) {
+            return {
+                deviceId: (existing && existing.deviceId) || randomSutraId('device'),
+                lastBackupAt: '',
+                lastError: '',
+                autoBackup: { enabled: false, frequency: 'daily' },
+                lastAutoBackupAt: ''
+            };
+        }
+
+        function loadSutraCloudMeta() {
+            if (sutraCloudMeta) return sutraCloudMeta;
+            const raw = SutraSafeStorage.get(SUTRA_CLOUD_META_KEY, { fallback: null });
+            sutraCloudMeta = { ...getDefaultSutraCloudMeta(raw), ...(raw && typeof raw === 'object' ? raw : {}) };
+            if (!sutraCloudMeta.autoBackup || typeof sutraCloudMeta.autoBackup !== 'object') {
+                sutraCloudMeta.autoBackup = { enabled: false, frequency: 'daily' };
+            }
+            sutraCloudMeta.autoBackup.enabled = sutraCloudMeta.autoBackup.enabled === true;
+            return sutraCloudMeta;
+        }
+
+        function persistSutraCloudMeta() {
+            SutraSafeStorage.set(SUTRA_CLOUD_META_KEY, loadSutraCloudMeta(), { importance: 'optional', label: 'Sutra Cloud settings' });
+        }
+
+        function persistSutraCloudSession() {
+            if (!sutraCloudRuntime.refreshToken) {
+                SutraSafeStorage.remove(SUTRA_CLOUD_SESSION_KEY);
+                return;
+            }
+            SutraSafeStorage.set(SUTRA_CLOUD_SESSION_KEY, {
+                accessToken: sutraCloudRuntime.accessToken,
+                refreshToken: sutraCloudRuntime.refreshToken,
+                expiresAtMs: sutraCloudRuntime.expiresAtMs,
+                user: sutraCloudRuntime.user
+            }, { importance: 'optional', label: 'Sutra Cloud session' });
+        }
+
+        function restoreSutraCloudSession() {
+            // Consent-first: reads device-local storage ONLY. Never a network call,
+            // so a cold boot of a signed-out (or fresh) profile stays fully offline.
+            const raw = SutraSafeStorage.get(SUTRA_CLOUD_SESSION_KEY, { fallback: null });
+            if (raw && typeof raw === 'object' && raw.refreshToken) {
+                sutraCloudRuntime.accessToken = String(raw.accessToken || '');
+                sutraCloudRuntime.refreshToken = String(raw.refreshToken || '');
+                sutraCloudRuntime.expiresAtMs = Number(raw.expiresAtMs || 0);
+                sutraCloudRuntime.user = raw.user && typeof raw.user === 'object' ? raw.user : null;
+            }
+            return isSutraCloudSignedIn();
+        }
+
+        function clearSutraCloudSession() {
+            sutraCloudRuntime.accessToken = '';
+            sutraCloudRuntime.refreshToken = '';
+            sutraCloudRuntime.expiresAtMs = 0;
+            sutraCloudRuntime.user = null;
+            sutraCloudRuntime.backupPassphrase = '';
+            if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+            SutraSafeStorage.remove(SUTRA_CLOUD_SESSION_KEY);
+        }
+
+        function isSutraCloudSignedIn() {
+            return !!(sutraCloudRuntime.refreshToken && sutraCloudRuntime.user && sutraCloudRuntime.user.id);
+        }
+
+        function applySutraCloudAuthResponse(json) {
+            if (!json || !json.access_token) throw new Error('Sign-in did not return a session.');
+            sutraCloudRuntime.accessToken = String(json.access_token);
+            sutraCloudRuntime.refreshToken = String(json.refresh_token || sutraCloudRuntime.refreshToken || '');
+            const expiresInMs = Number(json.expires_in || 3600) * 1000;
+            sutraCloudRuntime.expiresAtMs = Date.now() + Math.max(0, expiresInMs - 60000);
+            const user = json.user || {};
+            sutraCloudRuntime.user = { id: String(user.id || ''), email: String(user.email || '') };
+            persistSutraCloudSession();
+            return sutraCloudRuntime.user;
+        }
+
+        function sutraCloudTokenValid() {
+            return !!sutraCloudRuntime.accessToken && (!sutraCloudRuntime.expiresAtMs || Date.now() < sutraCloudRuntime.expiresAtMs);
+        }
+
+        async function refreshSutraCloudSession(force = false) {
+            if (!sutraCloudRuntime.refreshToken) return false;
+            if (!force && sutraCloudTokenValid()) return true;
+            if (sutraCloudRuntime.refreshing) return sutraCloudRuntime.refreshing;
+            sutraCloudRuntime.refreshing = (async () => {
+                try {
+                    const resp = await sutraCloudFetch('/auth/v1/token?grant_type=refresh_token', {
+                        method: 'POST',
+                        auth: false,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: sutraCloudRuntime.refreshToken })
+                    });
+                    const json = await resp.json().catch(() => null);
+                    if (!resp.ok || !json || !json.access_token) {
+                        clearSutraCloudSession(); // refresh token expired/revoked -> require re-sign-in
+                        return false;
+                    }
+                    applySutraCloudAuthResponse(json);
+                    return true;
+                } catch (error) {
+                    return false;
+                } finally {
+                    sutraCloudRuntime.refreshing = null;
+                }
+            })();
+            return sutraCloudRuntime.refreshing;
+        }
+
+        async function ensureSutraCloudAccessToken() {
+            if (sutraCloudTokenValid()) return sutraCloudRuntime.accessToken;
+            if (sutraCloudRuntime.refreshToken) await refreshSutraCloudSession();
+            return sutraCloudRuntime.accessToken;
+        }
+
+        async function sutraCloudFetch(path, options = {}) {
+            const cfg = getSutraCloudConfig();
+            if (!cfg.configured) throw new Error('Sutra Cloud is not configured for this build.');
+            const headers = Object.assign({ apikey: cfg.anonKey }, options.headers || {});
+            if (options.auth !== false) {
+                const token = await ensureSutraCloudAccessToken();
+                if (token) headers.Authorization = `Bearer ${token}`;
+            }
+            const resp = await fetch(`${cfg.url}${path}`, {
+                method: options.method || 'GET',
+                headers,
+                body: options.body
+            });
+            if (resp.status === 401 && options.auth !== false && !options.retried) {
+                const refreshed = await refreshSutraCloudSession(true);
+                if (refreshed) return sutraCloudFetch(path, { ...options, retried: true });
+            }
+            return resp;
+        }
+
+        async function sutraCloudJson(path, options = {}) {
+            const resp = await sutraCloudFetch(path, options);
+            let json = null;
+            try { json = await resp.json(); } catch (error) { json = null; }
+            if (!resp.ok) {
+                const msg = (json && (json.msg || json.message || json.error_description || json.error)) || `Request failed (${resp.status}).`;
+                throw new Error(msg);
+            }
+            return json;
+        }
+
+        async function sutraCloudSendOtp(email) {
+            const address = String(email || '').trim();
+            if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error('Enter a valid email address.');
+            const resp = await sutraCloudFetch('/auth/v1/otp', {
+                method: 'POST',
+                auth: false,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: address, create_user: true })
+            });
+            if (!resp.ok) {
+                const json = await resp.json().catch(() => null);
+                throw new Error((json && (json.msg || json.error_description || json.error)) || 'Could not send the sign-in code.');
+            }
+            return true;
+        }
+
+        async function sutraCloudVerifyOtp(email, token) {
+            const address = String(email || '').trim();
+            const code = String(token || '').trim();
+            if (!code) throw new Error('Enter the code from your email.');
+            const json = await sutraCloudJson('/auth/v1/verify', {
+                method: 'POST',
+                auth: false,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'email', email: address, token: code })
+            });
+            return applySutraCloudAuthResponse(json);
+        }
+
+        async function sutraCloudSignOut() {
+            try {
+                if (sutraCloudRuntime.accessToken) await sutraCloudFetch('/auth/v1/logout', { method: 'POST' });
+            } catch (error) { /* best effort — local sign-out always succeeds */ }
+            clearSutraCloudSession();
+            updateSutraCloudUi();
+        }
+
+        function encodeSutraCloudPath(path) {
+            return String(path).split('/').map(encodeURIComponent).join('/');
+        }
+
+        function buildSutraCloudBackupPath(label) {
+            const uid = sutraCloudRuntime.user && sutraCloudRuntime.user.id;
+            if (!uid) throw new Error('Sign in to Sutra Cloud first.');
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const safeLabel = String(label || 'workspace').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 40) || 'workspace';
+            return `${uid}/${stamp}-${safeLabel}.sutra`;
+        }
+
+        function formatSutraCloudSize(bytes) {
+            const n = Number(bytes || 0);
+            if (!n) return 'unknown size';
+            if (n < 1024) return `${n} B`;
+            if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+            return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        async function sutraCloudBackupNow(options = {}) {
+            if (!isSutraCloudSignedIn()) throw new Error('Sign in to Sutra Cloud first.');
+            assertSutraEncryptionAvailable();
+            const passphrase = options.passphrase || await openSutraCloudSyncPassphraseModal({
+                requireConfirm: true,
+                title: 'Set a backup password',
+                help: 'This password encrypts your backup before it leaves this device. Sutra Cloud cannot recover it if you forget it — let your browser save it.',
+                submitText: 'Encrypt & back up'
+            });
+            if (!passphrase) return { cancelled: true };
+            sutraCloudRuntime.busy = true;
+            updateSutraCloudUi();
+            try {
+                const encrypted = await createEncryptedSutraBackupBlob({ passphrase });
+                const path = buildSutraCloudBackupPath(options.label);
+                const upResp = await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'true' },
+                    body: encrypted.blob
+                });
+                if (!upResp.ok) {
+                    const j = await upResp.json().catch(() => null);
+                    throw new Error((j && (j.message || j.error)) || `Upload failed (${upResp.status}).`);
+                }
+                await sutraCloudJson('/rest/v1/backup_index', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                    body: JSON.stringify({
+                        path,
+                        label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
+                        size_bytes: encrypted.blob.size || encrypted.encryptedByteLength || 0,
+                        device_id: loadSutraCloudMeta().deviceId
+                    })
+                });
+                const meta = loadSutraCloudMeta();
+                meta.lastBackupAt = new Date().toISOString();
+                meta.lastError = '';
+                if (options.auto) meta.lastAutoBackupAt = meta.lastBackupAt;
+                persistSutraCloudMeta();
+                sutraCloudRuntime.backupPassphrase = passphrase; // session-only cache enables unattended auto-backup
+                await pruneSutraCloudBackups();
+                if (!options.silent) showToast('Encrypted backup saved to Sutra Cloud.');
+                return { uploaded: true, path };
+            } catch (error) {
+                const meta = loadSutraCloudMeta();
+                meta.lastError = error && error.message ? error.message : 'Backup failed.';
+                persistSutraCloudMeta();
+                if (!options.silent) showToast(`Sutra Cloud backup failed: ${meta.lastError}`);
+                throw error;
+            } finally {
+                sutraCloudRuntime.busy = false;
+                updateSutraCloudUi();
+            }
+        }
+
+        async function sutraCloudListBackups() {
+            if (!isSutraCloudSignedIn()) return [];
+            const rows = await sutraCloudJson('/rest/v1/backup_index?select=id,path,label,size_bytes,created_at,device_id&order=created_at.desc', {
+                headers: { Accept: 'application/json' }
+            });
+            return Array.isArray(rows) ? rows : [];
+        }
+
+        async function pruneSutraCloudBackups() {
+            try {
+                const rows = await sutraCloudListBackups();
+                if (rows.length <= SUTRA_CLOUD_KEEP_LAST) return;
+                for (const row of rows.slice(SUTRA_CLOUD_KEEP_LAST)) {
+                    await sutraCloudDeleteBackup(row, { silent: true, skipRefresh: true });
+                }
+            } catch (error) { /* retention is best-effort and never blocks a backup */ }
+        }
+
+        async function sutraCloudDeleteBackup(row, options = {}) {
+            if (!row || !row.path) return;
+            await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(row.path)}`, { method: 'DELETE' });
+            if (row.id) {
+                await sutraCloudFetch(`/rest/v1/backup_index?id=eq.${encodeURIComponent(row.id)}`, {
+                    method: 'DELETE',
+                    headers: { Prefer: 'return=minimal' }
+                });
+            }
+            if (!options.silent) showToast('Backup deleted from Sutra Cloud.');
+            if (!options.skipRefresh) refreshSutraCloudBackupList();
+        }
+
+        async function sutraCloudRestore(row, options = {}) {
+            if (!row || !row.path) throw new Error('No backup selected.');
+            const passphrase = options.passphrase || await openSutraCloudSyncPassphraseModal({
+                requireConfirm: false,
+                title: 'Enter backup password',
+                help: 'Enter the password you used to encrypt this backup. Restoring replaces your current workspace.',
+                submitText: 'Restore backup'
+            });
+            if (!passphrase) return { cancelled: true };
+            sutraCloudRuntime.busy = true;
+            updateSutraCloudUi();
+            try {
+                const dlResp = await sutraCloudFetch(`/storage/v1/object/authenticated/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(row.path)}`, { method: 'GET' });
+                if (!dlResp.ok) throw new Error(`Download failed (${dlResp.status}).`);
+                const buffer = await dlResp.arrayBuffer();
+                const zipBytes = await decryptSutraEncryptedEnvelopeBytes(buffer, passphrase);
+                const imported = await importAtelierPackage(new Blob([zipBytes], { type: 'application/zip' }));
+                await applyValidatedWorkspaceImport(imported.workspacePayload, { source: 'sutra-cloud', legacyUnencrypted: false, warnings: imported.warnings });
+                showToast('Workspace restored from Sutra Cloud.');
+                return { restored: true };
+            } catch (error) {
+                const msg = error && error.name === 'SutraDecryptError'
+                    ? SUTRA_DECRYPT_GENERIC_ERROR
+                    : (error && error.message ? error.message : 'Restore failed.');
+                showToast(msg);
+                throw error;
+            } finally {
+                sutraCloudRuntime.busy = false;
+                updateSutraCloudUi();
+            }
+        }
+
+        // ---- Optional auto-backup (Phase C) --------------------------------
+        // Purely opt-in: runs ONLY when configured + signed in + the toggle is on
+        // + a passphrase is cached this session (from a manual backup). Turning the
+        // toggle off, or signing out, stops it immediately. Manual backup is always
+        // the primary path; this is a convenience layer.
+        function sutraCloudAutoReady() {
+            const meta = loadSutraCloudMeta();
+            return getSutraCloudConfig().configured
+                && !!(meta.autoBackup && meta.autoBackup.enabled)
+                && isSutraCloudSignedIn()
+                && !!sutraCloudRuntime.backupPassphrase;
+        }
+
+        function runSutraCloudAutoBackup() {
+            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy) return;
+            sutraCloudBackupNow({
+                passphrase: sutraCloudRuntime.backupPassphrase,
+                auto: true,
+                silent: true,
+                label: 'Auto backup'
+            }).then(() => { try { refreshSutraCloudBackupList(); } catch (e) {} })
+              .catch(() => { /* errors surface in the panel status; never disrupt the app */ });
+        }
+
+        function scheduleSutraCloudAutoBackup(delayMs = 60000) {
+            if (sutraCloudAutoTimer) clearTimeout(sutraCloudAutoTimer);
+            sutraCloudAutoTimer = setTimeout(() => {
+                sutraCloudAutoTimer = null;
+                runSutraCloudAutoBackup();
+            }, delayMs);
+        }
+
+        // Called from the canonical local-save hook on every meaningful change.
+        function maybeSutraCloudAutoBackup(reason) {
+            if (!sutraCloudAutoReady()) return;
+            const meta = loadSutraCloudMeta();
+            const freq = (meta.autoBackup && meta.autoBackup.frequency) || 'daily';
+            if (reason === 'hidden') {
+                // "On app close" — best-effort when the tab is hidden/backgrounded.
+                if (freq === 'close') runSutraCloudAutoBackup();
+                return;
+            }
+            if (freq === 'close') return;            // only fires on hidden
+            if (freq === 'daily') {
+                const last = meta.lastAutoBackupAt ? Date.parse(meta.lastAutoBackupAt) : 0;
+                if (last && (Date.now() - last) < 20 * 60 * 60 * 1000) return; // ~once per day
+            }
+            scheduleSutraCloudAutoBackup();          // 'change' or due 'daily' → debounced upload
+        }
+
+        function bindSutraCloudVisibilityAutoBackup() {
+            if (sutraCloudVisibilityBound) return;
+            sutraCloudVisibilityBound = true;
+            try {
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        try { maybeSutraCloudAutoBackup('hidden'); } catch (e) { /* noop */ }
+                    }
+                });
+            } catch (e) { /* noop */ }
+        }
+
+        // ---- Sutra Cloud UI (save-bar panel) -------------------------------
+        function sutraCloudSetHidden(id, hidden) {
+            const el = document.getElementById(id);
+            if (el) el.hidden = !!hidden;
+        }
+        function sutraCloudSetText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+
+        function updateSutraCloudUi() {
+            const modal = document.getElementById('sutraCloudModal');
+            if (!modal) return;
+            const cfg = getSutraCloudConfig();
+            const backend = loadSutraCloudBackend();
+            const isCustom = cfg.mode === 'custom';
+            const cspOk = !cfg.url || sutraCloudOriginAllowedByCsp(cfg.url);
+            const signedIn = isSutraCloudSignedIn();
+            const meta = loadSutraCloudMeta();
+
+            // ---- Backend status block ----
+            sutraCloudSetText('sutraCloudStatBackend', isCustom ? 'Custom Supabase (your project)' : 'Official Sutra Cloud');
+            sutraCloudSetHidden('sutraCloudStatEmailRow', !signedIn);
+            if (signedIn && sutraCloudRuntime.user) sutraCloudSetText('sutraCloudStatEmail', sutraCloudRuntime.user.email || 'Signed in');
+            sutraCloudSetText('sutraCloudStatCheck', backend.lastConnectionCheckAt ? formatSutraDriveSyncDate(backend.lastConnectionCheckAt) : 'Never');
+            sutraCloudSetText('sutraCloudStatBackup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'Never');
+            sutraCloudSetText('sutraCloudStatAuto', (meta.autoBackup && meta.autoBackup.enabled) ? `on (${meta.autoBackup.frequency || 'daily'})` : 'off');
+
+            let setupMsg = '';
+            if (!cfg.configured) {
+                setupMsg = isCustom
+                    ? 'This backend needs your Supabase URL and anon key below.'
+                    : 'Official Sutra Cloud is not configured for this build yet (see supabase/README.md).';
+            } else if (isCustom && !cspOk) {
+                setupMsg = 'This build’s security policy (CSP) blocks your Supabase origin. Custom Supabase needs a self-hosted build with your project ref in the app CSP. Official Sutra Cloud works in the hosted version.';
+            }
+            sutraCloudSetHidden('sutraCloudStatSetupRow', !setupMsg);
+            if (setupMsg) sutraCloudSetText('sutraCloudStatSetup', setupMsg);
+
+            // ---- Backend selector state ----
+            const officialRadio = document.getElementById('sutraCloudBackendOfficial');
+            const customRadio = document.getElementById('sutraCloudBackendCustom');
+            if (officialRadio) officialRadio.checked = !isCustom;
+            if (customRadio) customRadio.checked = isCustom;
+            sutraCloudSetHidden('sutraCloudUseOfficialBtn', !isCustom);
+            const advanced = document.getElementById('sutraCloudAdvanced');
+            if (advanced && isCustom) advanced.open = true;
+
+            // A custom backend the browser can't reach (CSP) should not pretend it can
+            // sign in / back up. Treat it as unusable here, with a clear explanation.
+            const usable = cfg.configured && (!isCustom || cspOk);
+            // The compact status block (with its setup flag) is the single source of
+            // truth for "needs setup", so the old standalone notice stays hidden.
+            sutraCloudSetHidden('sutraCloudNotConfigured', true);
+            sutraCloudSetHidden('sutraCloudSigninSection', !usable || signedIn);
+            sutraCloudSetHidden('sutraCloudAccountSection', !usable || !signedIn);
+            sutraCloudSetHidden('sutraCloudActionsSection', !usable || !signedIn);
+            sutraCloudSetHidden('sutraCloudCodeRow', !sutraCloudUiState.awaitingCode);
+            if (signedIn && sutraCloudRuntime.user) sutraCloudSetText('sutraCloudAccountEmail', sutraCloudRuntime.user.email || 'Signed in');
+
+            let status;
+            if (!cfg.configured) status = isCustom ? 'Enter your Supabase project URL and anon key below.' : 'Sutra Cloud is not set up for this build yet. See supabase/README.md.';
+            else if (isCustom && !cspOk) status = 'Custom Supabase origin is blocked by this build’s CSP — a self-hosted build is required.';
+            else if (!signedIn) status = 'Signed out. Sign in to enable cloud backups.';
+            else if (sutraCloudRuntime.busy) status = 'Working…';
+            else if (meta.lastError) status = meta.lastError;
+            else if (meta.lastBackupAt) status = `Last backup: ${formatSutraDriveSyncDate(meta.lastBackupAt)}`;
+            else status = 'Signed in. No cloud backups yet.';
+            sutraCloudSetText('sutraCloudStatus', status);
+
+            const autoToggle = document.getElementById('sutraCloudAutoToggle');
+            if (autoToggle) autoToggle.checked = !!(meta.autoBackup && meta.autoBackup.enabled);
+            const autoFreq = document.getElementById('sutraCloudAutoFrequency');
+            if (autoFreq) {
+                autoFreq.value = (meta.autoBackup && meta.autoBackup.frequency) || 'daily';
+                autoFreq.disabled = !(meta.autoBackup && meta.autoBackup.enabled);
+            }
+            ['sutraCloudBackupNowBtn', 'sutraCloudRefreshBtn', 'sutraCloudSignOutBtn', 'sutraCloudSendCodeBtn', 'sutraCloudVerifyBtn', 'sutraCloudTestBtn', 'sutraCloudUseCustomBtn', 'sutraCloudUseOfficialBtn'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.disabled = sutraCloudRuntime.busy;
+            });
+        }
+
+        function buildSutraCloudRow(row) {
+            const item = document.createElement('div');
+            item.className = 'sutra-cloud-backup-row';
+            const info = document.createElement('div');
+            info.className = 'sutra-cloud-backup-info';
+            const title = document.createElement('div');
+            title.className = 'sutra-cloud-backup-title';
+            title.textContent = row.label || 'Backup';
+            const sub = document.createElement('div');
+            sub.className = 'sutra-cloud-backup-sub';
+            sub.textContent = `${formatSutraDriveSyncDate(row.created_at)} · ${formatSutraCloudSize(row.size_bytes)}`;
+            info.appendChild(title);
+            info.appendChild(sub);
+            const actions = document.createElement('div');
+            actions.className = 'sutra-cloud-backup-actions';
+            const restoreBtn = document.createElement('button');
+            restoreBtn.type = 'button';
+            restoreBtn.className = 'storage-btn';
+            restoreBtn.textContent = 'Restore';
+            restoreBtn.addEventListener('click', () => confirmSutraCloudRestore(row, item));
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'storage-btn';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => confirmSutraCloudDelete(row, item));
+            actions.appendChild(restoreBtn);
+            actions.appendChild(delBtn);
+            item.appendChild(info);
+            item.appendChild(actions);
+            return item;
+        }
+
+        function confirmSutraCloudRestore(row, item) {
+            const actions = item && item.querySelector('.sutra-cloud-backup-actions');
+            if (!actions) return;
+            actions.textContent = '';
+            const warn = document.createElement('span');
+            warn.className = 'sutra-cloud-confirm-text';
+            warn.textContent = 'Replace current workspace?';
+            const yes = document.createElement('button');
+            yes.type = 'button';
+            yes.className = 'storage-btn primary';
+            yes.textContent = 'Replace';
+            yes.addEventListener('click', async () => {
+                try { await sutraCloudRestore(row); closeSutraCloudModal(); }
+                catch (error) { refreshSutraCloudBackupList(); }
+            });
+            const no = document.createElement('button');
+            no.type = 'button';
+            no.className = 'storage-btn';
+            no.textContent = 'Cancel';
+            no.addEventListener('click', () => refreshSutraCloudBackupList());
+            actions.appendChild(warn);
+            actions.appendChild(yes);
+            actions.appendChild(no);
+        }
+
+        function confirmSutraCloudDelete(row, item) {
+            const actions = item && item.querySelector('.sutra-cloud-backup-actions');
+            if (!actions) return;
+            actions.textContent = '';
+            const warn = document.createElement('span');
+            warn.className = 'sutra-cloud-confirm-text';
+            warn.textContent = 'Delete this backup?';
+            const yes = document.createElement('button');
+            yes.type = 'button';
+            yes.className = 'storage-btn';
+            yes.textContent = 'Delete';
+            yes.addEventListener('click', async () => {
+                try { await sutraCloudDeleteBackup(row); }
+                catch (error) { showToast(`Delete failed: ${error.message || 'error'}`); refreshSutraCloudBackupList(); }
+            });
+            const no = document.createElement('button');
+            no.type = 'button';
+            no.className = 'storage-btn';
+            no.textContent = 'Cancel';
+            no.addEventListener('click', () => refreshSutraCloudBackupList());
+            actions.appendChild(warn);
+            actions.appendChild(yes);
+            actions.appendChild(no);
+        }
+
+        async function refreshSutraCloudBackupList() {
+            const list = document.getElementById('sutraCloudBackupList');
+            if (!list) return;
+            list.textContent = '';
+            if (!isSutraCloudSignedIn()) return;
+            const loading = document.createElement('div');
+            loading.className = 'sutra-cloud-empty';
+            loading.textContent = 'Loading backups…';
+            list.appendChild(loading);
+            let rows = [];
+            try {
+                rows = await sutraCloudListBackups();
+            } catch (error) {
+                list.textContent = '';
+                const er = document.createElement('div');
+                er.className = 'sutra-cloud-empty';
+                er.textContent = `Could not load backups: ${error.message || 'error'}`;
+                list.appendChild(er);
+                return;
+            }
+            list.textContent = '';
+            if (!rows.length) {
+                const em = document.createElement('div');
+                em.className = 'sutra-cloud-empty';
+                em.textContent = 'No cloud backups yet. Press “Back up now”.';
+                list.appendChild(em);
+                return;
+            }
+            rows.forEach(row => list.appendChild(buildSutraCloudRow(row)));
+        }
+
+        function openSutraCloudModal() {
+            const modal = document.getElementById('sutraCloudModal');
+            if (!modal) return;
+            if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
+            bindSutraCloudUi();
+            // Reflect any saved custom backend config in the advanced form (without
+            // clobbering anything the user is mid-typing).
+            const backend = loadSutraCloudBackend();
+            const urlEl = document.getElementById('sutraCloudCustomUrl');
+            const keyEl = document.getElementById('sutraCloudCustomKey');
+            if (urlEl && !urlEl.value) urlEl.value = backend.customSupabaseUrl || '';
+            if (keyEl && !keyEl.value) keyEl.value = backend.customSupabaseAnonKey || '';
+            sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
+            modal.classList.add('active');
+            try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
+            updateSutraCloudUi();
+            if (isSutraCloudSignedIn()) refreshSutraCloudBackupList();
+        }
+
+        function closeSutraCloudModal() {
+            const modal = document.getElementById('sutraCloudModal');
+            if (!modal) return;
+            modal.classList.remove('active');
+            try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
+        }
+
+        function bindSutraCloudUi() {
+            if (sutraCloudUiBound) return;
+            sutraCloudUiBound = true;
+            const on = (id, event, handler) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener(event, handler);
+            };
+            on('sutraCloudSendCodeBtn', 'click', async () => {
+                const email = (document.getElementById('sutraCloudEmailInput') || {}).value || '';
+                try {
+                    sutraCloudRuntime.busy = true; updateSutraCloudUi();
+                    await sutraCloudSendOtp(email);
+                    sutraCloudUiState.awaitingCode = true;
+                    sutraCloudUiState.pendingEmail = String(email).trim();
+                    showToast('Check your email for a 6-digit code.');
+                } catch (error) {
+                    showToast(error.message || 'Could not send the code.');
+                } finally {
+                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
+                }
+            });
+            on('sutraCloudVerifyBtn', 'click', async () => {
+                const code = (document.getElementById('sutraCloudCodeInput') || {}).value || '';
+                try {
+                    sutraCloudRuntime.busy = true; updateSutraCloudUi();
+                    await sutraCloudVerifyOtp(sutraCloudUiState.pendingEmail, code);
+                    sutraCloudUiState.awaitingCode = false;
+                    showToast('Signed in to Sutra Cloud.');
+                    updateSutraCloudUi();
+                    refreshSutraCloudBackupList();
+                } catch (error) {
+                    showToast(error.message || 'That code did not work.');
+                } finally {
+                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
+                }
+            });
+            on('sutraCloudSignOutBtn', 'click', () => { sutraCloudSignOut(); });
+            on('sutraCloudBackupNowBtn', 'click', async () => {
+                try { await sutraCloudBackupNow(); refreshSutraCloudBackupList(); }
+                catch (error) { /* toast already shown */ }
+            });
+            on('sutraCloudRefreshBtn', 'click', () => refreshSutraCloudBackupList());
+            on('sutraCloudAutoToggle', 'change', async (event) => {
+                const meta = loadSutraCloudMeta();
+                const enabling = !!(event.target && event.target.checked);
+                if (enabling) {
+                    if (!isSutraCloudSignedIn()) {
+                        if (event.target) event.target.checked = false;
+                        showToast('Sign in first to enable auto-backup.');
+                        return;
+                    }
+                    // Unattended backups need the password cached for this session.
+                    // Do one backup now (which prompts + caches it) to turn auto on.
+                    if (!sutraCloudRuntime.backupPassphrase) {
+                        showToast('Create one backup to set your password — then auto-backup runs on its own.');
+                        const res = await sutraCloudBackupNow().catch(() => null);
+                        if (!res || res.cancelled || !sutraCloudRuntime.backupPassphrase) {
+                            if (event.target) event.target.checked = false;
+                            return;
+                        }
+                        refreshSutraCloudBackupList();
+                    }
+                }
+                meta.autoBackup.enabled = enabling;
+                persistSutraCloudMeta();
+                updateSutraCloudUi();
+            });
+            on('sutraCloudAutoFrequency', 'change', (event) => {
+                const meta = loadSutraCloudMeta();
+                meta.autoBackup.frequency = (event.target && event.target.value) || 'daily';
+                persistSutraCloudMeta();
+            });
+
+            // ---- Storage backend (Official vs Bring-Your-Own Supabase) ----
+            let pendingSwitch = null;
+            const showSwitch = (target) => { pendingSwitch = target; sutraCloudSetHidden('sutraCloudSwitchConfirm', false); };
+            const readCustomInputs = () => ({
+                url: ((document.getElementById('sutraCloudCustomUrl') || {}).value || '').trim(),
+                key: ((document.getElementById('sutraCloudCustomKey') || {}).value || '').trim()
+            });
+            const proposeCustomSwitch = () => {
+                const { url, key } = readCustomInputs();
+                const backend = loadSutraCloudBackend();
+                const effUrl = url || backend.customSupabaseUrl || '';
+                const effKey = key || backend.customSupabaseAnonKey || '';
+                if (!isValidSupabaseUrl(effUrl) || !effKey) {
+                    const adv = document.getElementById('sutraCloudAdvanced'); if (adv) adv.open = true;
+                    showToast('Enter your Supabase URL and anon key, then Test connection.');
+                    return;
+                }
+                if (looksLikeServiceRoleKey(effKey)) {
+                    showToast('That looks like a service_role / secret key. Use the public anon key only.');
+                    return;
+                }
+                showSwitch({ mode: 'custom', customSupabaseUrl: effUrl, customSupabaseAnonKey: effKey });
+            };
+            on('sutraCloudBackendOfficial', 'change', (event) => {
+                if (!event.target.checked) return;
+                if (getSutraCloudConfig().mode === 'official') return;
+                showSwitch({ mode: 'official' });
+            });
+            on('sutraCloudBackendCustom', 'change', (event) => {
+                if (!event.target.checked) return;
+                if (getSutraCloudConfig().mode === 'custom') return;
+                const adv = document.getElementById('sutraCloudAdvanced');
+                if (adv) adv.open = true;
+                const { url, key } = readCustomInputs();
+                const backend = loadSutraCloudBackend();
+                const hasConfig = isValidSupabaseUrl(url || backend.customSupabaseUrl) && (key || backend.customSupabaseAnonKey);
+                if (hasConfig) {
+                    proposeCustomSwitch();   // ready to go → confirm the switch
+                } else {
+                    // Just reveal the form; the user applies it via "Save & use this backend".
+                    const urlEl = document.getElementById('sutraCloudCustomUrl');
+                    if (urlEl) { try { urlEl.focus(); } catch (error) { /* noop */ } }
+                }
+            });
+            on('sutraCloudUseCustomBtn', 'click', () => proposeCustomSwitch());
+            on('sutraCloudUseOfficialBtn', 'click', () => showSwitch({ mode: 'official' }));
+            on('sutraCloudTestBtn', 'click', async () => {
+                const { url, key } = readCustomInputs();
+                const statusEl = document.getElementById('sutraCloudTestStatus');
+                if (statusEl) { statusEl.textContent = 'Testing…'; statusEl.className = 'sutra-cloud-test-status'; }
+                sutraCloudRuntime.busy = true; updateSutraCloudUi();
+                try {
+                    const res = await sutraCloudTestConnection(url, key);
+                    if (statusEl) { statusEl.textContent = res.message; statusEl.className = `sutra-cloud-test-status ${res.ok ? 'is-ok' : 'is-err'}`; }
+                } finally {
+                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
+                }
+            });
+            on('sutraCloudSwitchConfirmYes', 'click', async () => {
+                const target = pendingSwitch;
+                pendingSwitch = null;
+                sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
+                if (!target) return;
+                try {
+                    await switchSutraCloudBackend(target);
+                    showToast(target.mode === 'custom'
+                        ? 'Switched to your Supabase project. Sign in to continue.'
+                        : 'Switched to Official Sutra Cloud. Sign in to continue.');
+                } catch (error) {
+                    showToast(error.message || 'Could not switch backend.');
+                    updateSutraCloudUi();
+                }
+            });
+            on('sutraCloudSwitchConfirmNo', 'click', () => {
+                pendingSwitch = null;
+                sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
+                updateSutraCloudUi(); // re-sync radios to the still-active backend
+            });
+        }
+
+        function initSutraCloud() {
+            try {
+                restoreSutraCloudSession();   // local only — no network
+                bindSutraCloudUi();
+                bindSutraCloudVisibilityAutoBackup();
+                updateSutraCloudUi();
+            } catch (error) {
+                if (typeof reportError === 'function') reportError(error, 'sutra-cloud-init', 'warn');
+            }
+        }
+
+        window.SutraCloudSync = {
+            isConfigured: () => getSutraCloudConfig().configured,
+            isSignedIn: isSutraCloudSignedIn,
+            sendCode: sutraCloudSendOtp,
+            verifyCode: sutraCloudVerifyOtp,
+            signOut: sutraCloudSignOut,
+            backupNow: sutraCloudBackupNow,
+            listBackups: sutraCloudListBackups,
+            restore: sutraCloudRestore,
+            deleteBackup: sutraCloudDeleteBackup,
+            open: openSutraCloudModal,
+            getMeta: () => ({ ...loadSutraCloudMeta() }),
+            // Backend (Official Sutra Cloud vs Bring-Your-Own Supabase)
+            getBackend: () => ({ ...loadSutraCloudBackend() }),
+            getActiveConfig: () => { const c = getSutraCloudConfig(); return { mode: c.mode, url: c.url, configured: c.configured }; },
+            isValidSupabaseUrl,
+            looksLikeServiceRoleKey,
+            originAllowedByCsp: sutraCloudOriginAllowedByCsp,
+            testConnection: sutraCloudTestConnection,
+            switchBackend: switchSutraCloudBackend
+        };
 
         function normalizeAtelierAssetFileName(fileName) {
             const clean = String(fileName || '').trim().replace(/^assets\//i, '');

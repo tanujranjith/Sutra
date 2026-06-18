@@ -42,6 +42,7 @@ const SCAN_FILES = [
   'src/core/dom-safety.js',
   'src/core/error-reporter.js',
   'src/core/feature-guard.js',
+  'src/core/issue-prompt.js',
   'src/core/migrations.js',
   'src/core/safe-storage.js',
   'src/config/sutra-runtime-config.js',

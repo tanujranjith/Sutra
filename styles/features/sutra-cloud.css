@@ -1,0 +1,342 @@
+/* Sutra Cloud — save-bar panel styling.
+   Optional, consent-first, end-to-end-encrypted cloud backup (powered by Supabase).
+   Reuses the shared .modal / .modal-content / .storage-btn primitives; this file
+   only adds the panel-specific layout. */
+
+/* The [hidden] attribute must win over the explicit display rules below
+   (.storage-btn, .sutra-cloud-notice, .sutra-cloud-field all set display), or
+   JS-hidden buttons/rows/notices would stay visible. */
+.sutra-cloud-modal [hidden] {
+    display: none !important;
+}
+
+.sutra-cloud-modal {
+    max-width: 520px;
+    /* Cap height and scroll the body so the header (title + close) stays pinned
+       and reachable even when the backend section makes the panel tall. */
+    max-height: min(88vh, calc(100dvh - 48px));
+    display: flex;
+    flex-direction: column;
+}
+
+.sutra-cloud-modal .modal-header {
+    flex: 0 0 auto;
+}
+
+.sutra-cloud-modal .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-bottom: 0;
+    /* room so the scrollbar doesn't overlap inputs */
+    padding-right: 4px;
+}
+
+.sutra-cloud-powered {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-status {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    min-height: 18px;
+}
+
+.sutra-cloud-notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--surface-2, rgba(125, 125, 125, 0.08));
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.25));
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.sutra-cloud-notice i {
+    margin-top: 2px;
+    color: var(--accent-color, #5d82f5);
+}
+
+.sutra-cloud-section {
+    padding: 14px 0;
+    border-top: 1px solid var(--border-color, rgba(125, 125, 125, 0.18));
+}
+
+.sutra-cloud-section:first-of-type {
+    border-top: 0;
+}
+
+.sutra-cloud-help {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.sutra-cloud-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.sutra-cloud-field > span,
+.sutra-cloud-field > label {
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-account-row,
+.sutra-cloud-action-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.sutra-cloud-account-row {
+    justify-content: space-between;
+    font-size: 14px;
+}
+
+.sutra-cloud-backups {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.sutra-cloud-empty {
+    padding: 14px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-backup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--surface-2, rgba(125, 125, 125, 0.06));
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.18));
+}
+
+.sutra-cloud-backup-info {
+    min-width: 0;
+}
+
+.sutra-cloud-backup-title {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sutra-cloud-backup-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-backup-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.sutra-cloud-confirm-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-auto {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0 6px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+
+.sutra-cloud-auto select {
+    max-width: 200px;
+}
+
+.sutra-cloud-fineprint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.atelier-onboarding-cloud-powered {
+    opacity: 0.85;
+}
+
+/* ---- Storage backend selector (Official vs Bring-Your-Own Supabase) ---- */
+.sutra-cloud-h {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.sutra-cloud-backend-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    background: var(--surface-2, rgba(125, 125, 125, 0.06));
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.18));
+    font-size: 12.5px;
+    color: var(--text-secondary);
+}
+
+.sutra-cloud-backend-status strong {
+    color: var(--text-primary, inherit);
+    font-weight: 600;
+}
+
+.sutra-cloud-setup-flag {
+    margin-top: 4px;
+    color: var(--warning-color, #b06a00);
+}
+
+.sutra-cloud-backend-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+}
+
+.sutra-cloud-backend-option {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+
+.sutra-cloud-backend-option:hover {
+    background: var(--surface-2, rgba(125, 125, 125, 0.06));
+}
+
+/* Highlight the active backend choice. */
+.sutra-cloud-backend-option:has(input:checked) {
+    border-color: var(--accent-color, #5d82f5);
+    background: var(--surface-2, rgba(93, 130, 245, 0.08));
+}
+
+.sutra-cloud-backend-option > span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sutra-cloud-backend-option input[type="radio"] {
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.sutra-cloud-advanced {
+    margin: 6px 0;
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.22));
+    border-radius: 10px;
+    padding: 6px 12px;
+}
+
+.sutra-cloud-advanced > summary {
+    cursor: pointer;
+    padding: 6px 0;
+    font-size: 13.5px;
+    list-style: none;
+}
+
+.sutra-cloud-advanced > summary::-webkit-details-marker { display: none; }
+
+.sutra-cloud-warning {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--warning-surface, rgba(176, 106, 0, 0.10));
+    border: 1px solid var(--warning-color, rgba(176, 106, 0, 0.4));
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.sutra-cloud-steps {
+    margin: 8px 0;
+    padding-left: 20px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.sutra-cloud-steps code {
+    font-size: 0.92em;
+}
+
+.sutra-cloud-backend-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 8px 0;
+}
+
+.sutra-cloud-link {
+    font-size: 12.5px;
+    color: var(--accent-color, #5d82f5);
+    text-decoration: underline;
+}
+
+.sutra-cloud-test-status {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    min-height: 16px;
+}
+
+.sutra-cloud-test-status.is-ok { color: var(--success-color, #2f8f5a); }
+.sutra-cloud-test-status.is-err { color: var(--danger-color, #c0504d); }
+
+.sutra-cloud-switch-confirm {
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--surface-2, rgba(125, 125, 125, 0.08));
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.3));
+    font-size: 13px;
+}
+
+.sutra-cloud-switch-confirm p { margin: 0 0 10px; }
+
+/* Off-screen (NOT display:none) username field so browser password managers can
+   associate + autofill the saved backup passphrase. display:none is ignored by
+   credential heuristics, so the field must remain in the layout but invisible. */
+.sutra-visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

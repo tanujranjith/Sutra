@@ -15,9 +15,10 @@ device.** It is a **static web app** - it runs from static hosting or directly
 from a local file, with:
 
 - **no backend** of Sutra's own,
-- **no required accounts** - there is nobody to sign up with,
+- **no required accounts** - you can use everything without signing up; an
+  account is needed only for the optional Sutra Cloud backup feature,
 - **no telemetry** - Sutra does not phone home or track usage,
-- **optional cloud sync off by default** - nothing is silently copied to a server.
+- **optional cloud sync/backup off by default** - nothing is silently copied to a server.
 
 Your notes, tasks, homework, study data, and settings are read and written locally. Optional Google Drive sync, if you explicitly enable it, uploads only browser-encrypted snapshots to your own Drive app-data folder. **Once Sutra has loaded, it needs no network connection to read or edit
 your workspace** - every data operation is local. How reliably the app itself
@@ -52,8 +53,13 @@ Some things are deliberately kept out of every backup file:
 - **Conversation history** with the Assistant is session-local and not exported.
 - **Backup passwords, Google Drive sync passwords, OAuth access tokens, refresh
   tokens, client secrets, and derived encryption keys** are never exported.
-- **Google Drive sync metadata** (`sutra:googleDriveSync:v1`) is device-local
-  operational state and is deliberately excluded from workspace backups.
+- **Google Drive sync metadata** (`sutra:googleDriveSync:v1`) and **Sutra Cloud
+  metadata** (`sutra:supabaseCloud:v1`) are device-local operational state and are
+  deliberately excluded from workspace backups.
+- **Sutra Cloud sign-in session** (`sutra:supabaseSession:v1`) is a device-local
+  account session token only. Your **backup passphrase is held in memory for the
+  session only** (to allow optional auto-backup) and is **never persisted and
+  never sent to any server**.
 
 Your provider and model **choices** (which are not secrets) do travel, so a
 restored workspace keeps its setup and only needs the key re-entered.
@@ -141,6 +147,29 @@ snapshots in your browser before uploading them to Drive `appDataFolder`, uses
 only the `https://www.googleapis.com/auth/drive.appdata` scope, and runs while
 the app is open, online, unlocked, and authorized.
 
+**Sutra Cloud** is a second optional convenience layer (powered by Supabase) for
+encrypted cloud backup + restore across devices. It is **off by default**, lives
+in the save bar, and only does anything after you turn it on, sign in with an
+email code, and press a button:
+
+- **Two backends:** **Official Sutra Cloud** (recommended; uses Sutra's configured
+  Supabase project) or, for advanced users, **your own Supabase project** chosen
+  from the panel's Storage backend section. Both use identical encryption — the
+  choice is only *whose* Supabase project stores the encrypted files, and custom
+  is *more user-controlled, not automatically safer*. The backend choice is
+  device-local and never travels inside a `.sutra` backup.
+- Each backup is a standard **password-encrypted `.sutra` file**, encrypted **on
+  your device before upload**. The selected backend stores only the **locked file**
+  plus a little non-sensitive metadata (label, size, timestamp) — it can never read
+  your workspace.
+- Your account **email** is the one piece of personal data the provider sees (it
+  is account PII). Your backup **passphrase is never sent** — lose it and the
+  cloud copy is unrecoverable, which is the price of true end-to-end encryption.
+- **Restore replaces** your current workspace (it is a backup, not a live merge),
+  and you confirm before it overwrites. Sutra keeps your **last 10** backups.
+- Optional **auto-backup** is itself off by default and only runs after you
+  explicitly enable it.
+
 Keep your backups somewhere you trust: encrypted `.sutra` backups still depend
 on the password you choose, and JSON exports are unencrypted. Neither contains
 your API keys, which are never exported.
@@ -174,7 +203,7 @@ browser session ends.
 
 | Question | Answer |
 |---|---|
-| Is there a Sutra server storing my data? | No. Static app, no Sutra backend. Optional Drive sync uses your Google account and encrypted app-data snapshots. |
+| Is there a Sutra server storing my data? | No. Static app, no Sutra backend. Optional Drive sync and optional Sutra Cloud (Supabase) store only **browser-encrypted** snapshots in **your own** account — the server never sees plaintext. |
 | Do I need an account? | No. |
 | Does Sutra track me / send telemetry? | No. |
 | Where does my workspace live? | Locally - IndexedDB + localStorage in your browser. |

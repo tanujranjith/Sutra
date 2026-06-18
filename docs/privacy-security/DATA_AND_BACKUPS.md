@@ -253,6 +253,63 @@ documented in [`GOOGLE_DRIVE_SYNC_SETUP.md`](../features/GOOGLE_DRIVE_SYNC_SETUP
 
 ---
 
+## 5b. Optional encrypted Sutra Cloud backup (Supabase)
+
+**Sutra Cloud** is a second optional, consent-first backup layer, powered by
+Supabase (Auth + Storage). It is **off by default** and lives in the save bar
+(not first-run onboarding — onboarding only *describes* it). Sutra stays
+local-first: IndexedDB/localStorage is the working copy and never depends on
+Sutra Cloud.
+
+It is intentionally a **manual backup/restore** model (with an opt-in auto layer),
+**not** continuous sync. "Cross-device" means: back up here, restore there.
+
+- **Two backends (device-local choice):** **Official Sutra Cloud** (default,
+  recommended — Sutra's configured Supabase project) or **Bring Your Own Supabase**
+  (advanced — the user's own project, config stored device-locally at
+  `sutra:supabaseCustomBackend:v1`, never inside a `.sutra` backup). Both share the
+  same encryption/passphrase/retention/restore behavior; only the project storing
+  the ciphertext differs. Switching backends signs out of the current session,
+  clears that session + the old backend's cached metadata, and leaves the local
+  workspace untouched. Because the hosted CSP pins exact origins, **custom Supabase
+  generally needs a self-hosted build** with the user's ref added to the CSP; the
+  panel detects a CSP-blocked origin and says so. Sutra **rejects `service_role`
+  keys** and only accepts the public anon key.
+- **Account:** passwordless email **one-time code** (Supabase Auth). The account
+  **email** is the only personal data the provider sees. No password to remember.
+- **Each backup is a standard encrypted `.sutra` envelope**, produced by the same
+  `createEncryptedSutraBackupBlob` pipeline as manual export (PBKDF2 600k +
+  AES-GCM-256, fresh salt + IV per backup), uploaded to a **private** Storage
+  bucket at `backups/<auth.uid()>/<timestamp>-<label>.sutra`. The server stores
+  **only ciphertext** plus a tiny `backup_index` row (path, label, size, device,
+  time) — never plaintext, never the passphrase.
+- **Row Level Security** isolates every user to their own `<uid>/` folder and
+  their own index rows (see [`supabase/schema.sql`](../../supabase/schema.sql)).
+- **Secrets:** the account session token is device-local
+  (`sutra:supabaseSession:v1`); the backup **passphrase is in memory only**
+  (session-scoped, to allow optional auto-backup) and is **never persisted or
+  sent**. Non-secret settings live at `sutra:supabaseCloud:v1`, excluded from
+  `.sutra` backups.
+- **Retention:** the most recent **10** backups per user; older ones are pruned
+  after each successful upload.
+- **Restore replaces** the current workspace (confirmed first) and runs through
+  the same decrypt → `importAtelierPackage` → safety-snapshot → apply path as a
+  local `.sutra` import.
+- **Optional auto-backup** is off by default. When enabled it runs only while
+  signed in, with the passphrase cached for the session, on the chosen trigger
+  (app hidden / once a day / on significant change). Turning it off stops it
+  immediately.
+- **Password recovery:** because backups are end-to-end encrypted, a lost
+  passphrase means the cloud copy is unrecoverable — so the passphrase modals are
+  wired to let your **browser's password manager** save and autofill it.
+
+Configuration (public URL + anon key) and the SQL/RLS migration are documented in
+[`supabase/README.md`](../../supabase/README.md). Sutra Cloud requires the hosted
+HTTPS app or localhost (Web Crypto + fetch); a cold boot with no saved session
+makes **zero** Sutra Cloud requests.
+
+---
+
 ## 6. Pre-import safety snapshot
 
 Importing replaces your current workspace, so before applying an import Sutra

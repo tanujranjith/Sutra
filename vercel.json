@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        { "type": "host", "value": "note-flow-atelier.vercel.app" }
+      ],
+      "destination": "https://sutra-two.vercel.app/HomePage.html",
+      "permanent": true
+    }
+  ]
+}

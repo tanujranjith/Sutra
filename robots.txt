@@ -1,0 +1,9 @@
+# robots.txt for Sutra
+# Primary canonical site: https://sutra-two.vercel.app/HomePage.html
+# Sutra is a private, local-first student workspace (student OS).
+
+User-agent: *
+Allow: /
+
+# Point crawlers at the sitemap on the primary deployment.
+Sitemap: https://sutra-two.vercel.app/sitemap.xml
