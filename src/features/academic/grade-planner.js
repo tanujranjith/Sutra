@@ -831,6 +831,22 @@
         computeCourseGrade: computeCourseGrade,
         computeGradeRisk: computeGradeRisk,
         computeGpa: computeGpa,
+        // Cumulative course grade after each dated score entry — a grade trend.
+        computeGradeTrend: function (courseId) {
+            var planner = getPlanner();
+            var data = getCourseData(planner, courseId);
+            if (!data) return [];
+            var dated = (data.entries || []).filter(function (e) {
+                return e && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date)) && Number.isFinite(Number(e.score));
+            }).slice().sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+            if (dated.length < 2) return [];
+            var trend = [];
+            for (var i = 0; i < dated.length; i += 1) {
+                var g = computeCourseGrade({ categories: data.categories, entries: dated.slice(0, i + 1) });
+                if (g && g.percent != null) trend.push({ date: dated[i].date, percent: Math.round(g.percent * 10) / 10 });
+            }
+            return trend;
+        },
         addEntryForCourse: function (courseId, entry) {
             var planner = getPlanner();
             var data = getCourseData(planner, courseId);

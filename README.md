@@ -176,7 +176,15 @@ Sutra's writing surface.
 
 ### Homework
 
-Two lanes — **Subjects** (your classes) and **Activities** (extracurriculars). Per-assignment fields cover title, due date/time, priority, difficulty, notes, and done state, with due-state chips (*no date / upcoming / due soon ≤ 48 h / overdue*). **Import from School Portal** pastes lines copied from a school portal (pipe-, tab-, or dash-separated), previews each parsed row, and lets you correct title / class / date / time / difficulty / priority before saving. JSON import/export is available, and each row's menu offers *Schedule this* and *Open class dashboard*.
+Two lanes — **Subjects** (your classes) and **Activities** (extracurriculars). Per-assignment fields cover title, due date/time, priority, difficulty, notes, and done state, with due-state chips (*no date / upcoming / due soon ≤ 48 h / overdue*). **Import from School Portal** pastes lines copied from a school portal (pipe-, tab-, or dash-separated), previews each parsed row, and lets you correct title / class / date / time / difficulty / priority before saving. JSON import/export is available, and each row's menu offers *Schedule this* and *Open class dashboard*. Any assignment can expand into an **Assignment Studio** (milestones, subtasks, rubric, linked notes/files, effort, revisions) whose milestones surface in All Due and Timeline — with *Schedule remaining*, *Make focus plan*, and *Make review cards* actions.
+
+### All Due
+
+One cross-workspace command center for everything with a deadline (tasks, homework, assignment milestones, AP exams, review due, college deadlines, timeline blocks, work, plus workspace signals). Filter by *overdue / today / this week / high-risk / unscheduled / review / AP / college / course / timeline*, and **sort** by *smart / due / urgency / importance / grade risk / effort / unscheduled-first / source*. Every row explains **why it's ranked here** (one line from the same deterministic engine that powers Today's **Next Step**) and offers *open source*, *schedule*, *start focus session*, *make review cards*, *open/create linked note*, *mark done*, and *defer*. See [All Due Command Center](docs/features/ALL_DUE_COMMAND_CENTER.md).
+
+### Course Hub
+
+A central dashboard per class — overview, assignments, files, linked notes, linked review decks, schedule periods, teacher/contact, and grade forecast. The overview shows a deterministic **"Do this next"** card (top-ranked item + reason) for that course. Notes/decks/assignments link by reference (`classLinkId` / relationships / `courseId`), never duplicated. See [Course Hub](docs/features/COURSE_HUB.md).
 
 ### AP Study
 
@@ -206,7 +214,7 @@ Sutra's spaced-repetition and active-recall center. It stores **decks**, **revie
 | Test | Fixed-length mixed-format quiz with a final score and card-by-card review. |
 | Match | Timed pair-up grid; best time is stored per deck. |
 
-Review surfaces a *Review due* card on Today, indexes deck names and card text in global search, links to a Focus template, and can take its source from a note, AP class, or homework class.
+Review surfaces a *Review due* card on Today, indexes deck names and card text in global search, links to a Focus template, and can take its source from a note, AP class, or homework class. The **Review Generator** turns existing work into cards: deterministic extraction (headings→body, *term: definition* lists, bold-term cloze) from a note, assignment, or All Due item, shown in an editable preview before saving, with each card linked back to its source. Start it from a note's menu (*Generate review cards*), Assignment Studio, All Due, or the Assistant. See [Review Generator](docs/features/REVIEW_GENERATOR.md).
 
 ### College
 
@@ -376,8 +384,9 @@ Sutra is keyboard-first. The most important shortcut is the **Command Palette** 
 Sutra ships layered help:
 
 1. **Sutra Setup** — the first-launch wizard that adds classes, AP subjects, and college focus, picks a Sutra Mode, and offers an immediate `.sutra` backup. Restart it anytime from `Settings → Advanced → Restart Sutra Setup`.
-2. **Help & Docs page** — an auto-generated, non-removable page at the top of the page tree, with its own table of contents.
-3. **Interactive tutorial** — a guided overlay tour from Settings → Advanced.
+2. **Starter Packs** — local, preview-then-apply workspace seeds (notes, courses, review decks, timeline blocks, tasks) for goals like AP season, college apps, SAT/ACT, robotics, senior year, research, freelancing, or a personal life system. Apply all or selected parts, with one-tap undo. Open from `Settings → Integrations → Starter Packs` or the All Due empty state. See [Starter Packs](docs/features/STARTER_PACKS.md).
+3. **Help & Docs page** — an auto-generated, non-removable page at the top of the page tree, with its own table of contents.
+4. **Interactive tutorial** — a guided overlay tour from Settings → Advanced.
 
 A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
@@ -403,7 +412,7 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 - **Cloud sync is optional and foreground-only.** Google Drive sync runs while Sutra is open, online, unlocked, and authorized. It does not sync after the browser is fully closed, and direct `file://` launch may not support Google OAuth.
 - **Browser storage caps.** IndexedDB and localStorage quotas vary by browser; very large, media-rich workspaces can hit limits. Export `.sutra` regularly.
-- **PDF export uses the browser print pipeline** and can render slightly differently across browsers.
+- **Document export is native and offline.** PDF uses the browser print pipeline (opens a print-ready view — choose *Save as PDF*); the **Word** option exports a full-page Word-compatible `.doc`; HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
 - **External media embeds** depend on the source's CORS / iframe policy and the approved-origin CSP list.
 - **Sutra Assistant Model IDs** must match the provider's exact string; typos fail at the provider.
 - **`file://` sandboxing** — some image-upload paths need an `http(s)://` origin; use a static server if you hit this.

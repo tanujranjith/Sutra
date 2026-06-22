@@ -1,9 +1,15 @@
-# Sutra Cloud (Supabase) — setup
+# Sutra Cloud — Supabase provider setup
+
+> **Supabase is now one *advanced* Sutra Cloud destination — not Sutra's central
+> backend.** Sutra Cloud is provider-based: most users pick a recommended
+> destination (Google Drive / OneDrive / Dropbox) or Manual export. Supabase is an
+> advanced option for people comfortable with Supabase Auth, Storage, and RLS.
+> Overview of all destinations: [`docs/SUTRA_CLOUD_PROVIDERS.md`](../docs/SUTRA_CLOUD_PROVIDERS.md).
 
 Sutra Cloud is an **optional, consent-first, end-to-end-encrypted** backup of your
 workspace. It is **off by default** and makes **zero** network requests until you
-both configure a backend and explicitly use it. It is **backup/restore, not live
-sync** — "cross-device" means *back up here, restore there*.
+both configure a destination and explicitly use it. It is **backup/restore, not
+live sync** — "cross-device" means *back up here, restore there*.
 
 The server (Supabase) only ever stores the **encrypted `.sutra` file** plus a tiny
 bit of non-sensitive metadata (timestamps, labels, sizes). It can never read your

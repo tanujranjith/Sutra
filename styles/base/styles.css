@@ -33392,3 +33392,97 @@ body.canvas-page-active .canvas-toolbar {
         flex: 1 1 auto;
     }
 }
+
+/* ==========================================================================
+   Code syntax highlighting (window.SutraHighlight) + inline math (KaTeX)
+   ========================================================================== */
+.tok-comment { color: #6a9955; font-style: italic; }
+.tok-string  { color: #ce9178; }
+.tok-number  { color: #b5cea8; }
+.tok-keyword { color: #569cd6; font-weight: 600; }
+body[data-theme="light"] .tok-comment,
+body:not([data-theme]) .tok-comment { color: #5a7d33; }
+body[data-theme="light"] .tok-string,
+body:not([data-theme]) .tok-string { color: #a31515; }
+body[data-theme="light"] .tok-number,
+body:not([data-theme]) .tok-number { color: #098658; }
+body[data-theme="light"] .tok-keyword,
+body:not([data-theme]) .tok-keyword { color: #0000c0; }
+.sutra-math { display: inline-block; max-width: 100%; overflow-x: auto; overflow-y: hidden; vertical-align: middle; }
+.sutra-math-block { display: inline-block; max-width: 100%; overflow-x: auto; vertical-align: middle; padding: 0 2px; border-radius: 4px; }
+.sutra-math-block:hover { background: rgba(111, 167, 255, 0.10); }
+.sutra-math .katex-display { margin: 0.4em 0; }
+
+/* Review analytics inline-SVG charts (window: renderSparkBars) */
+.review-analytics-chart { width: 100%; }
+.sutra-spark { width: 100%; height: 96px; display: block; }
+.sutra-spark-bar { fill: var(--accent, #6fa7ff); opacity: 0.85; }
+.sutra-spark-bar-due { fill: #e0913a; opacity: 0.9; }
+.sutra-spark-label { fill: var(--text-muted, #8a8f98); font-size: 3px; }
+.review-analytics-forecast-note { color: #c0622a; font-size: 0.85rem; margin-bottom: 8px; }
+
+/* Cloze deletions + card media (review study cards) */
+.review-cloze-blank { display: inline-block; min-width: 2.4em; border-bottom: 2px solid var(--accent, #6fa7ff); margin: 0 2px; color: var(--accent, #6fa7ff); font-weight: 600; }
+.review-cloze-fill { background: rgba(111, 167, 255, 0.18); border-radius: 4px; padding: 0 4px; font-weight: 600; }
+.review-bigcard-media { margin: 10px 0; display: flex; justify-content: center; }
+.review-bigcard-media img { max-width: 100%; max-height: 240px; border-radius: 8px; }
+.review-bigcard-media audio { width: 100%; max-width: 360px; }
+/* Card image editor field + image occlusion */
+.review-card-image-field { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.review-field-span { font-size: 0.8rem; color: var(--text-secondary, #666); }
+.review-card-image-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.review-card-image-stage { max-width: 260px; }
+.review-card-image-stage img { max-width: 100%; max-height: 160px; border-radius: 8px; border: 1px solid var(--border-color, #e2e5ea); }
+.review-card-image-hint { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin: 0; }
+.review-occluded { position: relative; display: inline-block; }
+.review-occluded img { filter: blur(14px); }
+.review-occlusion-cover { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(20, 22, 28, 0.45); color: #fff; border-radius: 8px; font-size: 0.85rem; font-weight: 600; }
+
+/* Notes backlinks / linked references panel */
+.notes-backlinks { margin: 18px 0 8px; padding: 14px 16px; border-top: 1px solid var(--border-color, #e2e5ea); }
+.notes-backlinks-head { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted, #8a8f98); margin-bottom: 8px; }
+.notes-backlinks-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.notes-backlink-item { border: 1px solid var(--border-color, #e2e5ea); background: var(--surface-2, rgba(127,127,127,0.06)); border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; cursor: pointer; color: var(--text-primary, inherit); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-backlink-item:hover { border-color: var(--accent, #6fa7ff); color: var(--accent, #6fa7ff); }
+
+/* Trash modal (recently-deleted pages) */
+.sutra-trash-modal { align-items: center; justify-content: center; }
+.sutra-trash-content { max-width: 560px; width: 100%; }
+.sutra-trash-body { max-height: 60vh; overflow-y: auto; }
+.sutra-trash-note, .sutra-trash-empty { color: var(--text-muted, #8a8f98); font-size: 0.85rem; margin-bottom: 10px; }
+.sutra-trash-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-color, #e2e5ea); }
+.sutra-trash-info { flex: 1 1 auto; min-width: 0; }
+.sutra-trash-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sutra-trash-meta { font-size: 0.75rem; color: var(--text-muted, #8a8f98); }
+.sutra-trash-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.sutra-trash-purge { color: #c0392b; }
+
+/* Focus + grade-trend dashboards */
+.sutra-dashboard-modal { align-items: center; justify-content: center; }
+.sutra-dashboard-content { max-width: 600px; width: 100%; }
+.sutra-dash-stats { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.sutra-dash-stat { flex: 1 1 90px; background: var(--surface-2, rgba(127,127,127,0.06)); border-radius: 10px; padding: 12px; text-align: center; }
+.sutra-dash-stat-val { font-size: 1.4rem; font-weight: 700; }
+.sutra-dash-stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #8a8f98); margin-top: 4px; }
+.sutra-dash-section { margin: 14px 0; }
+.sutra-dash-section-title { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary, #666); margin-bottom: 8px; }
+.sutra-dash-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border-color, #eee); font-size: 0.9rem; }
+.sutra-dash-empty { color: var(--text-muted, #8a8f98); font-size: 0.88rem; }
+.sutra-trend-delta.up { color: #22a06b; } .sutra-trend-delta.down { color: #d1453b; }
+.sutra-trend-delta { font-size: 0.8rem; font-weight: 600; }
+
+/* Workspace snapshot browser */
+.sutra-snapshot-modal { align-items: center; justify-content: center; }
+.sutra-snapshot-content { max-width: 600px; width: 100%; }
+.sutra-snap-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-color, #e2e5ea); }
+.sutra-snap-info { flex: 1 1 auto; min-width: 0; }
+.sutra-snap-title { font-weight: 600; }
+.sutra-snap-meta { font-size: 0.75rem; color: var(--text-muted, #8a8f98); }
+.sutra-snap-actions { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+.sutra-snap-diff { margin-top: 6px; font-size: 0.78rem; display: flex; gap: 8px; flex-wrap: wrap; }
+.sutra-snap-diff .up { color: #22a06b; } .sutra-snap-diff .down { color: #d1453b; }
+
+/* AP Study — computed exam-readiness suggestion */
+.ap-study-readiness-suggest { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.ap-study-readiness-suggest-val { font-size: 0.85rem; color: var(--text-secondary, #666); }
+.ap-study-readiness-suggest-val strong { color: var(--accent, #6fa7ff); }

@@ -23,6 +23,8 @@
     "gradePlanner",
     "semesterSetup",
     "cramSessions",
+    "trash",
+    "focusSessions",
     "testingHub",
     "focusTemplates",
     "splitPaneContexts",

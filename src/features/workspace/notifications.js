@@ -780,18 +780,35 @@
                 return n.due instanceof Date && n.due.toDateString() === today.toDateString() && n.source !== 'release';
             });
             var overdue = _notifications.filter(function (n) { return n.overdue; });
-            if (!dueToday.length && !overdue.length) return;
+            // Smart nudges from the local intelligence layer (review backlog,
+            // unscheduled priorities, weak focus area) — reads only the workspace.
+            var nudges = [];
+            try {
+                var intel = window.sutraIntelligence || window.flowIntelligence;
+                var ctx = intel && typeof intel.deriveStudentContext === 'function' ? intel.deriveStudentContext() : null;
+                if (ctx) {
+                    var rd = (ctx.reviewDebt && (ctx.reviewDebt.overdue || ctx.reviewDebt.due)) || 0;
+                    if (rd > 0) nudges.push(rd + ' review card' + (rd === 1 ? '' : 's') + ' to clear');
+                    var hp = Array.isArray(ctx.unscheduledHighPriority) ? ctx.unscheduledHighPriority.length : 0;
+                    if (hp > 0) nudges.push(hp + ' high-priority item' + (hp === 1 ? '' : 's') + ' unscheduled');
+                    var weak = (Array.isArray(ctx.lowConfidenceApSubjects) ? ctx.lowConfidenceApSubjects : [])[0];
+                    if (weak && weak.name) nudges.push('focus area: ' + weak.name);
+                }
+            } catch (e) { /* nudges are best-effort */ }
+            if (!dueToday.length && !overdue.length && !nudges.length) return;
             _state.lastDigest = Date.now();
             _saveState();
             var parts = [];
             if (overdue.length) parts.push(overdue.length + ' overdue');
             if (dueToday.length) parts.push(dueToday.length + ' due today');
-            var preview = dueToday.slice(0, 3).map(function (n) { return n.title; }).join(' · ');
+            if (!parts.length) parts.push('a few things to stay ahead of');
+            var previewBits = dueToday.slice(0, 2).map(function (n) { return n.title; });
+            var subtitle = previewBits.concat(nudges).slice(0, 3).join(' · ');
             showToast({
                 title: 'Daily digest: ' + parts.join(', '),
-                subtitle: preview,
+                subtitle: subtitle,
                 icon: 'fa-newspaper',
-                duration: 8000,
+                duration: 9000,
                 onClick: function () { openPanel(); }
             });
         } catch (e) { /* non-critical */ }
@@ -989,6 +1006,32 @@
         if (!document.hidden) refresh();
     }
 
+    // Register a Periodic Background Sync so the service worker can post a daily
+    // "open Sutra" reminder even when the app is closed (Chrome/Edge installed-PWA
+    // only; a no-op everywhere else). This is the honest local-first path to
+    // background reminders — there is no Sutra push server. While the app is open,
+    // exact due-item OS notifications already fire via _sendBrowserNotification;
+    // the .ics calendar handoff remains the cross-device "remind me when closed".
+    function registerBackgroundReminders() {
+        try {
+            if (!_state.prefs || !_state.prefs.browserNotificationsEnabled) return;
+            if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+            navigator.serviceWorker.ready.then(function (reg) {
+                if (!reg || !reg.periodicSync) return;
+                var doRegister = function () {
+                    reg.periodicSync.register('sutra-daily-reminder', { minInterval: 22 * 60 * 60 * 1000 }).catch(function () { /* unsupported / not installed */ });
+                };
+                if (navigator.permissions && navigator.permissions.query) {
+                    navigator.permissions.query({ name: 'periodic-background-sync' })
+                        .then(function (status) { if (status.state === 'granted') doRegister(); })
+                        .catch(doRegister);
+                } else {
+                    doRegister();
+                }
+            }).catch(function () { /* no SW */ });
+        } catch (e) { /* unsupported */ }
+    }
+
     // ---- Public: browser notifications -------------------------------------
     function requestBrowserPermission(callback) {
         if (!('Notification' in global)) {
@@ -996,6 +1039,7 @@
             return;
         }
         if (Notification.permission === 'granted') {
+            registerBackgroundReminders();
             if (callback) callback('granted');
             return;
         }
@@ -1004,6 +1048,7 @@
             return;
         }
         Notification.requestPermission().then(function (perm) {
+            if (perm === 'granted') registerBackgroundReminders();
             if (callback) callback(perm);
         });
     }
@@ -1020,6 +1065,7 @@
             _state.prefs.categories = Object.assign({}, DEFAULT_PREFS.categories, _state.prefs.categories, delta.categories);
         }
         _saveState();
+        if (delta.browserNotificationsEnabled) registerBackgroundReminders();
         refresh();
         _renderNotificationSettingsUI();
     }
@@ -1285,6 +1331,7 @@
         closePanel: closePanel,
         showToast: showToast,
         requestBrowserPermission: requestBrowserPermission,
+        registerBackgroundReminders: registerBackgroundReminders,
         getPreferences: getPreferences,
         updatePreferences: updatePreferences,
         exportState: exportState,

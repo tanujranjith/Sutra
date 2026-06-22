@@ -6,7 +6,7 @@
       "has": [
         { "type": "host", "value": "note-flow-atelier.vercel.app" }
       ],
-      "destination": "https://sutra-two.vercel.app/HomePage.html",
+      "destination": "https://tanujranjith.github.io/Sutra/HomePage.html",
       "permanent": true
     }
   ]

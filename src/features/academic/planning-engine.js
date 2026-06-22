@@ -53,7 +53,10 @@
             studyBlockMinutes: clampInt(prefs.studyBlockMinutes, 10, 180, DEFAULT_PREFS.studyBlockMinutes),
             breakMinutes: clampInt(prefs.breakMinutes, 0, 60, DEFAULT_PREFS.breakMinutes),
             maxDailyBlocks: clampInt(prefs.maxDailyBlocks, 1, 12, DEFAULT_PREFS.maxDailyBlocks),
-            maxBlockMinutes: clampInt(prefs.maxBlockMinutes, 30, 240, DEFAULT_PREFS.maxBlockMinutes)
+            maxBlockMinutes: clampInt(prefs.maxBlockMinutes, 30, 240, DEFAULT_PREFS.maxBlockMinutes),
+            // Spread an item's chunks across the available days before its due date
+            // instead of cramming them into the earliest slots (anti-clustering).
+            spread: prefs.spread !== false
         };
     }
     function clampInt(v, lo, hi, dflt) {
@@ -83,24 +86,65 @@
 
     // Split a total estimate into block-sized chunks (prefer milestone-sized pieces,
     // never one huge block for a hard assignment).
-    function chunkMinutes(total, prefs) {
+    function chunkMinutes(total, prefs, preferred) {
         var t = Number(total);
         if (!Number.isFinite(t) || t <= 0) t = prefs.studyBlockMinutes;
-        t = Math.max(15, Math.min(8 * 60, Math.round(t)));
+        t = Math.max(15, Math.min(12 * 60, Math.round(t)));
+        // A `preferred` chunk size (e.g. one exam-study session) splits the work
+        // into more, smaller pieces that the spreader can distribute across days.
+        var max = (preferred && preferred > 0)
+            ? Math.max(15, Math.min(prefs.maxBlockMinutes, Math.round(preferred)))
+            : prefs.maxBlockMinutes;
+        var maxChunks = preferred ? 12 : 6;
         var chunks = [];
-        var max = prefs.maxBlockMinutes;
         while (t > 0) {
             var c = Math.min(max, t);
             // avoid leaving a tiny sliver — merge if remainder is small
             if (t - c > 0 && t - c < 15) c = t;
             chunks.push(c);
             t -= c;
-            if (chunks.length >= 6) { // cap blocks per item
+            if (chunks.length >= maxChunks) { // cap blocks per item
                 if (t > 0) chunks[chunks.length - 1] += t;
                 break;
             }
         }
         return chunks;
+    }
+
+    // Turn upcoming exams into spread-out study work: one item per exam, split
+    // into session-sized chunks so the planner distributes review across the days
+    // BEFORE the exam (reverse scheduling). More runway / lower confidence => more
+    // sessions. Pure; returns planWork-shaped items.
+    function expandExamPrep(exams, options) {
+        options = options || {};
+        var today = options.today || isoLocal(new Date());
+        var sessionMinutes = clampInt(options.sessionMinutes, 15, 120, 45);
+        var out = [];
+        (Array.isArray(exams) ? exams : []).forEach(function (ex) {
+            if (!ex) return;
+            var examDate = ex.examDate || ex.dueDate || '';
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(examDate))) return;
+            var days = daysBetween(today, examDate);
+            if (days === null || days < 0) return; // past or invalid
+            var conf = Number(ex.confidence);
+            var confFactor = Number.isFinite(conf) ? (conf <= 2 ? 1.5 : (conf >= 4 ? 0.7 : 1)) : 1;
+            var base = Math.min(8, Math.max(1, Math.ceil((days + 1) / 2)));
+            var sessions = Math.max(1, Math.round(base * confFactor));
+            sessions = Math.min(sessions, Math.max(1, days + 1)); // at most ~one per day
+            out.push({
+                id: (ex.id || ex.name || 'exam') + ':prep',
+                kind: 'review',
+                title: 'Study ' + (ex.name || 'exam'),
+                courseName: ex.name || '',
+                dueDate: examDate,
+                priority: (Number.isFinite(conf) && conf <= 2) ? 'high' : 'medium',
+                difficulty: 'medium',
+                estimateMinutes: sessions * sessionMinutes,
+                preferredChunkMinutes: sessionMinutes,
+                examPrep: true
+            });
+        });
+        return out;
     }
 
     // Subtract [s, e] (plus trailing buffer) from a list of free windows in place,
@@ -177,7 +221,7 @@
         var unplaced = [];
 
         items.forEach(function (item) {
-            var chunks = chunkMinutes(item.estimateMinutes, prefs);
+            var chunks = chunkMinutes(item.estimateMinutes, prefs, item.preferredChunkMinutes);
             var due = /^\d{4}-\d{2}-\d{2}$/.test(String(item.dueDate || '')) ? String(item.dueDate) : '';
             // Due time caps how late work can be scheduled ON the due date.
             var dueMin = hhmmToMinutes(item.dueTime);
@@ -185,10 +229,16 @@
             // candidate dates: never after the due date; soonest-first so work lands early.
             var candidates = dates.filter(function (dk) { return !due || dk <= due; });
             if (!candidates.length) candidates = dates.filter(function (dk) { return dk <= today; }).length ? [today] : dates.slice(0, 1);
+            // When spreading, each chunk starts scanning one day later than the
+            // previous one landed, so a multi-session item fans out across the
+            // runway instead of clustering in the first day's free slots.
+            var spread = prefs.spread && candidates.length > 1 && chunks.length > 1;
+            var scanStart = 0;
             var placedAny = false;
             chunks.forEach(function (dur, idx) {
                 var placed = false;
-                for (var c = 0; c < candidates.length; c++) {
+                for (var k = 0; k < candidates.length; k++) {
+                    var c = spread ? ((scanStart + k) % candidates.length) : k;
                     var dk = candidates[c];
                     if (blocksPerDay[dk] >= prefs.maxDailyBlocks) continue;
                     // On the due date, the slot must finish by the due time.
@@ -214,6 +264,7 @@
                         conflict: !!overdue,
                         estimateMinutes: dur
                     });
+                    if (spread) scanStart = (c + 1) % candidates.length;
                     placed = true;
                     placedAny = true;
                     break;
@@ -327,6 +378,7 @@
     var Engine = {
         planWork: planWork,
         analyzePlan: analyzePlan,
+        expandExamPrep: expandExamPrep,
         minutesToHHMM: minutesToHHMM,
         hhmmToMinutes: hhmmToMinutes,
         DEFAULT_PREFS: DEFAULT_PREFS
@@ -391,6 +443,23 @@
                 push(ctx.overdue, 'task');
                 push(ctx.dueSoon, 'task');
                 push(ctx.unscheduledHighPriority, 'task');
+
+                // Reverse-plan study sessions backward from upcoming exams.
+                var examSrc = (ctx.missingExamBlocks || []).concat(ctx.lowConfidenceApSubjects || []);
+                var seenExam = {};
+                var exams = [];
+                examSrc.forEach(function (ex) {
+                    var key = ex.name || ex.id;
+                    if (!key || seenExam[key]) return;
+                    seenExam[key] = true;
+                    exams.push({ id: ex.id || key, name: ex.name, examDate: ex.examDate, confidence: ex.confidence });
+                });
+                expandExamPrep(exams, { today: isoLocalToday() }).forEach(function (it) {
+                    var k = it.kind + ':' + it.id;
+                    if (seen[k]) return;
+                    seen[k] = true;
+                    items.push(it);
+                });
             }
         } catch (e) { /* none */ }
         return items;

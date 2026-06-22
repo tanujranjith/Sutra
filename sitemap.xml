@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Sitemap for Sutra.
-  Only the primary canonical deployment (https://sutra-two.vercel.app) is listed.
-  The duplicate deployments (note-flow-atelier.vercel.app, tanujranjith.github.io)
+  Canonical deployment: https://tanujranjith.github.io/Sutra/ (GitHub Pages).
+  The duplicate deployments (sutra-two.vercel.app, note-flow-atelier.vercel.app)
   are intentionally NOT listed here; they canonicalize to the URLs below so they
   do not compete for indexing in Google.
 -->
@@ -10,13 +10,13 @@
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
   <url>
-    <loc>https://sutra-two.vercel.app/HomePage.html</loc>
+    <loc>https://tanujranjith.github.io/Sutra/HomePage.html</loc>
     <lastmod>2026-06-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://sutra-two.vercel.app/Sutra.html</loc>
+    <loc>https://tanujranjith.github.io/Sutra/Sutra.html</loc>
     <lastmod>2026-06-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

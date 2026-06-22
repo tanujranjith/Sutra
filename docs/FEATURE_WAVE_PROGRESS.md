@@ -1,0 +1,140 @@
+# Feature-Upgrade Wave — Progress & TODO
+
+Honest status of the 10-feature upgrade wave. "Complete" means shipped and
+covered by checks/tests; "Partial" means a real, working increment landed with
+remaining work listed; "Pre-existing" means it was already substantially built
+in the repo before this wave.
+
+Anchors below are by symbol name (line numbers drift in `src/core/app.js`).
+
+| # | Feature | Status |
+|---|---|---|
+| 1 | Sutra Cloud Backup Hub | **Pre-existing + documented** |
+| 2 | Unified All Due Command Center | **Complete (this wave)** |
+| 3 | Course Hub 2.0 | **Partial** — deterministic "what next" card added |
+| 4 | Assistant Action Plans | **Pre-existing harness + plan templates added** |
+| 5 | Smart Review Generator | **Complete (deterministic core + entry points)** |
+| 6 | Assignment Studio 2.0 | **Pre-existing + focus-plan/review-cards actions added** |
+| 7 | College App Builder Mode | **Partial / mostly pre-existing** |
+| 8 | Import Everything Wizard | **Partial / mostly pre-existing** |
+| 9 | Workspace Time Machine | **Partial** — version history pre-exists; recovery extras TODO |
+| 10 | Template & Starter Pack System | **Complete (this wave)** |
+
+---
+
+## 1. Sutra Cloud — Pre-existing, documented
+Provider abstraction (`makeSutraCloudAdapter`), 9-provider registry (Manual /
+Supabase / WebDAV / Custom HTTP fully wired; Drive / OneDrive / Dropbox / Box /
+S3 honestly labelled scaffolded/preview), CSP enforcement, secret rejection,
+encryption reuse, auto-backup, full Settings panel, e2e tests, and the
+`docs/SUTRA_CLOUD_*.md` set were already present. Added
+`docs/features/SUTRA_CLOUD.md`.
+**TODO:** restore-time conflict chooser (the current model is backup/restore, not
+live sync); OAuth wiring for OneDrive/Dropbox/Box; S3 SigV4 signing.
+
+## 2. All Due — Complete
+- Shared deterministic ranking engine `computeDeadlineRank(item)` +
+  `estimateItemEffortMinutes(item)`.
+- `getStudentInboxItems` now annotates every item with `rankScore`,
+  `rankReason`, `effortMinutes` and supports **sort modes**
+  (`smart`/`due`/`urgency`/`importance`/`gradeRisk`/`effort`/`scheduled`/`source`)
+  via the persisted `courseWorkspace.settings.studentInboxSort`.
+- Rows show a one-line **"why it's ranked here"** reason; header has a **Sort**
+  selector.
+- New per-item actions: **start focus session**, **make review cards**,
+  **open/create linked note** (`cwFocusInboxItem`, `cwReviewCardsForInboxItem`,
+  `cwNoteForInboxItem`).
+- `pickNextBestAction` (Today's **Next Step**) re-implemented on the same engine
+  and keeps its one-sentence reason — the two never disagree.
+- Tests: `tests/e2e/sutra-feature-wave.spec.mjs`. Docs:
+  `docs/features/ALL_DUE_COMMAND_CENTER.md`.
+
+## 3. Course Hub 2.0 — Partial
+- `cwNextActionsHtml` upgraded to a deterministic **"Do this next"** card (top
+  ranked item + reason, then the next few) using the shared engine.
+- **TODO:** dedicated per-course **Deadlines** tab; explicit **weak-areas** model
+  (e.g. low-mastery cards / missed rubric criteria per course); deeper **AP
+  linkage** detail on the dashboard. Notes/decks/assignments already link by
+  `classLinkId` / `courseWorkspace.relationships` / `courseId`.
+
+## 4. Assistant Action Plans — Pre-existing harness + templates
+The multi-action harness already exists: `window.SutraAssistantActions`
+(`applyBatch`, `openActionReviewCenter` reviewable cards, apply-all/selected,
+risk-gated confirm), the Activity log (`sutra:activityLog:v1`) with undo
+(`UNDOABLE_TYPES`), context chips, and the AI send-disclosure gate
+(`ensureAiSendDisclosure`).
+- Added the five named **plan templates** (`PLAN_TEMPLATES` in
+  `flow-assistant.js`): *Plan my week*, *Turn this note into review*, *Break down
+  this assignment*, *Make an AP cram plan*, *Organize college application tasks* —
+  injected into the contextual quick-action row by view. Each routes through the
+  existing reviewable-card flow + activity log + undo.
+- **TODO (optional):** an explicit ordered/sequential multi-step plan action type
+  (`create_action_plan` with `steps[]`); today plans compose via batched and
+  higher-level workflow actions rather than declared step sequencing.
+
+## 5. Smart Review Generator — Complete
+- Deterministic extractor `sutraExtractReviewPairsFromHtml` (headings→body,
+  `term: definition` lists, bold-term cloze) + `SutraReviewGenerator`
+  (`fromNoteId` / `fromHomeworkTask` / `fromText` / `fromInboxItem`).
+- Flows into the existing preview/edit table (`SutraReviewGen.openGenerator`);
+  source backlinks ride existing card fields (no new persisted fields).
+- Entry points: Notes page menu, Assignment Studio, All Due, Assistant.
+- Tests + `docs/features/REVIEW_GENERATOR.md`.
+- **TODO:** generate-from-AP-unit and from-test-mistakes deterministic paths;
+  surface a "Generate Review" button directly in the AP Study unit view.
+
+## 6. Assignment Studio 2.0 — Pre-existing + actions
+`task.studio` already carries milestones, subtasks, rubric, linked notes/files,
+effort, revisions, progress; milestones already surface in All Due / Timeline /
+notifications via `getMilestoneDeadlines` → `collectWorkspaceDeadlines`.
+- Added **Make focus plan** (schedule remaining milestones as focus blocks + start
+  a focus session) and **Make review cards** (→ `SutraReviewGenerator`).
+- **TODO:** richer in-studio note-link picker UI; effort→grade-planner signal.
+
+## 7. College App Builder — Partial / mostly pre-existing
+Already present: school tracker, essay organizer (essays open as linked notes via
+`noteId`), score tracker, awards/honors, scholarships, decision matrices, visit
+tracker, a deterministic per-school **readiness score**
+(`getCollegeAppReadiness`), and college deadlines feeding Timeline/All Due via
+`collectCollegeDeadlineItems`.
+- **TODO:** dedicated **activities/extracurricular builder** (new
+  `collegeAppWorkspace.activities` collection — wire through defaults → normalize
+  → serialize → `.sutra` → migrations); structured recommendation-request manager;
+  Common App **templates** (activities, honors descriptions, why-major, why-school,
+  additional-information); structured submission-readiness checklist rows.
+
+## 8. Import Everything Wizard — Partial / mostly pre-existing
+Smart Import already parses text / CSV / ICS / syllabus deterministically, shows
+confidence + a review screen, supports duplicate detection, undo-last-import, and
+logs to Activity. Targets today: homework, tasks, timeline, notes, review.
+- **TODO:** **JSON workspace-fragment** import (validated, allow-listed fields
+  only); new mapping **targets**: Courses, School Schedule, Grade Planner, AP
+  Study, **College**; "manual course setup" step. Parsers to reuse:
+  `parseIcsEvents`, `parseAssignmentText`, `parseSmartImportText`.
+
+## 9. Workspace Time Machine — Partial
+Per-page version history is mature (20/page, throttled, "Before restore"
+checkpoint, secret-safe, single-note restore, `check:versions` invariants). See
+`docs/features/WORKSPACE_TIME_MACHINE.md`.
+- **TODO:** restore-deleted-page/task **trash** (new persisted collection, wired
+  end-to-end, secret-excluded); whole-workspace **snapshot browser**;
+  single-note-from-snapshot restore; **compare/diff** view; **Storage Health**
+  via `navigator.storage.estimate()` with cleanup settings.
+
+## 10. Starter Packs — Complete
+Local data (`src/features/workspace/starter-packs.data.js`,
+`window.SUTRA_STARTER_PACKS`, 9 packs) + controller `window.SutraStarterPacks`
+(`list`/`apply`/`undo`) with a preview-then-apply modal (apply all / apply
+selected / cancel), per-batch **undo**, and custom-pack import/export
+(device-local). Reuses existing create functions, so everything round-trips.
+Entry points: Settings → Integrations, All Due empty state. Tests +
+`docs/features/STARTER_PACKS.md`.
+
+---
+
+## Checks run (all green)
+`npm run check:all` (syntax, app-shell, migrations, smoke, round-trip, versions,
+rebrand, compat, csp, persistence, modal, network, encoding, responsive, brand,
+docbg, academic, sw, guardrails self-test, guardrails, links) + the new
+`tests/e2e/sutra-feature-wave.spec.mjs` (chromium). Guardrail baseline updated for
+the intentional new globals.

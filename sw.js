@@ -83,3 +83,34 @@ function cachePut(req, res) {
     const copy = res.clone();
     caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => undefined);
 }
+
+/* Background reminders (local-first). Periodic Background Sync — where the
+   browser supports it for an installed PWA — posts a once-a-day nudge to open
+   Sutra and check today's plan. There is NO push server and NO workspace data in
+   the notification: it is a generic, privacy-preserving nudge. Exact due-item
+   notifications still fire in-app, and the .ics calendar handoff covers
+   remind-me-when-closed across devices. */
+self.addEventListener('periodicsync', (event) => {
+    if (event.tag !== 'sutra-daily-reminder') return;
+    event.waitUntil(
+        self.registration.showNotification('Sutra', {
+            body: 'Open Sutra to check today’s plan and anything due.',
+            tag: 'sutra-daily-reminder',
+            icon: './assets/brand/sutra/generated/favicon.ico',
+            badge: './assets/brand/sutra/generated/favicon.ico'
+        }).catch(() => undefined)
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if (client.url.indexOf(self.location.origin) === 0 && 'focus' in client) return client.focus();
+            }
+            if (self.clients.openWindow) return self.clients.openWindow('./Sutra.html');
+            return undefined;
+        })
+    );
+});

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://www.googleapis.com https://accounts.google.com https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
     <title>Sutra</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -53,6 +53,7 @@
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
     <script src="src/core/migrations.js?v=20260614-migrations1"></script>
+    <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
     <script src="src/components/icons/icon-paths.js?v=20260504-lock-icons" defer></script>
     <script src="src/components/icons/index.js?v=20260504-lock-icons" defer></script>
@@ -1352,6 +1353,7 @@
                     </div>
                     <!-- Linked tasks feature removed -->
                     <div class="editor" id="editor" contenteditable="true" placeholder="Start typing..."></div>
+                    <aside class="notes-backlinks" id="notesBacklinksPanel" hidden aria-label="Linked references"></aside>
                     <div class="canvas-editor" id="canvasEditor" hidden aria-label="Canvas page editor">
                         <div class="canvas-toolbar" id="canvasToolbar" role="toolbar" aria-label="Canvas tools">
                             <button type="button" class="toolbar-btn active" data-canvas-tool="select" onclick="canvasSetTool('select')" title="Select" aria-label="Select"><i class="fas fa-bullseye"></i></button>
@@ -4035,6 +4037,13 @@
                         </div>
                     </div>
                     <div class="cc-group">
+                        <span class="cc-group-title">Starter Packs</span>
+                        <p class="cc-foot-help">Set up a workspace in one step — notes, courses, review decks, timeline blocks, and tasks for a goal (AP, college apps, SAT/ACT, projects, and more). Local only, preview before applying, and undoable.</p>
+                        <div class="cc-stacked-actions">
+                            <button type="button" class="cc-btn cc-btn-ghost" onclick="openStarterPacks()">Browse Starter Packs</button>
+                        </div>
+                    </div>
+                    <div class="cc-group">
                         <span class="cc-group-title">Quick launchers</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text"><span class="cc-row-name">Spotify quick launch</span><span class="cc-row-help">Show the Spotify launcher in the floating dock.</span></span>
@@ -4240,7 +4249,7 @@
                                 <select class="modal-input cc-select" id="notesExportFormatSelect" data-pref-path="data.defaultExportFormat">
                                     <option value="atelier" selected>Sutra Workspace (.sutra)</option>
                                     <option value="json">Workspace JSON (.json)</option>
-                                    <option value="docx">Word (.docx)</option>
+                                    <option value="docx">Word (.doc)</option>
                                     <option value="pdf">PDF (.pdf)</option>
                                     <option value="html">HTML</option>
                                     <option value="md">Markdown</option>
@@ -5537,127 +5546,66 @@
                 <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Optional encrypted backup, powered by Supabase.</p>
-                <p class="sutra-cloud-status" id="sutraCloudStatus" role="status" aria-live="polite">Sutra Cloud is off.</p>
+                <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Choose where Sutra stores your encrypted backups.</p>
 
-                <!-- Storage backend: Official Sutra Cloud (default) vs advanced Bring-Your-Own Supabase -->
-                <div class="sutra-cloud-section sutra-cloud-backend">
-                    <h4 class="sutra-cloud-h">Storage backend</h4>
-                    <div class="sutra-cloud-backend-status" id="sutraCloudBackendStatus">
-                        <div>Backend: <strong id="sutraCloudStatBackend">Official Sutra Cloud</strong></div>
-                        <div>Provider: Powered by Supabase</div>
-                        <div id="sutraCloudStatEmailRow" hidden>Signed in: <strong id="sutraCloudStatEmail">—</strong></div>
-                        <div>Last connection check: <strong id="sutraCloudStatCheck">Never</strong></div>
-                        <div>Last backup: <strong id="sutraCloudStatBackup">Never</strong></div>
-                        <div>Auto-backup: <strong id="sutraCloudStatAuto">off</strong></div>
-                        <div class="sutra-cloud-setup-flag" id="sutraCloudStatSetupRow" hidden><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> <span id="sutraCloudStatSetup"></span></div>
-                    </div>
+                <!-- Status card (current destination, connection, last backup, issues) -->
+                <div class="sutra-cloud-status-card" id="sutraCloudStatusCard" aria-live="polite"></div>
 
-                    <p class="sutra-cloud-help">Your workspace is encrypted on this device before upload. The selected cloud backend stores only encrypted backup files. Your backup passphrase is never sent to Sutra or Supabase. If you lose the passphrase, your cloud backups cannot be recovered.</p>
-
-                    <div class="sutra-cloud-backend-options" role="radiogroup" aria-label="Storage backend">
-                        <label class="sutra-cloud-backend-option">
-                            <input type="radio" name="sutraCloudBackendMode" id="sutraCloudBackendOfficial" value="official" checked>
-                            <span><strong>Official Sutra Cloud</strong> <em>(recommended)</em>
-                                <span class="sutra-cloud-fineprint">Easiest option, used by most people. Encrypted before upload; only encrypted files are stored. You control the passphrase — if it’s lost, backups can’t be recovered.</span>
-                            </span>
-                        </label>
-                        <label class="sutra-cloud-backend-option">
-                            <input type="radio" name="sutraCloudBackendMode" id="sutraCloudBackendCustom" value="custom">
-                            <span><strong>Use my own Supabase project</strong> <em>(advanced)</em>
-                                <span class="sutra-cloud-fineprint">Connect your own Supabase project instead of the official backend.</span>
-                            </span>
-                        </label>
-                    </div>
-
-                    <details class="sutra-cloud-advanced" id="sutraCloudAdvanced">
-                        <summary><i class="fas fa-screwdriver-wrench" aria-hidden="true"></i> Advanced Supabase setup &amp; connection</summary>
-                        <div class="sutra-cloud-warning" role="note">
-                            <strong>Advanced users only:</strong> custom Supabase requires correct setup. Sutra cannot verify every security rule in your project. Use the official backend unless you understand Supabase Auth, Storage, and RLS. It is <em>more user-controlled, not automatically safer</em>.
-                        </div>
-                        <ol class="sutra-cloud-steps">
-                            <li>Create a Supabase project.</li>
-                            <li>Run Sutra’s <code>supabase/schema.sql</code>.</li>
-                            <li>Copy your Project URL.</li>
-                            <li>Copy your public anon key.</li>
-                            <li>Paste both below.</li>
-                            <li>Click <strong>Test connection</strong>.</li>
-                            <li>Sign in with email, then run a manual backup before enabling auto-backup.</li>
-                        </ol>
-                        <label class="sutra-cloud-field" for="sutraCloudCustomUrl">
-                            <span>Supabase project URL</span>
-                            <input class="modal-input" id="sutraCloudCustomUrl" type="url" inputmode="url" placeholder="https://your-ref.supabase.co" autocomplete="off" spellcheck="false">
-                        </label>
-                        <label class="sutra-cloud-field" for="sutraCloudCustomKey">
-                            <span>Supabase anon (public) key</span>
-                            <input class="modal-input" id="sutraCloudCustomKey" type="text" placeholder="public anon key — never the service_role key" autocomplete="off" spellcheck="false">
-                        </label>
-                        <div class="sutra-cloud-backend-actions">
-                            <button class="storage-btn" type="button" id="sutraCloudTestBtn">Test connection</button>
-                            <button class="storage-btn primary" type="button" id="sutraCloudUseCustomBtn">Save &amp; use this backend</button>
-                            <a class="sutra-cloud-link" id="sutraCloudSetupGuide" href="supabase/README.md" target="_blank" rel="noopener">Setup guide</a>
-                        </div>
-                        <p class="sutra-cloud-test-status" id="sutraCloudTestStatus" role="status" aria-live="polite"></p>
-                        <p class="sutra-cloud-fineprint"><strong>Never paste a service_role / secret key.</strong> Sutra only needs the public anon key, and it is responsible only for your local app — your Supabase project’s billing, uptime, configuration, and security rules are yours.</p>
-                    </details>
-
-                    <button class="storage-btn" type="button" id="sutraCloudUseOfficialBtn" hidden>Reset to Official Sutra Cloud</button>
-
-                    <div class="sutra-cloud-switch-confirm" id="sutraCloudSwitchConfirm" hidden>
-                        <p id="sutraCloudSwitchConfirmText">Switching cloud backends will sign you out of the current cloud session and show a different set of backups. Your local Sutra workspace will not be changed.</p>
-                        <div class="sutra-cloud-backend-actions">
-                            <button class="storage-btn primary" type="button" id="sutraCloudSwitchConfirmYes">Switch backend</button>
-                            <button class="storage-btn" type="button" id="sutraCloudSwitchConfirmNo">Cancel</button>
-                        </div>
-                    </div>
+                <!-- Primary actions (shown when the active destination is ready) -->
+                <div class="sutra-cloud-primary" id="sutraCloudPrimaryActions" hidden>
+                    <button class="storage-btn primary" type="button" id="sutraCloudBackupNowBtn"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i> Back Up Now</button>
+                    <button class="storage-btn" type="button" id="sutraCloudRestoreBtn"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i> Restore</button>
+                    <button class="storage-btn" type="button" id="sutraCloudManageBtn"><i class="fas fa-list" aria-hidden="true"></i> Manage backups</button>
                 </div>
 
-                <div class="sutra-cloud-notice" id="sutraCloudNotConfigured" hidden>
-                    <i class="fas fa-circle-info" aria-hidden="true"></i>
-                    <div>Sutra Cloud isn't set up for this build yet. Follow <strong>supabase/README.md</strong> to add your project URL + key, then reload.</div>
-                </div>
-
-                <!-- Sign in (passwordless email code) -->
-                <div class="sutra-cloud-section" id="sutraCloudSigninSection" hidden>
-                    <p class="sutra-cloud-help">Sign in with your email. We'll send you a 6-digit code — no password to remember.</p>
-                    <label class="sutra-cloud-field" for="sutraCloudEmailInput">
-                        <span>Email</span>
-                        <input class="modal-input" id="sutraCloudEmailInput" type="email" autocomplete="email" placeholder="you@example.com">
-                    </label>
-                    <button class="storage-btn primary" type="button" id="sutraCloudSendCodeBtn">Send code</button>
-                    <div class="sutra-cloud-field" id="sutraCloudCodeRow" hidden>
-                        <label for="sutraCloudCodeInput">Enter the code from your email</label>
-                        <input class="modal-input" id="sutraCloudCodeInput" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
-                        <button class="storage-btn primary" type="button" id="sutraCloudVerifyBtn">Verify &amp; sign in</button>
-                    </div>
-                </div>
-
-                <!-- Signed in -->
-                <div class="sutra-cloud-section" id="sutraCloudAccountSection" hidden>
-                    <div class="sutra-cloud-account-row">
-                        <span>Signed in as <strong id="sutraCloudAccountEmail">…</strong></span>
-                        <button class="storage-btn" type="button" id="sutraCloudSignOutBtn">Sign out</button>
-                    </div>
-                </div>
-
-                <!-- Backup actions -->
-                <div class="sutra-cloud-section" id="sutraCloudActionsSection" hidden>
+                <!-- Manage / backup list (toggled from "Manage backups") -->
+                <div class="sutra-cloud-manage" id="sutraCloudManage" hidden>
                     <div class="sutra-cloud-action-buttons">
-                        <button class="storage-btn primary" type="button" id="sutraCloudBackupNowBtn"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i> Back up now</button>
                         <button class="storage-btn" type="button" id="sutraCloudRefreshBtn"><i class="fas fa-rotate" aria-hidden="true"></i> Refresh</button>
+                        <label class="sutra-cloud-auto">
+                            <input type="checkbox" id="sutraCloudAutoToggle">
+                            <span>Auto-backup (optional, off by default)</span>
+                            <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
+                                <option value="close">On app close</option>
+                                <option value="daily">Once a day</option>
+                                <option value="change">On significant change</option>
+                            </select>
+                        </label>
                     </div>
                     <div class="sutra-cloud-backups" id="sutraCloudBackupList" aria-live="polite"></div>
-                    <label class="sutra-cloud-auto">
-                        <input type="checkbox" id="sutraCloudAutoToggle">
-                        <span>Auto-backup (optional)</span>
-                        <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
-                            <option value="close">On app close</option>
-                            <option value="daily">Once a day</option>
-                            <option value="change">On significant change</option>
-                        </select>
-                    </label>
-                    <p class="sutra-cloud-fineprint">Backups are end-to-end encrypted with your backup password before upload — Supabase only stores the locked file. We keep your last 10.</p>
                 </div>
+
+                <p class="sutra-cloud-help" id="sutraCloudPrivacyLine">Your workspace is encrypted on this device before it leaves Sutra. Sutra Cloud stores only encrypted backup files in the provider you choose. Your backup passphrase is never sent to Sutra or your cloud provider. If you lose the passphrase, your cloud backups cannot be recovered.</p>
+
+                <!-- Choose destination -->
+                <div class="sutra-cloud-section">
+                    <h4 class="sutra-cloud-h">Choose backup destination</h4>
+                    <div class="sutra-cloud-card-group" id="sutraCloudCardsRecommended"></div>
+                    <details class="sutra-cloud-advanced" id="sutraCloudAdvanced">
+                        <summary><i class="fas fa-screwdriver-wrench" aria-hidden="true"></i> Advanced destinations</summary>
+                        <div class="sutra-cloud-card-group" id="sutraCloudCardsAdvanced"></div>
+                    </details>
+                    <div class="sutra-cloud-card-group" id="sutraCloudCardsManual"></div>
+                </div>
+
+                <!-- Per-provider setup (built dynamically for the active destination) -->
+                <div class="sutra-cloud-setup" id="sutraCloudSetupArea"></div>
+
+                <!-- Switch-destination confirmation -->
+                <div class="sutra-cloud-switch-confirm" id="sutraCloudSwitchConfirm" hidden>
+                    <p id="sutraCloudSwitchConfirmText">Switching Sutra Cloud destinations will sign you out of the current provider and show a different backup list. Your local Sutra workspace will not be changed.</p>
+                    <div class="sutra-cloud-backend-actions">
+                        <button class="storage-btn primary" type="button" id="sutraCloudSwitchConfirmYes">Switch destination</button>
+                        <button class="storage-btn" type="button" id="sutraCloudSwitchConfirmNo">Cancel</button>
+                    </div>
+                </div>
+
+                <p class="sutra-cloud-fineprint" id="sutraCloudHelpLinks">
+                    <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">How Sutra Cloud works</a> ·
+                    <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">Which provider should I choose?</a> ·
+                    <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">What happens if I lose my passphrase?</a> ·
+                    <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">Troubleshooting</a>
+                </p>
             </div>
         </div>
     </div>
@@ -5683,7 +5631,7 @@
                 <select class="modal-input" id="exportModalFormatSelect" aria-label="Select current note export format">
                     <option value="atelier" selected>Encrypted Sutra Workspace (.sutra)</option>
                     <option value="json">Workspace JSON - unencrypted (.json)</option>
-                    <option value="docx">Word (.docx)</option>
+                    <option value="docx">Word (.doc)</option>
                     <option value="pdf">PDF (.pdf)</option>
                     <option value="html">HTML (.html)</option>
                     <option value="md">Markdown (.md)</option>
@@ -5702,6 +5650,17 @@
                     <i class="fas fa-file-export"></i> Export Current Note
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Starter Packs: preview-then-apply local workspace seeds -->
+    <div class="modal" id="starterPacksModal" role="dialog" aria-modal="true" aria-labelledby="starterPacksTitle" aria-hidden="true">
+        <div class="modal-content starter-packs-modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="starterPacksTitle">Starter Packs</h3>
+                <button class="close-btn" type="button" data-modal-close onclick="closeStarterPacks()" aria-label="Close starter packs">&times;</button>
+            </div>
+            <div class="modal-body" id="starterPacksBody"></div>
         </div>
     </div>
 
@@ -6862,6 +6821,9 @@
          Pure core + browser adapter; reads free windows + intelligence signals,
          writes nothing until the student approves a block. -->
     <script src="src/features/academic/planning-engine.js?v=20260616-plan1"></script>
+    <!-- Starter Packs: local, declarative workspace seeds (window.SUTRA_STARTER_PACKS).
+         Pure data, no logic; the app.js controller previews + applies on demand. -->
+    <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
 <script src="src/core/app.js?v=20260614-stabilize1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
@@ -6869,9 +6831,12 @@
     <script src="src/boot/sw-register.js?v=20260616-pwa1"></script>
     <script src="src/features/study/ap-study.js?v=20260602-audit2"></script>
     <script src="src/features/study/review.js?v=20260528-flow-upgrade"></script>
+    <script src="src/features/study/math-render.js?v=20260620-math1"></script>
+    <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/notifications.js?v=20260614-storage1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260620-mobilenav1"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
     <script src="src/core/issue-prompt.js?v=20260617-issue1"></script>

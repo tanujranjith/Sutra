@@ -264,17 +264,22 @@ Sutra Cloud.
 It is intentionally a **manual backup/restore** model (with an opt-in auto layer),
 **not** continuous sync. "Cross-device" means: back up here, restore there.
 
-- **Two backends (device-local choice):** **Official Sutra Cloud** (default,
-  recommended — Sutra's configured Supabase project) or **Bring Your Own Supabase**
-  (advanced — the user's own project, config stored device-locally at
-  `sutra:supabaseCustomBackend:v1`, never inside a `.sutra` backup). Both share the
-  same encryption/passphrase/retention/restore behavior; only the project storing
-  the ciphertext differs. Switching backends signs out of the current session,
-  clears that session + the old backend's cached metadata, and leaves the local
-  workspace untouched. Because the hosted CSP pins exact origins, **custom Supabase
-  generally needs a self-hosted build** with the user's ref added to the CSP; the
-  panel detects a CSP-blocked origin and says so. Sutra **rejects `service_role`
-  keys** and only accepts the public anon key.
+- **Provider-based (device-local choice):** Sutra Cloud is now a provider-adapter
+  system — the active destination is stored at `sutra:cloudActiveProvider:v1` and
+  per-provider config at `sutra:cloudProvider:<id>:v1` (via `SutraSafeStorage`,
+  never inside a `.sutra` backup). Destinations: **Google Drive / OneDrive /
+  Dropbox** (recommended), **WebDAV / S3-compatible / Supabase / Custom HTTP**
+  (advanced), and **Manual** encrypted-file export. **Supabase is now one advanced
+  provider, not the central backend.** All providers share the same
+  encryption/passphrase/retention/restore behavior; only the destination differs.
+  Switching destinations ends the current provider's session, resets shared backup
+  status, leaves remote backups + the local workspace untouched, and requires
+  connecting the new destination. Because the hosted CSP pins exact origins,
+  **custom destinations (WebDAV/S3/Custom HTTP/other Supabase projects) generally
+  need a self-hosted build** with the origin added to the CSP; the panel detects a
+  CSP-blocked origin and says so. Sutra **rejects `service_role` / root / admin
+  keys** where detectable. Full provider list:
+  [`SUTRA_CLOUD_PROVIDERS.md`](../SUTRA_CLOUD_PROVIDERS.md).
 - **Account:** passwordless email **one-time code** (Supabase Auth). The account
   **email** is the only personal data the provider sees. No password to remember.
 - **Each backup is a standard encrypted `.sutra` envelope**, produced by the same

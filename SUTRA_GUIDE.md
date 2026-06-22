@@ -20,7 +20,8 @@ A friendly, hands-on walkthrough of your **first session** with Sutra - from ope
 10. [Meet the Sutra Assistant](#10-meet-the-sutra-assistant)
 11. [Make it yours: themes & customization](#11-make-it-yours-themes--customization)
 12. [Export a `.sutra` backup](#12-export-a-sutra-backup)
-13. [Your daily three-minute loop](#13-your-daily-three-minute-loop)
+13. [Stay on top: All Due, Course Hub, Review Generator & Starter Packs](#13-stay-on-top-all-due-course-hub-review-generator--starter-packs)
+14. [Your daily three-minute loop](#14-your-daily-three-minute-loop)
 
 ---
 
@@ -248,7 +249,18 @@ A few things to know:
 > Make a backup now, while your workspace is small. Then make one before any big change.
 ---
 
-## 13. Your daily three-minute loop
+## 13. Stay on top: All Due, Course Hub, Review Generator & Starter Packs
+
+As your workspace fills up, four surfaces keep it manageable:
+
+- **All Due** is one command center for everything with a deadline — tasks, homework, assignment milestones, AP exams, review due, college deadlines, and timeline blocks. **Filter** (overdue / today / this week / high-risk / unscheduled / review / AP / college / course / timeline) and **sort** (Smart, Due date, Urgency, Importance, Grade risk, Effort, Unscheduled-first, Source). Every row tells you *why it's ranked here*, and you can open it, schedule it, start a focus session, make review cards, open/create a linked note, or mark it done — right from the row.
+- **Course Hub** gives each class a dashboard (assignments, files, linked notes, linked decks, schedule, grade forecast) with a deterministic **"Do this next"** card.
+- **Review Generator** turns a note (or an assignment) into review cards: it pulls candidates from your headings, *term: definition* lines, and bold terms, then shows an **editable preview** before anything saves. Find it in a note's menu (*Generate review cards*), in Assignment Studio, on an All Due row, or via the Assistant.
+- **Starter Packs** set up a whole workspace in one step for a goal (AP season, college apps, SAT/ACT, robotics, senior year, research, freelancing, a personal life system). **Preview** what a pack creates, apply all or just the parts you want, and **undo** the whole batch if you change your mind. Open from `Settings → Integrations → Starter Packs` or the All Due empty state.
+
+Big assignments can also expand into an **Assignment Studio** (milestones, subtasks, rubric, linked work) — its *Make focus plan* and *Make review cards* buttons tie straight into Timeline and Review.
+
+## 14. Your daily three-minute loop
 
 Once you're set up, the whole app collapses into a short daily rhythm:
 

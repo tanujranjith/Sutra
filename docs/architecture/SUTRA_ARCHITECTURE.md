@@ -64,6 +64,15 @@ incremental **extraction** of cross-cutting utilities out of `app.js`:
   feature-level runtime isolation. A broken feature is reported and shown a small
   degraded badge; the rest of the app still boots. The `DOMContentLoaded` boot
   sequence in `app.js` runs each step through this guard.
+- **`src/core/startup-health.js`** — `window.SutraStartupHealth`: proactive
+  startup-integrity watchdog. After boot has had a fair chance it verifies that
+  the *critical* subsystems came up (workspace save/serialize runtime, safe
+  storage, persistence pipeline, app shell). For a genuine catastrophic boot
+  failure — and only then — it shows one small, dismissible recovery banner with
+  the data-safety actions (Reload / Safe Mode / emergency export), never "file an
+  issue". It is false-alarm-resistant (watchdog + confirmation rechecks), makes
+  no network/storage writes, exposes no workspace data, and never blocks normal
+  use. Complements `issue-prompt.js` (which is reporting-oriented).
 
 New unsafe patterns (raw `innerHTML =`, direct `localStorage.setItem`,
 unregistered `window.*`, un-inventoried workspace fields) are blocked in CI by
@@ -96,6 +105,16 @@ Self-contained feature areas live in **`src/features/*.js`**:
 - `assignment-studio.js` — the **Assignment Studio** (milestones, subtasks,
   rubric, linked work) layered onto a Homework task.
 - `semester-setup.js` — the **Semester Setup** syllabus/calendar importer.
+- `workspace/starter-packs.data.js` — **Starter Packs** seed data
+  (`window.SUTRA_STARTER_PACKS`), loaded before `app.js`. It is *data only*; the
+  preview/apply/undo controller (`window.SutraStarterPacks`) lives in
+  `src/core/app.js` so it can reuse the in-closure create functions (notes,
+  courses, decks, blocks, tasks, college rows) — the same reason Sutra Cloud
+  providers and the Review Generator (`window.SutraReviewGenerator`) live there.
+
+The **All Due** ranking engine (`computeDeadlineRank`), the **Review Generator**
+(`SutraReviewGenerator`), and the **Starter Packs** controller all live in
+`src/core/app.js` for this in-closure-helper reason (see §15 landmine note).
 
 See [`SUTRA_ASSISTANT.md`](../features/SUTRA_ASSISTANT.md) for the Assistant + Intelligence
 split, and [`ACADEMIC_PLANNING.md`](../features/ACADEMIC_PLANNING.md) for the academic
@@ -231,6 +250,15 @@ Run with Node from the project root:
 - `npm run check:persistence` - centralized persistence-health guard.
 - `npm run check:modal` - modal accessibility primitive guard.
 - `npm run check:network` - approved-origin and startup-network guard.
+- `npm run check:startup-health` - asserts the runtime startup health layer
+  (`src/core/startup-health.js`) is present, safe (no network/storage/unsafe
+  sink), wired before `app.js`, and offers recovery actions.
+- `npm run check:dom` - duplicate element-id + duplicate `<script src>` guard for
+  the HTML entry points (`document.getElementById` returns only the first match,
+  so a dup id silently mis-wires).
+- `npm run verify` - the strongest practical local pass: `check:all` +
+  `build:deploy` + `check:deploy` + a deterministic serial Chromium e2e smoke
+  (`test:e2e:smoke`). The full browser matrix stays on `npm run test:e2e`.
 - `npm run check:guardrails` - architecture guardrails: fails CI when a change
   adds a new raw `innerHTML =` / `insertAdjacentHTML` / `document.write`, a new
   direct `localStorage.setItem` / `sessionStorage.setItem`, an unregistered

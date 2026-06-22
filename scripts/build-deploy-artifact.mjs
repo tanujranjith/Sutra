@@ -41,6 +41,7 @@ const FILES = [
   'HomePage.html',
   'Sutra.html',
   '404.html',
+  'oauth-callback.html', // OAuth popup redirect target for Sutra Cloud backup providers
   'manifest.webmanifest',
   'robots.txt', // SEO: allows crawling + points at the sitemap
   'sitemap.xml', // SEO: canonical public URLs for search engines
@@ -64,6 +65,7 @@ const REQUIRED_SOURCE = [
   'HomePage.html',
   'Sutra.html',
   '404.html',
+  'oauth-callback.html',
   'manifest.webmanifest',
   'robots.txt',
   'sitemap.xml',

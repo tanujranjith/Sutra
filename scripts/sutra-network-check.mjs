@@ -20,6 +20,21 @@ const approved = [
   'https://openrouter.ai',
   'https://accounts.google.com',
   'https://www.googleapis.com',
+  // Sutra Cloud backup providers — OneDrive (Microsoft Graph) + Dropbox.
+  // Fixed, well-known origins (no wildcard); the user pastes only a public
+  // OAuth client ID at runtime. Google Drive reuses googleapis/accounts above.
+  'https://login.microsoftonline.com',
+  'https://graph.microsoft.com',
+  'https://www.dropbox.com',
+  'https://api.dropboxapi.com',
+  'https://content.dropboxapi.com',
+  // OneDrive restore reads from Microsoft's sharded content CDN (the download host
+  // is dynamic per account/region). These wildcard families are pinned in the CSP
+  // as a reviewed exception (see scripts/sutra-csp-check.mjs).
+  'https://*.1drv.com',
+  'https://*.sharepoint.com',
+  'https://*.microsoftpersonalcontent.com',
+  'https://*.dms.live.net',
   'https://docs.google.com',
   'https://aistudio.google.com',
   'https://myap.collegeboard.org',
@@ -49,6 +64,10 @@ const approved = [
   'https://schema.org',
   'https://github.com',
   'http://www.w3.org/2000/svg',
+  // XML namespace identifier on the Word-compatible HTML export document
+  // (buildWordExportHtml). A namespace URI, never fetched — same rationale as
+  // the SVG namespace above.
+  'http://www.w3.org/TR/REC-html40',
   'http://localhost',
   'http://127.0.0.1'
 ];
@@ -64,6 +83,16 @@ for (const file of files) {
       url === 'https://…' ||
       url.startsWith('https://${') ||
       url.includes('${')
+    ) {
+      continue;
+    }
+    // Placeholder/example URLs shown in Sutra Cloud provider setup fields
+    // (WebDAV / S3 / Custom HTTP). These are illustrative input placeholders —
+    // the real endpoint is user-entered at runtime and, for custom origins, is
+    // still blocked by CSP in the hosted build (hence the self-hosted notice).
+    if (
+      /\bexample\.(com|org|net)\b/.test(url) ||
+      url.startsWith('https://s3.us-east-1.amazonaws.com')
     ) {
       continue;
     }

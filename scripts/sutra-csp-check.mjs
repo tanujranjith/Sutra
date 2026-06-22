@@ -26,6 +26,17 @@ const required = [
   'form-action'
 ];
 
+// OneDrive restore fetches encrypted backup bytes from Microsoft's sharded
+// content CDN, whose host is dynamic per account/region. These SPECIFIC provider
+// wildcard families are a reviewed connect-src exception; any OTHER connect/
+// frame-src wildcard still fails the check below.
+const APPROVED_CONNECT_WILDCARDS = [
+  'https://*.1drv.com',
+  'https://*.sharepoint.com',
+  'https://*.microsoftpersonalcontent.com',
+  'https://*.dms.live.net'
+];
+
 let failures = 0;
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
@@ -42,7 +53,9 @@ for (const file of files) {
       failures += 1;
     }
   }
-  if (/frame-src[^;]*\*/.test(csp) || /connect-src[^;]*\*/.test(csp.replace(/localhost:\*/g, '').replace(/127\.0\.0\.1:\*/g, ''))) {
+  let connectForWildcardCheck = csp.replace(/localhost:\*/g, '').replace(/127\.0\.0\.1:\*/g, '');
+  for (const wildcard of APPROVED_CONNECT_WILDCARDS) connectForWildcardCheck = connectForWildcardCheck.split(wildcard).join('');
+  if (/frame-src[^;]*\*/.test(csp) || /connect-src[^;]*\*/.test(connectForWildcardCheck)) {
     console.error(`FAIL ${file}: CSP contains an arbitrary frame/connect wildcard`);
     failures += 1;
   }

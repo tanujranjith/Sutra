@@ -610,6 +610,8 @@
             + '<div class="studio-section-actions">'
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="generate-plan">' + (studio.milestones.length ? '↻ Regenerate plan' : '✨ Generate plan') + '</button>'
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="schedule-remaining">Schedule remaining work</button>'
+            + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="make-focus-plan">Make focus plan</button>'
+            + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="make-review-cards">Make review cards</button>'
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="ask-assistant">Ask Sutra to break this down</button>'
             + '</div>'
             + '<div class="studio-empty-line studio-plan-hint">A plan splits the work into dated milestones working back from ' + (task.dueDate ? 'your ' + esc(task.dueDate) + ' due date' : 'the due date') + ' — review and edit before scheduling.</div>'
@@ -761,6 +763,10 @@
             }
         } else if (action === 'schedule-remaining') {
             scheduleRemaining(task);
+        } else if (action === 'make-focus-plan') {
+            makeFocusPlan(task);
+        } else if (action === 'make-review-cards') {
+            makeReviewCards(task);
         } else if (action === 'ask-assistant') {
             askAssistantToBreakDown(task);
         } else if (action === 'add-subtask') {
@@ -856,6 +862,50 @@
         toast(scheduled
             ? 'Opened scheduling for ' + scheduled + ' milestone' + (scheduled === 1 ? '' : 's') + '.'
             : 'Give milestones due dates first, then schedule them.');
+    }
+
+    /** Schedule remaining milestones as focus blocks, then start a focus session
+     *  on the first pending milestone so the student can begin right away. */
+    function makeFocusPlan(task) {
+        var studio = normalizeStudio(task.studio);
+        if (!studio) return;
+        var pending = studio.milestones.filter(function (m) { return !m.done; });
+        if (!pending.length) {
+            toast('No remaining milestones — add or generate a plan first.');
+            return;
+        }
+        var scheduled = 0;
+        if (global.flowAtelier && typeof global.flowAtelier.scheduleGenericItemAsBlock === 'function') {
+            pending.forEach(function (m) {
+                var dueDate = m.dueDate || task.dueDate;
+                if (!dueDate) return;
+                global.flowAtelier.scheduleGenericItemAsBlock({
+                    title: m.title + ' — ' + (task.title || 'Assignment'),
+                    dueDate: dueDate,
+                    dueTime: m.dueTime || '',
+                    category: 'focus'
+                });
+                scheduled += 1;
+            });
+        }
+        if (global.flowAtelier && typeof global.flowAtelier.startFocusSession === 'function') {
+            close();
+            global.flowAtelier.startFocusSession(null, { label: pending[0].title + ' — ' + (task.title || 'Assignment') });
+            toast('Focus plan ready' + (scheduled ? ' (' + scheduled + ' block' + (scheduled === 1 ? '' : 's') + ' scheduled)' : '') + ' — session started.');
+        } else {
+            toast(scheduled ? 'Focus plan scheduled ' + scheduled + ' block' + (scheduled === 1 ? '' : 's') + '.' : 'Give milestones due dates first.');
+        }
+    }
+
+    /** Turn this assignment (and its linked note, if any) into review cards via
+     *  the deterministic Review Generator, which opens the preview/edit editor. */
+    function makeReviewCards(task) {
+        if (global.SutraReviewGenerator && typeof global.SutraReviewGenerator.fromHomeworkTask === 'function') {
+            close();
+            global.SutraReviewGenerator.fromHomeworkTask(task.id, { title: 'Review: ' + (task.title || 'Assignment') });
+            return;
+        }
+        toast('Review generation is not available.');
     }
 
     function askAssistantToBreakDown(task) {

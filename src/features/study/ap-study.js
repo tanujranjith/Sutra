@@ -552,6 +552,47 @@
         return Math.round(total / targetUnitCount);
     }
 
+    // Data-driven exam-readiness estimate (deterministic, local). Combines unit
+    // review progress, recent practice scores, self-confidence, and a weak-area
+    // penalty into a 0-100 readiness the student can adopt over the manual slider.
+    function computeSuggestedReadiness(subject) {
+        if (!subject) return null;
+        const progress = clamp(calculateSubjectProgress(subject), 0, 100);
+        const logs = getPracticeLogsForSubject(subject.id).slice(0, 5);
+        let practiceAvg = null;
+        if (logs.length) {
+            const pts = logs.map(log => {
+                const max = Number(log.maxScore) || 0;
+                const sc = Number(log.score);
+                return (max > 0 && Number.isFinite(sc)) ? clamp((sc / max) * 100, 0, 100) : null;
+            }).filter(v => v !== null);
+            if (pts.length) practiceAvg = pts.reduce((a, b) => a + b, 0) / pts.length;
+        }
+        const confidence = clamp((normalizeConfidence(subject.confidenceLevel, 3) / 5) * 100, 0, 100);
+        const weak = countSubjectWeakItems(subject.id);
+        const weakPenalty = clamp(weak * 3, 0, 25);
+        let score;
+        let hasSignal;
+        if (practiceAvg !== null) {
+            score = progress * 0.4 + practiceAvg * 0.4 + confidence * 0.2;
+            hasSignal = true;
+        } else {
+            score = progress * 0.6 + confidence * 0.4;
+            hasSignal = progress > 0 || getUnitsForSubject(subject.id).length > 0 || logs.length > 0;
+        }
+        score = clamp(Math.round(score - weakPenalty), 0, 100);
+        return {
+            score,
+            hasSignal,
+            basis: {
+                progress: Math.round(progress),
+                practiceAvg: practiceAvg === null ? null : Math.round(practiceAvg),
+                confidence: Math.round(confidence),
+                weak
+            }
+        };
+    }
+
     function getRemainingReviewCount(subjectId) {
         const subject = getSubjectById(subjectId);
         if (!subject) return 0;
@@ -1737,7 +1778,20 @@
                         class="ap-study-readiness-slider"
                         data-ap-readiness-input="${escapeHtml(subject.id)}"
                         aria-label="Exam readiness for ${escapeHtml(subject.name)}" />
-                    <p class="ap-study-readiness-hint">Self-rated confidence going into the exam. Updates live.</p>
+                    ${(() => {
+                        const sug = computeSuggestedReadiness(subject);
+                        if (!sug || !sug.hasSignal) return '<p class="ap-study-readiness-hint">Self-rated confidence going into the exam. Updates live.</p>';
+                        const b = sug.basis;
+                        const parts = [`${b.progress}% reviewed`];
+                        if (b.practiceAvg !== null) parts.push(`${b.practiceAvg}% practice`);
+                        if (b.weak) parts.push(`${b.weak} weak`);
+                        const same = sug.score === readiness;
+                        return `<div class="ap-study-readiness-suggest">
+                            <span class="ap-study-readiness-suggest-val" title="${escapeHtml(parts.join(' · '))}">Suggested: <strong>${sug.score}%</strong></span>
+                            ${same ? '' : `<button type="button" class="ap-study-link-btn" data-ap-action="use-suggested-readiness" data-ap-subject-id="${escapeHtml(subject.id)}" data-ap-readiness-value="${sug.score}">Use ${sug.score}%</button>`}
+                        </div>
+                        <p class="ap-study-readiness-hint">Computed from review progress, recent practice, confidence, and weak areas (${escapeHtml(parts.join(' · '))}). The slider stays yours to override.</p>`;
+                    })()}
                 </div>
                 <div class="ap-study-nested-panel ap-study-quick-tasks-panel">
                     <div class="ap-study-nested-head">
@@ -3277,6 +3331,7 @@
         if (action === 'complete-session') return void completeSession(trigger.dataset.apId || '', true);
         if (action === 'reopen-session') return void completeSession(trigger.dataset.apId || '', false);
         if (action === 'remove-quick-task') return void removeQuickTask(trigger.dataset.apSubjectId || '', trigger.dataset.apTaskId || '');
+        if (action === 'use-suggested-readiness') return void setSubjectReadiness(trigger.dataset.apSubjectId || '', trigger.dataset.apReadinessValue || '0');
         if (action === 'open-timeline' && typeof setActiveView === 'function') setActiveView('timeline');
     }
 
@@ -3450,6 +3505,9 @@
     }
 
     window.getDefaultApStudyWorkspace = getDefaultApStudyWorkspace;
+    window.computeSuggestedExamReadiness = function (subjectId) {
+        try { return computeSuggestedReadiness(getSubjectById(String(subjectId || ''))); } catch (e) { return null; }
+    };
     window.normalizeApStudyWorkspace = normalizeApStudyWorkspace;
     window.hydrateApStudyWorkspaceState = hydrateApStudyWorkspaceState;
     window.initApStudyWorkspaceUI = initApStudyWorkspaceUI;

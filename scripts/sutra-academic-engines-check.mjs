@@ -363,6 +363,28 @@ const clampB = PE.planWork({
 });
 ok(clampB.blocks[0].endMin <= 1439 && PE.hhmmToMinutes(clampB.blocks[0].end) === clampB.blocks[0].endMin, 'block HH:MM string never desyncs from its minute value (1440 clamp)', clampB.blocks[0]);
 
+// Anti-clustering: a multi-chunk item across a multi-day runway must spread
+// across distinct days, not pile into the earliest free slots.
+const spreadDates = ['2026-06-20', '2026-06-21', '2026-06-22', '2026-06-23', '2026-06-24'];
+const spreadPlan = PE.planWork({
+  today: '2026-06-20', dates: spreadDates,
+  items: [{ id: 'p1', kind: 'task', title: 'Essay', dueDate: '2026-06-25', estimateMinutes: 270, priority: 'high', difficulty: 'hard' }],
+  freeWindowsByDate: Object.fromEntries(spreadDates.map(d => [d, [{ start: 540, end: 1020 }]]))
+});
+const spreadDays = new Set(spreadPlan.blocks.map(b => b.date));
+ok(spreadPlan.blocks.length >= 3 && spreadDays.size >= 3, 'multi-chunk work spreads across distinct days (anti-clustering)', { chunks: spreadPlan.blocks.length, days: spreadDays.size });
+
+// Reverse exam scheduling: expandExamPrep turns an exam into spread-out study
+// sessions that all land strictly BEFORE the exam date.
+const examItems = PE.expandExamPrep([{ id: 'apbio', name: 'AP Bio', examDate: '2026-06-27', confidence: 2 }], { today: '2026-06-20' });
+ok(examItems.length === 1 && examItems[0].preferredChunkMinutes === 45 && examItems[0].dueDate === '2026-06-27', 'expandExamPrep builds a session-chunked study item due on the exam date', examItems[0]);
+const examPlanDates = ['2026-06-20', '2026-06-21', '2026-06-22', '2026-06-23', '2026-06-24', '2026-06-25', '2026-06-26', '2026-06-27'];
+const examPlan = PE.planWork({
+  today: '2026-06-20', dates: examPlanDates, items: examItems,
+  freeWindowsByDate: Object.fromEntries(examPlanDates.map(d => [d, [{ start: 540, end: 1020 }]]))
+});
+ok(examPlan.blocks.length >= 2 && examPlan.blocks.every(b => b.date <= '2026-06-27'), 'exam study sessions are all scheduled before the exam', { blocks: examPlan.blocks.length });
+
 // ---------------------------------------------------------------------------
 console.log('\nAcademic Command Center - deterministic action ranking');
 const ACC = require('../src/features/academic/academic-command-center.js');

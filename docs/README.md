@@ -3,6 +3,13 @@
 Start here, then follow the topic folders. The canonical map of the whole app is
 [`architecture/SUTRA_ARCHITECTURE.md`](architecture/SUTRA_ARCHITECTURE.md).
 
+| Doc | What's inside |
+|---|---|
+| [`SUTRA_CLOUD_SETUP.md`](SUTRA_CLOUD_SETUP.md) | Sutra Cloud quick start + per-provider setup + hosted-vs-self-hosted CSP. |
+| [`SUTRA_CLOUD_PROVIDERS.md`](SUTRA_CLOUD_PROVIDERS.md) | Every backup destination, status matrix, the backup API contract, and the developer guide for adding a provider adapter. |
+| [`SUTRA_CLOUD_SECURITY.md`](SUTRA_CLOUD_SECURITY.md) | Encryption + passphrase model, credential storage, consent-first guarantees, threat model. |
+| [`SUTRA_CLOUD_TROUBLESHOOTING.md`](SUTRA_CLOUD_TROUBLESHOOTING.md) | Common errors, CSP limits, restore/passphrase issues, and the Sutra Cloud FAQ. |
+
 | Folder | What's inside |
 |---|---|
 | `architecture/` | `SUTRA_ARCHITECTURE.md` (the map — load order, path-coupling, "where do I edit X", staged extraction plan), `persistence-inventory.json` (the source-of-truth workspace-field inventory the guardrail/round-trip checks read), `sutra-save-systems-audit.md`. |

@@ -274,7 +274,7 @@
         showReviewModal({
             kind: 'bulk',
             title: 'Bulk import cards',
-            message: 'Paste cards, one per line. Separators auto-detected: Tab, " - " (dash), " = " (equals), or comma.',
+            message: 'Paste cards, one per line — works with Quizlet, Anki text exports, and CSV. Separators auto-detected: Tab, " - ", " = ", or comma. Use {{double braces}} in the prompt for a cloze (fill-in-the-blank). For Anki .apkg, export from Anki via File → Export → "Notes in Plain Text (.txt)" first.',
             placeholder: example,
             confirmLabel: 'Import cards',
             cancelLabel: 'Cancel',
@@ -432,10 +432,13 @@
 
     function deleteDeck(deckId) {
         const ws = safeWorkspace();
-        if (!ws) return;
+        if (!ws) return false;
+        const before = ws.decks.length;
         ws.decks = ws.decks.filter(d => d.id !== deckId);
+        const removed = ws.decks.length < before;
         ws.items = ws.items.filter(i => i.deckId !== deckId);
         persist();
+        return removed;
     }
 
     function setDeckArchived(deckId, archived) {
@@ -459,6 +462,8 @@
             answer: String(input && input.answer || ''),
             hint: String(input && input.hint || ''),
             imageUrl: String(input && input.imageUrl || ''),
+            audioUrl: String(input && input.audioUrl || ''),
+            occludeImage: !!(input && input.occludeImage),
             starred: !!(input && input.starred),
             mastery: 'new',
             correctCount: 0,
@@ -514,16 +519,134 @@
         persist();
     }
 
+    function decodeBasicEntities(s) {
+        return String(s || '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&');
+    }
+
+    // Minimal RFC-4180-ish single-row CSV parser (handles "quoted, cells" and "").
+    function parseCsvRow(line) {
+        const out = [];
+        let cur = '';
+        let q = false;
+        for (let i = 0; i < line.length; i += 1) {
+            const c = line[i];
+            if (q) {
+                if (c === '"') {
+                    if (line[i + 1] === '"') { cur += '"'; i += 1; } else { q = false; }
+                } else { cur += c; }
+            } else if (c === '"') { q = true; }
+            else if (c === ',') { out.push(cur); cur = ''; }
+            else { cur += c; }
+        }
+        out.push(cur);
+        return out.map(s => s.trim());
+    }
+
+    // One import line -> {prompt, answer}. Adds quoted-CSV support and HTML-entity
+    // decoding on top of splitCardLine, so Quizlet, Anki text exports, and CSV
+    // all import cleanly. Cloze cards ({{...}}) need no special handling — the
+    // braces are preserved in the prompt and rendered at study time.
+    function parseImportLine(line) {
+        if (/^\s*"/.test(line) && line.indexOf(',') !== -1) {
+            const cells = parseCsvRow(line);
+            if (cells.length >= 2 && cells[0]) {
+                return { prompt: decodeBasicEntities(cells[0]), answer: decodeBasicEntities(cells.slice(1).join(', ')) };
+            }
+        }
+        const c = splitCardLine(line, false);
+        return { prompt: decodeBasicEntities(c.prompt), answer: decodeBasicEntities(c.answer) };
+    }
+
+    // Build a self-contained, offline HTML flashcard viewer for a deck — a file
+    // a student can share with anyone (no account, no app needed). Cards travel
+    // as escaped JSON inside the file; cloze prompts render their blanks.
+    function buildShareableDeckHtml(deck, items) {
+        const esc = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const cards = (items || []).map(it => ({
+            prompt: String(it.prompt || ''),
+            answer: String(it.answer || ''),
+            cloze: hasCloze(it.prompt),
+            image: (it.imageUrl && /^(data:image\/|https?:)/i.test(String(it.imageUrl))) ? String(it.imageUrl) : ''
+        }));
+        const data = JSON.stringify(cards).replace(/</g, '\\u003c');
+        const title = esc(deck && deck.name ? deck.name : 'Flashcards');
+        return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title} — Flashcards</title>
+<style>
+:root{--bg:#0f1216;--card:#1b212b;--fg:#eef1f6;--muted:#9aa3b2;--accent:#6fa7ff;}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+h1{font-size:1.1rem;color:var(--muted);font-weight:600;margin:0 0 16px}
+.card{background:var(--card);border-radius:16px;padding:32px;max-width:640px;width:100%;min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer;box-shadow:0 10px 40px rgba(0,0,0,.35);}
+.face{font-size:1.3rem;line-height:1.5}.ey{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
+.cloze{display:inline-block;min-width:2.4em;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:700;margin:0 2px}.fill{color:var(--accent);font-weight:700}
+img{max-width:100%;max-height:240px;border-radius:10px;margin-top:14px}
+.bar{display:flex;gap:10px;align-items:center;margin-top:18px}
+button{background:var(--card);color:var(--fg);border:1px solid #2a313d;border-radius:10px;padding:8px 16px;font-size:.95rem;cursor:pointer}
+button:hover{border-color:var(--accent)}.count{color:var(--muted);font-size:.85rem;min-width:64px;text-align:center}
+.hint{color:var(--muted);font-size:.8rem;margin-top:10px}
+</style></head><body>
+<h1>${title}</h1>
+<div class="card" id="card" onclick="flip()"></div>
+<div class="bar"><button onclick="prev()">← Prev</button><span class="count" id="count"></span><button onclick="next()">Next →</button></div>
+<div class="hint">Click the card to flip · ${cards.length} card${cards.length === 1 ? '' : 's'} · made with Sutra</div>
+<script>
+var CARDS=${data};var i=0,showBack=false;
+function clozeFront(t){return String(t).replace(/\\{\\{[^}]+\\}\\}/g,'<span class="cloze">[…]</span>')}
+function clozeBack(t){return String(t).replace(/\\{\\{([^}]+)\\}\\}/g,'<span class="fill">$1</span>')}
+function escq(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function render(){var c=CARDS[i]||{prompt:'',answer:''};var el=document.getElementById('card');var img=c.image?'<img src="'+c.image.replace(/"/g,'&quot;')+'" alt="">':'';
+if(!showBack){el['innerHTML']='<div class="ey">Prompt</div><div class="face">'+(c.cloze?clozeFront(c.prompt):escq(c.prompt))+'</div>'+(c.cloze?'':img);}
+else{el['innerHTML']='<div class="ey">Answer</div><div class="face">'+(c.cloze?clozeBack(c.prompt):escq(c.answer||'(no answer)'))+'</div>'+img;}
+document.getElementById('count').textContent=(i+1)+' / '+CARDS.length;}
+function flip(){showBack=!showBack;render()}
+function next(){if(i<CARDS.length-1){i++;showBack=false;render()}}
+function prev(){if(i>0){i--;showBack=false;render()}}
+document.addEventListener('keydown',function(e){if(e.key===' '){e.preventDefault();flip()}else if(e.key==='ArrowRight')next();else if(e.key==='ArrowLeft')prev()});
+render();
+<\/script></body></html>`;
+    }
+
+    function exportShareableDeck(deckId) {
+        const deck = getDeck(deckId);
+        if (!deck) { notify('Open a set to share it.'); return; }
+        const items = getItems(deckId);
+        if (!items.length) { notify('This set has no cards to share yet.'); return; }
+        try {
+            const html = buildShareableDeckHtml(deck, items);
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safeName = String(deck.name || 'flashcards').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 60) || 'flashcards';
+            a.href = url; a.download = safeName + '_flashcards.html';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1500);
+            notify('Shareable flashcard file downloaded.');
+        } catch (err) { console.warn('share deck failed', err); notify('Could not build the share file.'); }
+    }
+
     function bulkImportCards(deckId, raw) {
         const ws = safeWorkspace();
         if (!ws || !getDeck(deckId)) return 0;
         const text = String(raw || '');
         if (!text.trim()) return 0;
-        // Auto-detect separator: prefer tab, fall back to comma, then ' - ' / ' = '.
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        // Auto-detect separator (tab / " - " / " = " / comma / quoted CSV).
+        // Lines starting with "#" are skipped: Anki's plain-text export prefixes
+        // directive/comment lines (e.g. "#separator:tab", "#html:true") with #.
+        const lines = text.split(/\r?\n/);
         let count = 0;
-        lines.forEach(line => {
-            const card = splitCardLine(line, false);
+        lines.forEach(rawLine => {
+            const line = rawLine.trim();
+            if (!line || /^#/.test(line)) return;
+            const card = parseImportLine(line);
             if (!card.prompt) return;
             createItem({ deckId, prompt: card.prompt, answer: card.answer });
             count += 1;
@@ -1150,9 +1273,97 @@
     // ------------------------------------------------------------------
     // Analytics view
     // ------------------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Retention analytics helpers (read-only over existing SM-2 data)
+    // ------------------------------------------------------------------
+    function analyticsDateKey(d) {
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return '';
+        return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+
+    // Cards reviewed per day across the last `days` days (from session history).
+    function getDailyReviewSeries(days) {
+        const ws = safeWorkspace();
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const byDay = {};
+        ((ws && ws.sessions) || []).forEach(s => {
+            const key = analyticsDateKey(s.startedAt || s.endedAt);
+            if (!key) return;
+            const n = s.totalReviewed || (Array.isArray(s.itemResults) ? s.itemResults.length : 0) || 0;
+            byDay[key] = (byDay[key] || 0) + n;
+        });
+        const out = [];
+        for (let i = days - 1; i >= 0; i -= 1) {
+            const d = new Date(today); d.setDate(today.getDate() - i);
+            const key = analyticsDateKey(d);
+            out.push({ key, label: d.toLocaleDateString(undefined, { weekday: 'short' }), count: byDay[key] || 0 });
+        }
+        return out;
+    }
+
+    // Cards due on each of the next `days` days, plus a count already overdue.
+    function getDueForecast(days) {
+        const ws = safeWorkspace();
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const byDay = {};
+        let overdue = 0;
+        ((ws && ws.items) || []).forEach(it => {
+            if (!it || !it.nextReviewAt) return;
+            const d = new Date(it.nextReviewAt);
+            if (isNaN(d.getTime())) return;
+            d.setHours(0, 0, 0, 0);
+            if (d < today) { overdue += 1; return; }
+            const key = analyticsDateKey(d);
+            byDay[key] = (byDay[key] || 0) + 1;
+        });
+        const series = [];
+        for (let i = 0; i < days; i += 1) {
+            const d = new Date(today); d.setDate(today.getDate() + i);
+            const key = analyticsDateKey(d);
+            series.push({ key, label: i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short' }), count: byDay[key] || 0 });
+        }
+        return { series, overdue };
+    }
+
+    // Recall retention: share of graded cards answered Good or Easy.
+    function getRetentionRate() {
+        const ws = safeWorkspace();
+        let good = 0; let total = 0;
+        ((ws && ws.sessions) || []).forEach(s => {
+            good += (s.goodCount || 0) + (s.easyCount || 0);
+            total += (s.againCount || 0) + (s.hardCount || 0) + (s.goodCount || 0) + (s.easyCount || 0);
+        });
+        return { rate: total ? Math.round((good / total) * 100) : 0, graded: total };
+    }
+
+    // Minimal dependency-free inline-SVG bar chart. Returns developer-authored
+    // markup injected through the existing analytics template (raw innerHTML),
+    // never through the user-HTML sanitizer (which would strip <svg>).
+    function renderSparkBars(series, fillClass, ariaLabel) {
+        const w = 100; const h = 40; const n = series.length || 1;
+        const max = Math.max(1, ...series.map(s => s.count));
+        const gap = 1.4;
+        const bw = (w - gap * (n - 1)) / n;
+        let bars = '';
+        let labels = '';
+        series.forEach((s, i) => {
+            const bh = s.count ? Math.max(1.5, (s.count / max) * (h - 12)) : 0.6;
+            const x = i * (bw + gap);
+            const y = h - bh - 8;
+            bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="0.7" class="${fillClass}"><title>${escapeHtml(s.label)}: ${s.count}</title></rect>`;
+            if (n <= 14) labels += `<text x="${(x + bw / 2).toFixed(2)}" y="${h - 1}" text-anchor="middle" class="sutra-spark-label">${escapeHtml(String(s.label).slice(0, 2))}</text>`;
+        });
+        return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" class="sutra-spark" role="img" aria-label="${escapeHtml(ariaLabel || 'chart')}">${bars}${labels}</svg>`;
+    }
+
     function renderAnalyticsView(mount) {
         const ws = safeWorkspace();
         if (!ws) { mount.innerHTML = ''; return; }
+        const activitySeries = getDailyReviewSeries(14);
+        const forecast = getDueForecast(7);
+        const retention = getRetentionRate();
+        const forecastTotal = forecast.series.reduce((sum, d) => sum + d.count, 0) + forecast.overdue;
         const allDecks = getDecks(false);
         const totalCards = ws.items.length;
         const mastery = { new: 0, learning: 0, familiar: 0, mastered: 0 };
@@ -1207,6 +1418,27 @@
                         <div class="review-analytics-stat-value">${weakCards.length}</div>
                         <div class="review-analytics-stat-sub">need extra review</div>
                     </div>
+                    <div class="review-analytics-stat">
+                        <div class="review-analytics-stat-label">Retention</div>
+                        <div class="review-analytics-stat-value">${retention.rate}<span style="font-size:1rem;color:var(--text-muted)">%</span></div>
+                        <div class="review-analytics-stat-sub">${retention.graded ? 'recalled Good or Easy' : 'no graded reviews yet'}</div>
+                    </div>
+                    <div class="review-analytics-stat">
+                        <div class="review-analytics-stat-label">Due Soon</div>
+                        <div class="review-analytics-stat-value">${forecastTotal}</div>
+                        <div class="review-analytics-stat-sub">${forecast.overdue ? `${forecast.overdue} overdue + ` : ''}next 7 days</div>
+                    </div>
+                </div>
+
+                <div class="review-analytics-section">
+                    <div class="review-analytics-section-title">Review activity — last 14 days</div>
+                    <div class="review-analytics-chart">${renderSparkBars(activitySeries, 'sutra-spark-bar', 'Cards reviewed per day, last 14 days')}</div>
+                </div>
+
+                <div class="review-analytics-section">
+                    <div class="review-analytics-section-title">Upcoming review load — next 7 days</div>
+                    ${forecast.overdue ? `<div class="review-analytics-forecast-note">${forecast.overdue} card${forecast.overdue === 1 ? '' : 's'} overdue right now — clear these first.</div>` : ''}
+                    <div class="review-analytics-chart">${renderSparkBars(forecast.series, 'sutra-spark-bar-due', 'Cards due per day, next 7 days')}</div>
                 </div>
 
                 <div class="review-analytics-section">
@@ -1330,6 +1562,7 @@
                         <button type="button" class="review-btn-ghost" data-review-action="open-edit-set" data-deck-id="${escapeHtml(deck.id)}">Edit set</button>
                         <button type="button" class="review-btn-primary review-set-add-card-btn" data-review-action="open-add-card-drawer" data-deck-id="${escapeHtml(deck.id)}">＋ Card</button>
                         <button type="button" class="review-btn-ghost" data-review-action="open-bulk-import" data-deck-id="${escapeHtml(deck.id)}">Bulk import</button>
+                        <button type="button" class="review-btn-ghost" data-review-action="share-deck" data-deck-id="${escapeHtml(deck.id)}" title="Export a self-contained flashcard file to share">Share</button>
                         <button type="button" class="review-btn-ghost" data-review-action="toggle-archive" data-deck-id="${escapeHtml(deck.id)}">${deck.archived ? 'Unarchive' : 'Archive'}</button>
                         <button type="button" class="review-btn-ghost review-btn-danger" data-review-action="delete-deck" data-deck-id="${escapeHtml(deck.id)}">Delete</button>
                     </div>
@@ -1441,6 +1674,18 @@
                             <input id="reviewCardTags" type="text" placeholder="Comma-separated" />
                         </label>
                     </div>
+                    <div class="review-card-image-field">
+                        <span class="review-field-span">Image (optional)</span>
+                        <div class="review-card-image-controls">
+                            <input type="file" id="reviewCardImageInput" accept="image/png,image/jpeg,image/webp,image/gif" />
+                            <button type="button" class="review-btn-ghost" id="reviewCardImageClear" hidden>Remove</button>
+                            <label class="review-checkbox"><input type="checkbox" id="reviewCardOcclude" /><span>Hide until flip</span></label>
+                        </div>
+                        <div class="review-card-image-stage" id="reviewCardImageStage" hidden>
+                            <img id="reviewCardImagePreview" alt="card image preview" />
+                        </div>
+                        <p class="review-card-image-hint">Upload or paste an image. "Hide until flip" covers it on the front (image occlusion) and reveals it on the back.</p>
+                    </div>
                     <label class="review-field"><span>Source (optional)</span>
                         <select id="reviewCardSource" class="review-select">${sourceOptions.map(o => `<option value="${escapeHtml(o.value)}"${sourceValue === o.value ? ' selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>
                     </label>
@@ -1469,6 +1714,7 @@
             if (starEl) starEl.checked = !!editingCard.starred;
         }
 
+        setupCardImageField(mount, editingCard);
         bindDeckEvents(mount, deck);
 
         // Auto-focus the prompt field whenever the drawer opens.
@@ -1478,6 +1724,87 @@
                 if (promptEl) try { promptEl.focus(); } catch (err) { /* non-critical */ }
             }, 30);
         }
+    }
+
+    // Downscale an image (File or data URL) to a bounded data URL so cards stay
+    // small enough to round-trip in the workspace backup.
+    function downscaleImageToDataUrl(source, maxDim, cb) {
+        const img = new Image();
+        img.onload = function () {
+            try {
+                let w = img.naturalWidth || img.width;
+                let h = img.naturalHeight || img.height;
+                if (!w || !h) { cb(typeof source === 'string' ? source : ''); return; }
+                const scale = Math.min(1, maxDim / Math.max(w, h));
+                w = Math.round(w * scale); h = Math.round(h * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                cb(canvas.toDataURL('image/jpeg', 0.85));
+            } catch (e) { cb(typeof source === 'string' ? source : ''); }
+        };
+        img.onerror = function () { cb(''); };
+        if (typeof source === 'string') { img.src = source; }
+        else {
+            const reader = new FileReader();
+            reader.onload = function () { img.src = String(reader.result || ''); };
+            reader.onerror = function () { cb(''); };
+            reader.readAsDataURL(source);
+        }
+    }
+
+    function setupCardImageField(mount, editingCard) {
+        const input = mount.querySelector('#reviewCardImageInput');
+        const stage = mount.querySelector('#reviewCardImageStage');
+        const preview = mount.querySelector('#reviewCardImagePreview');
+        const clearBtn = mount.querySelector('#reviewCardImageClear');
+        const occludeCk = mount.querySelector('#reviewCardOcclude');
+        const form = mount.querySelector('#reviewCardForm');
+        if (!stage || !preview || !form) return;
+
+        const showImage = (dataUrl) => {
+            if (dataUrl) {
+                preview.src = dataUrl;
+                stage.hidden = false;
+                if (clearBtn) clearBtn.hidden = false;
+            } else {
+                preview.removeAttribute('src');
+                stage.hidden = true;
+                if (clearBtn) clearBtn.hidden = true;
+            }
+        };
+
+        if (editingCard && editingCard.imageUrl) showImage(editingCard.imageUrl);
+        if (occludeCk && editingCard) occludeCk.checked = !!editingCard.occludeImage;
+
+        if (input) {
+            input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+                if (!file) return;
+                downscaleImageToDataUrl(file, 1200, (dataUrl) => { if (dataUrl) showImage(dataUrl); else notify('Could not read that image.'); });
+            });
+        }
+        if (clearBtn) clearBtn.addEventListener('click', () => showImage(''));
+        // Paste an image directly into the card form.
+        form.addEventListener('paste', (e) => {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i += 1) {
+                if (items[i].type && items[i].type.indexOf('image/') === 0) {
+                    const file = items[i].getAsFile();
+                    if (file) { e.preventDefault(); downscaleImageToDataUrl(file, 1200, (d) => { if (d) showImage(d); }); break; }
+                }
+            }
+        });
+    }
+
+    function readCardImageFields(mount) {
+        const preview = mount.querySelector('#reviewCardImagePreview');
+        const stage = mount.querySelector('#reviewCardImageStage');
+        const occludeCk = mount.querySelector('#reviewCardOcclude');
+        const imageUrl = (stage && !stage.hidden && preview && preview.getAttribute('src')) ? preview.getAttribute('src') : '';
+        return { imageUrl: imageUrl, occludeImage: !!(occludeCk && occludeCk.checked && imageUrl) };
     }
 
     function modeDescription(mode) {
@@ -1549,6 +1876,7 @@
             const starEl = mount.querySelector('#reviewCardStarred');
             const editingId = form.getAttribute('data-card-id') || '';
             const sourceData = applySourceSelection(sourceSel ? sourceSel.value : '');
+            const imageData = readCardImageFields(mount);
             if (editingId) {
                 updateItem(editingId, {
                     prompt: promptEl ? promptEl.value.trim() : '',
@@ -1556,6 +1884,8 @@
                     hint: hintEl ? hintEl.value : '',
                     tags: (tagsEl ? tagsEl.value : '').split(',').map(t => t.trim()).filter(Boolean),
                     starred: !!(starEl && starEl.checked),
+                    imageUrl: imageData.imageUrl,
+                    occludeImage: imageData.occludeImage,
                     sourceType: sourceData.sourceType,
                     sourceId: sourceData.sourceId,
                     sourceNoteId: sourceData.sourceNoteId,
@@ -1574,6 +1904,8 @@
                     hint: hintEl ? hintEl.value : '',
                     tags: tagsEl ? tagsEl.value : '',
                     starred: !!(starEl && starEl.checked),
+                    imageUrl: imageData.imageUrl,
+                    occludeImage: imageData.occludeImage,
                     sourceType: sourceData.sourceType,
                     sourceId: sourceData.sourceId,
                     sourceNoteId: sourceData.sourceNoteId,
@@ -1739,6 +2071,9 @@
             case 'toggle-archive':
                 setDeckArchived(ctx.deckId, !(getDeck(ctx.deckId) || {}).archived);
                 render();
+                break;
+            case 'share-deck':
+                exportShareableDeck(ctx.deckId || viewState.deckId);
                 break;
             case 'open-add-card-drawer': {
                 const targetDeckId = ctx.deckId || viewState.deckId;
@@ -2242,6 +2577,62 @@
         render();
     }
 
+    // Cloze deletions: `{{hidden}}` in a card prompt renders as a blank on the
+    // front and the revealed term on the back. Returns developer-safe HTML
+    // (every literal slice is escaped).
+    function hasCloze(text) {
+        return /\{\{[^}]+\}\}/.test(String(text || ''));
+    }
+    // Render an image/audio attachment on a card face, but only for safe
+    // sources (data:/https:/blob:) so a hand-edited card can't smuggle a
+    // dangerous URL into the face markup.
+    function mediaTag(src, kind) {
+        const s = String(src || '').trim();
+        if (!s) return '';
+        if (kind === 'image') {
+            if (!/^(data:image\/|https?:|blob:)/i.test(s)) return '';
+            return `<div class="review-bigcard-media"><img src="${escapeHtml(s)}" alt="card image" loading="lazy"></div>`;
+        }
+        if (kind === 'audio') {
+            if (!/^(data:audio\/|https?:|blob:)/i.test(s)) return '';
+            return `<div class="review-bigcard-media"><audio controls src="${escapeHtml(s)}"></audio></div>`;
+        }
+        return '';
+    }
+    function renderClozeHtml(text, reveal) {
+        const src = String(text || '');
+        let out = '';
+        let last = 0;
+        const re = /\{\{([^}]+)\}\}/g;
+        let m;
+        while ((m = re.exec(src)) !== null) {
+            out += escapeHtml(src.slice(last, m.index));
+            out += reveal
+                ? `<span class="review-cloze-fill">${escapeHtml(m[1])}</span>`
+                : '<span class="review-cloze-blank">[&hellip;]</span>';
+            last = re.lastIndex;
+        }
+        out += escapeHtml(src.slice(last));
+        return out;
+    }
+
+    // Render LaTeX math ($...$, $$...$$) and syntax-highlight fenced code in a
+    // freshly-mounted container. Both helpers are optional (lazy-loaded) and
+    // no-op gracefully if unavailable, so this never blocks the study UI.
+    function applyRichContentRendering(el) {
+        if (!el) return;
+        try {
+            if (window.SutraHighlight && typeof window.SutraHighlight.highlightInElement === 'function') {
+                window.SutraHighlight.highlightInElement(el);
+            }
+        } catch (e) { /* non-critical */ }
+        try {
+            if (window.SutraMath && typeof window.SutraMath.renderInElement === 'function') {
+                window.SutraMath.renderInElement(el);
+            }
+        } catch (e) { /* non-critical */ }
+    }
+
     function renderStudyView(mount) {
         const session = viewState.session;
         if (!session) { viewState.view = 'library'; render(); return; }
@@ -2294,6 +2685,7 @@
         bindCommonActions(mount);
         bindStudyKeys();
         bindModeSpecificEvents(mount, session);
+        applyRichContentRendering(mount);
     }
 
     function renderModeFooter(session) {
@@ -2326,6 +2718,21 @@
             : (settings.frontSide || 'prompt');
         const front = (frontPref === 'answer' && item.answer) ? item.answer : item.prompt;
         const back = (frontPref === 'answer') ? item.prompt : (item.answer || '(no answer noted)');
+        // Cloze cards (prompt contains {{...}}) blank the term on the front and
+        // reveal it on the back, regardless of front-side preference.
+        const cloze = hasCloze(item.prompt);
+        const frontHtml = cloze ? renderClozeHtml(item.prompt, false) : escapeHtml(front);
+        const backHtml = cloze ? renderClozeHtml(item.prompt, true) : escapeHtml(back);
+        const safeImg = (item.imageUrl && /^(data:image\/|https?:|blob:)/i.test(String(item.imageUrl).trim())) ? String(item.imageUrl).trim() : '';
+        // Image occlusion: when occludeImage is set, the image is hidden on the
+        // front (flip to reveal) and shown on the back; otherwise it shows on the front.
+        const imgFront = safeImg
+            ? (item.occludeImage
+                ? `<div class="review-bigcard-media review-occluded"><img src="${escapeHtml(safeImg)}" alt="hidden image" loading="lazy"><span class="review-occlusion-cover"><i class="fas fa-eye-slash" aria-hidden="true"></i> Hidden — flip to reveal</span></div>`
+                : mediaTag(safeImg, 'image'))
+            : '';
+        const imgBack = (safeImg && item.occludeImage) ? mediaTag(safeImg, 'image') : '';
+        const audioBack = mediaTag(item.audioUrl, 'audio');
         const tagHtml = (item.tags || []).map(t => `<span class="review-tag">${escapeHtml(t)}</span>`).join('');
         const revealed = !!session._answerRevealed;
         const atStart = idx === 0;
@@ -2337,14 +2744,17 @@
                         <div class="review-bigcard-inner">
                             <div class="review-bigcard-face review-bigcard-front">
                                 ${deck ? `<div class="review-bigcard-deck">${escapeHtml(deck.name)}</div>` : ''}
-                                <div class="review-bigcard-prompt">${escapeHtml(front)}</div>
+                                <div class="review-bigcard-prompt">${frontHtml}</div>
+                                ${imgFront}
                                 ${item.hint ? `<div class="review-bigcard-hint">Hint: ${escapeHtml(item.hint)}</div>` : ''}
                                 <div class="review-bigcard-tags">${tagHtml}</div>
                                 <div class="review-bigcard-cue">Click or press Space to flip</div>
                             </div>
                             <div class="review-bigcard-face review-bigcard-back">
                                 <div class="eyebrow">Answer</div>
-                                <div class="review-bigcard-answer">${escapeHtml(back)}</div>
+                                <div class="review-bigcard-answer">${backHtml}</div>
+                                ${imgBack}
+                                ${audioBack}
                                 <div class="review-bigcard-cue">Grade your recall ↓</div>
                             </div>
                         </div>
@@ -3267,6 +3677,17 @@
     window.bulkImportReviewCards = function (deckId, raw) {
         try { return bulkImportCards(deckId, raw); } catch (err) { console.warn('bulkImportReviewCards failed', err); return 0; }
     };
+    // Pure helpers exposed for the Study & Review e2e suite (no DOM side effects).
+    window.SutraReviewTesting = {
+        hasCloze: hasCloze,
+        renderClozeHtml: renderClozeHtml,
+        parseImportLine: parseImportLine,
+        getRetentionRate: getRetentionRate,
+        getDueForecast: getDueForecast,
+        addCard: (input) => createItem(input || {}),
+        getItems: (deckId) => getItems(deckId),
+        buildShareableDeckHtml: (deck, items) => buildShareableDeckHtml(deck, items)
+    };
     // Phase 2 #8: Generate Review Deck — parse material into candidate cards,
     // flag duplicates, and open the editable review table before saving.
     window.SutraReviewGen = {
@@ -3282,6 +3703,6 @@
     };
     // Lets Flow Assistant's undo path remove a deck it just created.
     window.deleteReviewDeck = function (deckId) {
-        try { deleteDeck(deckId); if (typeof renderReviewWorkspace === 'function') renderReviewWorkspace(); return true; } catch (err) { console.warn('deleteReviewDeck failed', err); return false; }
+        try { const removed = deleteDeck(deckId); if (typeof renderReviewWorkspace === 'function') renderReviewWorkspace(); return removed !== false; } catch (err) { console.warn('deleteReviewDeck failed', err); return false; }
     };
 })();

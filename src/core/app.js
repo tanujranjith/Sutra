@@ -1514,6 +1514,11 @@ function getPageActionsConfig(pageId) {
             onClick: () => duplicatePage(page.id)
         },
         {
+            className: 'fas fa-layer-group',
+            label: 'Generate review cards',
+            onClick: () => { try { if (window.SutraReviewGenerator) window.SutraReviewGenerator.fromNoteId(page.id, { title: 'Review: ' + (page.title || 'Note') }); } catch (e) { /* non-critical */ } }
+        },
+        {
             className: 'fas fa-pencil-alt',
             label: 'Rename page',
             onClick: () => showRenameModal(page.id)
@@ -2974,10 +2979,26 @@ function populateProgressDashboard() {
             if (lastExportEl) lastExportEl.textContent = formatSutraHealthDate(dataHealth.lastAtelierExportAt);
             if (storageHealthEl) storageHealthEl.textContent = failure ? 'Needs attention' : 'Healthy';
             if (storageDetailEl) {
-                storageDetailEl.textContent = [
+                const baseDetail = [
                     state.lastConfirmedSaveAt ? `saved ${formatSutraHealthDate(state.lastConfirmedSaveAt)}` : 'no confirmed save yet',
                     state.lastSerializedBytes ? formatByteCount(state.lastSerializedBytes) : ''
                 ].filter(Boolean).join(' / ');
+                storageDetailEl.textContent = baseDetail;
+                // Browser storage-usage gauge (best-effort; not all browsers support it).
+                try {
+                    if (navigator.storage && typeof navigator.storage.estimate === 'function') {
+                        navigator.storage.estimate().then(est => {
+                            if (!est || !storageDetailEl) return;
+                            const used = formatByteCount(est.usage || 0);
+                            const quota = est.quota ? formatByteCount(est.quota) : '';
+                            const pct = est.quota ? Math.round((est.usage / est.quota) * 100) : null;
+                            const gauge = quota
+                                ? `${used} of ${quota}${pct !== null ? ` (${pct}%)` : ''} used`
+                                : `${used} used`;
+                            storageDetailEl.textContent = baseDetail ? `${baseDetail} · ${gauge}` : gauge;
+                        }).catch(() => { /* unsupported — leave base detail */ });
+                    }
+                } catch (e) { /* unsupported */ }
             }
             if (degradedEl) {
                 let degraded = null;
@@ -6202,6 +6223,8 @@ function populateProgressDashboard() {
                 pages: [],
                 spaces: [], // Section 6 — Spaces/folders
                 cramSessions: [], // Section 31 — Cram Hub sessions
+                trash: [], // Part 5 — recently-deleted items (restore / purge)
+                focusSessions: [], // Part 5 — completed focus session history
                 testingHub: getDefaultTestingHub(), // Section 32 — Standardized Testing Hub
                 tasks: [],
                 taskOrder: [],
@@ -6623,6 +6646,9 @@ function populateProgressDashboard() {
             merged.spaces = normalizeSpacesCollection(stored && stored.spaces ? stored.spaces : defaults.spaces);
             // Cram Hub sessions (Section 31) — safe default for older workspaces
             merged.cramSessions = Array.isArray(stored && stored.cramSessions) ? stored.cramSessions : [];
+            // Part 5 — recently-deleted items + focus history (safe default for older workspaces)
+            merged.trash = Array.isArray(stored && stored.trash) ? stored.trash : [];
+            merged.focusSessions = Array.isArray(stored && stored.focusSessions) ? stored.focusSessions : [];
             // Testing Hub (Section 32) — safe default + normalization for older workspaces
             merged.testingHub = normalizeTestingHub(stored && stored.testingHub);
             // mobileTodayMode + recentSearches live inside settings; ensure
@@ -6856,6 +6882,9 @@ function populateProgressDashboard() {
             ensureHelpPagesForAllSpaces();
             // Cram Hub (Section 31)
             cramSessions = Array.isArray(appData.cramSessions) ? appData.cramSessions : [];
+            // Part 5 — trash + focus history
+            trash = Array.isArray(appData.trash) ? appData.trash : [];
+            focusSessions = Array.isArray(appData.focusSessions) ? appData.focusSessions : [];
             // Testing Hub (Section 32)
             testingHub = normalizeTestingHub(appData.testingHub);
             tasks = Array.isArray(appData.tasks)
@@ -7014,6 +7043,8 @@ function populateProgressDashboard() {
             appData.pages = pages;
             appData.spaces = spaces; // Section 6 — Spaces/folders persistence
             appData.cramSessions = cramSessions; // Section 31 — Cram Hub persistence
+            appData.trash = trash; // Part 5 — trash persistence
+            appData.focusSessions = focusSessions; // Part 5 — focus history persistence
             appData.testingHub = testingHub; // Section 32 — Testing Hub persistence
             appData.tasks = tasks;
             appData.taskOrder = taskOrder;
@@ -7084,6 +7115,9 @@ function populateProgressDashboard() {
         let activeSpaceId = 'default';
         // Cram Hub (Section 31) — focused study sessions
         let cramSessions = [];
+        // Part 5 — recently-deleted items (restore/purge) + completed focus sessions
+        let trash = [];
+        let focusSessions = [];
         let activeCramSessionId = null;
         let cramBuiltInTimer = { running: false, remaining: 0, total: 0, blockId: null, sessionId: null, interval: null };
         // Testing Hub (Section 32) — standardized testing workspace
@@ -15709,6 +15743,8 @@ function populateProgressDashboard() {
 
         function completeTimer() {
             pauseTimer();
+            const wasHabitTimer = !!activeTimedHabitTimerId;
+            const elapsedMinutes = Math.round((Number(focusTimer.durationSeconds) || 0) / 60);
             focusTimer.remaining = 0;
             saveFocusState();
             updateTimerUI();
@@ -15716,6 +15752,17 @@ function populateProgressDashboard() {
                 const completedTimedHabitId = activeTimedHabitTimerId;
                 activeTimedHabitTimerId = null;
                 try { markTimedHabitTimerReady(completedTimedHabitId); } catch (err) { /* non-critical */ }
+            }
+            // Log completed focus sessions (not habit timers) to history for the
+            // time-by-subject dashboard.
+            if (!wasHabitTimer && elapsedMinutes > 0) {
+                try {
+                    recordFocusSession({
+                        minutes: elapsedMinutes,
+                        subject: String(focusTimer.label || focusTimer.subject || 'Focus'),
+                        category: 'study'
+                    });
+                } catch (err) { /* non-critical */ }
             }
             showTimerDonePopup();
 
@@ -20869,26 +20916,95 @@ function populateProgressDashboard() {
             return groups;
         }
 
-        function pickNextBestAction(groups) {
-            const pri = (item) => String(item.priority || '').toLowerCase();
-            const overdue = groups.overdue || [];
-            const today = groups.today || [];
+        // ---- Shared deterministic ranking engine -------------------------------
+        // Used by both All Due (smart/urgency sort + per-item "why ranked here")
+        // and the Today "Next Step" card so the two never disagree. No model calls:
+        // the score is a pure function of due proximity, priority, grade risk, type,
+        // and whether the work is still unscheduled.
+        function estimateItemEffortMinutes(item) {
+            if (!item) return 30;
+            const explicit = Number(
+                (item.metadata && (item.metadata.estimateMinutes || item.metadata.effortMinutes))
+                || item.estimateMinutes || item.effortMinutes || 0
+            );
+            if (explicit > 0) return explicit;
+            const t = `${item.type || ''} ${item.title || ''}`.toLowerCase();
+            if (/\b(final|midterm)\b/.test(t)) return 180;
+            if (/\b(exam|test)\b/.test(t)) return 120;
+            if (/\b(project|build|presentation|portfolio)\b/.test(t)) return 180;
+            if (/\b(essay|paper|lab report|research)\b/.test(t)) return 120;
+            if (/\b(quiz)\b/.test(t)) return 45;
+            if (/\b(read|reading)\b/.test(t)) return 40;
+            if (/\b(review|flashcard|card)\b/.test(t)) return 20;
+            const src = String(item.source || '').toLowerCase();
+            if (src === 'review') return 20;
+            if (src === 'timeline') return 30;
+            if (src === 'milestone') return 60;
+            return 45;
+        }
 
-            const overdueHwHigh = overdue.find(i => i.source === 'homework' && pri(i) === 'high');
-            if (overdueHwHigh) return { item: overdueHwHigh, reason: 'Overdue high-priority homework' };
-            const overdueTaskHigh = overdue.find(i => i.source === 'task' && pri(i) === 'high');
-            if (overdueTaskHigh) return { item: overdueTaskHigh, reason: 'Overdue high-priority task' };
-            const hwToday = today.find(i => i.source === 'homework');
-            if (hwToday) return { item: hwToday, reason: 'Homework due today' };
-            const apSoon = [...(today), ...(groups.tomorrow || []), ...(groups.thisWeek || [])].find(i => i.source === 'apexam');
-            if (apSoon) return { item: apSoon, reason: 'AP exam coming up' };
-            const collegeSoon = [...(today), ...(groups.tomorrow || []), ...(groups.thisWeek || [])].find(i => i.source === 'college');
-            if (collegeSoon) return { item: collegeSoon, reason: 'College deadline coming up' };
-            const blockToday = today.find(i => i.source === 'timeline');
-            if (blockToday) return { item: blockToday, reason: 'Next scheduled block' };
-            const firstTaskToday = today.find(i => i.source === 'task');
-            if (firstTaskToday) return { item: firstTaskToday, reason: 'First incomplete task for today' };
-            return null;
+        function computeDeadlineRank(item, now) {
+            now = now instanceof Date ? now : new Date();
+            let score = 0;
+            const due = item && item.due instanceof Date
+                ? item.due
+                : (item && (item.dueDate || item.date) ? normalizeDeadlineDate(item.dueDate || item.date, item.dueTime || '') : null);
+            const priority = String(item && item.priority || 'medium').toLowerCase();
+            const urgency = String(item && item.urgency || '').toLowerCase();
+            const riskScore = Number(item && (item.riskScore || (item.risk === 'high' ? 4 : 0))) || 0;
+            const typeText = `${item && item.type || ''} ${item && item.title || ''}`.toLowerCase();
+            const isExam = (item && item.type === 'Exam') || /\b(exam|test|final|midterm|frq|dbq)\b/.test(typeText);
+            const isMajor = isExam || /\b(project|essay|paper|portfolio|presentation|build|checkoff)\b/.test(typeText);
+            const unscheduled = !!(item && (item.unscheduled === true || (item.flags && item.flags.unscheduled)));
+            const overdue = !!(due && due < now && startOfDay(due) < startOfDay(now));
+
+            let dueReason = 'No due date';
+            let daysUntil = null;
+            if (due) {
+                const msPerDay = 86400000;
+                daysUntil = Math.round((startOfDay(due).getTime() - startOfDay(now).getTime()) / msPerDay);
+                if (overdue) {
+                    const overdueDays = Math.max(1, Math.abs(daysUntil));
+                    score += 1000 + Math.min(overdueDays, 30) * 12;
+                    dueReason = overdueDays <= 1 ? 'Overdue' : `Overdue by ${overdueDays} days`;
+                } else if (daysUntil <= 0) { score += 720; dueReason = 'Due today'; }
+                else if (daysUntil === 1) { score += 560; dueReason = 'Due tomorrow'; }
+                else if (daysUntil <= 7) { score += Math.max(120, 480 - daysUntil * 40); dueReason = `Due in ${daysUntil} days`; }
+                else { score += Math.max(20, 200 - daysUntil * 3); dueReason = `Due in ${daysUntil} days`; }
+            }
+
+            if (priority === 'high') score += 140;
+            else if (priority === 'low') score -= 40;
+            if (urgency === 'high') score += 60;
+            if (riskScore >= 4) score += 130;
+            else if (riskScore >= 3) score += 70;
+            if (isExam) score += 110;
+            else if (isMajor) score += 60;
+            if (unscheduled && (priority === 'high' || riskScore >= 3 || isMajor)) score += 50;
+
+            let reason;
+            if (overdue) reason = (priority === 'high' || riskScore >= 4) ? `${dueReason} and high priority` : dueReason;
+            else if (isExam && dueReason.startsWith('Due')) reason = dueReason.replace(/^Due/, 'Exam');
+            else if (riskScore >= 4 && (dueReason === 'Due today' || dueReason === 'Due tomorrow')) reason = `${dueReason} with high grade risk`;
+            else if (dueReason === 'Due today' || dueReason === 'Due tomorrow') reason = priority === 'high' ? `${dueReason} · high priority` : dueReason;
+            else if (riskScore >= 4) reason = 'High grade-risk work';
+            else if (unscheduled && priority === 'high') reason = 'High priority and not scheduled yet';
+            else reason = dueReason;
+
+            return { score: Math.round(score), reason, daysUntil, overdue };
+        }
+
+        function pickNextBestAction(groups) {
+            const pools = ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'later'];
+            const now = new Date();
+            let best = null;
+            let bestScore = -Infinity;
+            pools.forEach(key => (groups[key] || []).forEach(item => {
+                if (!item || item.completed || item.status === 'done') return;
+                const rank = computeDeadlineRank(item, now);
+                if (rank.score > bestScore) { bestScore = rank.score; best = { item, reason: rank.reason }; }
+            }));
+            return best;
         }
 
         function openDeadlineSource(item) {
@@ -22266,8 +22382,8 @@ function populateProgressDashboard() {
                         <section class="atelier-onboarding-setup-section">
                             <h3 class="atelier-onboarding-setup-h">Where to find it</h3>
                             <p class="atelier-onboarding-setup-help">Look for the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace. You can set it up whenever you like &mdash; there&rsquo;s nothing to do now.</p>
-                            <p class="atelier-onboarding-setup-help">Most people use <strong>Official Sutra Cloud</strong> (recommended). Advanced users can instead connect <strong>their own Supabase project</strong> from the Sutra Cloud panel.</p>
-                            <p class="atelier-onboarding-setup-help atelier-onboarding-cloud-powered">Powered by <strong>Supabase</strong>, which stores only the locked, encrypted backup file.</p>
+                            <p class="atelier-onboarding-setup-help">You choose <strong>where</strong> backups go. Recommended: <strong>Google Drive, OneDrive, Dropbox</strong>. Advanced: <strong>WebDAV, S3-compatible storage, Supabase, or a custom endpoint</strong>. Or just download an encrypted file and save it anywhere.</p>
+                            <p class="atelier-onboarding-setup-help atelier-onboarding-cloud-powered">Whichever you pick stores only the locked, encrypted backup file — never your readable workspace.</p>
                         </section>
                     </div>
                 `;
@@ -23198,6 +23314,7 @@ function populateProgressDashboard() {
         const COURSE_FILE_KINDS = ['syllabus', 'rubric', 'worksheet', 'study_guide', 'lecture_notes', 'lab', 'slide_deck', 'image', 'pdf', 'document', 'spreadsheet', 'link', 'other'];
         const COURSE_DUE_RANGES = ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'later'];
         const STUDENT_INBOX_FILTERS = ['all', 'overdue', 'today', 'thisWeek', 'highRisk', 'unscheduled', 'review', 'ap', 'college', 'course', 'timeline'];
+        const STUDENT_INBOX_SORTS = ['smart', 'due', 'urgency', 'importance', 'gradeRisk', 'effort', 'scheduled', 'source'];
         const COURSE_PALETTE = ['#7c9cf2', '#e0a05f', '#67b08a', '#c98bd0', '#5fb0c9', '#e07a93', '#b3a06a', '#8f8df0', '#6aa6e0', '#d99f6a'];
         const COURSE_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const COURSE_FILE_INLINE_NOTE_BYTES = 100 * 1024 * 1024; // hard reject above this
@@ -23234,6 +23351,7 @@ function populateProgressDashboard() {
                     courseFilter: 'all',
                     allDueFilter: 'overdue',
                     studentInboxFilter: 'all',
+                    studentInboxSort: 'smart',
                     allDueCourseFilter: 'all',
                     migratedFromHomeworkAt: null
                 }
@@ -23429,6 +23547,7 @@ function populateProgressDashboard() {
                     courseFilter: ['all', 'active', 'archived'].includes(s.courseFilter) ? s.courseFilter : 'all',
                     allDueFilter: COURSE_DUE_RANGES.includes(s.allDueFilter) ? s.allDueFilter : 'overdue',
                     studentInboxFilter: STUDENT_INBOX_FILTERS.includes(s.studentInboxFilter) ? s.studentInboxFilter : 'all',
+                    studentInboxSort: STUDENT_INBOX_SORTS.includes(s.studentInboxSort) ? s.studentInboxSort : 'smart',
                     allDueCourseFilter: String(s.allDueCourseFilter || 'all'),
                     migratedFromHomeworkAt: s.migratedFromHomeworkAt || null
                 }
@@ -24532,13 +24651,32 @@ function populateProgressDashboard() {
                     || String(i.signal || '').toLowerCase().includes(q)
                 );
             }
-            items.sort((a, b) => {
-                const ad = a.due instanceof Date ? a.due.getTime() : Number.MAX_SAFE_INTEGER;
-                const bd = b.due instanceof Date ? b.due.getTime() : Number.MAX_SAFE_INTEGER;
-                if (ad !== bd) return ad - bd;
-                const riskOrder = { high: 0, medium: 1, low: 2 };
-                return (riskOrder[a.urgency] ?? 1) - (riskOrder[b.urgency] ?? 1);
+            // Annotate every item with the shared deterministic rank so the row can
+            // show "why it's ranked here" and the sort modes can reuse it.
+            const rankNow = new Date();
+            items.forEach(item => {
+                const rank = computeDeadlineRank(item, rankNow);
+                item.rankScore = rank.score;
+                item.rankReason = rank.reason;
+                item.effortMinutes = estimateItemEffortMinutes(item);
             });
+
+            const dueT = (x) => (x.due instanceof Date ? x.due.getTime() : Number.MAX_SAFE_INTEGER);
+            const cmpDue = (a, b) => dueT(a) - dueT(b);
+            const prRank = { high: 0, medium: 1, low: 2 };
+            const urRank = { high: 0, medium: 1, low: 2 };
+            const sortMode = STUDENT_INBOX_SORTS.includes(filters.sort) ? filters.sort : 'smart';
+            const comparators = {
+                smart: (a, b) => (b.rankScore - a.rankScore) || cmpDue(a, b),
+                due: cmpDue,
+                urgency: (a, b) => ((urRank[a.urgency] ?? 1) - (urRank[b.urgency] ?? 1)) || cmpDue(a, b),
+                importance: (a, b) => ((prRank[a.priority] ?? 1) - (prRank[b.priority] ?? 1)) || cmpDue(a, b),
+                gradeRisk: (a, b) => ((b.riskScore || 0) - (a.riskScore || 0)) || cmpDue(a, b),
+                effort: (a, b) => ((a.effortMinutes || 0) - (b.effortMinutes || 0)) || cmpDue(a, b),
+                scheduled: (a, b) => ((a.unscheduled ? 0 : 1) - (b.unscheduled ? 0 : 1)) || cmpDue(a, b),
+                source: (a, b) => String(a.source).localeCompare(String(b.source)) || cmpDue(a, b)
+            };
+            items.sort(comparators[sortMode] || comparators.smart);
             return items;
         }
 
@@ -25232,12 +25370,24 @@ function populateProgressDashboard() {
         }
 
         function cwNextActionsHtml(course) {
-            const actions = getStudentInboxItems({ courseId: course.id, filter: 'all', search: '' }).slice(0, 4);
-            if (!actions.length) return '<div class="cw-empty-line">No urgent next actions for this course.</div>';
-            return `<div class="cw-next-list">${actions.map(item => {
+            // Deterministic "What should I do next?" — top item by the shared rank
+            // engine (assignments, review due, grade risk, upcoming tests), with a
+            // one-line reason, then the next few.
+            const ranked = getStudentInboxItems({ courseId: course.id, filter: 'all', search: '', sort: 'smart' });
+            if (!ranked.length) return '<div class="cw-empty-line">No urgent next actions for this course. You\'re on top of this one.</div>';
+            const top = ranked[0];
+            const topMeta = cwDueMeta(top.due);
+            const rest = ranked.slice(1, 4);
+            const topHtml = `<button type="button" class="cw-next-primary" onclick="cwOpenDueItem('${cwEsc(top.source)}','${cwEsc(top.sourceId)}')">
+                <span class="cw-next-primary-eyebrow">Do this next${top.rankReason ? ' · ' + cwEsc(top.rankReason) : ''}</span>
+                <span class="cw-next-primary-title">${cwEsc(top.title)}</span>
+                <span class="cw-next-primary-meta">${cwEsc(topMeta.label)} · ${cwEsc(cwInboxSourceLabel(top.source))}</span>
+            </button>`;
+            const restHtml = rest.length ? `<div class="cw-next-list">${rest.map(item => {
                 const meta = cwDueMeta(item.due);
                 return `<button type="button" class="cw-next-action" onclick="cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')"><span>${cwEsc(item.title)}</span><small>${cwEsc(meta.label)} · ${cwEsc(cwInboxSourceLabel(item.source))}</small></button>`;
-            }).join('')}</div>`;
+            }).join('')}</div>` : '';
+            return topHtml + restHtml;
         }
 
         function cwCreateReviewDeckForCourse(courseId) {
@@ -25620,6 +25770,11 @@ function populateProgressDashboard() {
             persistAppData();
             renderAllDueView();
         }
+        function cwSetAllDueSort(sort) {
+            courseWorkspace.settings.studentInboxSort = STUDENT_INBOX_SORTS.includes(sort) ? sort : 'smart';
+            persistAppData();
+            renderAllDueView();
+        }
         function cwSetAllDueCourse(value) {
             courseWorkspace.settings.allDueCourseFilter = String(value || 'all');
             persistAppData();
@@ -25815,6 +25970,619 @@ function populateProgressDashboard() {
             return ok;
         }
 
+        // Start a focus session seeded with the item title (falls back gracefully
+        // across the focus-session entry points the build exposes).
+        function cwFocusInboxItem(source, sourceId, milestoneId) {
+            const item = cwFindInboxItem(source, sourceId, milestoneId);
+            const title = item ? item.title : '';
+            if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') {
+                try { window.flowAtelier.startFocusSession({ label: title, taskTitle: title }); showToast('Focus session started.'); return true; } catch (e) { /* fall through */ }
+            }
+            if (typeof startFocusSession === 'function') {
+                try { startFocusSession(null, { label: title }); showToast('Focus session started.'); return true; } catch (e) { try { startFocusSession(); return true; } catch (e2) { /* fall through */ } }
+            }
+            setActiveView('today');
+            return false;
+        }
+
+        // Open the Review generator seeded with this item so the student can turn
+        // it into review cards (deeper note/AP/homework sourcing lives in the
+        // Review Generator feature; this is the All Due entry point into it).
+        function cwReviewCardsForInboxItem(source, sourceId, milestoneId) {
+            const item = cwFindInboxItem(source, sourceId, milestoneId);
+            const title = item ? item.title : 'Review';
+            if (window.SutraReviewGenerator && typeof window.SutraReviewGenerator.fromInboxItem === 'function') {
+                try { window.SutraReviewGenerator.fromInboxItem(item); return true; } catch (e) { /* fall through */ }
+            }
+            if (window.SutraReviewGen && typeof window.SutraReviewGen.openGenerator === 'function') {
+                try { window.SutraReviewGen.openGenerator({ title, rawText: '' }); return true; } catch (e) { /* fall through */ }
+            }
+            setActiveView('review');
+            return false;
+        }
+
+        // Open the note already linked to this item, or create a lightweight linked
+        // note titled after it. Mirrors the existing programmatic note-create path.
+        function cwNoteForInboxItem(source, sourceId, milestoneId) {
+            const item = cwFindInboxItem(source, sourceId, milestoneId);
+            const title = item ? item.title : 'Note';
+            // If a homework task already has a linked studio note, open it.
+            if (cwInboxSource(source) === 'homework' || cwInboxSource(source) === 'milestone') {
+                try {
+                    const hwTasks = cwReadHwArray('hwTasks:v2');
+                    const task = hwTasks.find(t => String(t && t.id) === String(sourceId || ''));
+                    const linkedId = task && task.studio && Array.isArray(task.studio.linkedPageIds) ? task.studio.linkedPageIds[0] : '';
+                    if (linkedId && Array.isArray(pages) && pages.some(p => String(p.id) === String(linkedId))) {
+                        setActiveView('notes'); if (typeof loadPage === 'function') loadPage(linkedId); return true;
+                    }
+                } catch (e) { /* fall through to create */ }
+            }
+            if (!Array.isArray(pages)) { setActiveView('notes'); return false; }
+            const nowIso = new Date().toISOString();
+            const course = item && item.courseId ? getCourseById(item.courseId) : null;
+            const newPage = {
+                id: generateId(),
+                title,
+                content: [
+                    `<h2>${escapeHtml(title)}</h2>`,
+                    course ? `<p><strong>Course:</strong> ${escapeHtml(course.name)}</p>` : '',
+                    item && item.dueDate ? `<p><strong>Due:</strong> ${escapeHtml(item.dueDate)}</p>` : '',
+                    '<h3>Plan</h3><ul><li></li></ul>',
+                    '<h3>Notes</h3><p></p>'
+                ].filter(Boolean).join(''),
+                blocks: [],
+                icon: (typeof PAGE_ICONS !== 'undefined' ? PAGE_ICONS.DOC : '📄'),
+                spaceId: activeSpaceId || 'default',
+                collapsed: false,
+                classLinkId: course ? course.id : undefined,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                theme: (typeof globalTheme !== 'undefined' ? globalTheme : 'default')
+            };
+            pages.push(newPage);
+            try { savePagesToLocal && savePagesToLocal(); } catch (err) { window.reportError && window.reportError(err, 'persist:savePagesToLocal', 'warning'); }
+            try { renderPagesList && renderPagesList(); } catch (err) { /* non-critical */ }
+            try { setActiveView('notes'); loadPage && loadPage(newPage.id); } catch (err) { /* non-critical */ }
+            showToast('Linked note created.');
+            return true;
+        }
+
+        // =====================================================================
+        // REVIEW GENERATOR — deterministic cards from existing work (#5)
+        // Pure extractor (headings -> body, "term: definition" lists, bold-term
+        // cloze) that emits tab-separated prompt/answer pairs. Those flow through
+        // the EXISTING review create/preview editor (SutraReviewGen.openGenerator),
+        // so nothing new persists and source backlinks ride the card's existing
+        // sourceNoteId/sourceApClassId/sourceAssignmentId fields.
+        // =====================================================================
+        function sutraReviewDecodeText(s) {
+            return String(s || '')
+                .replace(/<br\s*\/?>(?=)/gi, ' ')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/&nbsp;/gi, ' ')
+                .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+                .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        function sutraReviewSplitTermDefinition(text) {
+            text = String(text || '').trim();
+            if (!text) return null;
+            let idx = text.indexOf(' — ');
+            if (idx === -1) idx = text.indexOf(' – ');
+            if (idx === -1) idx = text.indexOf(' - ');
+            if (idx === -1) idx = text.indexOf(' = ');
+            if (idx !== -1) {
+                const q = text.slice(0, idx).trim();
+                const a = text.slice(idx + 3).trim();
+                if (q && a) return { q, a };
+                return null;
+            }
+            const m = text.match(/^(.{2,80}?):\s+(.+)$/);
+            if (m && m[1].trim() && m[2].trim()) return { q: m[1].trim(), a: m[2].trim() };
+            return null;
+        }
+        function sutraExtractReviewPairsFromHtml(html, options) {
+            options = options || {};
+            const max = Number.isFinite(options.max) ? options.max : 60;
+            const pairs = [];
+            const seen = new Set();
+            const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const push = (qRaw, aRaw) => {
+                let q = sutraReviewDecodeText(qRaw);
+                let a = sutraReviewDecodeText(aRaw);
+                if (!q || q.length < 3 || !a) return;
+                if (q.length > 200) q = q.slice(0, 200);
+                if (a.length > 400) a = a.slice(0, 400);
+                const key = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+                if (!key || seen.has(key)) return;
+                seen.add(key);
+                if (pairs.length < max) pairs.push({ q, a });
+            };
+            const source = String(html || '');
+            let m;
+            // 1. Headings -> following body text (until the next heading).
+            const headingRe = /<h([1-4])[^>]*>([\s\S]*?)<\/h\1>([\s\S]*?)(?=<h[1-4][^>]*>|$)/gi;
+            while ((m = headingRe.exec(source)) !== null) {
+                const heading = sutraReviewDecodeText(m[2]);
+                const body = sutraReviewDecodeText(m[3]);
+                if (heading && body && body.length > 1) push(heading, body);
+            }
+            // 2. List items shaped like "term: definition" / "term - definition".
+            const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+            while ((m = liRe.exec(source)) !== null) {
+                const pair = sutraReviewSplitTermDefinition(sutraReviewDecodeText(m[1]));
+                if (pair) push(pair.q, pair.a);
+            }
+            // 3. Bold/strong term cloze from paragraphs.
+            const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+            while ((m = pRe.exec(source)) !== null) {
+                const inner = m[1];
+                const sentence = sutraReviewDecodeText(inner);
+                if (sentence.split(' ').length < 5) continue;
+                const boldRe = /<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi;
+                let bm;
+                while ((bm = boldRe.exec(inner)) !== null) {
+                    const term = sutraReviewDecodeText(bm[2]);
+                    if (term && term.length >= 3 && sentence.toLowerCase().includes(term.toLowerCase())) {
+                        push(sentence.replace(new RegExp(escRe(term), 'i'), '_____'), term);
+                    }
+                }
+            }
+            return pairs;
+        }
+        function sutraBuildReviewTsvFromContent(content, options) {
+            const hasHtml = /<[a-z][\s\S]*>/i.test(content || '');
+            let pairs = hasHtml ? sutraExtractReviewPairsFromHtml(content, options) : [];
+            if (pairs.length < 3) {
+                const text = hasHtml
+                    ? String(content || '').replace(/<\/(p|li|h[1-6]|div|tr)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/[ \t]+/g, ' ')
+                    : String(content || '');
+                let lineCandidates = [];
+                try { if (window.SutraReviewGen && typeof window.SutraReviewGen.generate === 'function') lineCandidates = window.SutraReviewGen.generate(text, { max: 60 }) || []; } catch (e) { /* non-critical */ }
+                const seen = new Set(pairs.map(p => p.q.toLowerCase()));
+                lineCandidates.forEach(c => {
+                    if (c && c.prompt && c.answer && !seen.has(c.prompt.toLowerCase())) {
+                        seen.add(c.prompt.toLowerCase());
+                        pairs.push({ q: c.prompt, a: c.answer });
+                    }
+                });
+            }
+            return pairs.map(p => `${p.q}\t${p.a}`).join('\n');
+        }
+        function sutraOpenReviewGen(payload) {
+            if (window.SutraReviewGen && typeof window.SutraReviewGen.openGenerator === 'function') {
+                try { return window.SutraReviewGen.openGenerator(payload); } catch (e) { /* fall through */ }
+            }
+            try { setActiveView('review'); } catch (e) { /* non-critical */ }
+            return { total: 0, duplicates: 0 };
+        }
+        const SutraReviewGenerator = {
+            extractPairs: (html, opts) => sutraExtractReviewPairsFromHtml(html, opts),
+            buildTsv: (content, opts) => sutraBuildReviewTsvFromContent(content, opts),
+            fromText(text, opts) {
+                opts = opts || {};
+                const tsv = sutraBuildReviewTsvFromContent(text, opts);
+                return sutraOpenReviewGen({ rawText: tsv || String(text || ''), title: opts.title || 'Review set', subject: opts.subject || '', source: opts.source || '' });
+            },
+            fromNoteId(noteId, opts) {
+                opts = opts || {};
+                const page = (typeof getPageById === 'function') ? getPageById(noteId) : null;
+                if (!page) { try { setActiveView('review'); } catch (e) {} return false; }
+                const tsv = sutraBuildReviewTsvFromContent(page.content || '', opts);
+                return sutraOpenReviewGen({ rawText: tsv, title: opts.title || (page.title ? `Review: ${page.title}` : 'Review set'), subject: opts.subject || '', source: `note:${noteId}` });
+            },
+            fromHomeworkTask(taskId, opts) {
+                opts = opts || {};
+                let linkedNoteId = '';
+                let title = '';
+                try {
+                    const hwTasks = cwReadHwArray('hwTasks:v2');
+                    const task = hwTasks.find(t => String(t && t.id) === String(taskId || ''));
+                    if (task) {
+                        title = task.title || '';
+                        if (task.studio && Array.isArray(task.studio.linkedPageIds) && task.studio.linkedPageIds.length) linkedNoteId = task.studio.linkedPageIds[0];
+                    }
+                } catch (e) { /* non-critical */ }
+                if (linkedNoteId) return this.fromNoteId(linkedNoteId, { title: title ? `Review: ${title}` : 'Review set' });
+                return this.fromText('', { title: title ? `Review: ${title}` : 'Review set', source: '' });
+            },
+            fromInboxItem(item) {
+                if (!item) { try { setActiveView('review'); } catch (e) {} return false; }
+                const src = cwInboxSource(item.source);
+                if (src === 'note' && item.sourceId) return this.fromNoteId(item.sourceId, { title: `Review: ${item.title}` });
+                if ((src === 'homework' || src === 'milestone') && item.sourceId) return this.fromHomeworkTask(item.sourceId, { title: `Review: ${item.title}` });
+                return this.fromText('', { title: `Review: ${item.title}` });
+            }
+        };
+        if (typeof window !== 'undefined') {
+            window.SutraReviewGenerator = SutraReviewGenerator;
+        }
+
+        // =====================================================================
+        // STARTER PACKS (#10) — local, preview-then-apply, undoable
+        // Packs are plain local data (window.SUTRA_STARTER_PACKS, plus optional
+        // user-imported custom packs in device-local storage). Applying a pack
+        // reuses the existing create functions, so every artifact round-trips
+        // through .sutra exactly like hand-made data. Each apply is one undoable
+        // batch. No secrets and no network.
+        // =====================================================================
+        const STARTER_PACK_CUSTOM_KEY = 'sutra:starterPacks:custom:v1';
+        let starterPacksView = { mode: 'list', packId: '', lastBatch: null };
+
+        // A custom pack id is interpolated into inline onclick handlers (a JS
+        // string inside an HTML attribute). escapeHtml is NOT sufficient there:
+        // the browser HTML-decodes the entity before the JS parser runs, so an
+        // escaped quote (&#39;) would still break out of the string. Restrict
+        // ids to a safe slug charset so an imported or hand-injected pack can
+        // never reach that sink with breakout characters. This is the security
+        // boundary for custom packs — keep it in sync with starterPacksImport.
+        function isSafeStarterPackId(id) { return /^[A-Za-z0-9_-]{1,64}$/.test(String(id == null ? '' : id)); }
+        function getStarterCustomPacks() {
+            try {
+                // SutraSafeStorage exposes get/set (not getItem/setItem) and
+                // JSON-encodes/decodes for us. The earlier getItem/setItem names did
+                // not exist, so custom-pack persistence silently no-op'd — imported
+                // packs vanished. Use the real API.
+                if (!window.SutraSafeStorage || typeof window.SutraSafeStorage.get !== 'function') return [];
+                const parsed = window.SutraSafeStorage.get(STARTER_PACK_CUSTOM_KEY, { fallback: [] });
+                return Array.isArray(parsed) ? parsed.filter(p => p && p.id && p.name && isSafeStarterPackId(p.id)) : [];
+            } catch (e) { return []; }
+        }
+        function setStarterCustomPacks(list) {
+            try {
+                if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
+                    window.SutraSafeStorage.set(STARTER_PACK_CUSTOM_KEY, Array.isArray(list) ? list : [], { importance: 'optional', label: 'starter packs' });
+                }
+            } catch (e) { /* non-critical */ }
+        }
+        function getStarterPacks() {
+            const base = Array.isArray(window.SUTRA_STARTER_PACKS) ? window.SUTRA_STARTER_PACKS : [];
+            const custom = getStarterCustomPacks().map(p => Object.assign({}, p, { custom: true }));
+            return base.concat(custom);
+        }
+        function getStarterPackById(id) { return getStarterPacks().find(p => String(p.id) === String(id)) || null; }
+        function starterPackCounts(pack) {
+            const a = (pack && pack.artifacts) || {};
+            return {
+                courses: (a.courses || []).length,
+                notes: (a.notes || []).length,
+                decks: (a.decks || []).length,
+                timeBlocks: (a.timeBlocks || []).length,
+                tasks: (a.tasks || []).length,
+                collegeChecklist: (a.collegeChecklist || []).length
+            };
+        }
+        const STARTER_GROUP_LABELS = { courses: 'Courses', notes: 'Notes', decks: 'Review decks', timeBlocks: 'Timeline blocks', tasks: 'Tasks', collegeChecklist: 'College checklist' };
+
+        function starterDateKeyFromOffset(days) {
+            const d = new Date();
+            d.setDate(d.getDate() + (Number(days) || 0));
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        function createStarterNote(title, content) {
+            if (!Array.isArray(pages)) return '';
+            const nowIso = new Date().toISOString();
+            const page = {
+                id: generateId(),
+                title: String(title || 'Note'),
+                content: String(content || ''),
+                blocks: [],
+                icon: (typeof PAGE_ICONS !== 'undefined' ? PAGE_ICONS.DOC : '📄'),
+                spaceId: activeSpaceId || 'default',
+                collapsed: false,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                theme: (typeof globalTheme !== 'undefined' ? globalTheme : 'default')
+            };
+            pages.push(page);
+            return page.id;
+        }
+        function createStarterBlock(b) {
+            if (!Array.isArray(timeBlocks)) return '';
+            const id = (typeof generateBlockId === 'function') ? generateBlockId() : generateId();
+            timeBlocks.push({
+                id,
+                name: String(b.title || 'Block'),
+                start: String(b.start || '17:00'),
+                end: String(b.end || '18:00'),
+                category: String(b.category || 'general'),
+                color: 'var(--accent-strong)',
+                recurrence: 'none',
+                date: starterDateKeyFromOffset(b.daysFromNow),
+                referenceUrl: '',
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
+            return id;
+        }
+        function createStarterTask(t) {
+            if (!Array.isArray(tasks)) return '';
+            const id = generateId();
+            const task = {
+                id,
+                title: String(t.title || 'Task'),
+                notes: '',
+                completed: false,
+                isActive: true,
+                priority: ['high', 'medium', 'low'].includes(t.priority) ? t.priority : 'medium',
+                difficulty: 'medium',
+                dueDate: (t.daysFromNow != null) ? starterDateKeyFromOffset(t.daysFromNow) : '',
+                dueTime: '',
+                category: '',
+                createdAt: new Date().toISOString()
+            };
+            tasks.unshift(task);
+            if (Array.isArray(taskOrder)) taskOrder.unshift(id);
+            return id;
+        }
+        function createStarterCollegeRow(row) {
+            if (typeof createCollegeTrackerRow !== 'function' || !collegeTracker || !Array.isArray(collegeTracker.checklist)) return '';
+            const newRow = createCollegeTrackerRow('checklist');
+            newRow.college = String(row.college || 'College');
+            collegeTracker.checklist.push(newRow);
+            return newRow.id;
+        }
+
+        function applyStarterPack(packId, selection) {
+            const pack = getStarterPackById(packId);
+            if (!pack) return null;
+            const a = pack.artifacts || {};
+            const sel = selection || {};
+            const want = (k) => sel[k] !== false;
+            const created = [];
+            try {
+                if (want('courses')) (a.courses || []).forEach(c => {
+                    try { const course = createCourse({ name: c.name, type: c.type || 'class', color: c.color }); if (course) created.push({ kind: 'course', id: course.id, title: course.name }); } catch (e) { /* skip */ }
+                });
+                if (want('notes')) (a.notes || []).forEach(n => {
+                    try { const id = createStarterNote(n.title, n.content); if (id) created.push({ kind: 'note', id, title: n.title }); } catch (e) { /* skip */ }
+                });
+                if (want('decks')) (a.decks || []).forEach(d => {
+                    try {
+                        const deck = (window.createReviewDeck) ? window.createReviewDeck({ name: d.name, description: d.description || '', subject: d.subject || '', sourceType: 'starterPack' }) : null;
+                        if (deck && deck.id) {
+                            const tsv = (d.cards || []).map(c => `${c.prompt}\t${c.answer}`).join('\n');
+                            if (tsv && window.bulkImportReviewCards) window.bulkImportReviewCards(deck.id, tsv);
+                            created.push({ kind: 'deck', id: deck.id, title: d.name });
+                        }
+                    } catch (e) { /* skip */ }
+                });
+                if (want('timeBlocks')) (a.timeBlocks || []).forEach(b => {
+                    try { const id = createStarterBlock(b); if (id) created.push({ kind: 'timeBlock', id, title: b.title }); } catch (e) { /* skip */ }
+                });
+                if (want('tasks')) (a.tasks || []).forEach(t => {
+                    try { const id = createStarterTask(t); if (id) created.push({ kind: 'task', id, title: t.title }); } catch (e) { /* skip */ }
+                });
+                if (want('collegeChecklist')) (a.collegeChecklist || []).forEach(r => {
+                    try { const id = createStarterCollegeRow(r); if (id) created.push({ kind: 'collegeChecklist', id, title: r.college }); } catch (e) { /* skip */ }
+                });
+            } finally {
+                try { persistAppData(); } catch (e) { /* non-critical */ }
+                try { savePagesToLocal && savePagesToLocal(); } catch (e) { /* non-critical */ }
+                try { renderPagesList && renderPagesList(); } catch (e) { /* non-critical */ }
+                try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
+                try { cwNotifyHomework && cwNotifyHomework(); } catch (e) { /* non-critical */ }
+            }
+            const batch = { id: 'pack_' + generateId(), packId, packName: pack.name, created, at: new Date().toISOString() };
+            starterPacksView.lastBatch = batch;
+            return batch;
+        }
+
+        function undoStarterPack(batch) {
+            const b = batch || starterPacksView.lastBatch;
+            if (!b || !Array.isArray(b.created)) return 0;
+            let removed = 0;
+            const removeById = (arr, id) => { if (!Array.isArray(arr)) return false; const i = arr.findIndex(x => String(x && (x.id != null ? x.id : x)) === String(id)); if (i >= 0) { arr.splice(i, 1); return true; } return false; };
+            b.created.forEach(obj => {
+                try {
+                    if (obj.kind === 'course') {
+                        if (courseWorkspace && removeById(courseWorkspace.courses, obj.id)) removed++;
+                        // Mirror deleteCourse: if the removed course was active, repoint
+                        // activeCourseId so it never dangles at a deleted id.
+                        if (courseWorkspace && courseWorkspace.settings && String(courseWorkspace.settings.activeCourseId) === String(obj.id)) {
+                            const next = (courseWorkspace.courses || []).find(c => !c.archived) || (courseWorkspace.courses || [])[0] || null;
+                            courseWorkspace.settings.activeCourseId = next ? next.id : null;
+                        }
+                        try { const hw = cwReadHwArray('hwCourses:v2').filter(c => String(c && c.id) !== String(obj.id)); cwWriteHwArray('hwCourses:v2', hw); } catch (e) { /* non-critical */ }
+                    } else if (obj.kind === 'note') {
+                        if (removeById(pages, obj.id)) removed++;
+                    } else if (obj.kind === 'deck') {
+                        if (window.deleteReviewDeck && window.deleteReviewDeck(obj.id)) removed++;
+                    } else if (obj.kind === 'timeBlock') {
+                        if (removeById(timeBlocks, obj.id)) removed++;
+                    } else if (obj.kind === 'task') {
+                        if (removeById(tasks, obj.id)) removed++;
+                        if (Array.isArray(taskOrder)) { const i = taskOrder.indexOf(obj.id); if (i >= 0) taskOrder.splice(i, 1); }
+                    } else if (obj.kind === 'collegeChecklist') {
+                        if (collegeTracker && removeById(collegeTracker.checklist, obj.id)) removed++;
+                    }
+                } catch (e) { /* skip */ }
+            });
+            try { persistAppData(); } catch (e) { /* non-critical */ }
+            try { savePagesToLocal && savePagesToLocal(); renderPagesList && renderPagesList(); } catch (e) { /* non-critical */ }
+            try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
+            if (b === starterPacksView.lastBatch) starterPacksView.lastBatch = null;
+            return removed;
+        }
+
+        // ---- Starter Packs UI ----
+        function openStarterPacks() {
+            const modal = document.getElementById('starterPacksModal');
+            if (!modal) return;
+            starterPacksView.mode = 'list';
+            starterPacksView.packId = '';
+            renderStarterPacks();
+            modal.classList.add('active');
+            try { document.body.classList.add('modal-open'); } catch (e) { /* non-critical */ }
+        }
+        function closeStarterPacks() {
+            const modal = document.getElementById('starterPacksModal');
+            if (modal) modal.classList.remove('active');
+        }
+        function starterPacksGoList() { starterPacksView.mode = 'list'; renderStarterPacks(); }
+        function starterPacksPreview(packId) { starterPacksView.mode = 'preview'; starterPacksView.packId = packId; renderStarterPacks(); }
+
+        function renderStarterPacks() {
+            const body = document.getElementById('starterPacksBody');
+            if (!body) return;
+            const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s) => String(s);
+            if (starterPacksView.mode === 'preview') {
+                const pack = getStarterPackById(starterPacksView.packId);
+                if (!pack) { starterPacksView.mode = 'list'; renderStarterPacks(); return; }
+                const a = pack.artifacts || {};
+                const groups = Object.keys(STARTER_GROUP_LABELS).filter(k => (a[k] || []).length);
+                const groupHtml = groups.map(k => {
+                    const items = a[k] || [];
+                    const titles = items.map(it => `<li>${esc(it.title || it.name || it.college || 'Item')}</li>`).join('');
+                    return `<div class="starter-group">
+                        <label class="starter-group-head"><input type="checkbox" class="starter-group-check" data-starter-group="${esc(k)}" checked> <strong>${esc(STARTER_GROUP_LABELS[k])}</strong> <span class="starter-group-count">${items.length}</span></label>
+                        <ul class="starter-group-list">${titles}</ul>
+                    </div>`;
+                }).join('');
+                body.innerHTML = `
+                    <div class="starter-preview">
+                        <button type="button" class="cw-link" onclick="starterPacksGoList()"><i class="fas fa-arrow-left" aria-hidden="true"></i> All packs</button>
+                        <div class="starter-preview-head"><span class="starter-pack-icon" aria-hidden="true">${esc(pack.icon || '📦')}</span><div><h3>${esc(pack.name)}</h3><p>${esc(pack.description || '')}</p></div></div>
+                        <p class="starter-preview-note">Review what this pack creates, then apply everything or just the parts you want. You can undo the whole batch right after.</p>
+                        ${groupHtml || '<p>This pack has no artifacts.</p>'}
+                        <div class="starter-preview-actions">
+                            <button type="button" class="cw-btn cw-btn-primary" onclick="starterPacksApply('${esc(pack.id)}', false)">Apply selected</button>
+                            <button type="button" class="cw-btn" onclick="starterPacksApply('${esc(pack.id)}', true)">Apply all</button>
+                            <button type="button" class="cw-btn cw-btn-ghost" onclick="starterPacksGoList()">Cancel</button>
+                        </div>
+                    </div>`;
+                return;
+            }
+            if (starterPacksView.mode === 'applied' && starterPacksView.lastBatch) {
+                const b = starterPacksView.lastBatch;
+                const byKind = {};
+                b.created.forEach(o => { byKind[o.kind] = (byKind[o.kind] || 0) + 1; });
+                const summary = Object.keys(byKind).map(k => `${byKind[k]} ${esc(STARTER_GROUP_LABELS[k === 'timeBlock' ? 'timeBlocks' : (k === 'course' ? 'courses' : (k === 'note' ? 'notes' : (k === 'deck' ? 'decks' : (k === 'task' ? 'tasks' : 'collegeChecklist'))))] || k).toLowerCase()}`).join(', ');
+                body.innerHTML = `
+                    <div class="starter-applied">
+                        <div class="starter-applied-icon"><i class="fas fa-circle-check" aria-hidden="true"></i></div>
+                        <h3>Applied “${esc(b.packName || 'pack')}”</h3>
+                        <p>Created ${esc(summary || 'nothing new')}.</p>
+                        <div class="starter-preview-actions">
+                            <button type="button" class="cw-btn cw-btn-ghost" onclick="starterPacksUndo()"><i class="fas fa-rotate-left" aria-hidden="true"></i> Undo this pack</button>
+                            <button type="button" class="cw-btn" onclick="starterPacksGoList()">Browse more packs</button>
+                            <button type="button" class="cw-btn cw-btn-primary" onclick="closeStarterPacks()">Done</button>
+                        </div>
+                    </div>`;
+                return;
+            }
+            // List mode
+            const cards = getStarterPacks().map(pack => {
+                const c = starterPackCounts(pack);
+                const chips = Object.keys(c).filter(k => c[k]).map(k => `<span class="starter-chip">${c[k]} ${esc(STARTER_GROUP_LABELS[k].toLowerCase())}</span>`).join('');
+                return `<button type="button" class="starter-card" onclick="starterPacksPreview('${esc(pack.id)}')">
+                    <span class="starter-pack-icon" aria-hidden="true">${esc(pack.icon || '📦')}</span>
+                    <span class="starter-card-body">
+                        <span class="starter-card-title">${esc(pack.name)}${pack.custom ? ' <span class="starter-custom-tag">custom</span>' : ''}</span>
+                        <span class="starter-card-desc">${esc(pack.description || '')}</span>
+                        <span class="starter-card-chips">${chips}</span>
+                    </span>
+                </button>`;
+            }).join('');
+            body.innerHTML = `
+                <p class="starter-intro">Starter Packs set up a workspace in one step — notes, courses, review decks, timeline blocks, and tasks. Everything is local, you preview before applying, and you can undo.</p>
+                <div class="starter-grid">${cards}</div>
+                <div class="starter-footer-actions">
+                    <button type="button" class="cw-btn cw-btn-ghost" onclick="starterPacksImport()"><i class="fas fa-file-import" aria-hidden="true"></i> Import custom pack</button>
+                    <button type="button" class="cw-btn cw-btn-ghost" onclick="starterPacksExport()"><i class="fas fa-file-export" aria-hidden="true"></i> Export custom packs</button>
+                </div>`;
+        }
+
+        function starterPacksApply(packId, all) {
+            let selection = {};
+            if (!all) {
+                const checks = document.querySelectorAll('#starterPacksBody .starter-group-check');
+                checks.forEach(ch => { selection[ch.dataset.starterGroup] = ch.checked; });
+            }
+            const batch = applyStarterPack(packId, all ? {} : selection);
+            if (batch) {
+                starterPacksView.mode = 'applied';
+                renderStarterPacks();
+                try { showToast(`Applied ${batch.created.length} item${batch.created.length === 1 ? '' : 's'} from “${batch.packName}”.`); } catch (e) { /* non-critical */ }
+            } else {
+                try { showToast('Could not apply that pack.'); } catch (e) { /* non-critical */ }
+            }
+        }
+        function starterPacksUndo() {
+            const removed = undoStarterPack();
+            try { showToast(removed ? `Removed ${removed} item${removed === 1 ? '' : 's'}.` : 'Nothing to undo.'); } catch (e) { /* non-critical */ }
+            starterPacksGoList();
+        }
+        async function starterPacksImport() {
+            const raw = window.atelierPrompt
+                ? await window.atelierPrompt('Paste a custom Starter Pack as JSON (same shape as built-in packs).', '', { title: 'Import custom pack', multiline: true })
+                : null;
+            if (!raw) return;
+            try {
+                const parsed = JSON.parse(raw);
+                const packs = Array.isArray(parsed) ? parsed : [parsed];
+                const baseIds = new Set((Array.isArray(window.SUTRA_STARTER_PACKS) ? window.SUTRA_STARTER_PACKS : []).map(p => String(p && p.id)));
+                let rejected = 0;
+                const valid = packs.filter(p => {
+                    // Require the documented shape, a safe-slug id (security: the id
+                    // reaches an inline onclick — see isSafeStarterPackId), and no
+                    // collision with a built-in id (a colliding custom pack would be
+                    // silently shadowed by the built-in and never resolve).
+                    const ok = p && p.id && p.name && p.artifacts && isSafeStarterPackId(p.id) && !baseIds.has(String(p.id));
+                    if (!ok) rejected++;
+                    return ok;
+                });
+                if (!valid.length) {
+                    showToast(rejected ? 'No importable packs — each needs an id (letters, numbers, - or _) that does not reuse a built-in pack id.' : 'No valid packs found in that JSON.');
+                    return;
+                }
+                const existing = getStarterCustomPacks();
+                const merged = existing.filter(p => !valid.some(v => String(v.id) === String(p.id))).concat(valid);
+                setStarterCustomPacks(merged);
+                showToast(`Imported ${valid.length} custom pack${valid.length === 1 ? '' : 's'}${rejected ? ` (skipped ${rejected} invalid)` : ''}.`);
+                starterPacksGoList();
+            } catch (e) {
+                showToast('That was not valid JSON.');
+            }
+        }
+        function starterPacksExport() {
+            const custom = getStarterCustomPacks();
+            if (!custom.length) { try { showToast('No custom packs to export yet.'); } catch (e) {} return; }
+            try {
+                const blob = new Blob([JSON.stringify(custom, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'sutra-starter-packs.json';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (e) { try { showToast('Export failed.'); } catch (e2) {} }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.SutraStarterPacks = {
+                list: getStarterPacks,
+                getById: getStarterPackById,
+                counts: starterPackCounts,
+                apply: applyStarterPack,
+                undo: undoStarterPack,
+                open: openStarterPacks,
+                close: closeStarterPacks
+            };
+            window.openStarterPacks = openStarterPacks;
+            window.openTrashModal = openTrashModal;
+            window.openFocusStatsModal = openFocusStatsModal;
+            window.openGradeTrendsModal = openGradeTrendsModal;
+            window.openSnapshotBrowserModal = openSnapshotBrowserModal;
+            window.closeStarterPacks = closeStarterPacks;
+            window.starterPacksGoList = starterPacksGoList;
+            window.starterPacksPreview = starterPacksPreview;
+            window.starterPacksApply = starterPacksApply;
+            window.starterPacksUndo = starterPacksUndo;
+            window.starterPacksImport = starterPacksImport;
+            window.starterPacksExport = starterPacksExport;
+        }
+
         function cwInboxActionButtons(item) {
             const source = cwEsc(item.source);
             const sourceId = cwEsc(item.sourceId);
@@ -25824,9 +26592,11 @@ function populateProgressDashboard() {
                 <span class="ad-row-actions" aria-label="Inbox actions">
                     <button type="button" class="cw-icon-btn" title="Open source" aria-label="Open source" onclick="event.stopPropagation();cwOpenDueItem('${source}','${sourceId}')"><i class="fas fa-up-right-from-square" aria-hidden="true"></i></button>
                     <button type="button" class="cw-icon-btn" title="Schedule this" aria-label="Schedule this" onclick="event.stopPropagation();cwScheduleInboxItem('${source}','${sourceId}','${milestoneId}','schedule')"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>
+                    <button type="button" class="cw-icon-btn" title="Start focus session" aria-label="Start focus session" onclick="event.stopPropagation();cwFocusInboxItem('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-hourglass-half" aria-hidden="true"></i></button>
+                    <button type="button" class="cw-icon-btn" title="Make review cards" aria-label="Make review cards" onclick="event.stopPropagation();cwReviewCardsForInboxItem('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-layer-group" aria-hidden="true"></i></button>
+                    <button type="button" class="cw-icon-btn" title="Open/create linked note" aria-label="Open or create linked note" onclick="event.stopPropagation();cwNoteForInboxItem('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-note-sticky" aria-hidden="true"></i></button>
                     ${mutable ? `<button type="button" class="cw-icon-btn" title="Mark done" aria-label="Mark done" onclick="event.stopPropagation();cwMarkInboxDone('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-check" aria-hidden="true"></i></button>` : ''}
                     ${mutable ? `<button type="button" class="cw-icon-btn" title="Defer or reschedule" aria-label="Defer or reschedule" onclick="event.stopPropagation();cwDeferInboxItem('${source}','${sourceId}','${milestoneId}')"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i></button>` : ''}
-                    <button type="button" class="cw-icon-btn" title="Create study block" aria-label="Create study block" onclick="event.stopPropagation();cwScheduleInboxItem('${source}','${sourceId}','${milestoneId}','study')"><i class="fas fa-book-open-reader" aria-hidden="true"></i></button>
                 </span>`;
         }
 
@@ -25841,7 +26611,7 @@ function populateProgressDashboard() {
             return `
                 <div class="ad-row student-inbox-row" role="button" tabindex="0" onclick="cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cwOpenDueItem('${cwEsc(item.source)}','${cwEsc(item.sourceId)}')}">
                     <span class="ad-row-dot ad-dot-${cwEsc(item.urgency)}" aria-hidden="true"></span>
-                    <span class="ad-row-title">${cwEsc(item.title)}${badges ? `<span class="ad-row-badges">${badges}</span>` : ''}</span>
+                    <span class="ad-row-title">${cwEsc(item.title)}${badges ? `<span class="ad-row-badges">${badges}</span>` : ''}${item.rankReason ? `<span class="ad-row-why" title="Why it is ranked here"><i class="fas fa-circle-info" aria-hidden="true"></i> ${cwEsc(item.rankReason)}</span>` : ''}</span>
                     <span class="ad-row-course">${course ? `<span class="cw-chip-dot" style="background:${cwEsc(courseColor)}" aria-hidden="true"></span>` : ''}${cwEsc(item.courseName || '—')}</span>
                     <span class="ad-row-due ad-due-${meta.tone}">${cwEsc(meta.label)}</span>
                     <span class="ad-row-type"><span class="cw-type-pill">${cwEsc(item.type || cwInboxSourceLabel(item.source))}</span></span>
@@ -25881,8 +26651,9 @@ function populateProgressDashboard() {
             if (!mount) return;
             const courseFilter = courseWorkspace.settings.allDueCourseFilter || 'all';
             const inboxFilter = courseWorkspace.settings.studentInboxFilter || 'all';
-            const allInboxItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: 'all' });
-            const allItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: inboxFilter });
+            const inboxSort = STUDENT_INBOX_SORTS.includes(courseWorkspace.settings.studentInboxSort) ? courseWorkspace.settings.studentInboxSort : 'smart';
+            const allInboxItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: 'all', sort: inboxSort });
+            const allItems = getStudentInboxItems({ courseId: courseFilter, search: cwAllDueSearchQuery, filter: inboxFilter, sort: inboxSort });
             const groups = groupDueItemsByRange(allItems);
             const allGroups = groupDueItemsByRange(allInboxItems);
             const now = new Date();
@@ -25909,6 +26680,8 @@ function populateProgressDashboard() {
             const weekRange = `${cwFmtDate(weekStart)} – ${cwFmtDate(weekEndD)}`;
 
             const courseOptions = getCourses({ filter: 'all' }).map(c => `<option value="${cwEsc(c.id)}" ${String(c.id) === courseFilter ? 'selected' : ''}>${cwEsc(c.name)}</option>`).join('');
+            const sortLabels = { smart: 'Sort: Smart', due: 'Sort: Due date', urgency: 'Sort: Urgency', importance: 'Sort: Importance', gradeRisk: 'Sort: Grade risk', effort: 'Sort: Effort', scheduled: 'Sort: Unscheduled first', source: 'Sort: Source' };
+            const sortOptions = STUDENT_INBOX_SORTS.map(s => `<option value="${s}" ${s === inboxSort ? 'selected' : ''}>${cwEsc(sortLabels[s] || s)}</option>`).join('');
             const inboxFilters = [
                 ['all', 'All', allInboxItems.length],
                 ['overdue', 'Overdue', allInboxItems.filter(i => i.flags && i.flags.overdue).length],
@@ -25929,6 +26702,7 @@ function populateProgressDashboard() {
                     <div class="ad-header-titles"><h1 class="cw-h1">All Due / Student Inbox</h1><p class="cw-sub">One command center for deadlines, review debt, AP prep, conflicts, stale notes, and course work.</p></div>
                     <div class="cw-header-controls">
                         <div class="cw-search"><i class="fas fa-search" aria-hidden="true"></i><input id="cwAllDueSearch" type="search" placeholder="Search assignments, notes, files..." value="${cwEsc(cwAllDueSearchQuery)}" aria-label="Search due items"></div>
+                        <select class="cw-filter" aria-label="Sort items" onchange="cwSetAllDueSort(this.value)">${sortOptions}</select>
                         <select class="cw-filter" aria-label="Filter by course" onchange="cwSetAllDueCourse(this.value)"><option value="all" ${courseFilter === 'all' ? 'selected' : ''}>All Courses</option>${courseOptions}</select>
                         <button type="button" class="cw-btn cw-btn-primary" onclick="cwAddAssignment('')"><i class="fas fa-plus" aria-hidden="true"></i> Add Assignment</button>
                     </div>
@@ -25952,6 +26726,7 @@ function populateProgressDashboard() {
                         <p>Try another filter, add an assignment, plan a study block, or set up a course to get started.</p>
                         <div class="cw-empty-actions">
                             <button type="button" class="cw-btn cw-btn-primary" onclick="cwAddAssignment('')"><i class="fas fa-plus" aria-hidden="true"></i> Add Assignment</button>
+                            <button type="button" class="cw-btn cw-btn-ghost" onclick="openStarterPacks()"><i class="fas fa-box-open" aria-hidden="true"></i> Starter Packs</button>
                             <button type="button" class="cw-btn cw-btn-ghost" onclick="cwQuickAction('studyTimer')">Start Study Block</button>
                             <button type="button" class="cw-btn cw-btn-ghost" onclick="setActiveView('courses')">Manage Courses</button>
                         </div>
@@ -26088,12 +26863,16 @@ function populateProgressDashboard() {
             window.cwUnlinkNote = cwUnlinkNote;
             window.cwSetAllDueRange = cwSetAllDueRange;
             window.cwSetStudentInboxFilter = cwSetStudentInboxFilter;
+            window.cwSetAllDueSort = cwSetAllDueSort;
             window.cwSetAllDueCourse = cwSetAllDueCourse;
             window.cwAllDueSearch = cwAllDueSearch;
             window.cwOpenDueItem = cwOpenDueItem;
             window.cwMarkInboxDone = cwMarkInboxDone;
             window.cwDeferInboxItem = cwDeferInboxItem;
             window.cwScheduleInboxItem = cwScheduleInboxItem;
+            window.cwFocusInboxItem = cwFocusInboxItem;
+            window.cwReviewCardsForInboxItem = cwReviewCardsForInboxItem;
+            window.cwNoteForInboxItem = cwNoteForInboxItem;
             window.cwQuickAction = cwQuickAction;
             // Service surface for Sutra Assistant + external callers.
             window.courseHub = {
@@ -37295,6 +38074,55 @@ function populateProgressDashboard() {
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
   <li>The Class Dashboard shows open homework, upcoming class deadlines, linked notes, and any AP subject tied to that class.</li>
   <li><strong>Import from School Portal</strong> accepts one assignment per line, previews parsed results, and lets you fix classes before saving.</li>
+  <li>Any assignment can expand into an <strong>Assignment Studio</strong>: milestones, subtasks, rubric, linked notes/files, effort, and revisions. Studio milestones appear in All Due and Timeline, and the studio offers <strong>Schedule remaining</strong>, <strong>Make focus plan</strong>, and <strong>Make review cards</strong>.</li>
+</ul>
+                    `
+                },
+                {
+                    id: 'all-due',
+                    title: 'All Due (Command Center)',
+                    body: `
+<ul>
+  <li><strong>All Due</strong> gathers every deadline and signal in one place — tasks, homework, assignment milestones, AP exams, review due, college deadlines, timeline blocks, and work.</li>
+  <li><strong>Filter</strong> by overdue / today / this week / high-risk / unscheduled / review / AP / college / course / timeline.</li>
+  <li><strong>Sort</strong> by Smart, Due date, Urgency, Importance, Grade risk, Effort, Unscheduled-first, or Source.</li>
+  <li>Each row shows a one-line <strong>reason it's ranked here</strong> — the same deterministic engine behind Today's <strong>Next Step</strong>, so no model call decides the order.</li>
+  <li>Row actions: open source, schedule, start focus session, make review cards, open/create linked note, mark done, defer.</li>
+</ul>
+                    `
+                },
+                {
+                    id: 'course-hub',
+                    title: 'Course Hub',
+                    body: `
+<ul>
+  <li>Each class has a dashboard: overview, assignments, files, linked notes, linked review decks, schedule periods, teacher/contact, and grade forecast.</li>
+  <li>The overview shows a deterministic <strong>"Do this next"</strong> card — the top-ranked item for that course, with a one-line reason.</li>
+  <li>Notes, decks, and assignments <strong>link by reference</strong> (never copied), so a course stays a single source of truth.</li>
+</ul>
+                    `
+                },
+                {
+                    id: 'review-generator',
+                    title: 'Review Generator',
+                    body: `
+<ul>
+  <li>Turn existing work into review cards. The generator extracts candidate prompt/answer pairs deterministically: headings become prompts, "term: definition" lines become cards, and bold terms become cloze blanks.</li>
+  <li>Every generation opens an <strong>editable preview</strong> first — edit cards, drop duplicates, pick the deck and source — and nothing saves until you confirm.</li>
+  <li>Cards <strong>link back</strong> to the note, AP unit, or homework they came from.</li>
+  <li>Start it from a note's menu (<em>Generate review cards</em>), Assignment Studio, All Due, or the Assistant. AI generation, when used, goes through the explicit AI send-disclosure first.</li>
+</ul>
+                    `
+                },
+                {
+                    id: 'starter-packs',
+                    title: 'Starter Packs',
+                    body: `
+<ul>
+  <li><strong>Starter Packs</strong> set up a workspace in one step for a goal — AP season, college apps, SAT/ACT, robotics, senior year, research, freelancing, or a personal life system.</li>
+  <li>A pack can create notes, courses, review decks, timeline blocks, tasks, and college-checklist rows. Everything is <strong>local</strong> — no marketplace, no network.</li>
+  <li>You <strong>preview</strong> exactly what a pack creates and apply all of it or just the parts you tick. Right after applying, an <strong>Undo</strong> button removes the whole batch.</li>
+  <li>Open from <em>Settings → Integrations → Starter Packs</em> or the All Due empty state. Custom packs can be imported/exported as JSON (device-local).</li>
 </ul>
                     `
                 },
@@ -37406,6 +38234,61 @@ function populateProgressDashboard() {
   <li>Export from Settings before major changes and keep multiple dated copies. Sutra will ask for a backup password and cannot recover it if forgotten.</li>
   <li>Import replaces the active workspace state, so Sutra creates a pre-import safety snapshot first.</li>
   <li><strong>Optional Drive sync:</strong> Settings &rsaquo; Data can upload encrypted snapshots to your Google Drive app-data folder while Sutra is open, online, unlocked, and authorized. Manual encrypted <code>.sutra</code> backups remain independent of Drive.</li>
+</ul>
+                    `
+                },
+                {
+                    id: 'sutra-cloud',
+                    title: 'Sutra Cloud (Optional Encrypted Cloud Backup)',
+                    body: `
+<p><strong>Sutra Cloud</strong> is an optional way to back up your encrypted workspace to a cloud destination of your choice and restore it on another device. It is <strong>off by default</strong> and is <strong>backup/restore, not live sync</strong>. Open it from the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace.</p>
+<h3>How it works</h3>
+<ul>
+  <li>Your workspace is <strong>encrypted on this device</strong> into a <code>.sutra</code> file <em>before</em> anything is uploaded. The provider you choose stores <strong>only the encrypted file</strong> — it can never read your notes, tasks, or files.</li>
+  <li>You pick <strong>where</strong> backups go. Recommended: <strong>Google Drive, OneDrive, Dropbox</strong>. Advanced: <strong>WebDAV (Nextcloud/ownCloud), S3-compatible storage, Supabase, Custom HTTP</strong>. Or <strong>Manual</strong>: download the encrypted file and save it anywhere.</li>
+</ul>
+<h3>Quick start</h3>
+<ol>
+  <li>Save bar &rsaquo; <strong>Sutra Cloud</strong>.</li>
+  <li>Under <strong>Choose backup destination</strong>, pick a provider and connect/configure it.</li>
+  <li>Click <strong>Back Up Now</strong> and set a backup passphrase (let your browser save it).</li>
+  <li>On another device: open Sutra Cloud, connect the <em>same</em> provider, open <strong>Manage backups</strong>, and restore with the <em>same</em> passphrase.</li>
+</ol>
+<h3>Connecting Google Drive, OneDrive, or Dropbox (one-time, free)</h3>
+<ul>
+  <li>These providers need a <strong>public app key you create once</strong> in the provider's developer console — Sutra is a static app and can't ship one for you. It is public configuration, <strong>not</strong> a secret: never paste a client <em>secret</em>, service-role, or admin key.</li>
+  <li><strong>Google Drive:</strong> Google Cloud Console &rsaquo; Credentials &rsaquo; create an <em>OAuth client ID</em> (type "Web application"); add this app's origin and the <em>redirect URI shown in the panel</em>; paste the Client ID, Save, then Connect.</li>
+  <li><strong>OneDrive:</strong> Microsoft Entra (Azure) &rsaquo; App registrations &rsaquo; new app with a <em>Single-page application (SPA)</em> platform; add the redirect URI shown in the panel; paste the Application (client) ID, Save, then Connect.</li>
+  <li><strong>Dropbox:</strong> Dropbox App Console &rsaquo; create a <em>Scoped access &middot; App folder</em> app; enable <code>files.content.read</code> + <code>files.content.write</code>; add the redirect URI shown in the panel; paste the App key, Save, then Connect.</li>
+  <li>Sutra opens a provider sign-in popup, then stores only your encrypted backups in that account. Disconnect any time from the same panel; your refresh token lives only on this device.</li>
+</ul>
+<h3>Passphrase warning</h3>
+<ul>
+  <li>The backup passphrase unlocks your cloud backups. <strong>Sutra never stores it and never sends it</strong> to any provider.</li>
+  <li><strong>If you lose the passphrase, your cloud backups cannot be recovered.</strong> Let your browser's password manager save it.</li>
+</ul>
+<h3>Restore warning</h3>
+<ul>
+  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and takes a pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
+</ul>
+<h3>Auto-backup</h3>
+<ul>
+  <li><strong>Off by default.</strong> Manual backups are always available. Enabling it needs a connected provider and one manual backup this session (so the passphrase is unlocked). Choose: on app close, once a day, or on significant change. Turn it off to stop instantly.</li>
+</ul>
+<h3>Provider limitations (important)</h3>
+<ul>
+  <li>Sutra is a static browser app with a strict security policy (CSP). <strong>Custom destinations (your own WebDAV/S3/Custom-HTTP/Supabase project) may be blocked in the hosted app</strong> and require a <strong>self-hosted Sutra build</strong> with your provider's origin added to the CSP. Recommended providers work in the hosted version. Sutra tells you in the panel when a destination is blocked.</li>
+  <li><strong>Box</strong> can't be connected in the hosted browser app: its sign-in requires a confidential client secret a static app can't hold safely (unlike Google Drive, OneDrive, and Dropbox). Use <strong>Manual encrypted file</strong> and save into a Box-synced folder, or self-host with a small token-exchange proxy.</li>
+</ul>
+<h3>Security model</h3>
+<ul>
+  <li>Local encryption first (AES-GCM-256, PBKDF2 600k). Provider stores ciphertext only. Passphrase never sent. Provider credentials are stored <strong>device-locally</strong>, never inside a <code>.sutra</code> file. <strong>Never paste service-role / root / admin keys</strong> — use scoped app passwords/keys (for Supabase, the public anon key only).</li>
+  <li>Keeps the latest 10 backups per provider. Switching destinations leaves your local workspace and old backups untouched.</li>
+</ul>
+<h3>Troubleshooting & FAQ</h3>
+<ul>
+  <li><em>Can't connect / "blocked by browser security policy"</em> → custom origins need a self-hosted build (CSP). <em>Forgot passphrase</em> → unrecoverable by design. <em>Restore says wrong password</em> → workspace untouched, try again. <em>Don't see backups</em> → connect the same provider/account. <em>Auto-backup not running</em> → enable it + back up once this session. <em>Switched providers, backups "gone"</em> → they're in the old provider; switch back.</li>
+  <li>Full guides: see the repo docs <code>docs/SUTRA_CLOUD_SETUP.md</code>, <code>docs/SUTRA_CLOUD_PROVIDERS.md</code>, <code>docs/SUTRA_CLOUD_SECURITY.md</code>, and <code>docs/SUTRA_CLOUD_TROUBLESHOOTING.md</code>.</li>
 </ul>
                     `
                 },
@@ -41218,6 +42101,7 @@ function getActiveEditor() {
                 renderTagsContainer();
                 updateWordCount();
                 restorePrimaryNotesScrollTop(getStoredPageScrollTop(pageId));
+                try { renderBacklinksPanel(isCanvasPage ? null : pageId); } catch (err) { /* non-critical */ }
 
                 if (appSettings && appSettings.notesSplitViewEnabled) {
                     if (!secondaryPageId || secondaryPageId === currentPageId) {
@@ -41230,6 +42114,87 @@ function getActiveEditor() {
                     }
                 }
             }
+        }
+
+        // Backlinks / "linked references": find every page whose body contains a
+        // page-link to `pageId`. Page links are stored as
+        // <span class="page-link" data-page-id="ID" ...> tokens, so a substring
+        // scan of each page's content is an accurate, cheap reverse index.
+        function getBacklinksForPage(pageId) {
+            if (!pageId || !Array.isArray(pages)) return [];
+            const needles = ['data-page-id="' + pageId + '"', "data-page-id='" + pageId + "'"];
+            const out = [];
+            pages.forEach(p => {
+                if (!p || p.id === pageId) return;
+                const html = String(p.content || '');
+                if (needles.some(n => html.indexOf(n) !== -1)) {
+                    out.push({ id: p.id, title: String(p.title || 'Untitled') });
+                }
+            });
+            return out;
+        }
+
+        const RELATED_STOPWORDS = new Set(['the', 'and', 'for', 'that', 'with', 'this', 'from', 'your', 'have', 'are', 'was', 'but', 'not', 'you', 'all', 'can', 'will', 'what', 'which', 'their', 'them', 'then', 'than', 'into', 'over', 'more', 'some', 'such', 'when', 'how', 'who', 'our', 'out', 'use', 'using', 'about', 'also', 'been', 'only', 'very', 'just', 'like', 'each', 'these', 'those', 'here', 'there', 'page', 'note', 'notes']);
+        function tokenizeForRelated(text) {
+            return String(text || '')
+                .toLowerCase()
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length >= 4 && !RELATED_STOPWORDS.has(w));
+        }
+        // "See also": other pages that share significant vocabulary with this one.
+        function getRelatedNotes(pageId, limit) {
+            if (!pageId || !Array.isArray(pages)) return [];
+            const page = pages.find(p => p.id === pageId);
+            if (!page) return [];
+            const myTokens = new Set(tokenizeForRelated((page.title || '') + ' ' + (page.content || '')));
+            if (myTokens.size < 2) return [];
+            const backIds = new Set(getBacklinksForPage(pageId).map(b => b.id));
+            const scored = [];
+            pages.forEach(p => {
+                if (!p || p.id === pageId || isHelpDocsPage(p) || backIds.has(p.id)) return;
+                const toks = tokenizeForRelated((p.title || '') + ' ' + (p.content || ''));
+                let shared = 0;
+                const seen = new Set();
+                toks.forEach(t => { if (!seen.has(t) && myTokens.has(t)) { shared += 1; seen.add(t); } });
+                if (shared >= 2) scored.push({ id: p.id, title: String(p.title || 'Untitled'), score: shared });
+            });
+            scored.sort((a, b) => b.score - a.score);
+            return scored.slice(0, limit || 5);
+        }
+
+        function renderBacklinksPanel(pageId) {
+            const panel = document.getElementById('notesBacklinksPanel');
+            if (!panel) return;
+            const links = pageId ? getBacklinksForPage(pageId) : [];
+            const related = pageId ? getRelatedNotes(pageId, 5) : [];
+            panel.replaceChildren();
+            if (!links.length && !related.length) { panel.hidden = true; return; }
+            panel.hidden = false;
+
+            const buildSection = (label, items) => {
+                if (!items.length) return;
+                const head = document.createElement('div');
+                head.className = 'notes-backlinks-head';
+                head.textContent = label + ' · ' + items.length;
+                panel.appendChild(head);
+                const list = document.createElement('div');
+                list.className = 'notes-backlinks-list';
+                items.forEach(l => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'notes-backlink-item';
+                    btn.textContent = l.title.split('::').pop();
+                    btn.title = l.title;
+                    btn.addEventListener('click', () => { try { loadPage(l.id); } catch (e) { /* non-critical */ } });
+                    list.appendChild(btn);
+                });
+                panel.appendChild(list);
+            };
+
+            buildSection('Linked references', links);
+            buildSection('Related notes', related);
         }
 
         function getHomeworkCourseLabelById(courseId) {
@@ -41392,6 +42357,13 @@ function getActiveEditor() {
         // hooks, batch cleanup) exercise the exact same cleanup logic without the
         // user-facing confirm/PIN gates.
         function executePageDeletion(idsToDelete) {
+            // Capture deleted pages into Trash first, so a delete is recoverable
+            // (restore/purge) instead of permanent. Help pages are never trashed.
+            try {
+                const removed = pages.filter(p => idsToDelete.has(p.id) && !isHelpDocsPage(p));
+                if (removed.length) addPagesToTrash(removed);
+            } catch (err) { /* non-critical — never block the delete */ }
+
             clearStoredPageUiState(Array.from(idsToDelete));
 
             pages = pages.filter(p => !idsToDelete.has(p.id));
@@ -41440,6 +42412,357 @@ function getActiveEditor() {
             }
             renderPagesList();
             showToast('Page deleted successfully!');
+        }
+
+        // ---- Trash (recently-deleted pages: restore / purge) -------------------
+        const TRASH_LIMIT = 50;
+
+        function addPagesToTrash(removedPages) {
+            if (!Array.isArray(trash)) trash = [];
+            const now = new Date().toISOString();
+            (removedPages || []).forEach(p => {
+                if (!p || !p.id) return;
+                let payload;
+                try { payload = JSON.parse(JSON.stringify(p)); } catch (err) { return; }
+                trash.unshift({
+                    id: generateId(),
+                    kind: 'page',
+                    deletedAt: now,
+                    title: String(p.title || 'Untitled'),
+                    spaceId: p.spaceId || 'default',
+                    payload
+                });
+            });
+            if (trash.length > TRASH_LIMIT) trash = trash.slice(0, TRASH_LIMIT);
+        }
+
+        function restoreTrashItem(trashId) {
+            if (!Array.isArray(trash)) return false;
+            const idx = trash.findIndex(t => t && t.id === trashId);
+            if (idx === -1) return false;
+            const rec = trash[idx];
+            if (rec.kind === 'page' && rec.payload) {
+                let restored;
+                try { restored = JSON.parse(JSON.stringify(rec.payload)); } catch (err) { return false; }
+                if (pages.some(p => p.id === restored.id)) restored.id = generateId();
+                if (!spaces.find(s => s.id === restored.spaceId)) restored.spaceId = 'default';
+                pages.push(restored);
+                trash.splice(idx, 1);
+                persistAppData();
+                renderPagesList();
+                renderTrashPanel();
+                try { loadPage(restored.id); } catch (err) { /* non-critical */ }
+                showToast('Restored from Trash.');
+                return true;
+            }
+            trash.splice(idx, 1);
+            persistAppData();
+            renderTrashPanel();
+            return false;
+        }
+
+        function purgeTrashItem(trashId) {
+            if (!Array.isArray(trash)) return;
+            trash = trash.filter(t => t && t.id !== trashId);
+            persistAppData();
+            renderTrashPanel();
+        }
+
+        function emptyTrash() {
+            if (!Array.isArray(trash) || !trash.length) return;
+            if (typeof confirm === 'function' && !confirm('Permanently delete all items in Trash? This cannot be undone.')) return;
+            trash = [];
+            persistAppData();
+            renderTrashPanel();
+            showToast('Trash emptied.');
+        }
+
+        function openTrashModal() {
+            let modal = document.getElementById('sutraTrashModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'sutraTrashModal';
+                modal.className = 'modal sutra-trash-modal';
+                modal.setAttribute('role', 'dialog');
+                modal.setAttribute('aria-modal', 'true');
+                modal.setAttribute('aria-label', 'Trash');
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal || e.target.closest('[data-trash-close]')) { closeTrashModal(); return; }
+                    const restoreBtn = e.target.closest('[data-trash-restore]');
+                    if (restoreBtn) { restoreTrashItem(restoreBtn.getAttribute('data-trash-restore')); return; }
+                    const purgeBtn = e.target.closest('[data-trash-purge]');
+                    if (purgeBtn) { purgeTrashItem(purgeBtn.getAttribute('data-trash-purge')); return; }
+                    if (e.target.closest('[data-trash-empty]')) { emptyTrash(); }
+                });
+            }
+            modal.style.display = 'flex';
+            modal.classList.add('active');
+            renderTrashPanel();
+            if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (err) { /* nc */ } }
+        }
+
+        function closeTrashModal() {
+            const modal = document.getElementById('sutraTrashModal');
+            if (!modal) return;
+            modal.style.display = 'none';
+            modal.classList.remove('active');
+            if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (err) { /* nc */ } }
+        }
+
+        function renderTrashPanel() {
+            const modal = document.getElementById('sutraTrashModal');
+            if (!modal) return;
+            modal.replaceChildren();
+            const card = document.createElement('div');
+            card.className = 'modal-content sutra-trash-content';
+
+            const head = document.createElement('div');
+            head.className = 'modal-header';
+            const h = document.createElement('h2');
+            h.textContent = 'Trash';
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'modal-close';
+            close.setAttribute('data-trash-close', '');
+            close.setAttribute('aria-label', 'Close');
+            close.textContent = '×';
+            head.appendChild(h);
+            head.appendChild(close);
+            card.appendChild(head);
+
+            const body = document.createElement('div');
+            body.className = 'modal-body sutra-trash-body';
+            const list = Array.isArray(trash) ? trash : [];
+            if (!list.length) {
+                const empty = document.createElement('p');
+                empty.className = 'sutra-trash-empty';
+                empty.textContent = 'Trash is empty. Deleted pages appear here and can be restored.';
+                body.appendChild(empty);
+            } else {
+                const note = document.createElement('p');
+                note.className = 'sutra-trash-note';
+                note.textContent = `${list.length} recently-deleted item${list.length === 1 ? '' : 's'} · kept up to ${TRASH_LIMIT}.`;
+                body.appendChild(note);
+                list.forEach(rec => {
+                    const row = document.createElement('div');
+                    row.className = 'sutra-trash-row';
+                    const info = document.createElement('div');
+                    info.className = 'sutra-trash-info';
+                    const title = document.createElement('div');
+                    title.className = 'sutra-trash-title';
+                    title.textContent = String(rec.title || 'Untitled').split('::').pop();
+                    const meta = document.createElement('div');
+                    meta.className = 'sutra-trash-meta';
+                    let when = '';
+                    try { when = new Date(rec.deletedAt).toLocaleString(); } catch (err) { when = ''; }
+                    meta.textContent = (rec.kind || 'page') + (when ? ' · deleted ' + when : '');
+                    info.appendChild(title);
+                    info.appendChild(meta);
+                    const actions = document.createElement('div');
+                    actions.className = 'sutra-trash-actions';
+                    const restore = document.createElement('button');
+                    restore.type = 'button';
+                    restore.className = 'btn btn-secondary';
+                    restore.setAttribute('data-trash-restore', rec.id);
+                    restore.textContent = 'Restore';
+                    const purge = document.createElement('button');
+                    purge.type = 'button';
+                    purge.className = 'btn btn-ghost sutra-trash-purge';
+                    purge.setAttribute('data-trash-purge', rec.id);
+                    purge.textContent = 'Delete forever';
+                    actions.appendChild(restore);
+                    actions.appendChild(purge);
+                    row.appendChild(info);
+                    row.appendChild(actions);
+                    body.appendChild(row);
+                });
+            }
+            card.appendChild(body);
+
+            const foot = document.createElement('div');
+            foot.className = 'modal-footer';
+            const emptyBtn = document.createElement('button');
+            emptyBtn.type = 'button';
+            emptyBtn.className = 'btn btn-ghost';
+            emptyBtn.setAttribute('data-trash-empty', '');
+            emptyBtn.disabled = !list.length;
+            emptyBtn.textContent = 'Empty Trash';
+            const doneBtn = document.createElement('button');
+            doneBtn.type = 'button';
+            doneBtn.className = 'btn btn-secondary';
+            doneBtn.setAttribute('data-trash-close', '');
+            doneBtn.textContent = 'Done';
+            foot.appendChild(emptyBtn);
+            foot.appendChild(doneBtn);
+            card.appendChild(foot);
+
+            modal.appendChild(card);
+        }
+
+        // ---- Focus session history + time-by-subject stats ---------------------
+        function recordFocusSession(rec) {
+            if (!rec || typeof rec !== 'object') return null;
+            if (!Array.isArray(focusSessions)) focusSessions = [];
+            const minutes = Math.max(0, Math.round(Number(rec.minutes) || 0));
+            if (minutes <= 0 && !rec.allowZero) return null;
+            const entry = {
+                id: generateId(),
+                startedAt: rec.startedAt || new Date().toISOString(),
+                endedAt: rec.endedAt || new Date().toISOString(),
+                minutes,
+                subject: String(rec.subject || rec.category || 'Focus'),
+                category: String(rec.category || 'study'),
+                sourceKind: rec.sourceKind || '',
+                sourceId: rec.sourceId || '',
+                note: String(rec.note || '')
+            };
+            focusSessions.unshift(entry);
+            if (focusSessions.length > 500) focusSessions = focusSessions.slice(0, 500);
+            try { persistAppData(); } catch (err) { /* non-critical */ }
+            return entry;
+        }
+
+        function getFocusStatsBySubject(days) {
+            const list = Array.isArray(focusSessions) ? focusSessions : [];
+            const cutoff = Number.isFinite(days) && days > 0 ? Date.now() - days * 86400000 : 0;
+            const bySubject = {};
+            let totalMinutes = 0;
+            let count = 0;
+            list.forEach(s => {
+                if (!s) return;
+                const t = new Date(s.startedAt || s.endedAt).getTime();
+                if (cutoff && (!t || t < cutoff)) return;
+                const subj = String(s.subject || 'Focus');
+                bySubject[subj] = (bySubject[subj] || 0) + (s.minutes || 0);
+                totalMinutes += (s.minutes || 0);
+                count += 1;
+            });
+            const subjects = Object.keys(bySubject)
+                .map(k => ({ subject: k, minutes: bySubject[k] }))
+                .sort((a, b) => b.minutes - a.minutes);
+            return { totalMinutes, count, subjects };
+        }
+
+        // Tiny inline-SVG bar chart (developer markup; values escaped in titles).
+        function buildSutraBarSvg(series, fill) {
+            const w = 100; const h = 42; const n = series.length || 1;
+            const max = Math.max(1, ...series.map(s => Number(s.value) || 0));
+            const gap = 1.4; const bw = (w - gap * (n - 1)) / n;
+            let bars = ''; let labels = '';
+            series.forEach((s, i) => {
+                const v = Number(s.value) || 0;
+                const bh = v ? Math.max(1.5, (v / max) * (h - 12)) : 0.6;
+                const x = i * (bw + gap); const y = h - bh - 8;
+                bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="0.7" fill="${fill}"><title>${escapeHtml(String(s.label))}: ${v}</title></rect>`;
+                if (n <= 16) labels += `<text x="${(x + bw / 2).toFixed(2)}" y="${h - 1}" text-anchor="middle" font-size="3" fill="#8a8f98">${escapeHtml(String(s.label).slice(0, 2))}</text>`;
+            });
+            return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:90px;display:block" role="img" aria-label="bar chart">${bars}${labels}</svg>`;
+        }
+        function buildSutraLineSvg(points, stroke) {
+            const w = 100; const h = 42; const n = points.length;
+            if (n < 2) return '';
+            const xs = (i) => (i / (n - 1)) * w;
+            const ys = (v) => h - 6 - ((Math.max(0, Math.min(110, v)) / 110) * (h - 10));
+            let d = '';
+            points.forEach((p, i) => { d += (i ? 'L' : 'M') + xs(i).toFixed(2) + ' ' + ys(Number(p.value) || 0).toFixed(2) + ' '; });
+            return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:70px;display:block" role="img" aria-label="line chart"><path d="${d.trim()}" fill="none" stroke="${stroke}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+        }
+
+        function getFocusDailySeries(days) {
+            const list = Array.isArray(focusSessions) ? focusSessions : [];
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const byDay = {};
+            list.forEach(s => {
+                if (!s) return;
+                const d = new Date(s.startedAt || s.endedAt);
+                if (isNaN(d.getTime())) return;
+                d.setHours(0, 0, 0, 0);
+                const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+                byDay[key] = (byDay[key] || 0) + (Number(s.minutes) || 0);
+            });
+            const out = [];
+            for (let i = days - 1; i >= 0; i -= 1) {
+                const d = new Date(today); d.setDate(today.getDate() - i);
+                const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+                out.push({ label: d.toLocaleDateString(undefined, { weekday: 'short' }), value: byDay[key] || 0 });
+            }
+            return out;
+        }
+
+        function openSutraDashboardModal(id, title, bodyHtml) {
+            let modal = document.getElementById(id);
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = id;
+                modal.className = 'modal sutra-dashboard-modal';
+                modal.setAttribute('role', 'dialog');
+                modal.setAttribute('aria-modal', 'true');
+                modal.setAttribute('aria-label', title);
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal || e.target.closest('[data-dash-close]')) {
+                        modal.style.display = 'none'; modal.classList.remove('active');
+                        if (window.SutraModalManager && window.SutraModalManager.sync) { try { window.SutraModalManager.sync(); } catch (err) { /* nc */ } }
+                    }
+                });
+            }
+            const head = `<div class="modal-header"><h2>${escapeHtml(title)}</h2><button type="button" class="modal-close" data-dash-close aria-label="Close">×</button></div>`;
+            const foot = '<div class="modal-footer"><button type="button" class="btn btn-secondary" data-dash-close>Done</button></div>';
+            if (window.SutraDOMSafety && window.SutraDOMSafety.setTrustedHTML) {
+                window.SutraDOMSafety.setTrustedHTML(modal, `<div class="modal-content sutra-dashboard-content">${head}<div class="modal-body">${bodyHtml}</div>${foot}</div>`);
+            }
+            modal.style.display = 'flex';
+            modal.classList.add('active');
+            if (window.SutraModalManager && window.SutraModalManager.sync) { try { window.SutraModalManager.sync(); } catch (err) { /* nc */ } }
+        }
+
+        function openFocusStatsModal() {
+            const week = getFocusStatsBySubject(7);
+            const avg = week.count ? Math.round(week.totalMinutes / week.count) : 0;
+            const daily = getFocusDailySeries(14);
+            const subjectBars = week.subjects.slice(0, 8).map(s => ({ label: s.subject, value: Math.round(s.minutes) }));
+            const fmtH = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+            const stat = (label, val) => `<div class="sutra-dash-stat"><div class="sutra-dash-stat-val">${escapeHtml(String(val))}</div><div class="sutra-dash-stat-label">${escapeHtml(label)}</div></div>`;
+            const subjList = subjectBars.length
+                ? subjectBars.map(s => `<div class="sutra-dash-row"><span>${escapeHtml(s.label)}</span><strong>${fmtH(s.value)}</strong></div>`).join('')
+                : '<p class="sutra-dash-empty">No focus sessions logged in the last 7 days. Finish a focus timer to start tracking.</p>';
+            const body = `
+                <div class="sutra-dash-stats">
+                    ${stat('This week', fmtH(Math.round(week.totalMinutes)))}
+                    ${stat('Sessions', week.count)}
+                    ${stat('Avg session', fmtH(avg))}
+                </div>
+                <div class="sutra-dash-section"><div class="sutra-dash-section-title">Daily focus — last 14 days (minutes)</div>${buildSutraBarSvg(daily, 'var(--accent, #6fa7ff)')}</div>
+                <div class="sutra-dash-section"><div class="sutra-dash-section-title">Time by subject — this week</div>${subjList}</div>`;
+            openSutraDashboardModal('sutraFocusStatsModal', 'Focus stats', body);
+        }
+
+        function openGradeTrendsModal() {
+            const gp = window.SutraGradePlanner;
+            let coursesHtml = '';
+            try {
+                const courses = (window.courseHub && typeof window.courseHub.getCourses === 'function')
+                    ? (window.courseHub.getCourses({ filter: 'all' }) || [])
+                    : [];
+                const rows = [];
+                courses.forEach(c => {
+                    if (!c || !gp || typeof gp.computeGradeTrend !== 'function') return;
+                    const trend = gp.computeGradeTrend(c.id);
+                    if (!trend || trend.length < 2) return;
+                    const last = trend[trend.length - 1].percent;
+                    const first = trend[0].percent;
+                    const delta = Math.round((last - first) * 10) / 10;
+                    const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '→');
+                    rows.push(`<div class="sutra-dash-section">
+                        <div class="sutra-dash-section-title">${escapeHtml(c.name || 'Course')} — ${last}% <span class="sutra-trend-delta ${delta >= 0 ? 'up' : 'down'}">${arrow} ${Math.abs(delta)}%</span></div>
+                        ${buildSutraLineSvg(trend.map(t => ({ value: t.percent })), delta >= 0 ? '#22a06b' : '#d1453b')}
+                    </div>`);
+                });
+                coursesHtml = rows.join('');
+            } catch (e) { coursesHtml = ''; }
+            const body = coursesHtml || '<p class="sutra-dash-empty">No grade trends yet. Add dated scores to your courses in the Grade Planner to see each course\'s grade over time.</p>';
+            openSutraDashboardModal('sutraGradeTrendsModal', 'Grade trends', body);
         }
 
         function getDefaultPage() {
@@ -43545,6 +44868,9 @@ function getActiveEditor() {
             ensureHelpPagesForAllSpaces();
             // Load Cram Hub sessions (Section 31)
             cramSessions = Array.isArray(appData && appData.cramSessions) ? appData.cramSessions : [];
+            // Part 5 — trash + focus history
+            trash = Array.isArray(appData && appData.trash) ? appData.trash : [];
+            focusSessions = Array.isArray(appData && appData.focusSessions) ? appData.focusSessions : [];
             // Load Testing Hub (Section 32)
             testingHub = normalizeTestingHub(appData && appData.testingHub);
 
@@ -44186,6 +45512,14 @@ function getActiveEditor() {
         }
 
         function getSutraGoogleDriveClientId() {
+            // In-app Sutra Cloud config wins: the user pastes their OAuth Web Client
+            // ID into the Google Drive setup form (saved device-local via
+            // SutraSafeStorage). This makes BOTH this Drive engine and the Sutra
+            // Cloud Google Drive destination work without editing source config.
+            try {
+                const inApp = String((loadSutraCloudProviderConfig('googledrive') || {}).clientId || '').trim();
+                if (inApp) return inApp;
+            } catch (e) {}
             const cfg = (typeof window !== 'undefined' && (window.SUTRA_CONFIG || window.SutraRuntimeConfig)) || {};
             const meta = typeof document !== 'undefined' ? document.querySelector('meta[name="sutra-google-client-id"]') : null;
             return String(
@@ -44651,6 +45985,144 @@ function getActiveEditor() {
         async function deleteSutraDriveFile(fileId) {
             await sutraDriveFetch(`${SUTRA_DRIVE_API_BASE}/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
             return true;
+        }
+
+        // ── Sutra Cloud backups on Google Drive ──────────────────────────────
+        // Reuses the Drive token + fetch plumbing above, but stores each backup as
+        // its OWN timestamped file under a DISTINCT app-properties role
+        // ('cloud-backup'), so Sutra Cloud's backup history never collides with the
+        // single live-sync file ('sync-current') used by Settings → Data.
+        const SUTRA_DRIVE_BACKUP_ROLE = 'cloud-backup';
+        const SUTRA_DRIVE_BACKUP_NAME_PREFIX = 'sutra-backup-';
+        function getSutraDriveBackupFields() { return 'id,name,size,createdTime,modifiedTime,appProperties'; }
+
+        // Acquire a Drive access token for BACKUPS without mutating the live-sync
+        // state machine (so picking the Google Drive backup destination never
+        // silently turns on Settings → Data live sync). Shares the in-memory token
+        // with live sync when one already exists — same drive.appdata scope, one
+        // Google consent.
+        async function authorizeSutraDriveForBackup(options = {}) {
+            if (!isSutraDriveOAuthOriginSupported()) throw new Error('Google Drive needs the hosted HTTPS app or localhost.');
+            const clientId = getSutraGoogleDriveClientId();
+            if (!clientId) throw new Error('Paste your Google OAuth Client ID first.');
+            if (hasSutraDriveAccessToken() && !options.force) return sutraDriveSyncRuntime.accessToken;
+            if (!(window.google && window.google.accounts && window.google.accounts.oauth2)) {
+                await loadExternalScript(SUTRA_GOOGLE_IDENTITY_SCRIPT, 'google');
+            }
+            const oauth = window.google && window.google.accounts && window.google.accounts.oauth2;
+            if (!oauth || typeof oauth.initTokenClient !== 'function') throw new Error('Google Identity Services is unavailable.');
+            return new Promise((resolve, reject) => {
+                const client = oauth.initTokenClient({
+                    client_id: clientId,
+                    scope: SUTRA_DRIVE_APPDATA_SCOPE,
+                    callback: (response) => {
+                        if (!response || response.error || !response.access_token) {
+                            reject(new Error(response && response.error ? String(response.error) : 'Google authorization was cancelled.'));
+                            return;
+                        }
+                        sutraDriveSyncRuntime.accessToken = String(response.access_token);
+                        sutraDriveSyncRuntime.tokenExpiresAtMs = response.expires_in
+                            ? Date.now() + Math.max(0, Number(response.expires_in) * 1000 - 60000)
+                            : 0;
+                        resolve(sutraDriveSyncRuntime.accessToken);
+                    },
+                    error_callback: (error) => reject(new Error(error && error.message ? String(error.message) : 'Google authorization failed.'))
+                });
+                sutraDriveSyncRuntime.tokenClient = client;
+                client.requestAccessToken({ prompt: options.prompt ?? '' });
+            });
+        }
+
+        function buildSutraDriveBackupMetadata(filename, info = {}, includeParent = true) {
+            const metadata = {
+                name: filename,
+                mimeType: 'application/octet-stream',
+                appProperties: {
+                    sutraRole: SUTRA_DRIVE_BACKUP_ROLE,
+                    sutraSyncFormat: SUTRA_DRIVE_SYNC_FORMAT,
+                    sutraLabel: String(info.label || '').slice(0, 120),
+                    sutraDeviceId: String(info.deviceId || '').slice(0, 120)
+                }
+            };
+            if (includeParent) metadata.parents = ['appDataFolder'];
+            return metadata;
+        }
+
+        async function uploadSutraDriveBackupMultipart(bytes, filename, info) {
+            const boundary = `sutra_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const metadata = buildSutraDriveBackupMetadata(filename, info, true);
+            const params = new URLSearchParams({ uploadType: 'multipart', fields: getSutraDriveBackupFields() });
+            const body = new Blob([
+                `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
+                `--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`,
+                bytes,
+                `\r\n--${boundary}--`
+            ], { type: `multipart/related; boundary=${boundary}` });
+            const response = await sutraDriveFetch(`${SUTRA_DRIVE_UPLOAD_BASE}/files?${params.toString()}`, {
+                method: 'POST',
+                headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+                body
+            });
+            return response.json();
+        }
+
+        async function uploadSutraDriveBackupResumable(bytes, filename, info) {
+            const metadata = buildSutraDriveBackupMetadata(filename, info, true);
+            const params = new URLSearchParams({ uploadType: 'resumable', fields: getSutraDriveBackupFields() });
+            const initResponse = await sutraDriveFetch(`${SUTRA_DRIVE_UPLOAD_BASE}/files?${params.toString()}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json; charset=UTF-8',
+                    'X-Upload-Content-Type': 'application/octet-stream',
+                    'X-Upload-Content-Length': String(bytes.byteLength)
+                },
+                body: JSON.stringify(metadata)
+            });
+            const sessionUrl = initResponse.headers.get('Location');
+            if (!sessionUrl) throw new Error('Google Drive did not create a resumable upload session.');
+            let lastError = null;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                try {
+                    const response = await sutraDriveFetch(sessionUrl, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/octet-stream',
+                            'Content-Range': `bytes 0-${bytes.byteLength - 1}/${bytes.byteLength}`
+                        },
+                        body: bytes
+                    });
+                    return response.json();
+                } catch (error) {
+                    lastError = error;
+                    if (!error.retryable) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+                }
+            }
+            throw lastError || new Error('Google Drive backup upload failed.');
+        }
+
+        async function uploadSutraDriveBackup(bytes, filename, info) {
+            if (bytes.byteLength > SUTRA_DRIVE_RESUMABLE_THRESHOLD_BYTES) {
+                return uploadSutraDriveBackupResumable(bytes, filename, info);
+            }
+            return uploadSutraDriveBackupMultipart(bytes, filename, info);
+        }
+
+        async function listSutraDriveBackupFiles() {
+            const q = [
+                `appProperties has { key='sutraRole' and value='${SUTRA_DRIVE_BACKUP_ROLE}' }`,
+                'trashed=false'
+            ].join(' and ');
+            const params = new URLSearchParams({
+                spaces: 'appDataFolder',
+                q,
+                fields: `files(${getSutraDriveBackupFields()})`,
+                orderBy: 'createdTime desc',
+                pageSize: '100'
+            });
+            const response = await sutraDriveFetch(`${SUTRA_DRIVE_API_BASE}/files?${params.toString()}`);
+            const json = await response.json();
+            return Array.isArray(json.files) ? json.files : [];
         }
 
         async function ensureSutraDriveVaultUnlocked(options = {}) {
@@ -45796,6 +47268,9 @@ function getActiveEditor() {
                 // Cram Hub sessions — previously not exported, causing data loss
                 // on cross-device restore.
                 cramSessions: Array.isArray(cramSessions) ? cloneSerializable(cramSessions, []) : [],
+                // Part 5 — recently-deleted items + focus session history travel in backups.
+                trash: Array.isArray(trash) ? cloneSerializable(trash, []) : [],
+                focusSessions: Array.isArray(focusSessions) ? cloneSerializable(focusSessions, []) : [],
                 // Testing Hub workspace (exams, mistakes, practice tests, tasks,
                 // custom exams, active section + active exam). Now included.
                 testingHub: normalizeTestingHub(testingHub),
@@ -45833,6 +47308,8 @@ function getActiveEditor() {
                     gradePlanner: payload.gradePlanner,
                     semesterSetup: payload.semesterSetup,
                     cramSessions: payload.cramSessions,
+                    trash: payload.trash,
+                    focusSessions: payload.focusSessions,
                     testingHub: payload.testingHub,
                     focusTemplates: payload.focusTemplates,
                     splitPaneContexts: payload.splitPaneContexts,
@@ -46306,7 +47783,7 @@ function getActiveEditor() {
         };
         let sutraCloudAutoTimer = null;
         let sutraCloudVisibilityBound = false;
-        const sutraCloudUiState = { awaitingCode: false, pendingEmail: '' };
+        const sutraCloudUiState = { awaitingCode: false, pendingEmail: '', selectedProviderId: '' };
         let sutraCloudMeta = null;
         let sutraCloudBackend = null;
         let sutraCloudUiBound = false;
@@ -46464,6 +47941,33 @@ function getActiveEditor() {
             updateSutraCloudUi();
             try { refreshSutraCloudBackupList(); } catch (error) { /* list refreshes on next open */ }
             return { switched: true, mode };
+        }
+
+        // Switch the active Sutra Cloud DESTINATION (provider). Ends the current
+        // provider's session (soft — keeps saved credentials + remote backups),
+        // resets shared backup status, and leaves the LOCAL workspace untouched.
+        async function switchSutraCloudProvider(id) {
+            const target = getSutraCloudProviderById(id);
+            if (!target) throw new Error('Unknown backup destination.');
+            const current = getActiveSutraCloudProvider();
+            if (current && current.id !== id) {
+                try { await current.endSession(); } catch (error) { /* best effort */ }
+            }
+            const meta = loadSutraCloudMeta();
+            meta.lastBackupAt = '';
+            meta.lastError = '';
+            meta.lastAutoBackupAt = '';
+            if (meta.autoBackup) meta.autoBackup.enabled = false;   // re-opt-in per destination
+            persistSutraCloudMeta();
+            sutraCloudRuntime.backupPassphrase = '';
+            if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+            sutraCloudUiState.awaitingCode = false;
+            sutraCloudUiState.pendingEmail = '';
+            sutraCloudUiState.selectedProviderId = id;             // UI shows this provider's setup
+            setSutraCloudActiveProviderId(id);
+            updateSutraCloudUi();
+            try { refreshSutraCloudBackupList(); } catch (error) { /* refreshes on next open */ }
+            return { switched: true, id };
         }
 
         function getDefaultSutraCloudMeta(existing) {
@@ -46669,8 +48173,865 @@ function getActiveEditor() {
             return `${(n / (1024 * 1024)).toFixed(1)} MB`;
         }
 
+        // ====================================================================
+        // Sutra Cloud — provider-agnostic backup destinations.
+        //
+        // The workspace is ALWAYS encrypted locally into a .sutra envelope first
+        // (createEncryptedSutraBackupBlob). A provider "adapter" only ever receives
+        // the encrypted blob and only moves ciphertext. Adapters share one common
+        // interface (see the registry below). Supabase is now just one advanced
+        // adapter; Google Drive remains via its existing sync controller.
+        // ====================================================================
+        const SUTRA_CLOUD_ACTIVE_PROVIDER_KEY = 'sutra:cloudActiveProvider:v1';
+        const SUTRA_CLOUD_PROVIDER_CONFIG_PREFIX = 'sutra:cloudProvider:'; // + id + ':v1'
+        let sutraCloudActiveProviderId = null;
+
+        function sutraCloudProviderConfigKey(id) { return `${SUTRA_CLOUD_PROVIDER_CONFIG_PREFIX}${id}:v1`; }
+        function loadSutraCloudProviderConfig(id) {
+            const raw = SutraSafeStorage.get(sutraCloudProviderConfigKey(id), { fallback: null });
+            return raw && typeof raw === 'object' ? raw : {};
+        }
+        function saveSutraCloudProviderConfig(id, cfg) {
+            SutraSafeStorage.set(sutraCloudProviderConfigKey(id), cfg || {}, { importance: 'optional', label: `Sutra Cloud (${id})` });
+        }
+        function clearSutraCloudProviderConfig(id) {
+            SutraSafeStorage.remove(sutraCloudProviderConfigKey(id));
+        }
+
+        function getSutraCloudActiveProviderId() {
+            if (sutraCloudActiveProviderId !== null) return sutraCloudActiveProviderId;
+            const stored = SutraSafeStorage.get(SUTRA_CLOUD_ACTIVE_PROVIDER_KEY, { fallback: '', parseJson: false });
+            if (stored && typeof stored === 'string') { sutraCloudActiveProviderId = stored; return stored; }
+            // Back-compat: earlier builds only had Supabase. If a Supabase session or
+            // config already exists, keep Supabase active so existing users continue
+            // uninterrupted. Otherwise no destination is selected yet.
+            let hadSupabase = false;
+            try { hadSupabase = !!SutraSafeStorage.get(SUTRA_CLOUD_SESSION_KEY, { fallback: null }) || getSutraCloudConfig().configured; } catch (e) {}
+            sutraCloudActiveProviderId = hadSupabase ? 'supabase' : '';
+            return sutraCloudActiveProviderId;
+        }
+        function setSutraCloudActiveProviderId(id) {
+            sutraCloudActiveProviderId = id || '';
+            SutraSafeStorage.set(SUTRA_CLOUD_ACTIVE_PROVIDER_KEY, sutraCloudActiveProviderId, { importance: 'optional', label: 'Sutra Cloud destination' });
+        }
+
+        function isValidHttpsUrl(u) {
+            try { return new URL(String(u || '').trim()).protocol === 'https:'; } catch (e) { return false; }
+        }
+
+        // Reject obviously-powerful admin/root credentials a user might paste by mistake.
+        function looksLikeDangerousSecret(value) {
+            const v = String(value || '');
+            if (!v) return false;
+            if (looksLikeServiceRoleKey(v)) return true;       // Supabase service_role / sb_secret_
+            if (/aws_secret_access_key|root|admin[_-]?secret/i.test(v)) return true;
+            return false;
+        }
+
+        function sutraCloudOriginAllowedFor(url) {
+            return !url || sutraCloudOriginAllowedByCsp(url);
+        }
+
+        // ====================================================================
+        // Browser OAuth2 + PKCE harness (no client secret, no SDK).
+        // Used by the OAuth cloud destinations whose token endpoints support a
+        // secretless PKCE exchange with CORS (OneDrive via Microsoft Graph,
+        // Dropbox). Google Drive uses Google Identity Services instead — see
+        // authorizeSutraDriveForBackup().
+        //
+        // Flow: a user-gesture popup opens the provider's authorize URL with a
+        // PKCE challenge + random state; the provider redirects back to our
+        // same-origin oauth-callback.html, which postMessages {code,state} to this
+        // window; we validate origin + state (CSRF) and exchange the code for
+        // tokens using the code_verifier (proof of possession — no secret needed).
+        // The access token stays in memory; the refresh token is stored
+        // device-local in the provider's SutraSafeStorage config (never in a
+        // .sutra backup).
+        // ====================================================================
+        const sutraOAuthRuntime = {};
+        function sutraOAuthTokenState(id) {
+            return sutraOAuthRuntime[id] || (sutraOAuthRuntime[id] = { accessToken: '', expiresAtMs: 0 });
+        }
+        function sutraOAuthRedirectUri() {
+            return new URL('oauth-callback.html', location.href).href;
+        }
+        function sutraOAuthB64Url(bytes) {
+            return uint8ArrayToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+        function sutraOAuthRandomToken(byteLength = 32) {
+            const a = new Uint8Array(byteLength);
+            getSutraCrypto().getRandomValues(a);
+            return sutraOAuthB64Url(a);
+        }
+        async function sutraOAuthPkceChallenge(verifier) {
+            const digest = await getSutraCrypto().subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+            return sutraOAuthB64Url(new Uint8Array(digest));
+        }
+
+        // Open the authorize popup and resolve with the returned authorization code.
+        function sutraOAuthPopup(url, expectedState) {
+            return new Promise((resolve, reject) => {
+                const w = 600, h = 720;
+                const sw = (window.screen && window.screen.width) || 1024;
+                const sh = (window.screen && window.screen.height) || 768;
+                const left = Math.max(0, (sw - w) / 2);
+                const top = Math.max(0, (sh - h) / 2);
+                const popup = window.open(url, 'sutra_oauth', `width=${w},height=${h},left=${left},top=${top}`);
+                if (!popup) { reject(new Error('Popup blocked. Allow popups for this site and try again.')); return; }
+                let settled = false;
+                const onMessage = (event) => {
+                    if (event.origin !== location.origin) return;            // same-origin only
+                    const data = event.data;
+                    if (!data || data.source !== 'sutra-oauth') return;
+                    if (String(data.state || '') !== String(expectedState)) return; // CSRF guard
+                    finish();
+                    if (data.error) reject(new Error(data.error_description || data.error));
+                    else if (data.code) resolve(String(data.code));
+                    else reject(new Error('Authorization did not return a code.'));
+                };
+                const poll = setInterval(() => {
+                    if (popup.closed && !settled) { finish(); reject(new Error('Authorization was cancelled.')); }
+                }, 500);
+                function finish() {
+                    settled = true;
+                    clearInterval(poll);
+                    window.removeEventListener('message', onMessage);
+                    try { popup.close(); } catch (e) {}
+                }
+                window.addEventListener('message', onMessage);
+            });
+        }
+
+        // spec: { id?, displayName?, authUrl, tokenUrl, clientId, scope, extraAuthParams? }
+        async function sutraOAuthAuthorize(spec) {
+            if (!spec.clientId) throw new Error('Enter your Client ID first.');
+            const verifier = sutraOAuthRandomToken(48);
+            const challenge = await sutraOAuthPkceChallenge(verifier);
+            const state = sutraOAuthRandomToken(16);
+            const redirectUri = sutraOAuthRedirectUri();
+            const authUrl = new URL(spec.authUrl);
+            const q = authUrl.searchParams;
+            q.set('client_id', spec.clientId);
+            q.set('response_type', 'code');
+            q.set('redirect_uri', redirectUri);
+            if (spec.scope) q.set('scope', spec.scope);
+            q.set('state', state);
+            q.set('code_challenge', challenge);
+            q.set('code_challenge_method', 'S256');
+            Object.entries(spec.extraAuthParams || {}).forEach(([k, v]) => q.set(k, String(v)));
+            const code = await sutraOAuthPopup(authUrl.href, state);
+            const body = new URLSearchParams({
+                client_id: spec.clientId,
+                grant_type: 'authorization_code',
+                code,
+                redirect_uri: redirectUri,
+                code_verifier: verifier
+            });
+            const resp = await fetch(spec.tokenUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const tok = await resp.json().catch(() => null);
+            if (!resp.ok || !tok || !tok.access_token) {
+                throw new Error((tok && (tok.error_description || tok.error)) || `Token exchange failed (${resp.status}).`);
+            }
+            return tok;
+        }
+
+        async function sutraOAuthRefresh(spec) {
+            const body = new URLSearchParams({
+                client_id: spec.clientId,
+                grant_type: 'refresh_token',
+                refresh_token: spec.refreshToken
+            });
+            if (spec.scope) body.set('scope', spec.scope);
+            const resp = await fetch(spec.tokenUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            const tok = await resp.json().catch(() => null);
+            if (!resp.ok || !tok || !tok.access_token) throw new Error('Reconnect required.');
+            return tok;
+        }
+
+        function sutraOAuthStoreToken(id, tok) {
+            const st = sutraOAuthTokenState(id);
+            st.accessToken = String(tok.access_token || '');
+            st.expiresAtMs = tok.expires_in ? Date.now() + Math.max(0, Number(tok.expires_in) * 1000) : (Date.now() + 3600 * 1000);
+            // Persist the refresh token (when (re)issued) so the destination keeps
+            // working across reloads without re-consent.
+            if (tok.refresh_token) {
+                const cfg = loadSutraCloudProviderConfig(id);
+                saveSutraCloudProviderConfig(id, { ...cfg, refreshToken: String(tok.refresh_token) });
+            }
+        }
+
+        async function sutraOAuthConnect(id, spec) {
+            const tok = await sutraOAuthAuthorize({ id, ...spec });
+            sutraOAuthStoreToken(id, tok);
+            return true;
+        }
+
+        // Return a valid access token: cached → refreshed → else require reconnect.
+        async function ensureSutraOAuthAccessToken(id, spec) {
+            const st = sutraOAuthTokenState(id);
+            if (st.accessToken && Date.now() < st.expiresAtMs - 60000) return st.accessToken;
+            const cfg = loadSutraCloudProviderConfig(id);
+            if (cfg.refreshToken) {
+                const tok = await sutraOAuthRefresh({ tokenUrl: spec.tokenUrl, clientId: spec.clientId, refreshToken: cfg.refreshToken, scope: spec.scope });
+                sutraOAuthStoreToken(id, tok);
+                return sutraOAuthTokenState(id).accessToken;
+            }
+            throw new Error(`Connect ${spec.displayName || id} to authorize.`);
+        }
+
+        function sutraOAuthSignedIn(id) {
+            const st = sutraOAuthTokenState(id);
+            if (st.accessToken && Date.now() < st.expiresAtMs - 60000) return true;
+            return !!loadSutraCloudProviderConfig(id).refreshToken;
+        }
+
+        function sutraOAuthDisconnect(id) {
+            const st = sutraOAuthTokenState(id);
+            st.accessToken = ''; st.expiresAtMs = 0;
+            const cfg = loadSutraCloudProviderConfig(id);
+            if (cfg.refreshToken) { const next = { ...cfg }; delete next.refreshToken; saveSutraCloudProviderConfig(id, next); }
+        }
+
+        function sutraOAuthEndSession(id) {
+            const st = sutraOAuthTokenState(id);
+            st.accessToken = ''; st.expiresAtMs = 0;
+        }
+
+        // ---- Adapter helper: fills defaults so each adapter only defines what differs.
+        function makeSutraCloudAdapter(spec) {
+            const base = {
+                id: spec.id,
+                displayName: spec.displayName,
+                category: spec.category || 'advanced',              // 'recommended' | 'advanced' | 'manual'
+                description: spec.description || '',
+                icon: spec.icon || 'fa-cloud',
+                requiresOAuth: !!spec.requiresOAuth,
+                requiresCustomCredentials: !!spec.requiresCustomCredentials,
+                supportsAutoBackup: spec.supportsAutoBackup !== false,
+                hasBackupList: spec.hasBackupList !== false,        // false for manual/local-only
+                cspNote: spec.cspNote || '',
+                getProviderId() { return this.id; },
+                getDisplayName() { return this.displayName; },
+                getCategory() { return this.category; },
+                getConfig() { return loadSutraCloudProviderConfig(this.id); },
+                setConfig(cfg) { saveSutraCloudProviderConfig(this.id, cfg); },
+                clearConfig() { clearSutraCloudProviderConfig(this.id); },
+                getSetupStatus() { return { ready: false, needsSetup: true, reason: 'Not configured.' }; },
+                getSignedInIdentity() { return ''; },
+                getSetupInstructions() { return spec.instructions || []; },
+                async connect() { return false; },
+                async disconnect() {},
+                async endSession() {},   // soft sign-out on switch (keeps saved credentials)
+                async testConnection() { return { ok: false, message: 'Not supported.' }; },
+                async uploadBackup() { throw new Error('This destination cannot upload yet.'); },
+                async listBackups() { return []; },
+                async downloadBackup() { throw new Error('This destination cannot download yet.'); },
+                async deleteBackup() {},
+                async enforceRetention(limit) {
+                    if (!this.hasBackupList) return;
+                    try {
+                        const rows = await this.listBackups();
+                        if (rows.length <= limit) return;
+                        for (const row of rows.slice(limit)) { await this.deleteBackup(row); }
+                    } catch (e) { /* retention is best-effort */ }
+                }
+            };
+            return Object.assign(base, spec.methods || {});
+        }
+
+        // ---- Supabase adapter (advanced) — wraps the existing OTP/Storage/index code.
+        const supabaseCloudAdapter = makeSutraCloudAdapter({
+            id: 'supabase',
+            displayName: 'Supabase',
+            category: 'advanced',
+            description: 'Your own (or the official) Supabase project. Encrypted backups in private Storage with Row Level Security.',
+            icon: 'fa-database',
+            requiresCustomCredentials: true,
+            cspNote: 'A custom Supabase project ref must be in the app CSP; in the hosted build only the configured project works (others need a self-hosted build).',
+            instructions: [
+                'Create a Supabase project and run supabase/schema.sql.',
+                'Enable email auth (one-time code).',
+                'Paste your Project URL + public anon key (never the service_role key).',
+                'Test connection, then sign in with email.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    const cfg = getSutraCloudConfig();
+                    const cspOk = sutraCloudOriginAllowedFor(cfg.url);
+                    if (!cfg.configured) return { ready: false, needsSetup: true, reason: 'Add your Supabase URL + anon key.' };
+                    if (!cspOk) return { ready: false, needsSetup: false, cspBlocked: true, reason: 'Blocked by browser security policy (CSP). Needs a self-hosted build with this project ref in the CSP.' };
+                    if (!isSutraCloudSignedIn()) return { ready: false, needsSetup: false, reason: 'Sign in with your email to finish.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { return isSutraCloudSignedIn() && sutraCloudRuntime.user ? (sutraCloudRuntime.user.email || 'Signed in') : ''; },
+                async disconnect() { await sutraCloudSignOut(); },
+                async endSession() { await sutraCloudSignOut(); },
+                async testConnection() { return sutraCloudTestConnection(); },
+                async uploadBackup(blob, meta) {
+                    const path = buildSutraCloudBackupPath(meta.label);
+                    const upResp = await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'true' },
+                        body: blob
+                    });
+                    if (!upResp.ok) { const j = await upResp.json().catch(() => null); throw new Error((j && (j.message || j.error)) || `Upload failed (${upResp.status}).`); }
+                    await sutraCloudJson('/rest/v1/backup_index', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                        body: JSON.stringify({ path, label: meta.label, size_bytes: meta.size, device_id: meta.deviceId })
+                    });
+                    return { id: path };
+                },
+                async listBackups() {
+                    if (!isSutraCloudSignedIn()) return [];
+                    const rows = await sutraCloudJson('/rest/v1/backup_index?select=id,path,label,size_bytes,created_at,device_id&order=created_at.desc', { headers: { Accept: 'application/json' } });
+                    return (Array.isArray(rows) ? rows : []).map(r => ({ id: r.id, path: r.path, label: r.label, sizeBytes: r.size_bytes, createdAt: r.created_at, deviceId: r.device_id, provider: 'supabase' }));
+                },
+                async downloadBackup(backup) {
+                    const path = (backup && backup.path) || backup;
+                    const dl = await sutraCloudFetch(`/storage/v1/object/authenticated/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, { method: 'GET' });
+                    if (!dl.ok) throw new Error(`Download failed (${dl.status}).`);
+                    return dl.arrayBuffer();
+                },
+                async deleteBackup(backup) {
+                    const path = (backup && backup.path) || backup;
+                    await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, { method: 'DELETE' });
+                    if (backup && backup.id) await sutraCloudFetch(`/rest/v1/backup_index?id=eq.${encodeURIComponent(backup.id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+                }
+            }
+        });
+
+        // ---- Manual export adapter (no account, no network) ----
+        const manualCloudAdapter = makeSutraCloudAdapter({
+            id: 'manual',
+            displayName: 'Manual encrypted file',
+            category: 'manual',
+            description: 'Download the encrypted .sutra file and save it anywhere — a synced folder (Drive/OneDrive/Dropbox/iCloud), USB, or NAS. No account needed.',
+            icon: 'fa-file-arrow-down',
+            supportsAutoBackup: false,
+            hasBackupList: false,
+            instructions: [
+                'Click Back Up Now to download an encrypted .sutra file.',
+                'Save/move it into any folder that already syncs to your cloud (Drive Desktop, OneDrive, Dropbox, iCloud Drive), a USB drive, or a NAS.',
+                'Restore later with “Restore from file”.'
+            ],
+            methods: {
+                getSetupStatus() { return { ready: true }; },
+                getSignedInIdentity() { return 'This device (download)'; },
+                async uploadBackup(blob, meta) {
+                    await triggerBlobDownload(blob, meta.filename || buildWorkspaceExportFilename('sutra_workspace'));
+                    return { id: 'local-download' };
+                }
+            }
+        });
+
+        // ---- WebDAV adapter (advanced; Nextcloud / ownCloud / generic WebDAV) ----
+        function sutraWebdavConfig() {
+            const c = loadSutraCloudProviderConfig('webdav');
+            const base = String(c.url || '').replace(/\/+$/, '');
+            const folder = String(c.folder || '').replace(/^\/+|\/+$/g, '');
+            return { url: base, username: c.username || '', password: c.password || '', folder, dir: folder ? `${base}/${folder}` : base };
+        }
+        // Base64 a Basic-auth "user:pass" pair. btoa() throws InvalidCharacterError
+        // on any non-Latin1 character, so UTF-8-encode first to support accented /
+        // Unicode app passwords (Nextcloud and friends allow them).
+        function sutraBasicAuthValue(username, password) {
+            const raw = `${username == null ? '' : username}:${password == null ? '' : password}`;
+            try {
+                const bytes = new TextEncoder().encode(raw);
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin);
+            } catch (e) {
+                try { return btoa(raw); } catch (e2) { return ''; }
+            }
+        }
+        function sutraWebdavAuthHeader() {
+            const c = sutraWebdavConfig();
+            if (!c.username) return {};
+            return { Authorization: `Basic ${sutraBasicAuthValue(c.username, c.password)}` };
+        }
+        const webdavCloudAdapter = makeSutraCloudAdapter({
+            id: 'webdav',
+            displayName: 'WebDAV (Nextcloud / ownCloud)',
+            category: 'advanced',
+            description: 'Any WebDAV server, including Nextcloud and ownCloud. Uses an app password over HTTPS.',
+            icon: 'fa-server',
+            requiresCustomCredentials: true,
+            cspNote: 'Your WebDAV server origin must be in the app CSP — this generally needs a self-hosted Sutra build.',
+            instructions: [
+                'In Nextcloud/ownCloud: Settings → Security → create an App password.',
+                'Enter the WebDAV URL (e.g. https://cloud.example.com/remote.php/dav/files/USER/).',
+                'Enter your username and the app password.',
+                'Optionally set a subfolder like sutra-backups.',
+                'Click Test connection.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    const c = sutraWebdavConfig();
+                    if (!isValidHttpsUrl(c.url) || !c.username) return { ready: false, needsSetup: true, reason: 'Enter your WebDAV URL, username, and app password.' };
+                    if (!sutraCloudOriginAllowedFor(c.url)) return { ready: false, cspBlocked: true, reason: 'Blocked by browser security policy (CSP). Add your WebDAV origin to the app CSP in a self-hosted build.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { const c = sutraWebdavConfig(); return c.url ? `${c.username} @ ${c.url}` : ''; },
+                async disconnect() { clearSutraCloudProviderConfig('webdav'); },
+                async testConnection(input) {
+                    const c = input || sutraWebdavConfig();
+                    const url = String(c.url || '').replace(/\/+$/, '');
+                    if (!isValidHttpsUrl(url)) return { ok: false, message: 'Enter an https:// WebDAV URL.' };
+                    if (looksLikeDangerousSecret(c.password)) return { ok: false, message: 'That looks like an admin/root secret. Use a scoped app password.' };
+                    if (!sutraCloudOriginAllowedFor(url)) return { ok: false, status: 'csp-blocked', message: 'This build’s CSP blocks that origin. WebDAV needs a self-hosted build with your server in the CSP.' };
+                    try {
+                        const dir = c.folder ? `${url}/${String(c.folder).replace(/^\/+|\/+$/g, '')}` : url;
+                        const auth = c.username ? { Authorization: `Basic ${sutraBasicAuthValue(c.username, c.password)}` } : {};
+                        const resp = await fetch(dir, { method: 'PROPFIND', headers: { ...auth, Depth: '0' } });
+                        if (resp.ok || resp.status === 207) return { ok: true, message: 'Connected to WebDAV.' };
+                        if (resp.status === 401) return { ok: false, message: 'WebDAV rejected the username/password (401).' };
+                        return { ok: false, message: `WebDAV connection failed (HTTP ${resp.status}).` };
+                    } catch (e) { return { ok: false, message: 'Could not reach the WebDAV server (network/CORS/CSP).' }; }
+                },
+                async uploadBackup(blob, meta) {
+                    const c = sutraWebdavConfig();
+                    const name = `sutra-${new Date().toISOString().replace(/[:.]/g, '-')}-${(meta.label || 'workspace').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 40)}.sutra`;
+                    if (c.folder) { try { await fetch(c.dir, { method: 'MKCOL', headers: sutraWebdavAuthHeader() }); } catch (e) {} }
+                    const resp = await fetch(`${c.dir}/${encodeURIComponent(name)}`, { method: 'PUT', headers: { ...sutraWebdavAuthHeader(), 'Content-Type': 'application/octet-stream' }, body: blob });
+                    if (!resp.ok && resp.status !== 201 && resp.status !== 204) throw new Error(`WebDAV upload failed (HTTP ${resp.status}).`);
+                    return { id: name };
+                },
+                async listBackups() {
+                    const c = sutraWebdavConfig();
+                    const resp = await fetch(c.dir, { method: 'PROPFIND', headers: { ...sutraWebdavAuthHeader(), Depth: '1' } });
+                    if (!resp.ok && resp.status !== 207) return [];
+                    const xml = await resp.text();
+                    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+                    const out = [];
+                    doc.querySelectorAll('response').forEach(node => {
+                        const href = (node.querySelector('href') || {}).textContent || '';
+                        if (!/\.sutra$/i.test(href)) return;
+                        const name = decodeURIComponent(href.split('/').filter(Boolean).pop() || '');
+                        const size = Number((node.querySelector('getcontentlength') || {}).textContent || 0);
+                        const mod = (node.querySelector('getlastmodified') || {}).textContent || '';
+                        out.push({ id: name, path: name, label: name.replace(/\.sutra$/i, ''), sizeBytes: size, createdAt: mod ? new Date(mod).toISOString() : '', deviceId: '', provider: 'webdav' });
+                    });
+                    return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+                },
+                async downloadBackup(backup) {
+                    const c = sutraWebdavConfig();
+                    const resp = await fetch(`${c.dir}/${encodeURIComponent((backup && backup.path) || backup)}`, { headers: sutraWebdavAuthHeader() });
+                    if (!resp.ok) throw new Error(`WebDAV download failed (HTTP ${resp.status}).`);
+                    return resp.arrayBuffer();
+                },
+                async deleteBackup(backup) {
+                    const c = sutraWebdavConfig();
+                    await fetch(`${c.dir}/${encodeURIComponent((backup && backup.path) || backup)}`, { method: 'DELETE', headers: sutraWebdavAuthHeader() });
+                }
+            }
+        });
+
+        // ---- Custom HTTP adapter (advanced) — a small documented backup API ----
+        function sutraCustomHttpConfig() {
+            const c = loadSutraCloudProviderConfig('customhttp');
+            return { baseUrl: String(c.baseUrl || '').replace(/\/+$/, ''), token: c.token || '' };
+        }
+        function sutraCustomHttpHeaders(extra) {
+            const c = sutraCustomHttpConfig();
+            return Object.assign({}, c.token ? { Authorization: `Bearer ${c.token}` } : {}, extra || {});
+        }
+        const customHttpCloudAdapter = makeSutraCloudAdapter({
+            id: 'customhttp',
+            displayName: 'Custom HTTP endpoint',
+            category: 'advanced',
+            description: 'Your own server implementing Sutra’s simple encrypted-backup API. For developers/self-hosters.',
+            icon: 'fa-code',
+            requiresCustomCredentials: true,
+            cspNote: 'Your endpoint origin must be in the app CSP — this almost always needs a self-hosted Sutra build.',
+            instructions: [
+                'Implement: POST {base}/backups (body=ciphertext → {id}); GET {base}/backups (list); GET {base}/backups/{id} (bytes); DELETE {base}/backups/{id}.',
+                'Optionally require Authorization: Bearer <token>.',
+                'Enter the base URL and optional token, then Test connection.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    const c = sutraCustomHttpConfig();
+                    if (!isValidHttpsUrl(c.baseUrl)) return { ready: false, needsSetup: true, reason: 'Enter your endpoint base URL (https://…).' };
+                    if (!sutraCloudOriginAllowedFor(c.baseUrl)) return { ready: false, cspBlocked: true, reason: 'Blocked by browser security policy (CSP). Add your endpoint origin to the app CSP in a self-hosted build.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { const c = sutraCustomHttpConfig(); return c.baseUrl || ''; },
+                async disconnect() { clearSutraCloudProviderConfig('customhttp'); },
+                async testConnection(input) {
+                    const c = input || sutraCustomHttpConfig();
+                    const base = String(c.baseUrl || '').replace(/\/+$/, '');
+                    if (!isValidHttpsUrl(base)) return { ok: false, message: 'Enter an https:// base URL.' };
+                    if (looksLikeDangerousSecret(c.token)) return { ok: false, message: 'That token looks like an admin/root secret. Use a scoped token.' };
+                    if (!sutraCloudOriginAllowedFor(base)) return { ok: false, status: 'csp-blocked', message: 'This build’s CSP blocks that origin. Custom endpoints need a self-hosted build with the origin in the CSP.' };
+                    try {
+                        const resp = await fetch(`${base}/backups`, { headers: c.token ? { Authorization: `Bearer ${c.token}` } : {} });
+                        if (resp.ok) return { ok: true, message: 'Endpoint reachable.' };
+                        if (resp.status === 401 || resp.status === 403) return { ok: false, message: 'Endpoint rejected the token.' };
+                        return { ok: false, message: `Endpoint responded HTTP ${resp.status}.` };
+                    } catch (e) { return { ok: false, message: 'Could not reach the endpoint (network/CORS/CSP).' }; }
+                },
+                async uploadBackup(blob, meta) {
+                    const c = sutraCustomHttpConfig();
+                    const resp = await fetch(`${c.baseUrl}/backups`, { method: 'POST', headers: sutraCustomHttpHeaders({ 'Content-Type': 'application/octet-stream', 'X-Sutra-Label': meta.label || '', 'X-Sutra-Device': meta.deviceId || '' }), body: blob });
+                    if (!resp.ok) throw new Error(`Upload failed (HTTP ${resp.status}).`);
+                    const j = await resp.json().catch(() => ({}));
+                    return { id: j.id || '' };
+                },
+                async listBackups() {
+                    const c = sutraCustomHttpConfig();
+                    const resp = await fetch(`${c.baseUrl}/backups`, { headers: sutraCustomHttpHeaders() });
+                    if (!resp.ok) return [];
+                    const rows = await resp.json().catch(() => []);
+                    return (Array.isArray(rows) ? rows : []).map(r => ({ id: r.id, path: r.id, label: r.label || r.id, sizeBytes: r.sizeBytes || r.size || 0, createdAt: r.createdAt || r.created_at || '', deviceId: r.deviceId || '', provider: 'customhttp' }));
+                },
+                async downloadBackup(backup) {
+                    const c = sutraCustomHttpConfig();
+                    const resp = await fetch(`${c.baseUrl}/backups/${encodeURIComponent((backup && backup.id) || backup)}`, { headers: sutraCustomHttpHeaders() });
+                    if (!resp.ok) throw new Error(`Download failed (HTTP ${resp.status}).`);
+                    return resp.arrayBuffer();
+                },
+                async deleteBackup(backup) {
+                    const c = sutraCustomHttpConfig();
+                    await fetch(`${c.baseUrl}/backups/${encodeURIComponent((backup && backup.id) || backup)}`, { method: 'DELETE', headers: sutraCustomHttpHeaders() });
+                }
+            }
+        });
+
+        // ---- Scaffolded adapters (registered cards; honest "needs setup" status) ----
+        function makeScaffoldAdapter(spec) {
+            return makeSutraCloudAdapter({
+                ...spec,
+                methods: {
+                    getSetupStatus() { return { ready: false, needsSetup: true, scaffolded: true, reason: spec.reason }; },
+                    ...(spec.methods || {})
+                }
+            });
+        }
+        // ---- Google Drive adapter (recommended) — bridges the encrypted Drive
+        // engine. The user pastes their own public OAuth Web Client ID in-app; each
+        // backup is a timestamped .sutra file in the private appDataFolder.
+        const googleDriveCloudAdapter = makeSutraCloudAdapter({
+            id: 'googledrive', displayName: 'Google Drive', category: 'recommended', icon: 'fa-brands fa-google-drive',
+            description: 'Encrypted backups to your Google Drive (private app-data folder).', requiresOAuth: true,
+            instructions: [
+                'In Google Cloud Console → Credentials, create an OAuth client ID of type "Web application".',
+                'Add this app’s origin to "Authorized JavaScript origins" and the redirect URI shown below to "Authorized redirect URIs".',
+                'Paste the Client ID below, click Save, then Connect.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    if (!isSutraDriveOAuthOriginSupported()) return { ready: false, needsSetup: false, reason: 'Google Drive needs the hosted HTTPS app or localhost.' };
+                    if (!getSutraGoogleDriveClientId()) return { ready: false, needsSetup: true, reason: 'Paste your Google OAuth Client ID, then Connect.' };
+                    if (!hasSutraDriveAccessToken()) return { ready: false, needsSetup: false, reason: 'Connect Google Drive to authorize this device.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { return hasSutraDriveAccessToken() ? 'Google Drive (connected)' : ''; },
+                async connect() { await authorizeSutraDriveForBackup({ prompt: 'consent' }); return hasSutraDriveAccessToken(); },
+                async disconnect() { clearSutraDriveSecrets({ clearClient: true }); },
+                async testConnection() {
+                    try { await authorizeSutraDriveForBackup(); await listSutraDriveBackupFiles(); return { ok: true, message: 'Connected to Google Drive.' }; }
+                    catch (e) { return { ok: false, message: e.message || 'Could not reach Google Drive.' }; }
+                },
+                async uploadBackup(blob, meta) {
+                    await authorizeSutraDriveForBackup();
+                    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const filename = `${SUTRA_DRIVE_BACKUP_NAME_PREFIX}${stamp}.sutra`;
+                    const bytes = new Uint8Array(await blob.arrayBuffer());
+                    const file = await uploadSutraDriveBackup(bytes, filename, { label: meta.label, deviceId: meta.deviceId });
+                    return { id: String((file && file.id) || ''), path: String((file && file.name) || filename) };
+                },
+                async listBackups() {
+                    if (!hasSutraDriveAccessToken()) return [];
+                    const files = await listSutraDriveBackupFiles();
+                    return files.map(f => ({
+                        id: String(f.id || ''),
+                        path: String(f.name || ''),
+                        label: (f.appProperties && f.appProperties.sutraLabel) || f.name || 'Backup',
+                        sizeBytes: Number(f.size || 0),
+                        createdAt: f.createdTime || f.modifiedTime || '',
+                        deviceId: (f.appProperties && f.appProperties.sutraDeviceId) || '',
+                        provider: 'googledrive'
+                    }));
+                },
+                async downloadBackup(backup) {
+                    await authorizeSutraDriveForBackup();
+                    const bytes = await downloadSutraDriveRemoteBytes((backup && backup.id) || backup);
+                    return bytes.buffer;
+                },
+                async deleteBackup(backup) {
+                    await authorizeSutraDriveForBackup();
+                    await deleteSutraDriveFile((backup && backup.id) || backup);
+                }
+            }
+        });
+        // ---- OneDrive adapter (recommended) — Microsoft Graph, app folder. ----
+        // Restore downloads from @microsoft.graph.downloadUrl, a pre-authenticated
+        // URL on Microsoft's sharded content CDN (host varies per account/region).
+        // Those wildcard families are pinned in the CSP as a reviewed exception
+        // (see scripts/sutra-csp-check.mjs).
+        const SUTRA_ONEDRIVE_GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+        function sutraOneDriveSpec() {
+            const cfg = loadSutraCloudProviderConfig('onedrive');
+            return {
+                id: 'onedrive', displayName: 'OneDrive',
+                authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+                tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+                scope: 'Files.ReadWrite.AppFolder offline_access',
+                extraAuthParams: { prompt: 'select_account' },
+                clientId: String(cfg.clientId || '').trim()
+            };
+        }
+        async function sutraOneDriveFetch(pathOrUrl, options = {}, retry = true) {
+            const token = await ensureSutraOAuthAccessToken('onedrive', sutraOneDriveSpec());
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', `Bearer ${token}`);
+            const url = /^https?:/i.test(pathOrUrl) ? pathOrUrl : `${SUTRA_ONEDRIVE_GRAPH_BASE}${pathOrUrl}`;
+            const resp = await fetch(url, { ...options, headers });
+            if (resp.status === 401 && retry) { sutraOAuthEndSession('onedrive'); return sutraOneDriveFetch(pathOrUrl, options, false); }
+            if (!resp.ok) { const t = await resp.text().catch(() => ''); throw new Error(`OneDrive request failed (${resp.status}). ${String(t).slice(0, 180)}`); }
+            return resp;
+        }
+        const oneDriveCloudAdapter = makeSutraCloudAdapter({
+            id: 'onedrive', displayName: 'OneDrive', category: 'recommended', icon: 'fa-cloud',
+            description: 'Encrypted backups to Microsoft OneDrive (private app folder).', requiresOAuth: true,
+            instructions: [
+                'In the Microsoft Entra admin center → App registrations, create an app and add a "Single-page application (SPA)" platform.',
+                'Add the redirect URI shown below to that SPA platform.',
+                'Copy the Application (client) ID, paste it below, Save, then Connect.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    if (location.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1)$/i.test(location.hostname)) return { ready: false, needsSetup: false, reason: 'OneDrive needs the hosted HTTPS app or localhost.' };
+                    if (!sutraOneDriveSpec().clientId) return { ready: false, needsSetup: true, reason: 'Paste your Microsoft Application (client) ID, then Connect.' };
+                    if (!sutraOAuthSignedIn('onedrive')) return { ready: false, needsSetup: false, reason: 'Connect OneDrive to authorize this device.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { return sutraOAuthSignedIn('onedrive') ? 'OneDrive (connected)' : ''; },
+                async connect() { return sutraOAuthConnect('onedrive', sutraOneDriveSpec()); },
+                async disconnect() { sutraOAuthDisconnect('onedrive'); },
+                async endSession() { sutraOAuthEndSession('onedrive'); },
+                async testConnection() {
+                    try { await sutraOneDriveFetch('/me/drive/special/approot'); return { ok: true, message: 'Connected to OneDrive.' }; }
+                    catch (e) { return { ok: false, message: e.message || 'Could not reach OneDrive.' }; }
+                },
+                async uploadBackup(blob, meta) {
+                    const filename = sutraOAuthBackupFilename(meta);
+                    const resp = await sutraOneDriveFetch(`/me/drive/special/approot:/${encodeURIComponent(filename)}:/content`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/octet-stream' },
+                        body: blob
+                    });
+                    const item = await resp.json().catch(() => ({}));
+                    return { id: String(item.id || ''), path: String(item.name || filename) };
+                },
+                async listBackups() {
+                    if (!sutraOAuthSignedIn('onedrive')) return [];
+                    const resp = await sutraOneDriveFetch('/me/drive/special/approot/children?$select=id,name,size,createdDateTime&$top=200');
+                    const json = await resp.json().catch(() => ({}));
+                    const items = Array.isArray(json.value) ? json.value : [];
+                    return items.filter(it => it && sutraIsSutraBackupName(it.name)).map(it => ({
+                        id: String(it.id || ''),
+                        path: String(it.name || ''),
+                        label: sutraOAuthParseBackupName(it.name),
+                        sizeBytes: Number(it.size || 0),
+                        createdAt: it.createdDateTime || '',
+                        deviceId: '',
+                        provider: 'onedrive'
+                    }));
+                },
+                async downloadBackup(backup) {
+                    const id = (backup && backup.id) || backup;
+                    const metaResp = await sutraOneDriveFetch(`/me/drive/items/${encodeURIComponent(id)}`);
+                    const item = await metaResp.json().catch(() => ({}));
+                    const url = item['@microsoft.graph.downloadUrl'] || item['@content.downloadUrl'];
+                    if (!url) throw new Error('OneDrive did not provide a download URL.');
+                    const dl = await fetch(url);
+                    if (!dl.ok) throw new Error(`OneDrive download failed (${dl.status}).`);
+                    return dl.arrayBuffer();
+                },
+                async deleteBackup(backup) {
+                    const id = (backup && backup.id) || backup;
+                    await sutraOneDriveFetch(`/me/drive/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                }
+            }
+        });
+        // Shared filename helpers for OAuth destinations that store each backup as a
+        // flat file (Dropbox, OneDrive). The encrypted .sutra bytes carry the real
+        // payload; the human label rides in the filename, while createdAt/size come
+        // from the provider natively.
+        function sutraOAuthBackupFilename(meta) {
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const safeLabel = String((meta && meta.label) || 'backup').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 40) || 'backup';
+            return `sutra-backup-${stamp}__${safeLabel}.sutra`;
+        }
+        function sutraOAuthParseBackupName(name) {
+            const base = String(name || '').replace(/\.sutra$/i, '');
+            const idx = base.indexOf('__');
+            return idx >= 0 ? base.slice(idx + 2) : (base || 'Backup');
+        }
+        function sutraIsSutraBackupName(name) {
+            return /^sutra-backup-/i.test(String(name || ''));
+        }
+        async function sutraDropboxErrorText(resp) {
+            const t = await resp.text().catch(() => '');
+            return `Dropbox request failed (${resp.status}). ${String(t).slice(0, 180)}`;
+        }
+
+        // ---- Dropbox adapter (recommended) — scoped App-folder app, PKCE. ----
+        function sutraDropboxSpec() {
+            const cfg = loadSutraCloudProviderConfig('dropbox');
+            return {
+                id: 'dropbox', displayName: 'Dropbox',
+                authUrl: 'https://www.dropbox.com/oauth2/authorize',
+                tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
+                extraAuthParams: { token_access_type: 'offline' },
+                clientId: String(cfg.clientId || '').trim()
+            };
+        }
+        function sutraDropboxToken() { return ensureSutraOAuthAccessToken('dropbox', sutraDropboxSpec()); }
+        const dropboxCloudAdapter = makeSutraCloudAdapter({
+            id: 'dropbox', displayName: 'Dropbox', category: 'recommended', icon: 'fa-brands fa-dropbox',
+            description: 'Encrypted backups to Dropbox (scoped app folder).', requiresOAuth: true,
+            instructions: [
+                'In the Dropbox App Console, create an app with "Scoped access" → "App folder".',
+                'Under Permissions, enable files.content.write and files.content.read; under Settings add the redirect URI shown below.',
+                'Copy the App key, paste it below, Save, then Connect.'
+            ],
+            methods: {
+                getSetupStatus() {
+                    if (location.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1)$/i.test(location.hostname)) return { ready: false, needsSetup: false, reason: 'Dropbox needs the hosted HTTPS app or localhost.' };
+                    if (!sutraDropboxSpec().clientId) return { ready: false, needsSetup: true, reason: 'Paste your Dropbox app key, then Connect.' };
+                    if (!sutraOAuthSignedIn('dropbox')) return { ready: false, needsSetup: false, reason: 'Connect Dropbox to authorize this device.' };
+                    return { ready: true };
+                },
+                getSignedInIdentity() { return sutraOAuthSignedIn('dropbox') ? 'Dropbox (connected)' : ''; },
+                async connect() { return sutraOAuthConnect('dropbox', sutraDropboxSpec()); },
+                async disconnect() { sutraOAuthDisconnect('dropbox'); },
+                async endSession() { sutraOAuthEndSession('dropbox'); },
+                async testConnection() {
+                    try {
+                        const token = await sutraDropboxToken();
+                        const resp = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ path: '', limit: 1 })
+                        });
+                        if (resp.ok || resp.status === 409) return { ok: true, message: 'Connected to Dropbox.' };
+                        return { ok: false, message: `Dropbox check failed (${resp.status}).` };
+                    } catch (e) { return { ok: false, message: e.message || 'Could not reach Dropbox.' }; }
+                },
+                async uploadBackup(blob, meta) {
+                    const token = await sutraDropboxToken();
+                    const filename = sutraOAuthBackupFilename(meta);
+                    const arg = JSON.stringify({ path: `/${filename}`, mode: 'add', autorename: true, mute: true });
+                    const resp = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': arg },
+                        body: blob
+                    });
+                    if (!resp.ok) throw new Error(await sutraDropboxErrorText(resp));
+                    const j = await resp.json().catch(() => ({}));
+                    return { id: String(j.path_lower || j.id || `/${filename}`), path: String(j.name || filename) };
+                },
+                async listBackups() {
+                    if (!sutraOAuthSignedIn('dropbox')) return [];
+                    const token = await sutraDropboxToken();
+                    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+                    let resp = await fetch('https://api.dropboxapi.com/2/files/list_folder', { method: 'POST', headers, body: JSON.stringify({ path: '', recursive: false, limit: 200 }) });
+                    if (!resp.ok) { if (resp.status === 409) return []; throw new Error(await sutraDropboxErrorText(resp)); }
+                    let json = await resp.json();
+                    let entries = Array.isArray(json.entries) ? json.entries.slice() : [];
+                    let guard = 0;
+                    while (json.has_more && guard < 20) {
+                        guard += 1;
+                        resp = await fetch('https://api.dropboxapi.com/2/files/list_folder/continue', { method: 'POST', headers, body: JSON.stringify({ cursor: json.cursor }) });
+                        if (!resp.ok) break;
+                        json = await resp.json();
+                        if (Array.isArray(json.entries)) entries = entries.concat(json.entries);
+                    }
+                    return entries
+                        .filter(e => e && e['.tag'] === 'file' && sutraIsSutraBackupName(e.name))
+                        .map(e => ({
+                            id: String(e.path_lower || e.id || ''),
+                            path: String(e.path_display || e.name || ''),
+                            label: sutraOAuthParseBackupName(e.name),
+                            sizeBytes: Number(e.size || 0),
+                            createdAt: e.client_modified || e.server_modified || '',
+                            deviceId: '',
+                            provider: 'dropbox'
+                        }));
+                },
+                async downloadBackup(backup) {
+                    const token = await sutraDropboxToken();
+                    const path = (backup && backup.id) || backup;
+                    const resp = await fetch('https://content.dropboxapi.com/2/files/download', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Dropbox-API-Arg': JSON.stringify({ path: String(path) }) }
+                    });
+                    if (!resp.ok) throw new Error(await sutraDropboxErrorText(resp));
+                    return resp.arrayBuffer();
+                },
+                async deleteBackup(backup) {
+                    const token = await sutraDropboxToken();
+                    const path = (backup && backup.id) || backup;
+                    const resp = await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: String(path) })
+                    });
+                    if (!resp.ok) throw new Error(await sutraDropboxErrorText(resp));
+                }
+            }
+        });
+        const boxCloudAdapter = makeScaffoldAdapter({
+            id: 'box', displayName: 'Box', category: 'advanced', icon: 'fa-box',
+            description: 'Encrypted backups to Box.', requiresOAuth: true,
+            reason: 'Box can’t be enabled in a browser-only build: its OAuth token exchange requires a confidential client secret, which a static app cannot hold safely (unlike Google Drive, OneDrive, and Dropbox, which support secretless PKCE). Use the Manual encrypted file option into a Box-synced folder, or self-host Sutra with a small token-exchange proxy.',
+            instructions: [
+                'Today: choose “Manual encrypted file”, click Back Up Now, and save the .sutra file into a Box-synced folder on your computer — it syncs to Box automatically.',
+                'Advanced / self-host: run a tiny server endpoint that injects your Box client secret into the OAuth token exchange; Sutra can then connect to Box through that proxy.'
+            ]
+        });
+        const s3CloudAdapter = makeScaffoldAdapter({
+            id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', icon: 'fa-brands fa-aws',
+            description: 'Any S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces, MinIO.', requiresCustomCredentials: true,
+            cspNote: 'Your S3 endpoint origin must be in the app CSP — needs a self-hosted Sutra build.',
+            reason: 'S3-compatible storage is in preview (SigV4 request signing is a planned follow-up). Use WebDAV or Custom HTTP today.',
+            instructions: ['Create a bucket and scoped access keys (never root keys).', 'Enter endpoint, region, bucket, access key ID, secret key, optional prefix.', 'S3 signing support is coming; until then use WebDAV or Custom HTTP.']
+        });
+
+        // ---- Registry (display order = recommended → advanced → manual) ----
+        const SUTRA_CLOUD_PROVIDERS = [
+            googleDriveCloudAdapter,
+            oneDriveCloudAdapter,
+            dropboxCloudAdapter,
+            webdavCloudAdapter,
+            s3CloudAdapter,
+            supabaseCloudAdapter,
+            customHttpCloudAdapter,
+            boxCloudAdapter,
+            manualCloudAdapter
+        ];
+        function getSutraCloudProviders() { return SUTRA_CLOUD_PROVIDERS; }
+        function getSutraCloudProviderById(id) { return SUTRA_CLOUD_PROVIDERS.find(p => p.id === id) || null; }
+        function getActiveSutraCloudProvider() { return getSutraCloudProviderById(getSutraCloudActiveProviderId()); }
+
+        // ---- Generic controller (provider-agnostic) ----
         async function sutraCloudBackupNow(options = {}) {
-            if (!isSutraCloudSignedIn()) throw new Error('Sign in to Sutra Cloud first.');
+            const provider = getActiveSutraCloudProvider();
+            if (!provider) throw new Error('Choose a backup destination first.');
+            const status = provider.getSetupStatus();
+            if (!status.ready) throw new Error(status.reason || `${provider.displayName} needs setup first.`);
             assertSutraEncryptionAvailable();
             const passphrase = options.passphrase || await openSutraCloudSyncPassphraseModal({
                 requireConfirm: true,
@@ -46683,40 +49044,30 @@ function getActiveEditor() {
             updateSutraCloudUi();
             try {
                 const encrypted = await createEncryptedSutraBackupBlob({ passphrase });
-                const path = buildSutraCloudBackupPath(options.label);
-                const upResp = await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'true' },
-                    body: encrypted.blob
-                });
-                if (!upResp.ok) {
-                    const j = await upResp.json().catch(() => null);
-                    throw new Error((j && (j.message || j.error)) || `Upload failed (${upResp.status}).`);
-                }
-                await sutraCloudJson('/rest/v1/backup_index', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-                    body: JSON.stringify({
-                        path,
-                        label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
-                        size_bytes: encrypted.blob.size || encrypted.encryptedByteLength || 0,
-                        device_id: loadSutraCloudMeta().deviceId
-                    })
-                });
-                const meta = loadSutraCloudMeta();
-                meta.lastBackupAt = new Date().toISOString();
-                meta.lastError = '';
-                if (options.auto) meta.lastAutoBackupAt = meta.lastBackupAt;
+                const meta = {
+                    label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
+                    size: encrypted.blob.size || encrypted.encryptedByteLength || 0,
+                    deviceId: loadSutraCloudMeta().deviceId,
+                    filename: encrypted.filename
+                };
+                await provider.uploadBackup(encrypted.blob, meta);
+                const m = loadSutraCloudMeta();
+                m.lastBackupAt = new Date().toISOString();
+                m.lastError = '';
+                if (options.auto) m.lastAutoBackupAt = m.lastBackupAt;
                 persistSutraCloudMeta();
                 sutraCloudRuntime.backupPassphrase = passphrase; // session-only cache enables unattended auto-backup
-                await pruneSutraCloudBackups();
-                if (!options.silent) showToast('Encrypted backup saved to Sutra Cloud.');
-                return { uploaded: true, path };
+                try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); } catch (e) {}
+                if (!options.silent) showToast(provider.id === 'manual' ? 'Encrypted backup downloaded.' : 'Encrypted backup saved to Sutra Cloud.');
+                return { uploaded: true };
             } catch (error) {
-                const meta = loadSutraCloudMeta();
-                meta.lastError = error && error.message ? error.message : 'Backup failed.';
+                const m = loadSutraCloudMeta();
+                m.lastError = error && error.message ? error.message : 'Backup failed.';
                 persistSutraCloudMeta();
-                if (!options.silent) showToast(`Sutra Cloud backup failed: ${meta.lastError}`);
+                // Record in the diagnostics ring buffer too (context carries no
+                // passphrase/credentials) so an exported report shows the failure.
+                if (window.reportError) window.reportError(error, { where: 'sutraCloud:backupNow', provider: provider.id, auto: !!options.auto }, 'warning');
+                if (!options.silent) showToast(`Sutra Cloud backup failed: ${m.lastError}`);
                 throw error;
             } finally {
                 sutraCloudRuntime.busy = false;
@@ -46725,38 +49076,26 @@ function getActiveEditor() {
         }
 
         async function sutraCloudListBackups() {
-            if (!isSutraCloudSignedIn()) return [];
-            const rows = await sutraCloudJson('/rest/v1/backup_index?select=id,path,label,size_bytes,created_at,device_id&order=created_at.desc', {
-                headers: { Accept: 'application/json' }
-            });
+            const provider = getActiveSutraCloudProvider();
+            if (!provider || !provider.hasBackupList) return [];
+            const status = provider.getSetupStatus();
+            if (!status.ready) return [];
+            const rows = await provider.listBackups();
             return Array.isArray(rows) ? rows : [];
         }
 
-        async function pruneSutraCloudBackups() {
-            try {
-                const rows = await sutraCloudListBackups();
-                if (rows.length <= SUTRA_CLOUD_KEEP_LAST) return;
-                for (const row of rows.slice(SUTRA_CLOUD_KEEP_LAST)) {
-                    await sutraCloudDeleteBackup(row, { silent: true, skipRefresh: true });
-                }
-            } catch (error) { /* retention is best-effort and never blocks a backup */ }
-        }
-
         async function sutraCloudDeleteBackup(row, options = {}) {
-            if (!row || !row.path) return;
-            await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(row.path)}`, { method: 'DELETE' });
-            if (row.id) {
-                await sutraCloudFetch(`/rest/v1/backup_index?id=eq.${encodeURIComponent(row.id)}`, {
-                    method: 'DELETE',
-                    headers: { Prefer: 'return=minimal' }
-                });
-            }
+            const provider = getActiveSutraCloudProvider();
+            if (!provider || !row) return;
+            await provider.deleteBackup(row);
             if (!options.silent) showToast('Backup deleted from Sutra Cloud.');
             if (!options.skipRefresh) refreshSutraCloudBackupList();
         }
 
         async function sutraCloudRestore(row, options = {}) {
-            if (!row || !row.path) throw new Error('No backup selected.');
+            const provider = getActiveSutraCloudProvider();
+            if (!provider) throw new Error('Choose a backup destination first.');
+            if (!row) throw new Error('No backup selected.');
             const passphrase = options.passphrase || await openSutraCloudSyncPassphraseModal({
                 requireConfirm: false,
                 title: 'Enter backup password',
@@ -46767,18 +49106,22 @@ function getActiveEditor() {
             sutraCloudRuntime.busy = true;
             updateSutraCloudUi();
             try {
-                const dlResp = await sutraCloudFetch(`/storage/v1/object/authenticated/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(row.path)}`, { method: 'GET' });
-                if (!dlResp.ok) throw new Error(`Download failed (${dlResp.status}).`);
-                const buffer = await dlResp.arrayBuffer();
+                const buffer = await provider.downloadBackup(row);
                 const zipBytes = await decryptSutraEncryptedEnvelopeBytes(buffer, passphrase);
                 const imported = await importAtelierPackage(new Blob([zipBytes], { type: 'application/zip' }));
-                await applyValidatedWorkspaceImport(imported.workspacePayload, { source: 'sutra-cloud', legacyUnencrypted: false, warnings: imported.warnings });
+                await applyValidatedWorkspaceImport(imported.workspacePayload, { source: `sutra-cloud:${provider.id}`, legacyUnencrypted: false, warnings: imported.warnings });
                 showToast('Workspace restored from Sutra Cloud.');
                 return { restored: true };
             } catch (error) {
                 const msg = error && error.name === 'SutraDecryptError'
                     ? SUTRA_DECRYPT_GENERIC_ERROR
                     : (error && error.message ? error.message : 'Restore failed.');
+                // A wrong-password decrypt failure is expected user error, not a
+                // fault — only report genuine faults (download/parse/apply) to
+                // diagnostics, and never the passphrase or ciphertext.
+                if (window.reportError && !(error && error.name === 'SutraDecryptError')) {
+                    window.reportError(error, { where: 'sutraCloud:restore', provider: provider.id }, 'warning');
+                }
                 showToast(msg);
                 throw error;
             } finally {
@@ -46794,9 +49137,11 @@ function getActiveEditor() {
         // the primary path; this is a convenience layer.
         function sutraCloudAutoReady() {
             const meta = loadSutraCloudMeta();
-            return getSutraCloudConfig().configured
+            const provider = getActiveSutraCloudProvider();
+            return !!provider
+                && provider.supportsAutoBackup
+                && provider.getSetupStatus().ready
                 && !!(meta.autoBackup && meta.autoBackup.enabled)
-                && isSutraCloudSignedIn()
                 && !!sutraCloudRuntime.backupPassphrase;
         }
 
@@ -46862,63 +49207,26 @@ function getActiveEditor() {
         function updateSutraCloudUi() {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
-            const cfg = getSutraCloudConfig();
-            const backend = loadSutraCloudBackend();
-            const isCustom = cfg.mode === 'custom';
-            const cspOk = !cfg.url || sutraCloudOriginAllowedByCsp(cfg.url);
-            const signedIn = isSutraCloudSignedIn();
+            const provider = getActiveSutraCloudProvider();
+            const status = provider ? provider.getSetupStatus() : null;
+            const ready = !!(status && status.ready);
+            const hasList = !!(provider && provider.hasBackupList);
             const meta = loadSutraCloudMeta();
 
-            // ---- Backend status block ----
-            sutraCloudSetText('sutraCloudStatBackend', isCustom ? 'Custom Supabase (your project)' : 'Official Sutra Cloud');
-            sutraCloudSetHidden('sutraCloudStatEmailRow', !signedIn);
-            if (signedIn && sutraCloudRuntime.user) sutraCloudSetText('sutraCloudStatEmail', sutraCloudRuntime.user.email || 'Signed in');
-            sutraCloudSetText('sutraCloudStatCheck', backend.lastConnectionCheckAt ? formatSutraDriveSyncDate(backend.lastConnectionCheckAt) : 'Never');
-            sutraCloudSetText('sutraCloudStatBackup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'Never');
-            sutraCloudSetText('sutraCloudStatAuto', (meta.autoBackup && meta.autoBackup.enabled) ? `on (${meta.autoBackup.frequency || 'daily'})` : 'off');
+            buildSutraCloudStatusCard(provider, status, meta);
+            buildSutraCloudCards();
+            buildSutraCloudSetup(provider);
 
-            let setupMsg = '';
-            if (!cfg.configured) {
-                setupMsg = isCustom
-                    ? 'This backend needs your Supabase URL and anon key below.'
-                    : 'Official Sutra Cloud is not configured for this build yet (see supabase/README.md).';
-            } else if (isCustom && !cspOk) {
-                setupMsg = 'This build’s security policy (CSP) blocks your Supabase origin. Custom Supabase needs a self-hosted build with your project ref in the app CSP. Official Sutra Cloud works in the hosted version.';
-            }
-            sutraCloudSetHidden('sutraCloudStatSetupRow', !setupMsg);
-            if (setupMsg) sutraCloudSetText('sutraCloudStatSetup', setupMsg);
+            sutraCloudSetHidden('sutraCloudPrimaryActions', !ready);
+            const backupBtn = document.getElementById('sutraCloudBackupNowBtn');
+            const restoreBtn = document.getElementById('sutraCloudRestoreBtn');
+            const manageBtn = document.getElementById('sutraCloudManageBtn');
+            if (restoreBtn) restoreBtn.hidden = !ready;
+            if (manageBtn) manageBtn.hidden = !ready || !hasList;
+            [backupBtn, restoreBtn, manageBtn].forEach(b => { if (b) b.disabled = sutraCloudRuntime.busy; });
 
-            // ---- Backend selector state ----
-            const officialRadio = document.getElementById('sutraCloudBackendOfficial');
-            const customRadio = document.getElementById('sutraCloudBackendCustom');
-            if (officialRadio) officialRadio.checked = !isCustom;
-            if (customRadio) customRadio.checked = isCustom;
-            sutraCloudSetHidden('sutraCloudUseOfficialBtn', !isCustom);
-            const advanced = document.getElementById('sutraCloudAdvanced');
-            if (advanced && isCustom) advanced.open = true;
-
-            // A custom backend the browser can't reach (CSP) should not pretend it can
-            // sign in / back up. Treat it as unusable here, with a clear explanation.
-            const usable = cfg.configured && (!isCustom || cspOk);
-            // The compact status block (with its setup flag) is the single source of
-            // truth for "needs setup", so the old standalone notice stays hidden.
-            sutraCloudSetHidden('sutraCloudNotConfigured', true);
-            sutraCloudSetHidden('sutraCloudSigninSection', !usable || signedIn);
-            sutraCloudSetHidden('sutraCloudAccountSection', !usable || !signedIn);
-            sutraCloudSetHidden('sutraCloudActionsSection', !usable || !signedIn);
-            sutraCloudSetHidden('sutraCloudCodeRow', !sutraCloudUiState.awaitingCode);
-            if (signedIn && sutraCloudRuntime.user) sutraCloudSetText('sutraCloudAccountEmail', sutraCloudRuntime.user.email || 'Signed in');
-
-            let status;
-            if (!cfg.configured) status = isCustom ? 'Enter your Supabase project URL and anon key below.' : 'Sutra Cloud is not set up for this build yet. See supabase/README.md.';
-            else if (isCustom && !cspOk) status = 'Custom Supabase origin is blocked by this build’s CSP — a self-hosted build is required.';
-            else if (!signedIn) status = 'Signed out. Sign in to enable cloud backups.';
-            else if (sutraCloudRuntime.busy) status = 'Working…';
-            else if (meta.lastError) status = meta.lastError;
-            else if (meta.lastBackupAt) status = `Last backup: ${formatSutraDriveSyncDate(meta.lastBackupAt)}`;
-            else status = 'Signed in. No cloud backups yet.';
-            sutraCloudSetText('sutraCloudStatus', status);
-
+            const autoRow = document.querySelector('#sutraCloudManage .sutra-cloud-auto');
+            if (autoRow) autoRow.hidden = !(provider && provider.supportsAutoBackup);
             const autoToggle = document.getElementById('sutraCloudAutoToggle');
             if (autoToggle) autoToggle.checked = !!(meta.autoBackup && meta.autoBackup.enabled);
             const autoFreq = document.getElementById('sutraCloudAutoFrequency');
@@ -46926,10 +49234,314 @@ function getActiveEditor() {
                 autoFreq.value = (meta.autoBackup && meta.autoBackup.frequency) || 'daily';
                 autoFreq.disabled = !(meta.autoBackup && meta.autoBackup.enabled);
             }
-            ['sutraCloudBackupNowBtn', 'sutraCloudRefreshBtn', 'sutraCloudSignOutBtn', 'sutraCloudSendCodeBtn', 'sutraCloudVerifyBtn', 'sutraCloudTestBtn', 'sutraCloudUseCustomBtn', 'sutraCloudUseOfficialBtn'].forEach(id => {
-                const b = document.getElementById(id);
-                if (b) b.disabled = sutraCloudRuntime.busy;
+            if (!ready || !hasList) sutraCloudSetHidden('sutraCloudManage', true);
+        }
+
+        function buildSutraCloudStatusCard(provider, status, meta) {
+            const card = document.getElementById('sutraCloudStatusCard');
+            if (!card) return;
+            card.textContent = '';
+            if (!provider) {
+                const t = document.createElement('div'); t.className = 'sutra-cloud-empty-title'; t.textContent = 'No cloud destination connected yet.';
+                const s = document.createElement('div'); s.className = 'sutra-cloud-empty-sub'; s.textContent = 'Choose a provider below to start backing up encrypted Sutra files. (Manual encrypted export works with no account.)';
+                card.appendChild(t); card.appendChild(s);
+                return;
+            }
+            const identity = provider.getSignedInIdentity();
+            const ready = !!(status && status.ready);
+            let label = 'Needs setup';
+            let tone = 'warn';
+            if (ready) { label = 'Ready'; tone = 'ok'; }
+            else if (status && status.cspBlocked) { label = 'Blocked by browser security policy'; tone = 'warn'; }
+            else if (status && status.scaffolded) { label = 'Not available in this build'; tone = 'warn'; }
+            else if (identity) { label = 'Connected — finish setup'; tone = 'warn'; }
+            else if (provider.requiresOAuth || provider.id === 'supabase') { label = 'Disconnected'; tone = 'warn'; }
+            const row = (k, v, t) => {
+                const r = document.createElement('div'); r.className = 'sutra-cloud-stat-row';
+                const ke = document.createElement('span'); ke.className = 'sutra-cloud-stat-k'; ke.textContent = k;
+                const ve = document.createElement('span'); ve.className = 'sutra-cloud-stat-v' + (t === 'ok' ? ' is-ok' : t === 'warn' ? ' is-warn' : ''); ve.textContent = v;
+                r.appendChild(ke); r.appendChild(ve); card.appendChild(r);
+            };
+            row('Destination', provider.displayName);
+            row('Status', label, tone);
+            if (identity) row(provider.requiresOAuth || provider.id === 'supabase' ? 'Account' : 'Endpoint', identity);
+            row('Last backup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'never');
+            row('Auto-backup', (meta.autoBackup && meta.autoBackup.enabled) ? `on (${meta.autoBackup.frequency || 'daily'})` : 'off');
+            if (!ready && status && status.reason) row('Next step', status.reason, 'warn');
+            if (meta.lastError && ready) row('Last error', meta.lastError, 'warn');
+        }
+
+        function buildSutraCloudCards() {
+            const groups = { recommended: 'sutraCloudCardsRecommended', advanced: 'sutraCloudCardsAdvanced', manual: 'sutraCloudCardsManual' };
+            Object.values(groups).forEach(id => { const c = document.getElementById(id); if (c) c.textContent = ''; });
+            const activeId = getSutraCloudActiveProviderId();
+            getSutraCloudProviders().forEach(p => {
+                const container = document.getElementById(groups[p.category] || groups.advanced);
+                if (!container) return;
+                const isActive = p.id === activeId;
+                const card = document.createElement('div');
+                card.className = 'sutra-cloud-card' + (isActive ? ' is-active' : '');
+                const ic = document.createElement('div'); ic.className = 'sutra-cloud-card-icon';
+                const i = document.createElement('i'); i.className = (p.icon && p.icon.indexOf('fa-brands') === 0 ? p.icon : `fas ${p.icon || 'fa-cloud'}`); i.setAttribute('aria-hidden', 'true'); ic.appendChild(i);
+                const body = document.createElement('div'); body.className = 'sutra-cloud-card-body';
+                const titleRow = document.createElement('div'); titleRow.className = 'sutra-cloud-card-title';
+                const name = document.createElement('strong'); name.textContent = p.displayName; titleRow.appendChild(name);
+                const badge = document.createElement('span'); badge.className = `sutra-cloud-badge ${p.category}`; badge.textContent = p.category === 'recommended' ? 'Recommended' : (p.category === 'manual' ? 'Manual' : 'Advanced'); titleRow.appendChild(badge);
+                const desc = document.createElement('div'); desc.className = 'sutra-cloud-card-desc'; desc.textContent = p.description;
+                const st = document.createElement('div'); st.className = 'sutra-cloud-card-status';
+                const status = p.getSetupStatus(); const identity = p.getSignedInIdentity();
+                st.textContent = isActive ? (status.ready ? 'Active · Ready' : (status.cspBlocked ? 'Active · blocked by CSP' : 'Active · needs setup')) : (status.scaffolded ? 'Coming soon' : (identity ? 'Configured' : 'Not connected'));
+                body.appendChild(titleRow); body.appendChild(desc); body.appendChild(st);
+                const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'storage-btn' + (isActive ? '' : ' primary');
+                btn.textContent = isActive ? 'Selected' : 'Use this';
+                btn.disabled = isActive;
+                btn.addEventListener('click', () => selectSutraCloudProvider(p.id));
+                card.appendChild(ic); card.appendChild(body); card.appendChild(btn);
+                container.appendChild(card);
             });
+        }
+
+        function sutraCloudField(spec) {
+            const wrap = document.createElement('label'); wrap.className = 'sutra-cloud-field';
+            const span = document.createElement('span'); span.textContent = spec.label; wrap.appendChild(span);
+            const input = document.createElement('input');
+            input.className = 'modal-input'; input.type = spec.type || 'text';
+            input.placeholder = spec.placeholder || ''; input.autocomplete = spec.autocomplete || 'off'; input.spellcheck = false;
+            if (spec.value) input.value = spec.value;
+            input.dataset.key = spec.key;
+            wrap.appendChild(input);
+            return wrap;
+        }
+
+        function buildSutraCloudSetup(provider) {
+            const area = document.getElementById('sutraCloudSetupArea');
+            if (!area) return;
+            const pid = provider ? provider.id : '';
+            if (sutraCloudUiState.renderedSetupFor === pid && !sutraCloudUiState.forceSetupRebuild) return;
+            sutraCloudUiState.renderedSetupFor = pid;
+            sutraCloudUiState.forceSetupRebuild = false;
+            area.textContent = '';
+            if (!provider) return;
+            const h = document.createElement('h4'); h.className = 'sutra-cloud-h'; h.textContent = `Set up ${provider.displayName}`; area.appendChild(h);
+            if (provider.cspNote) { const n = document.createElement('p'); n.className = 'sutra-cloud-fineprint'; n.textContent = provider.cspNote; area.appendChild(n); }
+            if (provider.id === 'supabase') { buildSupabaseProviderSetup(area); return; }
+            if (provider.id === 'webdav') {
+                buildSutraCloudCredentialSetup(area, provider, [
+                    { key: 'url', label: 'WebDAV server URL', placeholder: 'https://cloud.example.com/remote.php/dav/files/USER/' },
+                    { key: 'username', label: 'Username' },
+                    { key: 'password', label: 'App password', type: 'password' },
+                    { key: 'folder', label: 'Folder (optional)', placeholder: 'sutra-backups' }
+                ]);
+                return;
+            }
+            if (provider.id === 'customhttp') {
+                buildSutraCloudCredentialSetup(area, provider, [
+                    { key: 'baseUrl', label: 'Base URL', placeholder: 'https://backups.example.com/api' },
+                    { key: 'token', label: 'Auth token (optional)', type: 'password' }
+                ]);
+                return;
+            }
+            if (provider.id === 's3') {
+                buildSutraCloudCredentialSetup(area, provider, [
+                    { key: 'endpoint', label: 'Endpoint URL', placeholder: 'https://s3.us-east-1.amazonaws.com' },
+                    { key: 'region', label: 'Region', placeholder: 'us-east-1' },
+                    { key: 'bucket', label: 'Bucket' },
+                    { key: 'accessKeyId', label: 'Access key ID' },
+                    { key: 'secretAccessKey', label: 'Secret access key', type: 'password' },
+                    { key: 'prefix', label: 'Folder / prefix (optional)', placeholder: 'sutra/' }
+                ], { preview: true });
+                return;
+            }
+            if (provider.id === 'googledrive' || provider.id === 'onedrive' || provider.id === 'dropbox') {
+                buildSutraCloudOAuthSetup(area, provider);
+                return;
+            }
+            buildSutraCloudInstructions(area, provider);
+        }
+
+        function buildSutraCloudInstructions(area, provider) {
+            const status = provider.getSetupStatus();
+            if (status.reason) { const r = document.createElement('div'); r.className = 'sutra-cloud-warning'; r.textContent = status.reason; area.appendChild(r); }
+            const steps = provider.getSetupInstructions() || [];
+            if (steps.length) {
+                const ol = document.createElement('ol'); ol.className = 'sutra-cloud-steps';
+                steps.forEach(s => { const li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
+                area.appendChild(ol);
+            }
+        }
+
+        function buildSutraCloudCredentialSetup(area, provider, fields, opts = {}) {
+            const cfg = provider.getConfig();
+            const warn = document.createElement('div'); warn.className = 'sutra-cloud-warning';
+            warn.textContent = opts.preview
+                ? 'This destination is in preview — request signing isn’t implemented yet. You can save credentials, but use WebDAV or Custom HTTP for working backups today. Never paste root/admin keys; create scoped, app-specific keys.'
+                : 'Advanced destination. Use a scoped app password / token — never your root or admin credentials. Your credentials are stored only on this device.';
+            area.appendChild(warn);
+            buildSutraCloudInstructions(area, provider);
+            const inputs = fields.map(f => { const el = sutraCloudField({ ...f, value: cfg[f.key] || '' }); area.appendChild(el); return el.querySelector('input'); });
+            const readValues = () => { const out = {}; inputs.forEach(inp => { out[inp.dataset.key] = inp.value.trim(); }); return out; };
+            const actions = document.createElement('div'); actions.className = 'sutra-cloud-backend-actions';
+            const statusEl = document.createElement('p'); statusEl.className = 'sutra-cloud-test-status'; statusEl.setAttribute('role', 'status');
+            const testBtn = document.createElement('button'); testBtn.type = 'button'; testBtn.className = 'storage-btn'; testBtn.textContent = 'Test connection';
+            testBtn.addEventListener('click', async () => {
+                statusEl.textContent = 'Testing…'; statusEl.className = 'sutra-cloud-test-status';
+                try { const res = await provider.testConnection(readValues()); statusEl.textContent = res.message; statusEl.className = `sutra-cloud-test-status ${res.ok ? 'is-ok' : 'is-err'}`; }
+                catch (e) { statusEl.textContent = e.message || 'Test failed.'; statusEl.className = 'sutra-cloud-test-status is-err'; }
+            });
+            const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'storage-btn primary'; saveBtn.textContent = 'Save destination';
+            saveBtn.addEventListener('click', () => {
+                const values = readValues();
+                const secret = values.password || values.token || values.secretAccessKey || '';
+                if (secret && looksLikeDangerousSecret(secret)) { showToast('That looks like an admin/root secret. Use a scoped app credential.'); return; }
+                provider.setConfig(values);
+                showToast(`${provider.displayName} saved on this device.`);
+                updateSutraCloudUi();
+            });
+            const clearBtn = document.createElement('button'); clearBtn.type = 'button'; clearBtn.className = 'storage-btn'; clearBtn.textContent = 'Clear credentials';
+            clearBtn.addEventListener('click', () => { provider.clearConfig(); sutraCloudUiState.forceSetupRebuild = true; showToast('Credentials cleared from this device.'); updateSutraCloudUi(); });
+            actions.appendChild(testBtn); actions.appendChild(saveBtn); actions.appendChild(clearBtn);
+            area.appendChild(actions); area.appendChild(statusEl);
+        }
+
+        // In-app setup for OAuth destinations (Google Drive, OneDrive, Dropbox):
+        // paste a public client ID / app key, register the shown redirect URI, then
+        // Connect. Reuses the credential-form building blocks.
+        function buildSutraCloudOAuthSetup(area, provider) {
+            const cfg = provider.getConfig();
+            const keyLabel = provider.id === 'dropbox' ? 'Dropbox app key' : 'OAuth Client ID';
+            buildSutraCloudInstructions(area, provider);
+
+            // Redirect URI the user registers in the provider console (read-only).
+            const redirectField = sutraCloudField({ key: 'redirect', label: 'Redirect URI to register in the provider console', value: sutraOAuthRedirectUri() });
+            const redirectInput = redirectField.querySelector('input');
+            redirectInput.readOnly = true;
+            redirectInput.addEventListener('focus', () => { try { redirectInput.select(); } catch (e) {} });
+            area.appendChild(redirectField);
+
+            // Client ID / app key.
+            const keyField = sutraCloudField({ key: 'clientId', label: keyLabel, placeholder: keyLabel, value: cfg.clientId || '' });
+            area.appendChild(keyField);
+            const keyInput = keyField.querySelector('input');
+
+            const statusEl = document.createElement('p'); statusEl.className = 'sutra-cloud-test-status'; statusEl.setAttribute('role', 'status');
+            const actions = document.createElement('div'); actions.className = 'sutra-cloud-backend-actions';
+            const persistKey = () => { provider.setConfig({ ...provider.getConfig(), clientId: keyInput.value.trim() }); };
+
+            const identity = provider.getSignedInIdentity();
+            if (identity) {
+                const row = document.createElement('div'); row.className = 'sutra-cloud-account-row';
+                const span = document.createElement('span'); span.textContent = `Connected — ${identity}`;
+                const out = document.createElement('button'); out.type = 'button'; out.className = 'storage-btn'; out.textContent = 'Disconnect';
+                out.addEventListener('click', async () => {
+                    try { await provider.disconnect(); } catch (e) {}
+                    sutraCloudUiState.forceSetupRebuild = true; showToast(`${provider.displayName} disconnected.`); updateSutraCloudUi();
+                });
+                row.appendChild(span); row.appendChild(out); area.appendChild(row);
+            } else {
+                const connectBtn = document.createElement('button'); connectBtn.type = 'button'; connectBtn.className = 'storage-btn primary'; connectBtn.textContent = 'Connect';
+                connectBtn.addEventListener('click', async () => {
+                    persistKey();
+                    if (!keyInput.value.trim()) { statusEl.textContent = `Enter your ${keyLabel} first.`; statusEl.className = 'sutra-cloud-test-status is-err'; return; }
+                    statusEl.textContent = 'Opening provider sign-in…'; statusEl.className = 'sutra-cloud-test-status';
+                    try {
+                        const ok = await provider.connect();
+                        statusEl.textContent = ok ? 'Connected.' : 'Could not connect.';
+                        statusEl.className = `sutra-cloud-test-status ${ok ? 'is-ok' : 'is-err'}`;
+                        sutraCloudUiState.forceSetupRebuild = true; updateSutraCloudUi();
+                        if (ok) refreshSutraCloudBackupList();
+                    } catch (e) {
+                        statusEl.textContent = e.message || 'Connection failed.';
+                        statusEl.className = 'sutra-cloud-test-status is-err';
+                    }
+                });
+                actions.appendChild(connectBtn);
+            }
+
+            const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'storage-btn'; saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', () => { persistKey(); sutraCloudUiState.forceSetupRebuild = true; showToast(`${provider.displayName} settings saved.`); updateSutraCloudUi(); });
+            actions.appendChild(saveBtn);
+
+            const clearBtn = document.createElement('button'); clearBtn.type = 'button'; clearBtn.className = 'storage-btn'; clearBtn.textContent = 'Clear';
+            clearBtn.addEventListener('click', async () => {
+                try { await provider.disconnect(); } catch (e) {}
+                provider.clearConfig();
+                sutraCloudUiState.forceSetupRebuild = true; showToast(`${provider.displayName} settings cleared.`); updateSutraCloudUi();
+            });
+            actions.appendChild(clearBtn);
+
+            area.appendChild(actions);
+            area.appendChild(statusEl);
+        }
+
+        function buildSupabaseProviderSetup(area) {
+            const cfg = getSutraCloudConfig();
+            const cspOk = sutraCloudOriginAllowedFor(cfg.url);
+            if (cfg.configured && cspOk && isSutraCloudSignedIn()) {
+                const rowEl = document.createElement('div'); rowEl.className = 'sutra-cloud-account-row';
+                const span = document.createElement('span'); span.textContent = `Signed in as ${(sutraCloudRuntime.user && sutraCloudRuntime.user.email) || 'your account'}`;
+                const out = document.createElement('button'); out.type = 'button'; out.className = 'storage-btn'; out.textContent = 'Sign out';
+                out.addEventListener('click', () => { sutraCloudSignOut(); sutraCloudUiState.forceSetupRebuild = true; updateSutraCloudUi(); });
+                rowEl.appendChild(span); rowEl.appendChild(out); area.appendChild(rowEl);
+                return;
+            }
+            if (cfg.configured && cspOk && !isSutraCloudSignedIn()) {
+                const help = document.createElement('p'); help.className = 'sutra-cloud-help'; help.textContent = 'Sign in with your email — we send a 6-digit code, no password to remember.'; area.appendChild(help);
+                const emailEl = sutraCloudField({ key: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com', autocomplete: 'email' }); area.appendChild(emailEl);
+                const emailInput = emailEl.querySelector('input');
+                const codeWrap = document.createElement('div'); codeWrap.className = 'sutra-cloud-field'; codeWrap.hidden = true;
+                const codeLabel = document.createElement('span'); codeLabel.textContent = 'Enter the code from your email'; codeWrap.appendChild(codeLabel);
+                const codeInput = document.createElement('input'); codeInput.className = 'modal-input'; codeInput.type = 'text'; codeInput.inputMode = 'numeric'; codeInput.autocomplete = 'one-time-code'; codeInput.placeholder = '123456'; codeWrap.appendChild(codeInput);
+                const verifyBtn = document.createElement('button'); verifyBtn.type = 'button'; verifyBtn.className = 'storage-btn primary'; verifyBtn.textContent = 'Verify & sign in'; codeWrap.appendChild(verifyBtn);
+                const sendBtn = document.createElement('button'); sendBtn.type = 'button'; sendBtn.className = 'storage-btn primary'; sendBtn.textContent = 'Send code';
+                sendBtn.addEventListener('click', async () => {
+                    try { await sutraCloudSendOtp(emailInput.value); sutraCloudUiState.pendingEmail = emailInput.value.trim(); codeWrap.hidden = false; showToast('Check your email for a 6-digit code.'); }
+                    catch (e) { showToast(e.message || 'Could not send the code.'); }
+                });
+                verifyBtn.addEventListener('click', async () => {
+                    try { await sutraCloudVerifyOtp(sutraCloudUiState.pendingEmail, codeInput.value); showToast('Signed in to Sutra Cloud.'); sutraCloudUiState.forceSetupRebuild = true; updateSutraCloudUi(); refreshSutraCloudBackupList(); }
+                    catch (e) { showToast(e.message || 'That code did not work.'); }
+                });
+                area.appendChild(sendBtn); area.appendChild(codeWrap);
+                return;
+            }
+            // Not configured (or CSP-blocked) → Bring-Your-Own Supabase config form.
+            const backend = loadSutraCloudBackend();
+            buildSutraCloudInstructions(area, getSutraCloudProviderById('supabase'));
+            const urlEl = sutraCloudField({ key: 'url', label: 'Supabase project URL', type: 'url', placeholder: 'https://your-ref.supabase.co', value: backend.customSupabaseUrl || '' }); area.appendChild(urlEl);
+            const keyEl = sutraCloudField({ key: 'anon', label: 'Supabase anon (public) key', placeholder: 'public anon key — never the service_role key', value: backend.customSupabaseAnonKey || '' }); area.appendChild(keyEl);
+            const actions = document.createElement('div'); actions.className = 'sutra-cloud-backend-actions';
+            const statusEl = document.createElement('p'); statusEl.className = 'sutra-cloud-test-status'; statusEl.setAttribute('role', 'status');
+            const testBtn = document.createElement('button'); testBtn.type = 'button'; testBtn.className = 'storage-btn'; testBtn.textContent = 'Test connection';
+            testBtn.addEventListener('click', async () => {
+                statusEl.textContent = 'Testing…'; statusEl.className = 'sutra-cloud-test-status';
+                const res = await sutraCloudTestConnection(urlEl.querySelector('input').value, keyEl.querySelector('input').value);
+                statusEl.textContent = res.message; statusEl.className = `sutra-cloud-test-status ${res.ok ? 'is-ok' : 'is-err'}`;
+            });
+            const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'storage-btn primary'; saveBtn.textContent = 'Save Supabase project';
+            saveBtn.addEventListener('click', async () => {
+                try {
+                    await switchSutraCloudBackend({ mode: 'custom', customSupabaseUrl: urlEl.querySelector('input').value, customSupabaseAnonKey: keyEl.querySelector('input').value });
+                    sutraCloudUiState.forceSetupRebuild = true; updateSutraCloudUi();
+                } catch (e) { showToast(e.message || 'Could not save Supabase project.'); }
+            });
+            // Link to the repo on GitHub, not the in-repo path: supabase/ is
+            // excluded from the production deploy artifact, so a relative
+            // 'supabase/README.md' href 404s on the hosted build.
+            const guide = document.createElement('a'); guide.className = 'sutra-cloud-link'; guide.href = 'https://github.com/tanujranjith/Sutra/blob/main/supabase/README.md'; guide.target = '_blank'; guide.rel = 'noopener noreferrer'; guide.textContent = 'Setup guide';
+            actions.appendChild(testBtn); actions.appendChild(saveBtn); actions.appendChild(guide);
+            area.appendChild(actions); area.appendChild(statusEl);
+        }
+
+        function selectSutraCloudProvider(id) {
+            const current = getActiveSutraCloudProvider();
+            if (current && current.id === id) { sutraCloudUiState.forceSetupRebuild = true; updateSutraCloudUi(); return; }
+            const connected = current && current.getSignedInIdentity && current.getSignedInIdentity();
+            if (connected) {
+                sutraCloudUiState.pendingProviderSwitch = id;
+                sutraCloudSetHidden('sutraCloudSwitchConfirm', false);
+                return;
+            }
+            switchSutraCloudProvider(id);
         }
 
         function buildSutraCloudRow(row) {
@@ -46942,7 +49554,11 @@ function getActiveEditor() {
             title.textContent = row.label || 'Backup';
             const sub = document.createElement('div');
             sub.className = 'sutra-cloud-backup-sub';
-            sub.textContent = `${formatSutraDriveSyncDate(row.created_at)} · ${formatSutraCloudSize(row.size_bytes)}`;
+            // Adapter rows are normalized to camelCase (createdAt/sizeBytes); keep a
+            // snake_case fallback for any provider that returns raw index rows.
+            const createdAt = row.createdAt || row.created_at;
+            const sizeBytes = row.sizeBytes != null ? row.sizeBytes : row.size_bytes;
+            sub.textContent = `${formatSutraDriveSyncDate(createdAt)} · ${formatSutraCloudSize(sizeBytes)}`;
             info.appendChild(title);
             info.appendChild(sub);
             const actions = document.createElement('div');
@@ -47018,7 +49634,11 @@ function getActiveEditor() {
             const list = document.getElementById('sutraCloudBackupList');
             if (!list) return;
             list.textContent = '';
-            if (!isSutraCloudSignedIn()) return;
+            // Gate on provider-agnostic readiness, not the Supabase-only
+            // isSutraCloudSignedIn(): WebDAV / Custom HTTP become ready via saved
+            // credentials (no "session"), and would otherwise never list backups.
+            const provider = getActiveSutraCloudProvider();
+            if (!provider || !provider.hasBackupList || !provider.getSetupStatus().ready) return;
             const loading = document.createElement('div');
             loading.className = 'sutra-cloud-empty';
             loading.textContent = 'Loading backups…';
@@ -47050,18 +49670,14 @@ function getActiveEditor() {
             if (!modal) return;
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
-            // Reflect any saved custom backend config in the advanced form (without
-            // clobbering anything the user is mid-typing).
-            const backend = loadSutraCloudBackend();
-            const urlEl = document.getElementById('sutraCloudCustomUrl');
-            const keyEl = document.getElementById('sutraCloudCustomKey');
-            if (urlEl && !urlEl.value) urlEl.value = backend.customSupabaseUrl || '';
-            if (keyEl && !keyEl.value) keyEl.value = backend.customSupabaseAnonKey || '';
+            sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state
             sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
+            sutraCloudSetHidden('sutraCloudManage', true);
             modal.classList.add('active');
             try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
             updateSutraCloudUi();
-            if (isSutraCloudSignedIn()) refreshSutraCloudBackupList();
+            const provider = getActiveSutraCloudProvider();
+            if (provider && provider.hasBackupList && provider.getSetupStatus().ready) refreshSutraCloudBackupList();
         }
 
         function closeSutraCloudModal() {
@@ -47071,6 +49687,21 @@ function getActiveEditor() {
             try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
         }
 
+        // Opens the in-app Help & Docs page and jumps to the Sutra Cloud section.
+        function openSutraCloudHelpDocs() {
+            try {
+                const help = (appData.pages || []).find(p => p && (p.builtInId === 'help-docs' || p.systemRole === HELP_PAGE_SYSTEM_ROLE));
+                if (help && typeof loadPage === 'function') {
+                    closeSutraCloudModal();
+                    if (typeof setActiveView === 'function') setActiveView('notes');
+                    loadPage(help.id);
+                    setTimeout(() => { try { const a = document.getElementById('sutra-cloud'); if (a && a.scrollIntoView) a.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {} }, 350);
+                    return;
+                }
+            } catch (error) { /* fall through to a hint */ }
+            showToast('Open “Help & Docs” from the sidebar, then see the Sutra Cloud section.');
+        }
+
         function bindSutraCloudUi() {
             if (sutraCloudUiBound) return;
             sutraCloudUiBound = true;
@@ -47078,52 +49709,34 @@ function getActiveEditor() {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener(event, handler);
             };
-            on('sutraCloudSendCodeBtn', 'click', async () => {
-                const email = (document.getElementById('sutraCloudEmailInput') || {}).value || '';
-                try {
-                    sutraCloudRuntime.busy = true; updateSutraCloudUi();
-                    await sutraCloudSendOtp(email);
-                    sutraCloudUiState.awaitingCode = true;
-                    sutraCloudUiState.pendingEmail = String(email).trim();
-                    showToast('Check your email for a 6-digit code.');
-                } catch (error) {
-                    showToast(error.message || 'Could not send the code.');
-                } finally {
-                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
-                }
-            });
-            on('sutraCloudVerifyBtn', 'click', async () => {
-                const code = (document.getElementById('sutraCloudCodeInput') || {}).value || '';
-                try {
-                    sutraCloudRuntime.busy = true; updateSutraCloudUi();
-                    await sutraCloudVerifyOtp(sutraCloudUiState.pendingEmail, code);
-                    sutraCloudUiState.awaitingCode = false;
-                    showToast('Signed in to Sutra Cloud.');
-                    updateSutraCloudUi();
-                    refreshSutraCloudBackupList();
-                } catch (error) {
-                    showToast(error.message || 'That code did not work.');
-                } finally {
-                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
-                }
-            });
-            on('sutraCloudSignOutBtn', 'click', () => { sutraCloudSignOut(); });
             on('sutraCloudBackupNowBtn', 'click', async () => {
-                try { await sutraCloudBackupNow(); refreshSutraCloudBackupList(); }
+                try { await sutraCloudBackupNow(); const p = getActiveSutraCloudProvider(); if (p && p.hasBackupList) { sutraCloudSetHidden('sutraCloudManage', false); refreshSutraCloudBackupList(); } }
                 catch (error) { /* toast already shown */ }
+            });
+            on('sutraCloudRestoreBtn', 'click', () => {
+                const provider = getActiveSutraCloudProvider();
+                if (provider && !provider.hasBackupList) { if (typeof importFromFile === 'function') importFromFile(); return; }
+                sutraCloudSetHidden('sutraCloudManage', false);
+                refreshSutraCloudBackupList();
+            });
+            on('sutraCloudManageBtn', 'click', () => {
+                const mgr = document.getElementById('sutraCloudManage');
+                const willShow = mgr && mgr.hidden;
+                sutraCloudSetHidden('sutraCloudManage', !willShow);
+                if (willShow) refreshSutraCloudBackupList();
             });
             on('sutraCloudRefreshBtn', 'click', () => refreshSutraCloudBackupList());
             on('sutraCloudAutoToggle', 'change', async (event) => {
                 const meta = loadSutraCloudMeta();
+                const provider = getActiveSutraCloudProvider();
                 const enabling = !!(event.target && event.target.checked);
                 if (enabling) {
-                    if (!isSutraCloudSignedIn()) {
+                    if (!provider || !provider.getSetupStatus().ready) {
                         if (event.target) event.target.checked = false;
-                        showToast('Sign in first to enable auto-backup.');
+                        showToast('Connect a destination first to enable auto-backup.');
                         return;
                     }
                     // Unattended backups need the password cached for this session.
-                    // Do one backup now (which prompts + caches it) to turn auto on.
                     if (!sutraCloudRuntime.backupPassphrase) {
                         showToast('Create one backup to set your password — then auto-backup runs on its own.');
                         const res = await sutraCloudBackupNow().catch(() => null);
@@ -47143,84 +49756,18 @@ function getActiveEditor() {
                 meta.autoBackup.frequency = (event.target && event.target.value) || 'daily';
                 persistSutraCloudMeta();
             });
-
-            // ---- Storage backend (Official vs Bring-Your-Own Supabase) ----
-            let pendingSwitch = null;
-            const showSwitch = (target) => { pendingSwitch = target; sutraCloudSetHidden('sutraCloudSwitchConfirm', false); };
-            const readCustomInputs = () => ({
-                url: ((document.getElementById('sutraCloudCustomUrl') || {}).value || '').trim(),
-                key: ((document.getElementById('sutraCloudCustomKey') || {}).value || '').trim()
-            });
-            const proposeCustomSwitch = () => {
-                const { url, key } = readCustomInputs();
-                const backend = loadSutraCloudBackend();
-                const effUrl = url || backend.customSupabaseUrl || '';
-                const effKey = key || backend.customSupabaseAnonKey || '';
-                if (!isValidSupabaseUrl(effUrl) || !effKey) {
-                    const adv = document.getElementById('sutraCloudAdvanced'); if (adv) adv.open = true;
-                    showToast('Enter your Supabase URL and anon key, then Test connection.');
-                    return;
-                }
-                if (looksLikeServiceRoleKey(effKey)) {
-                    showToast('That looks like a service_role / secret key. Use the public anon key only.');
-                    return;
-                }
-                showSwitch({ mode: 'custom', customSupabaseUrl: effUrl, customSupabaseAnonKey: effKey });
-            };
-            on('sutraCloudBackendOfficial', 'change', (event) => {
-                if (!event.target.checked) return;
-                if (getSutraCloudConfig().mode === 'official') return;
-                showSwitch({ mode: 'official' });
-            });
-            on('sutraCloudBackendCustom', 'change', (event) => {
-                if (!event.target.checked) return;
-                if (getSutraCloudConfig().mode === 'custom') return;
-                const adv = document.getElementById('sutraCloudAdvanced');
-                if (adv) adv.open = true;
-                const { url, key } = readCustomInputs();
-                const backend = loadSutraCloudBackend();
-                const hasConfig = isValidSupabaseUrl(url || backend.customSupabaseUrl) && (key || backend.customSupabaseAnonKey);
-                if (hasConfig) {
-                    proposeCustomSwitch();   // ready to go → confirm the switch
-                } else {
-                    // Just reveal the form; the user applies it via "Save & use this backend".
-                    const urlEl = document.getElementById('sutraCloudCustomUrl');
-                    if (urlEl) { try { urlEl.focus(); } catch (error) { /* noop */ } }
-                }
-            });
-            on('sutraCloudUseCustomBtn', 'click', () => proposeCustomSwitch());
-            on('sutraCloudUseOfficialBtn', 'click', () => showSwitch({ mode: 'official' }));
-            on('sutraCloudTestBtn', 'click', async () => {
-                const { url, key } = readCustomInputs();
-                const statusEl = document.getElementById('sutraCloudTestStatus');
-                if (statusEl) { statusEl.textContent = 'Testing…'; statusEl.className = 'sutra-cloud-test-status'; }
-                sutraCloudRuntime.busy = true; updateSutraCloudUi();
-                try {
-                    const res = await sutraCloudTestConnection(url, key);
-                    if (statusEl) { statusEl.textContent = res.message; statusEl.className = `sutra-cloud-test-status ${res.ok ? 'is-ok' : 'is-err'}`; }
-                } finally {
-                    sutraCloudRuntime.busy = false; updateSutraCloudUi();
-                }
-            });
             on('sutraCloudSwitchConfirmYes', 'click', async () => {
-                const target = pendingSwitch;
-                pendingSwitch = null;
+                const id = sutraCloudUiState.pendingProviderSwitch;
+                sutraCloudUiState.pendingProviderSwitch = null;
                 sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
-                if (!target) return;
-                try {
-                    await switchSutraCloudBackend(target);
-                    showToast(target.mode === 'custom'
-                        ? 'Switched to your Supabase project. Sign in to continue.'
-                        : 'Switched to Official Sutra Cloud. Sign in to continue.');
-                } catch (error) {
-                    showToast(error.message || 'Could not switch backend.');
-                    updateSutraCloudUi();
-                }
+                if (!id) return;
+                try { await switchSutraCloudProvider(id); showToast('Switched backup destination. Connect it to continue.'); }
+                catch (error) { showToast(error.message || 'Could not switch destination.'); updateSutraCloudUi(); }
             });
             on('sutraCloudSwitchConfirmNo', 'click', () => {
-                pendingSwitch = null;
+                sutraCloudUiState.pendingProviderSwitch = null;
                 sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
-                updateSutraCloudUi(); // re-sync radios to the still-active backend
+                updateSutraCloudUi();
             });
         }
 
@@ -47243,6 +49790,7 @@ function getActiveEditor() {
             signOut: sutraCloudSignOut,
             backupNow: sutraCloudBackupNow,
             listBackups: sutraCloudListBackups,
+            refreshBackupList: refreshSutraCloudBackupList,   // test/automation seam for the manage-list render
             restore: sutraCloudRestore,
             deleteBackup: sutraCloudDeleteBackup,
             open: openSutraCloudModal,
@@ -47254,7 +49802,26 @@ function getActiveEditor() {
             looksLikeServiceRoleKey,
             originAllowedByCsp: sutraCloudOriginAllowedByCsp,
             testConnection: sutraCloudTestConnection,
-            switchBackend: switchSutraCloudBackend
+            switchBackend: switchSutraCloudBackend,
+            // Provider-agnostic API
+            listProviders: () => getSutraCloudProviders().map(p => ({
+                id: p.id, displayName: p.displayName, category: p.category,
+                description: p.description, requiresOAuth: p.requiresOAuth,
+                requiresCustomCredentials: p.requiresCustomCredentials,
+                supportsAutoBackup: p.supportsAutoBackup, hasBackupList: p.hasBackupList,
+                cspNote: p.cspNote, status: p.getSetupStatus(), identity: p.getSignedInIdentity()
+            })),
+            getActiveProviderId: getSutraCloudActiveProviderId,
+            getActiveProvider: () => { const p = getActiveSutraCloudProvider(); return p ? { id: p.id, displayName: p.displayName, category: p.category, status: p.getSetupStatus(), identity: p.getSignedInIdentity() } : null; },
+            switchProvider: switchSutraCloudProvider,
+            connectProvider: async (id) => { const p = getSutraCloudProviderById(id); return p && p.connect ? p.connect() : false; },
+            disconnectProvider: async (id) => { const p = getSutraCloudProviderById(id); if (p && p.disconnect) await p.disconnect(); },
+            saveProviderConfig: (id, cfg) => { saveSutraCloudProviderConfig(id, cfg); return loadSutraCloudProviderConfig(id); },
+            getProviderConfig: (id) => ({ ...loadSutraCloudProviderConfig(id) }),
+            clearProviderConfig: clearSutraCloudProviderConfig,
+            testProvider: async (id, input) => { const p = getSutraCloudProviderById(id); return p ? p.testConnection(input) : { ok: false, message: 'Unknown provider.' }; },
+            isValidHttpsUrl,
+            looksLikeDangerousSecret
         };
 
         function normalizeAtelierAssetFileName(fileName) {
@@ -47978,35 +50545,87 @@ function getActiveEditor() {
                 .replace(/\r?\n/g, '\\par ');
         }
 
+        // Word-compatible HTML document. The MSO conditional block + the named
+        // `@page Section1` rule + the `div.Section1` wrapper make Word (and Google
+        // Docs) lay the content out on a full Letter page with real 1-inch
+        // margins. The previous version used `max-width:860px;margin:0 auto`,
+        // which Word rendered as a narrow centred column — the cause of the
+        // "text on half the page" export bug. No library and no network needed.
         function buildWordExportHtml(title, bodyHtml) {
+            const safeTitle = escapeHtml(String(title || 'Untitled Note'));
             return `<!doctype html>
-<html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(String(title || 'Untitled Note'))}</title>
+<title>${safeTitle}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
 <style>
-body{font-family:Calibri,Arial,sans-serif;line-height:1.55;color:#111;padding:36px;max-width:860px;margin:0 auto;}
-h1{font-size:30px;margin:0 0 18px;}
+@page Section1 { size:8.5in 11.0in; margin:1.0in 1.0in 1.0in 1.0in; }
+div.Section1 { page:Section1; }
+body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;color:#111;margin:0;}
+h1{font-size:24pt;margin:0 0 14pt;}
+h2{font-size:18pt;margin:18pt 0 8pt;}
+h3{font-size:14pt;margin:14pt 0 6pt;}
+p{margin:0 0 10pt;}
 table{border-collapse:collapse;width:100%;}
-th,td{border:1px solid #d8d8d8;padding:8px;vertical-align:top;}
+th,td{border:1px solid #d8d8d8;padding:6pt;vertical-align:top;}
 img{max-width:100%;height:auto;}
-ol{list-style-type:decimal;padding-left:28px;}
+ol{list-style-type:decimal;padding-left:32px;}
 ol ol{list-style-type:lower-alpha;}
 ol ol ol{list-style-type:lower-roman;}
-ol ol ol ol{list-style-type:decimal;}
-ul{padding-left:28px;}
-.export-media-wrapper{margin:14px 0;max-width:100%;page-break-inside:avoid;break-inside:avoid;}
+ul{padding-left:32px;}
+.export-media-wrapper{margin:10pt 0;max-width:100%;}
 code,pre{font-family:Consolas,Menlo,monospace;}
-pre{white-space:pre-wrap;background:#f6f6f6;padding:10px;border-radius:6px;}
-blockquote{border-left:4px solid #ccc;padding-left:10px;color:#444;}
-.atelier-page-break{position:relative;display:block;height:22px;margin:24px 0;background:linear-gradient(to bottom,transparent calc(50% - 0.5px),#d6d9e0 calc(50% - 0.5px),#d6d9e0 calc(50% + 0.5px),transparent calc(50% + 0.5px));break-before:page;page-break-before:always;}
-.atelier-page-break::before{content:'Page Break';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:2px 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#8a8f98;font-family:-apple-system,Segoe UI,sans-serif;}
-@media print{.atelier-page-break{height:0;margin:0;background:none;}.atelier-page-break::before{display:none;}}
+pre{white-space:pre-wrap;background:#f6f6f6;padding:8pt;border:1px solid #e5e7eb;}
+blockquote{border-left:3px solid #ccc;padding-left:10px;color:#444;margin:10pt 0;}
+.atelier-page-break{page-break-before:always;height:0;margin:0;border:none;background:none;}
+.atelier-page-break::before{display:none;}
 </style>
 </head>
 <body>
-<h1>${escapeHtml(String(title || 'Untitled Note'))}</h1>
+<div class="Section1">
+<h1>${safeTitle}</h1>
 ${String(bodyHtml || '<p>(No content)</p>')}
+</div>
+</body>
+</html>`;
+        }
+
+        // Clean, self-contained HTML document for the "HTML" export format. Kept
+        // separate from the Word export so the .html file is plain semantic HTML
+        // (no MSO directives) — readable in any browser and full-page when printed.
+        function buildStandaloneHtmlExport(title, bodyHtml) {
+            const safeTitle = escapeHtml(String(title || 'Untitled Note'));
+            return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${safeTitle}</title>
+<style>
+body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.6;color:#1a1a1a;background:#fff;margin:0;padding:48px 24px;}
+main{max-width:820px;margin:0 auto;}
+h1{font-size:2rem;margin:0 0 1rem;line-height:1.2;}
+h2{font-size:1.5rem;margin:1.6rem 0 .6rem;}
+h3{font-size:1.2rem;margin:1.2rem 0 .5rem;}
+p{margin:0 0 1rem;}
+img,video,canvas,svg{max-width:100%;height:auto;}
+table{border-collapse:collapse;width:100%;margin:1rem 0;}
+th,td{border:1px solid #d8dce3;padding:8px;vertical-align:top;text-align:left;}
+pre{background:#f5f6f8;border:1px solid #e5e7eb;border-radius:8px;padding:12px;overflow:auto;}
+code{font-family:Consolas,Menlo,monospace;}
+blockquote{border-left:4px solid #cbd5e1;margin:1rem 0;padding:.2rem 0 .2rem 1rem;color:#475569;}
+ul,ol{padding-left:1.6rem;}
+hr,.atelier-page-break{border:none;border-top:1px solid #d6d9e0;margin:1.5rem 0;height:0;}
+.atelier-page-break::before{display:none;}
+@media print{@page{margin:0.7in;}body{padding:0;}main{max-width:none;}}
+</style>
+</head>
+<body>
+<main>
+<h1>${safeTitle}</h1>
+${String(bodyHtml || '<p>(No content)</p>')}
+</main>
 </body>
 </html>`;
         }
@@ -48028,8 +50647,7 @@ ${String(bodyHtml || '<p>(No content)</p>')}
             return `
 @page { size: letter; margin: 0.55in; }
 html,body{margin:0;padding:0;background:#ffffff;color:#111827;font-family:Georgia,"Times New Roman",serif;}
-body{padding:0.3in 0.28in;}
-.pdf-export-sheet{max-width:7.5in;margin:0 auto;}
+.pdf-export-sheet{width:100%;max-width:none;margin:0;}
 .pdf-export-header{margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid #d6d9e0;}
 .pdf-export-header h1{margin:0;font-size:28px;line-height:1.2;letter-spacing:-0.02em;}
 .pdf-export-content{font-size:12pt;line-height:1.62;}
@@ -48098,34 +50716,175 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 </html>`;
         }
 
+        // Deterministic, fully-local HTML -> Markdown converter. Replaces the old
+        // CDN-loaded Turndown dependency so Markdown export works offline (and
+        // stops silently degrading to a wall of plain text when the network /
+        // CDN is unavailable). Covers the block types the Notes editor produces:
+        // headings, paragraphs, nested ordered/unordered lists, blockquotes,
+        // code blocks, tables, images, horizontal rules and page breaks.
+        function htmlToMarkdownForExport(html) {
+            const root = document.createElement('div');
+            root.innerHTML = String(html || ''); // sutra-allow-html: parse-only into a detached element to walk for export; never inserted into the live DOM
+            if (typeof stripEditorOnlyNodesForExport === 'function') stripEditorOnlyNodesForExport(root);
+            const out = [];
+
+            const inlineText = (node) => {
+                let s = '';
+                node.childNodes.forEach((c) => {
+                    if (c.nodeType === 3) { s += c.textContent.replace(/\s+/g, ' '); return; }
+                    if (c.nodeType !== 1) return;
+                    const tag = c.tagName.toLowerCase();
+                    if (tag === 'br') { s += '  \n'; return; }
+                    if (tag === 'img') { s += `![${c.getAttribute('alt') || 'image'}](${c.getAttribute('src') || ''})`; return; }
+                    const inner = inlineText(c);
+                    if (tag === 'strong' || tag === 'b') s += `**${inner}**`;
+                    else if (tag === 'em' || tag === 'i') s += `*${inner}*`;
+                    else if (tag === 'del' || tag === 's' || tag === 'strike') s += `~~${inner}~~`;
+                    else if (tag === 'code') s += '`' + c.textContent + '`';
+                    else if (tag === 'a') { const h = c.getAttribute('href') || ''; s += h ? `[${inner}](${h})` : inner; }
+                    else s += inner;
+                });
+                return s;
+            };
+
+            const renderList = (listEl, depth, ordered) => {
+                let idx = 1;
+                Array.from(listEl.children).forEach((li) => {
+                    if (!li.tagName || li.tagName.toLowerCase() !== 'li') return;
+                    const liClone = li.cloneNode(true);
+                    const nested = [];
+                    Array.from(liClone.children).forEach((ch) => {
+                        const t = ch.tagName && ch.tagName.toLowerCase();
+                        if (t === 'ul' || t === 'ol') { nested.push(ch); ch.remove(); }
+                    });
+                    const marker = ordered ? `${idx++}. ` : '- ';
+                    out.push('    '.repeat(depth) + marker + inlineText(liClone).trim());
+                    nested.forEach((n) => renderList(n, depth + 1, n.tagName.toLowerCase() === 'ol'));
+                });
+            };
+
+            const tableMd = (table) => {
+                const rows = Array.from(table.querySelectorAll('tr'));
+                if (!rows.length) return;
+                const cellText = (tr) => Array.from(tr.children).map((td) => inlineText(td).trim().replace(/\|/g, '\\|'));
+                const header = cellText(rows[0]);
+                out.push('| ' + header.join(' | ') + ' |');
+                out.push('| ' + header.map(() => '---').join(' | ') + ' |');
+                rows.slice(1).forEach((tr) => out.push('| ' + cellText(tr).join(' | ') + ' |'));
+            };
+
+            const walk = (node) => {
+                node.childNodes.forEach((c) => {
+                    if (c.nodeType === 3) { const t = c.textContent.trim(); if (t) { out.push(t, ''); } return; }
+                    if (c.nodeType !== 1) return;
+                    const tag = c.tagName.toLowerCase();
+                    const cls = typeof c.className === 'string' ? c.className : '';
+                    if (/^h[1-6]$/.test(tag)) { out.push('#'.repeat(Number(tag[1])) + ' ' + inlineText(c).trim(), ''); }
+                    else if (tag === 'p') { out.push(inlineText(c).trim(), ''); }
+                    else if (tag === 'ul') { renderList(c, 0, false); out.push(''); }
+                    else if (tag === 'ol') { renderList(c, 0, true); out.push(''); }
+                    else if (tag === 'blockquote') { inlineText(c).trim().split('\n').forEach((l) => out.push('> ' + l.trim())); out.push(''); }
+                    else if (tag === 'pre') { out.push('```', c.textContent.replace(/\n+$/, ''), '```', ''); }
+                    else if (tag === 'hr' || /atelier-page-break/.test(cls)) { out.push('---', ''); }
+                    else if (tag === 'table') { tableMd(c); out.push(''); }
+                    else if (tag === 'img') { out.push(`![${c.getAttribute('alt') || 'image'}](${c.getAttribute('src') || ''})`, ''); }
+                    else if (tag === 'br') { /* standalone break between blocks — ignore */ }
+                    else { walk(c); }
+                });
+            };
+
+            walk(root);
+            return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+        }
+
         async function convertHtmlToMarkdownForExport(html) {
             try {
-                const TurndownService = await loadExternalScript('https://unpkg.com/turndown/dist/turndown.js', 'TurndownService');
-                if (TurndownService) {
-                    const service = new TurndownService({
-                        headingStyle: 'atx',
-                        codeBlockStyle: 'fenced',
-                        emDelimiter: '*',
-                        bulletListMarker: '-'
-                    });
-                    // Turndown drops empty block elements before custom rules
-                    // get a chance to match, so seed each page-break with a
-                    // unique marker first, then convert that marker to ---.
-                    // Use a marker built from letters only — Turndown escapes
-                    // underscores/asterisks inside paragraph text.
-                    const PAGE_BREAK_MARKER = 'ATELIERxPAGEBREAKxMARKERxZZ';
-                    let prepared = String(html || '').replace(
-                        /<div\b[^>]*class="[^"]*\batelier-page-break\b[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
-                        `<p>${PAGE_BREAK_MARKER}</p>`
-                    );
-                    let md = service.turndown(prepared);
-                    md = md.replace(new RegExp(PAGE_BREAK_MARKER, 'g'), '---');
-                    return md;
-                }
+                return htmlToMarkdownForExport(html);
             } catch (error) {
                 console.warn('Markdown export fallback:', error);
+                return convertHtmlToPlainTextForExport(html);
             }
-            return convertHtmlToPlainTextForExport(html);
+        }
+
+        function rtfEscapeText(value) {
+            const str = String(value || '');
+            let out = '';
+            for (let i = 0; i < str.length; i++) {
+                const ch = str[i];
+                const code = str.charCodeAt(i);
+                if (ch === '\\') out += '\\\\';
+                else if (ch === '{') out += '\\{';
+                else if (ch === '}') out += '\\}';
+                else if (ch === '\t') out += '\\tab ';
+                else if (code > 127) out += '\\u' + code + '?';
+                else out += ch;
+            }
+            return out;
+        }
+
+        // Structure-preserving HTML -> RTF. The previous RTF export emitted only
+        // `note.text` (plain text), silently dropping every heading, list, table
+        // and emphasis. This walks the DOM and emits RTF control words so the
+        // exported .rtf keeps headings, bold/italic/underline, lists, blockquotes,
+        // code and basic tables.
+        function buildRtfFromHtml(title, html) {
+            const root = document.createElement('div');
+            root.innerHTML = String(html || ''); // sutra-allow-html: parse-only into a detached element to walk for export; never inserted into the live DOM
+            if (typeof stripEditorOnlyNodesForExport === 'function') stripEditorOnlyNodesForExport(root);
+            const parts = [];
+
+            const inlineRtf = (node) => {
+                let s = '';
+                node.childNodes.forEach((c) => {
+                    if (c.nodeType === 3) { s += rtfEscapeText(c.textContent.replace(/\s+/g, ' ')); return; }
+                    if (c.nodeType !== 1) return;
+                    const tag = c.tagName.toLowerCase();
+                    if (tag === 'br') { s += '\\line '; return; }
+                    if (tag === 'img') { s += rtfEscapeText('[image]'); return; }
+                    const inner = inlineRtf(c);
+                    if (tag === 'strong' || tag === 'b') s += `{\\b ${inner}}`;
+                    else if (tag === 'em' || tag === 'i') s += `{\\i ${inner}}`;
+                    else if (tag === 'u') s += `{\\ul ${inner}}`;
+                    else if (tag === 'code') s += `{\\f1 ${inner}}`;
+                    else s += inner;
+                });
+                return s;
+            };
+
+            const headingSizes = { 1: 36, 2: 30, 3: 26, 4: 24, 5: 22, 6: 20 };
+            const walk = (node) => {
+                node.childNodes.forEach((c) => {
+                    if (c.nodeType === 3) { const t = c.textContent.trim(); if (t) parts.push(`${rtfEscapeText(t)}\\par`); return; }
+                    if (c.nodeType !== 1) return;
+                    const tag = c.tagName.toLowerCase();
+                    const cls = typeof c.className === 'string' ? c.className : '';
+                    if (/^h[1-6]$/.test(tag)) {
+                        parts.push(`{\\b\\fs${headingSizes[Number(tag[1])] || 24} ${inlineRtf(c)}}\\par\\par`);
+                    } else if (tag === 'p') { parts.push(`${inlineRtf(c)}\\par`); }
+                    else if (tag === 'ul' || tag === 'ol') {
+                        let i = 1;
+                        Array.from(c.children).forEach((li) => {
+                            if (!li.tagName || li.tagName.toLowerCase() !== 'li') return;
+                            const marker = tag === 'ol' ? `${i++}.` : '\\bullet';
+                            parts.push(`{\\tab ${marker} ${inlineRtf(li)}}\\par`);
+                        });
+                        parts.push('\\par');
+                    } else if (tag === 'blockquote') { parts.push(`{\\i ${inlineRtf(c)}}\\par`); }
+                    else if (tag === 'pre') { parts.push(`{\\f1 ${rtfEscapeText(c.textContent)}}\\par`); }
+                    else if (tag === 'hr' || /atelier-page-break/.test(cls)) { parts.push('\\par'); }
+                    else if (tag === 'table') {
+                        Array.from(c.querySelectorAll('tr')).forEach((tr) => {
+                            const cells = Array.from(tr.children).map((td) => inlineRtf(td)).join('\\tab ');
+                            parts.push(`${cells}\\par`);
+                        });
+                        parts.push('\\par');
+                    } else { walk(c); }
+                });
+            };
+
+            walk(root);
+            const titleRtf = `{\\b\\fs40 ${rtfEscapeText(String(title || 'Untitled Note'))}}\\par\\par`;
+            return `{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0 Calibri;}{\\f1 Consolas;}}\\fs22\n${titleRtf}${parts.join('\n')}}`;
         }
 
         function getCurrentNoteForDocumentExport() {
@@ -48252,80 +51011,37 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
 
             try {
-                if (format === 'docx') {
-                    try {
-                        const htmlDocx = await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.3.1/html-docx.js', 'htmlDocx');
-                        const blob = htmlDocx.asBlob(buildWordExportHtml(note.title, note.html));
-                        triggerBlobDownload(blob, `${note.baseName}.docx`);
-                        showExportToast('Current note exported as DOCX.', note.warnings);
-                    } catch (docxError) {
-                        console.warn('DOCX export fallback to DOC:', docxError);
-                        const docBlob = buildDocHtmlBlob(note);
-                        triggerBlobDownload(docBlob, `${note.baseName}.doc`);
-                        showExportToast(
-                            'DOCX converter unavailable in this browser session. Exported as Word (.doc) instead.',
-                            note.warnings
-                        );
-                    }
+                if (format === 'docx' || format === 'doc') {
+                    // Word-compatible HTML saved as .doc. Word and Google Docs open
+                    // this at full page width with real margins, it preserves rich
+                    // content (images, tables, colour) better than the old
+                    // html-docx-js OOXML converter, and it needs no library and no
+                    // network. A genuine .docx requires an OOXML zip; the .doc Word
+                    // HTML is the more faithful, fully-offline choice.
+                    const docBlob = buildDocHtmlBlob(note);
+                    triggerBlobDownload(docBlob, `${note.baseName}.doc`);
+                    showExportToast('Current note exported as Word (.doc).', note.warnings);
                     return;
                 }
 
                 if (format === 'pdf') {
+                    // Native browser print pipeline. This renders real, paginated,
+                    // selectable-text PDF that honours @page margins and works fully
+                    // offline. The old html2pdf path rasterised the page through
+                    // html2canvas, which mismatched the Letter width (the "text on
+                    // half the page" / blank-page bug) and required a CDN.
                     try {
-                        const html2pdf = await loadExternalScript(
-                            'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
-                            'html2pdf'
-                        );
-                        if (typeof html2pdf !== 'function') {
-                            throw new Error('html2pdf is unavailable');
-                        }
-                        // html2pdf clones DOM elements into its own absolute-positioned
-                        // container then captures that container with html2canvas.  Inline
-                        // styles on the source (position, width, z-index) are copied onto
-                        // the clone and can break the container layout (zero height, overflow
-                        // clipping).  Passing an HTML *string* instead lets html2pdf build
-                        // its own element sized to the PDF page — no cloning conflicts.
-                        var pdfBody = buildPdfExportBodyHtml(note.title, note.html);
-
-                        // Pre-load any non-inlined images so they are in the browser cache
-                        // when html2canvas renders the content a moment later.
-                        var preloadEl = document.createElement('div');
-                        preloadEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:816px;';
-                        preloadEl.setAttribute('aria-hidden', 'true');
-                        preloadEl.innerHTML = pdfBody;
-                        document.body.appendChild(preloadEl);
-                        try { await waitForContainerImages(preloadEl, 3600); } finally { preloadEl.remove(); }
-
-                        await html2pdf()
-                            .set({
-                                filename: `${note.baseName}.pdf`,
-                                margin: [12, 12, 12, 12],
-                                image: { type: 'jpeg', quality: 0.98 },
-                                html2canvas: {
-                                    scale: 2,
-                                    backgroundColor: '#ffffff',
-                                    useCORS: true,
-                                    allowTaint: false
-                                },
-                                jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' },
-                                pagebreak: { mode: ['css', 'legacy'] }
-                            })
-                            .from('<style>' + getPdfExportStyles() + '</style>' + pdfBody, 'string')
-                            .save();
-                        showExportToast('Current note exported as PDF.', note.warnings);
-                    } catch (pdfError) {
-                        console.warn('PDF direct-export fallback to print dialog:', pdfError);
                         openPrintWindowForPdf(note);
-                        showExportToast(
-                            `PDF direct download was unavailable. Opened a print-ready PDF view (${pdfError.message || 'unknown error'}).`,
-                            note.warnings
-                        );
+                        showExportToast('Opened a print-ready view — choose "Save as PDF" in the print dialog.', note.warnings);
+                    } catch (pdfError) {
+                        console.error('PDF export failed', pdfError);
+                        showToast(`PDF export failed: ${pdfError.message || 'print unavailable'}`);
                     }
                     return;
                 }
 
                 if (format === 'html') {
-                    const htmlBlob = new Blob([buildWordExportHtml(note.title, note.html)], { type: 'text/html;charset=utf-8' });
+                    const htmlBlob = new Blob([buildStandaloneHtmlExport(note.title, note.html)], { type: 'text/html;charset=utf-8' });
                     triggerBlobDownload(htmlBlob, `${note.baseName}.html`);
                     showExportToast('Current note exported as HTML.', note.warnings);
                     return;
@@ -48347,17 +51063,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
 
                 if (format === 'rtf') {
-                    const rtfContent = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Calibri;}}\\fs22 \\b ${escapeRtf(note.title)}\\b0\\par\\par ${escapeRtf(note.text)}}`;
+                    const rtfContent = buildRtfFromHtml(note.title, note.html);
                     const rtfBlob = new Blob([rtfContent], { type: 'application/rtf' });
                     triggerBlobDownload(rtfBlob, `${note.baseName}.rtf`);
                     showExportToast('Current note exported as RTF.', note.warnings);
-                    return;
-                }
-
-                if (format === 'doc') {
-                    const docBlob = buildDocHtmlBlob(note);
-                    triggerBlobDownload(docBlob, `${note.baseName}.doc`);
-                    showExportToast('Current note exported as DOC.', note.warnings);
                     return;
                 }
 
@@ -49024,7 +51733,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const workspace = data.workspace && typeof data.workspace === 'object' ? data.workspace : null;
             const pagesValue = Object.prototype.hasOwnProperty.call(data, 'pages') ? data.pages : (workspace && workspace.pages);
             if (!Array.isArray(pagesValue)) throw new Error('Workspace backup is missing a valid pages list.');
-            const arrayFields = ['spaces', 'tasks', 'taskOrder', 'timeBlocks', 'focusTemplates', 'cramSessions'];
+            const arrayFields = ['spaces', 'tasks', 'taskOrder', 'timeBlocks', 'focusTemplates', 'cramSessions', 'trash', 'focusSessions'];
             arrayFields.forEach(field => {
                 const value = Object.prototype.hasOwnProperty.call(data, field) ? data[field] : (workspace && workspace[field]);
                 if (value !== undefined && value !== null && !Array.isArray(value)) {
@@ -49289,6 +51998,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // will fall back to safe defaults so legacy imports stay green.
             const importedSpaces = data.spaces || (workspace && workspace.spaces) || null;
             const importedCramSessions = data.cramSessions || (workspace && workspace.cramSessions) || null;
+            const importedTrash = data.trash || (workspace && workspace.trash) || null;
+            const importedFocusSessions = data.focusSessions || (workspace && workspace.focusSessions) || null;
             const importedTestingHub = data.testingHub || (workspace && workspace.testingHub) || null;
             const importedFocusTemplates = data.focusTemplates || (workspace && workspace.focusTemplates) || null;
             const importedSplitPaneContexts = data.splitPaneContexts || (workspace && workspace.splitPaneContexts) || null;
@@ -49366,6 +52077,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // files won't crash or wipe these features.
             spaces = normalizeSpacesCollection(importedSpaces);
             cramSessions = Array.isArray(importedCramSessions) ? importedCramSessions : [];
+            trash = Array.isArray(importedTrash) ? importedTrash : [];
+            focusSessions = Array.isArray(importedFocusSessions) ? importedFocusSessions : [];
             testingHub = normalizeTestingHub(importedTestingHub);
             // Academic planning workspaces — older backups simply produce
             // safe defaults here, so legacy imports stay lossless and green.
@@ -49614,7 +52327,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     'collegeAppWorkspace', 'lifeWorkspace', 'businessWorkspace',
                     'apStudyWorkspace', 'homeworkWorkspace', 'reviewWorkspace',
                     'courseWorkspace', 'schoolSchedule', 'gradePlanner', 'semesterSetup',
-                    'cramSessions', 'testingHub', 'focusTemplates',
+                    'cramSessions', 'trash', 'focusSessions', 'testingHub', 'focusTemplates',
                     'splitPaneContexts', 'pinnedPages', 'notificationsState',
                     'assistantChatHistory', 'settings', 'ui', 'globalTheme',
                     'localStorageSnapshot', 'exportedAt'
@@ -49670,6 +52383,31 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             window.__sutraPublicBetaTestHooks = {
                 normalizePageIcon: (icon) => normalizePageIcon(icon),
+                // Document-export builders, exposed for the export-fidelity suite
+                // (tests/e2e/document-export.spec.mjs). They are pure string/blob
+                // builders — calling them does not trigger a download.
+                documentExport: {
+                    wordHtml: (title, html) => buildWordExportHtml(title || 'Untitled', html || ''),
+                    standaloneHtml: (title, html) => buildStandaloneHtmlExport(title || 'Untitled', html || ''),
+                    pdfPrintHtml: (title, html) => buildPdfPrintDocumentHtml(title || 'Untitled', html || ''),
+                    rtf: (title, html) => buildRtfFromHtml(title || 'Untitled', html || ''),
+                    markdown: (html) => convertHtmlToMarkdownForExport(html || ''),
+                    plainText: (html) => convertHtmlToPlainTextForExport(html || '')
+                },
+                getBacklinksForPage: (id) => getBacklinksForPage(id),
+                getRelatedNotes: (id, limit) => getRelatedNotes(id, limit),
+                renderMathBlocksIn: (el) => renderMathBlocksIn(el),
+                searchAll: (q) => (typeof globalSearchAll === 'function' ? globalSearchAll(q) : null),
+                getTrash: () => (Array.isArray(trash) ? trash.slice() : []),
+                restoreTrashItem: (id) => restoreTrashItem(id),
+                purgeTrashItem: (id) => purgeTrashItem(id),
+                createWorkspaceSnapshot: (label) => createWorkspaceSnapshot(label),
+                getWorkspaceSnapshots: () => getWorkspaceSnapshots(),
+                diffWorkspaceSnapshot: (id) => diffWorkspaceSnapshot(id),
+                deleteWorkspaceSnapshot: (id) => deleteWorkspaceSnapshot(id),
+                recordFocusSession: (rec) => recordFocusSession(rec),
+                getFocusSessions: () => (Array.isArray(focusSessions) ? focusSessions.slice() : []),
+                getFocusStatsBySubject: (days) => getFocusStatsBySubject(days),
                 injectMissingCourseAttachment() {
                     courseWorkspace = normalizeCourseWorkspace(courseWorkspace);
                     courseWorkspace.files = Array.isArray(courseWorkspace.files) ? courseWorkspace.files : [];
@@ -50154,6 +52892,156 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 console.warn('Pre-import safety snapshot failed', err);
                 return false;
             }
+        }
+
+        // ---- Whole-workspace snapshots (in-app restore points + diff) ----------
+        const WORKSPACE_SNAPSHOTS_KEY = 'sutra:workspaceSnapshots:v1';
+        const WORKSPACE_SNAPSHOT_CAP = 3;
+        const WORKSPACE_SNAPSHOT_MAX_BYTES = 2.5 * 1024 * 1024;
+
+        function buildWorkspaceSnapshotSummary(payload) {
+            payload = payload || {};
+            const n = (x) => (Array.isArray(x) ? x.length : 0);
+            const rv = payload.reviewWorkspace || {};
+            const cw = payload.courseWorkspace || {};
+            return {
+                pages: n(payload.pages),
+                tasks: n(payload.tasks),
+                timeBlocks: n(payload.timeBlocks),
+                reviewDecks: n(rv.decks),
+                reviewCards: n(rv.items),
+                courses: n(cw.courses),
+                apSubjects: n((payload.apStudyWorkspace || {}).subjects),
+                focusSessions: n(payload.focusSessions),
+                trash: n(payload.trash)
+            };
+        }
+        function getWorkspaceSnapshots() {
+            try {
+                const arr = (window.SutraSafeStorage && window.SutraSafeStorage.get) ? window.SutraSafeStorage.get(WORKSPACE_SNAPSHOTS_KEY) : null;
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) { return []; }
+        }
+        function saveWorkspaceSnapshots(list) {
+            try { if (window.SutraSafeStorage && window.SutraSafeStorage.set) return window.SutraSafeStorage.set(WORKSPACE_SNAPSHOTS_KEY, list); } catch (e) { /* nc */ }
+            return { ok: false };
+        }
+        function createWorkspaceSnapshot(label) {
+            try {
+                const payload = buildWorkspaceExportPayload({ mode: 'json', includeSensitiveSettings: false });
+                const json = JSON.stringify(payload);
+                if (json.length > WORKSPACE_SNAPSHOT_MAX_BYTES) {
+                    showToast('Workspace is too large for an in-app snapshot — use Settings → Data to export a .sutra backup.');
+                    return null;
+                }
+                const snap = { id: generateId(), label: String(label || 'Snapshot'), createdAt: new Date().toISOString(), summary: buildWorkspaceSnapshotSummary(payload), payload };
+                let list = getWorkspaceSnapshots();
+                list.unshift(snap);
+                if (list.length > WORKSPACE_SNAPSHOT_CAP) list = list.slice(0, WORKSPACE_SNAPSHOT_CAP);
+                const res = saveWorkspaceSnapshots(list);
+                if (res && res.ok === false) { showToast('Could not save snapshot (storage full). Export a .sutra backup instead.'); return null; }
+                return snap;
+            } catch (e) { console.warn('createWorkspaceSnapshot failed', e); return null; }
+        }
+        function deleteWorkspaceSnapshot(id) {
+            saveWorkspaceSnapshots(getWorkspaceSnapshots().filter(s => s && s.id !== id));
+        }
+        function diffWorkspaceSnapshot(id) {
+            const snap = getWorkspaceSnapshots().find(s => s && s.id === id);
+            if (!snap) return null;
+            const current = buildWorkspaceSnapshotSummary(buildWorkspaceExportPayload({ mode: 'json', includeSensitiveSettings: false }));
+            const diffs = [];
+            Object.keys(current).forEach(k => {
+                const before = (snap.summary && snap.summary[k]) || 0;
+                const now = current[k] || 0;
+                if (before !== now) diffs.push({ key: k, before, now, delta: now - before });
+            });
+            return { snap, current, diffs };
+        }
+        async function restoreWorkspaceSnapshot(id) {
+            const snap = getWorkspaceSnapshots().find(s => s && s.id === id);
+            if (!snap || !snap.payload) return;
+            if (typeof confirm === 'function' && !confirm('Restore this snapshot? Your current workspace will be replaced. A "Before restore" snapshot is saved first.')) return;
+            createWorkspaceSnapshot('Before restore');
+            try {
+                importWorkspacePayload(snap.payload);
+                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('snapshot-restore');
+                showToast('Workspace restored. Reloading…');
+                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, 700);
+            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); }
+        }
+
+        function openSnapshotBrowserModal() {
+            let modal = document.getElementById('sutraSnapshotModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'sutraSnapshotModal';
+                modal.className = 'modal sutra-snapshot-modal';
+                modal.setAttribute('role', 'dialog');
+                modal.setAttribute('aria-modal', 'true');
+                modal.setAttribute('aria-label', 'Workspace snapshots');
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal || e.target.closest('[data-snap-close]')) { closeSnapshotBrowserModal(); return; }
+                    if (e.target.closest('[data-snap-create]')) { if (createWorkspaceSnapshot('Manual snapshot')) showToast('Snapshot saved.'); renderSnapshotBrowser(); return; }
+                    const rest = e.target.closest('[data-snap-restore]');
+                    if (rest) { restoreWorkspaceSnapshot(rest.getAttribute('data-snap-restore')); return; }
+                    const del = e.target.closest('[data-snap-delete]');
+                    if (del) { deleteWorkspaceSnapshot(del.getAttribute('data-snap-delete')); renderSnapshotBrowser(); return; }
+                    const diff = e.target.closest('[data-snap-diff]');
+                    if (diff) { renderSnapshotBrowser(diff.getAttribute('data-snap-diff')); return; }
+                });
+            }
+            modal.style.display = 'flex';
+            modal.classList.add('active');
+            renderSnapshotBrowser();
+            if (window.SutraModalManager && window.SutraModalManager.sync) { try { window.SutraModalManager.sync(); } catch (e) { /* nc */ } }
+        }
+        function closeSnapshotBrowserModal() {
+            const modal = document.getElementById('sutraSnapshotModal');
+            if (!modal) return;
+            modal.style.display = 'none';
+            modal.classList.remove('active');
+            if (window.SutraModalManager && window.SutraModalManager.sync) { try { window.SutraModalManager.sync(); } catch (e) { /* nc */ } }
+        }
+        function renderSnapshotBrowser(diffId) {
+            const modal = document.getElementById('sutraSnapshotModal');
+            if (!modal) return;
+            const list = getWorkspaceSnapshots();
+            const esc = (s) => (window.SutraDOMSafety ? window.SutraDOMSafety.escapeHtml(String(s)) : String(s));
+            let rows;
+            if (!list.length) {
+                rows = '<p class="sutra-dash-empty">No snapshots yet. Create one before big changes — it’s a quick in-app restore point (kept up to ' + WORKSPACE_SNAPSHOT_CAP + ').</p>';
+            } else {
+                rows = list.map(s => {
+                    let when = ''; try { when = new Date(s.createdAt).toLocaleString(); } catch (e) { when = ''; }
+                    const sum = s.summary || {};
+                    const meta = `${sum.pages || 0} pages · ${sum.tasks || 0} tasks · ${sum.reviewCards || 0} cards`;
+                    let diffHtml = '';
+                    if (diffId === s.id) {
+                        const d = diffWorkspaceSnapshot(s.id);
+                        diffHtml = d && d.diffs.length
+                            ? '<div class="sutra-snap-diff">' + d.diffs.map(x => `<span class="${x.delta >= 0 ? 'up' : 'down'}">${esc(x.key)} ${x.delta > 0 ? '+' : ''}${x.delta}</span>`).join(' ') + '</div>'
+                            : '<div class="sutra-snap-diff">No differences from the current workspace.</div>';
+                    }
+                    return `<div class="sutra-snap-row">
+                        <div class="sutra-snap-info"><div class="sutra-snap-title">${esc(s.label)}</div><div class="sutra-snap-meta">${esc(when)} · ${esc(meta)}</div>${diffHtml}</div>
+                        <div class="sutra-snap-actions">
+                            <button type="button" class="btn btn-ghost" data-snap-diff="${esc(s.id)}">Diff</button>
+                            <button type="button" class="btn btn-secondary" data-snap-restore="${esc(s.id)}">Restore</button>
+                            <button type="button" class="btn btn-ghost sutra-trash-purge" data-snap-delete="${esc(s.id)}">Delete</button>
+                        </div></div>`;
+                }).join('');
+            }
+            const html = `<div class="modal-content sutra-snapshot-content">
+                <div class="modal-header"><h2>Workspace snapshots</h2><button type="button" class="modal-close" data-snap-close aria-label="Close">×</button></div>
+                <div class="modal-body">
+                    <p class="sutra-dash-empty">A snapshot is a local restore point of your whole workspace. Restoring replaces the current workspace (a "Before restore" snapshot is saved first). For long-term safety, also export a <strong>.sutra</strong> backup.</p>
+                    ${rows}
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-primary" data-snap-create>Create snapshot</button><button type="button" class="btn btn-secondary" data-snap-close>Done</button></div>
+            </div>`;
+            if (window.SutraDOMSafety && window.SutraDOMSafety.setTrustedHTML) window.SutraDOMSafety.setTrustedHTML(modal, html);
         }
 
         async function importEncryptedSutraPackage(file) {
@@ -52721,6 +55609,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             hydrateDrawingBlocksInContainer(editor, page, { mode: 'editor' });
             // Restore table cell editability for tables inserted before the fix
             fixTableEditability(editor);
+            // Render any LaTeX math blocks from their stored source (data-latex).
+            renderMathBlocksIn(editor);
             // Reset undo history for this editor and record the loaded state as the baseline
             noteUndoManager.resetFor(editor);
             noteUndoManager.push(editor);
@@ -55646,6 +58536,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             { id: 'pagelink', icon: 'fa-file-alt', title: 'Link to Page', desc: 'Link to another page', action: () => insertPageLink() },
             { id: 'callout', icon: 'fa-exclamation-circle', title: 'Callout', desc: 'Highlight important info', action: () => insertCallout() },
             { id: 'pagebreak', icon: 'fa-grip-lines', title: 'Page Break', desc: 'Force a new page in print and PDF export', action: () => insertPageBreak() },
+            { id: 'math', icon: 'fa-square-root-variable', title: 'Math / LaTeX', desc: 'Insert a rendered LaTeX math block', action: () => insertMathBlock() },
             // New Atelier Pro slash commands
             { id: 'find', icon: 'fa-search', title: 'Find & Replace', desc: 'Find and replace in this note (Ctrl+F)', action: () => toggleFindReplacePanel() },
             { id: 'outline', icon: 'fa-list-ul', title: 'Document Outline', desc: 'Show outline panel from headings', action: () => toggleDocOutlinePanel() },
@@ -55876,6 +58767,52 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // export. CSS handles both the in-editor visual (subtle divider with a
         // muted "Page Break" label) and the actual page-break behavior on print.
         const PAGE_BREAK_MARKUP = '<div class="atelier-page-break" data-atelier-block="page-break" contenteditable="false" role="separator" aria-label="Page break"></div>';
+
+        // Render LaTeX math blocks (stored as <span class="sutra-math-block"
+        // data-latex="…">) from their source. data-latex is the source of truth;
+        // the rendered KaTeX is display-only and re-rendered on every load, so the
+        // note's saved content can never desync from the editable LaTeX.
+        function renderMathBlocksIn(editor) {
+            if (!editor || typeof editor.querySelectorAll !== 'function') return;
+            const blocks = editor.querySelectorAll('.sutra-math-block[data-latex]');
+            if (!blocks.length) return;
+            const doRender = () => {
+                blocks.forEach(block => {
+                    const latex = block.getAttribute('data-latex') || '';
+                    block.setAttribute('contenteditable', 'false');
+                    let html = null;
+                    if (window.SutraMath && typeof window.SutraMath.renderToHtml === 'function') {
+                        html = window.SutraMath.renderToHtml(latex, /\n|\\\\|\\begin/.test(latex));
+                    }
+                    if (html && window.SutraDOMSafety && window.SutraDOMSafety.setTrustedHTML) {
+                        window.SutraDOMSafety.setTrustedHTML(block, html);
+                    } else if (window.SutraDOMSafety && window.SutraDOMSafety.setText) {
+                        window.SutraDOMSafety.setText(block, latex);
+                    }
+                });
+            };
+            if (window.SutraMath && typeof window.SutraMath.ensure === 'function') {
+                window.SutraMath.ensure().then(doRender).catch(doRender);
+            } else {
+                doRender();
+            }
+        }
+
+        function insertMathBlock() {
+            const latex = (typeof window.prompt === 'function')
+                ? window.prompt('Enter LaTeX (e.g. \\frac{a}{b} or x^2 + y^2 = r^2):', '')
+                : '';
+            const trimmed = String(latex || '').trim();
+            if (!trimmed) return;
+            const safe = escapeHtml(trimmed);
+            insertHtmlAtCursor(`<span class="sutra-math-block" data-latex="${safe}" contenteditable="false">${safe}</span>&nbsp;`);
+            const editor = getActiveEditor() || getPrimaryEditor();
+            if (editor) {
+                renderMathBlocksIn(editor);
+                updateWordCount(editor);
+                queueSaveForEditor(editor);
+            }
+        }
 
         function insertPageBreak() {
             // Trailing <p> ensures the cursor lands on a fresh line below the
@@ -60729,6 +63666,8 @@ ${cspMeta}
                 get pages() { return pages; },
                 get timeBlocks() { return timeBlocks; },
                 get cramSessions() { return cramSessions; },
+                get trash() { return trash; },
+                get focusSessions() { return focusSessions; },
                 get currentPageId() { return currentPageId; },
                 get activeSpaceId() { return activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default'; },
                 get activeView() { return activeView; },
@@ -62996,6 +65935,30 @@ function submitQuickCapture() {
 }
 
 // ---------- Global Search ----------
+// Relevance score for ranking/fuzzy search. 0 = no match; higher = better:
+// prefix > word-boundary substring > infix substring > in-order subsequence.
+// Subsequence support means "apbio" can still match "AP Biology".
+function sutraFuzzyScore(haystack, query) {
+    const h = String(haystack || '').toLowerCase();
+    const q = String(query || '').toLowerCase().trim();
+    if (!q || !h) return 0;
+    const idx = h.indexOf(q);
+    if (idx === 0) return 1000;
+    if (idx > 0) return (h[idx - 1] === ' ' ? 700 : 500) - Math.min(idx, 100);
+    // In-order subsequence (gaps allowed).
+    let hi = 0; let matched = 0; let gaps = 0;
+    for (let qi = 0; qi < q.length; qi += 1) {
+        const c = q[qi];
+        let found = -1;
+        for (let k = hi; k < h.length; k += 1) { if (h[k] === c) { found = k; break; } }
+        if (found === -1) return 0;
+        if (qi > 0 && found > hi) gaps += (found - hi);
+        hi = found + 1;
+        matched += 1;
+    }
+    return Math.max(1, 300 - gaps - (h.length - matched));
+}
+
 function globalSearchAll(query) {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return { notes: [], tasks: [], homework: [], courses: [], resources: [], apstudy: [], college: [], timeline: [], review: [], trackers: [], assistant: [], settings: [] };
@@ -63011,7 +65974,8 @@ function globalSearchAll(query) {
             const pageIsLocked = page.isLocked && page.lockHash && !_unlocked.has(page.id);
             const title = String(page.title || '').toLowerCase();
             const body = pageIsLocked ? '' : stripHtml(page.content).toLowerCase();
-            if (title.includes(q) || body.includes(q)) {
+            // Title matching is fuzzy (subsequence-tolerant); body stays substring.
+            if (sutraFuzzyScore(title, q) > 0 || body.includes(q)) {
                 results.notes.push({
                     id: page.id,
                     title: page.title || 'Untitled',
@@ -63253,6 +66217,15 @@ function globalSearchAll(query) {
         });
     } catch (err) {}
 
+    // Rank every category by relevance so the best matches surface first.
+    try {
+        Object.keys(results).forEach(cat => {
+            results[cat].sort((a, b) =>
+                sutraFuzzyScore((b.title || '') + ' ' + (b.context || ''), q)
+                - sutraFuzzyScore((a.title || '') + ' ' + (a.context || ''), q));
+        });
+    } catch (err) {}
+
     return results;
 }
 
@@ -63280,6 +66253,10 @@ function getCommandPaletteCommands() {
         { id: 'open-business', label: 'Open Business', hint: 'Projects & Work', hidden: modeHides('business'), run: () => setActiveView('business') },
         { id: 'open-settings', label: 'Open Settings', hint: 'Workspace control center', run: () => setActiveView('settings') },
         { id: 'open-deadline-radar', label: 'Open Deadline Radar', hint: 'See every upcoming deadline', run: () => { closeCommandPalette(); openDeadlineRadar(); } },
+        { id: 'open-trash', label: 'Open Trash', hint: 'Restore recently-deleted pages', run: () => { closeCommandPalette(); if (typeof openTrashModal === 'function') openTrashModal(); } },
+        { id: 'workspace-snapshots', label: 'Workspace snapshots', hint: 'Create / restore / diff a whole-workspace restore point', run: () => { closeCommandPalette(); if (typeof openSnapshotBrowserModal === 'function') openSnapshotBrowserModal(); } },
+        { id: 'focus-stats', label: 'Focus stats', hint: 'Weekly focus time by subject + chart', run: () => { closeCommandPalette(); try { openFocusStatsModal(); } catch (err) { /* non-critical */ } } },
+        { id: 'grade-trends', label: 'Grade trends', hint: 'Each course’s grade over time', run: () => { closeCommandPalette(); try { openGradeTrendsModal(); } catch (err) { /* non-critical */ } } },
         { id: 'quick-capture', label: 'Quick Capture…', hint: 'Create task/homework/note/block', run: () => { closeCommandPalette(); openQuickCaptureModal(''); } },
         { id: 'search-everywhere', label: 'Search everywhere…', hint: 'Full cross-workspace search', run: () => { closeCommandPalette(); openGlobalSearchPanel(''); } },
         { id: 'homework-paste-import', label: 'Import homework (paste)…', hint: 'Paste assignments from a portal', hidden: modeHides('homework'), run: () => { closeCommandPalette(); openHomeworkPasteImport(''); } },
@@ -63365,6 +66342,33 @@ function closeCommandPalette() {
     document.body.classList.remove('command-palette-open');
 }
 
+function getRecentCommandIds() {
+    try {
+        // SutraSafeStorage.get already JSON-parses; pass/return the array directly.
+        const arr = (window.SutraSafeStorage && window.SutraSafeStorage.get) ? window.SutraSafeStorage.get('sutra:recentCommands:v1') : null;
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+function recordRecentCommand(id) {
+    if (!id) return;
+    try {
+        let arr = getRecentCommandIds().filter(x => x !== id);
+        arr.unshift(String(id));
+        arr = arr.slice(0, 8);
+        if (window.SutraSafeStorage && window.SutraSafeStorage.set) window.SutraSafeStorage.set('sutra:recentCommands:v1', arr);
+    } catch (e) { /* non-critical */ }
+}
+function orderCommandsByRecent(commands) {
+    const recent = getRecentCommandIds();
+    if (!recent.length) return commands;
+    const rank = new Map(recent.map((id, i) => [id, i]));
+    return commands.slice().sort((a, b) => {
+        const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
+        const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
+        return ra - rb;
+    });
+}
+
 function renderCommandPalette(query) {
     const modal = document.getElementById('commandPaletteModal');
     if (!modal) return;
@@ -63372,11 +66376,16 @@ function renderCommandPalette(query) {
     if (!list) return;
     const q = String(query || '').trim().toLowerCase();
 
-    // Section 1: commands.
+    // Section 1: commands. Fuzzy-ranked when a query is typed (subsequence-aware,
+    // best matches first); recently-run commands float to the top when empty.
     const commands = getCommandPaletteCommands();
     const matchedCommands = q
-        ? commands.filter(c => c.label.toLowerCase().includes(q) || (c.hint && c.hint.toLowerCase().includes(q)))
-        : commands;
+        ? commands
+            .map(c => ({ c, s: Math.max(sutraFuzzyScore(c.label, q), c.hint ? sutraFuzzyScore(c.hint, q) - 60 : 0) }))
+            .filter(x => x.s > 0)
+            .sort((a, b) => b.s - a.s)
+            .map(x => x.c)
+        : orderCommandsByRecent(commands);
 
     let html = '';
     html += '<div class="command-palette-section-label">Commands</div>';
@@ -63434,6 +66443,7 @@ function renderCommandPalette(query) {
             const cmdId = node.getAttribute('data-cmd-id');
             const cmd = getCommandPaletteCommands().find(c => c.id === cmdId);
             if (cmd && typeof cmd.run === 'function') {
+                recordRecentCommand(cmd.id);
                 try { cmd.run(); } catch (err) { console.warn(err); }
             }
             // Commands that open modals call closeCommandPalette themselves; otherwise close.

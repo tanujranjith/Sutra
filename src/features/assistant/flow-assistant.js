@@ -2816,6 +2816,26 @@
         ]
     };
 
+    // Named multi-step plan templates (#4). Each maps to the existing reviewable
+    // action flow — the assistant proposes cards, the user applies all/selected or
+    // declines, and applied steps are logged in Assistant Activity with undo.
+    const PLAN_TEMPLATES = {
+        week: { label: 'Plan my week', prompt: 'Plan my week. Propose a plan_week action that schedules my open homework, assignment milestones, and study around my fixed commitments — realistic, with buffer.' },
+        noteReview: { label: 'Turn this note into review', prompt: 'Turn the current note into review. Propose a create_review_deck action whose cards array has 8–15 high-quality front/back pairs covering the key concepts.' },
+        breakdown: { label: 'Break down this assignment', prompt: 'Break down my most pressing assignment. Propose a create_assignment_plan action with 3–6 dated milestones spaced before the due date.' },
+        apCram: { label: 'Make an AP cram plan', prompt: 'Make an AP cram plan. Propose a create_exam_plan action plus create_timeline_block actions for a realistic sprint on my soonest AP exam.' },
+        college: { label: 'Organize college application tasks', prompt: 'Organize my college application tasks. Propose create_college_task actions for missing deadlines and a plan_week action to fit essay and submission work in.' }
+    };
+    function planTemplatesForView(v) {
+        const out = [];
+        if (v === 'notes') out.push(PLAN_TEMPLATES.noteReview);
+        if (v === 'homework' || v === 'courses' || v === 'alldue') out.push(PLAN_TEMPLATES.breakdown);
+        if (v === 'apstudy' || v === 'cramhub') out.push(PLAN_TEMPLATES.apCram);
+        if (v === 'collegeapp') out.push(PLAN_TEMPLATES.college);
+        if (v === 'today' || v === 'timeline' || !out.length) out.push(PLAN_TEMPLATES.week);
+        return out;
+    }
+
     function getQuickActions(view) {
         try { return buildContextualQuickActions(view); } catch (e) {
             const key = String(view || getActiveViewName());
@@ -4360,6 +4380,17 @@
         if (/^(?:what should i (?:do|work on)(?: today| first)?|plan my day|shape my day|daily briefing|brief me|what's my day look like|what does my day look like)[?.!]?$/.test(lc)) {
             return { handled: true, message: buildDailyBriefingMessage() };
         }
+        // Auto study planner (deterministic, no key) — spreads work across free
+        // time before each deadline and reverse-schedules study before exams.
+        // Opens the approve-block-by-block preview; writes nothing until approved.
+        if (/(?:plan my week|build (?:me )?an? (?:study )?(?:plan|schedule)|make (?:me )?an? study (?:plan|schedule)|schedule my (?:work|study|week)|plan my study)/.test(lc)) {
+            const planEng = window.SutraPlanningEngine;
+            if (planEng && typeof planEng.planWeek === 'function') {
+                const scope = /\b(?:day|today)\b/.test(lc) ? 'day' : 'week';
+                try { (scope === 'day' ? planEng.planDay : planEng.planWeek)(); } catch (e) { /* surfaced below */ }
+                return { handled: true, message: `Opened a suggested ${scope} plan. It spreads your open work across free time before each due date and adds study sessions before your exams. Review each block and add the ones you want — nothing is scheduled until you approve.` };
+            }
+        }
         // Recovery / catch-up.
         if (/(?:catch me up|i missed school|i was sick|rebuild my week|(?:make|build|create)(?: me)? a (?:recovery|catch-?up) plan|help me catch up)/.test(lc)) {
             return { handled: true, message: buildRecoveryPlanMessage() };
@@ -5070,6 +5101,10 @@
         if (v === 'homework') {
             items.push({ label: 'Import assignments', prompt: 'I will paste assignment text from a class portal. Parse it into an import_assignments action with structured rows.' });
         }
+        // Named plan templates for this view (#4).
+        planTemplatesForView(v).forEach(t => {
+            if (items.length < 6 && !items.some(x => x.label === t.label)) items.push(t);
+        });
         // Fall back to static per-view prompts to fill out the row.
         (QUICK_ACTIONS_BY_VIEW[v] || QUICK_ACTIONS_BY_VIEW.today).forEach(it => {
             if (items.length >= 6) return;
@@ -5141,7 +5176,7 @@
         ],
         homework: [
             { icon: '🧩', title: 'Break down assignment', sub: 'Steps + plan', prompt: 'Break the most pressing homework assignment into sub-steps and propose create_task actions for each step.' },
-            { icon: '🗓️', title: 'Build study plan', sub: 'Realistic blocks', prompt: 'Propose a study plan for the next 5 days as create_timeline_block actions, sized realistically around my open homework.' },
+            { icon: '🗓️', title: 'Build study plan', sub: 'Spreads work, no key', prompt: 'build a study plan', local: true },
             { icon: '📥', title: 'Import assignments', sub: 'Paste portal text', prompt: 'I will paste assignment text from a class portal. Parse it into an import_assignments action with structured rows.' },
             { icon: '🛟', title: 'Recover overdue work', sub: 'Catch-up plan', prompt: 'make a recovery plan', local: true }
         ],

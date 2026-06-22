@@ -147,24 +147,27 @@ snapshots in your browser before uploading them to Drive `appDataFolder`, uses
 only the `https://www.googleapis.com/auth/drive.appdata` scope, and runs while
 the app is open, online, unlocked, and authorized.
 
-**Sutra Cloud** is a second optional convenience layer (powered by Supabase) for
-encrypted cloud backup + restore across devices. It is **off by default**, lives
-in the save bar, and only does anything after you turn it on, sign in with an
-email code, and press a button:
+**Sutra Cloud** is a second optional convenience layer for encrypted cloud backup
++ restore across devices. It is **provider-based** and **off by default**, lives
+in the save bar, and only does anything after you choose a destination, connect
+it, and press a button:
 
-- **Two backends:** **Official Sutra Cloud** (recommended; uses Sutra's configured
-  Supabase project) or, for advanced users, **your own Supabase project** chosen
-  from the panel's Storage backend section. Both use identical encryption — the
-  choice is only *whose* Supabase project stores the encrypted files, and custom
-  is *more user-controlled, not automatically safer*. The backend choice is
-  device-local and never travels inside a `.sutra` backup.
+- **You choose the destination.** Recommended: Google Drive, OneDrive, Dropbox.
+  Advanced: WebDAV (Nextcloud/ownCloud), S3-compatible storage, Supabase, or a
+  custom HTTP endpoint. Manual: download the encrypted file and save it anywhere.
+  Sutra does **not** require a central backend of its own for backups.
+- The destination choice and any provider credentials are **device-local** (via
+  `SutraSafeStorage`) and **never travel inside a `.sutra` backup**. Advanced
+  providers are *more user-controlled, not automatically safer*, and custom
+  providers are the user's responsibility.
 - Each backup is a standard **password-encrypted `.sutra` file**, encrypted **on
-  your device before upload**. The selected backend stores only the **locked file**
-  plus a little non-sensitive metadata (label, size, timestamp) — it can never read
-  your workspace.
-- Your account **email** is the one piece of personal data the provider sees (it
-  is account PII). Your backup **passphrase is never sent** — lose it and the
-  cloud copy is unrecoverable, which is the price of true end-to-end encryption.
+  your device before upload**. The selected destination stores only the **locked
+  file** plus a little non-sensitive metadata (label, size, timestamp) — it can
+  never read your workspace.
+- For account-based destinations, your **sign-in identity** (e.g. your email) is
+  the personal data that provider sees. Your backup **passphrase is never sent** —
+  lose it and the cloud copy is unrecoverable, which is the price of true
+  end-to-end encryption.
 - **Restore replaces** your current workspace (it is a backup, not a live merge),
   and you confirm before it overwrites. Sutra keeps your **last 10** backups.
 - Optional **auto-backup** is itself off by default and only runs after you

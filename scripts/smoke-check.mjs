@@ -852,7 +852,7 @@ mustContain('HomePage.html', "capture: true", 'scroll listeners use capture phas
 mustContain('HomePage.html', 'IntersectionObserver', 'tour steps activate via IntersectionObserver');
 mustContain('HomePage.html', 'hero-eyebrow', 'hero eyebrow (PRIVATE · LOCAL-FIRST · STUDENT-BUILT)');
 mustContain('HomePage.html', 'Explore Sutra', 'hero secondary CTA (rebranded)');
-mustContain('HomePage.html', '<title>Sutra | Your Academic Life in One Private Workspace</title>', 'landing title rebranded to Sutra');
+mustContain('HomePage.html', '<title>Sutra | Student OS for School, Projects, and Life</title>', 'landing title rebranded to Sutra');
 mustContain('HomePage.html', '<span class="brand-text">Sutra</span>', 'landing wordmark rebranded to Sutra');
 mustContain('HomePage.html', 'Start your workspace', 'rebranded primary CTA');
 mustContain('HomePage.html', 'A step change in academic productivity.', 'Sutra hero tagline present');
@@ -915,6 +915,17 @@ mustContain('Sutra.html', 'styles/features/academic-command-center.css', 'academ
 mustContain('src/core/app.js', 'SutraAcademicCommandCenter.renderHtml', 'Course Hub composes the academic command center');
 mustContain('src/features/academic/academic-command-center.js', 'function rankActions', 'deterministic next-action ranking present');
 mustContain('src/core/safe-storage.js', 'sessionGet: sessionGet', 'safe storage exposes session reads');
+
+// ---- Runtime startup health layer ---------------------------------------
+mustContain('Sutra.html', 'src/core/startup-health.js', 'startup health layer loaded in app shell');
+mustContain('src/core/startup-health.js', 'window.SutraStartupHealth', 'startup health exposes its namespace');
+mustContain('src/core/startup-health.js', "severity: 'critical'", 'startup health distinguishes critical failures');
+mustContain('src/core/startup-health.js', 'sutraSafeMode', 'startup health recovery offers Safe Mode');
+
+// ---- Sutra Cloud S3 brand-icon regression --------------------------------
+// `fa-aws` is a Font Awesome BRAND glyph; rendered with the solid `fas` prefix
+// it never displays. The card renderer keys off a `fa-brands` prefix.
+mustContain('src/core/app.js', "id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', icon: 'fa-brands fa-aws'", 'S3 cloud provider declares a brand-prefixed icon');
 
 if (failures.length) {
     console.error('SMOKE CHECK FAILED:');
