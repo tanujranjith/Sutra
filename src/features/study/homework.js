@@ -623,6 +623,807 @@
     };
   }
 
+  // =====================================================================
+  // Redesign layer: selectable layouts, add methods, and pinned countdowns.
+  // Layout + add method are read from body[data-homework-*] (driven by the
+  // Settings → Homework prefs in app.js). All renderers below emit the same
+  // data-task-* / .hw-task-menu markup the original board used, so the
+  // existing bindBoardInteractions() keeps wiring every action for free.
+  // =====================================================================
+
+  const HW_SUBJECT_PALETTE = [
+    { bg: '#E1F5EE', text: '#0F6E56' },
+    { bg: '#EEEDFE', text: '#3C3489' },
+    { bg: '#E6F1FB', text: '#185FA5' },
+    { bg: '#FAEEDA', text: '#854F0B' },
+    { bg: '#FBEAF0', text: '#993556' },
+    { bg: '#FAECE7', text: '#993C1D' },
+    { bg: '#EAF3DE', text: '#3B6D11' },
+    { bg: '#F1EFE8', text: '#444441' }
+  ];
+
+  function hashString(value) {
+    const str = String(value || '');
+    let hash = 0;
+    for (let i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    return hash;
+  }
+
+  function getCourseColor(courseId) {
+    if (!courseId) return HW_SUBJECT_PALETTE[HW_SUBJECT_PALETTE.length - 1];
+    return HW_SUBJECT_PALETTE[hashString(courseId) % HW_SUBJECT_PALETTE.length];
+  }
+
+  function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Route trusted markup through the shared DOM-safety sink. Every dynamic
+  // value below is already escaped via escHtml(); the rest is static developer
+  // markup, so this is the trusted (not user) channel.
+  function setSafeHTML(el, html) {
+    if (!el) return;
+    if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
+      window.SutraDOMSafety.setTrustedHTML(el, html);
+      return;
+    }
+    el.innerHTML = html; // sutra-allow-html: fallback only; all interpolated values pass through escHtml()
+  }
+
+  function getHwLayout() {
+    const value = document.body && document.body.dataset ? document.body.dataset.homeworkLayout : '';
+    return ['list', 'upnext', 'board', 'timeline'].includes(value) ? value : 'list';
+  }
+
+  function getHwAddMethod() {
+    const value = document.body && document.body.dataset ? document.body.dataset.homeworkAddMethod : '';
+    return ['inline', 'quick', 'panel'].includes(value) ? value : 'inline';
+  }
+
+  function studioPctOf(task) {
+    if (task && task.studio && window.SutraAssignmentStudio) {
+      try {
+        return window.SutraAssignmentStudio.computeProgress(window.SutraAssignmentStudio.normalizeStudio(task.studio));
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function getTaskByIdInternal(id) {
+    if (!id) return null;
+    return tasks.find(task => String(task.id) === String(id)) || null;
+  }
+
+  // ---- shared task-menu + compact card (reused across every layout) -----
+
+  function renderTaskMenu(task) {
+    const recurrence = normalizeRecurrence(task.recurrence);
+    const toggleLabel = recurrence !== 'none' && !task.done
+      ? 'Mark this occurrence done'
+      : (task.done ? 'Mark as open' : 'Mark as done');
+    return `
+      <div class="hw-assignment-menu-wrap">
+        <button type="button" class="hw-task-menu-btn" data-task-menu-trigger="${escHtml(task.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Assignment actions">
+          <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
+        </button>
+        <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
+          <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
+          <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
+          <button type="button" data-task-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
+          <button type="button" data-task-pin-countdown="${escHtml(task.id)}" role="menuitem">Pin as countdown&hellip;</button>
+          ${recurrence !== 'none' ? `<button type="button" data-task-stop-recurring="${escHtml(task.id)}" role="menuitem">Stop recurring</button>` : ''}
+          ${task.courseId ? `<button type="button" data-task-dashboard="${escHtml(task.id)}" role="menuitem">Open class dashboard</button>` : ''}
+          <button type="button" data-task-schedule="${escHtml(task.id)}" role="menuitem">Schedule this</button>
+          <button type="button" class="danger" data-task-delete="${escHtml(task.id)}" role="menuitem">Delete assignment</button>
+        </div>
+      </div>`;
+  }
+
+  function renderTaskCard(task) {
+    const course = courses.find(c => String(c.id) === String(task.courseId));
+    const color = getCourseColor(task.courseId);
+    const ds = getTaskDueState(task);
+    const difficulty = normalizeDifficulty(task.difficulty);
+    const recurrence = normalizeRecurrence(task.recurrence);
+    const pct = studioPctOf(task);
+    const subjectTag = course
+      ? `<span class="hw-card-subject" style="background:${color.bg};color:${color.text}">${escHtml(course.name)}</span>`
+      : '';
+    const timeLabel = ds.dueTimeLabel && ds.dueTimeLabel !== 'No time' ? ds.dueTimeLabel : '';
+    return `
+      <li class="hw-card ${task.done ? 'is-done' : ''}" data-task-id="${escHtml(task.id)}">
+        <button type="button" class="hw-card-check" data-task-toggle="${escHtml(task.id)}" aria-label="${task.done ? 'Mark as open' : 'Mark as done'}"><i class="fas ${task.done ? 'fa-check-circle' : 'fa-circle'}" aria-hidden="true"></i></button>
+        <div class="hw-card-main">
+          <div class="hw-card-title" data-task-open="${escHtml(task.id)}" role="button" tabindex="0">${escHtml(task.title)}${pct != null ? ` <span class="hw-card-studio">&middot; ${pct}%</span>` : ''}</div>
+          <div class="hw-card-sub">
+            ${subjectTag}
+            <span class="hw-card-meta hw-meta-due"><i class="fas fa-calendar-day" aria-hidden="true"></i>${escHtml(ds.dueDateLabel)}</span>
+            ${timeLabel ? `<span class="hw-card-meta hw-meta-time"><i class="fas fa-clock" aria-hidden="true"></i>${escHtml(timeLabel)}</span>` : ''}
+            ${recurrence !== 'none' ? `<span class="hw-card-meta hw-meta-recurrence"><i class="fas fa-repeat" aria-hidden="true"></i>${escHtml(recurrenceLabel(recurrence))}</span>` : ''}
+            <span class="hw-card-meta hw-meta-difficulty">${escHtml(difficulty.charAt(0).toUpperCase() + difficulty.slice(1))}</span>
+          </div>
+        </div>
+        <span class="hw-status-chip ${escHtml(ds.stateClass)}">${escHtml(ds.statusText)}</span>
+        ${renderTaskMenu(task)}
+      </li>`;
+  }
+
+  function renderEmptyStateRedesign(message) {
+    return `<div class="hw-empty-redesign"><i class="fas fa-clipboard-check" aria-hidden="true"></i><p>${escHtml(message || 'Nothing here yet.')}</p></div>`;
+  }
+
+  // ---- inline add composer (default add method) -------------------------
+
+  function buildCourseOptions(selectedId) {
+    const cls = courses.filter(c => c.type === 'class');
+    const misc = courses.filter(c => c.type === 'misc');
+    const optionFor = c => `<option value="${escHtml(c.id)}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${escHtml(c.name)}</option>`;
+    let html = '<option value="">Subject&hellip;</option>';
+    if (cls.length) html += `<optgroup label="Classes">${cls.map(optionFor).join('')}</optgroup>`;
+    if (misc.length) html += `<optgroup label="Activities">${misc.map(optionFor).join('')}</optgroup>`;
+    return html;
+  }
+
+  function renderInlineComposer(presetDate) {
+    return `
+      <div class="hw-inline-add" data-inline-add>
+        <button type="button" class="hw-inline-add-trigger" data-inline-trigger><i class="fas fa-plus" aria-hidden="true"></i><span>Add a task&hellip;</span></button>
+        <form class="hw-inline-add-form" data-inline-form hidden autocomplete="off">
+          <input type="text" class="hw-inline-title" data-inline-title placeholder="What needs doing?" maxlength="180" />
+          <div class="hw-inline-chips">
+            <select class="hw-inline-course" data-inline-course aria-label="Subject">${buildCourseOptions('')}</select>
+            <input type="date" class="hw-inline-date" data-inline-date value="${escHtml(presetDate || '')}" aria-label="Due date" />
+            <select class="hw-inline-diff" data-inline-diff aria-label="Difficulty">
+              <option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option>
+            </select>
+            <select class="hw-inline-rep" data-inline-rep aria-label="Repeat">
+              <option value="none" selected>Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+            </select>
+            <span class="hw-inline-hint">Enter to save &middot; Esc to cancel</span>
+          </div>
+        </form>
+      </div>`;
+  }
+
+  function bindInlineComposers(board) {
+    board.querySelectorAll('[data-inline-add]').forEach(wrap => {
+      const trigger = wrap.querySelector('[data-inline-trigger]');
+      const form = wrap.querySelector('[data-inline-form]');
+      const titleInput = wrap.querySelector('[data-inline-title]');
+      const courseSel = wrap.querySelector('[data-inline-course]');
+      const dateInput = wrap.querySelector('[data-inline-date]');
+      const diffSel = wrap.querySelector('[data-inline-diff]');
+      const repSel = wrap.querySelector('[data-inline-rep]');
+      if (!trigger || !form) return;
+
+      const openForm = () => {
+        if (!courses.length) {
+          promptAddCourse('class', { returnFocus: trigger });
+          return;
+        }
+        form.hidden = false;
+        trigger.hidden = true;
+        setTimeout(() => { if (titleInput) titleInput.focus(); }, 20);
+      };
+      const closeForm = () => {
+        form.hidden = true;
+        trigger.hidden = false;
+        if (titleInput) titleInput.value = '';
+      };
+      const submit = () => {
+        const courseId = String(courseSel && courseSel.value || '').trim();
+        if (!courseId) {
+          if (courseSel) courseSel.focus();
+          return;
+        }
+        const created = addTaskToCourse(courseId, {
+          title: titleInput ? titleInput.value : '',
+          dueDate: dateInput ? dateInput.value : '',
+          dueTime: '',
+          difficulty: diffSel ? diffSel.value : 'medium',
+          recurrence: repSel ? repSel.value : 'none'
+        });
+        if (!created) {
+          if (titleInput) titleInput.focus();
+          return;
+        }
+        render();
+      };
+
+      trigger.addEventListener('click', openForm);
+      form.addEventListener('submit', event => { event.preventDefault(); submit(); });
+      if (titleInput) {
+        titleInput.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); submit(); }
+          else if (event.key === 'Escape') { event.preventDefault(); closeForm(); }
+        });
+      }
+    });
+  }
+
+  // ---- quick add (natural language) -------------------------------------
+
+  const QUICK_WEEKDAYS = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
+
+  function quickNextWeekday(targetDow) {
+    const now = startOfDay(new Date());
+    let delta = (targetDow - now.getDay() + 7) % 7;
+    if (delta === 0) delta = 7;
+    const d = new Date(now);
+    d.setDate(d.getDate() + delta);
+    return formatDateKey(d);
+  }
+
+  function parseQuickAdd(rawText) {
+    let raw = ` ${String(rawText || '').trim()} `;
+    if (!raw.trim()) return null;
+
+    let difficulty = 'medium';
+    const diffMatch = raw.match(/\b(easy|medium|med|hard)\b/i);
+    if (diffMatch) {
+      const token = diffMatch[1].toLowerCase();
+      difficulty = normalizeDifficulty(token === 'med' ? 'medium' : token);
+      raw = raw.replace(diffMatch[0], ' ');
+    }
+
+    let dueTime = '';
+    const timeMatch = raw.match(/\b(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\b/i);
+    if (timeMatch) {
+      const parsed = normalizeDueTime(timeMatch[0].replace(/\s+/g, '')) || normalizeDueTime(`${timeMatch[0].replace(/[^\d]/g, '')}:00`);
+      if (parsed) { dueTime = parsed; raw = raw.replace(timeMatch[0], ' '); }
+    }
+
+    let dueDate = '';
+    const isoMatch = raw.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    const tomorrowMatch = raw.match(/\b(tomorrow|tmrw|tmr)\b/i);
+    const todayMatch = raw.match(/\b(today|tonight)\b/i);
+    const nextWeekMatch = raw.match(/\bnext week\b/i);
+    const mdMatch = raw.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+    let weekdayMatch = null;
+    for (const name of Object.keys(QUICK_WEEKDAYS)) {
+      const re = new RegExp(`\\b${name}\\b`, 'i');
+      if (re.test(raw)) { weekdayMatch = { name, match: raw.match(re)[0] }; break; }
+    }
+
+    if (isoMatch) { dueDate = normalizeDueDate(isoMatch[1]); raw = raw.replace(isoMatch[0], ' '); }
+    else if (todayMatch) { dueDate = formatDateKey(new Date()); raw = raw.replace(todayMatch[0], ' '); }
+    else if (tomorrowMatch) { const d = new Date(); d.setDate(d.getDate() + 1); dueDate = formatDateKey(d); raw = raw.replace(tomorrowMatch[0], ' '); }
+    else if (nextWeekMatch) { const d = new Date(); d.setDate(d.getDate() + 7); dueDate = formatDateKey(d); raw = raw.replace(nextWeekMatch[0], ' '); }
+    else if (mdMatch) {
+      const mo = Number(mdMatch[1]); const da = Number(mdMatch[2]);
+      let yr = mdMatch[3] ? Number(mdMatch[3]) : new Date().getFullYear();
+      if (yr < 100) yr += 2000;
+      const d = new Date(yr, mo - 1, da);
+      if (!Number.isNaN(d.getTime())) { dueDate = formatDateKey(d); raw = raw.replace(mdMatch[0], ' '); }
+    } else if (weekdayMatch) {
+      dueDate = quickNextWeekday(QUICK_WEEKDAYS[weekdayMatch.name]);
+      raw = raw.replace(new RegExp(`\\b${weekdayMatch.match}\\b`, 'i'), ' ');
+    }
+
+    let courseId = '';
+    let matchedName = '';
+    courses.forEach(course => {
+      const name = String(course.name || '').trim();
+      if (name && name.length > matchedName.length && new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i').test(raw)) {
+        courseId = course.id;
+        matchedName = name;
+      }
+    });
+    if (matchedName) raw = raw.replace(new RegExp(escapeRegExp(matchedName), 'i'), ' ');
+
+    const title = raw.replace(/\b(due|on|at|by)\b/ig, ' ').replace(/\s+/g, ' ').trim();
+    return { courseId, title, dueDate, dueTime, difficulty };
+  }
+
+  function renderQuickAddBar() {
+    return `
+      <div class="hw-quick-add">
+        <div class="hw-quick-add-row">
+          <div class="hw-quick-add-field">
+            <i class="fas fa-bolt" aria-hidden="true"></i>
+            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" maxlength="200" autocomplete="off" />
+          </div>
+          <button type="button" class="hw-quick-add-submit" data-quick-add-submit>Add</button>
+        </div>
+        <div class="hw-quick-add-preview" data-quick-add-preview></div>
+      </div>`;
+  }
+
+  function bindQuickAdd(board) {
+    const input = board.querySelector('[data-quick-add-input]');
+    if (!input) return;
+    const submitBtn = board.querySelector('[data-quick-add-submit]');
+    const preview = board.querySelector('[data-quick-add-preview]');
+
+    const updatePreview = () => {
+      if (!preview) return;
+      if (!input.value.trim()) { preview.textContent = ''; return; }
+      const parsed = parseQuickAdd(input.value);
+      if (!parsed) { preview.textContent = ''; return; }
+      const course = courses.find(c => String(c.id) === String(parsed.courseId));
+      const chips = [];
+      if (course) chips.push(`<span class="hw-quick-chip">${escHtml(course.name)}</span>`);
+      if (parsed.dueDate) chips.push(`<span class="hw-quick-chip">${escHtml(formatDueDateLabel(parsed.dueDate))}</span>`);
+      if (parsed.dueTime) chips.push(`<span class="hw-quick-chip">${escHtml(formatDueTimeLabel(parsed.dueTime))}</span>`);
+      chips.push(`<span class="hw-quick-chip">${escHtml(parsed.difficulty)}</span>`);
+      setSafeHTML(preview, `<span>Will add &ldquo;${escHtml(parsed.title || '…')}&rdquo;</span>${chips.join('')}`);
+    };
+
+    const submit = () => {
+      const parsed = parseQuickAdd(input.value);
+      if (!parsed || !parsed.title) { input.focus(); return; }
+      addTaskToCourse(parsed.courseId || '', {
+        title: parsed.title,
+        dueDate: parsed.dueDate,
+        dueTime: parsed.dueTime,
+        difficulty: parsed.difficulty,
+        recurrence: 'none'
+      });
+      render();
+    };
+
+    input.addEventListener('input', updatePreview);
+    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } });
+    if (submitBtn) submitBtn.addEventListener('click', submit);
+  }
+
+  // ---- bucketing + the four layouts -------------------------------------
+
+  function getDueBucket(task) {
+    if (task.done) return 'done';
+    const due = getTaskDueDateTime(task);
+    if (!due) return 'nodate';
+    const now = new Date();
+    if (due.getTime() < now.getTime()) return 'overdue';
+    const diffDays = Math.round((startOfDay(due).getTime() - startOfDay(now).getTime()) / 86400000);
+    if (diffDays <= 0) return 'today';
+    if (diffDays === 1) return 'tomorrow';
+    if (diffDays <= 7) return 'week';
+    return 'later';
+  }
+
+  function bucketizeTasks() {
+    const buckets = { overdue: [], today: [], tomorrow: [], week: [], later: [], nodate: [], done: [] };
+    tasks.forEach(task => { (buckets[getDueBucket(task)] || buckets.later).push(task); });
+    Object.keys(buckets).forEach(key => buckets[key].sort(compareHomeworkTasks));
+    return buckets;
+  }
+
+  function bucketPresetDate(key) {
+    const today = new Date();
+    if (key === 'today') return formatDateKey(today);
+    if (key === 'tomorrow') { const d = new Date(today); d.setDate(d.getDate() + 1); return formatDateKey(d); }
+    return '';
+  }
+
+  function renderSmartList() {
+    const buckets = bucketizeTasks();
+    const addMethod = getHwAddMethod();
+    const order = [['overdue', 'Overdue'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This week'], ['later', 'Later'], ['nodate', 'No date']];
+    let html = '';
+    let anyOpen = false;
+    order.forEach(([key, label]) => {
+      const list = buckets[key];
+      if (!list || !list.length) return;
+      anyOpen = true;
+      html += `<section class="hw-group hw-group-${key}"><div class="hw-group-head"><span class="hw-group-title">${label}</span><span class="hw-group-count">${list.length}</span></div><ul class="hw-card-list">${list.map(renderTaskCard).join('')}${addMethod === 'inline' ? renderInlineComposer(bucketPresetDate(key)) : ''}</ul></section>`;
+    });
+    if (buckets.done.length) {
+      html += `<section class="hw-group hw-group-done"><div class="hw-group-head"><span class="hw-group-title">Done</span><span class="hw-group-count">${buckets.done.length}</span></div><ul class="hw-card-list">${buckets.done.slice(0, 15).map(renderTaskCard).join('')}</ul></section>`;
+    }
+    if (!anyOpen && !buckets.done.length) {
+      html = `${renderEmptyStateRedesign('No assignments yet — add one to get started.')}${addMethod === 'inline' ? renderInlineComposer('') : ''}`;
+    }
+    return `<div class="hw-smartlist">${html}</div>`;
+  }
+
+  function renderUpNext() {
+    const open = tasks.filter(t => !t.done).slice().sort(compareHomeworkTasks);
+    if (!open.length) return `<div class="hw-upnext">${renderEmptyStateRedesign('No open assignments — nice work.')}</div>`;
+    const hero = open[0];
+    const rest = open.slice(1, 7);
+    const ds = getTaskDueState(hero);
+    const course = courses.find(c => String(c.id) === String(hero.courseId));
+    const color = getCourseColor(hero.courseId);
+    const pct = studioPctOf(hero);
+    const heroClass = ds.stateClass === 'is-overdue' ? 'is-overdue' : (ds.stateClass === 'is-soon' ? 'is-soon' : '');
+    const startAttr = hero.studio ? `data-studio-open="${escHtml(hero.id)}"` : `data-task-open="${escHtml(hero.id)}"`;
+    const timeLabel = ds.dueTimeLabel && ds.dueTimeLabel !== 'No time' ? ` &middot; ${escHtml(ds.dueTimeLabel)}` : '';
+    return `
+      <div class="hw-upnext">
+        <section class="hw-hero ${heroClass}">
+          <div class="hw-hero-eyebrow">Up next</div>
+          ${course ? `<span class="hw-card-subject" style="background:${color.bg};color:${color.text}">${escHtml(course.name)}</span>` : ''}
+          <div class="hw-hero-title" data-task-open="${escHtml(hero.id)}" role="button" tabindex="0">${escHtml(hero.title)}</div>
+          <div class="hw-hero-meta">
+            <span><i class="fas fa-calendar-day" aria-hidden="true"></i> ${escHtml(ds.dueDateLabel)}${timeLabel}</span>
+            <span><i class="fas fa-fire" aria-hidden="true"></i> ${escHtml(normalizeDifficulty(hero.difficulty))}</span>
+            <span class="hw-status-chip ${escHtml(ds.stateClass)}">${escHtml(ds.statusText)}</span>
+          </div>
+          ${pct != null ? `<div class="hw-hero-progress"><div class="hw-hero-progress-track"><div class="hw-hero-progress-bar" style="width:${pct}%"></div></div></div>` : ''}
+          <div class="hw-hero-actions">
+            <button type="button" class="hw-hero-btn is-primary" ${startAttr}><i class="fas fa-play" aria-hidden="true"></i> Start working</button>
+            <button type="button" class="hw-hero-btn" data-task-toggle="${escHtml(hero.id)}"><i class="fas fa-check" aria-hidden="true"></i> Mark done</button>
+            <button type="button" class="hw-hero-btn" data-task-snooze="${escHtml(hero.id)}">Snooze 1 day</button>
+          </div>
+        </section>
+        ${rest.length ? `<section class="hw-group"><div class="hw-group-head"><span class="hw-group-title">Also coming up</span><span class="hw-group-count">${rest.length}</span></div><ul class="hw-card-list">${rest.map(renderTaskCard).join('')}</ul></section>` : ''}
+      </div>`;
+  }
+
+  function renderBoard() {
+    const todo = [];
+    const inProgress = [];
+    const done = [];
+    tasks.forEach(task => {
+      if (task.done) { done.push(task); return; }
+      const pct = studioPctOf(task);
+      if (pct != null && pct > 0 && pct < 100) inProgress.push(task);
+      else todo.push(task);
+    });
+    [todo, inProgress, done].forEach(list => list.sort(compareHomeworkTasks));
+    const addMethod = getHwAddMethod();
+    const column = (dotClass, title, list, extra) => `<div class="hw-board-col"><div class="hw-board-col-head"><span class="hw-board-dot ${dotClass}"></span><span class="hw-board-col-title">${title}</span><span class="hw-board-col-count">${list.length}</span></div><ul class="hw-card-list">${list.map(renderTaskCard).join('')}${extra || ''}</ul></div>`;
+    return `<div class="hw-board">
+        ${column('is-todo', 'To do', todo, addMethod === 'inline' ? renderInlineComposer('') : '')}
+        ${column('is-progress', 'In progress', inProgress, '')}
+        ${column('is-done', 'Done', done.slice(0, 15), '')}
+      </div>`;
+  }
+
+  let timelineWeekOffset = 0;
+
+  function renderTimeline() {
+    const today = startOfDay(new Date());
+    const monday = new Date(today);
+    monday.setDate(monday.getDate() - ((today.getDay() + 6) % 7) + timelineWeekOffset * 7);
+    const days = [];
+    for (let i = 0; i < 7; i += 1) { const d = new Date(monday); d.setDate(d.getDate() + i); days.push(d); }
+    const weekKeys = days.map(formatDateKey);
+    const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const todayKey = formatDateKey(today);
+    const byDay = {};
+    weekKeys.forEach(key => { byDay[key] = []; });
+    const leftover = [];
+    tasks.filter(t => !t.done).forEach(task => {
+      const dd = normalizeDueDate(task.dueDate);
+      if (dd && byDay[dd]) byDay[dd].push(task);
+      else leftover.push(task);
+    });
+    const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+    const grid = days.map((d, i) => {
+      const key = weekKeys[i];
+      const isToday = key === todayKey;
+      const pills = byDay[key].slice().sort(compareHomeworkTasks).map(task => {
+        const color = getCourseColor(task.courseId);
+        return `<span class="hw-tl-pill" data-task-open="${escHtml(task.id)}" role="button" tabindex="0" style="background:${color.bg};color:${color.text}" title="${escHtml(task.title)}">${escHtml(task.title)}</span>`;
+      }).join('');
+      return `<div class="hw-tl-day ${isToday ? 'is-today' : ''}"><div class="hw-tl-dow">${dows[i]}${isToday ? ' &middot; today' : ''}</div><div class="hw-tl-date">${d.getDate()}</div>${pills}</div>`;
+    }).join('');
+    const leftoverHtml = leftover.length
+      ? `<div class="hw-tl-overflow"><span class="hw-group-title">Other open (${leftover.length})</span><ul class="hw-card-list">${leftover.slice().sort(compareHomeworkTasks).map(renderTaskCard).join('')}</ul></div>`
+      : '';
+    return `<div class="hw-timeline">
+        <div class="hw-timeline-head"><div class="hw-group-title">Week of ${escHtml(monthFmt.format(days[0]))} &ndash; ${escHtml(monthFmt.format(days[6]))}</div><div class="hw-timeline-nav"><button type="button" data-timeline-prev aria-label="Previous week"><i class="fas fa-chevron-left" aria-hidden="true"></i></button><button type="button" data-timeline-next aria-label="Next week"><i class="fas fa-chevron-right" aria-hidden="true"></i></button></div></div>
+        <div class="hw-timeline-grid">${grid}</div>
+        ${leftoverHtml}
+      </div>`;
+  }
+
+  function snoozeTask(taskId) {
+    const task = getTaskByIdInternal(taskId);
+    if (!task) return;
+    const base = normalizeDueDate(task.dueDate) || formatDateKey(new Date());
+    const d = new Date(`${base}T12:00:00`);
+    d.setDate(d.getDate() + 1);
+    task.dueDate = formatDateKey(d);
+    task.updatedAt = new Date().toISOString();
+    save();
+    render();
+  }
+
+  function bindExtraInteractions(board) {
+    board.querySelectorAll('[data-task-pin-countdown]').forEach(button => {
+      button.addEventListener('click', () => {
+        closeTaskContextMenus();
+        openCountdownPinChooser(button.getAttribute('data-task-pin-countdown'));
+      });
+    });
+    board.querySelectorAll('[data-task-snooze]').forEach(button => {
+      button.addEventListener('click', () => {
+        closeTaskContextMenus();
+        snoozeTask(button.getAttribute('data-task-snooze'));
+      });
+    });
+    board.querySelectorAll('[data-timeline-prev]').forEach(button => {
+      button.addEventListener('click', () => { timelineWeekOffset -= 1; render(); });
+    });
+    board.querySelectorAll('[data-timeline-next]').forEach(button => {
+      button.addEventListener('click', () => { timelineWeekOffset += 1; render(); });
+    });
+  }
+
+  // =====================================================================
+  // Pinned deadline countdowns (nav bar / sidebar / in-note chip).
+  // Pins live in their own storage key so they ride the safe-storage path
+  // without touching the homework task model. A single 1s ticker updates
+  // every pinned element + any countdown chip embedded in a note.
+  // =====================================================================
+
+  const COUNTDOWN_KEY = 'hwCountdownPins:v1';
+  let countdownTimer = null;
+  let countdownChooserTaskId = null;
+  let cdNoteSelection = null;
+
+  function navigateToHomework() {
+    try {
+      if (typeof window.setActiveView === 'function') window.setActiveView('homework');
+      else if (typeof window.applyActiveView === 'function') window.applyActiveView('homework');
+    } catch (_) { /* no-op */ }
+  }
+
+  function getPins() {
+    return parseArrayFromStorage(COUNTDOWN_KEY)
+      .filter(pin => pin && pin.taskId && (pin.target === 'nav' || pin.target === 'sidebar'))
+      .map(pin => ({ id: String(pin.id || uid()), taskId: String(pin.taskId), target: pin.target }));
+  }
+
+  function savePins(list) {
+    writeArrayToStorage(COUNTDOWN_KEY, Array.isArray(list) ? list : []);
+  }
+
+  function addPin(taskId, target) {
+    const normalizedTarget = target === 'sidebar' ? 'sidebar' : 'nav';
+    const list = getPins();
+    if (list.some(pin => pin.taskId === String(taskId) && pin.target === normalizedTarget)) {
+      showHomeworkToast('Already pinned there.');
+      return;
+    }
+    list.push({ id: uid(), taskId: String(taskId), target: normalizedTarget });
+    savePins(list);
+    renderPins();
+  }
+
+  function removePin(pinId) {
+    savePins(getPins().filter(pin => pin.id !== String(pinId)));
+    renderPins();
+  }
+
+  function cdUrgencyClass(ms) {
+    if (ms === null || ms === undefined) return 'hw-cd-calm';
+    if (ms <= 0) return 'hw-cd-overdue';
+    if (ms <= 6 * 3600000) return 'hw-cd-danger';
+    if (ms <= 48 * 3600000) return 'hw-cd-warn';
+    return 'hw-cd-calm';
+  }
+
+  function formatRemaining(ms) {
+    if (ms === null || ms === undefined) return '—';
+    if (ms <= 0) return 'Overdue';
+    const total = Math.floor(ms / 1000);
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    if (days >= 1) return `${days}d ${hours}h`;
+    if (hours >= 1) return `${hours}h ${minutes}m`;
+    return `${minutes}m ${seconds}s`;
+  }
+
+  function renderNavPin(pin) {
+    const task = getTaskByIdInternal(pin.taskId);
+    if (!task) return '';
+    const due = getTaskDueDateTime(task);
+    const ms = due ? due.getTime() - Date.now() : null;
+    return `<span class="hw-cd-pill ${cdUrgencyClass(ms)}" data-cd-pin="${escHtml(pin.id)}" data-cd-task="${escHtml(task.id)}" role="button" tabindex="0" title="${escHtml(task.title)}"><i class="fas fa-hourglass-half" aria-hidden="true"></i><span class="hw-cd-pill-time" data-cd-time>${escHtml(formatRemaining(ms))}</span><span class="hw-cd-pill-label">${escHtml(task.title)}</span><button type="button" class="hw-cd-unpin" data-cd-unpin="${escHtml(pin.id)}" aria-label="Unpin countdown">&times;</button></span>`;
+  }
+
+  function renderSideCard(pin) {
+    const task = getTaskByIdInternal(pin.taskId);
+    if (!task) return '';
+    const due = getTaskDueDateTime(task);
+    const ms = due ? due.getTime() - Date.now() : null;
+    const course = courses.find(c => String(c.id) === String(task.courseId));
+    const color = getCourseColor(task.courseId);
+    const ds = getTaskDueState(task);
+    const timeLabel = ds.dueTimeLabel && ds.dueTimeLabel !== 'No time' ? ` &middot; ${escHtml(ds.dueTimeLabel)}` : '';
+    return `<div class="hw-cd-card ${cdUrgencyClass(ms)}" data-cd-pin="${escHtml(pin.id)}" data-cd-task="${escHtml(task.id)}" role="button" tabindex="0">${course ? `<div class="hw-cd-card-subject" style="color:${color.text}">${escHtml(course.name)}</div>` : ''}<div class="hw-cd-card-title">${escHtml(task.title)}</div><div class="hw-cd-card-time" data-cd-time>${escHtml(formatRemaining(ms))}</div><div class="hw-cd-card-due">${escHtml(ds.dueDateLabel)}${timeLabel}</div><button type="button" class="hw-cd-unpin" data-cd-unpin="${escHtml(pin.id)}" aria-label="Unpin countdown">&times;</button></div>`;
+  }
+
+  function renderPins() {
+    let pins = getPins();
+    const valid = pins.filter(pin => getTaskByIdInternal(pin.taskId));
+    if (valid.length !== pins.length) { savePins(valid); pins = valid; }
+
+    const navWrap = document.getElementById('sutraCountdownNav');
+    if (navWrap) {
+      const navPins = pins.filter(pin => pin.target === 'nav');
+      setSafeHTML(navWrap, navPins.map(renderNavPin).join(''));
+      navWrap.style.display = navPins.length ? '' : 'none';
+    }
+    const sideWrap = document.getElementById('sutraCountdownSidebar');
+    if (sideWrap) {
+      const sidePins = pins.filter(pin => pin.target === 'sidebar');
+      setSafeHTML(sideWrap, sidePins.length ? `<div class="hw-cd-side-head">Pinned</div>${sidePins.map(renderSideCard).join('')}` : '');
+      sideWrap.style.display = sidePins.length ? '' : 'none';
+    }
+    bindPinInteractions();
+    tickCountdowns();
+  }
+
+  function bindPinInteractions() {
+    document.querySelectorAll('[data-cd-unpin]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        removePin(button.getAttribute('data-cd-unpin'));
+      });
+    });
+    document.querySelectorAll('[data-cd-pin]').forEach(el => {
+      el.addEventListener('click', () => navigateToHomework());
+      el.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigateToHomework(); }
+      });
+    });
+  }
+
+  function tickCountdowns() {
+    const now = Date.now();
+    const setUrgency = (el, ms) => {
+      const cls = cdUrgencyClass(ms);
+      ['hw-cd-calm', 'hw-cd-warn', 'hw-cd-danger', 'hw-cd-overdue'].forEach(name => el.classList.toggle(name, name === cls));
+    };
+
+    document.querySelectorAll('[data-cd-pin]').forEach(el => {
+      const task = getTaskByIdInternal(el.getAttribute('data-cd-task'));
+      const due = task ? getTaskDueDateTime(task) : null;
+      const ms = due ? due.getTime() - now : null;
+      const timeEl = el.querySelector('[data-cd-time]');
+      if (timeEl) { const txt = formatRemaining(ms); if (timeEl.textContent !== txt) timeEl.textContent = txt; }
+      setUrgency(el, ms);
+    });
+
+    document.querySelectorAll('[data-countdown]').forEach(el => {
+      let target = null;
+      const taskId = el.getAttribute('data-countdown-task');
+      if (taskId) {
+        const task = getTaskByIdInternal(taskId);
+        if (task) { const due = getTaskDueDateTime(task); if (due) target = due.getTime(); }
+      }
+      if (target === null) {
+        const iso = el.getAttribute('data-countdown-target');
+        if (iso) { const d = new Date(iso); if (!Number.isNaN(d.getTime())) target = d.getTime(); }
+      }
+      const ms = target === null ? null : target - now;
+      const timeEl = el.querySelector('[data-countdown-time]');
+      if (timeEl) { const txt = formatRemaining(ms); if (timeEl.textContent !== txt) timeEl.textContent = txt; }
+      setUrgency(el, ms);
+    });
+  }
+
+  function startCountdownTicker() {
+    if (countdownTimer) return;
+    countdownTimer = setInterval(tickCountdowns, 1000);
+    tickCountdowns();
+  }
+
+  function ensureCountdownPinModal() {
+    let modal = document.getElementById('hwCountdownPinModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'hwCountdownPinModal';
+    modal.className = 'hw-course-quick-modal';
+    modal.hidden = true;
+    setSafeHTML(modal, `
+      <div class="hw-course-quick-card" role="dialog" aria-modal="true" aria-labelledby="hwCdPinTitle">
+        <div class="hw-course-quick-head">
+          <h3 id="hwCdPinTitle" class="hw-course-quick-title">Pin as countdown</h3>
+          <button type="button" class="hw-course-quick-close" data-cd-pin-close aria-label="Close">&times;</button>
+        </div>
+        <p class="hw-course-quick-copy">Where should this deadline live?</p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button type="button" class="neumo-btn" data-cd-pin-target="nav"><i class="fas fa-window-maximize" aria-hidden="true"></i> Top nav bar</button>
+          <button type="button" class="neumo-btn" data-cd-pin-target="sidebar"><i class="fas fa-table-columns" aria-hidden="true"></i> Sidebar</button>
+          <button type="button" class="neumo-btn" data-cd-pin-target="note"><i class="fas fa-note-sticky" aria-hidden="true"></i> Insert into current note</button>
+        </div>
+      </div>`);
+    document.body.appendChild(modal);
+    const close = () => {
+      modal.hidden = true;
+      modal.classList.remove('is-visible');
+      if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (_) {} }
+    };
+    modal.querySelector('[data-cd-pin-close]').addEventListener('click', close);
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    modal.querySelectorAll('[data-cd-pin-target]').forEach(button => {
+      button.addEventListener('click', () => {
+        const target = button.getAttribute('data-cd-pin-target');
+        const taskId = countdownChooserTaskId;
+        close();
+        if (!taskId) return;
+        if (target === 'nav') { addPin(taskId, 'nav'); showHomeworkToast('Pinned to the top bar.'); }
+        else if (target === 'sidebar') { addPin(taskId, 'sidebar'); showHomeworkToast('Pinned to the sidebar.'); }
+        else if (target === 'note') { insertCountdownIntoNote(taskId); }
+      });
+    });
+    return modal;
+  }
+
+  function openCountdownPinChooser(taskId) {
+    countdownChooserTaskId = String(taskId || '');
+    const modal = ensureCountdownPinModal();
+    modal.hidden = false;
+    modal.classList.add('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (_) {} }
+  }
+
+  function insertCountdownIntoNote(taskId) {
+    const task = getTaskByIdInternal(taskId);
+    if (!task) { showHomeworkToast('Assignment not found.'); return; }
+    const due = getTaskDueDateTime(task);
+    if (typeof window.SutraInsertCountdownIntoNote === 'function') {
+      window.SutraInsertCountdownIntoNote({ taskId: String(task.id), label: task.title, targetIso: due ? due.toISOString() : '' });
+    } else {
+      showHomeworkToast('Open a note to insert a countdown.');
+    }
+  }
+
+  // Slash-command entry point (from app.js): pick a deadline to embed.
+  function pickForNote(selectionState) {
+    const open = tasks.filter(t => getTaskDueDateTime(t)).slice().sort(compareHomeworkTasks);
+    if (!open.length) { showHomeworkToast('Add a homework deadline first, then insert it.'); return; }
+    cdNoteSelection = selectionState || null;
+
+    let modal = document.getElementById('hwCountdownNoteModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'hwCountdownNoteModal';
+      modal.className = 'hw-course-quick-modal';
+      modal.hidden = true;
+      setSafeHTML(modal, `
+        <div class="hw-course-quick-card" role="dialog" aria-modal="true" aria-labelledby="hwCdNoteTitle">
+          <div class="hw-course-quick-head">
+            <h3 id="hwCdNoteTitle" class="hw-course-quick-title">Insert countdown</h3>
+            <button type="button" class="hw-course-quick-close" data-cd-note-close aria-label="Close">&times;</button>
+          </div>
+          <p class="hw-course-quick-copy">Pick a deadline to embed in this note.</p>
+          <div class="hw-cd-note-list" data-cd-note-list style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto;"></div>
+        </div>`);
+      document.body.appendChild(modal);
+      const closeNote = () => {
+        modal.hidden = true;
+        modal.classList.remove('is-visible');
+        if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (_) {} }
+      };
+      modal.querySelector('[data-cd-note-close]').addEventListener('click', closeNote);
+      modal.addEventListener('click', event => { if (event.target === modal) closeNote(); });
+      modal._close = closeNote;
+    }
+
+    const list = modal.querySelector('[data-cd-note-list]');
+    setSafeHTML(list, open.slice(0, 40).map(task => {
+      const course = courses.find(c => String(c.id) === String(task.courseId));
+      const ds = getTaskDueState(task);
+      return `<button type="button" class="neumo-btn" data-cd-note-pick="${escHtml(task.id)}" style="text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:2px;"><span>${escHtml(task.title)}</span><span style="font-size:11px;opacity:0.7;">${course ? `${escHtml(course.name)} &middot; ` : ''}${escHtml(ds.dueDateLabel)}</span></button>`;
+    }).join(''));
+    list.querySelectorAll('[data-cd-note-pick]').forEach(button => {
+      button.addEventListener('click', () => {
+        const task = getTaskByIdInternal(button.getAttribute('data-cd-note-pick'));
+        modal._close();
+        if (!task) return;
+        const due = getTaskDueDateTime(task);
+        if (typeof window.SutraInsertCountdownIntoNote === 'function') {
+          window.SutraInsertCountdownIntoNote({ taskId: String(task.id), label: task.title, targetIso: due ? due.toISOString() : '', selectionState: cdNoteSelection });
+        }
+      });
+    });
+
+    modal.hidden = false;
+    modal.classList.add('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (_) {} }
+  }
+
   function setDashboardStat(selector, value) {
     const el = $(selector);
     if (el) el.textContent = String(value);
@@ -901,22 +1702,23 @@
       headerActions.insertAdjacentHTML('beforeend', renderGlobalAssignmentComposer());
     }
 
-    board.innerHTML = [
-      renderCourseLane({
-        laneType: 'class',
-        title: 'Classes',
-        subtitle: 'Assignments grouped by class.',
-        emptyCopy: 'No subjects yet. Add one to start organizing homework.'
-      }),
-      renderCourseLane({
-        laneType: 'misc',
-        title: 'Extracurriculars',
-        subtitle: 'Clubs, projects, and non-class commitments.',
-        emptyCopy: 'No activities yet. Add one to track work outside class.'
-      })
-    ].join('');
+    const layout = getHwLayout();
+    const addMethod = getHwAddMethod();
+    const topAdd = addMethod === 'quick' ? renderQuickAddBar() : '';
+    let bodyHtml;
+    if (layout === 'upnext') bodyHtml = renderUpNext();
+    else if (layout === 'board') bodyHtml = renderBoard();
+    else if (layout === 'timeline') bodyHtml = renderTimeline();
+    else bodyHtml = renderSmartList();
+
+    board.dataset.hwLayout = layout;
+    board.innerHTML = topAdd + bodyHtml;
 
     bindBoardInteractions(board);
+    bindInlineComposers(board);
+    bindQuickAdd(board);
+    bindExtraInteractions(board);
+    renderPins();
   }
 
   function inferPriorityFromDueDate(dueDate) {
@@ -1565,8 +2367,49 @@
 
     window.addEventListener('homework:updated', () => {
       load();
+      renderPins();
       if (isHomeworkViewActive()) render();
     });
+
+    // Re-render when the layout / add-method preference changes in Settings.
+    window.addEventListener('sutra:homework-prefs', () => {
+      if (isHomeworkViewActive()) render();
+    });
+
+    // "Customize layout" button in the homework header → Settings → Homework.
+    const customizeBtn = $('#hwCustomizeLayoutBtn');
+    if (customizeBtn) {
+      customizeBtn.addEventListener('click', () => {
+        try {
+          if (typeof window.setActiveView === 'function') window.setActiveView('settings');
+          const nav = document.querySelector('[data-settings-nav="homework"]');
+          if (nav) nav.click();
+          const section = document.querySelector('[data-settings-section="homework"]');
+          if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (_) { /* no-op */ }
+      });
+    }
+
+    // Public API for the countdown engine + cross-feature reads.
+    window.SutraHomework = window.SutraHomework || {};
+    Object.assign(window.SutraHomework, {
+      getTasks: () => tasks.map(task => serializeTask(task)),
+      getCourses: () => courses.slice(),
+      getTaskById: (id) => { const task = getTaskByIdInternal(id); return task ? serializeTask(task) : null; },
+      render
+    });
+    window.SutraCountdown = window.SutraCountdown || {};
+    Object.assign(window.SutraCountdown, {
+      pin: addPin,
+      unpin: removePin,
+      list: getPins,
+      pickForNote,
+      renderPins,
+      tick: tickCountdowns
+    });
+
+    startCountdownTicker();
+    renderPins();
 
     render();
     if (isHomeworkViewActive()) {

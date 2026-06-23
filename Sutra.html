@@ -285,6 +285,8 @@
                     <span class="btn-text">New Page</span>
                 </button>
             </div>
+            <!-- Pinned deadline countdowns — populated by src/features/study/homework.js -->
+            <div id="sutraCountdownSidebar" aria-label="Pinned countdowns" style="display:none;"></div>
             <!-- Daily lock-in quote (Section 25) — hydrated by daily-lock-in-quote.js -->
             <div class="stay-hungry-quote" id="daily-lock-in-quote" aria-label="Daily focus quote">
                 <span class="daily-lock-in-quote-text">"Stay hungry. Stay foolish."</span>
@@ -377,6 +379,7 @@
                                                             </button>
                                                         </div>
                                                     </div>
+                                                    <div id="sutraCountdownNav" role="group" aria-label="Pinned countdowns" style="display:none;"></div>
                                                     <div class="toolbar-time-elegant tab-clock-embed" role="group" aria-label="Clock widget">
                                                         <span class="tab-clock-main">
                                                             <i class="fas fa-clock tab-clock-icon"></i>
@@ -2834,6 +2837,7 @@
                 <optgroup label="Tools">
                     <option value="tasks">Tasks</option>
                     <option value="calendar">Calendar</option>
+                    <option value="homework">Homework</option>
                     <option value="study">Study</option>
                     <option value="business">Business</option>
                     <option value="assistant">Assistant</option>
@@ -2901,11 +2905,18 @@
                                 <span class="cc-sidebar-item-copy">Planner &amp; timing</span>
                             </span>
                         </button>
+                        <button type="button" class="cc-sidebar-item" data-settings-nav="homework">
+                            <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-book-open"></i></span>
+                            <span class="cc-sidebar-item-text">
+                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Homework</span>
+                                <span class="cc-sidebar-item-copy">Layout &amp; adding</span>
+                            </span>
+                        </button>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="study">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-graduation-cap"></i></span>
                             <span class="cc-sidebar-item-text">
                                 <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Study</span>
-                                <span class="cc-sidebar-item-copy">Homework &amp; AP</span>
+                                <span class="cc-sidebar-item-copy">AP &amp; hub</span>
                             </span>
                         </button>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="business">
@@ -3659,16 +3670,43 @@
                     </div>
                 </section>
 
-                <section class="cc-section" data-settings-section="study">
+                <section class="cc-section" data-settings-section="homework">
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
-                            <h2 class="cc-section-title">Study</h2>
-                            <p class="cc-section-copy">Homework and AP study preferences.</p>
+                            <h2 class="cc-section-title">Homework</h2>
+                            <p class="cc-section-copy">How assignments are shown and added.</p>
                         </div>
-                        <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="study">Reset</button>
+                        <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
                     <div class="cc-group">
-                        <span class="cc-group-title">Homework</span>
+                        <span class="cc-group-title">Layout</span>
+                        <div class="cc-row" data-setting-item>
+                            <div class="cc-row-text"><span class="cc-row-name">Homework layout</span><span class="cc-row-help">How assignments are arranged. Switch anytime.</span></div>
+                            <div class="cc-row-control">
+                                <select class="modal-input cc-select" data-pref-path="study.homeworkLayout">
+                                    <option value="list">Smart list — grouped by due date</option>
+                                    <option value="upnext">Up Next — focus on what's due</option>
+                                    <option value="board">Board — to do / in progress / done</option>
+                                    <option value="timeline">Timeline — week at a glance</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cc-group">
+                        <span class="cc-group-title">Adding tasks</span>
+                        <div class="cc-row" data-setting-item>
+                            <div class="cc-row-text"><span class="cc-row-name">Add method</span><span class="cc-row-help">How the &ldquo;add a task&rdquo; experience works.</span></div>
+                            <div class="cc-row-control">
+                                <select class="modal-input cc-select" data-pref-path="study.homeworkAddMethod">
+                                    <option value="inline">Inline row — add in place</option>
+                                    <option value="quick">Quick add — type naturally</option>
+                                    <option value="panel">Panel — full add dialog</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cc-group">
+                        <span class="cc-group-title">Display</span>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text"><span class="cc-row-name">Homework density</span><span class="cc-row-help">Spacing of homework rows.</span></div>
                             <div class="cc-row-control">
@@ -3686,6 +3724,19 @@
                             <span class="cc-row-text"><span class="cc-row-name">Show homework due time</span><span class="cc-row-help">Show explicit due times when set.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="study.homeworkShowDueTime"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
+                    </div>
+                </section>
+
+                <section class="cc-section" data-settings-section="study">
+                    <header class="cc-section-head">
+                        <div class="cc-section-head-text">
+                            <h2 class="cc-section-title">Study</h2>
+                            <p class="cc-section-copy">AP study and student-hub preferences.</p>
+                        </div>
+                        <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="study">Reset</button>
+                    </header>
+                    <div class="cc-group">
+                        <span class="cc-group-title">Homework</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text"><span class="cc-row-name">Homework in student hub</span><span class="cc-row-help">Surface homework in the student hub.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="study.showHomeworkInStudentHub"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
@@ -4704,6 +4755,7 @@
                             <p class="hw-subcopy">A dashboard view for workload, urgency, and course progress.</p>
                         </div>
                         <div class="hw-header-actions">
+                            <button id="hwCustomizeLayoutBtn" class="hw-btn hw-btn-accent" type="button" title="Choose your homework layout"><i class="fas fa-table-cells-large" aria-hidden="true"></i>Customize layout</button>
                             <button id="hwExportBtn" class="hw-btn">Export</button>
                             <label class="hw-btn" style="cursor:pointer;">Import <input id="hwImportFile" type="file" accept="application/json" style="display:none"></label>
                             <button id="hwPasteImportBtn" class="hw-btn" type="button" onclick="openHomeworkPasteImport('')" title="Paste assignments from a school portal">Paste Import</button>
@@ -7209,6 +7261,7 @@
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260605-notif1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260610-academic1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260622-hw-redesign1">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260613-cc1">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

@@ -3420,6 +3420,8 @@ function populateProgressDashboard() {
                     defaultMinutes: 25
                 },
                 study: {
+                    homeworkLayout: 'list',
+                    homeworkAddMethod: 'inline',
                     homeworkDensity: 'comfortable',
                     homeworkShowDifficulty: true,
                     homeworkShowDueTime: true,
@@ -3654,6 +3656,8 @@ function populateProgressDashboard() {
                     defaultMinutes: Math.floor(clampSettingNumber(focusSource.defaultMinutes, defaults.focus.defaultMinutes, 5, 180))
                 },
                 study: {
+                    homeworkLayout: normalizeSettingChoice(studySource.homeworkLayout, ['list', 'upnext', 'board', 'timeline'], defaults.study.homeworkLayout),
+                    homeworkAddMethod: normalizeSettingChoice(studySource.homeworkAddMethod, ['inline', 'quick', 'panel'], defaults.study.homeworkAddMethod),
                     homeworkDensity: normalizeSettingChoice(studySource.homeworkDensity, ['compact', 'comfortable'], defaults.study.homeworkDensity),
                     homeworkShowDifficulty: studySource.homeworkShowDifficulty !== false,
                     homeworkShowDueTime: studySource.homeworkShowDueTime !== false,
@@ -3918,6 +3922,9 @@ function populateProgressDashboard() {
                 body.dataset.taskCompletionStyle = prefs.tasks.completionStyle;
                 body.dataset.timelineDensity = prefs.calendar.timelineDensity;
                 body.dataset.homeworkDensity = prefs.study.homeworkDensity;
+                body.dataset.homeworkLayout = prefs.study.homeworkLayout;
+                body.dataset.homeworkAddMethod = prefs.study.homeworkAddMethod;
+                try { window.dispatchEvent(new CustomEvent('sutra:homework-prefs')); } catch (_) { /* no-op */ }
                 body.dataset.businessViewMode = prefs.business.defaultView;
                 body.classList.toggle('pref-toolbar-hidden', prefs.layout.toolbarVisibility === 'hidden');
                 body.classList.toggle('pref-toolbar-focus-only', prefs.layout.toolbarVisibility === 'focus');
@@ -57666,6 +57673,42 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
         }
 
+        function buildCountdownChipHtml(payload) {
+            const label = escapeHtml(String(payload && payload.label || 'Countdown'));
+            const targetIso = escapeHtml(String(payload && payload.targetIso || ''));
+            const taskAttr = payload && payload.taskId ? ` data-countdown-task="${escapeHtml(String(payload.taskId))}"` : '';
+            return `<span class="sutra-countdown hw-cd-calm" data-countdown${taskAttr} data-countdown-target="${targetIso}" data-countdown-label="${label}" contenteditable="false"><i class="fas fa-hourglass-half" aria-hidden="true"></i><span class="sutra-countdown-label">${label}</span><span class="sutra-countdown-time" data-countdown-time>&mdash;</span></span>`;
+        }
+
+        // Insert a live countdown chip into the active note. The target date is
+        // baked into data-countdown-target so the chip survives save/reload (it
+        // is a plain element the editor sanitizer preserves); the homework
+        // countdown ticker recomputes the displayed time live on each load.
+        window.SutraInsertCountdownIntoNote = function (payload) {
+            if (payload && payload.selectionState) {
+                try { restoreEditorSelectionState(payload.selectionState); } catch (_) {}
+            }
+            const editor = getActiveEditor() || getPrimaryEditor();
+            if (!editor) { showToast('Open a note to insert a countdown.'); return false; }
+            editor.focus();
+            insertHtmlAtCursor(`${buildCountdownChipHtml(payload || {})}&nbsp;`);
+            try { queueSaveForEditor(editor); } catch (_) {}
+            showToast('Countdown inserted.');
+            return true;
+        };
+
+        // Slash-command entry point — defers to the homework module's deadline
+        // picker (it owns the task data), passing the captured selection so the
+        // chip lands where the "/" was typed.
+        function insertCountdown() {
+            const selectionState = (typeof captureEditorSelectionState === 'function') ? captureEditorSelectionState() : null;
+            if (window.SutraCountdown && typeof window.SutraCountdown.pickForNote === 'function') {
+                window.SutraCountdown.pickForNote(selectionState);
+            } else {
+                showToast('Add a homework deadline first, then insert it.');
+            }
+        }
+
         // Insert Page Link Function
         function insertPageLink() {
             openPageLinkModal();
@@ -58531,6 +58574,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             { id: 'audio', icon: 'fa-music', title: 'Audio', desc: 'Embed Spotify, SoundCloud, or upload', action: () => insertAudio() },
             { id: 'embed', icon: 'fa-globe', title: 'Embed', desc: 'Embed external content', action: () => insertEmbed() },
             { id: 'html', icon: 'fa-file-code', title: 'Embed HTML', desc: 'Render custom HTML as a content block', action: () => insertHtmlEmbed() },
+            { id: 'countdown', icon: 'fa-hourglass-half', title: 'Countdown', desc: 'Embed a live deadline countdown', action: () => insertCountdown() },
             { id: 'markdown', icon: 'fa-file-lines', title: 'Markdown', desc: 'Paste Markdown and convert it to rich text', action: () => insertMarkdown() },
             { id: 'link', icon: 'fa-link', title: 'Link', desc: 'Add a web link', action: () => insertLink() },
             { id: 'pagelink', icon: 'fa-file-alt', title: 'Link to Page', desc: 'Link to another page', action: () => insertPageLink() },

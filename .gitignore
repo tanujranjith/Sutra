@@ -22,6 +22,10 @@ security-artifacts/
 pitch-decks/
 product-documentation/
 
+# Launch film: large rendered media (frames/MP4s/WAVs ~2GB) + generated artifacts.
+# Marketing output, not part of the app. Sources stay on disk under launch-film/.
+launch-film/
+
 # Stale pre-rebrand assets (no longer referenced by any page; brand checks assert this)
 assets/legacy/mascot.png
 assets/legacy/noteflow-daily-view.png
