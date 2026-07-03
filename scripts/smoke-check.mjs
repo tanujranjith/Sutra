@@ -85,6 +85,19 @@ mustContain('src/core/app.js', 'sutraDriveSyncRuntime.accessToken', 'Drive acces
 mustContain('src/core/app.js', 'sutraDriveSyncRuntime.derivedKey', 'Drive derived key is runtime-only');
 mustContain('src/config/sutra-runtime-config.js', 'googleDriveClientId', 'public Drive OAuth client ID runtime config');
 mustContain('Sutra.html', 'src/config/sutra-runtime-config.js', 'runtime config loads before app');
+
+// Sutra Intelligence Harness — module load order + wiring.
+mustContain('Sutra.html', 'src/features/assistant/sutra-product-knowledge.js', 'product knowledge registry loaded');
+mustContain('Sutra.html', 'src/features/assistant/sutra-capability-registry.js', 'capability registry loaded');
+mustContain('Sutra.html', 'src/features/assistant/sutra-assistant-memory.js', 'assistant memory module loaded');
+mustContain('Sutra.html', 'src/features/assistant/sutra-local-help.js', 'local help module loaded');
+mustContain('Sutra.html', 'styles/features/sutra-assistant-help.css', 'local help / memory stylesheet linked');
+mustContain('Sutra.html', 'id="openSutraMemoryManagerBtn"', 'Manage Memory button in Assistant settings');
+mustContain('Sutra.html', 'data-pref-path="assistant.useMemory"', 'use-saved-memory toggle in Assistant settings');
+mustContain('src/core/app.js', "'sutra:assistantMemory:v1'", 'assistant memory key included in export snapshot');
+mustContain('Sutra.html', 'id="asstSidebarResizer"', 'resizable chat-list drag handle present');
+mustContain('src/features/assistant/flow-assistant.js', 'setupAsstSidebarResizer', 'chat-list resizer wiring present');
+mustContain('src/features/assistant/flow-assistant.js', 'inferActionsFromReply', 'phantom-action safety net present');
 mustContain('src/core/app.js', 'buildWorkspaceExportPayload', 'export payload builder');
 mustContain('src/core/app.js', 'importWorkspacePayload', 'workspace import function');
 mustContain('src/core/app.js', 'collectAtelierRawLocalStorageSnapshot', 'raw localStorage capture');
@@ -181,7 +194,7 @@ mustContain('src/core/app.js', 'resetAtelierOnboardingForTesting', 'Settings res
 mustContain('src/core/app.js', 'ONBOARDING_USER_INTENTS', 'unified onboarding user intent options');
 mustContain('src/core/app.js', 'ONBOARDING_WORKSPACE_FOCUS_OPTIONS', 'unified onboarding workspace focus options');
 mustContain('src/core/app.js', 'ONBOARDING_FEATURE_VIEWS', 'unified onboarding feature tile catalog');
-mustContain('src/core/app.js', "ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'cloud', 'tour']", 'unified onboarding 7-step ordering (incl. Sutra Cloud)');
+mustContain('src/core/app.js', "ONBOARDING_STEPS = ['welcome', 'focus', 'setup', 'ai', 'tour']", 'unified onboarding 5-step ordering (Cloud folded into AI & Backups, spaces into Focus)');
 mustContain('src/core/app.js', 'syncOnboardingStatusUi', 'onboarding status text updater');
 mustContain('Sutra.html', 'atelier-onboarding-rail', 'unified onboarding left rail markup');
 mustContain('Sutra.html', 'id="onboardingSteps"', 'unified onboarding step list anchor');
@@ -614,7 +627,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260614-stabilize1', 'app.js cache-busted so the latest repairs ship');
+mustContain('Sutra.html', 'src/core/app.js?v=20260702-onboarding5', 'app.js cache-busted so the latest repairs ship');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------

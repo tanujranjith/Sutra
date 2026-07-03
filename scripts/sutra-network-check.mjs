@@ -18,6 +18,12 @@ const approved = [
   'https://api.anthropic.com',
   'https://generativelanguage.googleapis.com',
   'https://openrouter.ai',
+  // Additional opt-in AI providers (OpenAI-compatible chat endpoints, pinned in
+  // the Sutra.html connect-src). Calls happen only after the user pastes their
+  // own key; keys stay session-only and never enter exports.
+  'https://api.deepseek.com',
+  'https://api.x.ai',
+  'https://api.perplexity.ai',
   'https://accounts.google.com',
   'https://www.googleapis.com',
   // Sutra Cloud backup providers — OneDrive (Microsoft Graph) + Dropbox.
@@ -56,6 +62,9 @@ const approved = [
   // Rendered as user-clicked anchors only — never fetched by the app.
   'https://docs.anthropic.com',
   'https://ai.google.dev',
+  'https://platform.deepseek.com',
+  'https://console.x.ai',
+  'https://www.perplexity.ai',
   'https://local.sutra.invalid',
   'https://tanujranjith.github.io',
   // SEO/canonical + structured-data references (metadata only, never fetched).

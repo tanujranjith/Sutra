@@ -380,6 +380,8 @@
 
     var activeDraftId = null;
     var activeStep = 'sources'; // 'sources' | 'review' | 'done'
+    var aiImproving = false;     // true while an "Improve with AI" request is in flight
+    var aiStatus = null;         // { kind: 'ok'|'info'|'error', text } — last AI result, shown in-modal
 
     function getActiveDraft() {
         var ws = getWorkspaceState();
@@ -441,6 +443,8 @@
         }
         activeDraftId = draft.id;
         activeStep = draft.items.length ? 'review' : 'sources';
+        aiImproving = false;
+        aiStatus = null;
         render();
         modal.__sutraReturnFocus = document.activeElement;
         modal.hidden = false;
@@ -571,15 +575,23 @@
 
         var approvedCount = draft.items.filter(function (i) { return i.approved; }).length;
 
+        var aiStatusHtml = '';
+        if (aiImproving) {
+            aiStatusHtml = '<div class="semsetup-ai-status is-busy" role="status" aria-live="polite"><span class="semsetup-ai-spinner" aria-hidden="true"></span> Reading your materials with AI…</div>';
+        } else if (aiStatus && aiStatus.text) {
+            aiStatusHtml = '<div class="semsetup-ai-status is-' + esc(aiStatus.kind || 'info') + '" role="status" aria-live="polite">' + esc(aiStatus.text) + '</div>';
+        }
+
         return '<section class="semsetup-section">'
             + '<div class="semsetup-review-head">'
             + '<p class="semsetup-lede">Found <strong>' + draft.items.length + '</strong> item' + (draft.items.length === 1 ? '' : 's') + '. Uncheck anything you don’t want. Nothing is written until you click Apply.</p>'
             + '<div class="semsetup-review-tools">'
             + '<button type="button" class="semsetup-mini-btn" data-sem-action="back-to-sources">← Materials</button>'
             + (aiAvailable
-                ? '<button type="button" class="semsetup-mini-btn semsetup-ai-btn" data-sem-action="improve-ai" title="Sends your pasted/uploaded text to the AI provider you configured. Sutra asks before sending.">✨ Improve with AI</button>'
+                ? '<button type="button" class="semsetup-mini-btn semsetup-ai-btn" data-sem-action="improve-ai"' + (aiImproving ? ' disabled' : '') + ' title="Sends your pasted/uploaded text to the AI provider you configured. Sutra asks before sending.">' + (aiImproving ? '✨ Thinking…' : '✨ Improve with AI') + '</button>'
                 : '')
             + '</div></div>'
+            + aiStatusHtml
             + (groupsHtml || '<div class="semsetup-empty">Nothing extracted yet — go back and add materials, or use Improve with AI.</div>')
             + '<div class="semsetup-foot-actions">'
             + '<span class="semsetup-apply-note">' + approvedCount + ' item' + (approvedCount === 1 ? '' : 's') + ' will be created</span>'
@@ -684,18 +696,34 @@
         + 'days uses 0=Sunday..6=Saturday. Omit anything you are not reasonably sure about. Dates must be ISO. Use the current or upcoming school year for missing years.';
 
     function improveWithAi() {
+        if (aiImproving) return; // already in flight — ignore double-clicks
         var draft = getActiveDraft();
         if (!draft || !draft.sources.length) return;
         var bridge = global.SutraIntelligenceBridge;
         if (!bridge || typeof bridge.extractStructured !== 'function') {
-            toast('AI assist needs a configured provider in Settings.');
+            aiStatus = { kind: 'error', text: 'AI assist needs a configured provider in Settings.' };
+            render();
+            toast(aiStatus.text);
             return;
         }
         var combined = draft.sources.map(function (s) {
             return '=== SOURCE: ' + s.name + ' ===\n' + s.text;
         }).join('\n\n').slice(0, 120000);
 
+        // Show progress IN the modal — toasts render behind it, so the wizard
+        // must surface its own status or the action looks like it did nothing.
+        aiImproving = true;
+        aiStatus = null;
+        render();
         toast('Asking your AI provider to re-read the materials…');
+
+        var finish = function (status) {
+            aiImproving = false;
+            aiStatus = status;
+            render();
+            if (status && status.text) toast(status.text);
+        };
+
         bridge.extractStructured({
             kind: 'semester-setup',
             systemPrompt: AI_SYSTEM_PROMPT,
@@ -703,17 +731,25 @@
             maxTokens: 4096
         }).then(function (result) {
             if (!result || !result.ok) {
-                toast(result && result.cancelled ? 'Cancelled — nothing was sent.' : ('AI extraction failed: ' + (result && result.errorMessage ? result.errorMessage : 'unknown error')));
+                finish({
+                    kind: result && result.cancelled ? 'info' : 'error',
+                    text: result && result.cancelled ? 'Cancelled — nothing was sent.' : ('AI extraction failed: ' + (result && result.errorMessage ? result.errorMessage : 'unknown error'))
+                });
                 return;
             }
             var added = mergeAiResult(result.value);
-            draft = getActiveDraft();
-            if (draft) {
-                draft.sources.forEach(function (s) { s.aiUsed = true; });
-                saveDraft(draft);
+            var current = getActiveDraft();
+            if (current) {
+                current.sources.forEach(function (s) { s.aiUsed = true; });
+                saveDraft(current);
             }
-            render();
-            toast(added ? ('AI found ' + added + ' additional item' + (added === 1 ? '' : 's') + '.') : 'AI didn’t find anything new beyond the local parse.');
+            finish({
+                kind: added ? 'ok' : 'info',
+                text: added ? ('AI found ' + added + ' additional item' + (added === 1 ? '' : 's') + '.') : 'AI didn’t find anything new beyond the local parse.'
+            });
+        }).catch(function (e) {
+            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.improveWithAi' }, 'error');
+            finish({ kind: 'error', text: 'AI request failed — nothing was changed.' });
         });
     }
 
@@ -1016,6 +1052,7 @@
             render();
         } else if (action === 'back-to-sources') {
             activeStep = 'sources';
+            aiStatus = null;
             render();
         } else if (action === 'improve-ai') {
             improveWithAi();

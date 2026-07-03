@@ -4,8 +4,9 @@
     {
       "name": "sutra-static",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["scripts/serve-static.mjs", "5173"],
-      "port": 5173
+      "runtimeArgs": ["scripts/serve-static.mjs"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

@@ -46,7 +46,8 @@
     "noteflow.feedback.googleEmbed.v1",
     "sutra:activityLog:v1",
     "flow:activityLog:v1",
-    "sutraNotifications:v1"
+    "sutraNotifications:v1",
+    "sutra:assistantMemory:v1"
   ],
   "deliberateExclusions": [
     "AI provider API keys",

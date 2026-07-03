@@ -135,7 +135,7 @@ test('corrupt .sutra import is refused without replacing workspace', async ({ pa
 
 test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data', async ({ page }) => {
   await openApp(page);
-  const result = await page.evaluate(async () => {
+  const setup = await page.evaluate(async () => {
     const now = new Date().toISOString();
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     const restoredTitle = `Restore QA ${Date.now()}`;
@@ -171,15 +171,24 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
     }));
     zip.file('workspace.json', JSON.stringify(legacyPayload));
     const blob = await zip.generateAsync({ type: 'blob' });
-    await window.importWorkspaceFile(new File([blob], 'legacy-import.atelier', { type: 'application/zip' }));
-    const afterLegacy = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    // Whole-workspace imports onto a non-empty device now block on the
+    // restore conflict chooser, so the import must NOT be awaited here —
+    // the test clicks the chooser from outside, then awaits the promise.
+    window.__legacyImportPromise = window.importWorkspaceFile(new File([blob], 'legacy-import.atelier', { type: 'application/zip' }));
     return {
       restored: afterRestore.pages.some(page => page.title === restoredTitle),
-      legacy: afterLegacy.pages.some(page => page.title === legacyTitle)
+      legacyTitle
     };
   });
-  expect(result.restored).toBe(true);
-  expect(result.legacy).toBe(true);
+  expect(setup.restored).toBe(true);
+  await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  const legacy = await page.evaluate(async (legacyTitle) => {
+    await window.__legacyImportPromise;
+    delete window.__legacyImportPromise;
+    const afterLegacy = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return afterLegacy.pages.some(page => page.title === legacyTitle);
+  }, setup.legacyTitle);
+  expect(legacy).toBe(true);
 });
 
 test('export modal has dialog semantics, traps Tab, and Escape restores focus', async ({ page }) => {

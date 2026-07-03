@@ -749,6 +749,7 @@ render();
             linkedFocusSessionId: opts && opts.linkedFocusSessionId ? String(opts.linkedFocusSessionId) : null,
             createdAt: nowIso()
         };
+        try { window.SutraActivation && window.SutraActivation.record('review'); } catch (e) { /* non-critical */ }
         return session;
     }
 
@@ -3662,12 +3663,65 @@ render();
         } catch (err) { /* non-critical */ }
     }
 
+    // Decks that belong to a given class — matched by an item's course link
+    // (sourceProjectId === courseId) or by the deck's subject/name overlapping the
+    // class name. Tokens shorter than 3 chars are ignored to avoid false hits.
+    function matchDecksForCourse(courseRef) {
+        const ws = safeWorkspace();
+        if (!ws) return [];
+        const courseId = courseRef && courseRef.courseId ? String(courseRef.courseId) : '';
+        const name = String(courseRef && courseRef.name || '').trim().toLowerCase();
+        const nameTokens = name.split(/[^a-z0-9]+/).filter(t => t.length >= 3);
+        const deckIdsByItem = new Set();
+        if (courseId) {
+            (ws.items || []).forEach(it => { if (it && String(it.sourceProjectId || '') === courseId) deckIdsByItem.add(it.deckId); });
+        }
+        return getDecks(false).filter(deck => {
+            if (deckIdsByItem.has(deck.id)) return true;
+            const hay = `${deck.subject || ''} ${deck.name || ''}`.toLowerCase();
+            if (!hay.trim()) return false;
+            if (name && hay.includes(name)) return true;
+            return nameTokens.some(tok => hay.includes(tok));
+        }).map(d => d.id);
+    }
+
+    // How many cards are due right now for a class — lets callers (e.g. Today)
+    // decide whether to show a "quiz me before <class>" shortcut at all.
+    function countDueForCourse(courseRef) {
+        try {
+            return matchDecksForCourse(courseRef).reduce((n, id) => n + getDueItems(id).length, 0);
+        } catch (err) { return 0; }
+    }
+
+    // Start a review session scoped to one class. Prefers due cards; if none are
+    // due, studies the whole subject so "quiz me" never dead-ends. Returns false
+    // when the class has no matching decks at all.
+    function startReviewForCourse(courseRef, mode) {
+        try {
+            if (typeof setActiveView === 'function') setActiveView('review');
+            const deckIds = matchDecksForCourse(courseRef);
+            const label = (courseRef && courseRef.name) ? courseRef.name : 'that class';
+            if (!deckIds.length) {
+                notify(`No review decks found for ${label}.`);
+                viewState.view = 'library';
+                render();
+                return false;
+            }
+            const due = deckIds.reduce((n, id) => n + getDueItems(id).length, 0);
+            const safeMode = STUDY_MODES.includes(mode) ? mode : 'flashcards';
+            startStudy(deckIds, safeMode, { onlyDue: due > 0 });
+            return true;
+        } catch (err) { return false; }
+    }
+
     window.initReviewWorkspaceUI = initReviewWorkspaceUI;
     window.renderReviewWorkspace = renderReviewWorkspace;
     window.getReviewTodayStats = getReviewTodayStats;
     window.getReviewSearchResults = getReviewSearchResults;
     window.openReviewTab = function () { try { if (typeof setActiveView === 'function') setActiveView('review'); } catch (err) {} };
     window.startReviewSessionFromShortcut = startReviewSessionFromShortcut;
+    window.startReviewForCourse = startReviewForCourse;
+    window.countReviewDueForCourse = countDueForCourse;
     window.openReviewDeck = openDeckById;
     // Flow Assistant integration: expose deck creation + bulk import so the
     // assistant's create_review_deck / add_review_cards actions can succeed.

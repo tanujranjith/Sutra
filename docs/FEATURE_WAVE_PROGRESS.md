@@ -29,8 +29,18 @@ S3 honestly labelled scaffolded/preview), CSP enforcement, secret rejection,
 encryption reuse, auto-backup, full Settings panel, e2e tests, and the
 `docs/SUTRA_CLOUD_*.md` set were already present. Added
 `docs/features/SUTRA_CLOUD.md`.
-**TODO:** restore-time conflict chooser (the current model is backup/restore, not
-live sync); OAuth wiring for OneDrive/Dropbox/Box; S3 SigV4 signing.
+**Update 2026-07-01:** restore-time **conflict chooser** shipped — before a cloud
+restore applies, Sutra compares this device vs the backup (page/task counts +
+newest edit vs backup timestamp) and asks, warning when the device looks newer;
+an empty device restores without interruption.
+**Update 2026-07-02:** the chooser now gates **every** whole-workspace
+replacement — it moved into `applyValidatedWorkspaceImport`
+(`confirmWorkspaceRestoreConflict` in app.js), so file-based .sutra/JSON imports
+and manual Drive restores get the same comparison; Drive's version-tracked
+background pull passes `skipConflictCheck:true`. Backup timestamps flow through
+via `options.backupTimestamp` (cloud row / Drive `modifiedTime`) with a fallback
+to the payload's `exportedAt`.
+**TODO:** OAuth wiring for OneDrive/Dropbox/Box; S3 SigV4 signing.
 
 ## 2. All Due — Complete
 - Shared deterministic ranking engine `computeDeadlineRank(item)` +
@@ -71,6 +81,21 @@ risk-gated confirm), the Activity log (`sutra:activityLog:v1`) with undo
 - **TODO (optional):** an explicit ordered/sequential multi-step plan action type
   (`create_action_plan` with `steps[]`); today plans compose via batched and
   higher-level workflow actions rather than declared step sequencing.
+- **Update 2026-07-02 — batch plan cards + receipts:** multi-action replies now
+  render as one **"Proposed plan"** group with a live *"N of M applied"* count
+  and a grouped **Undo all** button (`undoBatch(batchId)` in flow-assistant.js,
+  exported on `window.flowAssistant`; also an **Undo batch** button per batch in
+  the Activity modal). Every successful apply now renders a **receipt**
+  (`buildReceiptEl`): what changed + created-object counts, a **deep link** to
+  the affected surface (domain→view via `SutraCapabilityRegistry`, created notes
+  open directly), and an **inline Undo** (the activity record id now returns
+  through `applyActionLogged` as `result.activityId`). Verified in-browser on
+  both apply paths; `student-os-phase1.spec.mjs` review-head assertion updated
+  to the new title. The full **Weekly Review** build (grade ▲/▼ deltas +
+  missing-score prompts, plan-health section via
+  `SutraPlanningEngine.analyzeCurrent()` + "Repair my week", and
+  estimates-vs-reality calibration notes) shipped the same day in
+  `openWeeklyReviewModal`/`buildWeeklyReviewSummary` (app.js).
 
 ## 5. Smart Review Generator — Complete
 - Deterministic extractor `sutraExtractReviewPairsFromHtml` (headings→body,
@@ -107,19 +132,31 @@ tracker, a deterministic per-school **readiness score**
 Smart Import already parses text / CSV / ICS / syllabus deterministically, shows
 confidence + a review screen, supports duplicate detection, undo-last-import, and
 logs to Activity. Targets today: homework, tasks, timeline, notes, review.
+- **Update 2026-07-01:** Smart Import now targets **Grade Planner** (syllabus
+  weight lines like "Homework 20%" → `grade category` proposals, applied via
+  `SutraGradePlanner`) and **School Schedule** ("Chemistry MWF 9:00-9:50am" →
+  `schedule period` proposals with weekday templates + course assignment;
+  refuses to touch an existing A/B rotation). Courses were already a target
+  (`class`). Both new types are covered by undo-last-import. Separately, the
+  Homework paste importer gained an LMS path: Canvas assignment-page pastes
+  (title + "Due …" pairing), a `#sutra-import` bookmarklet format that keeps a
+  source URL per assignment (`task.sourceUrl`, shown as a Source link on
+  cards), and title+due duplicate detection with pre-checked Skip.
 - **TODO:** **JSON workspace-fragment** import (validated, allow-listed fields
-  only); new mapping **targets**: Courses, School Schedule, Grade Planner, AP
-  Study, **College**; "manual course setup" step. Parsers to reuse:
-  `parseIcsEvents`, `parseAssignmentText`, `parseSmartImportText`.
+  only); remaining mapping targets: AP Study, **College**; "manual course
+  setup" step. Parsers to reuse: `parseIcsEvents`, `parseAssignmentText`.
 
 ## 9. Workspace Time Machine — Partial
 Per-page version history is mature (20/page, throttled, "Before restore"
 checkpoint, secret-safe, single-note restore, `check:versions` invariants). See
 `docs/features/WORKSPACE_TIME_MACHINE.md`.
-- **TODO:** restore-deleted-page/task **trash** (new persisted collection, wired
-  end-to-end, secret-excluded); whole-workspace **snapshot browser**;
-  single-note-from-snapshot restore; **compare/diff** view; **Storage Health**
-  via `navigator.storage.estimate()` with cleanup settings.
+- **Update 2026-07-01:** the Trash now also holds deleted **planner tasks** and
+  **homework assignments** (including all rows of a deleted subject), not just
+  pages — restore/purge from the same Trash modal, with 30-day age-based
+  auto-purge on top of the 50-item cap. Producer API: `window.SutraTrash.add`.
+- **TODO:** whole-workspace **snapshot browser**; single-note-from-snapshot
+  restore; **compare/diff** view; **Storage Health** via
+  `navigator.storage.estimate()` with cleanup settings.
 
 ## 10. Starter Packs — Complete
 Local data (`src/features/workspace/starter-packs.data.js`,

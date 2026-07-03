@@ -133,6 +133,9 @@ test('Assistant chat history persists locally and is included in encrypted backu
     if (panel && panel.style.display !== 'flex' && typeof window.toggleChat === 'function') window.toggleChat();
   });
   await expect(page.locator('#chatbotMessages')).toBeVisible();
+  // Deterministic local commands ("open notes") sit behind the
+  // assistant.localRouting toggle, which defaults OFF (AI-only).
+  await page.evaluate(() => { window.setWorkspacePreference('assistant.localRouting', true); });
   await page.evaluate(async () => {
     document.getElementById('chatInput').value = 'open notes';
     await window.sendChat();
@@ -174,6 +177,13 @@ test('Assistant chat history persists locally and is included in encrypted backu
   await page.fill('#sutraImportPassphraseInput', PASS);
   await page.locator('#sutraImportPasswordSubmitBtn').click();
   await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+  // Whole-workspace imports onto a non-empty device now show the restore
+  // conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
+  await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  await expect.poll(
+    () => page.evaluate(() => !!localStorage.getItem('sutra:assistantChats:v1')),
+    { timeout: 20_000 }
+  ).toBe(true);
   const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}'));
   expect(restored.conversations?.[0]?.restoredFromBackup).toBe(true);
   expect(restored.conversations?.[0]?.messages?.map(m => m.role)).toEqual(['user', 'assistant']);

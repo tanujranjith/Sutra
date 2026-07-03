@@ -327,6 +327,140 @@
         return { ok: problems.length === 0, problems: problems, totals: { count: list.length, bytes: totalBytes } };
     }
 
+    /* ---------------------------------------------------------------------
+       Reasoning / "thinking effort" capability
+       ---------------------------------------------------------------------
+       Which provider + model combinations accept an explicit reasoning-effort
+       or extended-thinking control through the adapters IMPLEMENTED in
+       src/core/app.js, and how that control is expressed on the wire. Same
+       honesty rule as the rest of this file: a model is reported as
+       reasoning-capable ONLY when the adapter actually sets the parameter.
+       Conservative — unknown/unsupported models report `supported:false`, the
+       composer hides the control, and the request is sent unchanged.
+
+       Wire styles:
+         openai_effort       → body.reasoning_effort: 'minimal'|'low'|'medium'|'high'
+                               (OpenAI o-series/gpt-5 also swap max_tokens →
+                               max_completion_tokens; Groq gpt-oss/qwen3 keep
+                               the standard openai-compatible shape)
+         openrouter_reasoning→ body.reasoning: { effort }
+         anthropic_thinking  → body.thinking: { type:'enabled', budget_tokens }
+         gemini_thinking     → generationConfig.thinkingConfig: { thinkingBudget }
+       --------------------------------------------------------------------- */
+
+    // OpenAI reasoning models that take `reasoning_effort` (o1/o3/o4 + gpt-5).
+    // o1-mini / o1-preview do NOT accept the parameter, so they are excluded.
+    var OPENAI_EFFORT_PATTERN = /gpt-?5|(?:^|[^a-z0-9])o[34](?:[^a-z0-9]|$)|(?:^|[^a-z0-9])o1(?![-\s]?(?:mini|preview))/i;
+    // gpt-5 family additionally exposes the 'minimal' tier.
+    var OPENAI_MINIMAL_PATTERN = /gpt-?5/i;
+    // Groq exposes `reasoning_effort` (low/medium/high) ONLY on the gpt-oss
+    // models. Qwen3 there takes none/default and DeepSeek-R1 / QwQ use
+    // `reasoning_format` instead, so they are deliberately excluded.
+    // Verified against console.groq.com/docs/reasoning (2026-06).
+    var GROQ_EFFORT_PATTERN = /gpt-oss/i;
+    // OpenRouter's unified `reasoning` control spans most reasoning models.
+    var OPENROUTER_REASONING_PATTERN = /(?:^|[^a-z0-9])o[134](?:[^a-z0-9]|$)|gpt-?5|claude-(?:3[-.]7|sonnet-4|opus-4|haiku-4|4)|gemini-2[.-]5|deepseek-(?:r1|reasoner)|qwen3|qwq|grok-(?:3-mini|4)|magistral|thinking/i;
+    // Anthropic splits the thinking control by model generation (verified
+    // against platform.claude.com extended-thinking docs, 2026-06):
+    //  - Adaptive (`thinking:{type:'adaptive', effort}`) on Opus 4.6+ / Sonnet
+    //    4.6 and the 5.x family (Opus 4.8/4.7, Fable 5, Mythos 5). Sending
+    //    budget_tokens to these returns a 400.
+    //  - Manual (`thinking:{type:'enabled', budget_tokens}`) on Claude 3.7 and
+    //    the Claude 4.0/4.1/4.5 generation (Opus / Sonnet / Haiku).
+    var ANTHROPIC_ADAPTIVE_PATTERN = /claude-(?:opus|sonnet|haiku)-4-[6789]\b|claude-(?:opus|sonnet|haiku|fable|mythos)-5\b|claude-mythos-preview/i;
+    var ANTHROPIC_THINKING_PATTERN = /claude-(?:3[-.]7|opus-4|sonnet-4|haiku-4)/i;
+    // Gemini models with a configurable thinking budget (2.5 family + flash-thinking).
+    var GEMINI_THINKING_PATTERN = /gemini-2[.-]5|flash-thinking|thinking-exp/i;
+
+    // Token budgets for the extended-thinking providers (Anthropic / Gemini).
+    var THINK_BUDGET_TOKENS = { low: 2048, medium: 6144, high: 12288 };
+    // Completion-cap floors for the effort-style providers, raised so reasoning
+    // tokens do not starve the final answer (the chat default is only 1024).
+    var EFFORT_OUTPUT_FLOOR = { minimal: 2048, low: 4096, medium: 8192, high: 16384 };
+    // Headroom left for the visible answer on top of the thinking budget.
+    var THINK_ANSWER_HEADROOM = 4096;
+
+    /**
+     * Resolve whether a provider + model exposes a thinking / reasoning-effort
+     * control and, if so, which selectable levels the UI should offer.
+     * Returns { supported, style, levels, supportsOff, defaultLevel }.
+     */
+    function resolveReasoningCapability(provider, model) {
+        var p = String(provider || '').toLowerCase();
+        var m = String(model || '').trim();
+        var none = { supported: false, style: null, levels: [], supportsOff: false, defaultLevel: 'auto' };
+        if (!m) return none;
+        var type = PROVIDER_TYPE[p] || 'openai_compatible';
+
+        if (p === 'openai' && OPENAI_EFFORT_PATTERN.test(m)) {
+            var levels = OPENAI_MINIMAL_PATTERN.test(m) ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
+            return { supported: true, style: 'openai_effort', levels: levels, supportsOff: false, defaultLevel: 'medium' };
+        }
+        if (p === 'groq' && GROQ_EFFORT_PATTERN.test(m)) {
+            return { supported: true, style: 'openai_effort', levels: ['low', 'medium', 'high'], supportsOff: false, defaultLevel: 'medium' };
+        }
+        if (p === 'openrouter' && OPENROUTER_REASONING_PATTERN.test(m)) {
+            return { supported: true, style: 'openrouter_reasoning', levels: ['low', 'medium', 'high'], supportsOff: false, defaultLevel: 'medium' };
+        }
+        if (type === 'anthropic') {
+            if (ANTHROPIC_ADAPTIVE_PATTERN.test(m)) {
+                // Adaptive models think by default and cannot disable it; the
+                // effort knob (low/medium/high) is the only depth control.
+                return { supported: true, style: 'anthropic_adaptive', levels: ['low', 'medium', 'high'], supportsOff: false, defaultLevel: 'medium' };
+            }
+            if (ANTHROPIC_THINKING_PATTERN.test(m)) {
+                return { supported: true, style: 'anthropic_thinking', levels: ['low', 'medium', 'high'], supportsOff: true, defaultLevel: 'medium' };
+            }
+        }
+        if (type === 'gemini' && GEMINI_THINKING_PATTERN.test(m)) {
+            // 2.5 Pro always thinks (budget cannot be set to 0); flash/lite can disable.
+            var canOff = !/2[.-]5-pro/i.test(m);
+            return { supported: true, style: 'gemini_thinking', levels: ['low', 'medium', 'high'], supportsOff: canOff, defaultLevel: 'medium' };
+        }
+        return none;
+    }
+
+    /**
+     * Turn a user-chosen effort level into a concrete plan the request builder
+     * applies. `level` is one of 'auto' | 'off' | 'minimal' | 'low' | 'medium'
+     * | 'high'. 'auto' (and any unsupported case) leaves the payload untouched.
+     * Levels outside the model's supported set are clamped, never sent blindly.
+     * Always returns `{ apply, capability }`; when applying, also style/effort/
+     * disabled/budgetTokens/minOutputTokens.
+     */
+    function resolveReasoningPlan(provider, model, level) {
+        var cap = resolveReasoningCapability(provider, model);
+        var chosen = String(level == null ? 'auto' : level).trim().toLowerCase();
+        var inert = { apply: false, capability: cap };
+        if (!cap.supported) return inert;
+        if (chosen === '' || chosen === 'auto' || chosen === 'default') return inert;
+
+        if (chosen === 'off') {
+            if (!cap.supportsOff) return inert;
+            if (cap.style === 'gemini_thinking') {
+                return { apply: true, capability: cap, style: cap.style, effort: 'off', disabled: true, budgetTokens: 0, minOutputTokens: 0 };
+            }
+            // Anthropic: omit the thinking block entirely (disabled).
+            return { apply: true, capability: cap, style: cap.style, effort: 'off', disabled: true };
+        }
+
+        // Clamp an unsupported tier into the model's actual set.
+        if (cap.levels.indexOf(chosen) === -1) {
+            if (chosen === 'minimal') chosen = cap.levels.indexOf('low') !== -1 ? 'low' : cap.defaultLevel;
+            else chosen = cap.defaultLevel;
+            if (cap.levels.indexOf(chosen) === -1) chosen = cap.levels[cap.levels.length - 1] || 'medium';
+        }
+
+        var plan = { apply: true, capability: cap, style: cap.style, effort: chosen, disabled: false };
+        if (cap.style === 'anthropic_thinking' || cap.style === 'gemini_thinking') {
+            plan.budgetTokens = THINK_BUDGET_TOKENS[chosen] || THINK_BUDGET_TOKENS.medium;
+            plan.minOutputTokens = plan.budgetTokens + THINK_ANSWER_HEADROOM;
+        } else {
+            plan.minOutputTokens = EFFORT_OUTPUT_FLOOR[chosen] || EFFORT_OUTPUT_FLOOR.medium;
+        }
+        return plan;
+    }
+
     /**
      * Suggest provider/model combos (from those the app ships adapters for)
      * that can natively handle the given file category.
@@ -352,6 +486,8 @@
         VERSION: 1,
         classifyFile: classifyFile,
         resolveModelCapabilities: resolveModelCapabilities,
+        resolveReasoningCapability: resolveReasoningCapability,
+        resolveReasoningPlan: resolveReasoningPlan,
         determineAttachmentProcessingPlan: determineAttachmentProcessingPlan,
         validateAttachmentSet: validateAttachmentSet,
         suggestCompatibleModels: suggestCompatibleModels,

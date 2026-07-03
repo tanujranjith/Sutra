@@ -183,6 +183,7 @@
         else if (item.dueDate) bits.push('due ' + item.dueDate);
         if (item.priority === 'high') bits.push('high priority');
         if (item.difficulty === 'hard') bits.push('hard');
+        if (item.calibrated) bits.push('sized from your logged times');
         if (placedDate && item.dueDate && placedDate < item.dueDate) bits.push('placed early to leave a buffer');
         return bits.length ? bits.join(', ') : 'open work';
     }
@@ -427,17 +428,38 @@
             var ctx = intel && typeof intel.deriveStudentContext === 'function' ? intel.deriveStudentContext() : null;
             if (ctx) {
                 var seen = {};
+                // Homework context items carry no estimate; without this every block
+                // falls back to the default study-block length. Pull the task's
+                // calibrated estimate (logged actual-time history) so block sizing
+                // reflects how long this student's work really takes.
+                var hw = global.SutraHomework;
+                var canCalibrate = hw && typeof hw.getTaskById === 'function'
+                    && typeof hw.calibratedEstimateMinutes === 'function';
                 var push = function (arr, kind) {
                     (Array.isArray(arr) ? arr : []).forEach(function (it) {
                         var key = (it.kind || kind) + ':' + (it.id || it.title);
                         if (seen[key]) return;
                         seen[key] = true;
-                        items.push({
+                        var item = {
                             id: it.id || key, kind: it.kind || kind, title: it.title || 'Work',
                             courseName: it.courseName || '', dueDate: it.dueDate || '',
                             priority: it.priority || 'medium', difficulty: it.difficulty || 'medium',
                             estimateMinutes: it.estimateMinutes || 0
-                        });
+                        };
+                        if (!item.estimateMinutes && item.kind === 'homework' && canCalibrate) {
+                            try {
+                                var task = hw.getTaskById(item.id);
+                                if (task) {
+                                    var est = hw.calibratedEstimateMinutes(task);
+                                    if (est && est.minutes > 0) {
+                                        item.estimateMinutes = est.minutes;
+                                        item.calibrated = !!est.adjusted;
+                                    }
+                                    if (task.dueTime) item.dueTime = task.dueTime;
+                                }
+                            } catch (e) { /* keep default sizing */ }
+                        }
+                        items.push(item);
                     });
                 };
                 push(ctx.overdue, 'task');
@@ -505,6 +527,7 @@
             name: block.title, category: block.category || 'study',
             source: 'planner_preview', sourceNoteId: block.sourceId || ''
         });
+        if (id) { try { global.SutraActivation && global.SutraActivation.record('plan'); } catch (e) { /* non-critical */ } }
         return !!id;
     }
 

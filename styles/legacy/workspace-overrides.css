@@ -234,35 +234,104 @@
             font-style: italic;
             opacity: 0.92;
         }
-        /* Safe "thinking" state: Sutra mark + muted label + animated dots. No raw CoT. */
+        /* Safe "thinking" state: Sutra mark + shimmering label + animated dots,
+           wrapped in a softly glowing, sheen-swept pill. No raw CoT. */
         .chatbot-thinking-bubble {
             display: inline-flex;
             align-items: center;
-            gap: 7px;
+            gap: 8px;
             color: var(--text-secondary);
             font-size: 13px;
+            padding: 7px 12px;
+            border-radius: 14px;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(110deg,
+                color-mix(in srgb, var(--accent, #6aa3ff) 11%, transparent),
+                color-mix(in srgb, var(--accent, #6aa3ff) 4%, transparent));
+            border: 1px solid color-mix(in srgb, var(--accent, #6aa3ff) 22%, transparent);
+        }
+        /* Sweeping sheen across the pill. */
+        .chatbot-thinking-bubble::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(100deg, transparent 30%,
+                color-mix(in srgb, var(--accent, #6aa3ff) 16%, transparent) 50%, transparent 70%);
+            transform: translateX(-120%);
+            animation: chatbotThinkingSheen 1.9s ease-in-out infinite;
         }
         .chatbot-thinking-mark {
             color: var(--accent, #6aa3ff);
-            font-size: 14px;
+            font-size: 15px;
             line-height: 1;
-            animation: chatbotThinkingPulse 1.4s ease-in-out infinite;
+            animation: chatbotThinkingSpin 2.6s linear infinite, chatbotThinkingPulse 1.4s ease-in-out infinite;
+            filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent, #6aa3ff) 55%, transparent));
         }
-        .chatbot-thinking-label { letter-spacing: 0.01em; }
+        .chatbot-thinking-label {
+            letter-spacing: 0.01em;
+            background: linear-gradient(90deg,
+                var(--text-secondary) 0%, var(--text-secondary) 38%,
+                var(--text-primary) 50%, var(--text-secondary) 62%, var(--text-secondary) 100%);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: chatbotThinkingShimmer 2.2s linear infinite;
+        }
         .chatbot-thinking-dots { display: inline-flex; gap: 3px; }
         .chatbot-thinking-dots i {
             width: 4px; height: 4px; border-radius: 50%;
-            background: currentColor; opacity: 0.5;
+            background: var(--accent, #6aa3ff); opacity: 0.5;
             animation: chatbotThinkingDot 1.2s ease-in-out infinite;
         }
         .chatbot-thinking-dots i:nth-child(2) { animation-delay: 0.18s; }
         .chatbot-thinking-dots i:nth-child(3) { animation-delay: 0.36s; }
-        @keyframes chatbotThinkingPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+        @keyframes chatbotThinkingPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+        @keyframes chatbotThinkingSpin { to { transform: rotate(360deg); } }
+        @keyframes chatbotThinkingSheen { 0% { transform: translateX(-120%); } 60%,100% { transform: translateX(120%); } }
+        @keyframes chatbotThinkingShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         @keyframes chatbotThinkingDot { 0%,100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
-        @media (prefers-reduced-motion: reduce) {
-            .chatbot-thinking-mark, .chatbot-thinking-dots i { animation: none; }
-            .chatbot-thinking-dots i { opacity: 0.7; }
+        /* Blinking "typing" caret shown while an answer streams in. */
+        .assistant-streaming > *:last-child::after {
+            content: "▍";
+            display: inline-block;
+            margin-left: 2px;
+            color: var(--accent, #6aa3ff);
+            font-weight: 400;
+            transform: translateY(1px);
+            animation: chatbotCaretBlink 1.05s steps(1, end) infinite;
         }
+        @keyframes chatbotCaretBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+        /* Each chat bubble eases in as it is appended. */
+        .chatbot-msg { animation: chatbotMsgIn 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+        @keyframes chatbotMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) {
+            .chatbot-thinking-mark, .chatbot-thinking-dots i,
+            .chatbot-thinking-bubble::after, .assistant-streaming > *:last-child::after,
+            .chatbot-msg { animation: none; }
+            .chatbot-thinking-dots i { opacity: 0.7; }
+            .chatbot-thinking-label {
+                -webkit-text-fill-color: currentColor;
+                color: var(--text-secondary);
+                background: none;
+                animation: none;
+            }
+            .assistant-streaming > *:last-child::after { opacity: 1; }
+        }
+        body.motion-off .chatbot-thinking-mark,
+        body.motion-off .chatbot-thinking-dots i,
+        body.motion-off .chatbot-thinking-bubble::after,
+        body.motion-off .assistant-streaming > *:last-child::after,
+        body.motion-off .chatbot-msg { animation: none; }
+        body.motion-off .chatbot-thinking-label {
+            -webkit-text-fill-color: currentColor;
+            color: var(--text-secondary);
+            background: none;
+            animation: none;
+        }
+        body.motion-off .assistant-streaming > *:last-child::after { opacity: 1; }
         .chatbot-keybanner {
             display: flex;
             align-items: center;
@@ -361,7 +430,17 @@
             line-height: 1.45;
             font-size: 13.5px;
             font-family: inherit;
+            /* Thin, unobtrusive scrollbar only when the text actually overflows. */
+            scrollbar-width: thin;
+            scrollbar-color: var(--surface-border) transparent;
             transition: border-color 0.12s ease, background 0.12s ease;
+        }
+        .chatbot-input textarea::-webkit-scrollbar { width: 8px; }
+        .chatbot-input textarea::-webkit-scrollbar-thumb {
+            background: var(--surface-border);
+            border-radius: 999px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
         }
         .chatbot-input textarea:focus {
             outline: none;
@@ -434,6 +513,23 @@
             letter-spacing: 0.01em;
         }
         .chat-settings-note { margin: 2px 0 4px; font-size: 11px; color: var(--text-muted); }
+        .chat-settings-note[hidden] { display: none; }
+        /* Capability-gated "thinking effort" selector. The compound selector
+           keeps the 2-column layout from being overridden by the later,
+           equal-specificity .chat-settings-row (3-column) rule. */
+        .chatbot-settings .chat-reasoning-row {
+            grid-template-columns: auto minmax(0, 1fr);
+        }
+        .chat-reasoning-row[hidden] { display: none; }
+        .chat-reasoning-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .chat-reasoning-label i { color: var(--accent, #6aa3ff); font-size: 12px; }
 
         .chatbot-settings {
             padding: 10px;
@@ -555,6 +651,55 @@
     .assistant-actions button.flow-reply-save::before    { content: "❏"; }
     .assistant-actions button.flow-reply-task::before    { content: "✓"; }
     .assistant-actions button.flow-reply-copy::before    { content: "⧉"; }
+    .assistant-actions button.flow-reply-fill::before    { content: "✎"; }
+    .assistant-actions button.flow-reply-fill {
+        border-color: rgba(124,92,191,0.45);
+        color: var(--text-primary);
+    }
+    .assistant-actions button.flow-reply-fill:hover {
+        background: rgba(124,92,191,0.14);
+        border-color: rgba(124,92,191,0.85);
+    }
+    .assistant-actions button.flow-reply-regenerate::before { content: "↻"; }
+    .assistant-actions button.flow-reply-favorite.is-fav,
+    .user-message-actions button.flow-reply-favorite.is-fav {
+        color: #e0b64a;
+        border-color: rgba(224,182,74,0.5);
+    }
+    /* User-turn actions (Edit / Copy / Favorite) — same pill style as
+       .assistant-actions, right-aligned under the user bubble like the tab. */
+    .user-message-actions {
+        margin: 6px 0 0;
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .user-message-actions button {
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--surface-border);
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 11.5px;
+        font-family: inherit;
+        line-height: 1.3;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    .user-message-actions button:hover {
+        background: rgba(255,255,255,0.06);
+        color: var(--text-primary);
+        border-color: var(--text-muted);
+    }
+    /* Inline answer spans injected by smartFillAnswers */
+    .hw-fill-answer {
+        color: var(--accent, #7c5cbf);
+        font-style: italic;
+    }
 
     /* ---------- Context chip + selection flag ---------- */
     .flow-context-chip-row {
@@ -890,9 +1035,46 @@
         .chatbot-overflow-menu button i { width: 16px; text-align: center; color: var(--text-muted); }
 
         .chatbot-composer-meta {
-            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+            display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
             padding: 2px 14px 8px;
             min-height: 18px;
+        }
+        /* Compact single-line footer: provider + status flow on the left, the
+           action icons are pushed to the right edge and never wrap/orphan. */
+        .chatbot-composer-meta .flow-context-chip-row {
+            flex: 1 1 auto;
+            min-width: 0;
+            flex-wrap: nowrap;
+            gap: 6px;
+            overflow: hidden;
+        }
+        .chatbot-composer-meta .flow-context-chip {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* The first action icon claims the slack, pushing it + later icons right. */
+        .chatbot-composer-meta #flowViewContextBtn { margin-left: auto; }
+        .flow-chip-icon {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 28px;
+            padding: 0;
+            border-radius: 50%;
+            border: 1px solid var(--surface-border);
+            background: var(--surface-bg, rgba(255,255,255,0.04));
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+            transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+        }
+        .flow-chip-icon:hover,
+        .flow-chip-icon:focus-visible {
+            color: var(--text-primary);
+            border-color: var(--accent, #6aa3ff);
+            background: rgba(106,163,255,0.10);
         }
         .chatbot-composer-meta .chatbot-provider-chip {
             background: var(--surface-bg, rgba(255,255,255,0.05));

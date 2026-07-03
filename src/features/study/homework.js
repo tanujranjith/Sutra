@@ -237,8 +237,23 @@
       recurrence: normalizeRecurrence(task.recurrence),
       notes: String(task.notes || '').trim(),
       createdAt: task.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      // Preserve the real edit time — every mutator sets task.updatedAt
+      // itself. Restamping here marked ALL tasks "edited now" on every save,
+      // which broke any newest-edit comparison (e.g. the cloud-restore
+      // conflict summary).
+      updatedAt: task.updatedAt || new Date().toISOString()
     };
+
+    // Optional per-task extras ride the same row (hwTasks:v2) so they survive
+    // every existing persistence + export path without new storage keys:
+    // - actualMinutes: how long the student said it really took (calibration)
+    // - completedAt: when it was marked done (weekly review / calibration recency)
+    // - sourceUrl: where the assignment came from (LMS paste/bookmarklet import)
+    const actualMinutes = Math.round(Number(task.actualMinutes) || 0);
+    if (actualMinutes > 0) serialized.actualMinutes = actualMinutes;
+    if (task.completedAt) serialized.completedAt = String(task.completedAt);
+    const sourceUrl = sanitizeSourceUrl(task.sourceUrl);
+    if (sourceUrl) serialized.sourceUrl = sourceUrl;
 
     // Assignment Studio payload (milestones, subtasks, rubric, links, effort)
     // rides on the homework task itself so it survives every existing
@@ -317,6 +332,7 @@
   }
 
   function load() {
+    calibrationCache.clear(); // task data may change underneath the cache
     // If a recent write to the homework keys failed (quota / private mode), the
     // bytes in storage are STALE. Reloading would clobber the user's in-memory
     // changes (the homework:updated round-trip calls load()). Keep what we have
@@ -358,6 +374,7 @@
 
   function save() {
     normalizeState();
+    calibrationCache.clear(); // task data changed — recompute ratios lazily
     writeArrayToStorage(COURSES_KEY, courses);
     writeArrayToStorage(TASKS_KEY, tasks.map(task => serializeTask(task)));
     // Schema marker is a low-stakes optional write; never let it throw.
@@ -658,6 +675,18 @@
     return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // Imported assignments may carry a link back to the LMS page they came from.
+  // Only http(s) URLs are ever stored or rendered — anything else is dropped.
+  function sanitizeSourceUrl(rawValue) {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw);
+      if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+    } catch (_) { /* not a URL */ }
+    return '';
+  }
+
   // Route trusted markup through the shared DOM-safety sink. Every dynamic
   // value below is already escaped via escHtml(); the rest is static developer
   // markup, so this is the trusted (not user) channel.
@@ -668,11 +697,6 @@
       return;
     }
     el.innerHTML = html; // sutra-allow-html: fallback only; all interpolated values pass through escHtml()
-  }
-
-  function getHwLayout() {
-    const value = document.body && document.body.dataset ? document.body.dataset.homeworkLayout : '';
-    return ['list', 'upnext', 'board', 'timeline'].includes(value) ? value : 'list';
   }
 
   function getHwAddMethod() {
@@ -689,6 +713,206 @@
       }
     }
     return null;
+  }
+
+  // Total planned effort for a task, in minutes. Prefers the assignment-level
+  // estimate; otherwise sums the milestone estimates. 0 when no plan exists, so
+  // the card stays clean for assignments the student hasn't planned yet.
+  function studioEstimateMinutes(task) {
+    if (!(task && task.studio && window.SutraAssignmentStudio)) return 0;
+    try {
+      const studio = window.SutraAssignmentStudio.normalizeStudio(task.studio);
+      if (!studio) return 0;
+      const override = Number(studio.effort && studio.effort.estimateMinutes) || 0;
+      if (override > 0) return override;
+      const milestones = Array.isArray(studio.milestones) ? studio.milestones : [];
+      return milestones.reduce((sum, m) => sum + (Number(m && m.estimateMinutes) || 0), 0);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function formatEstimateLabel(minutes) {
+    const total = Math.max(0, Math.round(Number(minutes) || 0));
+    if (total <= 0) return '';
+    if (total < 60) return `${total}m`;
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+
+  // ---- effort calibration ------------------------------------------------
+  // When the student logs how long finished work actually took, future
+  // estimates scale by the actual/predicted ratio instead of staying naive.
+  // All deterministic and local: median ratio, tiered course → difficulty →
+  // global, at least MIN samples per tier, clamped so one outlier can't wreck
+  // the plan.
+
+  const CALIBRATION_MIN_SAMPLES = 3;
+  const CALIBRATION_CLAMP = { min: 0.5, max: 2.5 };
+  const LONG_WORK_TITLE_RE = /\bessay\b|\bproject\b|\blab\b|\bpaper\b|\bpresentation\b|\bpractice test\b|\bresearch\b/i;
+
+  // What Sutra would have predicted for this task before it was done: the
+  // Studio plan when one exists, otherwise the same difficulty base + long-work
+  // title bump Quick Capture uses (easy 30 / medium 60 / hard 120, >=90 for
+  // essays/projects/labs).
+  function predictEffortMinutes(task) {
+    if (!task) return 0;
+    const planned = studioEstimateMinutes(task);
+    if (planned > 0) return planned;
+    const base = { easy: 30, medium: 60, hard: 120 };
+    let minutes = base[normalizeDifficulty(task.difficulty)] || 60;
+    if (LONG_WORK_TITLE_RE.test(String(task.title || ''))) minutes = Math.max(minutes, 90);
+    return minutes;
+  }
+
+  function median(values) {
+    if (!values.length) return null;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  function calibrationRatios(filter) {
+    const out = [];
+    for (const t of tasks) {
+      if (!t || !t.done) continue;
+      const actual = Number(t.actualMinutes) || 0;
+      if (actual <= 0) continue;
+      const predicted = predictEffortMinutes(t);
+      if (predicted <= 0) continue;
+      if (filter && !filter(t)) continue;
+      out.push(actual / predicted);
+    }
+    return out;
+  }
+
+  // Tiered lookup: same course first, then same difficulty, then everything.
+  // Returns { ratio, samples, tier } — ratio 1 with tier 'none' when there is
+  // not enough history anywhere. Memoized per (courseId, difficulty) because
+  // callers run per-card / per-inbox-item / per-keystroke; the cache clears on
+  // every save()/load() so it never outlives the task data it derives from.
+  let calibrationCache = new Map();
+
+  function getEffortCalibration(opts) {
+    const courseId = opts && opts.courseId ? String(opts.courseId) : '';
+    const difficulty = opts && opts.difficulty ? normalizeDifficulty(opts.difficulty) : '';
+    const cacheKey = `${courseId}|${difficulty}`;
+    if (calibrationCache.has(cacheKey)) return calibrationCache.get(cacheKey);
+    const clamp = (r) => Math.min(CALIBRATION_CLAMP.max, Math.max(CALIBRATION_CLAMP.min, r));
+    const tiers = [
+      courseId ? { tier: 'course', filter: t => String(t.courseId) === courseId } : null,
+      difficulty ? { tier: 'difficulty', filter: t => normalizeDifficulty(t.difficulty) === difficulty } : null,
+      { tier: 'global', filter: null }
+    ].filter(Boolean);
+    let result = { ratio: 1, samples: 0, tier: 'none' };
+    for (const { tier, filter } of tiers) {
+      const ratios = calibrationRatios(filter);
+      if (ratios.length >= CALIBRATION_MIN_SAMPLES) {
+        result = { ratio: clamp(median(ratios)), samples: ratios.length, tier };
+        break;
+      }
+    }
+    calibrationCache.set(cacheKey, result);
+    return result;
+  }
+
+  // THE one place that decides when calibration applies (significance
+  // threshold) and how it rounds. Every surface — card chip, Quick Capture,
+  // All Due — goes through here so the policy can't drift between copies.
+  function applyEffortCalibration(minutes, opts) {
+    const base = Math.round(Number(minutes) || 0);
+    if (base <= 0) return { minutes: base, adjusted: false };
+    const cal = getEffortCalibration(opts || {});
+    if (cal.tier === 'none' || Math.abs(cal.ratio - 1) < 0.15) return { minutes: base, adjusted: false };
+    return { minutes: Math.max(5, Math.round((base * cal.ratio) / 5) * 5), adjusted: true };
+  }
+
+  // Calibrated estimate for one task. Used for the card chip and exposed for
+  // Quick Capture / All Due so every surface adapts the same way.
+  function calibratedEstimateMinutes(task) {
+    const predicted = predictEffortMinutes(task);
+    if (predicted <= 0) return { minutes: 0, adjusted: false };
+    return applyEffortCalibration(predicted, { courseId: task && task.courseId, difficulty: task && task.difficulty });
+  }
+
+  function logActualMinutes(taskId, minutes) {
+    const task = getTaskByIdInternal(taskId);
+    const value = Math.round(Number(minutes) || 0);
+    if (!task || value <= 0) return false;
+    task.actualMinutes = value;
+    task.updatedAt = new Date().toISOString();
+    save();
+    return true;
+  }
+
+  // Small non-blocking "took about how long?" card shown after marking an
+  // assignment done. Skippable, auto-dismisses, and never steals focus — the
+  // whole point is that answering is optional.
+  function promptActualMinutes(task) {
+    if (!task) return;
+    document.querySelectorAll('.hw-time-log-toast').forEach(el => el.remove());
+    const host = document.createElement('div');
+    host.className = 'hw-time-log-toast';
+    host.setAttribute('role', 'group');
+    host.setAttribute('aria-label', 'Log how long this took');
+
+    const label = document.createElement('div');
+    label.className = 'hw-time-log-label';
+    label.textContent = `Nice — "${String(task.title || 'Assignment').slice(0, 60)}" done. Took about…`;
+    host.appendChild(label);
+
+    const row = document.createElement('div');
+    row.className = 'hw-time-log-row';
+    const choices = [
+      { minutes: 15, text: '15m' },
+      { minutes: 30, text: '30m' },
+      { minutes: 60, text: '1h' },
+      { minutes: 120, text: '2h' },
+      { minutes: 240, text: '4h+' }
+    ];
+    let dismissTimer = 0;
+    const dismiss = () => {
+      window.clearTimeout(dismissTimer);
+      host.remove();
+    };
+    choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hw-time-log-btn';
+      btn.textContent = choice.text;
+      btn.addEventListener('click', () => {
+        if (logActualMinutes(task.id, choice.minutes)) {
+          showHomeworkToast(`Logged ${formatEstimateLabel(choice.minutes)} — future estimates will adapt.`);
+        }
+        dismiss();
+      });
+      row.appendChild(btn);
+    });
+    const skip = document.createElement('button');
+    skip.type = 'button';
+    skip.className = 'hw-time-log-btn hw-time-log-skip';
+    skip.textContent = 'Skip';
+    skip.addEventListener('click', dismiss);
+    row.appendChild(skip);
+    host.appendChild(row);
+
+    document.body.appendChild(host);
+    dismissTimer = window.setTimeout(dismiss, 15000);
+  }
+
+  // How many OTHER not-done assignments share this task's due date. Surfaced as a
+  // "+N due this day" chip so a crowded day is visible from the card itself
+  // (mirrors deriveStudentContext().overloadedDays, but per-card and store-local).
+  function sameDayConflictCount(task) {
+    const key = normalizeDueDate(task && task.dueDate);
+    if (!key || (task && task.done)) return 0;
+    let count = 0;
+    for (const t of tasks) {
+      if (!t || t.done || String(t.id) === String(task.id)) continue;
+      if (normalizeDueDate(t.dueDate) === key) count += 1;
+    }
+    return count;
   }
 
   function getTaskByIdInternal(id) {
@@ -713,6 +937,7 @@
           <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
           <button type="button" data-task-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
           <button type="button" data-task-pin-countdown="${escHtml(task.id)}" role="menuitem">Pin as countdown&hellip;</button>
+          ${!task.done ? `<button type="button" data-task-snooze="${escHtml(task.id)}" role="menuitem">Snooze 1 day</button>` : ''}
           ${recurrence !== 'none' ? `<button type="button" data-task-stop-recurring="${escHtml(task.id)}" role="menuitem">Stop recurring</button>` : ''}
           ${task.courseId ? `<button type="button" data-task-dashboard="${escHtml(task.id)}" role="menuitem">Open class dashboard</button>` : ''}
           <button type="button" data-task-schedule="${escHtml(task.id)}" role="menuitem">Schedule this</button>
@@ -732,6 +957,15 @@
       ? `<span class="hw-card-subject" style="background:${color.bg};color:${color.text}">${escHtml(course.name)}</span>`
       : '';
     const timeLabel = ds.dueTimeLabel && ds.dueTimeLabel !== 'No time' ? ds.dueTimeLabel : '';
+    const estimate = !task.done ? calibratedEstimateMinutes(task) : { minutes: 0, adjusted: false };
+    const planned = !task.done ? studioEstimateMinutes(task) : 0;
+    // Chip only when the student has a plan (keeps unplanned cards clean);
+    // calibration adjusts the number, it doesn't invent one.
+    const estLabel = planned > 0 ? formatEstimateLabel(estimate.adjusted ? estimate.minutes : planned) : '';
+    const estTitle = estimate.adjusted
+      ? 'Estimated time to finish (adjusted from how long your work usually takes)'
+      : 'Estimated time to finish (from your plan)';
+    const conflicts = sameDayConflictCount(task);
     return `
       <li class="hw-card ${task.done ? 'is-done' : ''}" data-task-id="${escHtml(task.id)}">
         <button type="button" class="hw-card-check" data-task-toggle="${escHtml(task.id)}" aria-label="${task.done ? 'Mark as open' : 'Mark as done'}"><i class="fas ${task.done ? 'fa-check-circle' : 'fa-circle'}" aria-hidden="true"></i></button>
@@ -741,8 +975,11 @@
             ${subjectTag}
             <span class="hw-card-meta hw-meta-due"><i class="fas fa-calendar-day" aria-hidden="true"></i>${escHtml(ds.dueDateLabel)}</span>
             ${timeLabel ? `<span class="hw-card-meta hw-meta-time"><i class="fas fa-clock" aria-hidden="true"></i>${escHtml(timeLabel)}</span>` : ''}
+            ${estLabel ? `<span class="hw-card-meta hw-meta-estimate" title="${escHtml(estTitle)}"><i class="fas fa-hourglass-half" aria-hidden="true"></i>${escHtml(estLabel)}${estimate.adjusted ? ' <span class="hw-meta-estimate-adj" aria-hidden="true">~</span>' : ''}</span>` : ''}
             ${recurrence !== 'none' ? `<span class="hw-card-meta hw-meta-recurrence"><i class="fas fa-repeat" aria-hidden="true"></i>${escHtml(recurrenceLabel(recurrence))}</span>` : ''}
             <span class="hw-card-meta hw-meta-difficulty">${escHtml(difficulty.charAt(0).toUpperCase() + difficulty.slice(1))}</span>
+            ${sanitizeSourceUrl(task.sourceUrl) ? `<a class="hw-card-meta hw-meta-source" href="${escHtml(sanitizeSourceUrl(task.sourceUrl))}" target="_blank" rel="noopener noreferrer" title="Open the original assignment page"><i class="fas fa-link" aria-hidden="true"></i>Source</a>` : ''}
+            ${conflicts > 0 ? `<span class="hw-card-meta hw-meta-conflict" title="${escHtml(String(conflicts + 1))} things due this day"><i class="fas fa-layer-group" aria-hidden="true"></i>+${conflicts} due this day</span>` : ''}
           </div>
         </div>
         <span class="hw-status-chip ${escHtml(ds.stateClass)}">${escHtml(ds.statusText)}</span>
@@ -931,6 +1168,19 @@
       </div>`;
   }
 
+  // Board-level "Add class / Add activity" controls. The homework-layout redesign
+  // moved away from the per-lane board (renderCourseLane), which removed the only
+  // direct way to add a class from the board. Students still need that, so this
+  // toolbar restores it for every layout — it opens #hwCourseQuickModal via the
+  // [data-course-add] handler wired in bindBoardInteractions().
+  function renderCourseAddBar() {
+    return `
+      <div class="hw-course-add-bar" role="group" aria-label="Add a class or activity">
+        <button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-plus" aria-hidden="true"></i> Add class</button>
+        <button type="button" class="hw-btn hw-btn-compact" data-course-add="misc"><i class="fas fa-plus" aria-hidden="true"></i> Add activity</button>
+      </div>`;
+  }
+
   function bindQuickAdd(board) {
     const input = board.querySelector('[data-quick-add-input]');
     if (!input) return;
@@ -969,147 +1219,103 @@
     if (submitBtn) submitBtn.addEventListener('click', submit);
   }
 
-  // ---- bucketing + the four layouts -------------------------------------
+  // ---- unified spreadsheet-style view ------------------------------------
+  // One row per class/activity, with that subject's assignments laid out as
+  // a compact list in the adjacent cell — replaces the old list/up-next/
+  // board/timeline layout picker with a single dense, always-visible view.
 
-  function getDueBucket(task) {
-    if (task.done) return 'done';
-    const due = getTaskDueDateTime(task);
-    if (!due) return 'nodate';
-    const now = new Date();
-    if (due.getTime() < now.getTime()) return 'overdue';
-    const diffDays = Math.round((startOfDay(due).getTime() - startOfDay(now).getTime()) / 86400000);
-    if (diffDays <= 0) return 'today';
-    if (diffDays === 1) return 'tomorrow';
-    if (diffDays <= 7) return 'week';
-    return 'later';
-  }
-
-  function bucketizeTasks() {
-    const buckets = { overdue: [], today: [], tomorrow: [], week: [], later: [], nodate: [], done: [] };
-    tasks.forEach(task => { (buckets[getDueBucket(task)] || buckets.later).push(task); });
-    Object.keys(buckets).forEach(key => buckets[key].sort(compareHomeworkTasks));
-    return buckets;
-  }
-
-  function bucketPresetDate(key) {
-    const today = new Date();
-    if (key === 'today') return formatDateKey(today);
-    if (key === 'tomorrow') { const d = new Date(today); d.setDate(d.getDate() + 1); return formatDateKey(d); }
-    return '';
-  }
-
-  function renderSmartList() {
-    const buckets = bucketizeTasks();
+  function renderTable() {
     const addMethod = getHwAddMethod();
-    const order = [['overdue', 'Overdue'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'This week'], ['later', 'Later'], ['nodate', 'No date']];
-    let html = '';
-    let anyOpen = false;
-    order.forEach(([key, label]) => {
-      const list = buckets[key];
-      if (!list || !list.length) return;
-      anyOpen = true;
-      html += `<section class="hw-group hw-group-${key}"><div class="hw-group-head"><span class="hw-group-title">${label}</span><span class="hw-group-count">${list.length}</span></div><ul class="hw-card-list">${list.map(renderTaskCard).join('')}${addMethod === 'inline' ? renderInlineComposer(bucketPresetDate(key)) : ''}</ul></section>`;
-    });
-    if (buckets.done.length) {
-      html += `<section class="hw-group hw-group-done"><div class="hw-group-head"><span class="hw-group-title">Done</span><span class="hw-group-count">${buckets.done.length}</span></div><ul class="hw-card-list">${buckets.done.slice(0, 15).map(renderTaskCard).join('')}</ul></section>`;
-    }
-    if (!anyOpen && !buckets.done.length) {
-      html = `${renderEmptyStateRedesign('No assignments yet — add one to get started.')}${addMethod === 'inline' ? renderInlineComposer('') : ''}`;
-    }
-    return `<div class="hw-smartlist">${html}</div>`;
-  }
+    const classes = courses.filter(c => c.type === 'class');
+    const activities = courses.filter(c => c.type === 'misc');
 
-  function renderUpNext() {
-    const open = tasks.filter(t => !t.done).slice().sort(compareHomeworkTasks);
-    if (!open.length) return `<div class="hw-upnext">${renderEmptyStateRedesign('No open assignments — nice work.')}</div>`;
-    const hero = open[0];
-    const rest = open.slice(1, 7);
-    const ds = getTaskDueState(hero);
-    const course = courses.find(c => String(c.id) === String(hero.courseId));
-    const color = getCourseColor(hero.courseId);
-    const pct = studioPctOf(hero);
-    const heroClass = ds.stateClass === 'is-overdue' ? 'is-overdue' : (ds.stateClass === 'is-soon' ? 'is-soon' : '');
-    const startAttr = hero.studio ? `data-studio-open="${escHtml(hero.id)}"` : `data-task-open="${escHtml(hero.id)}"`;
-    const timeLabel = ds.dueTimeLabel && ds.dueTimeLabel !== 'No time' ? ` &middot; ${escHtml(ds.dueTimeLabel)}` : '';
-    return `
-      <div class="hw-upnext">
-        <section class="hw-hero ${heroClass}">
-          <div class="hw-hero-eyebrow">Up next</div>
-          ${course ? `<span class="hw-card-subject" style="background:${color.bg};color:${color.text}">${escHtml(course.name)}</span>` : ''}
-          <div class="hw-hero-title" data-task-open="${escHtml(hero.id)}" role="button" tabindex="0">${escHtml(hero.title)}</div>
-          <div class="hw-hero-meta">
-            <span><i class="fas fa-calendar-day" aria-hidden="true"></i> ${escHtml(ds.dueDateLabel)}${timeLabel}</span>
-            <span><i class="fas fa-fire" aria-hidden="true"></i> ${escHtml(normalizeDifficulty(hero.difficulty))}</span>
-            <span class="hw-status-chip ${escHtml(ds.stateClass)}">${escHtml(ds.statusText)}</span>
-          </div>
-          ${pct != null ? `<div class="hw-hero-progress"><div class="hw-hero-progress-track"><div class="hw-hero-progress-bar" style="width:${pct}%"></div></div></div>` : ''}
-          <div class="hw-hero-actions">
-            <button type="button" class="hw-hero-btn is-primary" ${startAttr}><i class="fas fa-play" aria-hidden="true"></i> Start working</button>
-            <button type="button" class="hw-hero-btn" data-task-toggle="${escHtml(hero.id)}"><i class="fas fa-check" aria-hidden="true"></i> Mark done</button>
-            <button type="button" class="hw-hero-btn" data-task-snooze="${escHtml(hero.id)}">Snooze 1 day</button>
-          </div>
-        </section>
-        ${rest.length ? `<section class="hw-group"><div class="hw-group-head"><span class="hw-group-title">Also coming up</span><span class="hw-group-count">${rest.length}</span></div><ul class="hw-card-list">${rest.map(renderTaskCard).join('')}</ul></section>` : ''}
-      </div>`;
-  }
-
-  function renderBoard() {
-    const todo = [];
-    const inProgress = [];
-    const done = [];
+    const tasksByCourse = new Map();
     tasks.forEach(task => {
-      if (task.done) { done.push(task); return; }
-      const pct = studioPctOf(task);
-      if (pct != null && pct > 0 && pct < 100) inProgress.push(task);
-      else todo.push(task);
+      const key = String(task.courseId || '');
+      if (!tasksByCourse.has(key)) tasksByCourse.set(key, []);
+      tasksByCourse.get(key).push(task);
     });
-    [todo, inProgress, done].forEach(list => list.sort(compareHomeworkTasks));
-    const addMethod = getHwAddMethod();
-    const column = (dotClass, title, list, extra) => `<div class="hw-board-col"><div class="hw-board-col-head"><span class="hw-board-dot ${dotClass}"></span><span class="hw-board-col-title">${title}</span><span class="hw-board-col-count">${list.length}</span></div><ul class="hw-card-list">${list.map(renderTaskCard).join('')}${extra || ''}</ul></div>`;
-    return `<div class="hw-board">
-        ${column('is-todo', 'To do', todo, addMethod === 'inline' ? renderInlineComposer('') : '')}
-        ${column('is-progress', 'In progress', inProgress, '')}
-        ${column('is-done', 'Done', done.slice(0, 15), '')}
+    // A task whose courseId matches no existing course (deleted subject,
+    // restored-from-Trash row) must still be VISIBLE — fold it into the
+    // "No subject" bucket instead of a bucket nothing renders.
+    const knownCourseIds = new Set(courses.map(c => String(c.id)));
+    Array.from(tasksByCourse.keys()).forEach(key => {
+      if (key && !knownCourseIds.has(key)) {
+        const orphaned = tasksByCourse.get(key) || [];
+        tasksByCourse.set('', (tasksByCourse.get('') || []).concat(orphaned));
+        tasksByCourse.delete(key);
+      }
+    });
+
+    const renderCourseRow = (course) => {
+      const courseTasks = (tasksByCourse.get(String(course.id)) || []).slice().sort(compareHomeworkTasks);
+      const open = courseTasks.filter(task => !task.done);
+      const done = courseTasks.filter(task => task.done);
+      const overdueCount = open.filter(task => getTaskDueState(task).stateClass === 'is-overdue').length;
+      const dueSoonCount = open.filter(task => getTaskDueState(task).stateClass === 'is-soon').length;
+      const color = getCourseColor(course.id);
+      const visibleCards = [...open, ...done.slice(0, 10)];
+      const tasksCellHtml = visibleCards.length
+        ? `<ul class="hw-card-list hw-table-tasklist">${visibleCards.map(renderTaskCard).join('')}${addMethod === 'inline' ? renderInlineComposer('') : ''}</ul>`
+        : `<div class="hw-table-empty">No assignments yet.</div>${addMethod === 'inline' ? renderInlineComposer('') : ''}`;
+      return `
+        <div class="hw-table-row" data-course-row="${escHtml(course.id)}">
+          <div class="hw-table-cell hw-table-cell-subject" style="--hw-subject-accent:${color.text}">
+            <div class="hw-table-subject-name">${escHtml(course.name)}</div>
+            <div class="hw-table-subject-meta">${open.length} open${overdueCount ? ` &middot; <span class="hw-table-overdue-text">${overdueCount} overdue</span>` : ''}${dueSoonCount ? ` &middot; ${dueSoonCount} due soon` : ''}</div>
+            <div class="hw-table-subject-actions">
+              <button type="button" class="hw-table-icon-btn" data-course-dashboard="${escHtml(course.id)}" title="Open class dashboard" aria-label="Open ${escHtml(course.name)} dashboard"><i class="fas fa-gauge-high" aria-hidden="true"></i></button>
+              <button type="button" class="hw-table-icon-btn" data-course-delete="${escHtml(course.id)}" title="Remove subject" aria-label="Remove ${escHtml(course.name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <div class="hw-table-cell hw-table-cell-tasks">${tasksCellHtml}</div>
+        </div>`;
+    };
+
+    // One self-contained table per track (school classes vs extracurriculars),
+    // shown side-by-side so the two kinds of work read as separate columns.
+    const renderGroup = (list, label, emptyMsg, addType) => {
+      const body = list.length
+        ? list.map(renderCourseRow).join('')
+        : `<div class="hw-table-row hw-table-row-empty"><div class="hw-table-group-empty">${escHtml(emptyMsg)} <button type="button" class="hw-table-empty-add" data-course-add="${escHtml(addType)}">+ ${addType === 'class' ? 'Add class' : 'Add activity'}</button></div></div>`;
+      return `<div class="hw-table" role="table" aria-label="${escHtml(label)}">
+          <div class="hw-table-head" role="row">
+            <span class="hw-table-th hw-table-th-subject">${escHtml(label)}</span>
+            <span class="hw-table-th hw-table-th-tasks">Assignments</span>
+          </div>
+          ${body}
+        </div>`;
+    };
+
+    // Empty state only when there is truly NOTHING — with zero courses but
+    // surviving tasks (e.g. after deleting every subject) the orphan table
+    // below still has to render, or those assignments disappear from view.
+    if (!classes.length && !activities.length && !tasks.length) {
+      return renderEmptyStateRedesign('No classes yet — add one above to get started.');
+    }
+
+    const splitHtml = `<div class="hw-table-split">
+        <section class="hw-table-group" data-track="class">${renderGroup(classes, 'Classes', 'No classes yet.', 'class')}</section>
+        <section class="hw-table-group" data-track="misc">${renderGroup(activities, 'Extracurriculars', 'No activities yet.', 'misc')}</section>
       </div>`;
-  }
 
-  let timelineWeekOffset = 0;
-
-  function renderTimeline() {
-    const today = startOfDay(new Date());
-    const monday = new Date(today);
-    monday.setDate(monday.getDate() - ((today.getDay() + 6) % 7) + timelineWeekOffset * 7);
-    const days = [];
-    for (let i = 0; i < 7; i += 1) { const d = new Date(monday); d.setDate(d.getDate() + i); days.push(d); }
-    const weekKeys = days.map(formatDateKey);
-    const dows = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const todayKey = formatDateKey(today);
-    const byDay = {};
-    weekKeys.forEach(key => { byDay[key] = []; });
-    const leftover = [];
-    tasks.filter(t => !t.done).forEach(task => {
-      const dd = normalizeDueDate(task.dueDate);
-      if (dd && byDay[dd]) byDay[dd].push(task);
-      else leftover.push(task);
-    });
-    const monthFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
-    const grid = days.map((d, i) => {
-      const key = weekKeys[i];
-      const isToday = key === todayKey;
-      const pills = byDay[key].slice().sort(compareHomeworkTasks).map(task => {
-        const color = getCourseColor(task.courseId);
-        return `<span class="hw-tl-pill" data-task-open="${escHtml(task.id)}" role="button" tabindex="0" style="background:${color.bg};color:${color.text}" title="${escHtml(task.title)}">${escHtml(task.title)}</span>`;
-      }).join('');
-      return `<div class="hw-tl-day ${isToday ? 'is-today' : ''}"><div class="hw-tl-dow">${dows[i]}${isToday ? ' &middot; today' : ''}</div><div class="hw-tl-date">${d.getDate()}</div>${pills}</div>`;
-    }).join('');
-    const leftoverHtml = leftover.length
-      ? `<div class="hw-tl-overflow"><span class="hw-group-title">Other open (${leftover.length})</span><ul class="hw-card-list">${leftover.slice().sort(compareHomeworkTasks).map(renderTaskCard).join('')}</ul></div>`
+    // Tasks left over without a matching course (e.g. an import whose subject
+    // didn't resolve) still need to be visible somewhere — full-width below.
+    const orphanTasks = (tasksByCourse.get('') || []).slice().sort(compareHomeworkTasks);
+    const orphanHtml = orphanTasks.length
+      ? `<div class="hw-table hw-table-orphan" role="table" aria-label="Unassigned">
+           <div class="hw-table-head" role="row"><span class="hw-table-th hw-table-th-subject">No subject</span><span class="hw-table-th hw-table-th-tasks">Assignments</span></div>
+           <div class="hw-table-row hw-table-row-orphan" data-course-row="">
+             <div class="hw-table-cell hw-table-cell-subject">
+               <div class="hw-table-subject-name">No subject</div>
+               <div class="hw-table-subject-meta">${orphanTasks.length} item${orphanTasks.length === 1 ? '' : 's'}</div>
+             </div>
+             <div class="hw-table-cell hw-table-cell-tasks"><ul class="hw-card-list hw-table-tasklist">${orphanTasks.map(renderTaskCard).join('')}</ul></div>
+           </div>
+         </div>`
       : '';
-    return `<div class="hw-timeline">
-        <div class="hw-timeline-head"><div class="hw-group-title">Week of ${escHtml(monthFmt.format(days[0]))} &ndash; ${escHtml(monthFmt.format(days[6]))}</div><div class="hw-timeline-nav"><button type="button" data-timeline-prev aria-label="Previous week"><i class="fas fa-chevron-left" aria-hidden="true"></i></button><button type="button" data-timeline-next aria-label="Next week"><i class="fas fa-chevron-right" aria-hidden="true"></i></button></div></div>
-        <div class="hw-timeline-grid">${grid}</div>
-        ${leftoverHtml}
-      </div>`;
+
+    return splitHtml + orphanHtml;
   }
 
   function snoozeTask(taskId) {
@@ -1136,12 +1342,6 @@
         closeTaskContextMenus();
         snoozeTask(button.getAttribute('data-task-snooze'));
       });
-    });
-    board.querySelectorAll('[data-timeline-prev]').forEach(button => {
-      button.addEventListener('click', () => { timelineWeekOffset -= 1; render(); });
-    });
-    board.querySelectorAll('[data-timeline-next]').forEach(button => {
-      button.addEventListener('click', () => { timelineWeekOffset += 1; render(); });
     });
   }
 
@@ -1702,17 +1902,9 @@
       headerActions.insertAdjacentHTML('beforeend', renderGlobalAssignmentComposer());
     }
 
-    const layout = getHwLayout();
     const addMethod = getHwAddMethod();
     const topAdd = addMethod === 'quick' ? renderQuickAddBar() : '';
-    let bodyHtml;
-    if (layout === 'upnext') bodyHtml = renderUpNext();
-    else if (layout === 'board') bodyHtml = renderBoard();
-    else if (layout === 'timeline') bodyHtml = renderTimeline();
-    else bodyHtml = renderSmartList();
-
-    board.dataset.hwLayout = layout;
-    board.innerHTML = topAdd + bodyHtml;
+    board.innerHTML = topAdd + renderCourseAddBar() + renderTable();
 
     bindBoardInteractions(board);
     bindInlineComposers(board);
@@ -1768,6 +1960,13 @@
     });
     if (!confirmed) return;
 
+    // Every assignment in the deleted subject goes to Trash so a mis-click
+    // on "Delete Subject" can be walked back one row at a time.
+    if (window.SutraTrash && typeof window.SutraTrash.add === 'function') {
+      tasks.filter(task => String(task.courseId) === String(courseId)).forEach(task => {
+        try { window.SutraTrash.add('homework', task.title || task.text, serializeTask(task)); } catch (err) { /* non-critical */ }
+      });
+    }
     courses = courses.filter(course => String(course.id) !== String(courseId));
     tasks = tasks.filter(task => String(task.courseId) !== String(courseId));
     save();
@@ -1789,9 +1988,19 @@
     }
 
     task.done = !task.done;
+    if (task.done) {
+      task.completedAt = new Date().toISOString();
+    } else {
+      // Reopening clears the completion timestamp but KEEPS actualMinutes —
+      // deleting it meant one mis-click permanently destroyed the student's
+      // logged time (and a calibration sample) with no undo. On re-complete
+      // the prompt shows again and an answer overwrites the old value.
+      delete task.completedAt;
+    }
     task.updatedAt = new Date().toISOString();
     save();
     render();
+    if (task.done) promptActualMinutes(task);
   }
 
   function stopRecurrence(taskId) {
@@ -1804,6 +2013,12 @@
   }
 
   function deleteTask(taskId) {
+    const target = tasks.find(task => String(task.id) === String(taskId));
+    // Deletes are recoverable: the row goes to the shared workspace Trash
+    // (30-day retention) instead of vanishing.
+    if (target && window.SutraTrash && typeof window.SutraTrash.add === 'function') {
+      try { window.SutraTrash.add('homework', target.title || target.text, serializeTask(target)); } catch (err) { /* non-critical */ }
+    }
     tasks = tasks.filter(task => String(task.id) !== String(taskId));
     save();
     render();
@@ -2371,24 +2586,10 @@
       if (isHomeworkViewActive()) render();
     });
 
-    // Re-render when the layout / add-method preference changes in Settings.
+    // Re-render when the add-method preference changes in Settings.
     window.addEventListener('sutra:homework-prefs', () => {
       if (isHomeworkViewActive()) render();
     });
-
-    // "Customize layout" button in the homework header → Settings → Homework.
-    const customizeBtn = $('#hwCustomizeLayoutBtn');
-    if (customizeBtn) {
-      customizeBtn.addEventListener('click', () => {
-        try {
-          if (typeof window.setActiveView === 'function') window.setActiveView('settings');
-          const nav = document.querySelector('[data-settings-nav="homework"]');
-          if (nav) nav.click();
-          const section = document.querySelector('[data-settings-section="homework"]');
-          if (section && section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch (_) { /* no-op */ }
-      });
-    }
 
     // Public API for the countdown engine + cross-feature reads.
     window.SutraHomework = window.SutraHomework || {};
@@ -2396,6 +2597,27 @@
       getTasks: () => tasks.map(task => serializeTask(task)),
       getCourses: () => courses.slice(),
       getTaskById: (id) => { const task = getTaskByIdInternal(id); return task ? serializeTask(task) : null; },
+      // Find-or-create a class course by name, persist, and return { id, name }.
+      // Used by Quick Capture's inline "+ New class" so module memory and storage
+      // stay in sync (no direct hwCourses:v2 writes from outside this module).
+      addCourse: (name) => {
+        const normalized = String(name || '').trim();
+        if (!normalized) return null;
+        const id = ensureCourseIdByName(normalized, 'class');
+        if (!id) return null;
+        save();
+        render();
+        const course = courses.find(c => String(c.id) === String(id));
+        return { id: String(id), name: course ? String(course.name || normalized) : normalized };
+      },
+      // Effort calibration (deterministic, local): other surfaces (Quick
+      // Capture, All Due) scale their estimates by the same history the
+      // homework cards use, so every estimate in the app adapts together.
+      getEffortCalibration: (opts) => getEffortCalibration(opts || {}),
+      applyEffortCalibration: (minutes, opts) => applyEffortCalibration(minutes, opts || {}),
+      predictEffortMinutes: (task) => predictEffortMinutes(task),
+      calibratedEstimateMinutes: (task) => calibratedEstimateMinutes(task),
+      logActualMinutes,
       render
     });
     window.SutraCountdown = window.SutraCountdown || {};

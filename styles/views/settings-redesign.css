@@ -1543,3 +1543,65 @@ body.pref-high-contrast .cc-section-copy,
 body.pref-high-contrast .cc-subtitle {
     color: var(--cc-text-primary);
 }
+
+/* ==========================================================================
+   Redesign additions (2026-06): leading row icons, segmented controls in
+   rows, and per-category "unsaved" dots in the sidebar nav.
+   ========================================================================== */
+
+/* ----- Leading row icon ------------------------------------------------- */
+.cc-row-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--cc-radius-control);
+    background: color-mix(in srgb, var(--cc-text-muted) 12%, transparent);
+    color: var(--cc-text-secondary);
+    font-size: 0.86rem;
+    flex-shrink: 0;
+}
+
+/* Rows that carry a leading icon get a third (leading) grid column. */
+.cc-row:has(.cc-row-icon) {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
+.cc-row:hover .cc-row-icon {
+    color: var(--cc-text-primary);
+    background: color-mix(in srgb, var(--cc-accent) 18%, transparent);
+}
+
+/* ----- Segmented control inside a row ----------------------------------- */
+.cc-row-control > .cc-segmented {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.cc-row.is-dirty .cc-segment.active {
+    background: color-mix(in srgb, var(--cc-accent) 18%, var(--cc-surface));
+}
+
+/* ----- Per-category unsaved dot in the sidebar nav ---------------------- */
+.cc-sidebar-item { position: relative; }
+.cc-sidebar-item.has-dirty::after {
+    content: "";
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cc-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--cc-surface) 70%, transparent);
+}
+
+@media (max-width: 760px) {
+    .cc-row:has(.cc-row-icon) {
+        grid-template-columns: 30px minmax(0, 1fr);
+    }
+    .cc-row:has(.cc-row-icon) .cc-row-control {
+        grid-column: 1 / -1;
+    }
+    .cc-row-control > .cc-segmented { justify-content: flex-start; }
+}

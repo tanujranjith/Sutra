@@ -210,8 +210,10 @@ test('Supabase provider: restore reproduces workspace; wrong passphrase is safe'
   await fillCloudPassword(page, 'nope nope nope', false);
   expect(await wrong).not.toBe('ok');
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title)).toBe('Sentinel LOCAL');
-  // correct passphrase
-  const ok = page.evaluate(async () => { const rows = await window.SutraCloudSync.listBackups(); return window.SutraCloudSync.restore(rows[0]).then(x => (x && x.restored ? 'ok' : 'no')); });
+  // correct passphrase. Programmatic restores skip the interactive restore
+  // conflict chooser (covered by encrypted-backups.spec.mjs) — it would
+  // otherwise block this awaited evaluate forever.
+  const ok = page.evaluate(async () => { const rows = await window.SutraCloudSync.listBackups(); return window.SutraCloudSync.restore(rows[0], { skipConflictCheck: true }).then(x => (x && x.restored ? 'ok' : 'no')); });
   await fillCloudPassword(page, PASS, false);
   expect(await ok).toBe('ok');
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel REMOTE');
@@ -447,7 +449,7 @@ test('Google Drive: connect, backup uploads ciphertext only, restore round-trips
   expect(gd.uploads[0].bytes.toString('utf8')).not.toContain('Sentinel GDRIVE');
   // restore reproduces the workspace
   await seedWorkspace(page, 'GDLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel GDRIVE');
   // retention keeps the latest 10
@@ -469,7 +471,7 @@ test('OneDrive: backup uploads ciphertext, restore round-trips via the content C
   expect(od.uploads[0].bytes.slice(0, 8).toString('utf8')).toBe('SUTRAENC');
   expect(await page.evaluate(() => window.SutraCloudSync.listBackups().then(r => r.length))).toBe(1);
   await seedWorkspace(page, 'ODLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel ODRIVE');
 });
@@ -487,7 +489,7 @@ test('Dropbox: backup uploads ciphertext, restore round-trips', async ({ page })
   expect(db.uploads).toHaveLength(1);
   expect(db.uploads[0].bytes.slice(0, 8).toString('utf8')).toBe('SUTRAENC');
   await seedWorkspace(page, 'DBLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel DBOX');
 });

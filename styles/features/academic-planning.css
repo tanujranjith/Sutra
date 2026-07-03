@@ -285,6 +285,36 @@
 .semsetup-review-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .semsetup-review-tools { display: flex; gap: 8px; flex-wrap: wrap; }
 .semsetup-ai-btn { border-color: var(--accent, #7c9cf2); color: var(--accent, #7c9cf2); }
+.semsetup-ai-btn[disabled] { opacity: 0.7; cursor: progress; }
+/* In-modal AI status — toasts render below the modal, so the wizard surfaces
+   its own progress/result here where the user is actually looking. */
+.semsetup-ai-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+    background: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+    color: var(--text-secondary, #5d574a);
+}
+.semsetup-ai-status.is-ok { border-color: rgba(31, 122, 74, 0.4); background: rgba(31, 122, 74, 0.1); color: #1f7a4a; }
+.semsetup-ai-status.is-error { border-color: rgba(180, 59, 59, 0.4); background: rgba(180, 59, 59, 0.1); color: #b43b3b; }
+.semsetup-ai-status.is-busy { border-color: var(--accent, #7c9cf2); background: color-mix(in srgb, var(--accent, #7c9cf2) 10%, transparent); color: var(--accent-strong, var(--accent, #7c9cf2)); }
+.semsetup-ai-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--accent, #7c9cf2) 35%, transparent);
+    border-top-color: var(--accent, #7c9cf2);
+    animation: semsetupSpin 0.7s linear infinite;
+    flex: 0 0 auto;
+}
+@keyframes semsetupSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .semsetup-ai-spinner { animation-duration: 1.6s; } }
 .semsetup-group { border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1)); border-radius: 12px; margin-bottom: 10px; padding: 0 12px; }
 .semsetup-group summary { padding: 10px 0; cursor: pointer; font-size: 0.86rem; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .semsetup-group-count { background: var(--bg-secondary, rgba(0, 0, 0, 0.07)); border-radius: 999px; padding: 1px 8px; font-size: 0.7rem; }

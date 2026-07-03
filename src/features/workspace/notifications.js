@@ -59,7 +59,9 @@
         snoozed: {},        // notifKey -> snoozeUntil timestamp
         read: {},           // notifKey -> true
         lastDigest: 0,
-        lastActiveAt: 0     // last time this device saw the app open (missed-reminder replay)
+        lastActiveAt: 0,    // last time this device saw the app open (missed-reminder replay)
+        lastWeeklyReviewAt: 0,  // when the weekly review modal last ran (nudge suppression)
+        lastWeeklyNudge: 0      // when the Sunday "run your weekly review" nudge last showed
     };
     var _missedKeys = {};            // keys that fired while Sutra was closed (this session)
     var _browserNotifiedKeys = {};   // OS-notification dedupe (in-memory, per session)
@@ -89,6 +91,8 @@
                 _state.read = raw.read || {};
                 _state.lastDigest = raw.lastDigest || 0;
                 _state.lastActiveAt = raw.lastActiveAt || 0;
+                _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt || 0;
+                _state.lastWeeklyNudge = raw.lastWeeklyNudge || 0;
             } else {
                 _state.prefs = Object.assign({}, DEFAULT_PREFS);
             }
@@ -105,7 +109,9 @@
                 snoozed: _state.snoozed,
                 read: _state.read,
                 lastDigest: _state.lastDigest,
-                lastActiveAt: _state.lastActiveAt
+                lastActiveAt: _state.lastActiveAt,
+                lastWeeklyReviewAt: _state.lastWeeklyReviewAt,
+                lastWeeklyNudge: _state.lastWeeklyNudge
             };
             if (typeof SutraSafeStorage !== 'undefined' && SutraSafeStorage.set) {
                 SutraSafeStorage.set(STORAGE_KEY, payload);
@@ -814,6 +820,45 @@
         } catch (e) { /* non-critical */ }
     }
 
+    // ---- Weekly review nudge -------------------------------------------------------
+    // The weekly review modal exists but nothing invoked it on a cadence. On
+    // Sundays (or Monday if Sunday was missed), if the student hasn't run a
+    // review in the last 5 days, show one quiet toast that opens it. Same
+    // quiet-hours + once-per-day discipline as the daily digest.
+    function _maybeShowWeeklyReviewNudge() {
+        try {
+            if (_inQuietHours()) return;
+            var now = new Date();
+            var day = now.getDay();
+            if (day !== 0 && day !== 1) return;
+            var fiveDays = 5 * 24 * 3600 * 1000;
+            if (_state.lastWeeklyReviewAt && (now.getTime() - _state.lastWeeklyReviewAt) < fiveDays) return;
+            // Monday is a fallback for a MISSED Sunday only — one nudge per
+            // weekend. A same-day check alone re-nudged Monday everyone who
+            // saw Sunday's toast and chose to ignore it.
+            var threeDays = 3 * 24 * 3600 * 1000;
+            if (_state.lastWeeklyNudge && (now.getTime() - _state.lastWeeklyNudge) < threeDays) return;
+            _state.lastWeeklyNudge = now.getTime();
+            _saveState();
+            showToast({
+                title: 'Time for your weekly review',
+                subtitle: 'Your week, grades, and next week — on one screen',
+                icon: 'fa-rotate-left',
+                duration: 9000,
+                onClick: function () {
+                    try { global.dispatchEvent(new CustomEvent('sutra:open-weekly-review')); } catch (e) { /* non-critical */ }
+                }
+            });
+        } catch (e) { /* non-critical */ }
+    }
+
+    // Called by app.js whenever the weekly review modal actually opens, so the
+    // nudge stays quiet for students who already review on their own schedule.
+    function markWeeklyReviewDone() {
+        _state.lastWeeklyReviewAt = Date.now();
+        _saveState();
+    }
+
     // ---- Calendar handoff (.ics with alarms) -----------------------------------------
     // The honest path for "remind me even when the browser is closed": hand the
     // reminders to the device calendar, which CAN alert in the background.
@@ -854,6 +899,20 @@
             lines.push('DESCRIPTION:' + icsEscape(n.title));
             lines.push('TRIGGER:-PT30M');
             lines.push('END:VALARM');
+            // Second alarm the evening BEFORE (5pm local). A 30-min lead on a
+            // 11:59pm deadline is too late to act on — the evening-before ping
+            // is the one that actually changes behavior. Absolute trigger so it
+            // lands at a sane hour regardless of the due time.
+            var eveBefore = new Date(n.due.getTime());
+            eveBefore.setDate(eveBefore.getDate() - 1);
+            eveBefore.setHours(17, 0, 0, 0);
+            if (eveBefore.getTime() > now.getTime() && eveBefore.getTime() < n.due.getTime()) {
+                lines.push('BEGIN:VALARM');
+                lines.push('ACTION:DISPLAY');
+                lines.push('DESCRIPTION:' + icsEscape('Due tomorrow: ' + n.title));
+                lines.push('TRIGGER;VALUE=DATE-TIME:' + fmtUtc(eveBefore));
+                lines.push('END:VALARM');
+            }
             lines.push('END:VEVENT');
         });
         lines.push('END:VCALENDAR');
@@ -1276,8 +1335,10 @@
             _saveState();
             refresh();
             _maybeShowDailyDigest();
+            _maybeShowWeeklyReviewNudge();
         }, 60000);
         setTimeout(_maybeShowDailyDigest, 6000);
+        setTimeout(_maybeShowWeeklyReviewNudge, 9000);
 
         // Grace period: don't show toasts for the first 4 seconds
         // so startup doesn't flood the user
@@ -1302,7 +1363,9 @@
             snoozed: _state.snoozed,
             read: _state.read,
             lastDigest: _state.lastDigest,
-            lastActiveAt: _state.lastActiveAt
+            lastActiveAt: _state.lastActiveAt,
+            lastWeeklyReviewAt: _state.lastWeeklyReviewAt,
+            lastWeeklyNudge: _state.lastWeeklyNudge
         };
     }
 
@@ -1314,6 +1377,8 @@
         if (raw.read) _state.read = Object.assign({}, raw.read);
         if (raw.lastDigest) _state.lastDigest = raw.lastDigest;
         if (raw.lastActiveAt) _state.lastActiveAt = raw.lastActiveAt;
+        if (raw.lastWeeklyReviewAt) _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt;
+        if (raw.lastWeeklyNudge) _state.lastWeeklyNudge = raw.lastWeeklyNudge;
         _saveState();
         refresh();
     }
@@ -1337,6 +1402,7 @@
         exportState: exportState,
         importState: importState,
         exportRemindersToCalendar: exportRemindersToCalendar,
+        markWeeklyReviewDone: markWeeklyReviewDone,
         renderSettingsUI: _renderNotificationSettingsUI
     };
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
     <title>Sutra</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -73,8 +73,8 @@
     
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260528-zfix">
-    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260516-pro">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260702-onboarding5">
+    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260701-suite1">
     <link rel="stylesheet" href="styles/features/sutra-intelligence.css?v=20260610-intel1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -350,6 +350,7 @@
                                                     <!-- Review and Cram Hub consolidated into Testing Hub. Buttons hidden but kept for backward-compat click handlers -->
                                                     <button id="tabReview" class="view-tab" data-view="review" hidden aria-hidden="true" style="display:none;">Review</button>
                                                     <button id="tabCramHub" class="view-tab" data-view="cramhub" hidden aria-hidden="true" style="display:none;" title="Cram Hub"><i class="fas fa-bolt" aria-hidden="true"></i> Cram Hub</button>
+                                                    <button id="tabAssistantView" class="view-tab" data-view="assistantview" title="Sutra Assistant — full-screen AI chat"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
                                                     <button class="view-tab" data-view="settings" aria-label="Settings" title="Settings">
                                                         <i class="fas fa-cog" aria-hidden="true"></i>
                                                         <span class="sr-only">Settings</span>
@@ -373,6 +374,7 @@
                                                             <button class="view-tab view-more-item" data-view="apstudy" role="menuitem">Testing Hub</button>
                                                             <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
                                                             <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;">Review</button>
+                                                            <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
                                                             <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings">
                                                                 <i class="fas fa-cog" aria-hidden="true"></i>
                                                                 <span class="sr-only">Settings</span>
@@ -463,6 +465,8 @@
                         <div class="today-hero-more-wrap">
                             <button class="neumo-btn today-hero-ghost today-hero-more" id="todayHeaderMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
                             <div class="today-hero-menu" id="todayHeaderMoreMenu" role="menu" hidden>
+                                <button type="button" role="menuitem" id="todayPasteImportBtn" class="today-hero-menu-item"><i class="fas fa-file-import"></i><span>Paste assignments / syllabus</span></button>
+                                <button type="button" role="menuitem" id="todayWeeklyReviewBtn" class="today-hero-menu-item"><i class="fas fa-calendar-check"></i><span>Weekly review</span></button>
                                 <button type="button" role="menuitem" id="applyPlanTimelineBtn" class="today-hero-menu-item"><i class="fas fa-calendar-plus"></i><span>Apply plan to calendar</span></button>
                                 <button type="button" role="menuitem" id="autoBlockEventsBtn" class="today-hero-menu-item"><i class="fas fa-bolt"></i><span>Auto-block events now</span></button>
                                 <label class="today-hero-menu-toggle">
@@ -3007,6 +3011,7 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Visual foundation</span>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-palette"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Theme</span>
                                 <span class="cc-row-help">Open the theme panel to choose your palette.</span>
@@ -3018,29 +3023,31 @@
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-table-cells"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Density</span>
                                 <span class="cc-row-help">Spacing rhythm across surfaces.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.density">
-                                    <option value="compact">Compact</option>
-                                    <option value="comfortable">Comfortable</option>
-                                    <option value="spacious">Spacious</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.density" role="radiogroup" aria-label="Density">
+                                    <button type="button" class="cc-segment" data-value="compact" role="radio" aria-checked="false">Compact</button>
+                                    <button type="button" class="cc-segment" data-value="comfortable" role="radio" aria-checked="false">Comfortable</button>
+                                    <button type="button" class="cc-segment" data-value="spacious" role="radio" aria-checked="false">Spacious</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-circle-half-stroke"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Contrast</span>
                                 <span class="cc-row-help">Boost or soften the separation between layers.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.contrast">
-                                    <option value="soft">Soft</option>
-                                    <option value="standard">All Tools</option>
-                                    <option value="high">High</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.contrast" role="radiogroup" aria-label="Contrast">
+                                    <button type="button" class="cc-segment" data-value="soft" role="radio" aria-checked="false">Soft</button>
+                                    <button type="button" class="cc-segment" data-value="standard" role="radio" aria-checked="false">Standard</button>
+                                    <button type="button" class="cc-segment" data-value="high" role="radio" aria-checked="false">High</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3048,56 +3055,60 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Material &amp; shape</span>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-layer-group"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Card style</span>
                                 <span class="cc-row-help">Glass, solid, or minimal panel materials.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.cardStyle">
-                                    <option value="glass">Glass</option>
-                                    <option value="solid">Solid</option>
-                                    <option value="minimal">Minimal</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.cardStyle" role="radiogroup" aria-label="Card style">
+                                    <button type="button" class="cc-segment" data-value="glass" role="radio" aria-checked="false">Glass</button>
+                                    <button type="button" class="cc-segment" data-value="solid" role="radio" aria-checked="false">Solid</button>
+                                    <button type="button" class="cc-segment" data-value="minimal" role="radio" aria-checked="false">Minimal</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-vector-square"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Corners</span>
                                 <span class="cc-row-help">Sharp, rounded, or pill radii.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.cornerStyle">
-                                    <option value="sharp">Sharp</option>
-                                    <option value="rounded">Rounded</option>
-                                    <option value="pill">Pill</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.cornerStyle" role="radiogroup" aria-label="Corners">
+                                    <button type="button" class="cc-segment" data-value="sharp" role="radio" aria-checked="false">Sharp</button>
+                                    <button type="button" class="cc-segment" data-value="rounded" role="radio" aria-checked="false">Rounded</button>
+                                    <button type="button" class="cc-segment" data-value="pill" role="radio" aria-checked="false">Pill</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-clone"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Shadow</span>
                                 <span class="cc-row-help">Depth applied to elevated surfaces.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.shadowIntensity">
-                                    <option value="subtle">Subtle</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="bold">Bold</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.shadowIntensity" role="radiogroup" aria-label="Shadow">
+                                    <button type="button" class="cc-segment" data-value="subtle" role="radio" aria-checked="false">Subtle</button>
+                                    <button type="button" class="cc-segment" data-value="medium" role="radio" aria-checked="false">Medium</button>
+                                    <button type="button" class="cc-segment" data-value="bold" role="radio" aria-checked="false">Bold</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-droplet"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Blur</span>
                                 <span class="cc-row-help">Backdrop blur for translucent surfaces.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.blurIntensity">
-                                    <option value="off">Off</option>
-                                    <option value="low">Low</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="high">High</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.blurIntensity" role="radiogroup" aria-label="Blur">
+                                    <button type="button" class="cc-segment" data-value="off" role="radio" aria-checked="false">Off</button>
+                                    <button type="button" class="cc-segment" data-value="low" role="radio" aria-checked="false">Low</button>
+                                    <button type="button" class="cc-segment" data-value="medium" role="radio" aria-checked="false">Medium</button>
+                                    <button type="button" class="cc-segment" data-value="high" role="radio" aria-checked="false">High</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3105,42 +3116,45 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Interface detail</span>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-icons"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Icon size</span>
                                 <span class="cc-row-help">Scale used by toolbar and sidebar icons.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.iconSize">
-                                    <option value="small">Small</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="large">Large</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.iconSize" role="radiogroup" aria-label="Icon size">
+                                    <button type="button" class="cc-segment" data-value="small" role="radio" aria-checked="false">Small</button>
+                                    <button type="button" class="cc-segment" data-value="medium" role="radio" aria-checked="false">Medium</button>
+                                    <button type="button" class="cc-segment" data-value="large" role="radio" aria-checked="false">Large</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-table-columns"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Sidebar style</span>
                                 <span class="cc-row-help">How the navigation rail renders its surface.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.sidebarStyle">
-                                    <option value="glass">Glass</option>
-                                    <option value="solid">Solid</option>
-                                    <option value="minimal">Minimal</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.sidebarStyle" role="radiogroup" aria-label="Sidebar style">
+                                    <button type="button" class="cc-segment" data-value="glass" role="radio" aria-checked="false">Glass</button>
+                                    <button type="button" class="cc-segment" data-value="solid" role="radio" aria-checked="false">Solid</button>
+                                    <button type="button" class="cc-segment" data-value="minimal" role="radio" aria-checked="false">Minimal</button>
+                                </div>
                             </div>
                         </div>
                         <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-wand-magic-sparkles"></i></span>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Motion</span>
                                 <span class="cc-row-help">Reduce or disable animations across the app.</span>
                             </div>
                             <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="appearance.motionIntensity">
-                                    <option value="full">Full</option>
-                                    <option value="reduced">Reduced</option>
-                                    <option value="off">Off</option>
-                                </select>
+                                <div class="cc-segmented" data-pref-path="appearance.motionIntensity" role="radiogroup" aria-label="Motion">
+                                    <button type="button" class="cc-segment" data-value="full" role="radio" aria-checked="false">Full</button>
+                                    <button type="button" class="cc-segment" data-value="reduced" role="radio" aria-checked="false">Reduced</button>
+                                    <button type="button" class="cc-segment" data-value="off" role="radio" aria-checked="false">Off</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3458,7 +3472,7 @@
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Rerun full onboarding</span>
-                                <span class="cc-row-help">Walks you through Welcome, Focus, Features, Setup, AI &amp; Backups, and Tour. Your notes, tasks, and other data are preserved.</span>
+                                <span class="cc-row-help">Walks you through Welcome, Focus, Setup, AI &amp; Backups, and Tour. Your notes, tasks, and other data are preserved.</span>
                             </div>
                             <div class="cc-row-control">
                                 <button class="cc-btn cc-btn-ghost cc-btn-small" type="button" onclick="rerunAtelierOnboarding()">Rerun onboarding</button>
@@ -3679,20 +3693,6 @@
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
                     <div class="cc-group">
-                        <span class="cc-group-title">Layout</span>
-                        <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Homework layout</span><span class="cc-row-help">How assignments are arranged. Switch anytime.</span></div>
-                            <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="study.homeworkLayout">
-                                    <option value="list">Smart list — grouped by due date</option>
-                                    <option value="upnext">Up Next — focus on what's due</option>
-                                    <option value="board">Board — to do / in progress / done</option>
-                                    <option value="timeline">Timeline — week at a glance</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="cc-group">
                         <span class="cc-group-title">Adding tasks</span>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text"><span class="cc-row-name">Add method</span><span class="cc-row-help">How the &ldquo;add a task&rdquo; experience works.</span></div>
@@ -3878,6 +3878,10 @@
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.showActionPreviews"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <label class="cc-row cc-row-toggle" data-setting-item>
+                            <span class="cc-row-text"><span class="cc-row-name">Always ask before acting</span><span class="cc-row-help">The assistant must get your approval before applying any action or agentic step — nothing auto-applies, ever. Overrides the confirmation mode below. Recommended on.</span></span>
+                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.requireApprovalForActions"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
+                        </label>
+                        <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text"><span class="cc-row-name">Require confirmation</span><span class="cc-row-help">Action proposals always show Apply / Decline cards. Leave on — Sutra is local-first.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.requireConfirmation"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
@@ -3895,10 +3899,28 @@
                             <span class="cc-row-text"><span class="cc-row-name">Include selected text by default</span><span class="cc-row-help">When you have text selected in a note or Canvas, include it in Sutra Assistant context automatically. Turn off for extra privacy.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.includeSelectionByDefault"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
+                        <label class="cc-row cc-row-toggle" data-setting-item>
+                            <span class="cc-row-text"><span class="cc-row-name">Answer simple requests locally (no AI)</span><span class="cc-row-help">Off (default): every message goes to your AI model, so nothing is intercepted by built-in help cards or command shortcuts. Turn on to answer product questions and simple task commands instantly, offline, without an API key. Theme generation and memory always stay local.</span></span>
+                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.localRouting"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
+                        </label>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text"><span class="cc-row-name">Activity log</span><span class="cc-row-help">Every applied Sutra action is recorded locally with an undo option. The log travels with .sutra / .atelier / JSON backups.</span></div>
                             <div class="cc-row-control">
                                 <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" id="openFlowActivityLogBtn" onclick="try{window.flowAssistant&&window.flowAssistant.openActivityLog()}catch(e){}">Open activity log</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cc-group">
+                        <span class="cc-group-title">Assistant Memory</span>
+                        <p class="cc-foot-help">Long-term memory lets Sutra Assistant remember stable facts you ask it to keep (study habits, goals, preferences) to personalize help across sessions. It is consent-first and local: it never saves passwords, keys, financial, medical, precise-location, or locked-note content, and it travels inside encrypted <code>.sutra</code> backups. Manage, edit, or forget anything anytime.</p>
+                        <label class="cc-row cc-row-toggle" data-setting-item>
+                            <span class="cc-row-text"><span class="cc-row-name">Use saved memory to personalize answers</span><span class="cc-row-help">When on, Sutra retrieves a few relevant saved memories for a request. Turn off to ignore memory without deleting it.</span></span>
+                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.useMemory"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
+                        </label>
+                        <div class="cc-row" data-setting-item>
+                            <div class="cc-row-text"><span class="cc-row-name">Manage Memory</span><span class="cc-row-help">View, search, edit, enable/disable, or forget saved memories. Clear temporary or expired memories. No API key needed.</span></div>
+                            <div class="cc-row-control">
+                                <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" id="openSutraMemoryManagerBtn" onclick="try{window.SutraAssistantMemory&&window.SutraAssistantMemory.openManager()}catch(e){}">Manage Memory</button>
                             </div>
                         </div>
                     </div>
@@ -4053,6 +4075,18 @@
                                 <label for="openrouterApiKeyInput">OpenRouter</label>
                                 <input id="openrouterApiKeyInput" type="password" placeholder="OpenRouter API key" autocomplete="off">
                             </div>
+                            <div class="chat-key-item">
+                                <label for="deepseekApiKeyInput">DeepSeek</label>
+                                <input id="deepseekApiKeyInput" type="password" placeholder="DeepSeek API key (sk-…)" autocomplete="off">
+                            </div>
+                            <div class="chat-key-item">
+                                <label for="xaiApiKeyInput">xAI (Grok)</label>
+                                <input id="xaiApiKeyInput" type="password" placeholder="xAI API key (xai-…)" autocomplete="off">
+                            </div>
+                            <div class="chat-key-item">
+                                <label for="perplexityApiKeyInput">Perplexity</label>
+                                <input id="perplexityApiKeyInput" type="password" placeholder="Perplexity API key (pplx-…)" autocomplete="off">
+                            </div>
                         </div>
                         <div class="cc-stacked-actions">
                             <button class="cc-btn cc-btn-primary" id="saveChatKeysBtn" type="button">Save Keys</button>
@@ -4062,7 +4096,10 @@
                             <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">OpenAI</a> ·
                             <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">Anthropic</a> ·
                             <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a> ·
-                            <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">OpenRouter</a>
+                            <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">OpenRouter</a> ·
+                            <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer">DeepSeek</a> ·
+                            <a href="https://console.x.ai" target="_blank" rel="noopener noreferrer">xAI</a> ·
+                            <a href="https://www.perplexity.ai/settings/api" target="_blank" rel="noopener noreferrer">Perplexity</a>
                         </p>
                     </div>
                 </section>
@@ -4248,6 +4285,11 @@
                                 <button class="cc-btn cc-btn-ghost" id="sutraDriveDisconnectBtn" type="button">Disconnect Drive</button>
                                 <button class="cc-btn cc-btn-ghost" id="sutraDriveDeleteBtn" type="button">Delete cloud sync data</button>
                             </div>
+                            <label class="cc-data-health-row" id="sutraDriveStayUnlockedRow" hidden>
+                                <span>Stay unlocked on this device</span>
+                                <input type="checkbox" id="sutraDriveStayUnlockedToggle" aria-describedby="sutraDriveStayUnlockedHelp">
+                            </label>
+                            <p class="cc-foot-help" id="sutraDriveStayUnlockedHelp">When on, the encryption key (never the password) is kept in this browser so Sutra can sync automatically on open, on focus, and every few minutes — no unlock prompt. Turn off on shared computers.</p>
                             <p class="cc-foot-help">Sutra syncs while this app is open, online, unlocked, and authorized. Disconnecting Drive does not delete local workspace data. Manual encrypted .sutra backups are still recommended.</p>
                         </div>
                     </div>
@@ -4379,7 +4421,7 @@
                     </div>
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Tutorial &amp; onboarding</span></div>
-                        <p class="cc-foot-help" id="tutorialStatusText">Onboarding walks you through Welcome, Focus, Features, Setup, AI &amp; Backups, and Tour. The guided tour highlights Daily Thread, Deadline Radar, Sutra Modes, and .sutra backup/restore.</p>
+                        <p class="cc-foot-help" id="tutorialStatusText">Onboarding walks you through Welcome, Focus, Setup, AI &amp; Backups, and Tour. The guided tour highlights Daily Thread, Deadline Radar, Sutra Modes, and .sutra backup/restore.</p>
                         <div class="cc-onboarding-status" id="onboardingStatusBadge" aria-live="polite"></div>
                         <div class="cc-stacked-actions">
                             <!-- onclick fallback in addition to the JS addEventListener
@@ -4488,6 +4530,95 @@
         </div>
     </div>
 </section>
+
+<!-- ── Sutra Assistant View Tab ─────────────────────────────────────── -->
+<section id="view-assistantview" class="view view-assistantview">
+  <div class="asst-shell">
+    <!-- Left sidebar: chat history list -->
+    <div class="asst-sidebar" id="asstSidebar">
+      <div class="asst-sidebar-head">
+        <span class="asst-sidebar-title">Chats</span>
+        <button class="asst-new-chat-btn" id="asstNewChatBtn" title="New chat" aria-label="New chat">
+          <i class="fas fa-plus" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="asst-sidebar-search-row">
+        <input type="search" class="asst-sidebar-search" id="asstSearch" placeholder="Search chats…" aria-label="Search chats">
+      </div>
+      <div class="asst-chat-list" id="asstChatList"></div>
+    </div>
+    <!-- Drag handle to resize the chat list (keyboard: ←/→) -->
+    <div class="asst-resizer" id="asstSidebarResizer" role="separator" aria-orientation="vertical" aria-label="Resize chat list" tabindex="0"></div>
+    <!-- Main: chat area -->
+    <div class="asst-main" id="asstMainPanel">
+      <!-- Header bar: title, model badge, actions -->
+      <div class="asst-topbar" id="asstTopbar">
+        <button class="asst-topbar-menu" id="asstSidebarToggle" type="button" title="Toggle chat list" aria-label="Toggle chat list">
+          <i class="fas fa-bars" aria-hidden="true"></i>
+        </button>
+        <div class="asst-topbar-titles">
+          <span class="asst-topbar-title" id="asstTopbarTitle">New chat</span>
+          <button class="asst-topbar-model" id="asstModelBtn" type="button" title="Change model" aria-haspopup="true" aria-expanded="false">
+            <i class="fas fa-microchip" aria-hidden="true"></i>
+            <span id="asstModelLabel">Model</span>
+            <i class="fas fa-chevron-down asst-topbar-model-caret" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="asst-topbar-actions">
+          <button class="asst-topbar-btn" id="asstCustomizeBtn" type="button" title="Customize the assistant (personality, custom instructions)" aria-label="Customize the assistant">
+            <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+          </button>
+          <button class="asst-topbar-btn" id="asstSettingsBtn" type="button" title="Assistant settings (API keys, model, preferences)" aria-label="Open Assistant settings">
+            <i class="fas fa-gear" aria-hidden="true"></i>
+          </button>
+          <button class="asst-topbar-btn" id="asstExportBtn" type="button" title="Export this chat" aria-label="Export this chat">
+            <i class="fas fa-download" aria-hidden="true"></i>
+          </button>
+          <button class="asst-topbar-btn" id="asstMoreBtn" type="button" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false">
+            <i class="fas fa-ellipsis" aria-hidden="true"></i>
+          </button>
+          <button class="asst-topbar-btn" id="asstClearAllBtn" type="button" title="Clear all chats" aria-label="Clear all chats">
+            <i class="fas fa-trash-can" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <!-- Scrollable body (hero + messages) -->
+      <div class="asst-body" id="asstBody">
+        <div class="asst-hero" id="asstHero">
+          <img src="assets/brand/sutra/generated/sutra-assistant-icon-128.png" class="asst-hero-icon" alt="">
+          <h2 class="asst-hero-title">Sutra Assistant</h2>
+          <p class="asst-hero-sub">Ask anything about your notes,<br>homework, or studies.</p>
+        </div>
+        <div class="asst-msgs" id="asstMessages"></div>
+      </div>
+      <!-- Quick-action chips (only in empty state) -->
+      <div class="asst-chips" id="asstChips"></div>
+      <!-- Context bar (attached context chips, shown when non-empty) -->
+      <div class="asst-context-bar" id="asstContextBar" hidden aria-live="polite"></div>
+      <!-- Input bar -->
+      <div class="asst-input-wrap">
+        <div class="asst-input-card" style="position:relative;">
+          <button class="asst-ctx-btn" id="asstCtxBtn" type="button" title="Add context to message" aria-label="Add context to message" aria-haspopup="true" aria-expanded="false">
+            <i class="fas fa-paperclip" aria-hidden="true"></i>
+          </button>
+          <textarea id="asstInput" class="asst-ta" placeholder="Ask anything…" rows="1" aria-label="Message to Sutra Assistant"></textarea>
+          <div class="asst-input-foot">
+            <button class="asst-send-btn" id="asstSendBtn" aria-label="Send message" disabled>
+              <svg class="asst-send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                   stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true">
+                <line x1="12" y1="19" x2="12" y2="5"/>
+                <polyline points="5 12 12 5 19 12"/>
+              </svg>
+              <span class="asst-stop-icon" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <p class="asst-hint">Shift + Enter for new line · Type <kbd>/</kbd> for commands · <kbd>@</kbd> to mention a note</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="view-apstudy" class="view view-apstudy" style="display:none;">
                 <!-- Testing Hub (Section 32) — redesigned student command center.
                      Dashboard first, segmented nav, no permanent 14-chip row. -->
@@ -4755,7 +4886,6 @@
                             <p class="hw-subcopy">A dashboard view for workload, urgency, and course progress.</p>
                         </div>
                         <div class="hw-header-actions">
-                            <button id="hwCustomizeLayoutBtn" class="hw-btn hw-btn-accent" type="button" title="Choose your homework layout"><i class="fas fa-table-cells-large" aria-hidden="true"></i>Customize layout</button>
                             <button id="hwExportBtn" class="hw-btn">Export</button>
                             <label class="hw-btn" style="cursor:pointer;">Import <input id="hwImportFile" type="file" accept="application/json" style="display:none"></label>
                             <button id="hwPasteImportBtn" class="hw-btn" type="button" onclick="openHomeworkPasteImport('')" title="Paste assignments from a school portal">Paste Import</button>
@@ -4786,7 +4916,7 @@
                     </div>
                     <div class="hw-dashboard-body" id="hwDataTable"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260614-storage1"></script>
+                <script src="src/features/study/homework.js?v=20260701-loops2"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -4910,7 +5040,7 @@
         <div class="quick-capture-backdrop" onclick="closeQuickCaptureModal()"></div>
         <div class="quick-capture-card glass-card">
             <div class="eyebrow" id="quickCaptureTitle">Quick Capture</div>
-            <input id="quickCaptureInput" class="modal-input" type="text" placeholder='Try "Chem homework due Friday hard" or "AP Physics FRQ practice tomorrow 6pm"' autocomplete="off" />
+            <input id="quickCaptureInput" class="modal-input" type="text" placeholder='Try "Chem homework due Friday hard" or "got 87/100 on bio test"' autocomplete="off" />
             <p class="quick-capture-preview" id="quickCapturePreview">Start typing to capture…</p>
             <div class="quick-capture-grid">
                 <label class="quick-capture-field">
@@ -4922,6 +5052,7 @@
                         <option value="block">Calendar block</option>
                         <option value="apsession">AP session idea (task)</option>
                         <option value="college">College task</option>
+                        <option value="grade">Grade (log a score)</option>
                     </select>
                 </label>
                 <label class="quick-capture-field">
@@ -4939,6 +5070,18 @@
                     <option value="">Choose AP subject…</option>
                 </select>
                 <small id="quickCaptureApSubjectHelp" class="quick-capture-helper">Choose the AP subject before saving.</small>
+            </label>
+            <div class="quick-capture-field quick-capture-course-field" id="quickCaptureCourseField" hidden>
+                <span>Class</span>
+                <select id="quickCaptureCourse" class="modal-input">
+                    <option value="">No class</option>
+                </select>
+                <input id="quickCaptureNewCourse" class="modal-input" type="text" placeholder="New class name…" autocomplete="off" maxlength="120" hidden />
+                <small id="quickCaptureCourseHelp" class="quick-capture-helper">Sutra matched this from your text — change it if needed.</small>
+            </div>
+            <label class="quick-capture-blocktime" id="quickCaptureBlockTimeField" hidden>
+                <input type="checkbox" id="quickCaptureBlockTime" />
+                <span id="quickCaptureBlockTimeLabel">Block focus time to work on this</span>
             </label>
             <div class="quick-capture-actions">
                 <button type="button" class="neumo-btn" data-modal-close onclick="closeQuickCaptureModal()">Cancel</button>
@@ -4967,6 +5110,15 @@
                 <button type="button" class="neumo-btn" onclick="closeHomeworkPasteImport()" aria-label="Close">Close</button>
             </div>
             <textarea id="homeworkPasteInput" class="modal-input hw-paste-textarea" rows="6" placeholder="Paste assignments here…"></textarea>
+            <details class="hw-paste-lms-tools">
+                <summary>Importing from Canvas / an LMS?</summary>
+                <p class="hw-paste-help">Copy the assignments page in Canvas and paste it above — Sutra pairs each title with its "Due …" line and skips the noise. For one-click capture with links back to each assignment, drag this button to your bookmarks bar, then click it on your Canvas assignments page and paste the result here:</p>
+                <div class="hw-paste-lms-row">
+                    <a id="sutraLmsBookmarklet" class="neumo-btn" href="#" draggable="true" title="Drag me to your bookmarks bar">📥 Send to Sutra</a>
+                    <button type="button" class="neumo-btn" id="sutraLmsBookmarkletCopy">Copy bookmarklet code</button>
+                </div>
+                <p class="hw-paste-help hw-paste-lms-note">The bookmarklet runs only on the page you click it on, copies assignment titles, due dates, and links to your clipboard, and sends nothing anywhere.</p>
+            </details>
             <div id="homeworkPastePreview" class="hw-paste-preview" aria-live="polite"></div>
             <div class="hw-paste-footer">
                 <div id="homeworkPasteStatus" class="hw-paste-status" aria-live="polite"></div>
@@ -5008,12 +5160,60 @@
         </div>
     </div>
 
+    <div id="overdueRecoveryModal" class="deadline-radar-modal overdue-recovery-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="overdueRecoveryTitle">
+        <div class="deadline-radar-backdrop" data-modal-close onclick="closeOverdueRecovery()"></div>
+        <div class="deadline-radar-card glass-card">
+            <div class="deadline-radar-head">
+                <div>
+                    <div class="eyebrow">Recover</div>
+                    <h3 id="overdueRecoveryTitle">Here's what slipped</h3>
+                    <p class="deadline-radar-help">Catch up fast: mark what you already did, push the rest to a realistic day, or open it.</p>
+                </div>
+                <button type="button" class="neumo-btn" data-modal-close onclick="closeOverdueRecovery()" aria-label="Close">Close</button>
+            </div>
+            <div class="overdue-recovery-toolbar" id="overdueRecoveryToolbar"></div>
+            <div class="deadline-radar-body overdue-recovery-body" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div id="gradeImpactModal" class="deadline-radar-modal gradeimpact-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="gradeImpactTitle">
+        <div class="deadline-radar-backdrop" data-modal-close onclick="closeGradeImpactModal()"></div>
+        <div class="deadline-radar-card glass-card">
+            <div class="deadline-radar-head">
+                <div>
+                    <div class="eyebrow">Grade what-if</div>
+                    <h3 id="gradeImpactTitle">See your grade impact</h3>
+                    <p class="deadline-radar-help">Model one upcoming assignment: what you need to hit your target, and what happens if you skip it.</p>
+                </div>
+                <button type="button" class="neumo-btn" data-modal-close onclick="closeGradeImpactModal()" aria-label="Close">Close</button>
+            </div>
+            <div class="deadline-radar-body gradeimpact-body" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <div id="weeklyReviewModal" class="deadline-radar-modal weekly-review-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="weeklyReviewTitle">
+        <div class="deadline-radar-backdrop" data-modal-close onclick="closeWeeklyReviewModal()"></div>
+        <div class="deadline-radar-card glass-card">
+            <div class="deadline-radar-head">
+                <div>
+                    <div class="eyebrow">Weekly review</div>
+                    <h3 id="weeklyReviewTitle">How your week went</h3>
+                    <p class="deadline-radar-help">What you finished, what slipped, where your grades stand, and what next week looks like.</p>
+                </div>
+                <button type="button" class="neumo-btn" data-modal-close onclick="closeWeeklyReviewModal()" aria-label="Close">Close</button>
+            </div>
+            <div class="deadline-radar-body weekly-review-body" aria-live="polite"></div>
+        </div>
+    </div>
+
     <!--
         Unified onboarding modal. Single dialog for the entire first-run
-        experience (Welcome, Focus, Features, Setup, AI & Backups, Tour).
+        experience (Welcome, Focus, Setup, AI & Backups, Tour).
         The legacy id studentOnboardingOverlay is preserved so that the
         smoke-check and compatibility wrappers continue to find this shell.
-        AtelierOnboardingController.render() populates #onboardingMainPanel.
+        AtelierOnboardingController.render() populates #onboardingMainPanel,
+        including the current step's <h2 id="onboardingTitle"> that the
+        dialog's aria-labelledby resolves to.
     -->
     <div id="studentOnboardingOverlay" class="atelier-onboarding" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
         <div class="atelier-onboarding-backdrop" data-onboarding-action="dismiss-backdrop"></div>
@@ -5038,13 +5238,13 @@
                     <p>Your notes stay on your device. You&rsquo;re always in control.</p>
                 </div>
             </div>
-            <div class="atelier-onboarding-main" id="onboardingTitle">
+            <div class="atelier-onboarding-main">
                 <div class="atelier-onboarding-mobile-stepper" id="onboardingMobileStepper" aria-hidden="true"></div>
                 <div class="atelier-onboarding-topbar">
                     <div class="atelier-onboarding-progress" id="onboardingProgressBar" aria-hidden="true">
                         <div class="atelier-onboarding-progress-fill" id="onboardingProgressFill"></div>
                     </div>
-                    <div class="atelier-onboarding-step-meta" id="onboardingStepMeta">Step 1 of 6</div>
+                    <div class="atelier-onboarding-step-meta" id="onboardingStepMeta">Step 1 of 5</div>
                 </div>
                 <div class="atelier-onboarding-content" id="onboardingMainPanel" tabindex="-1">
                     <!-- populated by AtelierOnboardingController.render() -->
@@ -5886,7 +6086,6 @@
             <div class="modal-body new-page-modal-body">
                 <div class="new-page-modal-main">
                     <section class="new-page-template-column" aria-label="Template picker">
-                        <div class="new-page-field-label">Pick a template</div>
                         <div class="template-picker-shell">
                             <div class="template-picker-context-badge" id="templatePickerContextBadge" hidden></div>
                             <div class="template-card-grid" id="templatePickerGrid" role="listbox" aria-label="Available templates"></div>
@@ -5894,56 +6093,54 @@
                     </section>
 
                     <aside class="new-page-setup-column" aria-label="Template setup">
+                        <div class="new-page-setup-heading">Page setup</div>
+
+                        <!-- Page / Canvas type toggle -->
+                        <div class="new-page-type-toggle" id="newPageTypeToggle" role="group" aria-label="Page type">
+                            <button type="button" class="new-page-type-toggle-btn nptt-active" id="newPageTypeBtn_note" data-type="note" onclick="handleNewPageTypeToggle('note')" aria-pressed="true">
+                                <i class="fas fa-file-alt" aria-hidden="true"></i> Page
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_canvas" data-type="canvas" onclick="handleNewPageTypeToggle('canvas')" aria-pressed="false">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                Canvas
+                            </button>
+                        </div>
+
                         <div class="new-page-name-field">
                             <label class="new-page-field-label" for="newPageName">Page title</label>
                             <div class="new-page-name-row">
-                                <input type="text" class="modal-input" id="newPageName" placeholder="Enter page name (use :: for hierarchy)..." />
+                                <input type="text" class="modal-input" id="newPageName" placeholder="Enter page title..." />
                                 <button type="button" class="btn btn-secondary template-suggest-btn" id="templateUseNameBtn" onclick="applyTemplateSuggestedName()">Use suggested title</button>
                             </div>
                         </div>
 
-                        <div class="new-page-compact-grid">
-                            <div class="new-page-type-field">
-                                <label class="new-page-field-label" for="newPageType">Page type</label>
-                                <select id="newPageType" class="modal-input" aria-label="Page type">
-                                    <option value="note">Standard note</option>
-                                    <option value="canvas">Canvas</option>
-                                </select>
-                            </div>
-                            <div class="new-page-parent-field">
-                                <label class="new-page-field-label" for="newPageParentPage">Parent location <span class="new-page-field-optional">optional</span></label>
-                                <select id="newPageParentPage" class="modal-input" aria-label="Optional parent page">
-                                    <option value="">Top level</option>
-                                </select>
-                            </div>
+                        <div class="new-page-parent-field">
+                            <label class="new-page-field-label" for="newPageParentPage">Parent location <span class="new-page-field-optional">optional</span></label>
+                            <select id="newPageParentPage" class="modal-input" aria-label="Optional parent page">
+                                <option value="">Top level</option>
+                            </select>
                         </div>
 
-                        <div class="new-page-template-compact">
-                            <label class="new-page-field-label" for="newPageTemplate">Template <span class="new-page-field-optional">optional</span></label>
+                        <!-- Class field promoted to top level for immediate discoverability -->
+                        <div class="new-page-context-row new-page-context-row-toplevel" id="newPageContextRow_class">
+                            <label class="new-page-field-label" for="newPageContextClass">Add to class <span class="new-page-field-optional">optional</span></label>
+                            <select id="newPageContextClass" class="modal-input"></select>
                         </div>
 
+                        <!-- Capabilities + starter-tasks panel (icon/name/desc kept hidden for JS data-binding) -->
                         <div class="template-preview-panel" id="templatePreviewPanel" aria-live="polite">
-                            <div class="template-preview-head">
-                                <div class="template-preview-title-wrap">
-                                    <span class="template-preview-icon" id="templatePreviewIcon">&#128196;</span>
-                                    <div>
-                                        <div class="template-preview-title" id="templatePreviewName">Blank Page</div>
-                                        <p class="template-preview-description" id="templatePreviewDescription">Start from an empty page.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="template-preview-section">
-                                <span class="template-preview-label">Includes</span>
-                                <div class="template-preview-tags" id="templatePreviewSections">
-                                    <span class="template-preview-tag">No starter blocks</span>
-                                </div>
-                            </div>
+                            <span class="template-preview-icon" id="templatePreviewIcon" aria-hidden="true" style="display:none">&#128196;</span>
+                            <div class="template-preview-title" id="templatePreviewName" aria-hidden="true" style="display:none">Blank Page</div>
+                            <p class="template-preview-description" id="templatePreviewDescription" aria-hidden="true" style="display:none"></p>
+                            <div class="template-preview-tags" id="templatePreviewSections" style="display:none"></div>
+
                             <div class="template-preview-section">
                                 <span class="template-preview-label">Capabilities</span>
                                 <div class="template-preview-tags" id="templatePreviewConnections">
                                     <span class="template-preview-tag">Standalone page</span>
                                 </div>
                             </div>
+
                             <div class="template-preview-task-row" id="templateTaskOptions">
                                 <div class="template-task-toggle-copy">
                                     <span class="template-preview-label">Create starter tasks</span>
@@ -5956,16 +6153,11 @@
                             </div>
                         </div>
 
-                        <!-- Progressive-disclosure context fields. Rows are shown
-                             conditionally per the selected template's contextFields list. -->
+                        <!-- Progressive-disclosure context fields (class row moved above). -->
                         <details class="new-page-advanced-disclosure" id="newPageAdvancedOptions">
                             <summary><span>Advanced options</span><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
                         <div class="new-page-context-panel" id="newPageContextPanel" hidden>
                             <div class="new-page-context-heading">Set up details (optional)</div>
-                            <div class="new-page-context-row" id="newPageContextRow_class" hidden>
-                                <label for="newPageContextClass">Class / subject</label>
-                                <select id="newPageContextClass" class="modal-input"></select>
-                            </div>
                             <div class="new-page-context-row" id="newPageContextRow_examName" hidden>
                                 <label for="newPageExamName">Exam name</label>
                                 <input id="newPageExamName" type="text" class="modal-input" placeholder="e.g. AP Calc BC final" />
@@ -6039,6 +6231,13 @@
                             </div>
                         </div>
                         </details>
+
+                        <!-- Hidden page-type select kept for JS compat; synced by setNewPageTemplateSelection -->
+                        <select id="newPageType" aria-hidden="true" style="display:none">
+                            <option value="note">Standard note</option>
+                            <option value="canvas">Canvas</option>
+                        </select>
+
                     </aside>
                 </div>
 
@@ -6662,7 +6861,7 @@
     
 
     <!-- Small Chatbot (local-only, uses user's own provider API keys) -->
-    <link rel="stylesheet" href="styles/legacy/workspace-overrides.css?v=20260616-cssextract1">
+    <link rel="stylesheet" href="styles/legacy/workspace-overrides.css?v=20260630-parity2">
 
     <style id="sutra-intel-badge-styles">
       .sutra-intel-badge{display:none;}
@@ -6690,6 +6889,7 @@
             </div>
             <div class="chatbot-actions">
                 <button id="chatNewBtn" type="button" class="chatbot-icon-btn" title="New chat" aria-label="New chat"><i class="fas fa-plus" aria-hidden="true"></i></button>
+                <button id="chatPopoutBtn" type="button" class="chatbot-icon-btn" title="Open full Assistant view" aria-label="Open full Assistant view"><i class="fas fa-expand" aria-hidden="true"></i></button>
                 <button id="chatOverflowBtn" type="button" class="chatbot-icon-btn" title="More options" aria-label="More options" aria-haspopup="true" aria-expanded="false"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>
                 <button id="chatCloseBtn" type="button" class="chatbot-icon-btn" title="Close" aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
             </div>
@@ -6772,12 +6972,20 @@
                         <option value="anthropic">Anthropic</option>
                         <option value="gemini">Google Gemini</option>
                         <option value="openrouter">OpenRouter</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="xai">xAI (Grok)</option>
+                        <option value="perplexity">Perplexity (Sonar)</option>
                         <option value="local">Local endpoint</option>
                     </select>
                     <select id="chatModelSelect" aria-label="Model list"></select>
                     <button id="refreshChatModelsBtn" type="button" class="chatbot-icon-btn" title="Refresh models" aria-label="Refresh models"><i class="fas fa-rotate-right" aria-hidden="true"></i></button>
                 </div>
                 <input id="chatCustomModelInput" type="text" aria-label="Model ID" placeholder="Exact model ID (e.g. gpt-4.1-mini)">
+                <div class="chat-settings-row chat-reasoning-row" id="chatReasoningRow" hidden>
+                    <label class="chat-reasoning-label" for="chatReasoningSelect"><i class="fas fa-brain" aria-hidden="true"></i> Thinking effort</label>
+                    <select id="chatReasoningSelect" aria-label="Thinking effort"></select>
+                </div>
+                <p class="chat-settings-note" id="chatReasoningNote" hidden>Higher effort lets the model reason longer before answering — slower and uses more tokens.</p>
                 <p class="chat-settings-note">Manage API keys in Settings ▸ Assistant.</p>
             </div>
         </div>
@@ -6850,8 +7058,16 @@
 
     <script src="src/features/workspace/business-workspace.js"></script>
     <script src="src/features/assistant/model-capabilities.js?v=20260610-intel1"></script>
+    <!-- Sutra Intelligence Harness: verified product knowledge + certified-action
+         capability registry. Loaded BEFORE flow-assistant, which consumes them. -->
+    <script src="src/features/assistant/sutra-product-knowledge.js?v=20260629-intel2"></script>
+    <script src="src/features/assistant/sutra-capability-registry.js?v=20260630-assist-hw4"></script>
     <script src="src/features/assistant/flow-intelligence.js?v=20260614-storage1"></script>
-    <script src="src/features/assistant/flow-assistant.js?v=20260614-dom1"></script>
+    <script src="src/features/assistant/flow-assistant.js?v=20260701-suite1"></script>
+    <!-- Assistant Memory store + Local Help decision tree. Loaded AFTER
+         flow-assistant: both call its action pipeline at runtime. -->
+    <script src="src/features/assistant/sutra-assistant-memory.js?v=20260629-intel3"></script>
+    <script src="src/features/assistant/sutra-local-help.js?v=20260630-assist-hw8"></script>
     <!-- Mods & handwriting engines: pure, dependency-free modules exposed on window.
          Loaded BEFORE app.js so the core can wire blocks / settings into them. -->
     <script src="src/features/workspace/handwriting.js?v=20260601-handwriting"></script>
@@ -6863,7 +7079,7 @@
     <script src="src/features/academic/school-schedule.js?v=20260610-academic1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260610-academic1"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260614-storage1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20260614-storage1"></script>
+    <script src="src/features/academic/semester-setup.js?v=20260630-assist-hw1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -6877,7 +7093,7 @@
          Pure data, no logic; the app.js controller previews + applies on demand. -->
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
-<script src="src/core/app.js?v=20260614-stabilize1"></script>
+<script src="src/core/app.js?v=20260702-onboarding5"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260616-pwa1"></script>
@@ -6887,7 +7103,10 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260605-quotes1"></script>
-    <script src="src/features/workspace/notifications.js?v=20260614-storage1"></script>
+    <script src="src/features/workspace/notifications.js?v=20260701-loops2"></script>
+    <!-- Local-only activation funnel (window.SutraActivation): first-capture /
+         onboarding / day-2 milestones + usage counts. Device-local, no network. -->
+    <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
     <script src="src/features/workspace/mobile-nav.js?v=20260620-mobilenav1"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
@@ -7257,11 +7476,13 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260611-mobile-polish">
-    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260427-cc-visible-scrollbars">
+    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260605-notif1">
-    <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260610-academic1">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260622-hw-redesign1">
+    <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260630-assist-hw1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260701-loops1">
+    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260630-parity2">
+    <link rel="stylesheet" href="styles/features/sutra-assistant-help.css?v=20260629-intel3">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260613-cc1">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

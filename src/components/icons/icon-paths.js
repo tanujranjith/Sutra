@@ -112,6 +112,7 @@
         'calendar-plus': '<rect x="4" y="6" width="16" height="14" rx="2"/><path d="M4 10h16"/><path d="M8 4v4"/><path d="M16 4v4"/><path d="M12 13v4"/><path d="M10 15h4"/>',
 
         // ── Files & docs ─────────────────────────────────────────────────────
+        'paperclip': '<path d="M20 11.5 12 19.5a5 5 0 0 1-7-7l8-8a3.2 3.2 0 0 1 4.5 4.5l-8 8a1.5 1.5 0 0 1-2-2l7-7"/>',
         'file': '<path d="M7 4h7l4 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v4h4"/>',
         'file-lines': '<path d="M7 4h7l4 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v4h4"/><path d="M9 13h7"/><path d="M9 16h7"/><path d="M9 10h3"/>',
         'file-code': '<path d="M7 4h7l4 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v4h4"/><path d="m11 13-2 2 2 2"/><path d="m13 13 2 2-2 2"/>',
@@ -334,6 +335,7 @@
         'fa-calendar-days': 'calendar-days',
         'fa-calendar-plus': 'calendar-plus',
 
+        'fa-paperclip': 'paperclip',
         'fa-file-alt': 'file-lines',
         'fa-file-lines': 'file-lines',
         'fa-file-code': 'file-code',

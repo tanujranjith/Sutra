@@ -3885,6 +3885,17 @@ body.theme-retro .exam-stat {
 }
 .th2-exam-card.past .th2-card-countdown-num { color: var(--text-secondary); }
 .th2-exam-card.past .th2-exam-card-status { color: var(--text-secondary); }
+/* Taken / completed exam — de-emphasized, green "Completed" badge. */
+.th2-exam-card.is-taken { border-color: rgba(40, 160, 80, 0.4); opacity: 0.72; }
+.th2-exam-card.is-taken .th2-card-countdown-num { color: rgba(40, 160, 80, 0.95); }
+.th2-exam-taken-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: rgba(40, 160, 80, 0.95) !important;
+    font-weight: 600;
+}
+.th2-exam-taken-badge i { font-size: 0.9em; }
 
 .th2-exam-card-desc {
     font-size: 12px;
@@ -6381,6 +6392,43 @@ button.cw-next-action:hover { background: var(--surface-bg-hover); }
 .flow-before-after-danger span:last-child {
     color: var(--danger, #c0564f);
 }
+/* Post-apply receipts: what happened + deep link + inline undo. */
+.flow-action-receipt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    padding: 7px 9px;
+    border: 1px solid var(--surface-border);
+    border-radius: 9px;
+    background: var(--surface-bg);
+    font-size: 12px;
+}
+.flow-action-receipt-text {
+    color: var(--success, #2ea043);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.flow-action-receipt-link,
+.flow-action-receipt-undo {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 11.5px;
+    padding: 3px 10px;
+    cursor: pointer;
+}
+.flow-action-receipt-link { color: var(--accent-strong, var(--accent)); }
+.flow-action-receipt-undo:disabled { opacity: 0.55; cursor: default; }
+.flow-action-receipt-undone { opacity: 0.75; }
+.flow-action-receipt-undone .flow-action-receipt-text { color: var(--text-muted); }
+.flow-action-batch-undo { color: var(--accent-strong, var(--accent)); }
 .flow-act-batch {
     border: 1px solid var(--surface-border);
     border-radius: 12px;

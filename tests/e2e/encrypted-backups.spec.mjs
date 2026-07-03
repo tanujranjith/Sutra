@@ -144,6 +144,12 @@ async function cancelImportPasswordModal(page) {
   await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/);
 }
 
+// Whole-workspace imports onto a non-empty device now show the restore
+// conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
+async function acceptRestoreConflictChooser(page) {
+  await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+}
+
 test('new .sutra export is an authenticated encrypted envelope with no plaintext workspace data', async ({ page }) => {
   await openApp(page);
   await seedRichWorkspace(page, 'EXPORT');
@@ -211,6 +217,7 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   await page.fill('#sutraImportPassphraseInput', PASS);
   await page.locator('#sutraImportPasswordSubmitBtn').click();
   await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+  await acceptRestoreConflictChooser(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel Note IMPORT');
 
   await page.reload();
@@ -317,12 +324,15 @@ test('legacy unencrypted .sutra, legacy .atelier, and JSON workspace imports sti
   });
 
   await page.setInputFiles('#fileInput', { name: 'legacy.sutra', mimeType: '', buffer: Buffer.from(fixtures.sutra) });
+  await acceptRestoreConflictChooser(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Legacy Plain Sutra');
 
   await page.setInputFiles('#fileInput', { name: 'legacy.atelier', mimeType: 'application/octet-stream', buffer: Buffer.from(fixtures.atelier) });
+  await acceptRestoreConflictChooser(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Legacy Atelier');
 
   await page.setInputFiles('#fileInput', { name: 'workspace.json', mimeType: 'application/json', buffer: Buffer.from(fixtures.json) });
+  await acceptRestoreConflictChooser(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('JSON Restore');
 });
 

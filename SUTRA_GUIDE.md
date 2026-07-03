@@ -80,6 +80,7 @@ If you're a student, **Student** is a great default.
 - **Daily Thread** - a summary card showing overdue / today / tomorrow / this-week counts, plus one **Next Step**: the single most useful thing to do right now, computed from your own data. You can run it directly.
 - **Shape My Day** - sequences the priorities you've committed against your calendar. Open the *Recommended sequence* disclosure to see the plan, and apply it to the Timeline if you like it.
 - **Deadline Radar** - opens a modal that gathers *every* deadline (tasks, homework, AP exams, college, timeline blocks, work) grouped by *overdue / today / tomorrow / this week / later*. Each row has **Open** and **Schedule this**.
+- **Weekly Review** - one screen for the week just ended and the week ahead: done / missed / overdue counts, **Grades** with per-course risk badges, week-over-week movement (▲/▼) and *"N missing - log scores?"* prompts, **Plan health** (a deterministic scan of the next 7 days for overlaps, missing buffers, overloaded days, and unscheduled priorities, with a **Repair my week** button), heavy days, and **Estimates vs reality** - once you log *"took about how long?"* after homework, it shows where your estimates run long or short per class. Sutra nudges you toward it on Sunday/Monday; you can also open it any time from Today or the Command Palette.
 
 Add your first task right here: click **+ Task**, fill in a title (and optionally a due date, priority, and a linked note), and save. Commit a couple of priorities with one click, and the bar at the top of the panel reflects what you've committed.
 
@@ -125,11 +126,17 @@ Add an assignment from the *+* control inside a lane. Each one carries a title, 
 Already have your assignments listed in a school portal? Don't retype them.
 
 1. Click **Import from School Portal** in the Homework header.
-2. Paste a block of lines copied from the portal (pipe-, tab-, or dash-separated all work).
-3. Sutra **previews** each parsed row. Correct any title / class / date / time / difficulty / priority before saving.
+2. Paste a block of lines copied from the portal (pipe-, tab-, or dash-separated all work). **Canvas pastes work directly** - copy your course's Assignments page and Sutra pairs each title with its "Due ..." line and skips the points/status noise.
+3. Sutra **previews** each parsed row, and marks anything **already in Sutra** (same title + due date) as skipped so re-pasting never doubles up. Correct any title / class / date / time / difficulty / priority before saving.
 4. Save - your assignments land in the right lanes.
 
+For one-click capture, open **"Importing from Canvas / an LMS?"** inside the import dialog and drag the **Send to Sutra** bookmarklet to your bookmarks bar. Clicking it on your LMS assignments page copies titles, due dates, *and links* to your clipboard - paste into the import box and every assignment keeps a **Source** link back to the original page. The bookmarklet runs only on the page you click it on and sends nothing anywhere.
+
 Each assignment's **...** menu offers **Schedule this** (drop a prep block on the Timeline) and **Open class dashboard**. By default, homework also shows up in your Today task feed (toggle in `Settings -> Tasks`).
+
+**When you finish an assignment**, Sutra asks (optionally) how long it really took. Answer a few times and every estimate in the app - homework chips, Quick Capture's "block focus time" nudge, All Due effort - adapts to how long *your* work actually takes. Deleted something by mistake? **Trash** (command palette → "Open Trash") keeps deleted pages, tasks, and assignments restorable for 30 days.
+
+**Log grades as fast as you capture homework:** open Quick Capture and type `got 87/100 on chem test`. Sutra logs the score to that class's Grade Planner and shows your course grade move in place - and if the score was rough, it offers to turn your mistakes into review cards on the spot.
 
 ---
 
@@ -207,9 +214,31 @@ Right under the panel header you'll see the **Powered by Sutra Intelligence** ba
 
 You decide how much it sees with **Workspace Access**: *Current Screen Only*, *Current Area*, or *Full Workspace Context*. Choose **Single Request** or **Conversation Memory** for whether it remembers the thread.
 
-When the assistant wants to *change* something - add a task, schedule a block, create a deck - it never does it silently. It renders **Apply / Decline** cards (and *Apply all* for multi-action replies), and **Confirm Before Applying Changes** keeps you in control. Every applied action is logged under **Assistant Activity** with **undo**, and anything it creates is saved and backed up exactly like work you did by hand.
+When the assistant wants to *change* something - add a task, schedule a block, create a deck - it never does it silently. It renders **Apply / Decline** cards, and multi-action replies group into one **Proposed plan** card with per-step checkboxes, *Apply selected / Apply all*, a live "N of M applied" count, and a one-click **Undo all** that reverses the whole batch. **Confirm Before Applying Changes** keeps you in control. After a step applies you get a **receipt** - what changed, a link that jumps to the affected screen (*Open Homework*, *Open Timeline*, ...), and an inline **Undo**. Every applied action is also logged under **Assistant Activity** (single actions and whole batches can be undone from there too), and anything it creates is saved and backed up exactly like work you did by hand.
 
 Try asking it to *plan my day*, *summarize this note*, or *make review cards from this note*.
+
+### No API key? Use Local Help
+
+You don't need a provider to get help. Type `help` (or use **Browse Local Help**
+in the panel) to open a **click-through, multiple-choice** helper that works fully
+offline. Pick an option and Sutra shows a **local answer** (badged *"Answered
+locally — no API key required"*), step-by-step guidance, an **Open in Sutra**
+button, and follow-up choices. Product questions like *"how do I make
+flashcards?"* or *"does Sutra send my data to a server?"* are answered from a
+verified knowledge base — never invented — and a provider is used only if you
+explicitly pick **"Use provider instead."**
+
+### Assistant Memory
+
+Tell the assistant something worth keeping — *"remember that I study best in the
+morning"* — and it saves a **long-term memory** to personalize future help. It's
+**local and consent-first**, and it **never** saves passwords, keys, financial,
+medical, precise-location, or locked/private content. Say *"what do you remember
+about me?"* to review, *"forget that"* to delete, or open **Settings ▸ Assistant
+▸ Manage Memory** to search, edit, enable/disable, or clear memories. Allowed
+memories travel inside your encrypted `.sutra` backup; secrets never do. Memory
+changes are logged in **Assistant Activity** and can be undone.
 
 ---
 

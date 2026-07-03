@@ -1,11 +1,24 @@
 /* =====================================================================
-   Homework redesign — selectable layouts, add methods, and countdowns.
-   Layouts are switched via body[data-homework-layout]; the markup is
-   produced by src/features/study/homework.js. Styling leans on the app's
-   own theme tokens (--accent, --surface-border, --text-primary, …) so it
-   adapts to every Sutra theme, with the existing .hw-status-chip colors
-   reused for due-state semantics.
+   Homework redesign — unified spreadsheet-style view + countdowns.
+   One row per class/activity (the "spreadsheet" feel); markup is produced
+   by src/features/study/homework.js. Styling leans on the app's own theme
+   tokens (--accent, --surface-border, --text-primary, …) so it adapts to
+   every Sutra theme, with the existing .hw-status-chip colors reused for
+   due-state semantics.
    ===================================================================== */
+
+/* ---- board-level add-class / add-activity toolbar -------------------- */
+.hw-course-add-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.hw-course-add-bar .hw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 
 /* ---- shared task card (used by list / board / up-next) ---------------- */
 .hw-card {
@@ -75,32 +88,23 @@
   gap: 4px;
 }
 .hw-card-meta i { font-size: 10px; opacity: 0.8; }
+/* Effort estimate chip — quietly informative (cool/neutral accent). */
+.hw-card-meta.hw-meta-estimate { color: var(--accent, #4c6ef5); }
+.hw-card-meta.hw-meta-estimate i { opacity: 0.9; }
+/* Same-day crowding chip — amber, reads as a soft warning without alarming. */
+.hw-card-meta.hw-meta-conflict {
+  color: #9a5b00;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.hw-card-meta.hw-meta-conflict i { opacity: 0.95; }
+body[data-theme="dark"] .hw-card-meta.hw-meta-conflict,
+body.dark .hw-card-meta.hw-meta-conflict { color: #f5c97a; background: rgba(245, 158, 11, 0.16); }
 .hw-card .hw-status-chip { flex: 0 0 auto; align-self: center; }
 .hw-card .hw-assignment-menu-wrap { flex: 0 0 auto; }
 
-/* ---- grouped smart list ---------------------------------------------- */
-.hw-smartlist { display: flex; flex-direction: column; gap: 20px; }
-.hw-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.hw-group-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--text-secondary, #8a8a8a);
-}
-.hw-group-overdue .hw-group-title { color: #b43b3b; }
-.hw-group-count {
-  font-size: 11px;
-  color: var(--text-tertiary, #aaa);
-  background: var(--accent-soft, rgba(0,0,0,0.04));
-  border-radius: 999px;
-  padding: 1px 8px;
-}
 .hw-card-list { list-style: none; margin: 0; padding: 0; }
 
 /* ---- inline add composer --------------------------------------------- */
@@ -206,73 +210,118 @@
   color: var(--text-secondary, #777);
 }
 
-/* ---- up next focus view ---------------------------------------------- */
-.hw-upnext { display: flex; flex-direction: column; gap: 18px; }
-.hw-hero {
-  border: 1px solid var(--surface-border-strong);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 14px 14px 0;
-  padding: 16px 18px;
-  background: var(--bg-primary);
+/* ---- unified spreadsheet-style table ---------------------------------- */
+/* One row per class/activity, with that subject's assignments laid out in
+   the adjacent cell — a single dense, always-visible grid instead of a
+   switchable layout. The host (#hwDataTable) still carries the legacy
+   .hw-dashboard-body 2-column grid class; override it so the table and the
+   add-class bar stack full-width. */
+#hwDataTable.hw-dashboard-body { display: block; }
+/* Two tracks side-by-side: school classes | extracurricular activities. */
+.hw-table-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
 }
-.hw-hero.is-overdue { border-left-color: #b43b3b; }
-.hw-hero.is-soon { border-left-color: #ad6d22; }
-.hw-hero-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-tertiary, #aaa); }
-.hw-hero-title { font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin: 8px 0 6px; cursor: pointer; }
-.hw-hero-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary, #888); }
-.hw-hero-progress { margin-top: 12px; }
-.hw-hero-progress-track { height: 6px; background: var(--accent-soft, rgba(0,0,0,0.06)); border-radius: 999px; overflow: hidden; }
-.hw-hero-progress-bar { height: 100%; background: var(--accent-strong, var(--accent)); }
-.hw-hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.hw-hero-btn {
-  padding: 8px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--surface-border-strong);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.hw-hero-btn.is-primary { background: var(--text-primary); color: var(--bg-primary); border-color: transparent; }
-.hw-hero-btn:hover { border-color: var(--accent); }
-
-/* ---- board (kanban) -------------------------------------------------- */
-.hw-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.hw-board-col { min-width: 0; }
-.hw-board-col-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 2px; }
-.hw-board-dot { width: 8px; height: 8px; border-radius: 50%; }
-.hw-board-dot.is-todo { background: #888780; }
-.hw-board-dot.is-progress { background: #ef9f27; }
-.hw-board-dot.is-done { background: #1d9e75; }
-.hw-board-col-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-.hw-board-col-count { font-size: 12px; color: var(--text-tertiary, #aaa); }
-.hw-board-col .hw-card { background: var(--bg-primary); }
-
-/* ---- timeline -------------------------------------------------------- */
-.hw-timeline-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.hw-timeline-nav { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary, #888); }
-.hw-timeline-nav button { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 14px; padding: 4px; }
-.hw-timeline-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-.hw-tl-day { border: 1px solid transparent; border-radius: 10px; padding: 6px 4px 8px; min-height: 70px; }
-.hw-tl-day.is-today { border-color: var(--surface-border-strong); background: var(--bg-primary); }
-.hw-tl-dow { font-size: 11px; text-align: center; color: var(--text-tertiary, #aaa); text-transform: uppercase; }
-.hw-tl-date { font-size: 15px; font-weight: 600; text-align: center; color: var(--text-secondary, #888); margin-bottom: 6px; }
-.hw-tl-day.is-today .hw-tl-date { color: var(--text-primary); }
-.hw-tl-pill {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 6px;
-  border-radius: 7px;
-  margin: 0 2px 4px;
-  cursor: pointer;
+.hw-table-group { min-width: 0; }
+.hw-table-orphan { margin-top: 16px; }
+.hw-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: var(--bg-primary);
 }
-.hw-tl-overflow { margin-top: 16px; }
-.hw-tl-overflow .hw-group-title { margin-bottom: 8px; display: block; }
+.hw-table-head {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  background: var(--accent-soft, rgba(0,0,0,0.035));
+  border-bottom: 1px solid var(--surface-border);
+}
+.hw-table-th {
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #8a8a8a);
+}
+.hw-table-row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  border-bottom: 1px solid var(--surface-border);
+}
+.hw-table-row:last-child { border-bottom: none; }
+.hw-table-row:nth-child(even) { background: var(--accent-soft, rgba(0,0,0,0.015)); }
+.hw-table-cell {
+  padding: 12px 14px;
+  min-width: 0;
+}
+.hw-table-cell-subject {
+  border-right: 1px solid var(--surface-border);
+  border-left: 3px solid var(--hw-subject-accent, var(--accent));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hw-table-subject-name { font-size: 0.92rem; font-weight: 700; color: var(--text-primary); word-break: break-word; }
+.hw-misc-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft, rgba(0,0,0,0.06));
+  color: var(--text-secondary, #888);
+  vertical-align: middle;
+}
+.hw-table-subject-meta { font-size: 11px; color: var(--text-secondary, #888); }
+.hw-table-overdue-text { color: #b43b3b; font-weight: 600; }
+.hw-table-subject-actions { display: flex; gap: 4px; margin-top: 4px; }
+.hw-table-icon-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary, #aaa);
+  font-size: 11px;
+  cursor: pointer;
+}
+.hw-table-icon-btn:hover { background: var(--accent-soft, rgba(0,0,0,0.06)); color: var(--text-primary); }
+.hw-table-tasklist .hw-card { background: var(--bg-primary); }
+.hw-table-tasklist .hw-card + .hw-card { margin-top: 6px; }
+.hw-table-empty { font-size: 12px; color: var(--text-tertiary, #aaa); padding: 4px 0; }
+.hw-table-row-orphan .hw-table-cell-subject { border-left-color: var(--text-tertiary, #aaa); }
+
+/* Inside the side-by-side split each group is ~half width, so the subject
+   column is narrower to leave room for assignment cards. */
+.hw-table-split .hw-table-head,
+.hw-table-split .hw-table-row { grid-template-columns: 150px 1fr; }
+.hw-table-row-empty { display: block; }
+.hw-table-group-empty {
+  padding: 16px 14px;
+  font-size: 12px;
+  color: var(--text-tertiary, #aaa);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hw-table-empty-add {
+  border: 1px dashed var(--surface-border-strong);
+  background: transparent;
+  color: var(--text-secondary, #888);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.hw-table-empty-add:hover { border-color: var(--accent); color: var(--text-primary); }
 
 /* ---- empty state ----------------------------------------------------- */
 .hw-empty-redesign {
@@ -352,40 +401,62 @@
 .sutra-countdown .sutra-countdown-label { color: var(--text-secondary, #888); font-weight: 500; }
 .sutra-countdown .sutra-countdown-time { color: var(--hw-cd-color, var(--accent)); }
 
-/* ===================================================================== */
-/* Settings: homework layout chooser cards                                */
-/* ===================================================================== */
-.hw-layout-choices,
-.hw-addmethod-choices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  width: 100%;
+/* Stack the two tracks once they get too cramped side-by-side, and give the
+   subject column its full width back. */
+@media (max-width: 900px) {
+  .hw-table-split { grid-template-columns: 1fr; }
+  .hw-table-split .hw-table-head,
+  .hw-table-split .hw-table-row { grid-template-columns: 220px 1fr; }
 }
-.hw-choice {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 12px;
-  border: 1px solid var(--surface-border);
-  border-radius: 12px;
-  cursor: pointer;
-  background: var(--bg-primary);
-}
-.hw-choice:hover { border-color: var(--surface-border-strong); }
-.hw-choice input { margin-top: 2px; }
-.hw-choice.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.hw-choice-icon { font-size: 16px; color: var(--accent-strong, var(--accent)); margin-top: 1px; }
-.hw-choice-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.hw-choice-desc { font-size: 11px; color: var(--text-secondary, #888); margin-top: 2px; line-height: 1.4; }
-
-/* header customize-layout button reuses .hw-btn; just space the icon */
-#hwCustomizeLayoutBtn i { margin-right: 6px; }
-
 @media (max-width: 760px) {
-  .hw-board { grid-template-columns: 1fr; }
-  .hw-layout-choices, .hw-addmethod-choices { grid-template-columns: 1fr; }
-  .hw-timeline-grid { grid-template-columns: 1fr; }
-  .hw-tl-day { display: flex; align-items: baseline; gap: 10px; min-height: 0; }
-  .hw-tl-day .hw-tl-dow, .hw-tl-day .hw-tl-date { margin: 0; }
+  /* Keep the track label (Classes / Extracurriculars) but drop the second
+     column header and collapse each row to subject-over-tasks. */
+  .hw-table-head { grid-template-columns: 1fr; }
+  .hw-table-th-tasks { display: none; }
+  .hw-table-row,
+  .hw-table-split .hw-table-head,
+  .hw-table-split .hw-table-row { grid-template-columns: 1fr; }
+  .hw-table-cell-subject { border-right: none; border-bottom: 1px solid var(--surface-border); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .hw-table-subject-actions { margin-top: 0; margin-left: auto; }
+}
+
+/* ---- effort calibration ("took about how long?") toast ------------------ */
+/* Small optional prompt after marking an assignment done. Sits above the
+   mobile FAB stack, never traps focus, auto-dismisses. */
+.hw-time-log-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 9600;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--surface-border-strong, rgba(0,0,0,0.14));
+  background: var(--surface-raised, var(--surface, #fff));
+  color: var(--text-primary, #1c1c1e);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hw-time-log-label { font-size: 0.9em; font-weight: 600; }
+.hw-time-log-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.hw-time-log-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--surface-border-strong, rgba(0,0,0,0.14));
+  background: var(--accent-soft, rgba(0,0,0,0.05));
+  color: inherit;
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hw-time-log-btn:hover { background: var(--accent, #4f7cff); color: #fff; }
+.hw-time-log-skip { background: transparent; border-style: dashed; font-weight: 500; }
+.hw-meta-estimate-adj { opacity: 0.75; font-weight: 700; }
+@media (max-width: 760px) {
+  /* Clear the mobile bottom action bar / FAB stack. */
+  .hw-time-log-toast { bottom: 88px; }
 }

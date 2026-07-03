@@ -46,6 +46,12 @@ async function openApp(page) {
   await completeOnboarding(page);
   await page.waitForFunction(() => !!window.flowAssistant && !!window.SutraAssistantActions
     && !!window.flowIntelligence && !!window.flowAtelier);
+  // This spec exercises the DETERMINISTIC local command layer (overdue
+  // listing, reference resolution, briefing, grade math). That layer sits
+  // behind the assistant.localRouting toggle, which defaults OFF (AI-only)
+  // since 2026-06-30 — opt in explicitly, like a user flipping the
+  // Settings ▸ Assistant toggle.
+  await page.evaluate(() => { window.setWorkspacePreference('assistant.localRouting', true); });
 }
 
 async function openAssistantPanel(page) {

@@ -1017,7 +1017,15 @@ function getDefaultTestingHub() {
         clep: getDefaultExamProfile('clep'),
         ib: getDefaultExamProfile('ib'),
         state: getDefaultExamProfile('state'),
-        custom: [] // array of custom exam profiles
+        custom: [], // array of custom exam profiles
+        // Exams the student has actually taken/finished. Single source of truth
+        // keyed by exam-card id (core type like 'sat', 'ap:<subjectId>', or
+        // 'custom:<id>') → ISO date taken. Unified here because AP exams live in
+        // apStudyWorkspace and custom exams in `custom`, so a per-profile flag
+        // wouldn't cover them. A taken exam drops off the "upcoming" list and
+        // shows a Completed badge. Set via the exam card or the assistant's
+        // update_exam_status action.
+        takenExams: {}
     };
 }
 
@@ -1323,6 +1331,13 @@ function normalizeTestingHub(raw) {
         merged[key].moreDetailsExpanded = !!merged[key].moreDetailsExpanded;
     });
     merged.custom = (Array.isArray(raw.custom) ? raw.custom : []).map(normalizeCustomExam).filter(Boolean);
+    // Taken-exam map: id → ISO date. Keep only string keys with truthy values.
+    merged.takenExams = (raw.takenExams && typeof raw.takenExams === 'object' && !Array.isArray(raw.takenExams))
+        ? Object.keys(raw.takenExams).reduce((acc, k) => {
+            if (typeof k === 'string' && k && raw.takenExams[k]) acc[k] = String(raw.takenExams[k]);
+            return acc;
+        }, {})
+        : {};
     merged.activeExam = typeof raw.activeExam === 'string' ? raw.activeExam : 'ap';
 
     // Pinned exams: validate against known types and custom ids; cap at 8 stored.
@@ -3420,7 +3435,6 @@ function populateProgressDashboard() {
                     defaultMinutes: 25
                 },
                 study: {
-                    homeworkLayout: 'list',
                     homeworkAddMethod: 'inline',
                     homeworkDensity: 'comfortable',
                     homeworkShowDifficulty: true,
@@ -3449,10 +3463,38 @@ function populateProgressDashboard() {
                     includeChatsInPlaintextRecovery: false,
                     showActionPreviews: true,
                     requireConfirmation: true,
+                    // Long-term Assistant Memory is ON by default — it is
+                    // consent-first (only saves what the user explicitly asks to
+                    // keep) and never stores secrets, so retrieval is safe.
+                    useMemory: true,
                     // Sutra Assistant upgrade — trust levels, context
                     // transparency and an optional local/offline endpoint.
                     confirmationMode: 'always',
+                    // Master approval gate. When true (default), the assistant
+                    // must ask before applying ANY action / agentic step — nothing
+                    // auto-applies, overriding the confirmationMode 'auto_low' path.
+                    requireApprovalForActions: true,
                     includeSelectionByDefault: true,
+                    // Local routing kill-switch. When false (default), the assistant
+                    // sends everything to your AI model instead of answering simple
+                    // requests / product questions locally — no "Answered locally"
+                    // help cards, no deterministic command dead-ends. Theme
+                    // generation and memory commands stay local regardless (the
+                    // chat model can't do those). Flip on for offline / no-key use.
+                    localRouting: false,
+                    // Thinking / reasoning-effort hint sent only to providers +
+                    // models that support it (capability-gated in the composer).
+                    // 'auto' leaves the provider default untouched.
+                    reasoningEffort: 'auto',
+                    // User personalization — how the assistant addresses and responds
+                    // to this student. Injected into the system prompt (buildSystemPrompt).
+                    personalization: {
+                        nickname: '',
+                        persona: 'balanced',
+                        responseLength: 'balanced',
+                        customInstructions: '',
+                        aboutUser: ''
+                    },
                     localEndpoint: {
                         enabled: false,
                         baseUrl: '',
@@ -3584,6 +3626,7 @@ function populateProgressDashboard() {
             const businessSource = { ...defaults.business, ...(legacySeed.business || {}), ...(source.business || {}) };
             const assistantSource = { ...defaults.assistant, ...(legacySeed.assistant || {}), ...(source.assistant || {}) };
             const assistantLocalEndpointSource = { ...defaults.assistant.localEndpoint, ...((legacySeed.assistant && legacySeed.assistant.localEndpoint) || {}), ...((source.assistant && source.assistant.localEndpoint) || {}) };
+            const assistantPersonalizationSource = { ...defaults.assistant.personalization, ...((legacySeed.assistant && legacySeed.assistant.personalization) || {}), ...((source.assistant && source.assistant.personalization) || {}) };
             const assistantPlanningSource = { ...defaults.assistant.planning, ...((source.assistant && source.assistant.planning) || {}) };
             const assistantOnboardingSource = { ...defaults.assistant.onboarding, ...((source.assistant && source.assistant.onboarding) || {}) };
             const studentPrefSource = { ...defaults.studentPreferences, ...(legacySeed.studentPreferences || {}), ...(source.studentPreferences || {}) };
@@ -3656,7 +3699,6 @@ function populateProgressDashboard() {
                     defaultMinutes: Math.floor(clampSettingNumber(focusSource.defaultMinutes, defaults.focus.defaultMinutes, 5, 180))
                 },
                 study: {
-                    homeworkLayout: normalizeSettingChoice(studySource.homeworkLayout, ['list', 'upnext', 'board', 'timeline'], defaults.study.homeworkLayout),
                     homeworkAddMethod: normalizeSettingChoice(studySource.homeworkAddMethod, ['inline', 'quick', 'panel'], defaults.study.homeworkAddMethod),
                     homeworkDensity: normalizeSettingChoice(studySource.homeworkDensity, ['compact', 'comfortable'], defaults.study.homeworkDensity),
                     homeworkShowDifficulty: studySource.homeworkShowDifficulty !== false,
@@ -3685,8 +3727,19 @@ function populateProgressDashboard() {
                     includeChatsInPlaintextRecovery: assistantSource.includeChatsInPlaintextRecovery === true,
                     showActionPreviews: assistantSource.showActionPreviews !== false,
                     requireConfirmation: assistantSource.requireConfirmation !== false,
+                    useMemory: assistantSource.useMemory !== false,
                     confirmationMode: normalizeSettingChoice(assistantSource.confirmationMode, ['always', 'auto_low', 'review_batches'], defaults.assistant.confirmationMode),
+                    requireApprovalForActions: assistantSource.requireApprovalForActions !== false,
                     includeSelectionByDefault: assistantSource.includeSelectionByDefault !== false,
+                    localRouting: assistantSource.localRouting === true,
+                    reasoningEffort: normalizeSettingChoice(assistantSource.reasoningEffort, ['auto', 'off', 'minimal', 'low', 'medium', 'high'], defaults.assistant.reasoningEffort),
+                    personalization: {
+                        nickname: String(assistantPersonalizationSource.nickname || '').trim().slice(0, 60),
+                        persona: normalizeSettingChoice(assistantPersonalizationSource.persona, ['balanced', 'encouraging', 'direct', 'socratic', 'formal'], defaults.assistant.personalization.persona),
+                        responseLength: normalizeSettingChoice(assistantPersonalizationSource.responseLength, ['concise', 'balanced', 'detailed'], defaults.assistant.personalization.responseLength),
+                        customInstructions: String(assistantPersonalizationSource.customInstructions || '').slice(0, 2000),
+                        aboutUser: String(assistantPersonalizationSource.aboutUser || '').slice(0, 2000)
+                    },
                     localEndpoint: {
                         enabled: assistantLocalEndpointSource.enabled === true,
                         baseUrl: String(assistantLocalEndpointSource.baseUrl || '').trim().slice(0, 300),
@@ -3922,7 +3975,6 @@ function populateProgressDashboard() {
                 body.dataset.taskCompletionStyle = prefs.tasks.completionStyle;
                 body.dataset.timelineDensity = prefs.calendar.timelineDensity;
                 body.dataset.homeworkDensity = prefs.study.homeworkDensity;
-                body.dataset.homeworkLayout = prefs.study.homeworkLayout;
                 body.dataset.homeworkAddMethod = prefs.study.homeworkAddMethod;
                 try { window.dispatchEvent(new CustomEvent('sutra:homework-prefs')); } catch (_) { /* no-op */ }
                 body.dataset.businessViewMode = prefs.business.defaultView;
@@ -13831,6 +13883,7 @@ function populateProgressDashboard() {
 
             let calcExpr = '';
             let calcJustEvaled = false;
+            let calcPrevExpr = '';
 
             function calcFormatNumber(n) {
                 if (Object.is(n, -0)) n = 0;
@@ -13846,7 +13899,39 @@ function populateProgressDashboard() {
                         .replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-')
                         .replace(/%/g, '/100');
                     if (!/^[0-9+\-*/().e\s]+$/.test(exec)) return null;
-                    const result = Function('"use strict"; return (' + exec + ');')();
+                    // Safe recursive-descent parser — avoids Function/eval (blocked by CSP)
+                    const tokens = exec.match(/[\d.]+(?:e[+\-]?\d+)?|[+\-*/()]/g);
+                    if (!tokens) return null;
+                    let p = 0;
+                    const peek = () => tokens[p];
+                    const consume = () => tokens[p++];
+                    function parseExpr() {
+                        let v = parseTerm();
+                        while (peek() === '+' || peek() === '-') {
+                            const op = consume(); const r = parseTerm();
+                            v = op === '+' ? v + r : v - r;
+                        }
+                        return v;
+                    }
+                    function parseTerm() {
+                        let v = parseFactor();
+                        while (peek() === '*' || peek() === '/') {
+                            const op = consume(); const r = parseFactor();
+                            if (op === '/' && r === 0) throw new Error('div0');
+                            v = op === '*' ? v * r : v / r;
+                        }
+                        return v;
+                    }
+                    function parseFactor() {
+                        if (peek() === '(') { consume(); const v = parseExpr(); if (peek() === ')') consume(); return v; }
+                        if (peek() === '-') { consume(); return -parseFactor(); }
+                        if (peek() === '+') { consume(); return parseFactor(); }
+                        const n = parseFloat(consume());
+                        if (isNaN(n)) throw new Error('nan');
+                        return n;
+                    }
+                    const result = parseExpr();
+                    if (p !== tokens.length) throw new Error('trailing');
                     return Number.isFinite(result) ? result : null;
                 } catch { return null; }
             }
@@ -13854,11 +13939,19 @@ function populateProgressDashboard() {
             function calcUpdateDisplay() {
                 const exprEl = document.getElementById('lifeCalcExpr');
                 const resultEl = document.getElementById('lifeCalcResult');
-                if (exprEl) exprEl.textContent = calcExpr;
                 if (!resultEl) return;
-                if (!calcExpr) { resultEl.textContent = '0'; return; }
-                const live = calcTryEval(calcExpr);
-                resultEl.textContent = live !== null ? calcFormatNumber(live) : calcExpr;
+                if (!calcExpr) {
+                    if (exprEl) exprEl.textContent = '';
+                    resultEl.textContent = '0';
+                    return;
+                }
+                if (calcJustEvaled) {
+                    if (exprEl) exprEl.textContent = calcPrevExpr + ' =';
+                    resultEl.textContent = calcExpr;
+                } else {
+                    if (exprEl) exprEl.textContent = '';
+                    resultEl.textContent = calcExpr;
+                }
             }
 
             function calcHandleButton(action) {
@@ -13866,6 +13959,7 @@ function populateProgressDashboard() {
                 if (action === 'clear') {
                     calcExpr = '';
                     calcJustEvaled = false;
+                    calcPrevExpr = '';
                     calcUpdateDisplay();
                     return;
                 }
@@ -13879,6 +13973,7 @@ function populateProgressDashboard() {
                     if (!calcExpr) return;
                     const result = calcTryEval(calcExpr);
                     if (result !== null) {
+                        calcPrevExpr = calcExpr;
                         calcExpr = calcFormatNumber(result);
                         calcJustEvaled = true;
                     }
@@ -17111,10 +17206,23 @@ function populateProgressDashboard() {
         function deleteTask(taskId) {
             const task = tasks.find(t => t.id === taskId);
             if (task && task.origin === 'homework') {
+                // Move the underlying homework row to Trash before removing it.
+                try {
+                    const sourceId = String(task.homeworkSourceId || '');
+                    if ((task.homeworkSource || 'v2') === 'v2' && sourceId && typeof addRecordToTrash === 'function') {
+                        const hwRow = readLocalArraySafe('hwTasks:v2').find(item => String(item.id) === sourceId);
+                        if (hwRow) addRecordToTrash('homework', hwRow.title || hwRow.text || task.title, hwRow);
+                    }
+                } catch (err) { /* non-critical */ }
                 deleteHomeworkTaskInStorage(task);
             }
             if (task && task.origin === 'ap_study' && typeof window !== 'undefined' && typeof window.deleteApStudyTaskInStore === 'function') {
                 window.deleteApStudyTaskInStore(task);
+            }
+            // Plain planner tasks are recoverable too; mirrored rows (homework /
+            // AP) already round-trip through their own store or aren't restorable.
+            if (task && !task.origin && typeof addRecordToTrash === 'function') {
+                try { addRecordToTrash('task', task.title, task); } catch (err) { /* non-critical */ }
             }
             tasks = tasks.filter(task => task.id !== taskId);
             taskOrder = taskOrder.filter(id => id !== taskId);
@@ -18832,6 +18940,11 @@ function populateProgressDashboard() {
                 const idx = list.findIndex(item => String(item.id) === sourceId);
                 if (idx !== -1) {
                     list[idx].done = !!done;
+                    // Keep the completion contract consistent with the
+                    // homework module's own toggle (completedAt set on done,
+                    // cleared on reopen; actualMinutes always preserved).
+                    if (done) list[idx].completedAt = new Date().toISOString();
+                    else delete list[idx].completedAt;
                     writeLocalArraySafe('hwTasks:v2', list);
                 }
                 return;
@@ -20929,6 +21042,28 @@ function populateProgressDashboard() {
         // the score is a pure function of due proximity, priority, grade risk, type,
         // and whether the work is still unscheduled.
         function estimateItemEffortMinutes(item) {
+            const minutes = estimateItemEffortMinutesBase(item);
+            // Scale heuristic homework estimates by the student's logged
+            // actual-vs-estimate history. The threshold/rounding policy lives
+            // in ONE place (SutraHomework.applyEffortCalibration) so this
+            // surface can't drift from the card chip or Quick Capture.
+            // Explicit plan estimates are left alone.
+            try {
+                const hw = window.SutraHomework;
+                if (hw && typeof hw.applyEffortCalibration === 'function' && item && String(item.source || '') === 'homework') {
+                    const explicit = Number(
+                        (item.metadata && (item.metadata.estimateMinutes || item.metadata.effortMinutes))
+                        || item.estimateMinutes || item.effortMinutes || 0
+                    );
+                    if (!(explicit > 0)) {
+                        return hw.applyEffortCalibration(minutes, { courseId: item.sourceCourseId || '' }).minutes;
+                    }
+                }
+            } catch (_) { /* keep the base estimate */ }
+            return minutes;
+        }
+
+        function estimateItemEffortMinutesBase(item) {
             if (!item) return 30;
             const explicit = Number(
                 (item.metadata && (item.metadata.estimateMinutes || item.metadata.effortMinutes))
@@ -21234,12 +21369,37 @@ function populateProgressDashboard() {
             const buildList = (rows, emptyLabel) => rows.length
                 ? rows.map(r => `<div class="today-mobile-list-row"><span>${escapeCommandHtml(r.title || 'Item')}</span><span>${escapeCommandHtml(r.meta || '')}</span></div>`).join('')
                 : `<div class="today-mobile-list-row"><span>${escapeCommandHtml(emptyLabel)}</span><span></span></div>`;
+
+            // "Right Now" hero — the single next move with time-until-due + one-tap start
+            // (mirrors the desktop Do-Now). Computed from the full workspace deadlines.
+            let deadlines = [];
+            try { deadlines = collectWorkspaceDeadlines() || []; } catch (err) { deadlines = []; }
+            let rnItem = null, rnReason = '';
+            try {
+                const nba = pickNextBestAction(groupDeadlinesByTimeframe(deadlines));
+                if (nba && nba.item) { rnItem = nba.item; rnReason = nba.reason || ''; }
+            } catch (err) { /* non-critical */ }
+            const overdueCount = deadlines.filter(i => i && i.overdue).length;
+            const rightNowHtml = rnItem
+                ? `<article class="today-mobile-card today-mobile-rightnow">
+                        <div class="mobile-card-eyebrow">Right now${rnReason ? ' · ' + escapeCommandHtml(rnReason) : ''}</div>
+                        <div class="mobile-card-title">${escapeCommandHtml(rnItem.title)}</div>
+                        <div class="mobile-card-sub">${escapeCommandHtml(relativeDueLabel(rnItem.due))}${rnItem.subtitle ? ' · ' + escapeCommandHtml(rnItem.subtitle) : ''} · ${dueToday.length} due · ${reviewDue} cards</div>
+                        <div class="today-mobile-quick-row">
+                            <button type="button" class="neumo-btn active" data-mobile-action="rightnow-start" data-rn-id="${escapeCommandHtml(rnItem.sourceId || '')}" data-rn-source="${escapeCommandHtml(rnItem.source || '')}" data-rn-title="${escapeCommandHtml(rnItem.title)}">Start now</button>
+                            <button type="button" class="neumo-btn" data-mobile-action="rightnow-open" data-rn-itemid="${escapeCommandHtml(rnItem.id)}">Open</button>
+                            ${overdueCount > 0 ? `<button type="button" class="neumo-btn is-recover" data-mobile-action="recover">Recover ${overdueCount}</button>` : ''}
+                        </div>
+                    </article>`
+                : `<article class="today-mobile-card today-mobile-rightnow">
+                        <div class="mobile-card-eyebrow">Right now · ${escapeCommandHtml(dateLabel)}</div>
+                        <div class="mobile-card-title">You're clear</div>
+                        <div class="mobile-card-sub">Nothing due · ${reviewDue} card${reviewDue === 1 ? '' : 's'} to review</div>
+                        ${overdueCount > 0 ? `<div class="today-mobile-quick-row"><button type="button" class="neumo-btn is-recover" data-mobile-action="recover">Recover ${overdueCount} overdue</button></div>` : ''}
+                    </article>`;
+
             shell.innerHTML = `
-                <article class="today-mobile-card">
-                    <div class="mobile-card-eyebrow">Today</div>
-                    <div class="mobile-card-title">${escapeCommandHtml(dateLabel)}</div>
-                    <div class="mobile-card-sub">${dueToday.length} due · ${habitDone}/${habitTotal} habits · ${reviewDue} cards</div>
-                </article>
+                ${rightNowHtml}
 
                 <article class="today-mobile-card" data-mobile-card="quick">
                     <div class="mobile-card-eyebrow">Quick actions</div>
@@ -21300,6 +21460,19 @@ function populateProgressDashboard() {
                         } else if (typeof startTimer === 'function') startTimer();
                     } else if (action === 'open-review' && typeof setActiveView === 'function') setActiveView('review');
                     else if (action === 'start-review' && typeof window.startReviewSessionFromShortcut === 'function') window.startReviewSessionFromShortcut();
+                    else if (action === 'rightnow-start') {
+                        const sid = btn.getAttribute('data-rn-id');
+                        const src = btn.getAttribute('data-rn-source');
+                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid);
+                        else if (typeof startFocusSession === 'function') startFocusSession();
+                    } else if (action === 'rightnow-open') {
+                        const id = btn.getAttribute('data-rn-itemid');
+                        const all = (typeof collectWorkspaceDeadlines === 'function') ? collectWorkspaceDeadlines() : [];
+                        const t = Array.isArray(all) ? all.find(i => i.id === id) : null;
+                        if (t) openDeadlineSource(t);
+                    } else if (action === 'recover') {
+                        if (typeof openOverdueRecovery === 'function') openOverdueRecovery();
+                    }
                 } catch (err) { /* non-critical */ }
             });
             shell.addEventListener('submit', event => {
@@ -21320,6 +21493,40 @@ function populateProgressDashboard() {
             });
         }
 
+        // Short "due in 3h" / "2d overdue" label for a Date. Used by the mobile
+        // Right Now hero so the next deadline reads at a glance.
+        function relativeDueLabel(due) {
+            try {
+                const ms = due.getTime() - Date.now();
+                if (ms < 0) { const d = Math.max(1, Math.round(-ms / 86400000)); return `${d}d overdue`; }
+                const mins = Math.round(ms / 60000);
+                if (mins < 60) return `due in ${Math.max(1, mins)} min`;
+                const hrs = Math.round(ms / 3600000);
+                if (hrs < 24) return `due in ${hrs}h`;
+                return `due in ${Math.round(hrs / 24)}d`;
+            } catch (e) { return ''; }
+        }
+
+        // The next class today that hasn't ended yet (with a real course assigned),
+        // from the School Schedule engine. Returns { courseId, name, label } or null
+        // when school is off / unscheduled. Powers the "quiz me before <class>" nudge.
+        function getNextClassToday() {
+            try {
+                const sched = window.SutraSchoolSchedule;
+                if (!sched || typeof sched.resolveDayInfo !== 'function') return null;
+                const now = new Date();
+                const info = sched.resolveDayInfo(quickCaptureLocalISO(now));
+                if (!info || !info.isSchoolDay || !Array.isArray(info.periods)) return null;
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                const upcoming = info.periods
+                    .filter(p => p && p.courseId && Number.isFinite(p.endMinutes) && p.endMinutes > nowMin)
+                    .sort((a, b) => (Number(a.startMinutes) || 0) - (Number(b.startMinutes) || 0));
+                if (!upcoming.length) return null;
+                const p = upcoming[0];
+                return { courseId: String(p.courseId), name: String(p.courseName || ''), label: String(p.label || '') };
+            } catch (err) { return null; }
+        }
+
         // ===== Daily Thread rendering =====
         function renderTodayDailyBrief() {
             const container = document.getElementById('todayDailyBrief');
@@ -21337,6 +21544,35 @@ function populateProgressDashboard() {
 
             const modeLabel = getWorkspaceModeLabel(mode);
 
+            // Contextual study debt (surfaces the Review engine on Today).
+            let reviewDue = 0;
+            try {
+                if (typeof window.getReviewTodayStats === 'function') {
+                    const rs = window.getReviewTodayStats() || {};
+                    reviewDue = (Number(rs.due) || 0) + (Number(rs.overdue) || 0);
+                }
+            } catch (err) { reviewDue = 0; }
+
+            // Overload forecast from the local intelligence layer ("heavy days").
+            let overloadDays = 0;
+            try {
+                const intel = window.sutraIntelligence || window.flowIntelligence;
+                if (intel && typeof intel.deriveStudentContext === 'function') {
+                    const ctx = intel.deriveStudentContext() || {};
+                    if (Array.isArray(ctx.overloadedDays)) overloadDays = ctx.overloadedDays.length;
+                }
+            } catch (err) { overloadDays = 0; }
+
+            // "Quiz me before <next class>" — only when that class actually has cards due (#8).
+            let nextClass = null;
+            let nextClassDue = 0;
+            try {
+                nextClass = getNextClassToday();
+                if (nextClass && nextClass.name && typeof window.countReviewDueForCourse === 'function') {
+                    nextClassDue = window.countReviewDueForCourse(nextClass) || 0;
+                }
+            } catch (err) { nextClass = null; nextClassDue = 0; }
+
             let nbaHtml;
             if (nba && nba.item) {
                 const dueLabel = (() => {
@@ -21345,44 +21581,53 @@ function populateProgressDashboard() {
                         return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                     } catch (err) { return ''; }
                 })();
+                const isHw = nba.item.source === 'homework' && nba.item.sourceId;
                 nbaHtml = `
-                    <div class="today-brief-nba">
-                        <div class="today-brief-nba-label">Next step · ${escapeHtml(nba.reason)}</div>
+                    <div class="today-brief-nba today-brief-donow">
+                        <div class="today-brief-nba-label">Do now · ${escapeHtml(nba.reason || 'next up')}</div>
                         <div class="today-brief-nba-title">${escapeHtml(nba.item.title)}</div>
                         <div class="today-brief-nba-meta">${escapeHtml(dueLabel)}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</div>
                         <div class="today-brief-actions">
+                            <button type="button" class="neumo-btn active" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}">Start focus</button>
                             <button type="button" class="neumo-btn" data-brief-open-source="${escapeHtml(nba.item.id)}">Open</button>
+                            ${isHw ? `<button type="button" class="neumo-btn" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
                             ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
-                            <button type="button" class="neumo-btn" id="todayBriefOpenRadar">Open Deadline Radar</button>
                         </div>
                     </div>`;
             } else if (items.length === 0) {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty">
-                        <div class="today-brief-nba-label">Next step</div>
-                        <div class="today-brief-nba-title">No deadlines on file</div>
-                        <div class="today-brief-nba-meta">Plan your day or use Quick Capture to jot something down.</div>
-                        <div class="today-brief-actions">
-                            <button type="button" class="neumo-btn" id="todayBriefOpenRadar">Open Deadline Radar</button>
-                        </div>
+                        <div class="today-brief-nba-label">Do now</div>
+                        <div class="today-brief-nba-title">Nothing due — you're clear</div>
+                        <div class="today-brief-nba-meta">Capture an assignment (Ctrl/⌘+K)${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</div>
                     </div>`;
             } else {
                 nbaHtml = `
                     <div class="today-brief-nba today-brief-nba-empty">
-                        <div class="today-brief-nba-label">Next step</div>
-                        <div class="today-brief-nba-title">Pick up where you left off</div>
-                        <div class="today-brief-nba-meta">No overdue or today items. See upcoming deadlines in the Radar.</div>
-                        <div class="today-brief-actions">
-                            <button type="button" class="neumo-btn" id="todayBriefOpenRadar">Open Deadline Radar</button>
-                        </div>
+                        <div class="today-brief-nba-label">Do now</div>
+                        <div class="today-brief-nba-title">Nothing overdue or due today</div>
+                        <div class="today-brief-nba-meta">Get ahead on what's coming — see the Radar${reviewDue > 0 ? ` or clear your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''}.</div>
                     </div>`;
             }
+
+            const overloadChip = overloadDays > 0
+                ? `<span class="today-brief-count is-alert"><strong>${overloadDays}</strong> heavy ${overloadDays === 1 ? 'day' : 'days'}</span>`
+                : '';
+
+            const smartRow = `
+                <div class="today-brief-smartrow">
+                    ${overdueN > 0 ? `<button type="button" class="neumo-btn is-recover" data-donow-recover="1">Recover ${overdueN} overdue</button>` : ''}
+                    ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
+                    ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
+                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar">Plan my day</button>
+                    <button type="button" class="neumo-btn" data-donow-calendar="1">Add deadlines to calendar</button>
+                </div>`;
 
             container.innerHTML = `
                 <div class="today-brief-head">
                     <div>
                         <div class="eyebrow">Daily Thread</div>
-                        <h3>Today at a glance</h3>
+                        <h3>Your next move</h3>
                         <p class="today-brief-mode">Mode: ${escapeHtml(modeLabel)}</p>
                     </div>
                     <div class="today-brief-counts">
@@ -21390,9 +21635,11 @@ function populateProgressDashboard() {
                         <span class="today-brief-count"><strong>${todayN}</strong> today</span>
                         <span class="today-brief-count"><strong>${tomorrowN}</strong> tomorrow</span>
                         <span class="today-brief-count"><strong>${weekN}</strong> this week</span>
+                        ${overloadChip}
                     </div>
                 </div>
                 ${nbaHtml}
+                ${smartRow}
             `;
 
             container.querySelectorAll('[data-brief-open-source]').forEach(btn => {
@@ -21412,6 +21659,69 @@ function populateProgressDashboard() {
             });
             const radarBtn = container.querySelector('#todayBriefOpenRadar');
             if (radarBtn) radarBtn.addEventListener('click', openDeadlineRadar);
+
+            // Start focus on the Do-Now item (#4 — guided work).
+            const focusBtn = container.querySelector('[data-donow-focus]');
+            if (focusBtn) focusBtn.addEventListener('click', () => {
+                const sid = focusBtn.getAttribute('data-donow-focus');
+                const src = focusBtn.getAttribute('data-donow-source');
+                const label = focusBtn.getAttribute('data-donow-title') || 'Focus';
+                try {
+                    if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') { startFocusSession(sid); return; }
+                    if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') { window.flowAtelier.startFocusSession({ label, taskTitle: label }); return; }
+                    if (typeof startFocusSession === 'function') { startFocusSession(); }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-focus', 'warning'); }
+            });
+
+            // Open Assignment Studio to break the Do-Now homework into steps (#4).
+            const planBtn = container.querySelector('[data-donow-plan]');
+            if (planBtn) planBtn.addEventListener('click', () => {
+                const sid = planBtn.getAttribute('data-donow-plan');
+                try {
+                    if (sid && window.SutraAssignmentStudio && typeof window.SutraAssignmentStudio.open === 'function') { window.SutraAssignmentStudio.open(sid); return; }
+                    if (sid && typeof window.openHomeworkTaskModal === 'function') { window.openHomeworkTaskModal('v2', sid); }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-plan', 'warning'); }
+            });
+
+            // Open the overdue recovery flow (#9).
+            const recoverBtn = container.querySelector('[data-donow-recover]');
+            if (recoverBtn) recoverBtn.addEventListener('click', () => {
+                try { openOverdueRecovery(); } catch (err) { window.reportError && window.reportError(err, 'today:donow-recover', 'warning'); }
+            });
+
+            // Start a subject-scoped review session before the next class (#8).
+            const quizBtn = container.querySelector('[data-quiz-class]');
+            if (quizBtn) quizBtn.addEventListener('click', () => {
+                const courseId = quizBtn.getAttribute('data-quiz-class') || '';
+                const name = quizBtn.getAttribute('data-quiz-name') || '';
+                try {
+                    if (typeof window.startReviewForCourse === 'function') { window.startReviewForCourse({ courseId, name }); return; }
+                    if (typeof window.startReviewSessionFromShortcut === 'function') window.startReviewSessionFromShortcut();
+                } catch (err) { window.reportError && window.reportError(err, 'today:quiz-class', 'warning'); }
+            });
+
+            // Start a due-card review session (#6 — contextual study).
+            const reviewBtn = container.querySelector('[data-donow-review]');
+            if (reviewBtn) reviewBtn.addEventListener('click', () => {
+                try {
+                    if (typeof window.startReviewSessionFromShortcut === 'function') { window.startReviewSessionFromShortcut(); return; }
+                    if (typeof window.openReviewTab === 'function') { window.openReviewTab(); return; }
+                    if (typeof setActiveView === 'function') setActiveView('review');
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-review', 'warning'); }
+            });
+
+            // Hand deadlines to the student's real calendar (#5 — local-first reminders).
+            const calBtn = container.querySelector('[data-donow-calendar]');
+            if (calBtn) calBtn.addEventListener('click', () => {
+                try {
+                    if (window.SutraNotifications && typeof window.SutraNotifications.exportRemindersToCalendar === 'function') {
+                        const n = window.SutraNotifications.exportRemindersToCalendar();
+                        if (typeof showToast === 'function') showToast(n > 0 ? `Added ${n} deadline${n === 1 ? '' : 's'} to a calendar file — open it to put them on your phone calendar.` : 'No upcoming deadlines to add yet.');
+                    } else if (typeof showToast === 'function') {
+                        showToast('Calendar export is unavailable right now.');
+                    }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-calendar', 'warning'); }
+            });
         }
 
         function openDeadlineRadar() {
@@ -21505,6 +21815,530 @@ function populateProgressDashboard() {
             modal.classList.remove('active');
             modal.setAttribute('aria-hidden', 'true');
         }
+
+        // ===== Overdue Recovery (#9) =====
+        // One screen for "here's what slipped" — the moment a student opens the app
+        // behind. Lists overdue work with one-tap recovery: mark done, push to today
+        // or tomorrow, or open. Quick actions cover the two most common sources
+        // (homework + tasks); everything else gets an Open button.
+        function overdueDeadlineItems() {
+            try { return collectWorkspaceDeadlines().filter(i => i && i.overdue); }
+            catch (err) { return []; }
+        }
+
+        function recoveryCanQuickAct(item) {
+            return !!item && (item.source === 'homework' || item.source === 'task');
+        }
+
+        // Write a new due date and/or completion onto the underlying record.
+        // Returns true only on a persisted change so callers never report a phantom
+        // success. Homework rides hwTasks:v2; tasks ride appData (.completed).
+        function mutateDeadlineRecord(item, change) {
+            if (!item) return false;
+            const sourceId = String(item.sourceId || '');
+            if (!sourceId) return false;
+            try {
+                if (item.source === 'homework') {
+                    const raw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                    const row = Array.isArray(raw) ? raw.find(t => String(t.id) === sourceId) : null;
+                    if (!row) return false;
+                    // Same completion contract as the homework module's toggle.
+                    if (change.done) { row.done = true; row.completedAt = new Date().toISOString(); }
+                    if (change.dueDate) row.dueDate = change.dueDate;
+                    row.updatedAt = new Date().toISOString();
+                    localStorage.setItem('hwTasks:v2', JSON.stringify(raw)); // sutra-allow-storage: homework store, same direct-write contract as the homework module + quick capture
+                    try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
+                    return true;
+                }
+                if (item.source === 'task' && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
+                    const row = tasks.find(t => String(t.id) === sourceId);
+                    if (!row) return false;
+                    if (change.done) row.completed = true;
+                    if (change.dueDate) row.dueDate = change.dueDate;
+                    try { persistAppData && persistAppData(); } catch (e) { /* non-critical */ }
+                    try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
+                    return true;
+                }
+            } catch (err) { window.reportError && window.reportError(err, 'overdueRecovery:mutate', 'warning'); }
+            return false;
+        }
+
+        function recoveryDateKey(when) {
+            const d = new Date();
+            if (when === 'tomorrow') d.setDate(d.getDate() + 1);
+            return quickCaptureLocalISO(d);
+        }
+
+        function recoveryRescheduleAll(when) {
+            const targets = overdueDeadlineItems().filter(recoveryCanQuickAct);
+            const dateKey = recoveryDateKey(when);
+            let n = 0;
+            targets.forEach(it => { if (mutateDeadlineRecord(it, { dueDate: dateKey })) n += 1; });
+            if (n && typeof showToast === 'function') showToast(`Moved ${n} item${n === 1 ? '' : 's'} to ${when === 'tomorrow' ? 'tomorrow' : 'today'}.`);
+            try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (e) { /* non-critical */ }
+            openOverdueRecovery();
+        }
+
+        function openOverdueRecovery() {
+            const modal = document.getElementById('overdueRecoveryModal');
+            if (!modal) return;
+            const items = overdueDeadlineItems();
+            const body = modal.querySelector('.overdue-recovery-body');
+            const toolbar = modal.querySelector('#overdueRecoveryToolbar');
+            const quickCount = items.filter(recoveryCanQuickAct).length;
+            if (toolbar) {
+                const toolbarHtml = items.length === 0
+                    ? ''
+                    : `<span class="overdue-recovery-summary"><strong>${items.length}</strong> overdue</span>`
+                      + (quickCount > 0
+                          ? `<span class="overdue-recovery-spacer"></span>
+                             <button type="button" class="neumo-btn" data-recover-all="today">Move all to today</button>
+                             <button type="button" class="neumo-btn" data-recover-all="tomorrow">Move all to tomorrow</button>`
+                          : '');
+                toolbar.innerHTML = toolbarHtml; // sutra-allow-html: trusted markup; only integers + static strings interpolated
+            }
+            if (body) {
+                let bodyHtml;
+                if (!items.length) {
+                    bodyHtml = `<div class="empty-state"><div class="empty-title">Nothing overdue</div><div class="empty-subtitle">You're caught up. Nice.</div></div>`;
+                } else {
+                    bodyHtml = `<ul class="overdue-recovery-list">${items.map(i => {
+                        const dueLabel = (() => { try { return i.due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } })();
+                        const daysLate = (() => { try { return Math.max(1, Math.round((Date.now() - i.due.getTime()) / 86400000)); } catch (e) { return 0; } })();
+                        const canAct = recoveryCanQuickAct(i);
+                        return `<li class="overdue-recovery-item" data-recover-id="${escapeHtml(i.id)}">
+                            <div class="overdue-recovery-main">
+                                <div class="overdue-recovery-title">${escapeHtml(i.title)}</div>
+                                <div class="overdue-recovery-meta">${escapeHtml(i.source)}${i.subtitle ? ' · ' + escapeHtml(i.subtitle) : ''} · was due ${escapeHtml(dueLabel)}${daysLate ? ` · ${daysLate}d late` : ''}</div>
+                            </div>
+                            <div class="overdue-recovery-actions">
+                                ${canAct ? `<button type="button" class="neumo-btn active" data-recover-done="${escapeHtml(i.id)}" title="Mark done">Done</button>` : ''}
+                                ${canAct ? `<button type="button" class="neumo-btn" data-recover-move="today" data-recover-move-id="${escapeHtml(i.id)}" title="Move to today">Today</button>` : ''}
+                                ${canAct ? `<button type="button" class="neumo-btn" data-recover-move="tomorrow" data-recover-move-id="${escapeHtml(i.id)}" title="Move to tomorrow">Tomorrow</button>` : ''}
+                                <button type="button" class="neumo-btn" data-recover-open="${escapeHtml(i.id)}" title="Open">Open</button>
+                            </div>
+                        </li>`;
+                    }).join('')}</ul>`;
+                }
+                body.innerHTML = bodyHtml; // sutra-allow-html: trusted markup; all dynamic values pass through escapeHtml()
+            }
+            const reRender = () => { try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (e) { /* non-critical */ } openOverdueRecovery(); };
+            modal.querySelectorAll('[data-recover-all]').forEach(btn => btn.addEventListener('click', () => recoveryRescheduleAll(btn.getAttribute('data-recover-all'))));
+            modal.querySelectorAll('[data-recover-done]').forEach(btn => btn.addEventListener('click', () => {
+                const target = items.find(i => i.id === btn.getAttribute('data-recover-done'));
+                if (target && mutateDeadlineRecord(target, { done: true })) { if (typeof showToast === 'function') showToast('Marked done.'); reRender(); }
+            }));
+            modal.querySelectorAll('[data-recover-move-id]').forEach(btn => btn.addEventListener('click', () => {
+                const target = items.find(i => i.id === btn.getAttribute('data-recover-move-id'));
+                const when = btn.getAttribute('data-recover-move');
+                if (target && mutateDeadlineRecord(target, { dueDate: recoveryDateKey(when) })) {
+                    if (typeof showToast === 'function') showToast(when === 'tomorrow' ? 'Moved to tomorrow.' : 'Moved to today.');
+                    reRender();
+                }
+            }));
+            modal.querySelectorAll('[data-recover-open]').forEach(btn => btn.addEventListener('click', () => {
+                const target = items.find(i => i.id === btn.getAttribute('data-recover-open'));
+                if (target) { closeOverdueRecovery(); openDeadlineSource(target); }
+            }));
+            modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeOverdueRecovery() {
+            const modal = document.getElementById('overdueRecoveryModal');
+            if (!modal) return;
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        // ===== Grade what-if calculator (#7) =====
+        // Drives the existing deterministic Grade Planner engine (whatIfScore /
+        // scoreNeededForTarget) so a student can answer "what do I need?" and
+        // "what if I skip this?" for one upcoming assignment, in plain letters.
+        function gradeCourseName(id) {
+            try {
+                if (window.courseHub && typeof window.courseHub.getCourseById === 'function') {
+                    const c = window.courseHub.getCourseById(id);
+                    if (c && c.name) return String(c.name);
+                }
+            } catch (e) { /* fall through */ }
+            try {
+                const raw = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                const m = Array.isArray(raw) ? raw.find(c => String(c.id) === String(id)) : null;
+                if (m && m.name) return String(m.name);
+            } catch (e) { /* fall through */ }
+            return 'Class';
+        }
+
+        function gradeImpactCourses() {
+            try {
+                const GP = window.SutraGradePlanner;
+                if (!GP || typeof GP.getPlanner !== 'function' || !GP.engine) return [];
+                const planner = GP.getPlanner();
+                const out = [];
+                Object.keys(planner.courses || {}).forEach(id => {
+                    const data = GP.engine.normalizeCourseGrades(planner.courses[id] || null);
+                    if (!data) return;
+                    const hasData = (data.categories && data.categories.length) || (data.entries && data.entries.length);
+                    if (hasData) out.push({ id, name: gradeCourseName(id) });
+                });
+                return out.sort((a, b) => a.name.localeCompare(b.name));
+            } catch (err) { return []; }
+        }
+
+        function gradeLetterDelta(fromPct, toPct, toLetter, fromLetter) {
+            if (toPct === null || toPct === undefined) return '';
+            if (fromPct === null || fromPct === undefined) return `${toPct.toFixed(1)}%${toLetter ? ' (' + toLetter + ')' : ''}`;
+            const d = Math.round((toPct - fromPct) * 10) / 10;
+            const arrow = (fromLetter && toLetter && fromLetter !== toLetter) ? ` · ${fromLetter} → ${toLetter}` : '';
+            const sign = d > 0 ? '+' : '';
+            return `${toPct.toFixed(1)}%${toLetter ? ' (' + toLetter + ')' : ''} · ${sign}${d}${arrow}`;
+        }
+
+        function updateGradeImpactResults(modal, courseId) {
+            const GP = window.SutraGradePlanner;
+            const out = modal.querySelector('#giResults');
+            if (!GP || !GP.engine || !out) return;
+            const planner = GP.getPlanner();
+            const data = GP.engine.normalizeCourseGrades(planner.courses[courseId] || null);
+            const settings = planner.settings;
+            if (!data) { out.innerHTML = ''; return; } // sutra-allow-html: clears trusted container
+            const catSel = modal.querySelector('#giCategory');
+            const maxEl = modal.querySelector('#giMax');
+            const scoreEl = modal.querySelector('#giScore');
+            const categoryId = catSel ? catSel.value : '';
+            const maxScore = Math.max(1, Math.round(Number(maxEl && maxEl.value) || 100));
+            let score = Number(scoreEl && scoreEl.value);
+            if (!Number.isFinite(score)) score = maxScore;
+            score = Math.max(0, Math.min(maxScore, score));
+
+            const current = GP.engine.computeCourseGrade(data, settings);
+            const ifScore = GP.engine.whatIfScore(data, { categoryId, score, maxScore }, settings);
+            const ifSkip = GP.engine.whatIfScore(data, { categoryId, score: 0, maxScore }, settings);
+            const curHtml = current.percent === null
+                ? '<span class="gi-muted">No graded work yet</span>'
+                : `${current.percent.toFixed(1)}%${current.letter ? ' (' + current.letter + ')' : ''}`;
+
+            let neededHtml = '';
+            const target = data.targetPercent;
+            if (target !== null && target !== undefined) {
+                const need = GP.engine.scoreNeededForTarget(data, { categoryId, maxScore, targetPercent: target }, settings);
+                if (need && need.possible) {
+                    neededHtml = need.alreadyMet
+                        ? `<div class="gi-line gi-good">You're already at or above your ${target}% target — even a zero keeps you there.</div>`
+                        : (need.achievable
+                            ? `<div class="gi-line">To hold your <strong>${target}%</strong> target, score <strong>${need.neededScore}/${maxScore}</strong> (${need.neededPercent}%).</div>`
+                            : `<div class="gi-line gi-warn">Even a perfect score on this can't reach your ${target}% target by itself.</div>`);
+                }
+            } else {
+                neededHtml = '<div class="gi-line gi-muted">Set a target grade in the Grades tab to see "what you need".</div>';
+            }
+
+            const resultHtml = `
+                <div class="gi-result-grid">
+                    <div class="gi-result"><div class="gi-result-label">Now</div><div class="gi-result-value">${curHtml}</div></div>
+                    <div class="gi-result"><div class="gi-result-label">If you score ${score}/${maxScore}</div><div class="gi-result-value">${escapeHtml(gradeLetterDelta(current.percent, ifScore.percent, ifScore.letter, current.letter))}</div></div>
+                    <div class="gi-result gi-result-skip"><div class="gi-result-label">If you skip it (0)</div><div class="gi-result-value">${escapeHtml(gradeLetterDelta(current.percent, ifSkip.percent, ifSkip.letter, current.letter))}</div></div>
+                </div>
+                ${neededHtml}`;
+            out.innerHTML = resultHtml; // sutra-allow-html: trusted markup; dynamic values are numbers or escapeHtml()'d
+        }
+
+        function renderGradeImpactShell(modal, courseId) {
+            const GP = window.SutraGradePlanner;
+            const body = modal.querySelector('.gradeimpact-body');
+            if (!body) return;
+            const courses = gradeImpactCourses();
+            if (!courses.length) {
+                body.innerHTML = `<div class="empty-state"><div class="empty-title">No grades to model yet</div><div class="empty-subtitle">Add grading categories or scores in a class's Grades tab, then come back to run what-ifs.</div></div>`; // sutra-allow-html: static trusted markup
+                return;
+            }
+            const activeId = courseExists(courses, courseId) ? courseId : courses[0].id;
+            const data = GP.engine.normalizeCourseGrades(GP.getPlanner().courses[activeId] || null);
+            const cats = (data && Array.isArray(data.categories)) ? data.categories : [];
+            const courseOpts = courses.map(c => `<option value="${escapeHtml(c.id)}" ${String(c.id) === String(activeId) ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+            const catOpts = ['<option value="">No category (points pool)</option>'].concat(
+                cats.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} · ${c.weight}%</option>`)
+            ).join('');
+            const shellHtml = `
+                <div class="gi-controls">
+                    <label class="gi-field"><span>Class</span><select id="giCourse" class="modal-input">${courseOpts}</select></label>
+                    <label class="gi-field"><span>Category</span><select id="giCategory" class="modal-input">${catOpts}</select></label>
+                    <label class="gi-field gi-field-sm"><span>Out of</span><input id="giMax" class="modal-input" type="number" min="1" step="1" value="100" /></label>
+                    <label class="gi-field gi-field-sm"><span>You score</span><input id="giScore" class="modal-input" type="number" min="0" step="1" value="100" /></label>
+                </div>
+                <div id="giResults" class="gi-results" aria-live="polite"></div>`;
+            body.innerHTML = shellHtml; // sutra-allow-html: trusted markup; option values are escapeHtml()'d
+            const courseSel = modal.querySelector('#giCourse');
+            if (courseSel) courseSel.addEventListener('change', () => renderGradeImpactShell(modal, courseSel.value));
+            ['#giCategory', '#giMax', '#giScore'].forEach(sel => {
+                const el = modal.querySelector(sel);
+                if (el) el.addEventListener('input', () => updateGradeImpactResults(modal, activeId));
+            });
+            updateGradeImpactResults(modal, activeId);
+        }
+
+        function courseExists(list, id) {
+            return Array.isArray(list) && list.some(c => String(c.id) === String(id));
+        }
+
+        function openGradeImpactModal(preselectCourseId) {
+            const modal = document.getElementById('gradeImpactModal');
+            if (!modal) return;
+            renderGradeImpactShell(modal, preselectCourseId || '');
+            modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeGradeImpactModal() {
+            const modal = document.getElementById('gradeImpactModal');
+            if (!modal) return;
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        // ===== Weekly Review surface (#4) =====
+        // Assembles the week into one screen: what got done, what slipped, where
+        // grades stand (per-course risk), and what next week looks like (heavy days),
+        // with a deterministic recommendation + one-tap actions. The existing
+        // createWeeklyReviewNote() remains the "save a copy" output.
+        function weeklyReviewCourseRisks() {
+            try {
+                const GP = window.SutraGradePlanner;
+                if (!GP || !GP.engine || typeof GP.computeGradeRisk !== 'function') return [];
+                const planner = GP.getPlanner();
+                return gradeImpactCourses().map(c => {
+                    const data = GP.engine.normalizeCourseGrades(planner.courses[c.id] || null);
+                    return { id: c.id, name: c.name, risk: GP.computeGradeRisk(data, planner.settings), delta: weeklyReviewGradeDelta(c.id) };
+                });
+            } catch (err) { return []; }
+        }
+
+        // Week-over-week grade movement for one course: current cumulative
+        // grade vs where it stood before this review window. null when there
+        // isn't enough dated history to say anything honest.
+        function weeklyReviewGradeDelta(courseId) {
+            try {
+                const GP = window.SutraGradePlanner;
+                if (!GP || typeof GP.computeGradeTrend !== 'function') return null;
+                const trend = GP.computeGradeTrend(courseId) || [];
+                if (trend.length < 2) return null;
+                const start = new Date(); start.setDate(start.getDate() - 6);
+                const startKey = quickCaptureLocalISO(start);
+                let base = null;
+                trend.forEach(p => { if (p && p.date < startKey) base = p; });
+                if (!base) base = trend[0];
+                const last = trend[trend.length - 1];
+                if (!base || !last || base === last || last.date < startKey) return null;
+                const delta = Math.round((last.percent - base.percent) * 10) / 10;
+                if (Math.abs(delta) < 0.5) return null;
+                return delta;
+            } catch (err) { return null; }
+        }
+
+        // Effort-calibration payoff: courses where logged time shows estimates
+        // run meaningfully long or short. Only course-tier results (enough
+        // samples for THAT course) are surfaced — no global guesses here.
+        function weeklyReviewCalibrationNotes() {
+            try {
+                const HW = window.SutraHomework;
+                if (!HW || typeof HW.getEffortCalibration !== 'function' || typeof HW.getCourses !== 'function') return [];
+                const notes = [];
+                (HW.getCourses() || []).forEach(c => {
+                    if (!c || !c.id) return;
+                    const cal = HW.getEffortCalibration({ courseId: c.id });
+                    if (cal && cal.tier === 'course' && Math.abs(cal.ratio - 1) >= 0.2) {
+                        notes.push({ name: c.name || 'Class', ratio: cal.ratio, samples: cal.samples });
+                    }
+                });
+                notes.sort((a, b) => Math.abs(b.ratio - 1) - Math.abs(a.ratio - 1));
+                return notes.slice(0, 3);
+            } catch (err) { return []; }
+        }
+
+        // Deterministic plan health for the next 7 days (overlaps, missing
+        // buffers, overloaded days, unscheduled priorities) via the planning
+        // engine's real analyzer — same source as the Plan check modal.
+        function weeklyReviewPlanIssues() {
+            try {
+                const PE = window.SutraPlanningEngine;
+                if (!PE || typeof PE.analyzeCurrent !== 'function') return [];
+                const report = PE.analyzeCurrent() || {};
+                return Array.isArray(report.issues) ? report.issues : [];
+            } catch (err) { return []; }
+        }
+
+        function weeklyReviewOverloadDays() {
+            try {
+                const intel = window.sutraIntelligence || window.flowIntelligence;
+                if (intel && typeof intel.deriveStudentContext === 'function') {
+                    const ctx = intel.deriveStudentContext() || {};
+                    return Array.isArray(ctx.overloadedDays) ? ctx.overloadedDays : [];
+                }
+            } catch (err) { /* non-critical */ }
+            return [];
+        }
+
+        function buildWeeklyReviewSummary() {
+            const now = new Date();
+            const start = new Date(now); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+            const inRange = (key) => {
+                if (!key) return false;
+                const d = new Date(`${key}T00:00:00`);
+                return !isNaN(d) && d >= start && d <= now;
+            };
+            const isMissed = (key) => {
+                if (!key) return false;
+                const end = new Date(`${key}T23:59:59`);
+                const begin = new Date(`${key}T00:00:00`);
+                return !isNaN(end) && end < now && begin >= start;
+            };
+            const allTasks = Array.isArray(tasks) ? tasks : [];
+            const hwRaw = (function () { try { return JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (e) { return []; } })();
+            const hw = Array.isArray(hwRaw) ? hwRaw : [];
+            const doneCount = allTasks.filter(t => t.completed && inRange(t.dueDate)).length
+                + hw.filter(h => h.done && inRange(h.dueDate)).length;
+            // Logged focus time this week: homework rows completed in-window
+            // with a real "took about how long?" answer.
+            const loggedMinutes = hw.reduce((sum, h) => {
+                if (!h || !h.done) return sum;
+                const doneKey = typeof h.completedAt === 'string' ? h.completedAt.slice(0, 10) : '';
+                if (!inRange(doneKey || h.dueDate)) return sum;
+                const mins = Number(h.actualMinutes) || 0;
+                return mins > 0 ? sum + mins : sum;
+            }, 0);
+            const missed = []
+                .concat(allTasks.filter(t => !t.completed && isMissed(t.dueDate)).map(t => ({ title: t.title || 'Task', due: t.dueDate || '' })))
+                .concat(hw.filter(h => !h.done && isMissed(h.dueDate)).map(h => ({ title: h.title || h.text || 'Assignment', due: h.dueDate || '' })));
+            let deadlines = [];
+            try { deadlines = collectWorkspaceDeadlines() || []; } catch (e) { deadlines = []; }
+            const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
+            const upcoming = deadlines.filter(d => d.due >= now && d.due <= weekEnd);
+            const overdueCount = deadlines.filter(d => d && d.overdue).length;
+            return {
+                startKey: quickCaptureLocalISO(start),
+                endKey: quickCaptureLocalISO(now),
+                doneCount,
+                missed,
+                upcomingCount: upcoming.length,
+                overdueCount,
+                loggedMinutes,
+                risks: weeklyReviewCourseRisks(),
+                heavy: weeklyReviewOverloadDays(),
+                planIssues: weeklyReviewPlanIssues(),
+                calibration: weeklyReviewCalibrationNotes()
+            };
+        }
+
+        function weeklyReviewRecommendation(s) {
+            if (s.overdueCount > 0) return { text: `Catch up first — ${s.overdueCount} item${s.overdueCount === 1 ? ' is' : 's are'} overdue.`, cta: 'recover' };
+            const atRisk = s.risks.filter(r => r.risk && (r.risk.status === 'risk' || r.risk.status === 'danger'));
+            if (atRisk.length) return { text: `Watch your grade in ${atRisk.map(r => r.name).slice(0, 2).join(', ')}. Plan time on the work that moves it.`, cta: 'plan' };
+            const highPlan = (s.planIssues || []).filter(i => i && i.severity === 'high');
+            if (highPlan.length) return { text: `Your plan has ${highPlan.length} issue${highPlan.length === 1 ? '' : 's'} that need${highPlan.length === 1 ? 's' : ''} attention next week — repair it before the week starts.`, cta: 'repair' };
+            if (s.heavy.length > 0) return { text: `Next week looks heavy (${s.heavy.length} loaded day${s.heavy.length === 1 ? '' : 's'}). Spread the work out now.`, cta: 'plan' };
+            return { text: 'You\'re on track. Skim next week\'s deadlines and keep the streak going.', cta: 'plan' };
+        }
+
+        function openWeeklyReviewModal() {
+            const modal = document.getElementById('weeklyReviewModal');
+            if (!modal) return;
+            const body = modal.querySelector('.weekly-review-body');
+            if (!body) return;
+            // Tell the notifications layer a review ran so the Sunday nudge
+            // stays quiet for students who already review on their own.
+            try {
+                if (window.SutraNotifications && typeof window.SutraNotifications.markWeeklyReviewDone === 'function') {
+                    window.SutraNotifications.markWeeklyReviewDone();
+                }
+            } catch (e) { /* non-critical */ }
+            const s = buildWeeklyReviewSummary();
+            const rec = weeklyReviewRecommendation(s);
+            const riskHtml = s.risks.length
+                ? `<ul class="wr-risk-list">${s.risks.map(r => {
+                    const st = (r.risk && r.risk.status) || 'unknown';
+                    const pct = (r.risk && r.risk.percent != null) ? r.risk.percent.toFixed(1) + '%' : '—';
+                    const delta = (typeof r.delta === 'number')
+                        ? `<span class="wr-risk-delta ${r.delta > 0 ? 'is-up' : 'is-down'}" title="Change this week">${r.delta > 0 ? '▲' : '▼'} ${escapeHtml(Math.abs(r.delta).toFixed(1))}%</span>`
+                        : '';
+                    const missing = (r.risk && r.risk.missingCount > 0)
+                        ? `<span class="wr-risk-missing" title="Ungraded or unlogged work drags the picture down">${escapeHtml(String(r.risk.missingCount))} missing — log scores?</span>`
+                        : '';
+                    return `<li class="wr-risk-row"><button type="button" class="wr-risk-name" data-wr-grade="${escapeHtml(r.id)}">${escapeHtml(r.name)}</button><span class="wr-risk-pct">${escapeHtml(pct)}</span>${delta}${missing}<span class="wr-risk-badge wr-risk-${escapeHtml(st)}">${escapeHtml((r.risk && r.risk.label) || 'No data')}</span></li>`;
+                }).join('')}</ul>`
+                : '<p class="class-dash-empty">No grades entered yet — add scores in a class\'s Grades tab.</p>';
+            const sevLabel = { high: 'Needs attention', medium: 'Worth a look', low: 'Minor' };
+            const planHtml = s.planIssues.length
+                ? `<ul class="wr-list wr-plan-list">${s.planIssues.slice(0, 4).map(i => `<li class="wr-plan-issue wr-sev-${escapeHtml(i.severity || 'low')}"><span class="wr-plan-sev">${escapeHtml(sevLabel[i.severity] || i.severity || '')}</span> ${escapeHtml(i.title || '')}${i.suggestion ? ` <span class="wr-plan-fix">→ ${escapeHtml(i.suggestion)}</span>` : ''}</li>`).join('')}</ul>`
+                : '<p class="class-dash-empty">Plan looks healthy — no overlaps, buffers respected, nothing high-priority unscheduled.</p>';
+            const calibrationBits = [];
+            if (s.loggedMinutes > 0) {
+                const hrs = Math.round((s.loggedMinutes / 60) * 10) / 10;
+                calibrationBits.push(`<li>You logged <strong>${escapeHtml(String(hrs))}h</strong> of real work time this week — estimates get sharper with every log.</li>`);
+            }
+            s.calibration.forEach(n => {
+                const dir = n.ratio > 1 ? 'longer' : 'shorter';
+                calibrationBits.push(`<li><strong>${escapeHtml(n.name)}</strong> work runs ~${escapeHtml(n.ratio.toFixed(1))}× ${dir} than your estimates (${escapeHtml(String(n.samples))} logged) — Sutra already adjusts for it.</li>`);
+            });
+            const calibrationHtml = calibrationBits.length
+                ? `<ul class="wr-list wr-cal-list">${calibrationBits.join('')}</ul>`
+                : '<p class="class-dash-empty">Log "took about how long?" after finishing homework and Sutra will calibrate your estimates here.</p>';
+            const missedHtml = s.missed.length
+                ? `<ul class="wr-list">${s.missed.slice(0, 8).map(m => `<li>${escapeHtml(m.title)}${m.due ? ` · due ${escapeHtml(m.due)}` : ''}</li>`).join('')}</ul>`
+                : '<p class="class-dash-empty">Nothing slipped this week. 🎉</p>';
+            const heavyHtml = s.heavy.length
+                ? `<ul class="wr-list">${s.heavy.slice(0, 6).map(d => `<li>${escapeHtml(d.date)} · ${escapeHtml(String(d.dueItems || 0))} due${d.scheduledHours ? ` · ${escapeHtml(String(d.scheduledHours))}h scheduled` : ''}</li>`).join('')}</ul>`
+                : '<p class="class-dash-empty">No overloaded days next week.</p>';
+            const bodyHtml = `
+                <div class="wr-stats">
+                    <div class="wr-stat"><span class="wr-stat-num">${s.doneCount}</span><span class="wr-stat-lbl">Done</span></div>
+                    <div class="wr-stat ${s.missed.length ? 'is-alert' : ''}"><span class="wr-stat-num">${s.missed.length}</span><span class="wr-stat-lbl">Missed</span></div>
+                    <div class="wr-stat"><span class="wr-stat-num">${s.upcomingCount}</span><span class="wr-stat-lbl">Next 7 days</span></div>
+                    <div class="wr-stat ${s.overdueCount ? 'is-alert' : ''}"><span class="wr-stat-num">${s.overdueCount}</span><span class="wr-stat-lbl">Overdue</span></div>
+                </div>
+                <div class="wr-rec"><i class="fas fa-lightbulb" aria-hidden="true"></i><span>${escapeHtml(rec.text)}</span></div>
+                <div class="wr-section"><h4>Grades</h4>${riskHtml}</div>
+                <div class="wr-section"><h4>What slipped</h4>${missedHtml}</div>
+                <div class="wr-section"><h4>Next week — plan health</h4>${planHtml}</div>
+                <div class="wr-section"><h4>Next week — heavy days</h4>${heavyHtml}</div>
+                <div class="wr-section"><h4>Estimates vs reality</h4>${calibrationHtml}</div>
+                <div class="wr-actions">
+                    ${s.overdueCount > 0 ? '<button type="button" class="neumo-btn active" data-wr-action="recover">Recover overdue</button>' : ''}
+                    ${s.planIssues.length ? '<button type="button" class="neumo-btn" data-wr-action="repair">Repair my week</button>' : ''}
+                    <button type="button" class="neumo-btn" data-wr-action="plan">Plan my day</button>
+                    <button type="button" class="neumo-btn" data-wr-action="save">Save as note</button>
+                </div>`;
+            body.innerHTML = bodyHtml; // sutra-allow-html: trusted markup; all dynamic values pass through escapeHtml()
+            body.querySelectorAll('[data-wr-grade]').forEach(btn => btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-wr-grade');
+                closeWeeklyReviewModal();
+                try { openGradeImpactModal(id); } catch (e) { /* non-critical */ }
+            }));
+            body.querySelectorAll('[data-wr-action]').forEach(btn => btn.addEventListener('click', () => {
+                const action = btn.getAttribute('data-wr-action');
+                try {
+                    if (action === 'recover') { closeWeeklyReviewModal(); openOverdueRecovery(); }
+                    else if (action === 'repair') { closeWeeklyReviewModal(); if (window.SutraPlanningEngine && typeof window.SutraPlanningEngine.repairPlan === 'function') window.SutraPlanningEngine.repairPlan(); }
+                    else if (action === 'plan') { closeWeeklyReviewModal(); planMyDay('manual'); try { renderTodayView(); } catch (e) {} setActiveView('today'); }
+                    else if (action === 'save') { closeWeeklyReviewModal(); createWeeklyReviewNote(); }
+                } catch (e) { window.reportError && window.reportError(e, 'weeklyReview:action', 'warning'); }
+            }));
+            modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeWeeklyReviewModal() {
+            const modal = document.getElementById('weeklyReviewModal');
+            if (!modal) return;
+            modal.classList.remove('active');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        // The Sunday nudge (notifications.js) can't reach into this closure,
+        // so it asks for the weekly review via an event.
+        window.addEventListener('sutra:open-weekly-review', () => {
+            try { openWeeklyReviewModal(); } catch (e) { /* non-critical */ }
+        });
         // ===== end Daily Thread =====
 
         // ===== Atelier Unified Onboarding Controller =====
@@ -21530,23 +22364,26 @@ function populateProgressDashboard() {
 
         const ONBOARDING_VERSION = 1;
 
-        const ONBOARDING_STEPS = ['welcome', 'focus', 'features', 'setup', 'ai', 'cloud', 'tour'];
+        const ONBOARDING_STEPS = ['welcome', 'focus', 'setup', 'ai', 'tour'];
 
         const ONBOARDING_STEP_META = {
             welcome:  { label: 'Welcome',     summary: 'How you use Sutra' },
-            focus:    { label: 'Focus',       summary: 'Your workspace focus' },
-            features: { label: 'Features',    summary: 'Enabled spaces' },
+            focus:    { label: 'Focus',       summary: 'Focus & enabled spaces' },
             setup:    { label: 'Setup',       summary: 'Personalize your setup' },
-            ai:       { label: 'AI & Backups', summary: 'Sutra Assistant & data safety' },
-            cloud:    { label: 'Sutra Cloud', summary: 'Optional encrypted cloud backup' },
+            ai:       { label: 'AI & Backups', summary: 'Assistant, backups & cloud' },
             tour:     { label: 'Tour',        summary: 'You’re ready to begin' }
         };
+
+        // Steps removed when the wizard was condensed from 7 to 5. Persisted
+        // mid-wizard state may still point at them; remap instead of resetting
+        // the user back to 'welcome'.
+        const ONBOARDING_RETIRED_STEP_MAP = { features: 'focus', cloud: 'ai' };
 
         const ONBOARDING_USER_INTENTS = [
             { key: 'student',      title: 'Student',             icon: 'fa-graduation-cap', description: 'Classes, homework, AP study, college planning.' },
             { key: 'professional', title: 'Adult / Professional', icon: 'fa-briefcase',      description: 'Projects, meetings, tasks, business workspace.' },
             { key: 'both',         title: 'Both',                 icon: 'fa-scale-balanced', description: 'School and work, all in one place.' },
-            { key: 'skip',         title: 'Just Sutra',           icon: 'fa-sparkles',       description: 'Minimal setup. Use the app as-is.' }
+            { key: 'skip',         title: 'Just Sutra',           icon: 'fa-sparkles',       description: 'No setup. Jump straight in and use the app as-is.' }
         ];
 
         const ONBOARDING_WORKSPACE_FOCUS_OPTIONS = [
@@ -21590,7 +22427,8 @@ function populateProgressDashboard() {
         ];
 
         const ONBOARDING_TOUR_CHOICES = [
-            { key: 'tour',        title: 'Start guided tour now',     description: 'Walk through Daily Thread, Deadline Radar, Sutra Modes, and encrypted .sutra backup.' },
+            { key: 'essentials',  title: 'Quick start (5 essentials)', description: 'Just the five things that matter: Today, Quick Capture, Homework, Review, and Settings. ~1 minute.' },
+            { key: 'tour',        title: 'Full guided tour',          description: 'Walk through every workspace — Daily Thread, Deadline Radar, Sutra Modes, and encrypted .sutra backup.' },
             { key: 'today',       title: 'Finish and open Today',     description: 'Close the setup wizard and land on the Today view.' },
             { key: 'explore',     title: 'Keep exploring later',      description: 'Close setup. You can rerun the tour from Settings any time.' }
         ];
@@ -21681,6 +22519,7 @@ function populateProgressDashboard() {
                 out.migratedFromLegacy = true;
             }
 
+            if (ONBOARDING_RETIRED_STEP_MAP[out.currentStep]) out.currentStep = ONBOARDING_RETIRED_STEP_MAP[out.currentStep];
             if (!ONBOARDING_STEPS.includes(out.currentStep)) out.currentStep = 'welcome';
             return out;
         }
@@ -21790,8 +22629,9 @@ function populateProgressDashboard() {
 
         function showFeatureSetupOverlay() {
             // Legacy entry point. Route into the unified onboarding controller
-            // so the standalone overlay never appears.
-            AtelierOnboardingController.show({ jumpTo: 'features' });
+            // so the standalone overlay never appears. Space selection now
+            // lives on the Focus step.
+            AtelierOnboardingController.show({ jumpTo: 'focus' });
         }
 
         function hideFeatureSetupOverlay() {
@@ -21817,6 +22657,9 @@ function populateProgressDashboard() {
             let keydownHandler = null;
             let isOpen = false;
             let pendingTourLaunch = false;
+            // Theme active when the wizard opened, so a previewed-but-not-kept
+            // theme can be reverted on dismiss (Escape / ×).
+            let themeAtOpen = null;
             // Draft mirrors the persisted onboarding state during a session
             // so users can navigate Back without losing entries.
             let draft = null;
@@ -21841,7 +22684,10 @@ function populateProgressDashboard() {
                     dayDefaults: { ...state.dayDefaults },
                     aiSetup: { ...state.aiSetup, apiKey: '' },
                     backupAcknowledged: !!state.backupAcknowledged,
-                    tourChoice: state.tourChoice || ''
+                    tourChoice: state.tourChoice || '',
+                    // Session-only: pasted syllabus/assignment text. Never persisted
+                    // into onboarding state; it feeds the paste importer at finish.
+                    pastedImportText: ''
                 };
                 // Seed from existing preferences if present so the user sees
                 // their current defaults rather than wizard fallbacks.
@@ -21892,6 +22738,7 @@ function populateProgressDashboard() {
                 const root = el();
                 if (!root) return;
                 isOpen = true;
+                themeAtOpen = (appSettings && appSettings.theme) || null;
                 draft = cloneDraftFromState();
                 const state = getOnboardingState();
                 if (opts.reset === true) {
@@ -21928,12 +22775,62 @@ function populateProgressDashboard() {
                     try { lastFocusedBeforeOpen.focus({ preventScroll: true }); } catch (err) { /* non-critical */ }
                 }
                 if (opts.startTour) {
+                    const essentialsOnly = opts.startTour === 'essentials';
                     pendingTourLaunch = true;
                     setTimeout(() => {
                         if (!pendingTourLaunch) return;
                         pendingTourLaunch = false;
-                        try { startInteractiveTutorial(true, { skipConfirm: true }); } catch (err) { /* non-critical */ }
+                        try { startInteractiveTutorial(true, { skipConfirm: true, essentialsOnly }); } catch (err) { /* non-critical */ }
                     }, 280);
+                }
+                // Import-first finish: open the paste importer AFTER the overlay is gone
+                // (no modal stacking / focus-trap conflict) so onboarding ends in real work.
+                // A string value prefills the importer with text pasted during setup.
+                if (opts.openPasteImport) {
+                    const prefill = typeof opts.openPasteImport === 'string' ? opts.openPasteImport : '';
+                    setTimeout(() => {
+                        try { setActiveView('today'); } catch (err) { /* non-critical */ }
+                        try { openHomeworkPasteImport(prefill); } catch (err) { /* non-critical */ }
+                    }, 300);
+                }
+            }
+
+            function handleAction(target, e) {
+                const action = target.getAttribute('data-onboarding-action');
+                if (action === 'close') {
+                    e.preventDefault();
+                    dismiss();
+                } else if (action === 'dismiss-backdrop') {
+                    // The mockups intentionally keep the modal modal: clicking
+                    // the backdrop does not dismiss. Ignore.
+                } else if (action === 'back') {
+                    e.preventDefault();
+                    goBack();
+                } else if (action === 'skip') {
+                    e.preventDefault();
+                    skip();
+                } else if (action === 'continue') {
+                    e.preventDefault();
+                    goContinue();
+                } else if (action === 'finish') {
+                    e.preventDefault();
+                    finish();
+                } else if (action === 'import') {
+                    e.preventDefault();
+                    finishWithImport();
+                } else if (action === 'jump') {
+                    // Allow rail-step activation for completed/preceding steps.
+                    const stepKey = target.getAttribute('data-onboarding-step');
+                    if (stepKey && ONBOARDING_STEPS.includes(stepKey)) {
+                        const state = getOnboardingState();
+                        const currentIdx = ONBOARDING_STEPS.indexOf(state.currentStep);
+                        const targetIdx = ONBOARDING_STEPS.indexOf(stepKey);
+                        if (targetIdx <= currentIdx) {
+                            e.preventDefault();
+                            state.currentStep = stepKey;
+                            render();
+                        }
+                    }
                 }
             }
 
@@ -21943,38 +22840,15 @@ function populateProgressDashboard() {
                 root.addEventListener('click', (e) => {
                     const target = e.target.closest('[data-onboarding-action]');
                     if (!target) return;
-                    const action = target.getAttribute('data-onboarding-action');
-                    if (action === 'close') {
-                        e.preventDefault();
-                        skip();
-                    } else if (action === 'dismiss-backdrop') {
-                        // The mockups intentionally keep the modal modal: clicking
-                        // the backdrop does not dismiss. Ignore.
-                    } else if (action === 'back') {
-                        e.preventDefault();
-                        goBack();
-                    } else if (action === 'skip') {
-                        e.preventDefault();
-                        skip();
-                    } else if (action === 'continue') {
-                        e.preventDefault();
-                        goContinue();
-                    } else if (action === 'finish') {
-                        e.preventDefault();
-                        finish();
-                    } else if (action === 'jump') {
-                        // Allow rail-step click for completed/preceding steps.
-                        const stepKey = target.getAttribute('data-onboarding-step');
-                        if (stepKey && ONBOARDING_STEPS.includes(stepKey)) {
-                            const state = getOnboardingState();
-                            const currentIdx = ONBOARDING_STEPS.indexOf(state.currentStep);
-                            const targetIdx = ONBOARDING_STEPS.indexOf(stepKey);
-                            if (targetIdx <= currentIdx) {
-                                state.currentStep = stepKey;
-                                render();
-                            }
-                        }
-                    }
+                    handleAction(target, e);
+                });
+                // Rail steps are focusable list items, not buttons — activate
+                // them with Enter/Space so backward jumps work from the keyboard.
+                root.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    const target = e.target.closest('[data-onboarding-action="jump"]');
+                    if (!target) return;
+                    handleAction(target, e);
                 });
             }
 
@@ -21983,8 +22857,11 @@ function populateProgressDashboard() {
                 keydownHandler = (e) => {
                     if (!isOpen) return;
                     if (e.key === 'Escape') {
+                        // Soft dismiss: close without marking onboarding skipped, so an
+                        // accidental Escape doesn't permanently hide setup from a new
+                        // user. The explicit "Skip setup" button is the permanent path.
                         e.preventDefault();
-                        skip();
+                        dismiss();
                     } else if (e.key === 'Tab') {
                         trapFocus(e);
                     }
@@ -22041,10 +22918,13 @@ function populateProgressDashboard() {
                         const meta = ONBOARDING_STEP_META[stepKey];
                         const isActive = i === idx;
                         const isDone = i < idx;
+                        // Only completed steps are jump targets, so only they are
+                        // focusable/button-like; current and future steps stay inert.
+                        const interactive = isDone ? ' role="button" tabindex="0" aria-label="Go back to ' + escapeHtml(meta.label) + '"' : '';
                         return `
                             <li class="atelier-onboarding-step${isActive ? ' is-active' : ''}${isDone ? ' is-complete' : ''}"
                                 data-onboarding-action="jump" data-onboarding-step="${stepKey}"
-                                role="listitem">
+                                ${isActive ? 'aria-current="step"' : ''}${interactive}>
                                 <span class="atelier-onboarding-step-circle" aria-hidden="true">
                                     ${isDone ? '<i class="fas fa-check"></i>' : (i + 1)}
                                 </span>
@@ -22088,10 +22968,8 @@ function populateProgressDashboard() {
                 const step = currentStepKey();
                 if (step === 'welcome') main.innerHTML = renderWelcomeStep();
                 else if (step === 'focus') main.innerHTML = renderFocusStep();
-                else if (step === 'features') main.innerHTML = renderFeaturesStep();
                 else if (step === 'setup') main.innerHTML = renderSetupStep();
-                else if (step === 'ai') main.innerHTML = renderAiStep();
-                else if (step === 'cloud') main.innerHTML = renderCloudStep(); // sutra-allow-html: static developer-authored onboarding markup (no user data)
+                else if (step === 'ai') main.innerHTML = renderAiStep(); // sutra-allow-html: static developer-authored onboarding markup (no user data)
                 else if (step === 'tour') main.innerHTML = renderTourStep();
                 bindMain(step);
             }
@@ -22104,30 +22982,21 @@ function populateProgressDashboard() {
                 const step = currentStepKey();
                 const draftRef = getDraft();
                 if (back) back.disabled = idx === 0;
-                if (skipBtn) skipBtn.textContent = (step === 'tour') ? 'Skip setup' : 'Skip setup';
+                if (skipBtn) skipBtn.textContent = 'Skip setup';
                 if (cont) {
                     if (step === 'tour') {
-                        if (draftRef.tourChoice === 'tour') {
-                            cont.textContent = 'Start tour';
-                            cont.setAttribute('data-onboarding-action', 'finish');
-                        } else {
-                            cont.textContent = 'Finish setup';
-                            cont.setAttribute('data-onboarding-action', 'finish');
-                        }
+                        cont.textContent = draftRef.tourChoice === 'tour' ? 'Start tour' : 'Finish setup';
+                        cont.setAttribute('data-onboarding-action', 'finish');
+                    } else if (step === 'welcome' && draftRef.userIntent === 'skip') {
+                        // "Just Sutra" fast-tracks: Continue finishes setup outright.
+                        cont.textContent = 'Start using Sutra';
+                        cont.setAttribute('data-onboarding-action', 'continue');
                     } else {
                         cont.textContent = 'Continue';
                         cont.setAttribute('data-onboarding-action', 'continue');
                     }
-                    // Welcome step requires a userIntent selection. AI &
-                    // Backups step requires the local-first acknowledgment.
-                    // Both gates match disabled-state behavior in the mockups.
-                    if (step === 'welcome' && !draftRef.userIntent) {
-                        cont.disabled = true;
-                    } else if (step === 'ai' && !draftRef.backupAcknowledged) {
-                        cont.disabled = true;
-                    } else {
-                        cont.disabled = false;
-                    }
+                    // Welcome step requires a userIntent selection.
+                    cont.disabled = (step === 'welcome' && !draftRef.userIntent);
                 }
             }
 
@@ -22148,7 +23017,7 @@ function populateProgressDashboard() {
                 }).join('');
                 return `
                     <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">Welcome to Sutra.</h2>
+                        <h2 class="atelier-onboarding-title" id="onboardingTitle">Welcome to Sutra.</h2>
                         <p class="atelier-onboarding-sub">Sutra is local-first and private by design. Let&rsquo;s tailor it to the way you think, learn, and work best.</p>
                     </header>
                     <div class="atelier-onboarding-cards atelier-onboarding-cards-2col" role="group" aria-label="How will you use Sutra?">
@@ -22184,10 +23053,14 @@ function populateProgressDashboard() {
                         <span class="atelier-onboarding-impact-value">${escapeHtml(c.value)}</span>
                     </div>
                 `).join('');
+                if (!draftRef.enabledSpaces) {
+                    draftRef.enabledSpaces = pickDefaultEnabledSpaces(draftRef.userIntent, draftRef.workspaceFocus);
+                }
+                const enabledCount = ONBOARDING_FEATURE_VIEWS.filter(f => draftRef.enabledSpaces[f.view] !== false).length;
                 return `
                     <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">Choose your workspace focus.</h2>
-                        <p class="atelier-onboarding-sub">This shapes defaults across Today, Calendar, and study tools. You can change it later in Settings.</p>
+                        <h2 class="atelier-onboarding-title" id="onboardingTitle">Choose your workspace focus.</h2>
+                        <p class="atelier-onboarding-sub">This shapes defaults across Today, Calendar, and study tools — and picks which spaces are on. You can change it later in Settings.</p>
                     </header>
                     <div class="atelier-onboarding-cards atelier-onboarding-cards-focus" role="group" aria-label="Workspace focus">
                         ${cards}
@@ -22196,15 +23069,18 @@ function populateProgressDashboard() {
                         <div class="atelier-onboarding-impact-title">What this changes</div>
                         <div class="atelier-onboarding-impact-grid">${chips}</div>
                     </section>
+                    <details class="atelier-onboarding-summary-details" id="onbSpacesDetails"${draftRef.spacesAdjustOpen ? ' open' : ''}>
+                        <summary class="atelier-onboarding-summary-toggle">Adjust enabled spaces (${enabledCount} of ${ONBOARDING_FEATURE_VIEWS.length} on)</summary>
+                        <div class="atelier-onboarding-feature-grid" role="group" aria-label="Enabled spaces">
+                            ${renderSpaceTiles(draftRef)}
+                        </div>
+                        <p class="atelier-onboarding-fine">At least one workspace stays enabled. You can always toggle these later from Settings.</p>
+                    </details>
                 `;
             }
 
-            function renderFeaturesStep() {
-                const draftRef = getDraft();
-                if (!draftRef.enabledSpaces) {
-                    draftRef.enabledSpaces = pickDefaultEnabledSpaces(draftRef.userIntent, draftRef.workspaceFocus);
-                }
-                const tiles = ONBOARDING_FEATURE_VIEWS.map(item => {
+            function renderSpaceTiles(draftRef) {
+                return ONBOARDING_FEATURE_VIEWS.map(item => {
                     const enabled = draftRef.enabledSpaces[item.view] !== false;
                     return `
                         <label class="atelier-onboarding-tile${enabled ? ' is-enabled' : ''}" data-onb-feature-card="${escapeHtml(item.view)}">
@@ -22218,16 +23094,6 @@ function populateProgressDashboard() {
                         </label>
                     `;
                 }).join('');
-                return `
-                    <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">Choose your enabled spaces.</h2>
-                        <p class="atelier-onboarding-sub">Turn workspaces on or off based on what you actually need today. Settings is always available.</p>
-                    </header>
-                    <div class="atelier-onboarding-feature-grid" role="group" aria-label="Enabled spaces">
-                        ${tiles}
-                    </div>
-                    <p class="atelier-onboarding-fine">At least one main workspace stays enabled. You can always toggle these later from Settings.</p>
-                `;
             }
 
             function renderSetupStep() {
@@ -22257,6 +23123,11 @@ function populateProgressDashboard() {
                         <p class="atelier-onboarding-setup-help">Add classes you’re taking now. Press Enter after each.</p>
                         <div class="atelier-onboarding-chips" id="onbClassChips">${classChips}</div>
                         <input type="text" class="atelier-onboarding-input" id="onbClassInput" placeholder="e.g. AP Physics, AP English, Calculus, Robotics">
+                    </section>
+                    <section class="atelier-onboarding-setup-section">
+                        <h3 class="atelier-onboarding-setup-h">Already have assignments somewhere? <span class="atelier-onboarding-pill-optional">Optional</span></h3>
+                        <p class="atelier-onboarding-setup-help">Paste a syllabus, assignment list, or portal page. When you finish setup, Sutra turns it into dated assignments filed to the right class.</p>
+                        <textarea class="atelier-onboarding-input atelier-onboarding-paste" id="onbPasteText" rows="4" placeholder="e.g.&#10;Math pset 4 — Friday&#10;APUSH ch. 9 reading — 10/14&#10;English essay draft — next Tuesday">${escapeHtml(draftRef.pastedImportText || '')}</textarea>
                     </section>` : '';
                 const professionalBlock = showProfessional ? `
                     <section class="atelier-onboarding-setup-section">
@@ -22271,7 +23142,7 @@ function populateProgressDashboard() {
                     </section>` : '';
                 return `
                     <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">Personalize your setup.</h2>
+                        <h2 class="atelier-onboarding-title" id="onboardingTitle">Personalize your setup.</h2>
                         <p class="atelier-onboarding-sub">A few small choices so Sutra feels ready for you.</p>
                     </header>
                     <div class="atelier-onboarding-setup-grid">
@@ -22321,7 +23192,7 @@ function populateProgressDashboard() {
                 const aiOpen = draftRef.aiSetup.provider && draftRef.aiSetup.provider !== 'local';
                 return `
                     <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">AI &amp; Backups.</h2>
+                        <h2 class="atelier-onboarding-title" id="onboardingTitle">AI &amp; Backups.</h2>
                         <p class="atelier-onboarding-sub">Sutra Assistant and data safety are both optional. Sutra always works locally.</p>
                     </header>
                     <div class="atelier-onboarding-setup-grid">
@@ -22346,51 +23217,24 @@ function populateProgressDashboard() {
                                         <input class="atelier-onboarding-input" id="onbAiEndpoint" type="text" autocomplete="off" value="${escapeHtml(draftRef.aiSetup.endpoint || '')}" placeholder="Leave blank for default">
                                     </label>
                                     <label class="atelier-onboarding-field atelier-onboarding-field-wide">
-                                        <span class="atelier-onboarding-field-label">API key (saved later, not now)</span>
-                                        <input class="atelier-onboarding-input" id="onbAiKey" type="password" autocomplete="off" spellcheck="false" placeholder="You can paste this later in Settings">
+                                        <span class="atelier-onboarding-field-label">API key (optional)</span>
+                                        <input class="atelier-onboarding-input" id="onbAiKey" type="password" autocomplete="off" spellcheck="false" value="${escapeHtml(draftRef.aiSetup.apiKey || '')}" placeholder="Paste now or add later in Settings">
+                                        <span class="atelier-onboarding-field-note">Applied when you finish setup. Kept in this browser session only &mdash; never in exports.</span>
                                     </label>
                                 </div>
                             </div>
                         </section>
                         <section class="atelier-onboarding-setup-section">
                             <h3 class="atelier-onboarding-setup-h">Backups &amp; data safety</h3>
-                            <p class="atelier-onboarding-setup-help">Sutra is local-first. Your workspace lives on this device. Use password-encrypted <strong>.sutra</strong> exports for full backups (older unencrypted <strong>.sutra</strong> and <strong>.atelier</strong> files still import). JSON exports remain unencrypted recovery files.</p>
+                            <p class="atelier-onboarding-setup-help"><strong>Sutra is local-first:</strong> your workspace lives on this device, and your exports are your backups. Use password-encrypted <strong>.sutra</strong> exports for full backups (older unencrypted <strong>.sutra</strong> and <strong>.atelier</strong> files still import). JSON exports remain unencrypted recovery files.</p>
                             <div class="atelier-onboarding-backup-actions">
                                 <button type="button" class="atelier-onboarding-btn ghost" id="onbExportNowBtn"><i class="fas fa-download" aria-hidden="true"></i> Export backup now</button>
                                 <button type="button" class="atelier-onboarding-btn ghost" id="onbImportNowBtn"><i class="fas fa-upload" aria-hidden="true"></i> Import existing backup&hellip;</button>
                             </div>
-                            <label class="atelier-onboarding-acknowledge">
-                                <input type="checkbox" id="onbBackupAck" ${draftRef.backupAcknowledged ? 'checked' : ''}>
-                                <span>I understand Sutra is local-first and that I&rsquo;m responsible for my own exports.</span>
-                            </label>
-                        </section>
-                    </div>
-                `;
-            }
-
-            function renderCloudStep() {
-                // Transparency / consent screen. Info-only: it never signs the user
-                // in or makes a network request — that only happens later, when the
-                // user opens Sutra Cloud from the save bar and chooses to.
-                return `
-                    <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">Sutra Cloud. <span class="atelier-onboarding-pill-optional">Optional</span></h2>
-                        <p class="atelier-onboarding-sub">An optional way to back up your workspace to the cloud and restore it on another device.</p>
-                    </header>
-                    <div class="atelier-onboarding-setup-grid">
-                        <section class="atelier-onboarding-setup-section">
-                            <h3 class="atelier-onboarding-setup-h">How it works</h3>
-                            <ul class="atelier-onboarding-setup-help">
-                                <li><strong>Off by default.</strong> Nothing is uploaded unless you turn it on yourself and press &ldquo;Back up now&rdquo;.</li>
-                                <li><strong>End-to-end encrypted.</strong> Your data is locked with your backup password <em>before</em> it leaves this device &mdash; nobody, including us, can read it.</li>
-                                <li><strong>You stay in control.</strong> Sign out or delete your cloud backups anytime. Sutra always works fully offline.</li>
-                            </ul>
                         </section>
                         <section class="atelier-onboarding-setup-section">
-                            <h3 class="atelier-onboarding-setup-h">Where to find it</h3>
-                            <p class="atelier-onboarding-setup-help">Look for the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace. You can set it up whenever you like &mdash; there&rsquo;s nothing to do now.</p>
-                            <p class="atelier-onboarding-setup-help">You choose <strong>where</strong> backups go. Recommended: <strong>Google Drive, OneDrive, Dropbox</strong>. Advanced: <strong>WebDAV, S3-compatible storage, Supabase, or a custom endpoint</strong>. Or just download an encrypted file and save it anywhere.</p>
-                            <p class="atelier-onboarding-setup-help atelier-onboarding-cloud-powered">Whichever you pick stores only the locked, encrypted backup file — never your readable workspace.</p>
+                            <h3 class="atelier-onboarding-setup-h">Sutra Cloud <span class="atelier-onboarding-pill-optional">Optional</span></h3>
+                            <p class="atelier-onboarding-setup-help"><strong>Off by default.</strong> When you want cloud backup, open <strong>Sutra Cloud</strong> from the save bar at the bottom of the workspace. Backups are end-to-end encrypted with your password before they leave this device, and you choose where they go &mdash; Google Drive, OneDrive, Dropbox, or your own storage. There&rsquo;s nothing to do now.</p>
                         </section>
                     </div>
                 `;
@@ -22417,23 +23261,91 @@ function populateProgressDashboard() {
                         </button>
                     `;
                 }).join('');
+                const plan = buildOnboardingPlanPreview();
+                const classCount = plan.classes.length;
+                const classNames = classCount ? escapeHtml(plan.classes.slice(0, 6).join(', ')) + (classCount > 6 ? '…' : '') : '';
+                const hasWork = plan.deadlineCount > 0;
+                const hasPaste = plan.pastedN > 0;
+                let todayTitle;
+                let todayNote;
+                if (hasWork) {
+                    todayTitle = escapeHtml(`${plan.weekN} due this week`);
+                    todayNote = escapeHtml(`${plan.todayN} today${plan.overdueN ? ` · ${plan.overdueN} overdue` : ''}${plan.nbaTitle ? ` · first up: ${plan.nbaTitle}` : ''}`);
+                } else if (hasPaste) {
+                    todayTitle = escapeHtml(`${plan.pastedN} assignment${plan.pastedN === 1 ? '' : 's'} ready to import`);
+                    todayNote = 'From your pasted list &mdash; you&rsquo;ll review and confirm them right after this.';
+                } else {
+                    todayTitle = 'Capture your first assignment';
+                    todayNote = 'Type something like &ldquo;math pset fri&rdquo; on Today &mdash; Sutra dates it and files it to the right class.';
+                }
+                const headline = hasWork
+                    ? `I found ${plan.weekN} thing${plan.weekN === 1 ? '' : 's'} due this week.`
+                    : (hasPaste
+                        ? `I found ${plan.pastedN} assignment${plan.pastedN === 1 ? '' : 's'} in your paste.`
+                        : (classCount ? `Your ${classCount} class${classCount === 1 ? '' : 'es'} are set.` : 'Your workspace is set.'));
+                const importCta = hasPaste
+                    ? `Finish and import your ${plan.pastedN} pasted assignment${plan.pastedN === 1 ? '' : 's'}`
+                    : (hasWork ? 'Import more from your syllabus or portal' : 'Paste your syllabus or assignment list to start with a real plan');
                 return `
                     <header class="atelier-onboarding-header">
-                        <h2 class="atelier-onboarding-title">You&rsquo;re ready to begin.</h2>
-                        <p class="atelier-onboarding-sub">Here&rsquo;s a quick summary. Pick how you&rsquo;d like to start.</p>
+                        <h2 class="atelier-onboarding-title" id="onboardingTitle">${escapeHtml(headline)}</h2>
+                        <p class="atelier-onboarding-sub">Here&rsquo;s your starting plan. Pick how you&rsquo;d like to begin.</p>
                     </header>
-                    <section class="atelier-onboarding-summary">
-                        ${summaryHtml}
+                    <section class="atelier-onboarding-preview" aria-label="Your starting plan">
+                        <div class="atelier-onboarding-preview-card">
+                            <div class="atelier-onboarding-preview-eyebrow">Today</div>
+                            <div class="atelier-onboarding-preview-title">${todayTitle}</div>
+                            <div class="atelier-onboarding-card-desc">${todayNote}</div>
+                        </div>
+                        <div class="atelier-onboarding-preview-card">
+                            <div class="atelier-onboarding-preview-eyebrow">Your classes</div>
+                            <div class="atelier-onboarding-preview-title">${classCount ? escapeHtml(`${classCount} class${classCount === 1 ? '' : 'es'} ready`) : 'No classes yet'}</div>
+                            <div class="atelier-onboarding-card-desc">${classNames || 'Add classes any time from Homework or Settings.'}</div>
+                        </div>
                     </section>
-                    <section class="atelier-onboarding-preview" aria-label="Preview">
-                        <div class="atelier-onboarding-preview-card"><div class="atelier-onboarding-preview-eyebrow">Today</div><div class="atelier-onboarding-preview-title">Daily Thread</div><div class="atelier-onboarding-preview-line"></div><div class="atelier-onboarding-preview-line short"></div></div>
-                        <div class="atelier-onboarding-preview-card"><div class="atelier-onboarding-preview-eyebrow">Notes</div><div class="atelier-onboarding-preview-title">Open editor</div><div class="atelier-onboarding-preview-line"></div><div class="atelier-onboarding-preview-line"></div></div>
-                        <div class="atelier-onboarding-preview-card"><div class="atelier-onboarding-preview-eyebrow">Homework</div><div class="atelier-onboarding-preview-title">Assignments</div><div class="atelier-onboarding-preview-line short"></div><div class="atelier-onboarding-preview-line"></div></div>
-                    </section>
+                    <button type="button" class="atelier-onboarding-import-cta${hasWork && !hasPaste ? '' : ' is-primary'}" data-onboarding-action="import">
+                        <i class="fas fa-file-import" aria-hidden="true"></i>
+                        <span>${importCta}</span>
+                    </button>
+                    <details class="atelier-onboarding-summary-details">
+                        <summary class="atelier-onboarding-summary-toggle">Your setup choices</summary>
+                        <section class="atelier-onboarding-summary">
+                            ${summaryHtml}
+                        </section>
+                    </details>
                     <div class="atelier-onboarding-cards atelier-onboarding-cards-tour" role="group" aria-label="How would you like to start?">
                         ${choices}
                     </div>
                 `;
+            }
+
+            // Compute a REAL starting plan for the finish screen from the student's
+            // classes + any deadlines already in the workspace, so the last thing they
+            // see is an outcome ("3 due this week") instead of "you're ready".
+            function buildOnboardingPlanPreview() {
+                const draftRef = getDraft();
+                const classes = Array.isArray(draftRef.classes) ? draftRef.classes.map(c => String(c || '').trim()).filter(Boolean) : [];
+                let deadlines = [];
+                try { deadlines = collectWorkspaceDeadlines() || []; } catch (err) { deadlines = []; }
+                let groups = { overdue: [], today: [], tomorrow: [], thisWeek: [] };
+                try { groups = groupDeadlinesByTimeframe(deadlines) || groups; } catch (err) { /* keep default */ }
+                let nba = null;
+                try { nba = pickNextBestAction(groups); } catch (err) { nba = null; }
+                let pastedN = 0;
+                try {
+                    const pasted = parseHomeworkPasteText(draftRef.pastedImportText || '');
+                    pastedN = Array.isArray(pasted) ? pasted.length : 0;
+                } catch (err) { pastedN = 0; }
+                const cnt = (a) => (Array.isArray(a) ? a.length : 0);
+                return {
+                    classes,
+                    pastedN,
+                    deadlineCount: deadlines.length,
+                    weekN: cnt(groups.overdue) + cnt(groups.today) + cnt(groups.tomorrow) + cnt(groups.thisWeek),
+                    todayN: cnt(groups.today),
+                    overdueN: cnt(groups.overdue),
+                    nbaTitle: nba && nba.item ? String(nba.item.title || '') : ''
+                };
             }
 
             function buildSummaryRows() {
@@ -22478,7 +23390,14 @@ function populateProgressDashboard() {
                             render();
                         });
                     });
-                } else if (step === 'features') {
+                    // Remember whether "Adjust enabled spaces" is expanded so
+                    // re-renders (focus card clicks) don't collapse it.
+                    const spacesDetails = document.getElementById('onbSpacesDetails');
+                    if (spacesDetails) {
+                        spacesDetails.addEventListener('toggle', () => {
+                            getDraft().spacesAdjustOpen = spacesDetails.open;
+                        });
+                    }
                     main.querySelectorAll('[data-onb-feature]').forEach(input => {
                         input.addEventListener('change', () => {
                             const draftRef = getDraft();
@@ -22518,6 +23437,8 @@ function populateProgressDashboard() {
                     if (fmtEl) fmtEl.addEventListener('change', () => { getDraft().dayDefaults.timeFormat = fmtEl.value === '24' ? '24' : '12'; });
                     const dueEl = document.getElementById('onbDueTime');
                     if (dueEl) dueEl.addEventListener('change', () => { getDraft().dayDefaults.defaultDueTime = dueEl.value || '23:59'; });
+                    const pasteEl = document.getElementById('onbPasteText');
+                    if (pasteEl) pasteEl.addEventListener('input', () => { getDraft().pastedImportText = pasteEl.value || ''; });
                     const classInput = document.getElementById('onbClassInput');
                     const renderClassChips = () => {
                         const host = document.getElementById('onbClassChips');
@@ -22581,13 +23502,6 @@ function populateProgressDashboard() {
                     if (endpointEl) endpointEl.addEventListener('input', () => { getDraft().aiSetup.endpoint = endpointEl.value || ''; });
                     const keyEl = document.getElementById('onbAiKey');
                     if (keyEl) keyEl.addEventListener('input', () => { getDraft().aiSetup.apiKey = keyEl.value || ''; });
-                    const ackEl = document.getElementById('onbBackupAck');
-                    if (ackEl) ackEl.addEventListener('change', () => {
-                        getDraft().backupAcknowledged = !!ackEl.checked;
-                        // Re-render the footer so Continue enables/disables
-                        // immediately on toggle without waiting for navigation.
-                        renderFooter();
-                    });
                     const exportBtn = document.getElementById('onbExportNowBtn');
                     if (exportBtn) exportBtn.addEventListener('click', () => {
                         try { exportWorkspaceAsAtelierPackage(); } catch (err) { /* non-critical */ }
@@ -22629,16 +23543,14 @@ function populateProgressDashboard() {
                     showToast('Choose how you’ll use Sutra to continue.');
                     return;
                 }
-                if (step === 'ai') {
-                    // Read the acknowledgement straight from the live checkbox so the very
-                    // first Continue click advances even if the change event hasn't yet
-                    // updated the draft (fixes the "needs a second click" issue).
-                    const ackEl = document.getElementById('onbBackupAck');
-                    if (ackEl) draftRef.backupAcknowledged = !!ackEl.checked;
-                    if (!draftRef.backupAcknowledged) {
-                        showToast('Please acknowledge that Sutra is local-first to continue.');
-                        return;
-                    }
+                if (step === 'welcome' && draftRef.userIntent === 'skip') {
+                    // "Just Sutra" promised no setup — finish immediately with
+                    // defaults instead of walking the remaining steps.
+                    commitOnboardingCompletion();
+                    close({ startTour: false });
+                    try { setActiveView('today'); } catch (err) { /* non-critical */ }
+                    showToast('Sutra is ready. Rerun setup any time from Settings.');
+                    return;
                 }
                 commitDraftToState();
                 const idx = currentStepIndex();
@@ -22692,11 +23604,27 @@ function populateProgressDashboard() {
                 showToast('Setup skipped. You can rerun it any time from Settings.');
             }
 
-            function finish() {
-                const draftRef = getDraft();
-                const chosenTour = draftRef.tourChoice;
-                // See skip(): set completion flags on the live state AFTER commit/applyChoices,
-                // which may replace appSettings.onboarding.
+            // Soft dismiss (Escape / × button): close the wizard WITHOUT marking it
+            // skipped, so it reopens on the next launch. Entries made so far are
+            // kept; a theme that was only previewed is reverted.
+            function dismiss() {
+                const d = getDraft();
+                commitDraftToState();
+                try {
+                    if (themeAtOpen && d.theme && d.theme !== themeAtOpen && ONBOARDING_THEMES.some(t => t.key === themeAtOpen)) {
+                        applyPresetTheme(themeAtOpen);
+                        const state = getOnboardingState();
+                        state.theme = themeAtOpen;
+                        persistOnboardingState();
+                    }
+                } catch (err) { /* non-critical */ }
+                close({ startTour: false });
+                showToast('Setup closed — it will reopen next launch. Choose “Skip setup” to dismiss it for good.');
+            }
+
+            // See skip(): set completion flags on the live state AFTER commit/applyChoices,
+            // which may replace appSettings.onboarding. Shared by finish() + finishWithImport().
+            function commitOnboardingCompletion() {
                 commitDraftToState();
                 applyChoicesToWorkspace({ silentTheme: true });
                 const state = getOnboardingState();
@@ -22705,7 +23633,40 @@ function populateProgressDashboard() {
                 state.completedAt = new Date().toISOString();
                 syncLegacyOnboardingFlags(state);
                 persistOnboardingState();
-                if (chosenTour === 'tour') {
+            }
+
+            // Import-first exit: finish setup and immediately open the paste importer so a
+            // student with assignments already somewhere gets a real plan in one step.
+            // Text pasted during the Setup step prefills the importer.
+            function finishWithImport() {
+                const pasteText = String(getDraft().pastedImportText || '').trim();
+                commitOnboardingCompletion();
+                close({ startTour: false, openPasteImport: pasteText || true });
+                showToast(pasteText
+                    ? 'Setup complete. Review your assignments to build your plan.'
+                    : 'Setup complete. Paste your assignments to build your plan.');
+            }
+
+            function finish() {
+                const draftRef = getDraft();
+                const chosenTour = draftRef.tourChoice;
+                const pasteText = String(draftRef.pastedImportText || '').trim();
+                if (pasteText) {
+                    // Assignments pasted during setup take priority: land the user in
+                    // the importer with their real plan. The tour is always available
+                    // from Settings.
+                    commitOnboardingCompletion();
+                    close({ startTour: false, openPasteImport: pasteText });
+                    showToast((chosenTour === 'tour' || chosenTour === 'essentials')
+                        ? 'Setup complete. Review your assignments first — the tour is in Settings any time.'
+                        : 'Setup complete. Review your assignments to build your plan.');
+                    return;
+                }
+                commitOnboardingCompletion();
+                if (chosenTour === 'essentials') {
+                    close({ startTour: 'essentials' });
+                    showToast('Setup complete. Here are the essentials…');
+                } else if (chosenTour === 'tour') {
                     close({ startTour: true });
                     showToast('Setup complete. Starting the guided tour…');
                 } else if (chosenTour === 'today') {
@@ -22970,7 +23931,7 @@ function populateProgressDashboard() {
             const state = (appSettings && appSettings.onboarding) ? appSettings.onboarding : null;
             if (!state || !status) {
                 if (tutorialStatus && !state) {
-                    tutorialStatus.textContent = 'Onboarding walks you through Welcome, Focus, Features, Setup, AI & Backups, and Tour.';
+                    tutorialStatus.textContent = 'Onboarding walks you through Welcome, Focus, Setup, AI & Backups, and Tour.';
                 }
                 return;
             }
@@ -22997,7 +23958,7 @@ function populateProgressDashboard() {
                 } else if (state.skipped) {
                     tutorialStatus.textContent = 'Onboarding was skipped. You can rerun the full onboarding or start the guided tour anytime.';
                 } else {
-                    tutorialStatus.textContent = 'Onboarding walks you through Welcome, Focus, Features, Setup, AI & Backups, and Tour. The guided tour highlights Daily Thread, Deadline Radar, Sutra Modes, and encrypted .sutra backup/restore.';
+                    tutorialStatus.textContent = 'Onboarding walks you through Welcome, Focus, Setup, AI & Backups, and Tour. The guided tour highlights Daily Thread, Deadline Radar, Sutra Modes, and encrypted .sutra backup/restore.';
                 }
             }
         }
@@ -23800,10 +24761,18 @@ function populateProgressDashboard() {
                 const next = courseWorkspace.courses.find(c => !c.archived) || courseWorkspace.courses[0] || null;
                 courseWorkspace.settings.activeCourseId = next ? next.id : null;
             }
-            // Optionally remove its homework lane + assignments.
+            // Optionally remove its homework lane + assignments. Every removed
+            // assignment goes to Trash first — the Homework view's delete is
+            // recoverable, so Course Hub's delete must honor the same contract.
             if (options.deleteAssignments !== false) {
+                const allHwTasks = cwReadHwArray('hwTasks:v2');
+                if (typeof addRecordToTrash === 'function') {
+                    allHwTasks.filter(t => String(t && t.courseId) === id).forEach(t => {
+                        try { addRecordToTrash('homework', t.title || t.text, t); } catch (err) { /* non-critical */ }
+                    });
+                }
                 const hwCourses = cwReadHwArray('hwCourses:v2').filter(c => String(c && c.id) !== id);
-                const hwTasks = cwReadHwArray('hwTasks:v2').filter(t => String(t && t.courseId) !== id);
+                const hwTasks = allHwTasks.filter(t => String(t && t.courseId) !== id);
                 cwWriteHwArray('hwCourses:v2', hwCourses);
                 cwWriteHwArray('hwTasks:v2', hwTasks);
                 cwNotifyHomework();
@@ -27026,6 +27995,9 @@ function populateProgressDashboard() {
             if (resolvedView === 'alldue') {
                 try { renderAllDueView(); } catch (e) { console.warn('renderAllDueView failed on view change', e); }
             }
+            if (resolvedView === 'assistantview') {
+                try { if (typeof renderAssistantView === 'function') renderAssistantView(); } catch (e) { console.warn('renderAssistantView failed on view change', e); }
+            }
             if (resolvedView === 'review') {
                 try {
                     if (typeof window.renderReviewWorkspace === 'function') window.renderReviewWorkspace();
@@ -27059,8 +28031,17 @@ function populateProgressDashboard() {
             setTimeout(resyncToolbarLayout, 120);
         }
 
+        function isSegmentedPreferenceControl(control) {
+            return !!(control && control.classList && control.classList.contains('cc-segmented'));
+        }
+
         function readPreferenceControlValue(control) {
             if (!control) return null;
+            if (isSegmentedPreferenceControl(control)) {
+                const active = control.querySelector('[data-value].active')
+                    || control.querySelector('[data-value][aria-checked="true"]');
+                return active ? active.getAttribute('data-value') : null;
+            }
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') return !!control.checked;
             if (type === 'number' || type === 'range') {
@@ -27072,6 +28053,15 @@ function populateProgressDashboard() {
 
         function writePreferenceControlValue(control, value) {
             if (!control) return;
+            if (isSegmentedPreferenceControl(control)) {
+                const target = value == null ? '' : String(value);
+                control.querySelectorAll('[data-value]').forEach(btn => {
+                    const on = btn.getAttribute('data-value') === target;
+                    btn.classList.toggle('active', on);
+                    btn.setAttribute('aria-checked', on ? 'true' : 'false');
+                });
+                return;
+            }
             const type = String(control.type || '').toLowerCase();
             if (type === 'checkbox') {
                 control.checked = value === true;
@@ -27181,6 +28171,27 @@ function populateProgressDashboard() {
             if (resetSectionBtn) {
                 resetSectionBtn.textContent = `Reset ${getCurrentSettingsCategoryLabel()}`;
             }
+
+            // Flag each sidebar category that has staged (unsaved) changes so the
+            // nav can show a per-section dirty dot.
+            document.querySelectorAll('#view-settings [data-settings-nav]').forEach(button => {
+                const category = String(button.getAttribute('data-settings-nav') || '').toLowerCase();
+                const section = category
+                    ? document.querySelector(`#view-settings [data-settings-section="${category}"]`)
+                    : null;
+                let sectionDirty = false;
+                if (section) {
+                    const controls = section.querySelectorAll('[data-pref-path]');
+                    for (let i = 0; i < controls.length; i++) {
+                        const controlPath = String(controls[i].getAttribute('data-pref-path') || '').trim();
+                        if (controlPath && settingsDraftValues.has(controlPath)) {
+                            sectionDirty = true;
+                            break;
+                        }
+                    }
+                }
+                button.classList.toggle('has-dirty', sectionDirty);
+            });
         }
 
         function updateSettingsPreviewCard() {
@@ -27408,6 +28419,21 @@ function populateProgressDashboard() {
                     syncWorkspacePreferenceControls();
                     filterSettingsControlsBySearch();
                 };
+                if (isSegmentedPreferenceControl(control)) {
+                    control.querySelectorAll('[data-value]').forEach(btn => {
+                        btn.addEventListener('click', event => {
+                            event.preventDefault();
+                            control.querySelectorAll('[data-value]').forEach(other => {
+                                other.classList.remove('active');
+                                other.setAttribute('aria-checked', 'false');
+                            });
+                            btn.classList.add('active');
+                            btn.setAttribute('aria-checked', 'true');
+                            listener();
+                        });
+                    });
+                    return;
+                }
                 const type = String(control.type || '').toLowerCase();
                 control.addEventListener(type === 'range' ? 'input' : 'change', listener);
                 if (type === 'range') {
@@ -28209,7 +29235,7 @@ function populateProgressDashboard() {
             tutorialState.revealedViews = {};
         }
 
-        function getTutorialSteps() {
+        function getTutorialSteps(essentialsOnly = false) {
             // Refreshed for the unified-onboarding era (May 2026). Every
             // step's selector has been verified against the current DOM, and
             // every body has been rewritten to reflect today's app surface:
@@ -28632,7 +29658,7 @@ function populateProgressDashboard() {
                 { selector: '#rerunOnboardingBtn',
                   before: () => gotoTutorialSettingsSection('data'),
                   title: 'Rerun full onboarding',
-                  body: 'Re-open the unified onboarding (Welcome, Focus, Features, Setup, AI & Backups, Tour) whenever your use case changes. Your notes, tasks, homework, and other data are preserved — only setup preferences are revisited.' },
+                  body: 'Re-open the unified onboarding (Welcome, Focus, Setup, AI & Backups, Tour) whenever your use case changes. Your notes, tasks, homework, and other data are preserved — only setup preferences are revisited.' },
 
                 { selector: '#resetOnboardingBtn',
                   before: () => gotoTutorialSettingsSection('data'),
@@ -28654,12 +29680,49 @@ function populateProgressDashboard() {
                   body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Notes has templates and split-screen, Tasks + Homework feed Today, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. This tour lives in Settings → Data & backups if you want to revisit it.' }
             ];
 
+            // Essentials path: a ~5-step "just the things that matter" tour for the
+            // average student who won't finish a 66-step walkthrough. Same step shape
+            // and same dead-selector filtering, so it rides the existing tour engine.
+            const essentialSteps = [
+                { title: 'The 5 essentials',
+                  body: 'A one-minute tour of the five things that matter for getting schoolwork done: Today, Quick Capture, Homework, Review, and where to back up. Use Next / Back; Skip leaves any time. You can run the full tour later from Settings.' },
+
+                { selector: '#view-today',
+                  before: () => safeRunTutorial(() => setActiveView('today')),
+                  title: '1 · Today is your home base',
+                  body: 'Today shows your next move, what\'s due, and today\'s schedule in one place. Open the app here every day and it tells you what to do next.' },
+
+                { selector: '#todayDailyBrief',
+                  before: () => safeRunTutorial(() => setActiveView('today')),
+                  title: '2 · Capture work in seconds',
+                  body: 'Type things like "Chem homework due Friday hard" and Sutra dates it and files it to the right class. This is the fastest way to get work into Sutra.',
+                  actionLabel: 'Open Quick Capture',
+                  autoAction: false,
+                  action: () => safeRunTutorial(() => openQuickCaptureModal('')) },
+
+                { selector: '#view-homework, .view-tabs',
+                  before: () => safeRunTutorial(() => setActiveView('homework')),
+                  title: '3 · Homework, organized',
+                  body: 'Every assignment lives here grouped by class and due date, with effort estimates and a chip when a day gets crowded. Paste a whole syllabus with “Paste Import”.' },
+
+                { selector: '#view-apstudy, .view-tabs',
+                  before: () => safeRunTutorial(() => setActiveView('apstudy')),
+                  title: '4 · Review what\'s due',
+                  body: 'Turn notes into flashcards and Sutra schedules them so you review at the right time. Today surfaces a shortcut whenever cards are due.' },
+
+                { selector: '#view-settings, .view-tabs',
+                  before: () => safeRunTutorial(() => setActiveView('settings')),
+                  title: '5 · Yours, and portable',
+                  body: 'Everything stays on your device. From Settings → Data & backups you can export an encrypted .sutra file, rerun this tour, or take the full walkthrough. That\'s the essentials — you\'re ready.' }
+            ];
+
             // Filter out steps whose targets don't currently exist (e.g. tabs
             // hidden by Sutra Mode or Feature tabs). Steps without a
             // selector are always kept. The positioning code also has a
             // graceful centered fallback, but filtering up-front keeps the
             // step count accurate and skips dead pointers cleanly.
-            return allSteps.filter(step => !step.selector || tutorialTargetExists(step.selector));
+            const source = essentialsOnly ? essentialSteps : allSteps;
+            return source.filter(step => !step.selector || tutorialTargetExists(step.selector));
         }
 
         function resolveTutorialTarget(step) {
@@ -28882,7 +29945,7 @@ function populateProgressDashboard() {
             // Skip the redundant confirm dialog when the user already opted in
             // explicitly via the onboarding "Start guided tour" choice.
             if (options.skipConfirm === true) {
-                tutorialState.steps = getTutorialSteps();
+                tutorialState.steps = getTutorialSteps(options.essentialsOnly === true);
                 tutorialState.stepIndex = 0;
                 tutorialState.active = true;
                 if (appSettings) {
@@ -29660,6 +30723,24 @@ function populateProgressDashboard() {
                 autoBlockBtn.addEventListener('click', () => {
                     autoCreateTimelineBlocksFromEvents({ force: true });
                     renderTaskViews();
+                });
+            }
+            const todayPasteImportBtn = document.getElementById('todayPasteImportBtn');
+            if (todayPasteImportBtn && todayPasteImportBtn.dataset.bound !== 'true') {
+                todayPasteImportBtn.dataset.bound = 'true';
+                todayPasteImportBtn.addEventListener('click', () => {
+                    const menu = document.getElementById('todayHeaderMoreMenu');
+                    if (menu) menu.hidden = true;
+                    if (typeof openHomeworkPasteImport === 'function') openHomeworkPasteImport('');
+                });
+            }
+            const todayWeeklyReviewBtn = document.getElementById('todayWeeklyReviewBtn');
+            if (todayWeeklyReviewBtn && todayWeeklyReviewBtn.dataset.bound !== 'true') {
+                todayWeeklyReviewBtn.dataset.bound = 'true';
+                todayWeeklyReviewBtn.addEventListener('click', () => {
+                    const menu = document.getElementById('todayHeaderMoreMenu');
+                    if (menu) menu.hidden = true;
+                    if (typeof openWeeklyReviewModal === 'function') openWeeklyReviewModal();
                 });
             }
             if (nextActionBtn && nextActionBtn.dataset.bound !== 'true') {
@@ -35647,6 +36728,68 @@ function populateProgressDashboard() {
             if (id.startsWith('custom:')) return (testingHub.custom || []).find(c => c.id === id.slice(7)) || null;
             return getExamProfile(id);
         }
+
+        // ---- Taken/completed exam state (unified map on testingHub) ----------
+        function _takenExamsMap() {
+            if (!testingHub) return {};
+            if (!testingHub.takenExams || typeof testingHub.takenExams !== 'object') testingHub.takenExams = {};
+            return testingHub.takenExams;
+        }
+        function _isExamTaken(id) {
+            return !!(id && _takenExamsMap()[id]);
+        }
+        function _examTakenAt(id) {
+            return id ? (_takenExamsMap()[id] || null) : null;
+        }
+        // Set/clear an exam's taken state by exam-card id. Persists + re-renders.
+        function _setExamTaken(id, taken, dateISO) {
+            if (!id) return false;
+            const map = _takenExamsMap();
+            if (taken) {
+                let iso = dateISO;
+                if (!iso) {
+                    const d = new Date();
+                    iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                }
+                map[id] = String(iso);
+            } else {
+                delete map[id];
+            }
+            try { persistAppData(); } catch (e) { /* non-critical */ }
+            try { if (activeView === 'testing' && typeof renderTestingHub === 'function') renderTestingHub(); } catch (e) { /* non-critical */ }
+            try { rerenderActiveExamDetail(); } catch (e) { /* non-critical */ }
+            return true;
+        }
+
+        // Resolve a loose exam reference (id OR display name) to a real exam-card
+        // id that exists in THIS user's Testing Hub — never a homework task. Used
+        // by the assistant's update_exam_status action so it can't misfire onto
+        // an unrelated assignment.
+        function resolveTestingHubExamId(ref) {
+            const raw = String(ref == null ? '' : ref).trim();
+            if (!raw) return null;
+            const ids = (typeof _activeExamCardIds === 'function') ? _activeExamCardIds() : [];
+            // Also consider every configured (non-placeholder) exam, not just pinned.
+            const extra = [];
+            try {
+                TESTING_HUB_CORE_EXAMS.forEach(t => { if (t !== 'ap' && testingHub[t] && testingHub[t].examDate) extra.push(t); });
+                (testingHub.custom || []).forEach(c => extra.push('custom:' + c.id));
+                const aps = (typeof apStudyWorkspace !== 'undefined' && apStudyWorkspace && Array.isArray(apStudyWorkspace.subjects)) ? apStudyWorkspace.subjects : [];
+                aps.forEach(s => { if (s && s.id) extra.push('ap:' + s.id); });
+            } catch (e) { /* ignore */ }
+            const all = Array.from(new Set([...ids, ...extra]));
+            const lc = raw.toLowerCase();
+            // Direct id match.
+            if (all.includes(raw)) return raw;
+            // Exact name match, then contains, via _examMeta().name.
+            const named = all.map(id => ({ id, name: String((_examMeta(id) || {}).name || _examIdLabel(id) || '').toLowerCase() })).filter(x => x.name);
+            const exact = named.find(x => x.name === lc);
+            if (exact) return exact.id;
+            const starts = named.find(x => x.name.startsWith(lc) || lc.startsWith(x.name));
+            if (starts) return starts.id;
+            const contains = named.find(x => x.name.includes(lc) || lc.includes(x.name));
+            return contains ? contains.id : null;
+        }
         function _toNum(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
         function _examDaysLeft(dateISO) {
             if (!dateISO) return null;
@@ -36941,15 +38084,84 @@ function populateProgressDashboard() {
             };
         }
 
+        // Assistant context summary — bounded, mirrors the business/college
+        // summarizers flow-assistant.js already calls. Reuses _examMeta so the
+        // model sees the same exam date/daysLeft/status the Testing Hub shows.
+        // Placeholder cards with no real signal (no date, no prep activity) are
+        // dropped so an empty Testing Hub doesn't pollute the model's context.
+        function getTestingHubAssistantSummary() {
+            try {
+                if (!testingHub) return null;
+                const ids = _activeExamCardIds();
+                const exams = ids.map(id => {
+                    const meta = _examMeta(id);
+                    if (!meta) return null;
+                    const taken = _isExamTaken(id);
+                    return {
+                        id,
+                        name: meta.name,
+                        examDate: meta.examDate || null,
+                        daysUntil: meta.daysLeft != null ? meta.daysLeft : null,
+                        studyStatus: meta.studyStatus || '',
+                        taken,
+                        takenAt: taken ? _examTakenAt(id) : null,
+                        targetScore: meta.targetScore || null,
+                        currentScore: meta.currentScore || null,
+                        openTasks: meta.openTasks || 0,
+                        unresolvedMistakes: meta.unresolvedMistakes || 0,
+                        practiceCount: meta.practiceCount || 0,
+                        nextTask: meta.nextTask || ''
+                    };
+                }).filter(Boolean).filter(e => e.examDate || e.openTasks || e.practiceCount || e.currentScore != null || e.taken);
+                if (!exams.length) return null;
+                // Upcoming (not taken) first, sorted by soonest; taken exams last.
+                exams.sort((a, b) => {
+                    if (!!a.taken !== !!b.taken) return a.taken ? 1 : -1;
+                    return (a.daysUntil == null ? Infinity : a.daysUntil) - (b.daysUntil == null ? Infinity : b.daysUntil);
+                });
+                const upcoming = exams.filter(e => !e.taken);
+                return { exams: exams.slice(0, 12), upcomingCount: upcoming.length, takenCount: exams.length - upcoming.length };
+            } catch (e) { return null; }
+        }
+
+        // Assistant-facing setter. Resolves a loose exam reference (id or name)
+        // to a real Testing Hub exam and updates its taken state and/or study
+        // status. Returns { ok, examId, examName, taken, studyStatus } or
+        // { ok:false, error } so the caller can report an honest result. NEVER
+        // touches homework/tasks — the resolver only matches Testing Hub exams.
+        function setTestingHubExamStatus(ref, opts) {
+            try {
+                const options = opts || {};
+                const id = resolveTestingHubExamId(ref);
+                if (!id) return { ok: false, error: 'no-match', ref: String(ref || '') };
+                let changed = false;
+                if (options.taken != null) { _setExamTaken(id, !!options.taken); changed = true; }
+                if (typeof options.studyStatus === 'string' && ['planning', 'studying', 'reviewing', 'ready'].includes(options.studyStatus)) {
+                    const profile = _examProfileFor(id);
+                    if (profile) { profile.studyStatus = options.studyStatus; changed = true; }
+                    // AP subjects carry their own status field in apStudyWorkspace;
+                    // leave those to the AP workspace (we still record taken above).
+                    try { persistAppData(); } catch (e) { /* non-critical */ }
+                }
+                const meta = _examMeta(id) || {};
+                return { ok: true, changed, examId: id, examName: meta.name || _examIdLabel(id), taken: _isExamTaken(id), studyStatus: (options.studyStatus || meta.studyStatus || '') };
+            } catch (e) {
+                return { ok: false, error: 'exception' };
+            }
+        }
+
         function _renderExamCard(id) {
             const meta = _examMeta(id);
             if (!meta) return '';
             const icon = _examIdIcon(id);
-            const countdownClass = meta.daysLeft === null || meta.daysLeft === undefined ? ''
+            const taken = _isExamTaken(id);
+            const countdownClass = taken ? 'is-taken'
+                : meta.daysLeft === null || meta.daysLeft === undefined ? ''
                 : meta.daysLeft < 0 ? 'past'
                 : meta.daysLeft <= 7 ? 'critical'
                 : meta.daysLeft <= 30 ? 'urgent' : '';
-            const countdownText = meta.daysLeft === null || meta.daysLeft === undefined ? 'No date'
+            const countdownText = taken ? 'Completed'
+                : meta.daysLeft === null || meta.daysLeft === undefined ? 'No date'
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Today'
                 : `${meta.daysLeft} day${meta.daysLeft === 1 ? '' : 's'}`;
@@ -36984,7 +38196,9 @@ function populateProgressDashboard() {
                         <div class="th2-exam-card-icon"><i class="fas ${icon}"></i></div>
                         <div class="th2-exam-card-title">
                             <h3>${escapeHtml(meta.name)}</h3>
-                            <span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">${escapeHtml(meta.studyStatus)}</span>
+                            ${taken
+                                ? '<span class="th2-exam-card-status th2-exam-taken-badge"><i class="fas fa-circle-check" aria-hidden="true"></i> Completed</span>'
+                                : `<span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">${escapeHtml(meta.studyStatus)}</span>`}
                         </div>
                         <div class="th2-exam-card-countdown">
                             <div class="th2-card-countdown-num">${escapeHtml(countdownText)}</div>
@@ -36999,6 +38213,7 @@ function populateProgressDashboard() {
                     ${meta.nextTask ? `<div class="th2-exam-card-next"><i class="fas fa-arrow-right"></i> ${escapeHtml(meta.nextTask)}</div>` : ''}
                     <footer class="th2-exam-card-actions">
                         ${quickActions}
+                        <button class="th2-card-action" type="button" onclick="event.stopPropagation(); toggleTestingHubExamTaken('${escapeHtml(id)}')"><i class="fas ${taken ? 'fa-rotate-left' : 'fa-circle-check'}"></i> ${taken ? 'Mark not taken' : 'Mark taken'}</button>
                         <button class="th2-card-action th2-card-action-primary" type="button" onclick="event.stopPropagation(); openExamDetail('${escapeHtml(id)}')"><i class="fas fa-arrow-right"></i> Open</button>
                     </footer>
                 </article>
@@ -37835,6 +39050,9 @@ function populateProgressDashboard() {
         try {
             if (typeof window !== 'undefined') {
                 window.switchTestingHubSection = switchTestingHubSection;
+                window.getTestingHubAssistantSummary = getTestingHubAssistantSummary;
+                window.setTestingHubExamStatus = setTestingHubExamStatus;
+                window.toggleTestingHubExamTaken = (id) => { try { _setExamTaken(id, !_isExamTaken(id)); } catch (e) {} };
                 window.openExamDetail = openExamDetail;
                 window.closeExamDetail = closeExamDetail;
                 window.openTestingHubExamPicker = openTestingHubExamPicker;
@@ -39911,6 +41129,11 @@ function getActiveEditor() {
         function setNewPageTemplateSelection(templateId, options = {}) {
             const select = document.getElementById('newPageTemplate');
             const id = pageTemplates[templateId] ? templateId : 'blank';
+            // Keep the hidden page-type select in sync so confirmNewPage reads
+            // the correct type without needing the old visible dropdown.
+            const typeSelect = document.getElementById('newPageType');
+            if (typeSelect) typeSelect.value = isCanvasTemplateId(id) ? PAGE_TYPES.CANVAS : PAGE_TYPES.NOTE;
+            syncPageTypeToggleState(isCanvasTemplateId(id) ? PAGE_TYPES.CANVAS : PAGE_TYPES.NOTE);
             if (select) {
                 select.value = id;
                 if (options.fireChange) {
@@ -39933,9 +41156,9 @@ function getActiveEditor() {
             syncNewPageSecondaryAction(id);
         }
 
-        // Render the card picker. Cards are sorted with student templates
-        // first (or class-aware ordering when a context is detected) and
-        // grouped by category.
+        // Render the card picker. In the "All" view two named sections are shown:
+        // "Quick start" (6 featured note templates) and "Visual thinking" (canvas).
+        // Filtered views and search fall back to the original flat/grouped rendering.
         function renderTemplatePickerCards(context) {
             const grid = document.getElementById('templatePickerGrid');
             if (!grid) return;
@@ -39965,88 +41188,157 @@ function getActiveEditor() {
 
             grid.innerHTML = '';
 
-            const groups = new Map();
-            filtered.forEach((row) => {
-                const cat = row.tpl.category || 'general';
-                if (!groups.has(cat)) groups.set(cat, []);
-                groups.get(cat).push(row);
-            });
             const orderedCats = ['student', 'planning', 'communication', 'general'];
-            const shouldGroup = activeFilter === 'all';
-            const renderRows = (rows, groupLabel = '') => {
+            const shouldGroup = activeFilter === 'all' && !search;
+
+            // ── Helper: build keyboard-navigable card events ──────────────────
+            const addCardKeys = (card, id) => {
+                card.addEventListener('click', () => setNewPageTemplateSelection(id, { fireChange: true }));
+                card.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setNewPageTemplateSelection(id, { fireChange: true });
+                        return;
+                    }
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); moveTemplateCardFocus(card, 1); return; }
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); moveTemplateCardFocus(card, -1); return; }
+                    if (event.key === 'Home') { event.preventDefault(); moveTemplateCardFocus(card, -1000); return; }
+                    if (event.key === 'End') { event.preventDefault(); moveTemplateCardFocus(card, 1000); }
+                });
+            };
+
+            // ── Helper: build a standard template card ────────────────────────
+            const makeCard = (row) => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'template-card';
+                card.dataset.templateId = row.id;
+                card.setAttribute('role', 'option');
+                card.setAttribute('aria-selected', 'false');
+                card.tabIndex = -1;
+                const connectionsHtml = row.tpl.connectsTo
+                    .slice(0, 2)
+                    .map((key) => `<span class="template-card-chip" title="${escapeHtml(TEMPLATE_CONNECTION_LABELS[key] || key)}">${escapeHtml(TEMPLATE_CONNECTION_LABELS[key] || key)}</span>`)
+                    .join('');
+                card.innerHTML = `
+                    <span class="template-card-icon" aria-hidden="true">${escapeHtml(row.tpl.icon)}</span>
+                    <span class="template-card-body">
+                        <span class="template-card-title">${escapeHtml(row.tpl.name)}</span>
+                        <span class="template-card-desc">${escapeHtml(row.tpl.description)}</span>
+                        ${connectionsHtml ? `<span class="template-card-chips">${connectionsHtml}</span>` : ''}
+                    </span>
+                    <span class="template-card-check" aria-hidden="true"><i class="fas fa-check"></i></span>`;
+                addCardKeys(card, row.id);
+                return card;
+            };
+
+            // ── Helper: build full-width featured canvas card ─────────────────
+            const makeCanvasFeaturedCard = (row) => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'template-card template-card-canvas-featured';
+                card.dataset.templateId = row.id;
+                card.setAttribute('role', 'option');
+                card.setAttribute('aria-selected', 'false');
+                card.tabIndex = -1;
+                const previewSvg = `<svg viewBox="0 0 210 118" xmlns="http://www.w3.org/2000/svg" class="canvas-preview-svg" aria-hidden="true">
+                    <rect x="6" y="14" width="72" height="44" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-opacity="0.4" stroke-width="1"/>
+                    <text x="14" y="33" font-size="8.5" fill="var(--text-primary)" fill-opacity="0.72" font-family="system-ui,sans-serif" font-weight="600">Brainstorm</text>
+                    <text x="14" y="46" font-size="7.5" fill="var(--text-secondary)" fill-opacity="0.65" font-family="system-ui,sans-serif">to clarity</text>
+                    <rect x="132" y="6" width="66" height="38" rx="7" fill="rgba(245,158,11,0.13)" stroke="rgba(245,158,11,0.38)" stroke-width="1"/>
+                    <text x="140" y="25" font-size="8" fill="var(--text-primary)" fill-opacity="0.7" font-family="system-ui,sans-serif" font-weight="600">Ideas</text>
+                    <rect x="108" y="70" width="80" height="38" rx="7" fill="rgba(139,92,246,0.11)" stroke="rgba(139,92,246,0.32)" stroke-width="1"/>
+                    <text x="116" y="90" font-size="8" fill="var(--text-primary)" fill-opacity="0.7" font-family="system-ui,sans-serif" font-weight="600">Connections</text>
+                    <line x1="78" y1="36" x2="132" y2="25" stroke="var(--text-secondary)" stroke-opacity="0.2" stroke-width="1.5" stroke-dasharray="4 3"/>
+                    <line x1="78" y1="42" x2="108" y2="86" stroke="var(--text-secondary)" stroke-opacity="0.2" stroke-width="1.5" stroke-dasharray="4 3"/>
+                    <line x1="165" y1="44" x2="165" y2="70" stroke="var(--text-secondary)" stroke-opacity="0.2" stroke-width="1.5" stroke-dasharray="4 3"/>
+                    <circle cx="78" cy="36" r="3" fill="var(--accent)" fill-opacity="0.55"/>
+                    <circle cx="78" cy="42" r="3" fill="var(--accent)" fill-opacity="0.55"/>
+                    <circle cx="132" cy="25" r="3" fill="rgba(245,158,11,0.7)"/>
+                    <circle cx="108" cy="86" r="3" fill="rgba(139,92,246,0.7)"/>
+                    <circle cx="165" cy="44" r="3" fill="rgba(245,158,11,0.7)"/>
+                    <circle cx="165" cy="70" r="3" fill="rgba(139,92,246,0.7)"/>
+                </svg>`;
+                card.innerHTML = `
+                    <span class="template-card-canvas-main">
+                        <span class="template-card-icon" aria-hidden="true">${escapeHtml(row.tpl.icon)}</span>
+                        <span class="template-card-body">
+                            <span class="template-card-title">${escapeHtml(row.tpl.name)} <span class="template-card-new-badge" aria-label="new">NEW</span></span>
+                            <span class="template-card-desc">${escapeHtml(row.tpl.description)}</span>
+                            <span class="template-card-chips">
+                                <span class="template-card-chip">Visual &amp; flexible</span>
+                                <span class="template-card-chip">Freeform layout</span>
+                            </span>
+                        </span>
+                    </span>
+                    <span class="template-card-canvas-preview" aria-hidden="true">${previewSvg}</span>
+                    <span class="template-card-check" aria-hidden="true"><i class="fas fa-check"></i></span>`;
+                addCardKeys(card, row.id);
+                return card;
+            };
+
+            // ── Helper: render a labelled group of cards ──────────────────────
+            const renderSection = (rows, label, subtitle, listClass = 'template-card-list') => {
                 if (!rows.length) return;
                 const groupRoot = document.createElement('div');
                 groupRoot.className = 'template-card-group';
-                if (groupLabel) {
-                    const heading = document.createElement('div');
-                    heading.className = 'template-card-group-heading';
-                    heading.textContent = groupLabel;
-                    groupRoot.appendChild(heading);
+                if (label) {
+                    const headWrap = document.createElement('div');
+                    headWrap.className = 'template-card-group-heading-wrap';
+                    headWrap.innerHTML = `<span class="template-card-group-heading">${escapeHtml(label)}</span>${subtitle ? `<span class="template-card-group-subtitle">${escapeHtml(subtitle)}</span>` : ''}`;
+                    groupRoot.appendChild(headWrap);
                 }
                 const groupGrid = document.createElement('div');
-                groupGrid.className = 'template-card-list';
-                rows.forEach((row) => {
-                    const card = document.createElement('button');
-                    card.type = 'button';
-                    card.className = 'template-card';
-                    card.dataset.templateId = row.id;
-                    card.setAttribute('role', 'option');
-                    card.setAttribute('aria-selected', 'false');
-                    card.tabIndex = -1;
-                    const connectionsHtml = row.tpl.connectsTo
-                        .slice(0, 3)
-                        .map((key) => `<span class="template-card-chip" title="${escapeHtml(TEMPLATE_CONNECTION_LABELS[key] || key)}">${escapeHtml(TEMPLATE_CONNECTION_LABELS[key] || key)}</span>`)
-                        .join('');
-                    card.innerHTML = `
-                        <span class="template-card-icon" aria-hidden="true">${escapeHtml(row.tpl.icon)}</span>
-                        <span class="template-card-body">
-                            <span class="template-card-title">${escapeHtml(row.tpl.name)}</span>
-                            <span class="template-card-desc">${escapeHtml(row.tpl.description)}</span>
-                            ${connectionsHtml ? `<span class="template-card-chips">${connectionsHtml}</span>` : ''}
-                        </span>
-                        <span class="template-card-check" aria-hidden="true"><i class="fas fa-check"></i></span>`;
-                    card.addEventListener('click', () => {
-                        setNewPageTemplateSelection(row.id, { fireChange: true });
-                    });
-                    card.addEventListener('keydown', (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            setNewPageTemplateSelection(row.id, { fireChange: true });
-                            return;
-                        }
-                        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-                            event.preventDefault();
-                            moveTemplateCardFocus(card, 1);
-                            return;
-                        }
-                        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-                            event.preventDefault();
-                            moveTemplateCardFocus(card, -1);
-                            return;
-                        }
-                        if (event.key === 'Home') {
-                            event.preventDefault();
-                            moveTemplateCardFocus(card, -1000);
-                            return;
-                        }
-                        if (event.key === 'End') {
-                            event.preventDefault();
-                            moveTemplateCardFocus(card, 1000);
-                        }
-                    });
-                    groupGrid.appendChild(card);
-                });
+                groupGrid.className = listClass;
+                rows.forEach((row) => groupGrid.appendChild(makeCard(row)));
                 groupRoot.appendChild(groupGrid);
                 grid.appendChild(groupRoot);
             };
 
             if (shouldGroup) {
-                orderedCats.forEach((cat) => {
-                    if (!groups.has(cat)) return;
-                    renderRows(groups.get(cat), TEMPLATE_CATEGORIES[cat] || cat);
+                // ── "Quick start" section ─────────────────────────────────────
+                const quickStartRows = QUICK_START_TEMPLATE_IDS
+                    .map(id => filtered.find(r => r.id === id))
+                    .filter(Boolean);
+                renderSection(quickStartRows, 'Quick start', 'Common note types for everyday use', 'template-card-list template-card-list-quickstart');
+
+                // ── "Visual thinking" section (featured canvas card) ──────────
+                const vtRow = filtered.find(r => r.id === VISUAL_THINKING_TEMPLATE_ID);
+                if (vtRow) {
+                    const vtGroup = document.createElement('div');
+                    vtGroup.className = 'template-card-group';
+                    const vtHead = document.createElement('div');
+                    vtHead.className = 'template-card-group-heading-wrap';
+                    vtHead.innerHTML = '<span class="template-card-group-heading">Visual thinking</span><span class="template-card-group-subtitle">Think freely and connect ideas visually</span>';
+                    vtGroup.appendChild(vtHead);
+                    vtGroup.appendChild(makeCanvasFeaturedCard(vtRow));
+                    grid.appendChild(vtGroup);
+                }
+
+                // ── Remaining templates (not in featured sections) ────────────
+                const featuredIds = new Set([...QUICK_START_TEMPLATE_IDS, VISUAL_THINKING_TEMPLATE_ID]);
+                const remainingGroups = new Map();
+                filtered.filter(r => !featuredIds.has(r.id)).forEach(row => {
+                    const cat = row.tpl.category || 'general';
+                    if (!remainingGroups.has(cat)) remainingGroups.set(cat, []);
+                    remainingGroups.get(cat).push(row);
+                });
+                orderedCats.forEach(cat => {
+                    if (!remainingGroups.has(cat)) return;
+                    renderSection(remainingGroups.get(cat), TEMPLATE_CATEGORIES[cat] || cat, '');
                 });
             } else {
-                renderRows(filtered, '');
+                // Filtered or search view: flat list grouped by category
+                const groups = new Map();
+                filtered.forEach((row) => {
+                    const cat = row.tpl.category || 'general';
+                    if (!groups.has(cat)) groups.set(cat, []);
+                    groups.get(cat).push(row);
+                });
+                orderedCats.forEach((cat) => {
+                    if (!groups.has(cat)) return;
+                    renderSection(groups.get(cat), activeFilter === 'all' ? (TEMPLATE_CATEGORIES[cat] || cat) : '');
+                });
             }
 
             if (!filtered.length) {
@@ -42175,9 +43467,8 @@ function getActiveEditor() {
             const panel = document.getElementById('notesBacklinksPanel');
             if (!panel) return;
             const links = pageId ? getBacklinksForPage(pageId) : [];
-            const related = pageId ? getRelatedNotes(pageId, 5) : [];
             panel.replaceChildren();
-            if (!links.length && !related.length) { panel.hidden = true; return; }
+            if (!links.length) { panel.hidden = true; return; }
             panel.hidden = false;
 
             const buildSection = (label, items) => {
@@ -42201,7 +43492,6 @@ function getActiveEditor() {
             };
 
             buildSection('Linked references', links);
-            buildSection('Related notes', related);
         }
 
         function getHomeworkCourseLabelById(courseId) {
@@ -42421,8 +43711,43 @@ function getActiveEditor() {
             showToast('Page deleted successfully!');
         }
 
-        // ---- Trash (recently-deleted pages: restore / purge) -------------------
+        // ---- Trash (recently-deleted pages / tasks / homework: restore / purge) ----
         const TRASH_LIMIT = 50;
+        const TRASH_MAX_AGE_MS = 30 * 24 * 3600 * 1000; // 30-day retention
+
+        function pruneTrashByAge() {
+            if (!Array.isArray(trash)) { trash = []; return; }
+            const cutoff = Date.now() - TRASH_MAX_AGE_MS;
+            trash = trash.filter(t => {
+                const ts = Date.parse((t && t.deletedAt) || '');
+                return !Number.isFinite(ts) || ts >= cutoff;
+            });
+        }
+
+        // Generic producer — planner tasks and homework rows share the same
+        // trash the pages already use. Exposed as window.SutraTrash.add so the
+        // homework module (own closure) can route its deletes here too.
+        function addRecordToTrash(kind, title, payload) {
+            if (!payload) return;
+            if (!Array.isArray(trash)) trash = [];
+            let cloned;
+            try { cloned = JSON.parse(JSON.stringify(payload)); } catch (err) { return; }
+            trash.unshift({
+                id: generateId(),
+                kind: String(kind || 'item'),
+                deletedAt: new Date().toISOString(),
+                title: String(title || 'Untitled'),
+                payload: cloned
+            });
+            pruneTrashByAge();
+            if (trash.length > TRASH_LIMIT) trash = trash.slice(0, TRASH_LIMIT);
+            // Persist NOW: the deletion that produced this record is already
+            // durable (homework writes hwTasks:v2 synchronously), so a
+            // memory-only trash entry would be lost on a quick close — the
+            // exact data-loss the Trash exists to prevent.
+            try { persistAppData(); } catch (err) { /* debounced autosave still covers it */ }
+            try { if (typeof flushAppSaveNow === 'function') flushAppSaveNow('trash-add'); } catch (err) { /* best-effort immediate flush */ }
+        }
 
         function addPagesToTrash(removedPages) {
             if (!Array.isArray(trash)) trash = [];
@@ -42440,6 +43765,7 @@ function getActiveEditor() {
                     payload
                 });
             });
+            pruneTrashByAge();
             if (trash.length > TRASH_LIMIT) trash = trash.slice(0, TRASH_LIMIT);
         }
 
@@ -42462,9 +43788,48 @@ function getActiveEditor() {
                 showToast('Restored from Trash.');
                 return true;
             }
-            trash.splice(idx, 1);
-            persistAppData();
-            renderTrashPanel();
+            if (rec.kind === 'task' && rec.payload) {
+                let restored;
+                try { restored = JSON.parse(JSON.stringify(rec.payload)); } catch (err) { return false; }
+                if (tasks.some(t => t && t.id === restored.id)) restored.id = generateId();
+                tasks.push(restored);
+                if (!taskOrder.includes(restored.id)) taskOrder.push(restored.id);
+                trash.splice(idx, 1);
+                persistAppData();
+                try { renderTaskViews(); } catch (err) { /* non-critical */ }
+                renderTrashPanel();
+                showToast('Task restored from Trash.');
+                return true;
+            }
+            if (rec.kind === 'homework' && rec.payload) {
+                let restored;
+                try { restored = JSON.parse(JSON.stringify(rec.payload)); } catch (err) { return false; }
+                const list = readLocalArraySafe('hwTasks:v2');
+                if (list.some(item => String(item.id) === String(restored.id))) {
+                    restored.id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+                }
+                // If the course this row belonged to was deleted, clear the
+                // dangling courseId — the homework table renders unknown-course
+                // rows nowhere, so a "restored" row would be invisible.
+                try {
+                    const knownCourses = readLocalArraySafe('hwCourses:v2');
+                    if (restored.courseId && !knownCourses.some(c => String(c && c.id) === String(restored.courseId))) {
+                        restored.courseId = '';
+                    }
+                } catch (err) { /* keep as-is */ }
+                list.push(restored);
+                writeLocalArraySafe('hwTasks:v2', list);
+                trash.splice(idx, 1);
+                persistAppData();
+                try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) { /* non-critical */ }
+                renderTrashPanel();
+                showToast('Assignment restored from Trash.');
+                return true;
+            }
+            // Unknown kind (future schema / foreign import): KEEP the record.
+            // Splicing here permanently destroyed anything this build didn't
+            // recognize the moment Restore was clicked.
+            showToast('This item type can’t be restored by this version of Sutra — it stays in Trash.');
             return false;
         }
 
@@ -42483,6 +43848,11 @@ function getActiveEditor() {
             renderTrashPanel();
             showToast('Trash emptied.');
         }
+
+        // Cross-module producer/opener (homework.js lives in its own closure).
+        try {
+            window.SutraTrash = { add: addRecordToTrash, open: openTrashModal, restore: restoreTrashItem };
+        } catch (err) { /* non-critical */ }
 
         function openTrashModal() {
             let modal = document.getElementById('sutraTrashModal');
@@ -42505,6 +43875,7 @@ function getActiveEditor() {
             }
             modal.style.display = 'flex';
             modal.classList.add('active');
+            pruneTrashByAge();
             renderTrashPanel();
             if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') { try { window.SutraModalManager.sync(); } catch (err) { /* nc */ } }
         }
@@ -42544,12 +43915,12 @@ function getActiveEditor() {
             if (!list.length) {
                 const empty = document.createElement('p');
                 empty.className = 'sutra-trash-empty';
-                empty.textContent = 'Trash is empty. Deleted pages appear here and can be restored.';
+                empty.textContent = 'Trash is empty. Deleted pages, tasks, and assignments appear here and can be restored for 30 days.';
                 body.appendChild(empty);
             } else {
                 const note = document.createElement('p');
                 note.className = 'sutra-trash-note';
-                note.textContent = `${list.length} recently-deleted item${list.length === 1 ? '' : 's'} · kept up to ${TRASH_LIMIT}.`;
+                note.textContent = `${list.length} recently-deleted item${list.length === 1 ? '' : 's'} · kept up to ${TRASH_LIMIT}, cleared after 30 days.`;
                 body.appendChild(note);
                 list.forEach(rec => {
                     const row = document.createElement('div');
@@ -43498,6 +44869,16 @@ function getActiveEditor() {
             dashboard: 'Surfaces on dashboard'
         });
 
+        // Ordered list of templates shown in the "Quick start" section when the
+        // All filter is active. canvas_concept_map is intentionally included here
+        // so it appears alongside note templates as a featured option.
+        const QUICK_START_TEMPLATE_IDS = Object.freeze([
+            'blank', 'lecture_notes', 'exam_prep',
+            'homework_tracker', 'project_workspace', 'canvas_concept_map'
+        ]);
+        // Canvas card featured alone in the "Visual thinking" section.
+        const VISUAL_THINKING_TEMPLATE_ID = 'canvas_blank';
+
         const pageTemplates = {
             blank: {
                 name: 'Blank Page',
@@ -44366,8 +45747,8 @@ function getActiveEditor() {
 
             // Show/hide progressive context-disclosure fields based on the
             // selected template's contextFields list.
+            // Note: class row is always visible at top level so it is excluded here.
             const fieldVisibility = {
-                class: template.contextFields.includes('class'),
                 dueDate: template.contextFields.includes('dueDate'),
                 difficulty: template.contextFields.includes('difficulty'),
                 estimate: template.contextFields.includes('estimate'),
@@ -44382,7 +45763,7 @@ function getActiveEditor() {
                 const row = document.getElementById(id);
                 if (row) row.hidden = !visible;
             };
-            setRow('newPageContextRow_class', fieldVisibility.class);
+            setRow('newPageContextRow_class', true); // always visible at top level
             setRow('newPageContextRow_examName', fieldVisibility.examName);
             setRow('newPageContextRow_dueDate', fieldVisibility.dueDate);
             setRow('newPageContextRow_difficulty', fieldVisibility.difficulty);
@@ -44486,6 +45867,24 @@ function getActiveEditor() {
             if (taskOptions) taskOptions.hidden = pageType === PAGE_TYPES.CANVAS;
             if (temporaryPanel) temporaryPanel.hidden = pageType === PAGE_TYPES.CANVAS;
             renderTemplatePickerCards(getActiveCreationContext());
+        }
+
+        function syncPageTypeToggleState(type) {
+            const noteBtn = document.getElementById('newPageTypeBtn_note');
+            const canvasBtn = document.getElementById('newPageTypeBtn_canvas');
+            if (!noteBtn || !canvasBtn) return;
+            const isCanvas = type === PAGE_TYPES.CANVAS;
+            noteBtn.classList.toggle('nptt-active', !isCanvas);
+            noteBtn.setAttribute('aria-pressed', String(!isCanvas));
+            canvasBtn.classList.toggle('nptt-active', isCanvas);
+            canvasBtn.setAttribute('aria-pressed', String(isCanvas));
+        }
+
+        function handleNewPageTypeToggle(type) {
+            const typeSelect = document.getElementById('newPageType');
+            if (typeSelect) typeSelect.value = type;
+            applyNewPageTypeUi();
+            syncPageTypeToggleState(type);
         }
 
         // Hierarchical Sidebar Rendering
@@ -45455,7 +46854,8 @@ function getActiveEditor() {
                 lastRemoteModifiedTime: '',
                 duplicateWarning: false,
                 bootstrapRequired: false,
-                remoteMissing: false
+                remoteMissing: false,
+                keepUnlocked: false
             };
         }
 
@@ -45480,7 +46880,8 @@ function getActiveEditor() {
                 lastRemoteModifiedTime: source.lastRemoteModifiedTime ? String(source.lastRemoteModifiedTime).slice(0, 80) : '',
                 duplicateWarning: source.duplicateWarning === true,
                 bootstrapRequired: source.bootstrapRequired === true,
-                remoteMissing: source.remoteMissing === true
+                remoteMissing: source.remoteMissing === true,
+                keepUnlocked: source.keepUnlocked === true
             };
         }
 
@@ -45553,6 +46954,124 @@ function getActiveEditor() {
             sutraDriveSyncRuntime.tokenExpiresAtMs = 0;
             sutraDriveSyncRuntime.derivedKey = null;
             if (options.clearClient) sutraDriveSyncRuntime.tokenClient = null;
+        }
+
+        // ---- "Stay unlocked on this device" key persistence -----------------
+        // The PBKDF2-derived AES-GCM key is created non-extractable, so it can be
+        // structured-cloned into IndexedDB and restored on the next visit without
+        // the raw key bytes ever being readable from script. Opt-in only
+        // (meta.keepUnlocked); locking, disconnecting, or deleting cloud data
+        // removes the stored key. localStorage cannot hold a CryptoKey, which is
+        // why this one Drive-sync secret lives in its own tiny IndexedDB store.
+        const SUTRA_DRIVE_KEY_DB_NAME = 'sutra-drive-sync-keys';
+        const SUTRA_DRIVE_KEY_STORE = 'keys';
+
+        function openSutraDriveKeyDb() {
+            return new Promise((resolve, reject) => {
+                let request;
+                try {
+                    request = indexedDB.open(SUTRA_DRIVE_KEY_DB_NAME, 1);
+                } catch (error) { reject(error); return; }
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(SUTRA_DRIVE_KEY_STORE)) {
+                        db.createObjectStore(SUTRA_DRIVE_KEY_STORE, { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error || new Error('IndexedDB unavailable.'));
+            });
+        }
+
+        async function sutraDriveKeyStoreRun(mode, work) {
+            const db = await openSutraDriveKeyDb();
+            try {
+                return await new Promise((resolve, reject) => {
+                    const tx = db.transaction(SUTRA_DRIVE_KEY_STORE, mode);
+                    const store = tx.objectStore(SUTRA_DRIVE_KEY_STORE);
+                    const request = work(store);
+                    tx.oncomplete = () => resolve(request ? request.result : undefined);
+                    tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed.'));
+                    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted.'));
+                });
+            } finally {
+                try { db.close(); } catch (error) { /* non-critical */ }
+            }
+        }
+
+        async function persistSutraDriveDerivedKey() {
+            const meta = loadSutraDriveSyncMetadata();
+            if (!meta.keepUnlocked || !sutraDriveSyncRuntime.derivedKey) return false;
+            try {
+                await sutraDriveKeyStoreRun('readwrite', store => store.put({
+                    id: 'derivedKey',
+                    key: sutraDriveSyncRuntime.derivedKey,
+                    vaultId: meta.vaultId || '',
+                    savedAt: new Date().toISOString()
+                }));
+                return true;
+            } catch (error) {
+                console.warn('Could not persist Drive sync key', error);
+                return false;
+            }
+        }
+
+        async function restoreSutraDrivePersistedKey() {
+            const meta = loadSutraDriveSyncMetadata();
+            if (!meta.keepUnlocked || sutraDriveSyncRuntime.derivedKey) return !!sutraDriveSyncRuntime.derivedKey;
+            try {
+                const record = await sutraDriveKeyStoreRun('readonly', store => store.get('derivedKey'));
+                if (!record || !record.key) return false;
+                // A vault reset (new salt/id) invalidates any previously stored key.
+                if (meta.vaultId && record.vaultId && record.vaultId !== meta.vaultId) return false;
+                sutraDriveSyncRuntime.derivedKey = record.key;
+                updateSutraDriveSyncUi();
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function clearSutraDrivePersistedKey() {
+            try {
+                await sutraDriveKeyStoreRun('readwrite', store => store.delete('derivedKey'));
+            } catch (error) { /* nothing stored, or IDB unavailable */ }
+        }
+
+        // ---- invisible auto-sync --------------------------------------------
+        // Pulls remote changes (not just pushes) on startup, tab focus, reconnect,
+        // and a slow interval — the piece that turns "encrypted backup" into
+        // "the same workspace on every device". Quiet by design: any missing
+        // precondition (locked vault, no silent token, offline) just bails and
+        // waits for the next trigger; it never opens a modal on its own.
+        let sutraDriveAutoSyncLastAttempt = 0;
+
+        async function maybeRunSutraDriveAutoSync(reason = 'auto') {
+            const meta = loadSutraDriveSyncMetadata();
+            if (!meta.enabled || meta.bootstrapRequired || meta.duplicateWarning) return { skipped: true };
+            if (!isSutraDriveOAuthOriginSupported() || !getSutraGoogleDriveClientId()) return { skipped: true };
+            if (!navigator.onLine || sutraDriveSyncRuntime.syncInProgress || sutraDriveSyncRuntime.conflictRemote) return { skipped: true };
+            const now = Date.now();
+            if (now - sutraDriveAutoSyncLastAttempt < 60000) return { throttled: true };
+            if (!sutraDriveSyncRuntime.derivedKey) await restoreSutraDrivePersistedKey();
+            if (!sutraDriveSyncRuntime.derivedKey) return { locked: true };
+            sutraDriveAutoSyncLastAttempt = now;
+            if (!hasSutraDriveAccessToken()) {
+                try {
+                    await authorizeSutraDriveSync({ prompt: '' });
+                } catch (error) {
+                    // Silent grant unavailable (popup blocked / consent expired):
+                    // stay quiet; the Settings "Sync now" button re-authorizes.
+                    updateSutraDriveSyncUi();
+                    return { needsReauth: true };
+                }
+            }
+            try {
+                return await syncSutraDriveNow();
+            } catch (error) {
+                console.warn(`Drive auto-sync (${reason}) failed`, error);
+                return { error: true };
+            }
         }
 
         function computeSutraDriveSyncState() {
@@ -45657,6 +47176,13 @@ function getActiveEditor() {
             if (buttons.disconnect) buttons.disconnect.hidden = !enabled;
             if (buttons.deleteCloud) buttons.deleteCloud.hidden = !enabled || !hasToken;
             Object.values(buttons).forEach(btn => { if (btn) btn.disabled = busy; });
+            const stayRow = byId('sutraDriveStayUnlockedRow');
+            const stayToggle = byId('sutraDriveStayUnlockedToggle');
+            if (stayRow) stayRow.hidden = !enabled;
+            if (stayToggle) {
+                stayToggle.checked = meta.keepUnlocked === true;
+                stayToggle.disabled = busy;
+            }
         }
 
         function openSutraCloudSyncPassphraseModal(options = {}) {
@@ -46171,6 +47697,7 @@ function getActiveEditor() {
                 meta.enabled = true;
                 meta.lastErrorSummary = '';
                 persistSutraDriveSyncMetadata();
+                if (meta.keepUnlocked) persistSutraDriveDerivedKey();
                 return true;
             } finally {
                 // Drop the raw passphrase reference as soon as PBKDF2/decrypt work is done.
@@ -46289,7 +47816,16 @@ function getActiveEditor() {
                     meta.vaultId = decrypted.envelope.header.vaultId || meta.vaultId || randomSutraId('vault');
                 }
                 const imported = await importAtelierPackage(new Blob([plainBytes], { type: 'application/zip' }));
-                await applyValidatedWorkspaceImport(imported.workspacePayload, { source: 'drive-sync', legacyUnencrypted: false });
+                const applied = await applyValidatedWorkspaceImport(imported.workspacePayload, {
+                    source: 'drive-sync',
+                    legacyUnencrypted: false,
+                    skipConflictCheck: options.skipConflictCheck === true,
+                    backupTimestamp: String(remoteFile.modifiedTime || ''),
+                    backupLabel: 'Drive backup'
+                });
+                // Cancelled at the conflict chooser: leave sync metadata alone so
+                // the remote still reads as "changed" — nothing was applied.
+                if (applied === false) return { cancelled: true };
                 meta.remoteFileId = String(remoteFile.id || '');
                 meta.lastKnownDriveVersion = String(remoteFile.version || '');
                 meta.lastRemoteModifiedTime = String(remoteFile.modifiedTime || '');
@@ -46374,7 +47910,11 @@ function getActiveEditor() {
                 return { conflict: true };
             }
             if (meta.localDirty && !remoteChanged) return uploadSutraDriveSnapshot();
-            if (!meta.localDirty && remoteChanged) return applySutraDriveRemoteSnapshot(remote);
+            // Background pull: local is clean (every local edit already synced),
+            // so the version tracking above IS the conflict management — a modal
+            // chooser popping up mid-sync would be noise. Manual restores
+            // (restoreSutraDriveSnapshotAction) do go through the chooser.
+            if (!meta.localDirty && remoteChanged) return applySutraDriveRemoteSnapshot(remote, { skipConflictCheck: true });
             markSutraDriveClean(remote);
             return { clean: true };
         }
@@ -46384,6 +47924,10 @@ function getActiveEditor() {
             if (!meta.enabled || !meta.localDirty) return;
             if (!navigator.onLine || !hasSutraDriveAccessToken() || !sutraDriveSyncRuntime.derivedKey) {
                 updateSutraDriveSyncUi();
+                // Locked or token expired mid-session: the auto-sync path can
+                // restore an opt-in persisted key / silently re-authorize, so a
+                // pending local change still reaches Drive without a click.
+                maybeRunSutraDriveAutoSync('save-blocked');
                 return;
             }
             if (sutraDriveSyncRuntime.debounceTimer) clearTimeout(sutraDriveSyncRuntime.debounceTimer);
@@ -46418,6 +47962,7 @@ function getActiveEditor() {
 
         async function disconnectSutraDriveSync() {
             clearSutraDriveSecrets({ clearClient: true });
+            await clearSutraDrivePersistedKey();
             resetSutraDriveSyncMetadata({ enabled: false });
             showToast('Google Drive sync disconnected. Local workspace data is unchanged.');
             return true;
@@ -46438,6 +47983,7 @@ function getActiveEditor() {
                 if (file && file.id) await deleteSutraDriveFile(file.id);
             }
             clearSutraDriveSecrets({ clearClient: true });
+            await clearSutraDrivePersistedKey();
             resetSutraDriveSyncMetadata({ enabled: false });
             showToast('Sutra Drive sync data deleted. Local workspace data is unchanged.');
             return true;
@@ -46455,7 +48001,11 @@ function getActiveEditor() {
                 confirmVariant: 'danger'
             });
             if (!ok) return false;
-            return applySutraDriveRemoteSnapshot(remote);
+            // skipConfirm means the caller already secured an explicit user
+            // decision (Drive conflict modal's "Use the Drive version here",
+            // programmatic restores) — don't double-gate with the conflict
+            // chooser. Interactive restores from Settings DO get the chooser.
+            return applySutraDriveRemoteSnapshot(remote, { skipConflictCheck: options.skipConfirm === true });
         }
 
         async function uploadThisDeviceToSutraDrive(options = {}) {
@@ -46477,6 +48027,7 @@ function getActiveEditor() {
 
         function lockSutraDriveSync() {
             sutraDriveSyncRuntime.derivedKey = null;
+            clearSutraDrivePersistedKey();
             updateSutraDriveSyncUi();
             showToast('Cloud sync locked for this browser session.');
             return true;
@@ -46544,14 +48095,58 @@ function getActiveEditor() {
             bind('sutraDriveLockBtn', lockSutraDriveSync);
             bind('sutraDriveDisconnectBtn', disconnectSutraDriveSync);
             bind('sutraDriveDeleteBtn', deleteSutraDriveSyncData);
+            const stayToggle = document.getElementById('sutraDriveStayUnlockedToggle');
+            if (stayToggle && stayToggle.dataset.bound !== 'true') {
+                stayToggle.dataset.bound = 'true';
+                stayToggle.addEventListener('change', () => {
+                    const meta = loadSutraDriveSyncMetadata();
+                    meta.keepUnlocked = stayToggle.checked === true;
+                    persistSutraDriveSyncMetadata();
+                    if (meta.keepUnlocked) {
+                        persistSutraDriveDerivedKey().then(saved => {
+                            if (saved) showToast('Cloud sync will stay unlocked on this device.');
+                            else if (!sutraDriveSyncRuntime.derivedKey) showToast('Unlock cloud sync once and it will stay unlocked here.');
+                        });
+                    } else {
+                        clearSutraDrivePersistedKey();
+                        showToast('Sutra will ask for the sync password next session.');
+                    }
+                });
+            }
             updateSutraDriveSyncUi();
         }
 
         try {
-            window.addEventListener('online', () => scheduleSutraDriveSync(1000));
-            window.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') scheduleSutraDriveSync(1000);
+            window.addEventListener('online', () => {
+                scheduleSutraDriveSync(1000);
+                maybeRunSutraDriveAutoSync('online');
             });
+            window.addEventListener('visibilitychange', () => {
+                if (document.visibilityState !== 'visible') return;
+                scheduleSutraDriveSync(1000);
+                maybeRunSutraDriveAutoSync('visible');
+            });
+            // Startup pull, a few seconds after boot so it never competes with
+            // initial render/restore work.
+            setTimeout(() => { maybeRunSutraDriveAutoSync('startup'); }, 5000);
+            // A silent token grant can be popup-blocked outside a user gesture;
+            // retrying once on the first real interaction gives the browser a
+            // gesture context, then the listener removes itself.
+            const sutraDriveFirstGestureSync = () => {
+                document.removeEventListener('pointerdown', sutraDriveFirstGestureSync, true);
+                document.removeEventListener('keydown', sutraDriveFirstGestureSync, true);
+                if (!hasSutraDriveAccessToken()) {
+                    sutraDriveAutoSyncLastAttempt = 0;
+                    maybeRunSutraDriveAutoSync('first-gesture');
+                }
+            };
+            document.addEventListener('pointerdown', sutraDriveFirstGestureSync, true);
+            document.addEventListener('keydown', sutraDriveFirstGestureSync, true);
+            // Slow steady pull while the tab stays open (~5 min, visible only)
+            // so a change made on another device lands without a reload.
+            setInterval(() => {
+                if (document.visibilityState === 'visible') maybeRunSutraDriveAutoSync('interval');
+            }, 5 * 60 * 1000);
         } catch (error) { /* non-critical */ }
 
         function exportCurrentNoteFromOptionsModal() {
@@ -47009,6 +48604,10 @@ function getActiveEditor() {
             if (raw.providerLabel) out.providerLabel = String(raw.providerLabel).slice(0, 80);
             if (raw.modelLabel) out.modelLabel = String(raw.modelLabel).slice(0, 120);
             if (raw.restoredFromBackup === true) out.restoredFromBackup = true;
+            if (raw.favorite === true) out.favorite = true;
+            if (Array.isArray(raw.thoughts) && raw.thoughts.length) {
+                out.thoughts = raw.thoughts.map(t => String(t).slice(0, 4000)).slice(0, 5);
+            }
             return out;
         }
 
@@ -47135,7 +48734,12 @@ function getActiveEditor() {
             'flow:activityLog:v1',
             // Notification center preferences and interaction state (read, dismissed,
             // snoozed). No sensitive data; safe to include in .sutra backups.
-            'sutraNotifications:v1'
+            'sutraNotifications:v1',
+            // Assistant Memory — long-term, user-controlled memories (study habits,
+            // goals, preferences). Consent-first and non-secret by construction
+            // (secrets/credentials are blocked at write time), so it rides along
+            // with .sutra / .atelier / JSON backups and restores on import.
+            'sutra:assistantMemory:v1'
         ];
 
         function collectAtelierRawLocalStorageSnapshot() {
@@ -49099,6 +50703,103 @@ function getActiveEditor() {
             if (!options.skipRefresh) refreshSutraCloudBackupList();
         }
 
+        // ---- Restore conflict chooser --------------------------------------
+        // Restoring silently overwrote whichever device restored second. Before
+        // applying, compare what's on THIS device with what's in the backup
+        // (counts + newest edit) and let the student choose with real info.
+        // Generic over the backup source: the gate itself runs inside
+        // applyValidatedWorkspaceImport, so file imports, Drive restores and
+        // Sutra Cloud restores all pass through it.
+        function summarizeWorkspaceForConflict(payload) {
+            const src = payload && payload.workspace && typeof payload.workspace === 'object' ? payload.workspace : (payload || {});
+            const pagesArr = Array.isArray(src.pages) ? src.pages : [];
+            const tasksArr = Array.isArray(src.tasks) ? src.tasks : [];
+            const hwWs = src.homeworkWorkspace && typeof src.homeworkWorkspace === 'object' ? src.homeworkWorkspace : {};
+            const hwArr = Array.isArray(hwWs.tasks) ? hwWs.tasks : [];
+            let latest = 0;
+            [pagesArr, tasksArr, hwArr].forEach(arr => arr.forEach(x => {
+                const t = Date.parse((x && (x.updatedAt || x.createdAt)) || '');
+                if (Number.isFinite(t) && t > latest) latest = t;
+            }));
+            return { pages: pagesArr.length, tasks: tasksArr.length + hwArr.length, latest };
+        }
+
+        function summarizeLiveWorkspaceForConflict() {
+            try {
+                return summarizeWorkspaceForConflict(serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }));
+            } catch (e) {
+                // null = "could not read this device" — the chooser must still
+                // show (fail CLOSED). Returning zeros here read as "empty
+                // device" and silently authorized the overwrite.
+                if (window.reportError) window.reportError(e, { where: 'sutraCloud:conflictSummary' }, 'warning');
+                return null;
+            }
+        }
+
+        async function confirmWorkspaceRestoreConflict(payload, context = {}) {
+            const local = summarizeLiveWorkspaceForConflict();
+            // An empty device has nothing to lose — restore without interrupting.
+            // (local === null means unknown, NOT empty — always ask then.)
+            if (local && !local.pages && !local.tasks) return true;
+            const backup = summarizeWorkspaceForConflict(payload);
+            const backupLabel = String(context.backupLabel || 'Backup');
+            // Timestamp preference: explicit metadata from the caller (cloud row,
+            // Drive modifiedTime) → the payload's own exportedAt stamp (file
+            // imports) → newest edit found inside the backup's content.
+            const payloadExportedAt = (payload && (payload.exportedAt || (payload.workspace && payload.workspace.exportedAt))) || '';
+            const backupStamp = Date.parse(context.backupTimestamp || '') || Date.parse(payloadExportedAt) || backup.latest;
+            const localNewer = !!(local && local.latest && backupStamp && local.latest > backupStamp + 60000);
+            const fmt = ts => (ts ? new Date(ts).toLocaleString() : 'unknown');
+
+            const body = document.createElement('div');
+            const addSide = (label, s, stamp, stampLabel) => {
+                const box = document.createElement('div');
+                box.setAttribute('style', 'flex:1;min-width:180px;padding:10px 12px;border:1px solid var(--surface-border,rgba(255,255,255,0.14));border-radius:10px;');
+                const h = document.createElement('div');
+                h.textContent = label;
+                h.setAttribute('style', 'font-weight:700;margin-bottom:6px;');
+                const counts = document.createElement('div');
+                counts.textContent = s
+                    ? `${s.pages} page${s.pages === 1 ? '' : 's'} · ${s.tasks} task${s.tasks === 1 ? '' : 's'}/assignments`
+                    : 'Could not read this device’s contents';
+                const when = document.createElement('div');
+                when.textContent = `${stampLabel}: ${fmt(stamp)}`;
+                when.setAttribute('style', 'font-size:0.82rem;opacity:0.75;margin-top:4px;');
+                box.appendChild(h); box.appendChild(counts); box.appendChild(when);
+                return box;
+            };
+            const rowEl = document.createElement('div');
+            rowEl.setAttribute('style', 'display:flex;gap:10px;flex-wrap:wrap;');
+            rowEl.appendChild(addSide('This device', local, local ? local.latest : 0, 'Last edited'));
+            rowEl.appendChild(addSide(backupLabel, backup, backupStamp, 'Backed up'));
+            body.appendChild(rowEl);
+            if (localNewer) {
+                const warn = document.createElement('p');
+                warn.textContent = '⚠ This device has edits NEWER than the backup. Restoring will replace them. If those edits matter, back this device up first, then restore.';
+                warn.setAttribute('style', 'margin:12px 0 0;font-size:0.88rem;color:var(--sutra-warning,#e2a33d);');
+                body.appendChild(warn);
+            }
+            const note = document.createElement('p');
+            note.textContent = 'A safety snapshot of this device is saved automatically before anything is replaced.';
+            note.setAttribute('style', 'margin:10px 0 0;font-size:0.8rem;opacity:0.7;');
+            body.appendChild(note);
+
+            // openSutraModal returns { close, result } — the button value arrives
+            // via .result. Awaiting the call itself resolved to that (truthy)
+            // handle object, so `choice === true` was ALWAYS false and the
+            // chooser could never authorize a restore on a non-empty device.
+            const { result } = openSutraModal({
+                titleText: localNewer ? 'This device looks newer than the backup' : 'Replace this device with the backup?',
+                bodyNode: body,
+                buttons: [
+                    { label: 'Cancel — keep this device', value: false, primary: localNewer },
+                    { label: 'Restore backup', value: true, primary: !localNewer }
+                ]
+            });
+            const choice = await result;
+            return choice === true;
+        }
+
         async function sutraCloudRestore(row, options = {}) {
             const provider = getActiveSutraCloudProvider();
             if (!provider) throw new Error('Choose a backup destination first.');
@@ -49116,7 +50817,18 @@ function getActiveEditor() {
                 const buffer = await provider.downloadBackup(row);
                 const zipBytes = await decryptSutraEncryptedEnvelopeBytes(buffer, passphrase);
                 const imported = await importAtelierPackage(new Blob([zipBytes], { type: 'application/zip' }));
-                await applyValidatedWorkspaceImport(imported.workspacePayload, { source: `sutra-cloud:${provider.id}`, legacyUnencrypted: false, warnings: imported.warnings });
+                // The conflict chooser now runs inside applyValidatedWorkspaceImport;
+                // pass the backup row's timestamp so it compares against the real
+                // backed-up-at time rather than the payload's content edits.
+                const applied = await applyValidatedWorkspaceImport(imported.workspacePayload, {
+                    source: `sutra-cloud:${provider.id}`,
+                    legacyUnencrypted: false,
+                    warnings: imported.warnings,
+                    skipConflictCheck: options.skipConflictCheck === true,
+                    backupTimestamp: (row && (row.modifiedAt || row.updatedAt || row.createdAt)) || '',
+                    backupLabel: 'Cloud backup'
+                });
+                if (applied === false) return { cancelled: true };
                 showToast('Workspace restored from Sutra Cloud.');
                 return { restored: true };
             } catch (error) {
@@ -49599,8 +51311,15 @@ function getActiveEditor() {
             yes.className = 'storage-btn primary';
             yes.textContent = 'Replace';
             yes.addEventListener('click', async () => {
-                try { await sutraCloudRestore(row); closeSutraCloudModal(); }
-                catch (error) { refreshSutraCloudBackupList(); }
+                try {
+                    const result = await sutraCloudRestore(row);
+                    // A cancelled restore (passphrase prompt or conflict
+                    // chooser) must NOT close the modal like a success — the
+                    // student chose to keep this device and should still see
+                    // the backup list.
+                    if (result && result.cancelled) refreshSutraCloudBackupList();
+                    else closeSutraCloudModal();
+                } catch (error) { refreshSutraCloudBackupList(); }
             });
             const no = document.createElement('button');
             no.type = 'button';
@@ -52250,7 +53969,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 // already complete or the user explicitly skipped.
                 const onb = appSettings.onboarding;
                 if (!(onb && (onb.completed || onb.skipped))) {
-                    AtelierOnboardingController.show({ jumpTo: 'features' });
+                    AtelierOnboardingController.show({ jumpTo: 'focus' });
                 }
             }
             try {
@@ -52645,6 +54364,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }),
                 connect: connectSutraDriveSync,
                 syncNow: syncSutraDriveNow,
+                autoSync: maybeRunSutraDriveAutoSync,
+                setKeepUnlocked: (value) => {
+                    const meta = loadSutraDriveSyncMetadata();
+                    meta.keepUnlocked = value === true;
+                    persistSutraDriveSyncMetadata();
+                    if (meta.keepUnlocked) return persistSutraDriveDerivedKey();
+                    return clearSutraDrivePersistedKey().then(() => false);
+                },
                 uploadThisDevice: uploadThisDeviceToSutraDrive,
                 restoreFromDrive: restoreSutraDriveSnapshotAction,
                 disconnect: disconnectSutraDriveSync,
@@ -53073,6 +54800,22 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function applyValidatedWorkspaceImport(workspacePayload, options = {}) {
             validateWorkspacePayloadForImport(workspacePayload);
+            // Every whole-workspace replacement funnels through here, so the
+            // "this device vs the backup" conflict chooser lives here too —
+            // file imports, Drive restores and Sutra Cloud restores all get the
+            // same gate. Flows that manage conflicts themselves (e.g. Drive's
+            // version-tracked background pull) pass skipConflictCheck:true.
+            // Returns false (import NOT applied) when the student cancels.
+            if (options.skipConflictCheck !== true) {
+                const proceed = await confirmWorkspaceRestoreConflict(workspacePayload, {
+                    backupTimestamp: options.backupTimestamp || '',
+                    backupLabel: options.backupLabel || 'Backup'
+                });
+                if (!proceed) {
+                    showToast('Import cancelled — this device was left untouched.');
+                    return false;
+                }
+            }
             showToast('Creating safety snapshot before import...', { durationMs: 1400 });
             await createPreImportSafetySnapshot();
             importWorkspacePayload(workspacePayload);
@@ -53104,17 +54847,20 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (!isWorkspacePayload(imported.workspacePayload)) {
                         throw new Error('Workspace backup payload is invalid.');
                     }
-                    await applyValidatedWorkspaceImport(imported.workspacePayload, {
+                    const applied = await applyValidatedWorkspaceImport(imported.workspacePayload, {
                         warnings: imported.warnings,
-                        legacyUnencrypted: imported.legacyUnencrypted
+                        legacyUnencrypted: imported.legacyUnencrypted,
+                        backupLabel: 'Backup file'
                     });
+                    if (applied === false) return false;
                 } else if (kind === 'json' || kind === 'json-or-document') {
                     const raw = await readFileAsText(file);
                     try {
                         const data = JSON.parse(raw);
                         if (looksLikeWorkspaceJson(data)) {
                             if (!isWorkspacePayload(data)) throw new Error('Workspace JSON is missing pages.');
-                            await applyValidatedWorkspaceImport(data, { legacyUnencrypted: true });
+                            const applied = await applyValidatedWorkspaceImport(data, { legacyUnencrypted: true, backupLabel: 'Backup file' });
+                            if (applied === false) return false;
                         } else {
                             await importDocumentIntoNewPage(file);
                         }
@@ -58658,7 +60404,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
             } else if (e.key === 'Escape') {
                 e.preventDefault();
-                hideSlashMenu();
+                hideSlashMenu(true);
             }
         }
         
@@ -58722,7 +60468,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             renderSlashMenuItems(slashCommands);
         }
         
-        function hideSlashMenu() {
+        function hideSlashMenu(cleanupEditor = false) {
+            // On explicit cancel (Escape), remove the "/" and any typed filter text
+            // so they don't end up as stray content in the note.
+            if (cleanupEditor && slashTriggerRange) {
+                try {
+                    const sel = window.getSelection();
+                    if (sel && sel.rangeCount) {
+                        const cur = sel.getRangeAt(0);
+                        const del = document.createRange();
+                        del.setStart(slashTriggerRange.startContainer, slashTriggerRange.startOffset);
+                        del.setEnd(cur.startContainer, cur.startOffset);
+                        if (del.toString().startsWith('/')) del.deleteContents();
+                    }
+                } catch (err) { /* range detached — nothing to clean up */ }
+            }
             const menu = document.getElementById('slashMenu');
             menu.classList.remove('active');
             slashMenuVisible = false;
@@ -59499,6 +61259,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
     const chatProviderSelect = document.getElementById('chatProviderSelect');
     const chatModelSelect = document.getElementById('chatModelSelect');
     const chatCustomModelInput = document.getElementById('chatCustomModelInput');
+    const chatReasoningRow = document.getElementById('chatReasoningRow');
+    const chatReasoningSelect = document.getElementById('chatReasoningSelect');
+    const chatReasoningNote = document.getElementById('chatReasoningNote');
     const refreshChatModelsBtn = document.getElementById('refreshChatModelsBtn');
     const saveChatKeysBtn = document.getElementById('saveChatKeysBtn');
     const chatSettingsShell = document.getElementById('chatSettingsShell');
@@ -59558,6 +61321,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
     const anthropicApiKeyInput = document.getElementById('anthropicApiKeyInput');
     const geminiApiKeyInput = document.getElementById('geminiApiKeyInput');
     const openrouterApiKeyInput = document.getElementById('openrouterApiKeyInput');
+    const deepseekApiKeyInput = document.getElementById('deepseekApiKeyInput');
+    const xaiApiKeyInput = document.getElementById('xaiApiKeyInput');
+    const perplexityApiKeyInput = document.getElementById('perplexityApiKeyInput');
     const localApiKeyInput = document.getElementById('localApiKeyInput');
     const chatInfoBtn = document.getElementById('chatInfoBtn');
     const chatInfo = document.getElementById('chatbotInfo');
@@ -59723,6 +61489,44 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 type: 'openai_compatible',
                 models: []
             },
+            // DeepSeek — OpenAI-compatible. Base https://api.deepseek.com (verified
+            // against api-docs.deepseek.com 2026-06). Live GET /models returns the
+            // current list (data[].id); deepseek-chat / deepseek-reasoner are the
+            // stable non-thinking / thinking aliases, seeded as a no-refresh fallback.
+            deepseek: {
+                label: 'DeepSeek',
+                keyStorage: 'deepseek_api_key',
+                defaultModel: '',
+                modelsEndpoint: 'https://api.deepseek.com/models',
+                chatEndpoint: 'https://api.deepseek.com/chat/completions',
+                type: 'openai_compatible',
+                models: ['deepseek-chat', 'deepseek-reasoner']
+            },
+            // xAI (Grok) — OpenAI-compatible. Base https://api.x.ai/v1 (verified
+            // against docs.x.ai 2026-06). GET /v1/models lists current Grok IDs;
+            // left unseeded so the live list is always authoritative.
+            xai: {
+                label: 'xAI (Grok)',
+                keyStorage: 'xai_api_key',
+                defaultModel: '',
+                modelsEndpoint: 'https://api.x.ai/v1/models',
+                chatEndpoint: 'https://api.x.ai/v1/chat/completions',
+                type: 'openai_compatible',
+                models: []
+            },
+            // Perplexity (Sonar) — OpenAI-compatible chat shape (choices[].message).
+            // Current endpoint is /v1/sonar and there is NO model-listing API
+            // (verified against docs.perplexity.ai 2026-06), so models are static.
+            // Every reply is web-grounded with a citations array.
+            perplexity: {
+                label: 'Perplexity (Sonar)',
+                keyStorage: 'perplexity_api_key',
+                defaultModel: '',
+                modelsEndpoint: '',
+                chatEndpoint: 'https://api.perplexity.ai/v1/sonar',
+                type: 'openai_compatible',
+                models: ['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research']
+            },
             // Optional power-user path: an OpenAI-compatible LOCAL/offline endpoint
             // (Ollama, LM Studio, llama.cpp server, or any user-supplied base URL).
             // The base URL + model are read from assistant.localEndpoint at send time;
@@ -59792,6 +61596,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (provider === 'anthropic') return anthropicApiKeyInput;
             if (provider === 'gemini') return geminiApiKeyInput;
             if (provider === 'openrouter') return openrouterApiKeyInput;
+            if (provider === 'deepseek') return deepseekApiKeyInput;
+            if (provider === 'xai') return xaiApiKeyInput;
+            if (provider === 'perplexity') return perplexityApiKeyInput;
             if (provider === 'local') return localApiKeyInput;
             return null;
         }
@@ -59804,7 +61611,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (provider === 'anthropic') return /^sk-ant-[A-Za-z0-9_-]+$/.test(candidate);
             if (provider === 'gemini') return /^AIza[0-9A-Za-z_-]{20,}$/.test(candidate);
             if (provider === 'openrouter') return /^sk-or-v1-[A-Za-z0-9_-]+$/.test(candidate);
-            return /^(sk-|gsk_|AIza)[A-Za-z0-9_-]+$/.test(candidate);
+            if (provider === 'deepseek') return /^sk-[A-Za-z0-9]+$/.test(candidate);
+            if (provider === 'xai') return /^xai-[A-Za-z0-9_-]+$/.test(candidate);
+            if (provider === 'perplexity') return /^pplx-[A-Za-z0-9_-]+$/.test(candidate);
+            return /^(sk-|gsk_|AIza|xai-|pplx-)[A-Za-z0-9_-]+$/.test(candidate);
         }
 
         function remapModelValueIfApiKey(provider, modelValue) {
@@ -59836,6 +61646,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (anthropicApiKeyInput) anthropicApiKeyInput.value = getProviderApiKey('anthropic');
             if (geminiApiKeyInput) geminiApiKeyInput.value = getProviderApiKey('gemini');
             if (openrouterApiKeyInput) openrouterApiKeyInput.value = getProviderApiKey('openrouter');
+            if (deepseekApiKeyInput) deepseekApiKeyInput.value = getProviderApiKey('deepseek');
+            if (xaiApiKeyInput) xaiApiKeyInput.value = getProviderApiKey('xai');
+            if (perplexityApiKeyInput) perplexityApiKeyInput.value = getProviderApiKey('perplexity');
             if (localApiKeyInput) localApiKeyInput.value = getProviderApiKey('local');
         }
 
@@ -59846,6 +61659,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 anthropic: anthropicApiKeyInput ? anthropicApiKeyInput.value.trim() : '',
                 gemini: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
                 openrouter: openrouterApiKeyInput ? openrouterApiKeyInput.value.trim() : '',
+                deepseek: deepseekApiKeyInput ? deepseekApiKeyInput.value.trim() : '',
+                xai: xaiApiKeyInput ? xaiApiKeyInput.value.trim() : '',
+                perplexity: perplexityApiKeyInput ? perplexityApiKeyInput.value.trim() : '',
                 local: localApiKeyInput ? localApiKeyInput.value.trim() : ''
             };
             Object.keys(keyMap).forEach(provider => {
@@ -59952,6 +61768,46 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             updateChatInputPlaceholder();
             if (chatSettingsCurrent) chatSettingsCurrent.textContent = CHAT_PROVIDER_CONFIG[provider]?.label || provider;
             updateChatKeyBanner();
+            syncReasoningControl(provider);
+        }
+
+        // Capability-gated "thinking effort" control. Shows the selector only
+        // when the capability registry confirms the live provider + model
+        // accepts a reasoning/thinking control, and offers exactly the levels
+        // that model supports. Hidden (and inert) for everything else, so the
+        // request is sent unchanged when there is no real control to expose.
+        const REASONING_LEVEL_LABELS = { auto: 'Auto', off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High' };
+        // `els` defaults to the floating panel's row/select/note; the full-screen
+        // tab's model picker passes its OWN elements so both surfaces share this
+        // one implementation instead of drifting apart with separate copies.
+        function syncReasoningControl(provider, els) {
+            const row = (els && els.row) || chatReasoningRow;
+            const select = (els && els.select) || chatReasoningSelect;
+            const note = (els && els.note) || chatReasoningNote;
+            if (!row || !select) return;
+            const prov = provider || getCurrentChatProvider();
+            const model = getActiveModelForProvider(prov) || getSelectedModelForProvider(prov) || '';
+            const caps = (window.SutraModelCapabilities && typeof window.SutraModelCapabilities.resolveReasoningCapability === 'function')
+                ? window.SutraModelCapabilities.resolveReasoningCapability(prov, model)
+                : { supported: false, levels: [], supportsOff: false };
+            if (!caps || !caps.supported) {
+                row.setAttribute('hidden', '');
+                if (note) note.setAttribute('hidden', '');
+                return;
+            }
+            // Available choices: Auto (provider default) + optional Off + tiers.
+            const choices = ['auto'].concat(caps.supportsOff ? ['off'] : [], caps.levels);
+            const current = String(getWorkspacePreference('assistant.reasoningEffort', 'auto') || 'auto').toLowerCase();
+            const effective = choices.indexOf(current) !== -1 ? current : 'auto';
+            select.replaceChildren(...choices.map(level => {
+                const opt = document.createElement('option');
+                opt.value = level;
+                opt.textContent = REASONING_LEVEL_LABELS[level] || level;
+                return opt;
+            }));
+            select.value = effective;
+            row.removeAttribute('hidden');
+            if (note) note.removeAttribute('hidden');
         }
 
         function normalizeModelIdFromGeminiName(value) {
@@ -59962,6 +61818,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         async function fetchProviderModels(provider, apiKey) {
             const config = CHAT_PROVIDER_CONFIG[provider];
             if (!config || !apiKey) return [];
+            // Providers with no model-listing API (e.g. Perplexity) ship a static
+            // list in config.models — return it so "Refresh" still works.
+            if (!String(config.modelsEndpoint || '').trim()) {
+                return Array.isArray(config.models) ? config.models.slice() : [];
+            }
             if (provider === 'gemini') {
                 const url = `${config.modelsEndpoint}?key=${encodeURIComponent(apiKey)}&pageSize=200`;
                 const resp = await fetch(url, { method: 'GET' });
@@ -60837,7 +62698,7 @@ ${cspMeta}
 
         function renderCurrentChatMessages() {
             resetChatMessageLog();
-            if (convo && convo.length) convo.forEach(m => appendMessage(m.role, m.content));
+            if (convo && convo.length) convo.forEach((m, idx) => appendMessage(m.role, m.content, m.thoughts, idx));
         }
 
         function startNewAssistantChat() {
@@ -61054,6 +62915,125 @@ ${cspMeta}
             sel.addRange(newRange);
         }
 
+        // Normalize a math expression for fuzzy matching (spaces / operator variants)
+        function _normMathExpr(expr) {
+            return String(expr)
+                .replace(/[×x]/g, '*')
+                .replace(/÷/g, '/')
+                .replace(/[−–]/g, '-')
+                .replace(/\s+/g, '')
+                .trim();
+        }
+
+        // Intelligently fill AI answers into the note:
+        //   • Replaces blank placeholders (______) by matching the surrounding equation
+        //   • Appends comprehension answers to their matching question paragraphs
+        function smartFillAnswers(responseText) {
+            if (!editorEl) return 0;
+            editorEl.focus();
+            let filled = 0;
+
+            // ── Parse math answers: "48 + 79 = **127**" / "48 + 79 = 127" ──────
+            const mathMap = new Map();
+            const mathRe = /([\d][\d\s+\-−–×÷x*/^.()]*?)\s*=\s*\**\s*(\$?[\d,.]+)\s*\**/g;
+            let m;
+            while ((m = mathRe.exec(responseText)) !== null) {
+                const norm = _normMathExpr(m[1]);
+                if (norm.length >= 2) mathMap.set(norm, m[2].replace(/,/g, '').trim());
+            }
+
+            // ── Parse Q&A pairs: "**Question text?** Answer text" ───────────────
+            const qaPairs = [];
+            const qaRe = /\*\*([^*\n]{5,100}?)\*\*\s+([^\n]{5,400})/g;
+            while ((m = qaRe.exec(responseText)) !== null) {
+                const q = m[1].trim();
+                if (/^Part\s+[A-Z]/i.test(q)) continue;
+                qaPairs.push({
+                    q: q.toLowerCase().replace(/[?!.,]/g, '').replace(/\s+/g, ' ').trim(),
+                    a: m[2].trim()
+                });
+            }
+
+            // ── Collect text nodes ───────────────────────────────────────────────
+            function _collectTextNodes(root) {
+                const nodes = [];
+                const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+                let n;
+                while ((n = tw.nextNode())) nodes.push(n);
+                return nodes;
+            }
+
+            // ── Fill blanks (______) by matching surrounding equation ────────────
+            // Process in reverse order so DOM mutations don't shift sibling positions
+            const blankNodes = _collectTextNodes(editorEl).filter(n => /_{3,}/.test(n.textContent)).reverse();
+            for (const node of blankNodes) {
+                const lineEl = node.parentElement && node.parentElement.closest('p,li,div,td');
+                const lineText = (lineEl ? lineEl.textContent : node.textContent).replace(/\s+/g, ' ').trim();
+
+                // Strip numbering / "Solve:" prefix / the blank itself
+                const cleanLine = lineText
+                    .replace(/^\d+[.)]\s*/, '')
+                    .replace(/Solve:\s*/i, '')
+                    .replace(/_{3,}/g, '')
+                    .replace(/=\s*$/, '')
+                    .trim();
+
+                const normLine = _normMathExpr(cleanLine);
+                let answer = null;
+                let bestLen = 0;
+                for (const [expr, ans] of mathMap) {
+                    if (normLine.startsWith(expr) && expr.length > bestLen) {
+                        answer = ans;
+                        bestLen = expr.length;
+                    }
+                }
+
+                if (answer !== null) {
+                    const blankMatch = /_{3,}/.exec(node.textContent);
+                    if (blankMatch) {
+                        const range = document.createRange();
+                        range.setStart(node, blankMatch.index);
+                        range.setEnd(node, blankMatch.index + blankMatch[0].length);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                        document.execCommand('insertText', false, answer);
+                        filled++;
+                    }
+                }
+            }
+
+            // ── Append comprehension answers to matching question paragraphs ──────
+            if (qaPairs.length > 0) {
+                const freshNodes = _collectTextNodes(editorEl);
+                for (const { q, a } of qaPairs) {
+                    const searchKey = q.split(/\s+/).slice(0, 5).join(' ');
+                    if (!searchKey) continue;
+                    for (const node of freshNodes) {
+                        const nodeNorm = node.textContent.toLowerCase().replace(/[?!.,]/g, '').replace(/\s+/g, ' ');
+                        if (!nodeNorm.includes(searchKey)) continue;
+                        const para = (node.parentElement && node.parentElement.closest('li,p')) || node.parentElement;
+                        if (!para) continue;
+                        if (para.textContent.toLowerCase().includes(a.toLowerCase().slice(0, 20))) continue;
+                        const ansEl = document.createElement('span');
+                        ansEl.className = 'hw-fill-answer';
+                        ansEl.textContent = ' ' + a;
+                        para.appendChild(ansEl);
+                        filled++;
+                        break;
+                    }
+                }
+            }
+
+            if (filled > 0) {
+                if (typeof queueSaveForEditor === 'function') queueSaveForEditor();
+                showToast('Filled ' + filled + ' answer' + (filled !== 1 ? 's' : '') + ' into your note');
+            } else {
+                showToast('No matching blanks found—try “Insert” instead');
+            }
+            return filled;
+        }
+
         // Gradually stream text into a container, then snap to fully-rendered HTML.
         // Gives the "AI is typing" feel without requiring real SSE streaming.
         function _streamMessageInto(hostEl, plainText, finalHtml, onDone) {
@@ -61066,6 +63046,9 @@ ${cspMeta}
             const wordsPerTick = words.length > 200 ? 8 : words.length > 80 ? 4 : 2;
             const tickMs = 22;
             let idx = 0;
+            // The blinking caret (CSS) keys off this class — added while words
+            // stream in, removed the moment the final HTML is committed.
+            hostEl.classList.add('assistant-streaming');
             function tick() {
                 idx = Math.min(idx + wordsPerTick, words.length);
                 hostEl.innerHTML = renderMarkdown(words.slice(0, idx).join(' '));
@@ -61073,6 +63056,7 @@ ${cspMeta}
                 if (idx < words.length) {
                     setTimeout(tick, tickMs);
                 } else {
+                    hostEl.classList.remove('assistant-streaming');
                     hostEl.innerHTML = finalHtml;
                     if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
                     if (typeof onDone === 'function') onDone();
@@ -61167,13 +63151,42 @@ ${cspMeta}
             if (existing) existing.remove();
         }
 
-        function appendMessage(role, text) {
+        // Panel-side Edit / Regenerate / Favorite — parity with the full-screen
+        // tab's asstEditMessage/asstRegenerate/asstToggleFavorite. Both surfaces
+        // mutate the SAME shared `convo` array via the convoTruncate*/
+        // convoToggleFavorite helpers defined near those tab functions; only the
+        // re-render + composer target differ per surface.
+        function panelToggleFavorite(index) {
+            if (!convoToggleFavorite(index)) return;
+            renderCurrentChatMessages();
+            refreshOtherAssistantSurface('panel');
+        }
+        function panelEditMessage(index) {
+            const content = convoTruncateForEdit(index);
+            if (content == null || !chatInput) return;
+            renderCurrentChatMessages();
+            refreshOtherAssistantSurface('panel');
+            chatInput.value = content;
+            chatInput.focus();
+            if (typeof autosize === 'function') autosize();
+        }
+        function panelRegenerate() {
+            const userText = convoTruncateForRegenerate();
+            if (userText == null) return;
+            renderCurrentChatMessages();
+            refreshOtherAssistantSurface('panel');
+            sendChat({ presetText: userText, skipUserPush: true });
+        }
+
+        function appendMessage(role, text, preStoredThoughts, index) {
             const wrap = document.createElement('div');
             wrap.className = 'chatbot-msg ' + (role === 'user' ? 'user' : 'assistant');
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             if (role === 'assistant') {
-                const { thoughts, clean } = splitThinkBlocks(text);
+                const { thoughts: _parsedThoughts, clean } = splitThinkBlocks(text);
+                // Use thoughts from the live response; fall back to what was saved for past chats
+                const thoughts = (_parsedThoughts && _parsedThoughts.length) ? _parsedThoughts : (preStoredThoughts || []);
                 // Sutra Assistant: extract action proposals before rendering, so the user
                 // never sees the raw JSON fenced block in the reply bubble.
                 let flowResult = null;
@@ -61228,6 +63241,19 @@ ${cspMeta}
                     insertBtn.addEventListener('click', ()=> insertIntoEditor(cleanForActions));
                     actions.appendChild(insertBtn);
 
+                    // "Fill answers" — shown when the response looks like structured Q&A or math answers
+                    const _looksLikeAnswers = /\*\*[^*\n]{5,}\*\*\s+\S/.test(cleanForActions)
+                        || /[\d][\d\s+\-×÷x*/^.()]+\s*=\s*\**[\d]/.test(cleanForActions);
+                    if (_looksLikeAnswers) {
+                        const fillBtn = document.createElement('button');
+                        fillBtn.type = 'button';
+                        fillBtn.className = 'flow-reply-fill';
+                        fillBtn.textContent = 'Fill answers';
+                        fillBtn.title = 'Intelligently fill these answers into matching blanks and questions in your note';
+                        fillBtn.addEventListener('click', () => smartFillAnswers(cleanForActions));
+                        actions.appendChild(fillBtn);
+                    }
+
                     // Context-aware: only show "Save as note" / "Create task" if the reply has substance.
                     const trimmedClean = String(cleanForActions || '').trim();
                     if (trimmedClean.length > 80) {
@@ -61269,6 +63295,32 @@ ${cspMeta}
                 copyBtn.title = 'Copy to clipboard';
                 copyBtn.addEventListener('click', ()=> navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(cleanForActions) : null);
                 actions.appendChild(copyBtn);
+
+                // Regenerate / Favorite — parity with the full-screen tab's
+                // asstBuildMessage actions. Only shown once this message has a
+                // stable position in `convo` (i.e. it's being rendered from
+                // history, not a fresh in-flight append) and, for Regenerate,
+                // only on the LAST message.
+                const isLastMsg = index != null && Array.isArray(convo) && index === convo.length - 1;
+                if (index != null && isLastMsg) {
+                    const regenBtn = document.createElement('button');
+                    regenBtn.type = 'button';
+                    regenBtn.className = 'flow-reply-regenerate';
+                    regenBtn.textContent = 'Regenerate';
+                    regenBtn.title = 'Regenerate this response';
+                    regenBtn.addEventListener('click', () => panelRegenerate());
+                    actions.appendChild(regenBtn);
+                }
+                if (index != null) {
+                    const favBtn = document.createElement('button');
+                    favBtn.type = 'button';
+                    favBtn.className = 'flow-reply-favorite' + (convo[index] && convo[index].favorite ? ' is-fav' : '');
+                    favBtn.textContent = (convo[index] && convo[index].favorite) ? '★ Favorited' : '☆ Favorite';
+                    favBtn.title = (convo[index] && convo[index].favorite) ? 'Unfavorite' : 'Favorite';
+                    favBtn.addEventListener('click', () => panelToggleFavorite(index));
+                    actions.appendChild(favBtn);
+                }
+
                 wrap.appendChild(bubble);
                 wrap.appendChild(actions);
                 messagesEl.appendChild(wrap);
@@ -61277,6 +63329,7 @@ ${cspMeta}
                 // Stream the answer in word-by-word, then reveal action buttons on completion
                 const finalHtml = renderMarkdown(displayedClean || '');
                 _streamMessageInto(answerHost, displayedClean || '', finalHtml, () => {
+                    asstRenderMathIn(answerHost); // typeset any $...$ / $$...$$ LaTeX via KaTeX
                     if (flowResult && flowResult.actions && flowResult.actions.length) {
                         try {
                             window.flowAssistant.renderActionCards(bubble, flowResult.actions, {});
@@ -61289,6 +63342,38 @@ ${cspMeta}
                 // user content kept as text to avoid injection
                 bubble.textContent = text;
                 wrap.appendChild(bubble);
+
+                // User-message actions — parity with the tab (Edit on the last
+                // user turn, Copy, Favorite). Same stable-index gating as above.
+                if (index != null) {
+                    const userActions = document.createElement('div');
+                    userActions.className = 'user-message-actions';
+                    const isLastUserMsg = Array.isArray(convo) && index === convo.length - 1;
+                    if (isLastUserMsg) {
+                        const editBtn = document.createElement('button');
+                        editBtn.type = 'button';
+                        editBtn.className = 'flow-reply-edit';
+                        editBtn.textContent = 'Edit';
+                        editBtn.title = 'Edit and resend';
+                        editBtn.addEventListener('click', () => panelEditMessage(index));
+                        userActions.appendChild(editBtn);
+                    }
+                    const copyUserBtn = document.createElement('button');
+                    copyUserBtn.type = 'button';
+                    copyUserBtn.className = 'flow-reply-copy';
+                    copyUserBtn.textContent = 'Copy';
+                    copyUserBtn.title = 'Copy to clipboard';
+                    copyUserBtn.addEventListener('click', () => navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null);
+                    userActions.appendChild(copyUserBtn);
+                    const favUserBtn = document.createElement('button');
+                    favUserBtn.type = 'button';
+                    favUserBtn.className = 'flow-reply-favorite' + (convo[index] && convo[index].favorite ? ' is-fav' : '');
+                    favUserBtn.textContent = (convo[index] && convo[index].favorite) ? '★ Favorited' : '☆ Favorite';
+                    favUserBtn.title = (convo[index] && convo[index].favorite) ? 'Unfavorite' : 'Favorite';
+                    favUserBtn.addEventListener('click', () => panelToggleFavorite(index));
+                    userActions.appendChild(favUserBtn);
+                    wrap.appendChild(userActions);
+                }
             }
             messagesEl.appendChild(wrap);
             messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -61296,9 +63381,10 @@ ${cspMeta}
 
         // Summarization removed: chats are not continuous (we do not send history to the API to save tokens)
 
-        // new element refs for fullscreen + close
+        // new element refs for fullscreen + close + popout
         const chatCloseBtn = document.getElementById('chatCloseBtn');
         const chatFullBtn = document.getElementById('chatFullBtn');
+        const chatPopoutBtn = document.getElementById('chatPopoutBtn');
 
         function extractOpenAiCompatibleMessage(obj) {
             if (!obj) return null;
@@ -61331,7 +63417,16 @@ ${cspMeta}
                 .map(part => String(part.text || '').trim())
                 .filter(Boolean)
                 .join('\n');
-            return text || null;
+            // Extended-thinking blocks ride back as `thinking` content. Wrap them
+            // in <think> so splitThinkBlocks routes them to the expandable
+            // reasoning section (and strips them before history is persisted).
+            const thinkText = content
+                .filter(part => part && part.type === 'thinking')
+                .map(part => String(part.thinking || '').trim())
+                .filter(Boolean)
+                .join('\n');
+            if (!text && !thinkText) return null;
+            return (thinkText ? `<think>${thinkText}</think>\n` : '') + text;
         }
 
         function extractGeminiMessage(obj) {
@@ -61372,6 +63467,73 @@ ${cspMeta}
         const intelligenceDiagnostics = [];
         const INTELLIGENCE_DIAGNOSTICS_CAP = 60;
         const INTELLIGENCE_REQUEST_TIMEOUT_MS = 180000;
+
+        // ---- Prompt caching (session-scoped, in-memory only) ---------------
+        // The system prompt is ~70% identical on every message (operating
+        // rules + Actions Bank). Anthropic and Gemini both let a server cache
+        // that unchanging prefix so it isn't fully re-processed (and usually
+        // re-billed) every turn. Nothing here is persisted — cache handles are
+        // just object references/ids that only make sense for this browser tab.
+        //
+        // Gemini requires an explicit "cachedContents" resource: create it once
+        // per (model + exact static text) via a separate REST call, then
+        // reference its name in every generateContent call until it expires.
+        // Not every model/plan supports this (small models, short content, or
+        // an ineligible tier all 400) — on ANY failure we cache "unsupported"
+        // for a while and fall back to sending the prompt uncached, so a
+        // caching problem can never break an actual chat send.
+        const geminiCacheRegistry = new Map(); // key -> { name, expireTime } | { unsupported: true, checkedAt }
+        const GEMINI_CACHE_TTL_SECONDS = 1200; // 20 min — long enough for a chat session, short enough to bound storage cost
+        const GEMINI_CACHE_UNSUPPORTED_RETRY_MS = 30 * 60 * 1000; // re-attempt occasionally in case eligibility changes
+        const GEMINI_CACHE_MIN_CHARS = 4000; // roughly Gemini's practical minimum cacheable size; skip the round trip below this
+
+        function simpleStringHash(str) {
+            let h = 0;
+            const s = String(str || '');
+            for (let i = 0; i < s.length; i += 1) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+            return (h >>> 0).toString(36);
+        }
+
+        // Returns a Gemini `cachedContents/...` resource name for this exact
+        // (model, staticText) pair, or null if caching isn't usable right now.
+        // Never throws — every failure path resolves to null.
+        async function getOrCreateGeminiContextCache(apiKey, model, staticText) {
+            try {
+                if (!apiKey || !model || !staticText || staticText.length < GEMINI_CACHE_MIN_CHARS) return null;
+                const key = `${model}::${simpleStringHash(staticText)}`;
+                const existing = geminiCacheRegistry.get(key);
+                if (existing) {
+                    if (existing.unsupported) {
+                        if (Date.now() - existing.checkedAt < GEMINI_CACHE_UNSUPPORTED_RETRY_MS) return null;
+                        geminiCacheRegistry.delete(key); // cool-down elapsed — try again below
+                    } else if (existing.expireTime && new Date(existing.expireTime).getTime() > Date.now() + 30000) {
+                        return existing.name; // still valid with >30s of headroom
+                    }
+                }
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${encodeURIComponent(apiKey)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: `models/${model}`,
+                        systemInstruction: { role: 'system', parts: [{ text: staticText }] },
+                        ttl: `${GEMINI_CACHE_TTL_SECONDS}s`
+                    })
+                });
+                if (!resp.ok) {
+                    geminiCacheRegistry.set(key, { unsupported: true, checkedAt: Date.now() });
+                    return null;
+                }
+                const data = await resp.json();
+                if (!data || !data.name) {
+                    geminiCacheRegistry.set(key, { unsupported: true, checkedAt: Date.now() });
+                    return null;
+                }
+                geminiCacheRegistry.set(key, { name: data.name, expireTime: data.expireTime });
+                return data.name;
+            } catch (e) {
+                return null; // network hiccup etc — just skip caching for this send
+            }
+        }
 
         function recordIntelligenceDiagnostic(entry) {
             try {
@@ -61425,7 +63587,7 @@ ${cspMeta}
         // Build the provider-specific endpoint/headers/body for one request.
         // attachments: [{ name, mediaType, dataUrl, processingPlan, extractedText }]
         //   processingPlan ∈ 'native-image' | 'native-pdf' | 'local-extraction'
-        function buildProviderRequestPayload(opts) {
+        async function buildProviderRequestPayload(opts) {
             const providerConfig = opts.providerConfig;
             const attachments = Array.isArray(opts.attachments) ? opts.attachments : [];
             const nativeAttachments = attachments.filter(a => a.processingPlan === 'native-image' || a.processingPlan === 'native-pdf');
@@ -61454,6 +63616,17 @@ ${cspMeta}
             const headers = { 'Content-Type': 'application/json' };
             let body = {};
 
+            // Reasoning / "thinking effort" plan. The capability registry is the
+            // single source of truth for whether the selected provider+model
+            // accepts a thinking control and how it's expressed on the wire. A
+            // missing registry, an unsupported model, or 'auto' all leave the
+            // payload unchanged (apply === false).
+            const reasoningPlan = (window.SutraModelCapabilities && typeof window.SutraModelCapabilities.resolveReasoningPlan === 'function')
+                ? window.SutraModelCapabilities.resolveReasoningPlan(opts.provider, opts.model, opts.reasoningEffort)
+                : { apply: false, capability: null };
+            const reasoningCap = reasoningPlan && reasoningPlan.capability;
+            const reasoningActive = !!(reasoningPlan && reasoningPlan.apply && !reasoningPlan.disabled);
+
             if (providerConfig.type === 'openai_compatible') {
                 if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
                 if (opts.provider === 'openrouter') {
@@ -61480,6 +63653,27 @@ ${cspMeta}
                 }
                 body = { model: opts.model, messages: msgs, temperature: typeof opts.temperature === 'number' ? opts.temperature : 1 };
                 if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+
+                if (opts.provider === 'openrouter' && reasoningActive && reasoningPlan.style === 'openrouter_reasoning') {
+                    // OpenRouter's unified reasoning control; bump the cap so the
+                    // visible answer is not truncated by reasoning tokens.
+                    body.reasoning = { effort: reasoningPlan.effort };
+                    body.max_tokens = Math.max(body.max_tokens || 0, reasoningPlan.minOutputTokens || 0);
+                } else if (opts.provider === 'openai' && reasoningCap && reasoningCap.style === 'openai_effort') {
+                    // OpenAI reasoning models (o-series / gpt-5): they reject
+                    // `max_tokens` and any non-default temperature, and need room
+                    // for reasoning tokens. This applies even at 'auto' (no
+                    // explicit effort) so these models work at all here.
+                    delete body.temperature;
+                    const floor = reasoningActive ? (reasoningPlan.minOutputTokens || 4096) : 4096;
+                    body.max_completion_tokens = Math.max(body.max_tokens || 0, floor);
+                    delete body.max_tokens;
+                    if (reasoningActive) body.reasoning_effort = reasoningPlan.effort;
+                } else if (reasoningActive && reasoningPlan.style === 'openai_effort') {
+                    // Groq gpt-oss / qwen3 etc. keep the standard openai shape.
+                    body.reasoning_effort = reasoningPlan.effort;
+                    body.max_tokens = Math.max(body.max_tokens || 0, reasoningPlan.minOutputTokens || 0);
+                }
             } else if (providerConfig.type === 'anthropic') {
                 headers['x-api-key'] = opts.apiKey;
                 headers['anthropic-version'] = '2023-06-01';
@@ -61499,7 +63693,33 @@ ${cspMeta}
                     };
                 }
                 body = { model: opts.model, max_tokens: opts.maxTokens || 1024, messages: msgs };
-                if (opts.systemPrompt) body.system = opts.systemPrompt;
+                // Prompt caching: when the caller split the prompt into
+                // {static, dynamic}, mark the static ~70% (rules + Actions Bank)
+                // as an ephemeral cache breakpoint. Anthropic reuses it across
+                // requests within its TTL instead of reprocessing/rebilling it
+                // in full every message. Falls back to the plain string form —
+                // identical output — whenever parts aren't available.
+                const anthropicParts = opts.systemPromptParts;
+                if (anthropicParts && anthropicParts.static) {
+                    body.system = [
+                        { type: 'text', text: anthropicParts.static, cache_control: { type: 'ephemeral' } },
+                        { type: 'text', text: anthropicParts.dynamic || '' }
+                    ];
+                } else if (opts.systemPrompt) {
+                    body.system = opts.systemPrompt;
+                }
+                if (reasoningActive && reasoningPlan.style === 'anthropic_thinking') {
+                    // Manual extended thinking (Claude 3.7 / 4.0–4.5). The budget
+                    // must sit below max_tokens with room left for the answer;
+                    // temperature must stay default (we never set one here).
+                    body.thinking = { type: 'enabled', budget_tokens: reasoningPlan.budgetTokens };
+                    body.max_tokens = Math.max(body.max_tokens || 0, reasoningPlan.minOutputTokens || 0);
+                } else if (reasoningActive && reasoningPlan.style === 'anthropic_adaptive') {
+                    // Adaptive thinking (Opus 4.6+/Sonnet 4.6/5.x) — these models
+                    // 400 on budget_tokens and take an effort level instead.
+                    body.thinking = { type: 'adaptive', effort: reasoningPlan.effort };
+                    body.max_tokens = Math.max(body.max_tokens || 0, reasoningPlan.minOutputTokens || 0);
+                }
             } else if (providerConfig.type === 'gemini') {
                 endpoint = providerConfig.chatEndpoint.replace('{model}', encodeURIComponent(opts.model));
                 endpoint += `?key=${encodeURIComponent(opts.apiKey)}`;
@@ -61521,8 +63741,41 @@ ${cspMeta}
                         maxOutputTokens: opts.maxTokens || 1024
                     }
                 };
-                if (opts.systemPrompt) {
+                // Prompt caching: try to reuse a server-side cachedContents
+                // resource holding the static ~70% of the prompt (rules + Actions
+                // Bank) so it isn't re-sent/re-processed every message. Not every
+                // model/plan supports this — getOrCreateGeminiContextCache never
+                // throws and returns null on any failure, in which case we send
+                // the full prompt exactly as before (unchanged, reliable path).
+                const geminiParts = opts.systemPromptParts;
+                let geminiCacheName = null;
+                if (geminiParts && geminiParts.static) {
+                    geminiCacheName = await getOrCreateGeminiContextCache(opts.apiKey, opts.model, geminiParts.static);
+                }
+                if (geminiCacheName) {
+                    body.cachedContent = geminiCacheName;
+                    // The cache holds ONLY the static instructions; the live
+                    // context (tasks/homework/testingHub/etc) still has to travel
+                    // with every request. Fold it into the CURRENT turn's parts
+                    // (ahead of the actual question) rather than inserting a new
+                    // content entry, so the role-alternation of `contents` is
+                    // unaffected — cachedContent + a same-shaped contents array
+                    // is the documented pattern; a synthetic extra turn is not.
+                    if (geminiParts.dynamic && lastUserIdx >= 0 && body.contents[lastUserIdx]) {
+                        body.contents[lastUserIdx].parts.unshift({ text: geminiParts.dynamic });
+                    }
+                } else if (opts.systemPrompt) {
                     body.systemInstruction = { role: 'system', parts: [{ text: opts.systemPrompt }] };
+                }
+                if (reasoningPlan && reasoningPlan.apply && reasoningPlan.style === 'gemini_thinking') {
+                    if (reasoningPlan.disabled) {
+                        body.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+                    } else {
+                        // includeThoughts surfaces thought summaries, which the
+                        // Gemini extractor folds into the expandable <think> section.
+                        body.generationConfig.thinkingConfig = { thinkingBudget: reasoningPlan.budgetTokens, includeThoughts: true };
+                        body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens || 0, reasoningPlan.minOutputTokens || 0);
+                    }
                 }
             }
             return { endpoint, headers, body };
@@ -61555,7 +63808,7 @@ ${cspMeta}
                 try { controller.abort(new DOMException('Request timed out', 'TimeoutError')); } catch (e) { try { controller.abort(); } catch (_) {} }
             }, opts.timeoutMs || INTELLIGENCE_REQUEST_TIMEOUT_MS);
             try {
-                const { endpoint, headers, body } = buildProviderRequestPayload(opts);
+                const { endpoint, headers, body } = await buildProviderRequestPayload(opts);
                 const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers,
@@ -63155,6 +65408,49 @@ ${cspMeta}
             return '';
         }
 
+        // ---- Smart Import: syllabus weights + weekly meeting times -------------
+        function smartImportTimeTo24(rawTime, fallbackMeridiem) {
+            const m = String(rawTime || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+            if (!m) return '';
+            let h = Number(m[1]);
+            const min = m[2] ? Number(m[2]) : 0;
+            const mer = (m[3] || fallbackMeridiem || '').toLowerCase();
+            if (mer === 'pm' && h < 12) h += 12;
+            if (mer === 'am' && h === 12) h = 0;
+            if (h > 23 || min > 59) return '';
+            return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        }
+
+        // Weekday tokens from a schedule line: full/abbreviated names first,
+        // then compact codes (MWF, TTh, MTWRF — R = Thursday).
+        function smartImportDaysFromText(line) {
+            const found = [];
+            const push = d => { if (d && !found.includes(d)) found.push(d); };
+            const wordRe = /\b(mon|tues?|wed(?:nes)?|thur?s?|fri|sat(?:ur)?|sun)(?:day)?\b/gi;
+            let m;
+            while ((m = wordRe.exec(line))) {
+                const t = m[1].toLowerCase();
+                push(t.startsWith('mon') ? 'mon' : t.startsWith('tu') ? 'tue' : t.startsWith('wed') ? 'wed' : t.startsWith('th') ? 'thu' : t.startsWith('fri') ? 'fri' : t.startsWith('sat') ? 'sat' : 'sun');
+            }
+            if (!found.length) {
+                const compact = line.match(/\b(?:M|Tu|T|W|Th|R|F){2,5}\b/);
+                if (compact) {
+                    const s = compact[0];
+                    for (let i = 0; i < s.length; i += 1) {
+                        const two = s.slice(i, i + 2);
+                        if (two === 'Th' || two === 'Tu') { push(two === 'Th' ? 'thu' : 'tue'); i += 1; continue; }
+                        const c = s[i];
+                        if (c === 'M') push('mon');
+                        else if (c === 'T') push('tue');
+                        else if (c === 'W') push('wed');
+                        else if (c === 'R') push('thu');
+                        else if (c === 'F') push('fri');
+                    }
+                }
+            }
+            return found;
+        }
+
         function parseSmartImportText(text, sourceTitle = 'Pasted text') {
             const raw = String(text || '').slice(0, 80000);
             if (/(?:__proto__|constructor\s*:|prototype\s*:|<script|javascript:|onerror\s*=|onclick\s*=)/i.test(raw)) {
@@ -63163,6 +65459,72 @@ ${cspMeta}
             const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(0, 80);
             const proposals = [];
             lines.forEach((line, index) => {
+                // Syllabus grading weights ("Homework 20%", "Tests: 40%") →
+                // Grade Planner categories. Checked before the generic type
+                // sniff so "Homework 20%" doesn't become a homework task.
+                const weightMatch = line.match(/^([A-Za-z][A-Za-z /&()-]{1,40}?)\s*[:\-–—]?\s*(\d{1,3}(?:\.\d+)?)\s*%\s*$/);
+                if (weightMatch && Number(weightMatch[2]) > 0 && Number(weightMatch[2]) <= 100) {
+                    proposals.push({
+                        id: `smart_${index}_${atelierHash(line)}`,
+                        type: 'grade category',
+                        title: weightMatch[1].trim().slice(0, 80),
+                        confidence: 'Needs review',
+                        sourceSnippet: line.slice(0, 260),
+                        sourceDocument: sourceTitle,
+                        sourceLocation: `line ${index + 1}`,
+                        proposedFields: { weight: Number(weightMatch[2]), className: '', dueDate: '', priority: 'medium' },
+                        warnings: ['Set the class this grading category belongs to before applying.']
+                    });
+                    return;
+                }
+                // Weekly meeting times ("Chemistry MWF 9:00-9:50am") → School
+                // Schedule periods. Needs BOTH weekday tokens and a time range.
+                const rangeMatch = line.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+                const dayTokens = rangeMatch ? smartImportDaysFromText(line) : [];
+                if (rangeMatch && dayTokens.length) {
+                    const startRaw = String(rangeMatch[1]);
+                    const endRaw = String(rangeMatch[2]);
+                    const startMer = (startRaw.match(/am|pm/i) || [''])[0];
+                    const endMer = (endRaw.match(/am|pm/i) || [''])[0];
+                    let end = smartImportTimeTo24(endRaw, startMer);
+                    // Start meridiem: explicit wins; otherwise pick whichever
+                    // reading gives a FORWARD range — "11:30-1:20pm" must read
+                    // 11:30am, not 11:30pm (blindly copying the end's meridiem
+                    // produced inverted 23:30→13:20 periods).
+                    let start = smartImportTimeTo24(startRaw, '');
+                    if (!startMer && endMer && end) {
+                        const same = smartImportTimeTo24(startRaw, endMer);
+                        const flipped = smartImportTimeTo24(startRaw, endMer.toLowerCase() === 'pm' ? 'am' : 'pm');
+                        start = (same && same < end) ? same : ((flipped && flipped < end) ? flipped : same);
+                    }
+                    // "11:30-1:20" with no meridiem anywhere: the end wrapped past noon.
+                    if (start && end && end <= start) {
+                        const bumped = smartImportTimeTo24(endRaw, 'pm');
+                        if (bumped > start) end = bumped;
+                    }
+                    // Still inverted → unparseable; drop the proposal rather
+                    // than write a period that ends before it starts.
+                    if (start && end && end <= start) end = '';
+                    const periodName = line.slice(0, rangeMatch.index)
+                        .replace(/\b(mon|tues?|wed(?:nes)?|thur?s?|fri|sat(?:ur)?|sun)(?:day)?\b/gi, ' ')
+                        .replace(/\b(?:M|Tu|T|W|Th|R|F){2,5}\b/g, ' ')
+                        .replace(/[|,:;·]+/g, ' ')
+                        .replace(/\s+/g, ' ').trim();
+                    if (periodName && start && end) {
+                        proposals.push({
+                            id: `smart_${index}_${atelierHash(line)}`,
+                            type: 'schedule period',
+                            title: periodName.slice(0, 80),
+                            confidence: 'High confidence',
+                            sourceSnippet: line.slice(0, 260),
+                            sourceDocument: sourceTitle,
+                            sourceLocation: `line ${index + 1}`,
+                            proposedFields: { days: dayTokens.join(','), startTime: start, endTime: end, className: periodName.slice(0, 80), dueDate: '', priority: 'medium' },
+                            warnings: []
+                        });
+                        return;
+                    }
+                }
                 const lower = line.toLowerCase();
                 const dueDate = normalizeSmartImportDate(line);
                 let type = 'task';
@@ -63200,6 +65562,28 @@ ${cspMeta}
             return { proposals, rejected: [] };
         }
 
+        // Find-or-create a homework course by name (shared by ALL Smart Import
+        // branches that attach to a class). Returns { course, created } so the
+        // caller can record creations for undo. A newly created course is
+        // bridged into the Course Hub immediately so surfaces that resolve
+        // names via courseHub (e.g. the Today schedule strip) don't show a
+        // blank name until the next reload.
+        function smartImportEnsureCourse(className, nowIso) {
+            const name = String(className || 'Imported').trim().slice(0, 80) || 'Imported';
+            const courses = (() => { try { return JSON.parse(localStorage.getItem('hwCourses:v2') || '[]') || []; } catch (_) { return []; } })();
+            let course = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').trim().toLowerCase() === name.toLowerCase());
+            let created = false;
+            if (!course) {
+                course = { id: `course_${generateId()}`, name, color: '#5078f2', createdAt: nowIso || new Date().toISOString() };
+                courses.push(course);
+                created = true;
+                localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); // sutra-allow-storage: homework courses direct write, same contract as the existing Smart Import branches
+                try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (_) {}
+                try { if (typeof migrateAndBridgeCourses === 'function') migrateAndBridgeCourses(); } catch (_) { /* name resolves after reload instead */ }
+            }
+            return { course, created };
+        }
+
         function applySmartImportProposal(proposal) {
             const type = String(proposal.type || '').toLowerCase();
             const title = String(proposal.title || '').trim().slice(0, 160);
@@ -63209,16 +65593,14 @@ ${cspMeta}
             const fields = proposal.proposedFields || {};
             const applied = { type, id: '', title };
             if (['homework', 'test', 'quiz', 'exam'].includes(type)) {
-                const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                // Shared find-or-create (trims + dedupes the class name the
+                // same way the other branches do — the old inline copy didn't
+                // trim, so ' Chem ' and 'Chem' became two courses).
+                const ensured = smartImportEnsureCourse(fields.className, now);
                 const tasksList = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-                let course = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').toLowerCase() === String(fields.className || '').toLowerCase());
-                if (!course) {
-                    course = { id: `course_${generateId()}`, name: String(fields.className || 'Imported').slice(0, 80), color: '#5078f2', createdAt: now };
-                    courses.push(course);
-                }
                 const item = {
                     id: `hw_${generateId()}`,
-                    courseId: course.id,
+                    courseId: ensured.course.id,
                     title,
                     dueDate: normalizeSmartImportDate(fields.dueDate),
                     dueTime: fields.dueTime || '',
@@ -63229,10 +65611,10 @@ ${cspMeta}
                     createdAt: now
                 };
                 tasksList.push(item);
-                localStorage.setItem('hwCourses:v2', JSON.stringify(courses));
                 localStorage.setItem('hwTasks:v2', JSON.stringify(tasksList));
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (_) {}
                 applied.id = item.id;
+                if (ensured.created) applied.createdCourseId = String(ensured.course.id);
                 return applied;
             }
             if (type === 'calendar event') {
@@ -63260,6 +65642,90 @@ ${cspMeta}
                 applied.id = course.id;
                 return applied;
             }
+            if (type === 'grade category') {
+                const GP = window.SutraGradePlanner;
+                if (!GP || !GP.engine || typeof GP.getPlanner !== 'function') throw new Error('Grade Planner is unavailable.');
+                const className = String(fields.className || '').trim();
+                if (!className) throw new Error(`"${title}" needs a class name before it can become a grading category.`);
+                const weight = Math.max(0, Math.min(100, Number(fields.weight) || 0));
+                const ensured = smartImportEnsureCourse(className, now);
+                const course = ensured.course;
+                const planner = GP.getPlanner();
+                const data = GP.engine.normalizeCourseGrades((planner.courses || {})[String(course.id)] || null);
+                const existingCat = data.categories.find(c => String(c.name || '').toLowerCase() === title.toLowerCase());
+                let categoryId;
+                if (existingCat) {
+                    // Reusing a pre-import category: record the prior weight so
+                    // undo REVERTS the update instead of deleting the category.
+                    applied.reusedCategory = true;
+                    applied.prevWeight = existingCat.weight;
+                    if (weight > 0) existingCat.weight = weight;
+                    categoryId = existingCat.id;
+                } else {
+                    categoryId = `cat_${generateId()}`;
+                    data.categories.push({ id: categoryId, name: title, weight, drops: 0 });
+                }
+                planner.courses[String(course.id)] = data;
+                GP.setPlanner(planner);
+                applied.id = categoryId;
+                applied.courseId = String(course.id);
+                applied.categoryId = categoryId;
+                if (ensured.created) applied.createdCourseId = String(course.id);
+                return applied;
+            }
+            if (type === 'schedule period') {
+                const SS = window.SutraSchoolSchedule;
+                if (!SS || typeof SS.getState !== 'function' || typeof SS.setState !== 'function') throw new Error('School Schedule is unavailable.');
+                const days = String(fields.days || '').split(',').map(d => d.trim().toLowerCase()).filter(d => ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].includes(d));
+                const start = String(fields.startTime || '');
+                const end = String(fields.endTime || '');
+                if (!days.length || !start) throw new Error(`"${title}" needs weekdays and a start time.`);
+                if (end && end <= start) throw new Error(`"${title}" has an end time before its start — fix the times and re-apply.`);
+                // Validate the rotation BEFORE any side effect: creating the
+                // course first left un-undoable ghost classes when this threw.
+                const ws = SS.getState();
+                ws.enabled = true;
+                // A fresh setup gets a weekly rotation; an existing A/B or
+                // cycle rotation is NEVER overwritten by an import.
+                if (!Array.isArray(ws.schedules) || ws.schedules.length === 0) ws.rotation.type = 'weekly';
+                if (ws.rotation.type !== 'weekly') throw new Error('Your School Schedule uses a rotation — add class times in its manager instead.');
+                const ensured = smartImportEnsureCourse(String(fields.className || title).trim(), now);
+                const course = ensured.course;
+                let sched = ws.schedules.find(s => s.id === ws.defaultScheduleId) || ws.schedules[0];
+                if (!sched) {
+                    sched = { id: `sched_${generateId()}`, name: 'School day', periods: [] };
+                    ws.schedules.push(sched);
+                    ws.defaultScheduleId = sched.id;
+                }
+                let period = (sched.periods || []).find(p => p.start === start && p.end === end);
+                applied.createdPeriod = false;
+                if (!period) {
+                    period = { id: `per_${generateId()}`, label: title.slice(0, 40), start, end };
+                    sched.periods.push(period);
+                    sched.periods.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+                    applied.createdPeriod = true;
+                }
+                ws.dayTemplates = ws.dayTemplates || {};
+                // Record each day's prior assignment so undo restores it
+                // instead of blindly deleting (a reused period may have had
+                // pre-import assignments).
+                applied.prevAssignments = {};
+                days.forEach(d => {
+                    const t = ws.dayTemplates[d] || { scheduleId: '', assignments: {} };
+                    if (!t.scheduleId) t.scheduleId = sched.id;
+                    t.assignments = t.assignments || {};
+                    applied.prevAssignments[d] = Object.prototype.hasOwnProperty.call(t.assignments, period.id) ? String(t.assignments[period.id]) : null;
+                    t.assignments[period.id] = String(course.id);
+                    ws.dayTemplates[d] = t;
+                });
+                SS.setState(ws);
+                applied.id = period.id;
+                applied.periodId = period.id;
+                applied.scheduleId = sched.id;
+                applied.days = days.slice();
+                if (ensured.created) applied.createdCourseId = String(course.id);
+                return applied;
+            }
             if (type === 'note') {
                 const page = { id: generateId(), title: title.slice(0, 80), content: normalizeTextToHtml(proposal.sourceSnippet || title), blocks: [], icon: PAGE_ICONS.IMPORT, createdAt: now, updatedAt: now, theme: globalTheme };
                 pages.push(page);
@@ -63280,6 +65746,64 @@ ${cspMeta}
         let smartImportLastApplied = [];
         function undoSmartImportLastApplied() {
             if (!smartImportLastApplied.length) return;
+            // Grade categories and schedule periods live in their own engines,
+            // so they undo through those engines, not the id sweep below.
+            // Records the import merely REUSED are reverted to their prior
+            // state — never deleted (deleting them destroyed pre-import data).
+            const undoCreatedCourseIds = new Set();
+            smartImportLastApplied.forEach(item => {
+                try {
+                    if (item.createdCourseId) undoCreatedCourseIds.add(String(item.createdCourseId));
+                    if (item.type === 'grade category' && item.courseId && item.categoryId) {
+                        const GP = window.SutraGradePlanner;
+                        if (!GP || !GP.engine) return;
+                        const planner = GP.getPlanner();
+                        const data = GP.engine.normalizeCourseGrades((planner.courses || {})[String(item.courseId)] || null);
+                        if (item.reusedCategory) {
+                            const cat = data.categories.find(c => String(c.id) === String(item.categoryId));
+                            if (cat) cat.weight = item.prevWeight;
+                        } else {
+                            data.categories = data.categories.filter(c => String(c.id) !== String(item.categoryId));
+                            data.entries.forEach(e => { if (String(e.categoryId) === String(item.categoryId)) e.categoryId = ''; });
+                        }
+                        planner.courses[String(item.courseId)] = data;
+                        GP.setPlanner(planner);
+                    } else if (item.type === 'schedule period' && item.periodId) {
+                        const SS = window.SutraSchoolSchedule;
+                        if (!SS || typeof SS.getState !== 'function') return;
+                        const ws = SS.getState();
+                        // Restore each day's prior assignment for this period.
+                        const prev = item.prevAssignments || {};
+                        (item.days || Object.keys(prev)).forEach(day => {
+                            const t = (ws.dayTemplates || {})[day];
+                            if (!t || !t.assignments) return;
+                            if (prev[day]) t.assignments[String(item.periodId)] = prev[day];
+                            else delete t.assignments[String(item.periodId)];
+                        });
+                        // Only a period the import CREATED is removed.
+                        if (item.createdPeriod) {
+                            (ws.schedules || []).forEach(s => {
+                                if (String(s.id) === String(item.scheduleId)) {
+                                    s.periods = (s.periods || []).filter(p => String(p.id) !== String(item.periodId));
+                                }
+                            });
+                            Object.keys(ws.dayTemplates || {}).forEach(key => {
+                                const t = ws.dayTemplates[key];
+                                if (t && t.assignments) delete t.assignments[String(item.periodId)];
+                            });
+                        }
+                        SS.setState(ws);
+                    }
+                } catch (_) { /* best-effort undo per engine */ }
+            });
+            // Courses the import itself created are removed too (they were
+            // invisible to the id sweep, leaving ghost classes behind).
+            if (undoCreatedCourseIds.size) {
+                try {
+                    const hwCoursesNow = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                    localStorage.setItem('hwCourses:v2', JSON.stringify(hwCoursesNow.filter(c => !undoCreatedCourseIds.has(String(c && c.id))))); // sutra-allow-storage: homework courses direct write, same contract as the surrounding undo sweep
+                } catch (_) { /* best-effort */ }
+            }
             const ids = new Set(smartImportLastApplied.map(item => item.id));
             tasks = tasks.filter(task => !ids.has(task.id));
             taskOrder = taskOrder.filter(id => !ids.has(id));
@@ -63336,7 +65860,7 @@ ${cspMeta}
                         <div>
                             <div class="smart-import-proposal-fields">
                                 <label>Type<select class="modal-input" data-field="type">
-                                    ${['homework','task','test','quiz','exam','calendar event','class','note'].map(t => `<option value="${t}" ${p.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                                    ${['homework','task','test','quiz','exam','calendar event','class','note','grade category','schedule period'].map(t => `<option value="${t}" ${p.type === t ? 'selected' : ''}>${t}</option>`).join('')}
                                 </select></label>
                                 <label>Title<input class="modal-input" data-field="title" value="${escapeHtml(p.title)}"></label>
                                 <label>Date<input class="modal-input" data-field="dueDate" type="date" value="${escapeHtml(p.proposedFields.dueDate || '')}"></label>
@@ -63369,6 +65893,7 @@ ${cspMeta}
             body.querySelector('#smartImportApplyBtn')?.addEventListener('click', async () => {
                 const rows = Array.from(body.querySelectorAll('.smart-import-proposal'));
                 const applied = [];
+                const failed = [];
                 for (const row of rows) {
                     const idx = Number(row.getAttribute('data-smart-import-index'));
                     if (!row.querySelector('input[type="checkbox"]')?.checked) continue;
@@ -63393,11 +65918,18 @@ ${cspMeta}
                             : false;
                         if (!confirmed) continue;
                     }
-                    applied.push(applySmartImportProposal(next));
+                    // One bad row (e.g. a grade category with no class set)
+                    // must not abort the whole batch.
+                    try {
+                        applied.push(applySmartImportProposal(next));
+                    } catch (err) {
+                        failed.push(err && err.message ? err.message : `Could not apply "${next.title}".`);
+                    }
                 }
                 smartImportLastApplied = applied;
-                body.querySelector('#smartImportStatus').textContent = `Applied ${applied.length} approved item${applied.length === 1 ? '' : 's'}.`;
-                showToast(`Smart Import applied ${applied.length} item${applied.length === 1 ? '' : 's'}.`);
+                const failNote = failed.length ? ` ${failed.length} skipped: ${failed[0]}` : '';
+                body.querySelector('#smartImportStatus').textContent = `Applied ${applied.length} approved item${applied.length === 1 ? '' : 's'}.${failNote}`;
+                showToast(`Smart Import applied ${applied.length} item${applied.length === 1 ? '' : 's'}.${failed.length ? ` ${failed.length} skipped.` : ''}`);
             });
             setTimeout(() => body.querySelector('#smartImportText')?.focus(), 30);
         }
@@ -63451,13 +65983,19 @@ ${cspMeta}
             } catch (_) {}
         }
 
-        async function sendChat() {
+        // opts.presetText / opts.skipUserPush support Regenerate (panelRegenerate):
+        // resend an EXISTING user turn without appending a duplicate. Both
+        // existing call sites (send button, Enter key) call sendChat() with no
+        // args, so this is fully backward compatible.
+        async function sendChat(opts = {}) {
             if (!chatInput || !messagesEl) return;
-            const text = chatInput.value.trim();
+            const text = (typeof opts.presetText === 'string' && opts.presetText) ? opts.presetText : chatInput.value.trim();
             if (!text) return;
             clearChatNotices();
-            appendMessage('user', text);
-            chatInput.value = '';
+            if (!opts.skipUserPush) {
+                appendMessage('user', text);
+                chatInput.value = '';
+            }
 
             // Sutra Assistant command layer: if the text is a recognized natural-
             // language command (open note, run deadline radar, start focus, etc.)
@@ -63466,6 +66004,9 @@ ${cspMeta}
                 if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
                     const cmd = window.flowAssistant.handleOutgoing(text);
                     if (cmd && cmd.handled) {
+                        // Local Help / Memory manager render their own interactive
+                        // panel into the message stream — don't append a text reply.
+                        if (cmd.silent) return;
                         const reply = cmd.message || 'Done.';
                         appendMessage('assistant', reply);
                         convo.push({ role: 'user', content: text });
@@ -63548,8 +66089,10 @@ ${cspMeta}
 
             // All gates passed and (for remote providers) the send was acknowledged —
             // only now persist the user turn into history, then show the thinking state.
-            convo.push({ role: 'user', content: text });
-            saveConvo();
+            if (!opts.skipUserPush) {
+                convo.push({ role: 'user', content: text });
+                saveConvo();
+            }
             // Stale-response protection: remember which conversation this send
             // belongs to. If the user switches/creates/deletes chats while the
             // request is in flight, the reply is persisted into the ORIGINAL
@@ -63564,7 +66107,17 @@ ${cspMeta}
                 const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
                     ? window.flowAssistant.buildRequestEnrichment(text, providerConfig.type, { conversation: conversationSnapshot })
                     : null;
-                const systemPromptText = flowEnrichment ? flowEnrichment.systemPrompt : null;
+                // Agent instructions must ALWAYS be present. Fall back to the
+                // strict always-on rules if enrichment was skipped or empty.
+                const systemPromptText = (flowEnrichment && flowEnrichment.systemPrompt)
+                    || (window.flowAssistant && window.flowAssistant.AGENT_RULES)
+                    || null;
+                // {static, dynamic} split for prompt caching (Anthropic cache_control /
+                // Gemini cachedContents) — the ~70% static portion (rules + Actions
+                // Bank) can be cached provider-side instead of re-sent every message.
+                // Only meaningful when it came from real enrichment (the AGENT_RULES
+                // fallback above has no useful context to split).
+                const systemPromptPartsForCache = (flowEnrichment && flowEnrichment.systemPromptParts) || null;
                 const requestMessages = flowEnrichment && Array.isArray(flowEnrichment.requestMessages) && flowEnrichment.requestMessages.length
                     ? flowEnrichment.requestMessages
                     : [{ role: 'user', content: text }];
@@ -63580,10 +66133,12 @@ ${cspMeta}
                     model: selectedModel,
                     localEndpointCfg: isLocalProvider ? localEndpointCfg : null,
                     systemPrompt: systemPromptText,
+                    systemPromptParts: systemPromptPartsForCache,
                     messages: requestMessages,
                     fallbackUserText: text,
                     attachments: flowAttachments,
-                    maxTokens: 1024,
+                    maxTokens: 2048,
+                    reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
                     onRequestStarted: (requestId) => {
                         showThinkingIndicator({
                             onCancel: () => cancelIntelligenceRequest(requestId)
@@ -63623,13 +66178,16 @@ ${cspMeta}
                 try { if (window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
 
                 const assistantText = result.text || '(no response)';
-                // Persist ONLY the user-facing final answer — never raw reasoning /
-                // chain-of-thought (any inline <think> block is stripped first).
-                const persistClean = splitThinkBlocks(assistantText).clean || assistantText;
+                // Persist the user-facing answer; strip inline <think> blocks from the
+                // content field but save them separately so past chats can show them.
+                const { clean: _splitClean, thoughts: _splitThoughts } = splitThinkBlocks(assistantText);
+                const persistClean = _splitClean || assistantText;
                 if (isStale) {
                     // Conversation changed mid-flight: persist into the original
                     // conversation's message array, never the visible transcript.
-                    sendConvoRef.push({ role: 'assistant', content: persistClean });
+                    const _staleMsg = { role: 'assistant', content: persistClean };
+                    if (_splitThoughts && _splitThoughts.length) _staleMsg.thoughts = _splitThoughts;
+                    sendConvoRef.push(_staleMsg);
                     const original = chatStore.conversations.find(chat => chat && chat.id === sendChatId);
                     if (original) {
                         original.messages = sendConvoRef.map(sanitizeAssistantChatMessage).filter(Boolean);
@@ -63639,7 +66197,9 @@ ${cspMeta}
                     return;
                 }
                 appendMessage('assistant', assistantText);
-                convo.push({ role: 'assistant', content: persistClean });
+                const _persistMsg = { role: 'assistant', content: persistClean };
+                if (_splitThoughts && _splitThoughts.length) _persistMsg.thoughts = _splitThoughts;
+                convo.push(_persistMsg);
                 saveConvo();
             } catch (err) {
                 hideThinkingIndicator();
@@ -63721,6 +66281,7 @@ ${cspMeta}
                 get businessWorkspace() { return businessWorkspace; },
                 get apStudyWorkspace() { return apStudyWorkspace; },
                 get reviewWorkspace() { return reviewWorkspace; },
+                get testingHub() { return testingHub; },
                 get canvas() { return window.SutraCanvas || null; },
                 getActiveSpaceId: () => activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default',
                 insertIntoEditor: (text) => _origInsertIntoEditor(text),
@@ -63783,7 +66344,14 @@ ${cspMeta}
         if (chatKeyBannerBtn) chatKeyBannerBtn.addEventListener('click', openProviderKeySettings);
         if (chatCloseBtn) chatCloseBtn.addEventListener('click', () => { if (chatbotPanel.classList.contains('fullscreen')) chatbotPanel.classList.remove('fullscreen'); toggleChat(); });
         if (chatFullBtn) chatFullBtn.addEventListener('click', toggleFullscreen);
+        // Expand into the full in-app Assistant view tab (shares chat state).
+        if (chatPopoutBtn) chatPopoutBtn.addEventListener('click', () => {
+            try { if (chatbotPanel && chatbotPanel.classList.contains('fullscreen')) chatbotPanel.classList.remove('fullscreen'); } catch (e) { /* non-critical */ }
+            try { if (typeof toggleChat === 'function' && chatbotPanel && chatbotPanel.style.display === 'flex') toggleChat(); } catch (e) { /* non-critical */ }
+            setActiveView('assistantview');
+        });
         if (chatInput) chatInput.addEventListener('keypress', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+
         if (chatProviderSelect) {
             chatProviderSelect.addEventListener('change', () => {
                 const provider = getCurrentChatProvider();
@@ -63795,6 +66363,7 @@ ${cspMeta}
                 const provider = getCurrentChatProvider();
                 const model = String(chatModelSelect.value || '').trim();
                 if (model) setModelForProvider(provider, model);
+                syncReasoningControl(provider);
             });
         }
         if (chatCustomModelInput) {
@@ -63802,6 +66371,7 @@ ${cspMeta}
                 const provider = getCurrentChatProvider();
                 const value = chatCustomModelInput.value || '';
                 if (!remapModelValueIfApiKey(provider, value)) setCustomModelForProvider(provider, value);
+                syncReasoningControl(provider);
             });
             chatCustomModelInput.addEventListener('keypress', (e) => {
                 if (e.key !== 'Enter') return;
@@ -63812,6 +66382,15 @@ ${cspMeta}
                     setCustomModelForProvider(provider, value);
                     showToast('Custom model saved');
                 }
+                syncReasoningControl(provider);
+            });
+            // Live update as the user types a model id (e.g. switching to o3).
+            chatCustomModelInput.addEventListener('input', () => syncReasoningControl());
+        }
+        if (chatReasoningSelect) {
+            chatReasoningSelect.addEventListener('change', () => {
+                const value = String(chatReasoningSelect.value || 'auto').toLowerCase();
+                setWorkspacePreference('assistant.reasoningEffort', value, { refresh: false });
             });
         }
         if (refreshChatModelsBtn) {
@@ -63836,8 +66415,12 @@ ${cspMeta}
             const popover = document.getElementById('chatSettingsShell');
             if (!popover) return;
             const willShow = (typeof force === 'boolean') ? force : popover.hasAttribute('hidden');
-            if (willShow) popover.removeAttribute('hidden');
-            else popover.setAttribute('hidden', '');
+            if (willShow) {
+                popover.removeAttribute('hidden');
+                // Refresh the thinking-effort control against the live model in
+                // case the model/provider changed since it was last shown.
+                syncReasoningControl();
+            } else popover.setAttribute('hidden', '');
         }
         if (chatSettingsCurrent) {
             chatSettingsCurrent.addEventListener('click', (e) => {
@@ -63868,13 +66451,1723 @@ ${cspMeta}
             chatInput.addEventListener('focus', autosize);
         }
 
+        // ════════════════════════════════════════════════════════════════
+        // Sutra Assistant — full view tab (#view-assistantview)
+        // A "fullscreen" surface for the assistant that shares the SAME chat
+        // state (convo / chatStore / currentChatId) as the docked panel, so
+        // the two stay in sync. Past chats live in the left sidebar.
+        // ════════════════════════════════════════════════════════════════
+        let asstCache = {};
+        let asstPendingContext = []; // array of {id, icon, label, content}
+        const ASST_QUICK_CHIPS = [
+            { icon: 'fa-lightbulb',      label: 'Explain a concept',  prompt: 'Explain this concept to me simply, with an example: ' },
+            { icon: 'fa-list-check',     label: 'Summarize my notes', prompt: 'Summarize the key points from my current note.', send: true },
+            { icon: 'fa-calculator',     label: 'Solve a problem',    prompt: 'Help me solve this step by step: ' },
+            { icon: 'fa-feather',        label: 'Improve my writing', prompt: 'Improve the writing in my current note while keeping my voice.', send: true },
+            { icon: 'fa-graduation-cap', label: 'Make a study plan',  prompt: 'Build me a study plan for my upcoming assignments and deadlines.', send: true },
+            { icon: 'fa-circle-question',label: 'Quiz me',            prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true }
+        ];
+
+        function asstReadEls() {
+            return {
+                shell:   document.querySelector('#view-assistantview .asst-shell'),
+                list:    document.getElementById('asstChatList'),
+                msgs:    document.getElementById('asstMessages'),
+                body:    document.getElementById('asstBody'),
+                chips:   document.getElementById('asstChips'),
+                input:   document.getElementById('asstInput'),
+                sendBtn: document.getElementById('asstSendBtn'),
+                newBtn:  document.getElementById('asstNewChatBtn'),
+                search:  document.getElementById('asstSearch'),
+                ctxBtn:  document.getElementById('asstCtxBtn'),
+                ctxBar:  document.getElementById('asstContextBar'),
+                topbarTitle: document.getElementById('asstTopbarTitle'),
+                modelBtn:    document.getElementById('asstModelBtn'),
+                modelLabel:  document.getElementById('asstModelLabel'),
+                exportBtn:   document.getElementById('asstExportBtn'),
+                clearAllBtn: document.getElementById('asstClearAllBtn'),
+                settingsBtn: document.getElementById('asstSettingsBtn'),
+                customizeBtn: document.getElementById('asstCustomizeBtn'),
+                sidebarToggle: document.getElementById('asstSidebarToggle'),
+                moreBtn: document.getElementById('asstMoreBtn')
+            };
+        }
+
+        function asstScrollToBottom() {
+            const b = asstCache.body;
+            if (!b) return;
+            b.scrollTop = b.scrollHeight;
+            // Height isn't always settled when this runs (tab just became visible,
+            // markdown/images/action-cards still laying out). Re-pin after the next
+            // paint so we land at the true bottom instead of partway.
+            requestAnimationFrame(() => {
+                const bb = asstCache.body;
+                if (bb) bb.scrollTop = bb.scrollHeight;
+            });
+        }
+
+        function asstAutosize() {
+            const t = asstCache.input;
+            if (!t) return;
+            t.style.height = 'auto';
+            t.style.height = Math.min(t.scrollHeight, 160) + 'px';
+        }
+
+        function asstUpdateSendDisabled() {
+            const { input, sendBtn } = asstCache;
+            if (!input || !sendBtn) return;
+            sendBtn.disabled = !input.value.trim();
+        }
+
+        function asstBuildThinking(thoughts) {
+            const box = document.createElement('div');
+            box.className = 'asst-think';
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'asst-think-toggle';
+            const caret = document.createElement('i');
+            caret.className = 'fas fa-chevron-right asst-think-caret';
+            caret.setAttribute('aria-hidden', 'true');
+            const caretLabel = document.createElement('span');
+            caretLabel.textContent = 'Thinking';
+            toggle.append(caret, caretLabel);
+            const body = document.createElement('div');
+            body.className = 'asst-think-body';
+            body.textContent = thoughts.join('\n\n');
+            toggle.addEventListener('click', () => box.classList.toggle('open'));
+            box.append(toggle, body);
+            return box;
+        }
+
+        // Pseudo-streaming reveal (matches the docked panel's _streamMessageInto).
+        // Typeset $...$ / $$...$$ LaTeX in a rendered message element using Sutra's
+        // KaTeX bridge (window.SutraMath). KaTeX is lazy-loaded on first use and
+        // skips code/pre tags, so plain prose and code blocks are untouched.
+        function asstRenderMathIn(el) {
+            try {
+                if (el && window.SutraMath && typeof window.SutraMath.renderInElement === 'function') {
+                    window.SutraMath.renderInElement(el);
+                }
+            } catch (e) { /* non-critical — falls back to raw text */ }
+        }
+
+        // Honors asstStream.cancelled so the Stop button can short-circuit it.
+        const asstStream = { cancelled: false };
+        function asstStreamInto(host, plainText, finalHtml, onDone) {
+            const words = String(plainText || '').split(/\s+/).filter(Boolean);
+            const commit = () => {
+                host.classList.remove('assistant-streaming');
+                host.innerHTML = finalHtml; // sutra-allow-html: sanitized renderMarkdown output (same pipeline as docked panel)
+                asstScrollToBottom();
+                if (typeof onDone === 'function') onDone();
+            };
+            if (words.length <= 4 || asstStream.cancelled) { commit(); return; }
+            const wordsPerTick = words.length > 200 ? 8 : words.length > 80 ? 4 : 2;
+            host.classList.add('assistant-streaming');
+            let idx = 0;
+            const tick = () => {
+                if (asstStream.cancelled) { commit(); return; }
+                idx = Math.min(idx + wordsPerTick, words.length);
+                host.innerHTML = renderMarkdown(words.slice(0, idx).join(' ')); // sutra-allow-html: sanitized renderMarkdown output, progressive reveal
+                asstScrollToBottom();
+                if (idx < words.length) setTimeout(tick, 22);
+                else commit();
+            };
+            tick();
+        }
+
+        // role/content come from a `convo` entry; opts carries index + position flags.
+        function asstBuildMessage(msgObj, opts = {}) {
+            const role = msgObj.role;
+            const text = msgObj.content;
+            const thoughts = msgObj.thoughts;
+            const wrap = document.createElement('div');
+            wrap.className = 'asst-msg ' + (role === 'user' ? 'user' : 'assistant');
+
+            const avatar = document.createElement('div');
+            avatar.className = 'asst-msg-avatar';
+            const avatarIcon = document.createElement('i');
+            avatarIcon.className = 'fas ' + (role === 'user' ? 'fa-user' : 'fa-feather-pointed');
+            avatarIcon.setAttribute('aria-hidden', 'true');
+            avatar.appendChild(avatarIcon);
+
+            const col = document.createElement('div');
+            col.className = 'asst-msg-wrap';
+
+            const bubble = document.createElement('div');
+            bubble.className = 'asst-msg-bubble' + (msgObj.favorite ? ' is-favorite' : '');
+
+            let cleanForActions = text;
+            let flowResult = null;
+            let streamHost = null;
+            let finalHtml = '';
+
+            if (role === 'user') {
+                bubble.textContent = text;
+            } else {
+                const { thoughts: parsed, clean } = splitThinkBlocks(text);
+                const finalThoughts = (parsed && parsed.length) ? parsed : (thoughts || []);
+                let displayedClean = clean;
+                try {
+                    if (window.flowAssistant && typeof window.flowAssistant.parseActions === 'function') {
+                        flowResult = window.flowAssistant.parseActions(clean || '');
+                        if (flowResult && flowResult.actions && flowResult.actions.length) {
+                            displayedClean = flowResult.cleanText || '';
+                        }
+                    }
+                } catch (e) { /* plain render */ }
+                cleanForActions = displayedClean || clean || text;
+                if (finalThoughts && finalThoughts.length) bubble.appendChild(asstBuildThinking(finalThoughts));
+                const answer = document.createElement('div');
+                finalHtml = renderMarkdown(displayedClean || '');
+                if (opts.stream) {
+                    streamHost = answer; // filled by asstStreamInto below
+                    answer.className = 'asst-stream-host';
+                } else {
+                    answer.innerHTML = finalHtml; // sutra-allow-html: same sanitized renderMarkdown pipeline the docked assistant uses
+                    asstRenderMathIn(answer); // typeset any $...$ / $$...$$ LaTeX via KaTeX
+                }
+                bubble.appendChild(answer);
+            }
+
+            col.appendChild(bubble);
+
+            // ── Action row ──
+            const actions = document.createElement('div');
+            actions.className = 'asst-msg-actions';
+            const makeAct = (icon, label, title, onClick, extraClass) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'asst-msg-act' + (extraClass ? ' ' + extraClass : '');
+                b.title = title;
+                b.setAttribute('aria-label', title);
+                const ic = document.createElement('i');
+                ic.className = 'fas ' + icon;
+                ic.setAttribute('aria-hidden', 'true');
+                b.appendChild(ic);
+                if (label) { const sp = document.createElement('span'); sp.className = 'asst-msg-act-label'; sp.textContent = label; b.appendChild(sp); }
+                b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+                return b;
+            };
+
+            const renderActionsNow = () => {
+                if (role === 'assistant') {
+                    actions.appendChild(makeAct('fa-copy', 'Copy', 'Copy to clipboard', () => asstCopyText(cleanForActions)));
+                    actions.appendChild(makeAct('fa-arrow-up-from-bracket', 'Insert', 'Insert into the current note', () => { try { insertIntoEditor(cleanForActions); } catch (e) { if (typeof showToast === 'function') showToast('Open a note to insert into.'); } }));
+                    // Fill answers / Save as note / Create task — parity with the
+                    // floating panel's reply actions (appendMessage), same
+                    // visibility rules and same underlying shared functions
+                    // (smartFillAnswers, flowAssistant.applyAction) so behavior
+                    // is identical, just reachable from this surface too.
+                    const trimmedForActions = String(cleanForActions || '').trim();
+                    const looksLikeAnswers = /\*\*[^*\n]{5,}\*\*\s+\S/.test(trimmedForActions)
+                        || /[\d][\d\s+\-×÷x*/^.()]+\s*=\s*\**[\d]/.test(trimmedForActions);
+                    if (looksLikeAnswers) {
+                        actions.appendChild(makeAct('fa-check-double', 'Fill answers', 'Intelligently fill these answers into matching blanks and questions in your note', () => smartFillAnswers(trimmedForActions)));
+                    }
+                    if (trimmedForActions.length > 80) {
+                        actions.appendChild(makeAct('fa-file-circle-plus', 'Save as note', 'Create a new note with this reply as the body', () => {
+                            const title = trimmedForActions.split('\n')[0].slice(0, 80) || 'Sutra reply';
+                            const result = (window.flowAssistant && window.flowAssistant.applyAction)
+                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedForActions })
+                                : { ok: false, message: 'Sutra Assistant not loaded.' };
+                            if (typeof showToast === 'function') showToast(result.message);
+                        }));
+                    }
+                    const firstLineForTask = trimmedForActions.split('\n')[0].replace(/^[#\-*\s]+/, '').trim();
+                    if (firstLineForTask && firstLineForTask.length < 140) {
+                        actions.appendChild(makeAct('fa-square-check', 'Create task', 'Create a task from this reply', () => {
+                            const result = (window.flowAssistant && window.flowAssistant.applyAction)
+                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLineForTask, notes: trimmedForActions })
+                                : { ok: false, message: 'Sutra Assistant not loaded.' };
+                            if (typeof showToast === 'function') showToast(result.message);
+                        }));
+                    }
+                    if (opts.isLastAssistant) {
+                        actions.appendChild(makeAct('fa-rotate-right', 'Regenerate', 'Regenerate this response', () => asstRegenerate()));
+                    }
+                } else {
+                    if (opts.isLastUser) {
+                        actions.appendChild(makeAct('fa-pen', 'Edit', 'Edit and resend', () => asstEditMessage(opts.index)));
+                    }
+                    actions.appendChild(makeAct('fa-copy', '', 'Copy to clipboard', () => asstCopyText(text)));
+                }
+                const favBtn = makeAct('fa-star', '', msgObj.favorite ? 'Unfavorite' : 'Favorite', () => asstToggleFavorite(opts.index), msgObj.favorite ? 'is-fav' : '');
+                actions.appendChild(favBtn);
+            };
+
+            if (flowResult && flowResult.actions && flowResult.actions.length) {
+                // action cards rendered after stream completes
+            }
+
+            // Stream (assistant only) then reveal actions + action cards
+            if (streamHost) {
+                actions.style.visibility = 'hidden';
+                renderActionsNow();
+                col.appendChild(actions);
+                asstStreamInto(streamHost, cleanForActions, finalHtml, () => {
+                    asstRenderMathIn(streamHost); // typeset LaTeX once the final HTML is committed
+                    if (flowResult && flowResult.actions && flowResult.actions.length) {
+                        try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                    }
+                    actions.style.visibility = '';
+                    if (typeof opts.onStreamDone === 'function') { try { opts.onStreamDone(); } catch (e) { /* non-critical */ } }
+                });
+            } else {
+                renderActionsNow();
+                col.appendChild(actions);
+                if (role === 'assistant' && flowResult && flowResult.actions && flowResult.actions.length) {
+                    try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                }
+            }
+
+            wrap.append(avatar, col);
+            return wrap;
+        }
+
+        function asstCopyText(text) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(String(text || ''));
+                    if (typeof showToast === 'function') showToast('Copied to clipboard.');
+                }
+            } catch (e) { /* non-critical */ }
+        }
+
+        // Shared conversation-mutation helpers — operate on the module-scoped
+        // `convo` array, which BOTH the floating panel and the full-screen tab
+        // read/write (same chat state). Each caller re-renders its OWN surface
+        // afterward (and, where cheap, the other surface too) rather than these
+        // helpers assuming which UI is on screen.
+        function convoToggleFavorite(index) {
+            const list = Array.isArray(convo) ? convo : [];
+            const m = list[index];
+            if (!m) return false;
+            m.favorite = !m.favorite;
+            saveConvo();
+            return true;
+        }
+        function convoTruncateForEdit(index) {
+            const list = Array.isArray(convo) ? convo : [];
+            const m = list[index];
+            if (!m || m.role !== 'user') return null;
+            // Drop this user turn and everything after it, then refill the composer.
+            convo = list.slice(0, index);
+            saveConvo();
+            return m.content;
+        }
+        function convoTruncateForRegenerate() {
+            const list = Array.isArray(convo) ? convo : [];
+            // Find the last user message; drop everything from the following assistant reply onward.
+            let lastUserIdx = -1;
+            for (let i = list.length - 1; i >= 0; i--) { if (list[i].role === 'user') { lastUserIdx = i; break; } }
+            if (lastUserIdx === -1) return null;
+            const userText = list[lastUserIdx].content;
+            convo = list.slice(0, lastUserIdx + 1); // keep the user turn, drop later replies
+            saveConvo();
+            return userText;
+        }
+        // Best-effort refresh of the OTHER surface, if it happens to be
+        // initialized this session, so both stay visually in sync (they already
+        // share the same `convo`/`chatStore` data).
+        function refreshOtherAssistantSurface(skip) {
+            try { if (skip !== 'tab' && asstCache && asstCache.msgs) asstRenderAll(); } catch (e) { /* non-critical */ }
+            try { if (skip !== 'panel' && typeof messagesEl !== 'undefined' && messagesEl) renderCurrentChatMessages(); } catch (e) { /* non-critical */ }
+        }
+
+        function asstToggleFavorite(index) {
+            if (!convoToggleFavorite(index)) return;
+            asstRenderMessages();
+            refreshOtherAssistantSurface('tab');
+        }
+
+        function asstEditMessage(index) {
+            const content = convoTruncateForEdit(index);
+            if (content == null || !asstCache.input) return;
+            asstRenderAll();
+            refreshOtherAssistantSurface('tab');
+            asstCache.input.value = content;
+            asstCache.input.focus();
+            asstAutosize();
+            asstUpdateSendDisabled();
+        }
+
+        function asstRegenerate() {
+            const userText = convoTruncateForRegenerate();
+            if (userText == null) return;
+            asstRenderAll();
+            refreshOtherAssistantSurface('tab');
+            asstSendCore(userText, userText, { pushUser: false });
+        }
+
+        function asstRenderMessages(streamOpts) {
+            const { shell, msgs } = asstCache;
+            if (!msgs) return;
+            msgs.replaceChildren();
+            const list = Array.isArray(convo) ? convo : [];
+            const hasMsgs = list.length > 0;
+            if (shell) shell.classList.toggle('has-msgs', hasMsgs);
+            // Position flags for per-message actions
+            let lastUserIdx = -1, lastAssistantIdx = -1;
+            list.forEach((m, i) => {
+                if (m.role === 'user') lastUserIdx = i;
+                if (m.role === 'assistant') lastAssistantIdx = i;
+            });
+            const streamIdx = streamOpts && typeof streamOpts.streamIndex === 'number' ? streamOpts.streamIndex : -1;
+            const streamDone = streamOpts && typeof streamOpts.onDone === 'function' ? streamOpts.onDone : null;
+            list.forEach((m, i) => {
+                if (m.role === 'user' || m.role === 'assistant') {
+                    msgs.appendChild(asstBuildMessage(m, {
+                        index: i,
+                        isLastUser: i === lastUserIdx,
+                        isLastAssistant: i === lastAssistantIdx,
+                        stream: i === streamIdx,
+                        onStreamDone: i === streamIdx ? streamDone : null
+                    }));
+                } else if (m.role === 'notice' || m.role === 'error') {
+                    const el = document.createElement('div');
+                    el.className = 'asst-notice';
+                    el.textContent = m.content;
+                    msgs.appendChild(el);
+                }
+            });
+            asstScrollToBottom();
+        }
+
+        // Tab-side archive toggle. Mirrors toggleAssistantChatArchive()'s
+        // mutation exactly but re-renders the TAB's own sidebar instead of the
+        // panel's history modal (that function self-refreshes the modal, which
+        // isn't open here).
+        function asstToggleChatArchive(id) {
+            const target = chatStore.conversations.find(chat => chat.id === id);
+            if (!target) return;
+            target.archived = !target.archived;
+            target.updatedAt = new Date().toISOString();
+            persistChatStore();
+            asstRenderChatList();
+            if (typeof showToast === 'function') showToast(target.archived ? 'Chat archived.' : 'Chat unarchived.');
+        }
+
+        function asstRenderChatList() {
+            const list = asstCache.list;
+            if (!list) return;
+            const q = String(asstCache.search ? asstCache.search.value || '' : '').trim().toLowerCase();
+            const allRows = sortAssistantConversations(chatStore.conversations).filter(c => c && !c.archived);
+            const rows = q
+                ? allRows.filter(c => (c.title || '').toLowerCase().includes(q)
+                    || (c.messages || []).some(m => (m.content || '').toLowerCase().includes(q)))
+                : allRows;
+
+            if (!rows.length) {
+                const empty = document.createElement('div');
+                empty.className = 'asst-chat-empty';
+                empty.textContent = q ? 'No chats match "' + q + '".' : 'No chats yet.';
+                list.replaceChildren(empty);
+                return;
+            }
+
+            // Date grouping helpers
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const yd = new Date(); yd.setDate(yd.getDate() - 1);
+            const yestStr = yd.toISOString().slice(0, 10);
+            const getGroup = (c) => {
+                const d = String(c.updatedAt || c.createdAt || '').slice(0, 10);
+                if (d >= todayStr) return 'Today';
+                if (d >= yestStr) return 'Yesterday';
+                return 'Older';
+            };
+
+            list.replaceChildren();
+            let lastGroup = null;
+            rows.forEach(chat => {
+                const group = getGroup(chat);
+                if (!q && group !== lastGroup) {
+                    lastGroup = group;
+                    const lbl = document.createElement('div');
+                    lbl.className = 'asst-chat-group-label';
+                    lbl.textContent = group;
+                    list.appendChild(lbl);
+                }
+
+                const item = document.createElement('div');
+                item.className = 'asst-chat-item' + (chat.id === currentChatId ? ' active' : '');
+                item.dataset.chatId = chat.id;
+
+                const icon = document.createElement('i');
+                icon.className = 'fas ' + (chat.pinned ? 'fa-thumbtack' : 'fa-message') + ' asst-chat-item-icon';
+                icon.setAttribute('aria-hidden', 'true');
+
+                const meta = document.createElement('div');
+                meta.className = 'asst-chat-item-meta';
+                const title = document.createElement('span');
+                title.className = 'asst-chat-item-title';
+                title.textContent = chat.title || 'New chat';
+                meta.appendChild(title);
+                const badgeText = String(chat.modelLabel || chat.providerLabel || '').trim();
+                if (badgeText) {
+                    const badge = document.createElement('span');
+                    badge.className = 'asst-chat-item-badge';
+                    badge.textContent = badgeText;
+                    meta.appendChild(badge);
+                }
+
+                // Action buttons container (visible on hover)
+                const actions = document.createElement('div');
+                actions.className = 'asst-chat-item-actions';
+
+                const renameBtn = document.createElement('button');
+                renameBtn.type = 'button';
+                renameBtn.className = 'asst-chat-item-btn rename-btn';
+                renameBtn.title = 'Rename';
+                renameBtn.setAttribute('aria-label', 'Rename chat');
+                const renameIcon = document.createElement('i');
+                renameIcon.className = 'fas fa-pencil';
+                renameIcon.setAttribute('aria-hidden', 'true');
+                renameBtn.appendChild(renameIcon);
+                renameBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const next = typeof atelierPrompt === 'function'
+                        ? await atelierPrompt('Conversation name', chat.title || 'New chat', { title: 'Rename Chat' })
+                        : null;
+                    if (!next || !next.trim()) return;
+                    chat.title = next.trim().slice(0, 90);
+                    chat.updatedAt = new Date().toISOString();
+                    persistChatStore();
+                    asstRenderAll();
+                });
+
+                const pinBtn = document.createElement('button');
+                pinBtn.type = 'button';
+                pinBtn.className = 'asst-chat-item-btn pin-btn' + (chat.pinned ? ' is-pinned' : '');
+                pinBtn.title = chat.pinned ? 'Unpin' : 'Pin';
+                pinBtn.setAttribute('aria-label', chat.pinned ? 'Unpin chat' : 'Pin chat');
+                const pinIcon = document.createElement('i');
+                pinIcon.className = 'fas fa-thumbtack';
+                pinIcon.setAttribute('aria-hidden', 'true');
+                pinBtn.appendChild(pinIcon);
+                pinBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    chat.pinned = !chat.pinned;
+                    chat.updatedAt = new Date().toISOString();
+                    persistChatStore();
+                    asstRenderAll();
+                });
+
+                // Archive — parity with the panel's history-modal Archive action
+                // (toggleAssistantChatArchive). Archived chats drop out of this
+                // list (same filter the panel's own display uses); reachable
+                // again via the topbar "More options ▸ All chats" entry, which
+                // opens the SAME history modal the panel uses.
+                const archiveBtn = document.createElement('button');
+                archiveBtn.type = 'button';
+                archiveBtn.className = 'asst-chat-item-btn archive-btn';
+                archiveBtn.title = 'Archive';
+                archiveBtn.setAttribute('aria-label', 'Archive chat');
+                const archiveIcon = document.createElement('i');
+                archiveIcon.className = 'fas fa-box-archive';
+                archiveIcon.setAttribute('aria-hidden', 'true');
+                archiveBtn.appendChild(archiveIcon);
+                archiveBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    asstToggleChatArchive(chat.id);
+                });
+
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'asst-chat-item-btn del-btn';
+                del.title = 'Delete';
+                del.setAttribute('aria-label', 'Delete chat');
+                const delIcon = document.createElement('i');
+                delIcon.className = 'fas fa-trash';
+                delIcon.setAttribute('aria-hidden', 'true');
+                del.appendChild(delIcon);
+                del.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const confirmed = typeof showCustomConfirmDialog === 'function'
+                        ? await showCustomConfirmDialog({ title: 'Delete Chat', message: `Delete "${chat.title || 'this conversation'}"?`, confirmText: 'Delete Chat', cancelText: 'Keep Chat', confirmVariant: 'danger' })
+                        : window.confirm('Delete "' + (chat.title || 'this conversation') + '"?');
+                    if (!confirmed) return;
+                    chatStore.conversations = chatStore.conversations.filter(c => c.id !== chat.id);
+                    if (currentChatId === chat.id) {
+                        const nxt = chatStore.conversations[0] || createAssistantConversation();
+                        if (!chatStore.conversations.length) chatStore.conversations = [nxt];
+                        currentChatId = nxt.id;
+                        convo = (nxt.messages || []).map(sanitizeAssistantChatMessage).filter(Boolean);
+                        try { sessionStorage.setItem('chat_history', JSON.stringify(convo)); } catch (_) {}
+                    }
+                    persistChatStore();
+                    asstRenderAll();
+                });
+
+                actions.append(renameBtn, pinBtn, archiveBtn, del);
+                item.addEventListener('click', () => {
+                    switchAssistantChat(chat.id);
+                    asstRenderAll();
+                    if (asstCache.input) asstCache.input.focus();
+                });
+                item.append(icon, meta, actions);
+                list.appendChild(item);
+            });
+        }
+
+        function asstRenderChips() {
+            const chips = asstCache.chips;
+            if (!chips) return;
+            // Prefer the SAME adaptive, context-aware quick-action source the
+            // floating panel uses (Canvas/selection/derived-risk-aware, up to 6
+            // items) instead of a fixed list, so both surfaces suggest the same
+            // things. ASST_QUICK_CHIPS is only a fallback — exactly mirroring how
+            // the panel's own renderAssistantQuickSuggestions() falls back to
+            // getAssistantSuggestionItems() when the shared source is unavailable.
+            let items = null;
+            try {
+                if (window.flowAssistant && typeof window.flowAssistant.getQuickActions === 'function') {
+                    const fromShared = window.flowAssistant.getQuickActions();
+                    if (Array.isArray(fromShared) && fromShared.length) items = fromShared;
+                }
+            } catch (e) { /* fall through to static chips */ }
+            chips.replaceChildren();
+            (items || ASST_QUICK_CHIPS).forEach(c => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'asst-chip';
+                if (c.icon) {
+                    const chipIcon = document.createElement('i');
+                    chipIcon.className = 'fas ' + c.icon;
+                    chipIcon.setAttribute('aria-hidden', 'true');
+                    b.append(chipIcon, ' ' + c.label);
+                } else {
+                    b.textContent = c.label;
+                }
+                b.addEventListener('click', () => {
+                    if (!asstCache.input) return;
+                    asstCache.input.value = c.prompt;
+                    asstCache.input.focus();
+                    asstAutosize();
+                    asstUpdateSendDisabled();
+                    if (c.send) asstSend();
+                });
+                chips.appendChild(b);
+            });
+        }
+
+        function asstRenderAll() {
+            asstRenderChatList();
+            asstRenderMessages();
+            asstUpdateTopbar();
+        }
+
+        // ── Topbar (title + model chip + export/clear) ───────────────────────
+        function asstUpdateTopbar() {
+            const current = chatStore.conversations.find(c => c && c.id === currentChatId);
+            if (asstCache.topbarTitle) {
+                asstCache.topbarTitle.textContent = (current && current.title) ? current.title : 'New chat';
+            }
+            if (asstCache.modelLabel) {
+                const labels = getCurrentProviderModelLabels();
+                const txt = labels.modelLabel || labels.providerLabel || 'Choose model';
+                asstCache.modelLabel.textContent = txt;
+                if (asstCache.modelBtn) asstCache.modelBtn.title = 'Model: ' + (labels.modelLabel || '—') + ' · ' + (labels.providerLabel || '') + ' (click to change)';
+            }
+        }
+
+        function asstExportCurrent() {
+            try { exportAssistantConversation(currentChatId); }
+            catch (e) { if (typeof showToast === 'function') showToast('Could not export this chat.'); }
+        }
+
+        async function asstClearAll() {
+            const confirmed = typeof showCustomConfirmDialog === 'function'
+                ? await showCustomConfirmDialog({ title: 'Clear All Chats', message: 'Delete every Assistant chat? This cannot be undone. Notes, tasks, keys, and settings are not affected.', confirmText: 'Clear All', cancelText: 'Keep Chats', confirmVariant: 'danger' })
+                : window.confirm('Delete every Assistant chat?');
+            if (!confirmed) return;
+            chatStore = { version: SUTRA_ASSISTANT_CHAT_EXPORT_VERSION, currentChatId: '', conversations: [] };
+            currentChatId = '';
+            convo = [];
+            try {
+                localStorage.removeItem(SUTRA_ASSISTANT_CHATS_KEY);
+                localStorage.removeItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY);
+                sessionStorage.removeItem('chat_history');
+            } catch (_) {}
+            startNewAssistantChat();
+            asstRenderAll();
+        }
+
+        // ── Assistant personalization (custom instructions / persona) ────────
+        // flow-assistant.js's buildSystemPrompt can't reach the app closure's
+        // getWorkspacePreference directly, so we expose a fresh getter on window
+        // (read on every send → never goes stale at boot) plus a snapshot mirror.
+        function readAssistantPersonalization() {
+            const p = getWorkspacePreference('assistant.personalization', {}) || {};
+            return {
+                nickname: String(p.nickname || ''),
+                persona: String(p.persona || 'balanced'),
+                responseLength: String(p.responseLength || 'balanced'),
+                customInstructions: String(p.customInstructions || ''),
+                aboutUser: String(p.aboutUser || '')
+            };
+        }
+        function updateAssistantPersonalizationGlobal() {
+            try {
+                window.SutraAssistantPersonalization = readAssistantPersonalization();
+                window.getSutraAssistantPersonalization = readAssistantPersonalization;
+            } catch (e) { /* non-critical */ }
+        }
+
+        function openAssistantCustomizer() {
+            const p = getWorkspacePreference('assistant.personalization', {}) || {};
+            const body = document.createElement('div');
+            body.className = 'asst-customizer';
+
+            const makeField = (labelText, hintText) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'asst-cust-field';
+                const lbl = document.createElement('label');
+                lbl.className = 'asst-cust-label';
+                lbl.textContent = labelText;
+                wrap.appendChild(lbl);
+                if (hintText) {
+                    const hint = document.createElement('p');
+                    hint.className = 'asst-cust-hint';
+                    hint.textContent = hintText;
+                    wrap.appendChild(hint);
+                }
+                return wrap;
+            };
+            const makeSelect = (pairs, current) => {
+                const sel = document.createElement('select');
+                sel.className = 'modal-input asst-cust-input';
+                pairs.forEach(([v, l]) => {
+                    const o = document.createElement('option');
+                    o.value = v; o.textContent = l;
+                    if (current === v) o.selected = true;
+                    sel.appendChild(o);
+                });
+                return sel;
+            };
+
+            const nameField = makeField('What should Sutra call you?');
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text'; nameInput.className = 'modal-input asst-cust-input';
+            nameInput.maxLength = 60; nameInput.placeholder = 'e.g. Alex';
+            nameInput.value = String(p.nickname || '');
+            nameField.appendChild(nameInput);
+
+            const personaField = makeField('Personality', 'How the assistant comes across.');
+            const personaSel = makeSelect([
+                ['balanced', 'Balanced'],
+                ['encouraging', 'Encouraging & warm'],
+                ['direct', 'Direct & concise'],
+                ['socratic', 'Socratic — guides with questions'],
+                ['formal', 'Formal & professional']
+            ], p.persona || 'balanced');
+            personaField.appendChild(personaSel);
+
+            const lenField = makeField('Response length');
+            const lenSel = makeSelect([
+                ['concise', 'Concise — just the essentials'],
+                ['balanced', 'Balanced'],
+                ['detailed', 'Detailed — thorough explanations']
+            ], p.responseLength || 'balanced');
+            lenField.appendChild(lenSel);
+
+            const aboutField = makeField('About you', 'Grade level, subjects, goals — anything that helps tailor answers.');
+            const aboutTa = document.createElement('textarea');
+            aboutTa.className = 'modal-input asst-cust-input'; aboutTa.rows = 3; aboutTa.maxLength = 2000;
+            aboutTa.placeholder = 'e.g. 11th grade, taking AP Bio and APUSH, aiming for a 5 on both.';
+            aboutTa.value = String(p.aboutUser || '');
+            aboutField.appendChild(aboutTa);
+
+            const ciField = makeField('Custom instructions', 'How should the assistant respond? Tone, format, things to always or never do.');
+            const ciTa = document.createElement('textarea');
+            ciTa.className = 'modal-input asst-cust-input'; ciTa.rows = 4; ciTa.maxLength = 2000;
+            ciTa.placeholder = 'e.g. Always show steps for math. Use bullet points. Avoid jargon. Quiz me at the end.';
+            ciTa.value = String(p.customInstructions || '');
+            ciField.appendChild(ciTa);
+
+            body.append(nameField, personaField, lenField, aboutField, ciField);
+
+            openSutraModal({
+                titleText: 'Customize Sutra Assistant',
+                bodyNode: body,
+                buttons: [
+                    { label: 'Cancel', value: false },
+                    {
+                        label: 'Save', value: true, primary: true,
+                        onClick: () => {
+                            setWorkspacePreference('assistant.personalization', {
+                                nickname: nameInput.value.trim().slice(0, 60),
+                                persona: personaSel.value,
+                                responseLength: lenSel.value,
+                                aboutUser: aboutTa.value.slice(0, 2000),
+                                customInstructions: ciTa.value.slice(0, 2000)
+                            });
+                            updateAssistantPersonalizationGlobal();
+                            if (typeof showToast === 'function') showToast('Assistant personalization saved.');
+                        }
+                    }
+                ]
+            });
+        }
+
+        // ── Model / provider picker popover ──────────────────────────────────
+        function asstCloseModelPicker() {
+            document.getElementById('asstModelPop')?.remove();
+            if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'false');
+        }
+        function asstOpenModelPicker() {
+            if (document.getElementById('asstModelPop')) { asstCloseModelPicker(); return; }
+            const topbar = document.getElementById('asstTopbar');
+            if (!topbar) return;
+            const pop = document.createElement('div');
+            pop.className = 'asst-model-pop';
+            pop.id = 'asstModelPop';
+
+            const h = document.createElement('h4');
+            h.textContent = 'Model & provider';
+            pop.appendChild(h);
+
+            // Provider select
+            const provLabel = document.createElement('label');
+            provLabel.textContent = 'Provider';
+            pop.appendChild(provLabel);
+            const provSel = document.createElement('select');
+            const curProvider = getCurrentChatProvider();
+            Object.keys(CHAT_PROVIDER_CONFIG).forEach(key => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = CHAT_PROVIDER_CONFIG[key].label || key;
+                if (key === curProvider) opt.selected = true;
+                provSel.appendChild(opt);
+            });
+            pop.appendChild(provSel);
+
+            // Model select
+            const modLabel = document.createElement('label');
+            modLabel.textContent = 'Model';
+            pop.appendChild(modLabel);
+            const modSel = document.createElement('select');
+            pop.appendChild(modSel);
+
+            const fillModels = (provider) => {
+                modSel.replaceChildren();
+                const isLocal = provider === 'local';
+                const models = (typeof getCachedModels === 'function') ? getCachedModels(provider) : [];
+                const selected = getActiveModelForProvider(provider) || getSelectedModelForProvider(provider) || '';
+                if (!models.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = isLocal ? 'Type your local model ID below' : 'No models loaded yet — click Refresh';
+                    modSel.appendChild(opt);
+                } else {
+                    const blank = document.createElement('option');
+                    blank.value = ''; blank.textContent = 'Select a model';
+                    modSel.appendChild(blank);
+                    models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m; opt.textContent = m;
+                        if (m === selected) opt.selected = true;
+                        modSel.appendChild(opt);
+                    });
+                }
+            };
+            fillModels(curProvider);
+
+            // Refresh-from-API button — pulls the provider's live /models list,
+            // caches it, and repopulates the dropdown (no typing required).
+            const refreshRow = document.createElement('div');
+            refreshRow.className = 'asst-model-refresh-row';
+            const refreshBtn = document.createElement('button');
+            refreshBtn.type = 'button';
+            refreshBtn.className = 'asst-model-refresh';
+            const refreshIcon = document.createElement('i');
+            refreshIcon.className = 'fas fa-rotate-right';
+            refreshIcon.setAttribute('aria-hidden', 'true');
+            const refreshLabel = document.createElement('span');
+            refreshLabel.textContent = 'Refresh model list';
+            refreshBtn.append(refreshIcon, refreshLabel);
+            refreshRow.appendChild(refreshBtn);
+            pop.appendChild(refreshRow);
+
+            const doRefresh = async () => {
+                const provider = provSel.value;
+                if (provider === 'local') {
+                    if (typeof showToast === 'function') showToast('Local models come from your endpoint — type the model ID below.');
+                    return;
+                }
+                const apiKey = getProviderApiKey(provider);
+                if (!apiKey) {
+                    if (typeof showToast === 'function') showToast('Add a ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' API key first.');
+                    asstCloseModelPicker();
+                    try { openProviderKeySettings(); } catch (e) { /* non-critical */ }
+                    return;
+                }
+                refreshBtn.disabled = true;
+                refreshIcon.classList.add('fa-spin');
+                refreshLabel.textContent = 'Loading…';
+                try {
+                    const fetched = await fetchProviderModels(provider, apiKey);
+                    if (fetched && fetched.length) {
+                        cacheModels(provider, fetched);
+                        if (typeof renderModelOptions === 'function' && provider === getCurrentChatProvider()) renderModelOptions(provider);
+                        fillModels(provider);
+                        refreshLabel.textContent = 'Loaded ' + fetched.length + ' models';
+                        if (typeof showToast === 'function') showToast('Loaded ' + fetched.length + ' ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' models.');
+                    } else {
+                        refreshLabel.textContent = 'No models returned';
+                        if (typeof showToast === 'function') showToast('No models returned by ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + '.');
+                    }
+                } catch (err) {
+                    refreshLabel.textContent = 'Refresh failed';
+                    if (typeof showToast === 'function') showToast('Model refresh failed: ' + (err && err.message ? err.message : 'unknown error'));
+                } finally {
+                    refreshIcon.classList.remove('fa-spin');
+                    refreshBtn.disabled = false;
+                    setTimeout(() => { if (refreshLabel.isConnected) refreshLabel.textContent = 'Refresh model list'; }, 2500);
+                }
+            };
+            refreshBtn.addEventListener('click', doRefresh);
+
+            provSel.addEventListener('change', () => {
+                const next = provSel.value;
+                try { syncProviderUi(next); } catch (e) { setCurrentChatProvider(next); }
+                fillModels(next);
+                asstUpdateTopbar();
+                // Auto-refresh if this provider has a key but no cached models yet.
+                try {
+                    if (next !== 'local' && getProviderApiKey(next) && !getCachedModels(next).length) doRefresh();
+                } catch (e) { /* non-critical */ }
+            });
+            modSel.addEventListener('change', () => {
+                const provider = provSel.value;
+                const model = String(modSel.value || '').trim();
+                if (model) { try { setModelForProvider(provider, model); } catch (e) { /* non-critical */ } }
+                if (chatModelSelect && provider === getCurrentChatProvider()) { try { chatModelSelect.value = model; } catch (e) {} }
+                asstUpdateTopbar();
+                syncReasoningControl(provider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
+            });
+
+            // Custom/exact model ID — parity with the floating panel's
+            // #chatCustomModelInput. Writes through the SAME storage function AND
+            // mirrors into the panel's own input (when present) so
+            // getActiveModelForProvider() — read by both surfaces — sees it
+            // immediately, exactly like the model <select> above already does.
+            const customLabel = document.createElement('label');
+            customLabel.textContent = 'Custom / exact model ID';
+            pop.appendChild(customLabel);
+            const customInput = document.createElement('input');
+            customInput.type = 'text';
+            customInput.setAttribute('aria-label', 'Model ID');
+            customInput.placeholder = 'Exact model ID (e.g. gpt-4.1-mini)';
+            customInput.value = getSelectedCustomModel(curProvider) || '';
+            pop.appendChild(customInput);
+            const applyCustomModel = (showSavedToast) => {
+                const provider = provSel.value;
+                const value = customInput.value || '';
+                const remapped = typeof remapModelValueIfApiKey === 'function' && remapModelValueIfApiKey(provider, value);
+                if (!remapped) {
+                    setCustomModelForProvider(provider, value);
+                    if (chatCustomModelInput && provider === getCurrentChatProvider()) { try { chatCustomModelInput.value = value; } catch (e) {} }
+                    if (showSavedToast && value && typeof showToast === 'function') showToast('Custom model saved');
+                }
+                asstUpdateTopbar();
+                syncReasoningControl(provider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
+            };
+            customInput.addEventListener('change', () => applyCustomModel(false));
+            customInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCustomModel(true); } });
+            customInput.addEventListener('input', () => syncReasoningControl(provSel.value, { row: reasoningRow, select: reasoningSel, note: reasoningNote }));
+
+            // Thinking effort — parity with the panel's #chatReasoningRow. Hidden
+            // (via syncReasoningControl) unless the capability registry confirms
+            // the live provider+model supports it.
+            const reasoningRow = document.createElement('div');
+            reasoningRow.className = 'asst-model-pop-reasoning-row';
+            reasoningRow.hidden = true;
+            const reasoningLabel = document.createElement('label');
+            reasoningLabel.innerHTML = '<i class="fas fa-brain" aria-hidden="true"></i> Thinking effort'; // sutra-allow-html: static developer-authored label markup (no user data)
+            reasoningRow.appendChild(reasoningLabel);
+            const reasoningSel = document.createElement('select');
+            reasoningSel.setAttribute('aria-label', 'Thinking effort');
+            reasoningRow.appendChild(reasoningSel);
+            pop.appendChild(reasoningRow);
+            const reasoningNote = document.createElement('p');
+            reasoningNote.className = 'asst-model-pop-hint';
+            reasoningNote.hidden = true;
+            reasoningNote.textContent = 'Higher effort lets the model reason longer before answering — slower and uses more tokens.';
+            pop.appendChild(reasoningNote);
+            reasoningSel.addEventListener('change', () => {
+                const value = String(reasoningSel.value || 'auto').toLowerCase();
+                setWorkspacePreference('assistant.reasoningEffort', value, { refresh: false });
+                if (chatReasoningSelect) { try { chatReasoningSelect.value = value; } catch (e) {} }
+            });
+            syncReasoningControl(curProvider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
+
+            // First-open convenience: if the current provider has a key but the
+            // dropdown is empty, pull the list immediately so it's never blank.
+            try {
+                if (curProvider !== 'local' && getProviderApiKey(curProvider) && !getCachedModels(curProvider).length) doRefresh();
+            } catch (e) { /* non-critical */ }
+
+            const savedNote = document.createElement('p');
+            savedNote.className = 'asst-model-pop-hint';
+            savedNote.style.marginTop = '12px';
+            const savedIcon = document.createElement('i');
+            savedIcon.className = 'fas fa-circle-check';
+            savedIcon.setAttribute('aria-hidden', 'true');
+            savedIcon.style.color = 'var(--asst-accent)';
+            savedIcon.style.marginRight = '6px';
+            savedNote.append(savedIcon, 'Saved as your default — new and existing chats use this until you change it.');
+            pop.appendChild(savedNote);
+
+            const hint = document.createElement('p');
+            hint.className = 'asst-model-pop-hint';
+            const hintLink = document.createElement('a');
+            hintLink.textContent = 'manage API keys';
+            hintLink.addEventListener('click', () => { asstCloseModelPicker(); try { openProviderKeySettings(); } catch (e) {} });
+            hint.append('Models load live from the provider. No key yet? ', hintLink, '.');
+            pop.appendChild(hint);
+
+            topbar.appendChild(pop);
+            if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'true');
+            const dismiss = (e) => {
+                if (!pop.contains(e.target) && e.target !== asstCache.modelBtn && !asstCache.modelBtn.contains(e.target)) {
+                    asstCloseModelPicker();
+                    document.removeEventListener('click', dismiss, true);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss, true), 0);
+        }
+
+        // ── Context attachment helpers ───────────────────────────────────────
+        function asstRenderContextBar() {
+            const bar = asstCache.ctxBar;
+            const btn = asstCache.ctxBtn;
+            if (!bar) return;
+            if (!asstPendingContext.length) {
+                bar.hidden = true;
+                bar.replaceChildren();
+                if (btn) btn.classList.remove('has-context');
+                return;
+            }
+            bar.hidden = false;
+            if (btn) btn.classList.add('has-context');
+            bar.replaceChildren();
+            asstPendingContext.forEach(ctx => {
+                const chip = document.createElement('div');
+                chip.className = 'asst-context-chip';
+
+                const chipIcon = document.createElement('i');
+                chipIcon.className = 'fas ' + (ctx.icon || 'fa-file-lines');
+                chipIcon.setAttribute('aria-hidden', 'true');
+
+                const label = document.createElement('span');
+                label.className = 'asst-context-chip-label';
+                label.textContent = ctx.label;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'asst-context-chip-remove';
+                removeBtn.setAttribute('aria-label', 'Remove context: ' + ctx.label);
+                const removeIcon = document.createElement('i');
+                removeIcon.className = 'fas fa-times';
+                removeIcon.setAttribute('aria-hidden', 'true');
+                removeBtn.appendChild(removeIcon);
+                removeBtn.addEventListener('click', () => {
+                    if (ctx.isAttachment) { try { window.flowAssistant && window.flowAssistant.clearAttachments && window.flowAssistant.clearAttachments(); } catch (e) {} }
+                    asstPendingContext = asstPendingContext.filter(c => c.id !== ctx.id);
+                    asstRenderContextBar();
+                });
+
+                chip.append(chipIcon, label, removeBtn);
+                bar.appendChild(chip);
+            });
+        }
+
+        function asstBuildContextBlock() {
+            // Attachment chips ride the flowAssistant attachment pipeline, not the text block.
+            const textCtx = asstPendingContext.filter(c => !c.isAttachment && c.content);
+            if (!textCtx.length) return '';
+            const parts = textCtx.map(c => `[Context — ${c.label}]\n${c.content}`);
+            return parts.join('\n\n') + '\n\n';
+        }
+
+        function asstClearContext() {
+            // Note: attachments are consumed by the send pipeline on success; only
+            // clear them here if the user is abandoning an unsent draft via this path.
+            asstPendingContext = [];
+            asstRenderContextBar();
+        }
+
+        // Topbar "More options" menu — parity with the floating panel's overflow
+        // menu (#chatOverflowMenu): surfaces the same Activity & Undo / View
+        // exact context / Assistant Guide / About Sutra Intelligence entries the
+        // panel already has, backed by the SAME shared functions so behavior is
+        // identical — just reachable from a different button on the big screen.
+        function asstOpenMoreMenu(anchorBtn) {
+            document.querySelector('.asst-more-dropdown')?.remove();
+            const menu = document.createElement('div');
+            menu.className = 'asst-more-dropdown';
+
+            const makeItem = (iconClass, label, onClick) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'asst-ctx-dropdown-item';
+                const ic = document.createElement('i');
+                ic.className = 'fas ' + iconClass;
+                ic.setAttribute('aria-hidden', 'true');
+                const txt = document.createTextNode(' ' + label);
+                btn.append(ic, txt);
+                btn.addEventListener('click', () => { menu.remove(); onClick(); });
+                return btn;
+            };
+
+            menu.appendChild(makeItem('fa-box-archive', 'All chats (incl. archived)', () => {
+                try { openAssistantHistoryPanel(); } catch (e) { /* non-critical */ }
+            }));
+            menu.appendChild(makeItem('fa-clock-rotate-left', 'Activity & Undo', () => {
+                try { window.flowAssistant && window.flowAssistant.openActivityLog(); } catch (e) { /* non-critical */ }
+            }));
+            menu.appendChild(makeItem('fa-eye', 'View exact context', () => {
+                try { window.flowAssistant && window.flowAssistant.showContextModal(); } catch (e) { /* non-critical */ }
+            }));
+            const sep = document.createElement('div');
+            sep.className = 'asst-ctx-dropdown-sep';
+            menu.appendChild(sep);
+            menu.appendChild(makeItem('fa-book', 'Sutra Assistant Guide', () => { try { openAssistantGuide(); } catch (e) { /* non-critical */ } }));
+            menu.appendChild(makeItem('fa-circle-info', 'About Sutra Intelligence', () => { try { openChatInfo(); } catch (e) { /* non-critical */ } }));
+
+            const actions = anchorBtn.closest('.asst-topbar-actions');
+            if (actions) actions.appendChild(menu);
+            else anchorBtn.parentNode.appendChild(menu);
+
+            anchorBtn.setAttribute('aria-expanded', 'true');
+            const dismiss = (e) => {
+                if (!menu.contains(e.target) && e.target !== anchorBtn && !anchorBtn.contains(e.target)) {
+                    menu.remove();
+                    anchorBtn.setAttribute('aria-expanded', 'false');
+                    document.removeEventListener('click', dismiss, true);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', dismiss, true), 0);
+        }
+
+        function asstShowCtxMenu(anchorBtn) {
+            document.querySelector('.asst-ctx-dropdown')?.remove();
+            const menu = document.createElement('div');
+            menu.className = 'asst-ctx-dropdown';
+
+            const makeItem = (iconClass, label, onClick) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'asst-ctx-dropdown-item';
+                const ic = document.createElement('i');
+                ic.className = 'fas ' + iconClass;
+                ic.setAttribute('aria-hidden', 'true');
+                const txt = document.createTextNode(' ' + label);
+                btn.append(ic, txt);
+                btn.addEventListener('click', () => { menu.remove(); onClick(); });
+                return btn;
+            };
+
+            menu.appendChild(makeItem('fa-file-lines', 'Add current note', () => {
+                const currentPage = pages.find(p => p.id === currentPageId);
+                const editorEl = document.getElementById('editor');
+                const noteText = editorEl ? (editorEl.innerText || '').trim() : '';
+                if (!noteText && !currentPage) {
+                    if (typeof showToast === 'function') showToast('Open a note first to add it as context.');
+                    return;
+                }
+                const label = currentPage ? (currentPage.title || 'Current note') : 'Current note';
+                const content = (currentPage ? 'Note: ' + label + '\n\n' : '') + (noteText || '(empty note)');
+                asstPendingContext = asstPendingContext.filter(c => c.id !== 'current-note');
+                asstPendingContext.push({ id: 'current-note', icon: 'fa-file-lines', label, content });
+                asstRenderContextBar();
+            }));
+
+            const sep = document.createElement('div');
+            sep.className = 'asst-ctx-dropdown-sep';
+            menu.appendChild(sep);
+
+            menu.appendChild(makeItem('fa-keyboard', 'Paste custom text…', async () => {
+                const snippet = typeof atelierPrompt === 'function'
+                    ? await atelierPrompt('Paste or type the context you want to add:', '', { title: 'Add context snippet', multiline: true })
+                    : null;
+                if (!snippet || !snippet.trim()) return;
+                const id = 'custom-' + Date.now();
+                const label = snippet.trim().slice(0, 40) + (snippet.trim().length > 40 ? '…' : '');
+                asstPendingContext.push({ id, icon: 'fa-quote-right', label, content: snippet.trim() });
+                asstRenderContextBar();
+            }));
+
+            if (asstPendingContext.length) {
+                const sep2 = document.createElement('div');
+                sep2.className = 'asst-ctx-dropdown-sep';
+                menu.appendChild(sep2);
+                menu.appendChild(makeItem('fa-trash', 'Clear all context', () => asstClearContext()));
+            }
+
+            // Position near the button
+            const card = anchorBtn.closest('.asst-input-card');
+            if (card) card.appendChild(menu);
+            else anchorBtn.parentNode.appendChild(menu);
+
+            // Close on outside click
+            const dismiss = (e) => { if (!menu.contains(e.target) && e.target !== anchorBtn) { menu.remove(); document.removeEventListener('click', dismiss, true); } };
+            setTimeout(() => document.addEventListener('click', dismiss, true), 0);
+        }
+        // ── End context helpers ──────────────────────────────────────────────
+
+        // ── Slash commands, @-mentions, and image attachments ───────────────
+        const ASST_SLASH_COMMANDS = [
+            { cmd: '/summarize', icon: 'fa-list-check', desc: 'Summarize the current note', prompt: 'Summarize the key points from my current note.', send: true },
+            { cmd: '/quiz',      icon: 'fa-circle-question', desc: 'Quiz me on the current note', prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true },
+            { cmd: '/explain',   icon: 'fa-lightbulb', desc: 'Explain a concept simply', prompt: 'Explain this concept to me simply, with an example: ' },
+            { cmd: '/improve',   icon: 'fa-feather', desc: 'Improve the writing in my note', prompt: 'Improve the writing in my current note while keeping my voice.', send: true },
+            { cmd: '/plan',      icon: 'fa-calendar-check', desc: 'Build a study plan', prompt: 'Build me a study plan for my upcoming assignments and deadlines.', send: true },
+            { cmd: '/note',      icon: 'fa-file-pen', desc: 'Create a new note from a topic', prompt: 'Create a new note about: ' },
+            { cmd: '/task',      icon: 'fa-square-check', desc: 'Create a task', prompt: 'Create a task: ' },
+            { cmd: '/cards',     icon: 'fa-clone', desc: 'Make review flashcards from my note', prompt: 'Read this note and propose a create_review_deck action with 8–15 high-quality front/back cards covering the key concepts.', send: true },
+            { cmd: '/solve',     icon: 'fa-calculator', desc: 'Solve a problem step by step', prompt: 'Help me solve this step by step: ' }
+        ];
+
+        function asstCloseInputPopups() {
+            document.getElementById('asstInputPopup')?.remove();
+            document.querySelector('.asst-ctx-dropdown')?.remove();
+        }
+
+        function asstBuildPopup(items, onPick) {
+            asstCloseInputPopups();
+            const card = asstCache.input ? asstCache.input.closest('.asst-input-card') : null;
+            if (!card) return null;
+            const menu = document.createElement('div');
+            menu.className = 'asst-popup-menu';
+            menu.id = 'asstInputPopup';
+            if (!items.length) {
+                const empty = document.createElement('div');
+                empty.className = 'asst-popup-empty';
+                empty.textContent = 'No matches';
+                menu.appendChild(empty);
+            } else {
+                items.forEach((it, idx) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'asst-popup-item' + (idx === 0 ? ' active' : '');
+                    const ic = document.createElement('i');
+                    ic.className = 'fas ' + (it.icon || 'fa-angle-right');
+                    ic.setAttribute('aria-hidden', 'true');
+                    const txt = document.createElement('div');
+                    txt.className = 'asst-popup-item-text';
+                    const t = document.createElement('div');
+                    t.className = 'asst-popup-item-title';
+                    t.textContent = it.title;
+                    txt.appendChild(t);
+                    if (it.desc) {
+                        const d = document.createElement('div');
+                        d.className = 'asst-popup-item-desc';
+                        d.textContent = it.desc;
+                        txt.appendChild(d);
+                    }
+                    b.append(ic, txt);
+                    b.addEventListener('mousedown', (e) => { e.preventDefault(); onPick(it); });
+                    menu.appendChild(b);
+                });
+            }
+            card.appendChild(menu);
+            return menu;
+        }
+
+        function asstHandleInputForPopups() {
+            const input = asstCache.input;
+            if (!input) return;
+            const val = input.value;
+            // Slash command: line starts with '/'
+            const slashMatch = /^\/(\w*)$/.exec(val);
+            if (slashMatch) {
+                const q = slashMatch[1].toLowerCase();
+                const matches = ASST_SLASH_COMMANDS
+                    .filter(c => c.cmd.slice(1).startsWith(q))
+                    .map(c => ({ title: c.cmd, desc: c.desc, icon: c.icon, _cmd: c }));
+                asstBuildPopup(matches, (it) => {
+                    const c = it._cmd;
+                    input.value = c.prompt;
+                    asstCloseInputPopups();
+                    input.focus();
+                    asstAutosize();
+                    asstUpdateSendDisabled();
+                    if (c.send) asstSend();
+                });
+                return;
+            }
+            // Mention: last token starts with '@'
+            const mentionMatch = /(?:^|\s)@([\w\- ]{0,40})$/.exec(val);
+            if (mentionMatch) {
+                const q = mentionMatch[1].trim().toLowerCase();
+                const allPages = (Array.isArray(pages) ? pages : []).filter(p => p && !p.isSystemPage);
+                const matches = allPages
+                    .filter(p => !q || String(p.title || '').toLowerCase().includes(q))
+                    .slice(0, 8)
+                    .map(p => ({ title: (p.title || 'Untitled').split('::').pop(), desc: 'Attach as context', icon: 'fa-file-lines', _page: p }));
+                asstBuildPopup(matches, (it) => {
+                    const p = it._page;
+                    // strip the trailing @token from the input
+                    input.value = val.replace(/(?:^|\s)@([\w\- ]{0,40})$/, ' ').replace(/\s+$/, ' ').replace(/^\s+/, '');
+                    asstCloseInputPopups();
+                    asstAttachNoteAsContext(p);
+                    input.focus();
+                    asstAutosize();
+                    asstUpdateSendDisabled();
+                });
+                return;
+            }
+            asstCloseInputPopups();
+        }
+
+        function asstAttachNoteAsContext(page) {
+            if (!page) return;
+            const label = (page.title || 'Note').split('::').pop();
+            let text = '';
+            if (page.id === currentPageId) {
+                const editorEl = document.getElementById('editor');
+                text = editorEl ? (editorEl.innerText || '').trim() : '';
+            }
+            if (!text) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = String(page.html || page.content || ''); // sutra-allow-html: offscreen scratch node for text extraction only, never inserted into the document
+                text = (tmp.textContent || '').trim();
+            }
+            const id = 'note-' + page.id;
+            asstPendingContext = asstPendingContext.filter(c => c.id !== id);
+            asstPendingContext.push({ id, icon: 'fa-file-lines', label, content: 'Note: ' + label + '\n\n' + (text || '(empty note)') });
+            asstRenderContextBar();
+        }
+
+        async function asstHandleFiles(fileList) {
+            const files = Array.from(fileList || []).filter(Boolean);
+            if (!files.length) return;
+            if (!(window.flowAssistant && typeof window.flowAssistant.addAttachmentFromFile === 'function')) {
+                if (typeof showToast === 'function') showToast('Attachments need the Assistant panel — open it once, then retry.');
+                return;
+            }
+            for (const file of files) {
+                try { await window.flowAssistant.addAttachmentFromFile(file); }
+                catch (e) { if (typeof showToast === 'function') showToast('Could not attach ' + (file.name || 'file') + '.'); }
+            }
+            // Reflect attached files as context chips (managed by flowAssistant; remove clears all).
+            try {
+                const atts = (typeof window.flowAssistant.getAttachments === 'function') ? window.flowAssistant.getAttachments() : [];
+                asstPendingContext = asstPendingContext.filter(c => c.id !== 'attachments');
+                if (atts.length) {
+                    const label = atts.length === 1 ? (atts[0].name || '1 file') : (atts.length + ' files attached');
+                    asstPendingContext.push({ id: 'attachments', icon: 'fa-paperclip', label, content: '', isAttachment: true });
+                }
+                asstRenderContextBar();
+            } catch (e) { /* non-critical */ }
+        }
+
+        function asstNotice(text) {
+            const { msgs, shell } = asstCache;
+            if (!msgs) return;
+            if (shell) shell.classList.add('has-msgs');
+            const el = document.createElement('div');
+            el.className = 'asst-notice';
+            el.textContent = text;
+            msgs.appendChild(el);
+            asstScrollToBottom();
+        }
+
+        function asstShowTyping() {
+            const msgs = asstCache.msgs;
+            if (!msgs) return null;
+            const wrap = document.createElement('div');
+            wrap.className = 'asst-msg assistant asst-typing-row';
+            wrap.setAttribute('role', 'status');
+            wrap.setAttribute('aria-live', 'polite');
+            wrap.setAttribute('aria-label', 'Sutra Assistant is thinking');
+            const typingMarkup = '<div class="asst-msg-avatar"><i class="fas fa-feather-pointed" aria-hidden="true"></i></div>'
+                + '<div class="asst-msg-bubble"><div class="asst-thinking-bubble">'
+                + '<span class="asst-thinking-mark" aria-hidden="true">✦</span>'
+                + '<span class="asst-thinking-label">Thinking</span>'
+                + '<span class="asst-thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>'
+                + '</div></div>';
+            wrap.innerHTML = typingMarkup; // sutra-allow-html: static developer-authored typing indicator markup (no user data)
+            msgs.appendChild(wrap);
+            asstScrollToBottom();
+            return wrap;
+        }
+
+        function asstHideTyping(node) {
+            if (node && node.parentNode) node.parentNode.removeChild(node);
+        }
+
+        function asstFormatError(result) {
+            if (result.status > 0) {
+                let msg = 'HTTP ' + result.status + ' - ' + (result.errorMessage || '(no details)');
+                if (result.errorCategory === 'auth') msg += ' — check the API key in Settings ▸ Integrations.';
+                else if (result.errorCategory === 'rate-limit') msg += ' — the provider is rate-limiting; wait a moment and retry.';
+                else if (result.errorCategory === 'unavailable-model') msg += ' — the selected model may be unavailable; pick another model.';
+                return msg;
+            }
+            if (result.errorCategory === 'timeout') return 'The request timed out. The provider may be slow or unreachable — try again.';
+            let msg = 'Request failed: ' + (result.errorMessage || 'unknown error');
+            if (String(result.errorMessage || '').toLowerCase().includes('failed to fetch')) {
+                msg += ' — usually a network issue, blocked API key, or provider CORS policy from browser context.';
+            }
+            return msg;
+        }
+
+        // In-flight request state — drives the Stop button.
+        let asstInFlight = false;
+        let asstActiveRequestId = null;
+        function asstSetInFlight(on) {
+            asstInFlight = on;
+            const btn = asstCache.sendBtn;
+            if (!btn) return;
+            if (on) {
+                btn.classList.add('is-stop');
+                btn.disabled = false;
+                btn.setAttribute('aria-label', 'Stop generating');
+                btn.title = 'Stop generating';
+            } else {
+                btn.classList.remove('is-stop');
+                btn.setAttribute('aria-label', 'Send message');
+                btn.title = '';
+                asstUpdateSendDisabled();
+            }
+        }
+        function asstStopRequest() {
+            asstStream.cancelled = true;
+            if (asstActiveRequestId) { try { cancelIntelligenceRequest(asstActiveRequestId); } catch (e) { /* settled */ } }
+        }
+
+        // Composer entry point. Doubles as the Stop button while a request runs.
+        async function asstSend() {
+            const input = asstCache.input;
+            if (!input) return;
+            if (asstInFlight) { asstStopRequest(); return; }
+            asstCloseInputPopups();
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            asstAutosize();
+            asstUpdateSendDisabled();
+
+            // Build context-augmented send text (context block is prepended only for the AI request)
+            const contextBlock = asstBuildContextBlock();
+            const sendText = contextBlock ? contextBlock + text : text;
+            asstClearContext(); // clear chips immediately for responsiveness
+
+            // Optimistically show the user's turn (ephemeral until gates pass).
+            if (asstCache.shell) asstCache.shell.classList.add('has-msgs');
+            if (asstCache.msgs) {
+                asstCache.msgs.appendChild(asstBuildMessage({ role: 'user', content: text }, { index: -1 }));
+                asstScrollToBottom();
+            }
+
+            // Command layer — natural-language commands run locally, no model call.
+            try {
+                if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
+                    const cmd = window.flowAssistant.handleOutgoing(text);
+                    if (cmd && cmd.handled) {
+                        // Local Help / Memory manager render their own interactive
+                        // panel into the message stream — don't append a text reply.
+                        if (cmd.silent) return;
+                        convo.push({ role: 'user', content: text });
+                        convo.push({ role: 'assistant', content: cmd.message || 'Done.' });
+                        saveConvo();
+                        asstRenderAll();
+                        return;
+                    }
+                }
+            } catch (e) { /* fall through to model */ }
+
+            await asstSendCore(text, sendText, { pushUser: true });
+        }
+
+        // Shared send pipeline. `displayText` is what the user sees/persists,
+        // `sendText` is what the model receives (may carry a context block).
+        // opts.pushUser=false is used by Regenerate (user turn already present).
+        async function asstSendCore(displayText, sendText, opts = {}) {
+            const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
+            const provider = getCurrentChatProvider();
+            const providerConfig = CHAT_PROVIDER_CONFIG[provider];
+            const isLocalProvider = provider === 'local';
+            const localEndpointCfg = isLocalProvider ? getWorkspacePreference('assistant.localEndpoint', {}) : null;
+            const apiKey = getProviderApiKey(provider);
+            let selectedModel = getActiveModelForProvider(provider);
+            if (isLocalProvider && !selectedModel && localEndpointCfg && localEndpointCfg.model) {
+                selectedModel = String(localEndpointCfg.model).trim();
+            }
+            if (!apiKey && !isLocalProvider) {
+                asstNotice('No ' + providerConfig.label + ' API key on file. Open Settings (the model chip above) to add one, then try again.');
+                try { openProviderKeySettings(); } catch (e) { /* non-critical */ }
+                return;
+            }
+            if (isLocalProvider && (!localEndpointCfg || !String(localEndpointCfg.baseUrl || '').trim())) {
+                asstNotice('No local endpoint configured. Set a base URL in Settings ▸ Assistant ▸ Local AI endpoint (e.g. http://localhost:11434/v1).');
+                return;
+            }
+            if (!selectedModel) {
+                asstNotice(isLocalProvider ? 'Set a local model id in Settings ▸ Assistant.' : 'Please choose a model first (the model chip above).');
+                return;
+            }
+            if (remapModelValueIfApiKey(provider, selectedModel)) {
+                asstNotice('The model field looked like an API key. Add the ' + providerConfig.label + ' key in Settings, then enter the exact model ID.');
+                return;
+            }
+
+            // Attachment compatibility gate (mirrors sendChat) — incompatible files block the send.
+            try {
+                if (window.flowAssistant && typeof window.flowAssistant.validateAttachmentsForSend === 'function') {
+                    const gate = window.flowAssistant.validateAttachmentsForSend(provider, selectedModel);
+                    if (gate && gate.ok === false) {
+                        asstNotice('Attachment can\'t be sent to ' + (providerConfig.label || provider) + ': ' + (gate.problems && gate.problems.length ? gate.problems.join(' ') : 'unsupported file.'));
+                        return;
+                    }
+                }
+            } catch (e) { /* non-blocking */ }
+
+            // First remote request privacy disclosure (local endpoints skip this).
+            if (!isLocalProvider) {
+                const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model: selectedModel });
+                if (!acknowledged) {
+                    asstNotice('Cancelled — nothing was sent to the AI provider.');
+                    return;
+                }
+            }
+
+            // Gates passed — persist the user turn (just what user typed), then re-render.
+            if (opts.pushUser) {
+                convo.push({ role: 'user', content: displayText });
+                saveConvo();
+                asstRenderAll();
+            }
+            asstStream.cancelled = false;
+            asstSetInFlight(true);
+            const typing = asstShowTyping();
+            const sendChatId = currentChatId;
+            const sendConvoRef = convo;
+            try {
+                setModelForProvider(provider, selectedModel);
+                const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
+                    ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot })
+                    : null;
+                // Agent instructions must ALWAYS be present. Fall back to the
+                // strict always-on rules if enrichment was skipped or empty.
+                const systemPromptText = (flowEnrichment && flowEnrichment.systemPrompt)
+                    || (window.flowAssistant && window.flowAssistant.AGENT_RULES)
+                    || null;
+                // {static, dynamic} split for prompt caching (Anthropic cache_control /
+                // Gemini cachedContents) — the ~70% static portion (rules + Actions
+                // Bank) can be cached provider-side instead of re-sent every message.
+                // Only meaningful when it came from real enrichment (the AGENT_RULES
+                // fallback above has no useful context to split).
+                const systemPromptPartsForCache = (flowEnrichment && flowEnrichment.systemPromptParts) || null;
+                const requestMessages = flowEnrichment && Array.isArray(flowEnrichment.requestMessages) && flowEnrichment.requestMessages.length
+                    ? flowEnrichment.requestMessages
+                    : [{ role: 'user', content: sendText }];
+                const flowAttachments = flowEnrichment && Array.isArray(flowEnrichment.attachments) ? flowEnrichment.attachments : [];
+
+                const result = await performIntelligenceRequest({
+                    kind: 'chat',
+                    provider,
+                    providerConfig,
+                    apiKey,
+                    model: selectedModel,
+                    localEndpointCfg: isLocalProvider ? localEndpointCfg : null,
+                    systemPrompt: systemPromptText,
+                    systemPromptParts: systemPromptPartsForCache,
+                    messages: requestMessages,
+                    fallbackUserText: sendText,
+                    attachments: flowAttachments,
+                    maxTokens: 2048,
+                    reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
+                    onRequestStarted: (rid) => { asstActiveRequestId = rid; }
+                });
+
+                asstHideTyping(typing);
+                asstActiveRequestId = null;
+                const isStale = currentChatId !== sendChatId;
+                if (result.cancelled) {
+                    asstSetInFlight(false);
+                    if (!isStale) asstNotice('Stopped — the request was cancelled.');
+                    return;
+                }
+                if (!result.ok) {
+                    asstSetInFlight(false);
+                    if (!isStale) asstNotice(asstFormatError(result));
+                    return;
+                }
+                try { if (window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
+
+                const assistantText = result.text || '(no response)';
+                const { clean: _splitClean, thoughts: _splitThoughts } = splitThinkBlocks(assistantText);
+                const persistClean = _splitClean || assistantText;
+                const persistMsg = { role: 'assistant', content: persistClean };
+                if (_splitThoughts && _splitThoughts.length) persistMsg.thoughts = _splitThoughts;
+
+                if (isStale) {
+                    asstSetInFlight(false);
+                    sendConvoRef.push(persistMsg);
+                    const original = chatStore.conversations.find(chat => chat && chat.id === sendChatId);
+                    if (original) {
+                        original.messages = sendConvoRef.map(sanitizeAssistantChatMessage).filter(Boolean);
+                        original.updatedAt = new Date().toISOString();
+                        persistChatStore();
+                    }
+                    return;
+                }
+                convo.push(persistMsg);
+                saveConvo();
+                // Render with the just-added assistant message streaming in.
+                asstRenderChatList();
+                asstUpdateTopbar();
+                asstRenderMessages({ streamIndex: convo.length - 1, onDone: () => asstSetInFlight(false) });
+            } catch (err) {
+                asstHideTyping(typing);
+                asstActiveRequestId = null;
+                asstSetInFlight(false);
+                if (currentChatId === sendChatId) {
+                    asstNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'));
+                }
+            }
+        }
+
+        // Called by setActiveView when the Assistant tab becomes active.
+        function renderAssistantView() {
+            if (!asstCache.shell) asstCache = asstReadEls();
+            asstRenderChips();
+            asstRenderAll();
+            // The tab fade-in + layout can settle a few frames after activation,
+            // so re-pin the scroll once more to guarantee we open at the bottom.
+            setTimeout(() => {
+                if (asstCache.input) asstCache.input.focus();
+                asstScrollToBottom();
+            }, 60);
+        }
+
+        // Pick the highlighted item in an open input popup (slash/mention).
+        function asstPopupActivateActive() {
+            const menu = document.getElementById('asstInputPopup');
+            if (!menu) return false;
+            const active = menu.querySelector('.asst-popup-item.active') || menu.querySelector('.asst-popup-item');
+            if (active) { active.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return true; }
+            return false;
+        }
+        function asstPopupMove(dir) {
+            const menu = document.getElementById('asstInputPopup');
+            if (!menu) return false;
+            const items = Array.from(menu.querySelectorAll('.asst-popup-item'));
+            if (!items.length) return false;
+            let idx = items.findIndex(el => el.classList.contains('active'));
+            items.forEach(el => el.classList.remove('active'));
+            idx = (idx + dir + items.length) % items.length;
+            items[idx].classList.add('active');
+            items[idx].scrollIntoView({ block: 'nearest' });
+            return true;
+        }
+
+        function asstInitView() {
+            asstCache = asstReadEls();
+            if (!asstCache.shell) return; // view markup absent
+            asstRenderChips();
+            if (asstCache.newBtn) {
+                asstCache.newBtn.addEventListener('click', () => {
+                    startNewAssistantChat();
+                    asstRenderAll();
+                    if (asstCache.input) asstCache.input.focus();
+                });
+            }
+            if (asstCache.sendBtn) asstCache.sendBtn.addEventListener('click', asstSend);
+            if (asstCache.input) {
+                asstCache.input.addEventListener('input', () => { asstAutosize(); asstUpdateSendDisabled(); asstHandleInputForPopups(); });
+                asstCache.input.addEventListener('keydown', (e) => {
+                    const popupOpen = !!document.getElementById('asstInputPopup');
+                    if (popupOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                        e.preventDefault(); asstPopupMove(e.key === 'ArrowDown' ? 1 : -1); return;
+                    }
+                    if (e.key === 'Escape') { asstCloseInputPopups(); return; }
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        if (popupOpen && asstPopupActivateActive()) { e.preventDefault(); return; }
+                        e.preventDefault(); asstSend();
+                    }
+                });
+                // Image paste → attach
+                asstCache.input.addEventListener('paste', (e) => {
+                    const files = e.clipboardData && e.clipboardData.files ? Array.from(e.clipboardData.files) : [];
+                    if (files.length) { e.preventDefault(); asstHandleFiles(files); }
+                });
+            }
+            if (asstCache.search) {
+                asstCache.search.addEventListener('input', () => asstRenderChatList());
+                asstCache.search.addEventListener('search', () => asstRenderChatList()); // clear button
+            }
+            if (asstCache.ctxBtn) {
+                asstCache.ctxBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = !!document.querySelector('.asst-ctx-dropdown');
+                    document.querySelector('.asst-ctx-dropdown')?.remove();
+                    if (!isOpen) asstShowCtxMenu(asstCache.ctxBtn);
+                });
+            }
+            // Topbar controls
+            if (asstCache.modelBtn) {
+                asstCache.modelBtn.addEventListener('click', (e) => { e.stopPropagation(); asstOpenModelPicker(); });
+            }
+            if (asstCache.settingsBtn) {
+                asstCache.settingsBtn.addEventListener('click', () => {
+                    try { openProviderKeySettings(); } catch (e) { try { setActiveView('settings'); } catch (_) {} }
+                });
+            }
+            if (asstCache.customizeBtn) asstCache.customizeBtn.addEventListener('click', openAssistantCustomizer);
+            updateAssistantPersonalizationGlobal();
+            if (asstCache.exportBtn) asstCache.exportBtn.addEventListener('click', asstExportCurrent);
+            if (asstCache.moreBtn) {
+                asstCache.moreBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = !!document.querySelector('.asst-more-dropdown');
+                    document.querySelector('.asst-more-dropdown')?.remove();
+                    if (!isOpen) asstOpenMoreMenu(asstCache.moreBtn);
+                });
+            }
+            if (asstCache.clearAllBtn) { asstCache.clearAllBtn.classList.add('danger'); asstCache.clearAllBtn.addEventListener('click', asstClearAll); }
+            if (asstCache.sidebarToggle) {
+                asstCache.sidebarToggle.addEventListener('click', () => {
+                    if (asstCache.shell) asstCache.shell.classList.toggle('show-sidebar');
+                });
+            }
+            // Drag-and-drop files onto the message area
+            if (asstCache.body) {
+                const body = asstCache.body;
+                body.addEventListener('dragover', (e) => { e.preventDefault(); body.classList.add('asst-dragover'); });
+                body.addEventListener('dragleave', (e) => { if (e.target === body) body.classList.remove('asst-dragover'); });
+                body.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    body.classList.remove('asst-dragover');
+                    const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+                    if (files.length) asstHandleFiles(files);
+                });
+            }
+            asstUpdateSendDisabled();
+        }
+
         // Initialize
         populateKeyInputsFromStorage();
+        // Restore the saved provider preference to the select BEFORE syncing.
+        // The select's static HTML default is Groq, and getCurrentChatProvider()
+        // reads the select first — so without this, a saved choice (e.g. Gemini)
+        // is ignored at boot and immediately overwritten back to Groq.
+        try {
+            const savedProvider = String(localStorage.getItem(CHAT_PROVIDER_STORAGE_KEY) || '').trim();
+            if (savedProvider && CHAT_PROVIDER_CONFIG[savedProvider] && chatProviderSelect) {
+                chatProviderSelect.value = savedProvider;
+            }
+        } catch (e) { /* optional preference */ }
         syncProviderUi(getCurrentChatProvider());
         // load and render conversation history
         loadConvo();
         renderCurrentChatMessages();
         bindPublicBetaSurfaces();
+        asstInitView();
 
 // ===============================================================================
 // TIMELINE / TIME-BLOCKING (TimeTile integration)
@@ -65542,45 +69835,210 @@ function initTimeline() {
 // indentation. All functions become window globals (regular script scope).
 // ============================================================================
 
+// Full HTML escaper — including BOTH quote characters, because callers
+// interpolate the result into double-quoted attribute values (paste-import
+// preview inputs/hrefs). A textContent→innerHTML round-trip does NOT escape
+// quotes, which allowed attribute breakout from pasted content.
 function escapeCommandHtml(value) {
-    const div = document.createElement('div');
-    div.textContent = String(value == null ? '' : value);
-    return div.innerHTML;
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 // ---------- Quick Capture ----------
+// Convert a Date to a local YYYY-MM-DD string. Quick Capture deals in local days,
+// never UTC, so we build the string from local getters (matches toISODate elsewhere).
+function quickCaptureLocalISO(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+// Natural-language due-date parser for Quick Capture. Returns
+// { date: 'YYYY-MM-DD', match: '<text that produced it>' } or null. Patterns are
+// tried most-specific-first; each only consumes text it is confident about so the
+// caller can strip the matched span from the title.
+function parseQuickCaptureDate(text, now) {
+    const base = now instanceof Date ? now : new Date();
+    const lower = String(text || '').toLowerCase();
+    if (!lower.trim()) return null;
+    const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    const MONTH_ABBR = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+    const WD = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
+    const monthNames = MONTHS.concat(Object.keys(MONTH_ABBR));
+    const monthIndex = (key) => (MONTHS.indexOf(key) !== -1 ? MONTHS.indexOf(key) : MONTH_ABBR[key]);
+    const addDays = (n) => { const d = new Date(base); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d; };
+    const res = (d, match) => ({ date: quickCaptureLocalISO(d), match });
+    // Month/day with no year -> this year, or next year if it has clearly passed.
+    const inferYear = (monthIdx, day) => {
+        const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
+        let d = new Date(base.getFullYear(), monthIdx, day); d.setHours(0, 0, 0, 0);
+        if (d.getTime() < todayMid.getTime() - 86400000) d = new Date(base.getFullYear() + 1, monthIdx, day);
+        return d;
+    };
+    let m;
+
+    if ((m = lower.match(/\b(today|tonight|tn|eod|end of day)\b/))) return res(addDays(0), m[0]);
+    if ((m = lower.match(/\b(tomorrow|tmrw|tmro|tmr|tmw|tomo)\b/))) return res(addDays(1), m[0]);
+
+    if ((m = lower.match(/\bin\s+(\d{1,3})\s*(days?|weeks?|months?)\b/))) {
+        const n = parseInt(m[1], 10);
+        const unit = m[2];
+        if (unit.indexOf('month') === 0) { const d = new Date(base); d.setHours(0, 0, 0, 0); d.setMonth(d.getMonth() + n); return res(d, m[0]); }
+        return res(addDays(unit.indexOf('week') === 0 ? n * 7 : n), m[0]);
+    }
+
+    if ((m = lower.match(/\bnext week\b/))) {
+        const offset = ((1 - base.getDay() + 7) % 7) || 7; // upcoming Monday (today-if-Monday -> next Monday)
+        return res(addDays(offset), m[0]);
+    }
+    if ((m = lower.match(/\b(?:this\s+)?weekend\b/))) {
+        return res(addDays((6 - base.getDay() + 7) % 7), m[0]); // upcoming Saturday
+    }
+
+    if ((m = lower.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/))) {
+        const y = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, day = parseInt(m[3], 10);
+        if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) { const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+    }
+    if ((m = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
+        const mo = parseInt(m[1], 10) - 1, day = parseInt(m[2], 10);
+        if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) {
+            if (m[3]) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            return res(inferYear(mo, day), m[0]);
+        }
+    }
+
+    let re = new RegExp('\\b(' + monthNames.join('|') + ')\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b');
+    if ((m = lower.match(re))) {
+        const mo = monthIndex(m[1]), day = parseInt(m[2], 10);
+        if (typeof mo === 'number' && day >= 1 && day <= 31) {
+            if (m[3]) { const d = new Date(parseInt(m[3], 10), mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            return res(inferYear(mo, day), m[0]);
+        }
+    }
+    re = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(' + monthNames.join('|') + ')\\.?\\b');
+    if ((m = lower.match(re))) {
+        const mo = monthIndex(m[2]), day = parseInt(m[1], 10);
+        if (typeof mo === 'number' && day >= 1 && day <= 31) return res(inferYear(mo, day), m[0]);
+    }
+
+    re = new RegExp('\\b(next|this|on|by)?\\s*(' + Object.keys(WD).join('|') + ')\\b');
+    if ((m = lower.match(re))) {
+        const prefix = (m[1] || '').toLowerCase();
+        const target = WD[m[2]];
+        let delta = (target - base.getDay() + 7) % 7; // 0 = today
+        if (prefix === 'next') delta = delta === 0 ? 7 : delta + 7;
+        return res(addDays(delta), m[0].trim());
+    }
+
+    if ((m = lower.match(/\b(?:the\s+|by\s+)?(\d{1,2})(?:st|nd|rd|th)\b/))) {
+        const day = parseInt(m[1], 10);
+        if (day >= 1 && day <= 31) {
+            const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
+            let d = new Date(base.getFullYear(), base.getMonth(), day); d.setHours(0, 0, 0, 0);
+            if (d.getTime() < todayMid.getTime()) d = new Date(base.getFullYear(), base.getMonth() + 1, day);
+            return res(d, m[0]);
+        }
+    }
+
+    return null;
+}
+
+// Resolve free text to one of the student's existing Homework courses (hwCourses:v2)
+// using the course name, its significant words, and common student shorthand
+// (math, chem, bio, ...). Returns { id, name } for the most specific match, or null.
+function resolveQuickCaptureCourse(text) {
+    let courses = [];
+    try {
+        if (typeof localStorage !== 'undefined') courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+    } catch (err) { courses = []; }
+    if (!Array.isArray(courses) || courses.length === 0) return null;
+
+    const padded = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    if (padded.trim() === '') return null;
+
+    // Student shorthand -> name stems that must appear in a matching course name.
+    const SHORTHAND = {
+        math: ['math', 'calc', 'algebra', 'geometry', 'trig', 'precalc', 'statistic'],
+        calc: ['calculus'],
+        chem: ['chemistry'],
+        bio: ['biology'],
+        physics: ['physics'],
+        phys: ['physics', 'physical'],
+        english: ['english', 'literature', 'language arts', 'composition', 'rhetoric'],
+        lit: ['literature'],
+        history: ['history', 'histor'],
+        gov: ['government', 'civics'],
+        econ: ['economics'],
+        psych: ['psychology'],
+        spanish: ['spanish', 'espanol'],
+        french: ['french'],
+        art: ['studio art', 'art studio', 'drawing', 'painting', 'ceramics'],
+        music: ['music', 'band', 'orchestra', 'choir', 'chorus']
+    };
+
+    let best = null;
+    courses.forEach(course => {
+        if (!course || course.id === undefined || course.id === null) return;
+        const name = String(course.name || '').toLowerCase();
+        if (!name.trim()) return;
+        const candidates = new Set();
+        candidates.add(name.replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim());
+        name.split(/[^a-z0-9]+/).forEach(w => { if (w.length >= 3) candidates.add(w); });
+        Object.keys(SHORTHAND).forEach(short => {
+            SHORTHAND[short].forEach(stem => {
+                if (name.indexOf(stem) !== -1) { candidates.add(short); candidates.add(stem); }
+            });
+        });
+        let localScore = 0;
+        candidates.forEach(tok => {
+            if (!tok || tok.length < 3) return;
+            if (padded.indexOf(' ' + tok + ' ') !== -1) localScore = Math.max(localScore, tok.length);
+        });
+        if (localScore > 0 && (!best || localScore > best.score)) {
+            best = { id: String(course.id), name: String(course.name || ''), score: localScore };
+        }
+    });
+    return best ? { id: best.id, name: best.name } : null;
+}
+
 function parseQuickCaptureText(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
-    const out = { title: raw, type: 'task', dueDate: '', dueTime: '', priority: 'medium', classHint: '' };
+    const out = { title: raw, type: 'task', dueDate: '', dueTime: '', priority: 'medium', difficulty: 'medium', classHint: '', courseId: '', courseName: '', score: null, maxScore: null };
     let working = raw;
 
-    // Very light natural-date parse.
-    const now = new Date();
-    const iso = (d) => {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    };
-    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const weekdayRe = new RegExp(`\\b(?:on )?(${weekdays.join('|')})\\b`, 'i');
-    const lower = working.toLowerCase();
-    if (/\btoday\b/.test(lower)) {
-        out.dueDate = iso(now);
-        working = working.replace(/\btoday\b/i, '').trim();
-    } else if (/\btomorrow\b/.test(lower)) {
-        const t = new Date(now); t.setDate(t.getDate() + 1);
-        out.dueDate = iso(t);
-        working = working.replace(/\btomorrow\b/i, '').trim();
-    } else {
-        const wdMatch = lower.match(weekdayRe);
-        if (wdMatch) {
-            const target = weekdays.indexOf(wdMatch[1].toLowerCase());
-            const delta = ((target - now.getDay() + 7) % 7) || 7;
-            const t = new Date(now); t.setDate(t.getDate() + delta);
-            out.dueDate = iso(t);
-            working = working.replace(weekdayRe, '').trim();
+    // Grade log detection — MUST run before date parsing so "9/10 on quiz"
+    // reads as a score, not September 10. Conservative on purpose: a fraction
+    // alone ("math pset 3/4") stays a task; it takes a grade verb ("got",
+    // "scored") or "N/M on …" word order to become a grade.
+    const gradeFraction = working.match(/\b(?:got|scored|earned|made)\s+(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(?:\s+(?:on|for|in)\b)?/i)
+        || working.match(/\b(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s+on\b/i);
+    const gradePercent = !gradeFraction && working.match(/\b(?:got|scored|earned|made)\s+(\d{1,3}(?:\.\d+)?)\s*%(?:\s+(?:on|for|in)\b)?/i);
+    if (gradeFraction || gradePercent) {
+        const m = gradeFraction || gradePercent;
+        const score = Number(m[1]);
+        const maxScore = gradeFraction ? Number(m[2]) : 100;
+        if (Number.isFinite(score) && Number.isFinite(maxScore) && maxScore > 0) {
+            out.type = 'grade';
+            out.score = score;
+            out.maxScore = maxScore;
+            working = working.replace(m[0], ' ').replace(/\s+/g, ' ').trim();
+        }
+    }
+
+    // Natural-language due date (today/tomorrow, weekdays + abbreviations,
+    // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
+    const dateParsed = parseQuickCaptureDate(working, new Date());
+    if (dateParsed && dateParsed.date) {
+        out.dueDate = dateParsed.date;
+        if (dateParsed.match) {
+            const dateRe = new RegExp(dateParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            working = working.replace(dateRe, ' ').replace(/\s+/g, ' ').trim();
         }
     }
 
@@ -65594,37 +70052,138 @@ function parseQuickCaptureText(text) {
         if (suffix === 'am' && h === 12) h = 0;
         if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && (suffix || timeMatch[0].includes(':'))) {
             out.dueTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-            working = working.replace(timeMatch[0], '').trim();
+            working = working.replace(timeMatch[0], ' ').replace(/\s+/g, ' ').trim();
         }
     }
 
-    // Priority hints.
-    if (/\bhigh\b|!!/.test(lower)) { out.priority = 'high'; working = working.replace(/\bhigh\b|!!/ig, '').trim(); }
-    else if (/\blow\b/.test(lower)) { out.priority = 'low'; working = working.replace(/\blow\b/ig, '').trim(); }
-    if (/\bhard\b/.test(lower)) working = working.replace(/\bhard\b/i, '').trim();
+    let lower = working.toLowerCase();
 
-    // Type hints.
-    if (/\bap\s+\w+|\bfrq\b|\bmcq\b|\bpractice test\b/i.test(working)) {
+    // Priority + difficulty hints.
+    if (/\bhigh\b|!!|\burgent\b/.test(lower)) { out.priority = 'high'; working = working.replace(/\bhigh\b|!!|\burgent\b/ig, ' ').replace(/\s+/g, ' ').trim(); }
+    else if (/\blow\b/.test(lower)) { out.priority = 'low'; working = working.replace(/\blow\b/ig, ' ').replace(/\s+/g, ' ').trim(); }
+    lower = working.toLowerCase();
+    if (/\bhard\b/.test(lower)) { out.difficulty = 'hard'; working = working.replace(/\bhard\b/i, ' ').replace(/\s+/g, ' ').trim(); }
+    else if (/\beasy\b/.test(lower)) { out.difficulty = 'easy'; working = working.replace(/\beasy\b/i, ' ').replace(/\s+/g, ' ').trim(); }
+
+    // Type hints. A detected grade log keeps its type — "ap bio test" after
+    // "got 40/50 on" is what the grade was ON, not a new AP session.
+    if (out.type === 'grade') {
+        /* keep */
+    } else if (/\bap\s+\w+|\bfrq\b|\bmcq\b|\bpractice test\b/i.test(working)) {
         out.type = 'apsession';
-    } else if (/\bhomework\b|\bhw\b|\bassignment\b/i.test(working)) {
+    } else if (/\bhomework\b|\bhw\b|\bassignment\b|\bpset\b|\bproblem set\b/i.test(working)) {
         out.type = 'homework';
-        working = working.replace(/\bhomework\b|\bhw\b|\bassignment\b/ig, '').trim();
+        working = working.replace(/\bhomework\b|\bhw\b|\bassignment\b/ig, ' ').replace(/\s+/g, ' ').trim();
     } else if (/\bcollege\b|\bessay\b|\bscholarship\b/i.test(working)) {
         out.type = 'college';
     } else if (/\bnote\b|^note:/i.test(working)) {
         out.type = 'note';
-        working = working.replace(/\bnote\b|^note:/ig, '').trim();
+        working = working.replace(/\bnote\b|^note:/ig, ' ').replace(/\s+/g, ' ').trim();
     } else if (/\bblock\b|\bcalendar\b|\bschedule\b/i.test(working)) {
         out.type = 'block';
     }
 
-    // Class hint: "chem homework", "ap physics frq" -> first words.
-    const classMatch = working.match(/^([A-Za-z][A-Za-z0-9 &.]{0,30})/);
-    if (classMatch) out.classHint = classMatch[1].trim();
+    // Resolve to an existing Homework course; an unclassified ("task") capture that
+    // names a real course is almost always homework, so promote it.
+    const courseMatch = resolveQuickCaptureCourse(working);
+    if (courseMatch) {
+        out.courseId = courseMatch.id;
+        out.courseName = courseMatch.name;
+        // A named real course means coursework. Promote a plain task, and also a weak
+        // "college" guess that only fired on the word "essay" (a class essay, not an app
+        // essay) — but leave explicit college/scholarship captures and AP sessions alone.
+        const explicitCollege = /\bcollege\b|\bcommon\s*app\b|\bpersonal statement\b|\bscholarship\b/i.test(raw);
+        if (out.type === 'task' || (out.type === 'college' && !explicitCollege)) out.type = 'homework';
+    } else {
+        // Fallback crude class hint when nothing matched ("chem homework" -> "chem").
+        const classMatch = working.match(/^([A-Za-z][A-Za-z0-9 &.]{0,30})/);
+        if (classMatch) out.classHint = classMatch[1].trim();
+    }
 
-    out.title = working.replace(/\s+/g, ' ').trim() || raw;
-    if (/\bdue\b/i.test(out.title)) out.title = out.title.replace(/\bdue\b/ig, '').replace(/\s+/g, ' ').trim();
+    out.title = working.replace(/\s+/g, ' ').trim().replace(/^[\s:,\-]+/, '').trim() || raw;
+    if (/\bdue\b/i.test(out.title)) out.title = out.title.replace(/\bdue\b/ig, ' ').replace(/\s+/g, ' ').trim();
     return out;
+}
+
+// Rough effort estimate for a captured work item, in minutes. Quick Capture has
+// no duration field, so we infer from type + difficulty — just enough to offer a
+// "block N min" nudge (the plan step of capture → plan → next-step). Non-work
+// captures (notes, calendar blocks) return 0 so no suggestion is shown.
+function estimateQuickCaptureMinutes(parsed) {
+    if (!parsed) return 0;
+    if (!['homework', 'task', 'college', 'apsession'].includes(parsed.type)) return 0;
+    const base = { easy: 30, medium: 60, hard: 120 };
+    let minutes = base[parsed.difficulty] || 60;
+    // Essays / projects / labs / presentations / practice tests tend to run longer.
+    if (/\bessay\b|\bproject\b|\blab\b|\bpaper\b|\bpresentation\b|\bpractice test\b|\bresearch\b/i.test(parsed.title || '')) {
+        minutes = Math.max(minutes, 90);
+    }
+    // Scale by the student's logged actual-vs-estimate history so the
+    // "block N min" nudge reflects how long their work really takes.
+    // Threshold/rounding policy lives in SutraHomework.applyEffortCalibration.
+    try {
+        const hw = window.SutraHomework;
+        if (hw && typeof hw.applyEffortCalibration === 'function') {
+            minutes = hw.applyEffortCalibration(minutes, { courseId: parsed.courseId || '', difficulty: parsed.difficulty || '' }).minutes;
+        }
+    } catch (_) { /* keep the base estimate */ }
+    return minutes;
+}
+
+function formatQuickCaptureEstimate(minutes) {
+    const total = Math.max(0, Math.round(Number(minutes) || 0));
+    if (total <= 0) return '';
+    if (total < 60) return `${total} min`;
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+// Find the earliest free start (in minutes) today that fits `duration`, never in
+// the past. Returns null when the day has no room. Reuses the canonical
+// free-window engine exposed on flowAtelier so it respects planner-day prefs and
+// existing blocks/classes.
+function pickFocusBlockStart(dateKey, duration) {
+    const fa = window.flowAtelier;
+    let free = [];
+    try {
+        if (fa && typeof fa.getFreeWindowsForDateKey === 'function') free = fa.getFreeWindowsForDateKey(dateKey, []) || [];
+    } catch (_) { free = []; }
+    const now = new Date();
+    const todayKey = quickCaptureLocalISO(now);
+    const earliest = dateKey === todayKey ? (now.getHours() * 60 + now.getMinutes() + 5) : 0;
+    for (const win of free) {
+        const start = Math.max(Number(win.start) || 0, earliest);
+        if (start + duration <= (Number(win.end) || 0)) return start;
+    }
+    return null;
+}
+
+// Optional "plan" step after a work capture: drop a focus block onto today's
+// timeline so the student has a concrete time to start. Best-effort — if there's
+// no free slot or the calendar bridge is unavailable, the capture still succeeds.
+function scheduleQuickCaptureFocusBlock(title, minutes, dueDate) {
+    const fa = window.flowAtelier;
+    if (!fa || typeof fa.addCalendarBlockForTemplate !== 'function') return;
+    const duration = Math.max(15, Math.min(240, Math.round(Number(minutes) || 30)));
+    // Block today so the student starts early — the due day itself is too late for
+    // anything due in the future, and "do it now" is the whole point.
+    const dateKey = quickCaptureLocalISO(new Date());
+    const startMin = pickFocusBlockStart(dateKey, duration);
+    if (startMin == null) {
+        if (typeof showToast === 'function') showToast('Captured — no free slot today to block. Add it in Timeline.');
+        return;
+    }
+    const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const id = fa.addCalendarBlockForTemplate({
+        date: dateKey,
+        start: fmt(startMin),
+        end: fmt(startMin + duration),
+        name: `Focus: ${title}`.slice(0, 120),
+        category: 'study',
+        source: 'quick_capture'
+    });
+    if (id && typeof showToast === 'function') showToast(`Blocked ${formatQuickCaptureEstimate(duration)} of focus time today.`);
 }
 
 function getQuickCaptureApSubjects() {
@@ -65683,6 +70242,83 @@ function syncQuickCaptureApSubjectField(parsed, modal) {
     };
 }
 
+function getQuickCaptureCourses() {
+    try {
+        if (window.SutraHomework && typeof window.SutraHomework.getCourses === 'function') {
+            const list = window.SutraHomework.getCourses();
+            if (Array.isArray(list)) return list.filter(c => c && c.id !== undefined && c.id !== null && String(c.name || '').trim());
+        }
+    } catch (err) { /* fall through to storage */ }
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const list = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            if (Array.isArray(list)) return list.filter(c => c && c.id !== undefined && c.id !== null && String(c.name || '').trim());
+        }
+    } catch (err) { /* ignore */ }
+    return [];
+}
+
+// Populate + manage the Quick Capture "Class" picker (homework only). Mirrors the AP
+// subject field: shown only for homework, pre-selects the parser's matched course, and
+// preserves a manual override once the user has touched it. Returns the effective
+// selection so the live preview can reflect the dropdown, not just the parse.
+function syncQuickCaptureCourseField(parsed, modal) {
+    const field = modal && modal.querySelector ? modal.querySelector('#quickCaptureCourseField') : null;
+    const select = modal && modal.querySelector ? modal.querySelector('#quickCaptureCourse') : null;
+    const newInput = modal && modal.querySelector ? modal.querySelector('#quickCaptureNewCourse') : null;
+    const help = modal && modal.querySelector ? modal.querySelector('#quickCaptureCourseHelp') : null;
+    if (!field || !select) return { selectedCourse: null, isNew: false };
+
+    // Homework AND grade logs both belong to a class, so both get the picker.
+    const isCourseWork = parsed && (parsed.type === 'homework' || parsed.type === 'grade');
+    field.hidden = !isCourseWork;
+    if (!isCourseWork) {
+        if (newInput) newInput.hidden = true;
+        return { selectedCourse: null, isNew: false };
+    }
+
+    const courses = getQuickCaptureCourses();
+    const previousValue = String(select.value || '');
+    const userTouched = select.dataset && select.dataset.userTouched === '1';
+
+    // Rebuild options via DOM (no innerHTML): No class · existing courses · + New class.
+    select.replaceChildren();
+    const addOption = (value, label) => {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        select.appendChild(opt);
+    };
+    addOption('', 'No class');
+    courses.forEach(c => addOption(String(c.id), String(c.name || 'Class')));
+    addOption('__new__', '＋ New class…');
+
+    const validValues = new Set(['', '__new__', ...courses.map(c => String(c.id))]);
+    let chosen = '';
+    if (userTouched && validValues.has(previousValue)) chosen = previousValue;
+    else if (parsed.courseId && validValues.has(String(parsed.courseId))) chosen = String(parsed.courseId);
+    select.value = chosen;
+
+    const isNew = chosen === '__new__';
+    if (newInput) {
+        newInput.hidden = !isNew;
+        if (isNew && !newInput.value && parsed.classHint) newInput.value = parsed.classHint;
+    }
+    if (help) {
+        if (isNew) help.textContent = 'Type a name for the new class.';
+        else if (chosen) help.textContent = 'Sutra matched this from your text — change it if needed.';
+        else if (courses.length === 0) help.textContent = 'No classes yet — pick “＋ New class…” to create one.';
+        else help.textContent = 'Pick the class this belongs to (optional).';
+    }
+
+    let selectedCourse = null;
+    if (chosen && chosen !== '__new__') {
+        const match = courses.find(c => String(c.id) === chosen);
+        if (match) selectedCourse = { id: String(match.id), name: String(match.name || '') };
+    }
+    return { selectedCourse, isNew };
+}
+
 function openQuickCaptureModal(prefillText) {
     const modal = document.getElementById('quickCaptureModal');
     if (!modal) return;
@@ -65692,7 +70328,14 @@ function openQuickCaptureModal(prefillText) {
     const dateInput = modal.querySelector('#quickCaptureDate');
     const timeInput = modal.querySelector('#quickCaptureTime');
     const apSubjectSelect = modal.querySelector('#quickCaptureApSubject');
+    const courseSelect = modal.querySelector('#quickCaptureCourse');
+    const newCourseInput = modal.querySelector('#quickCaptureNewCourse');
     if (!input || !previewEl || !typeSelect || !dateInput || !timeInput || !apSubjectSelect) return;
+
+    // Fresh open -> let the parser's match drive the course picker until the user edits it.
+    if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
+    const blockChk = modal.querySelector('#quickCaptureBlockTime');
+    if (blockChk) blockChk.checked = false;
 
     input.value = String(prefillText || '');
     const updatePreview = () => {
@@ -65705,6 +70348,7 @@ function openQuickCaptureModal(prefillText) {
         dateInput.value = parsed.dueDate || '';
         timeInput.value = parsed.dueTime || '';
         const apMeta = syncQuickCaptureApSubjectField(parsed, modal);
+        const courseMeta = syncQuickCaptureCourseField(parsed, modal);
         const bits = [];
         let destination = '';
         switch (parsed.type) {
@@ -65723,23 +70367,66 @@ function openQuickCaptureModal(prefillText) {
                 destination = isEssay ? 'College essay plan' : 'Task (College label)';
                 break;
             }
-            case 'homework': destination = 'Homework assignment'; break;
+            case 'homework': {
+                if (courseMeta.isNew) destination = 'Homework · (new class)';
+                else if (courseMeta.selectedCourse) destination = `Homework · ${courseMeta.selectedCourse.name}`;
+                else destination = 'Homework assignment';
+                break;
+            }
+            case 'grade': {
+                if (courseMeta.isNew) destination = 'Grade log · (new class)';
+                else if (courseMeta.selectedCourse) destination = `Grade log · ${courseMeta.selectedCourse.name}`;
+                else destination = 'Grade log · pick a class';
+                break;
+            }
             case 'note': destination = 'Note'; break;
             case 'block': destination = 'Timeline block'; break;
             default: destination = 'Task';
         }
         bits.push(`→ ${destination}`);
+        if (parsed.type === 'grade' && parsed.score !== null && parsed.maxScore) {
+            bits.push(`score: ${parsed.score}/${parsed.maxScore} (${Math.round((parsed.score / parsed.maxScore) * 1000) / 10}%)`);
+        }
         if (parsed.dueDate) bits.push(`date: ${parsed.dueDate}`);
         if (parsed.dueTime) bits.push(`time: ${parsed.dueTime}`);
         if (parsed.priority && parsed.priority !== 'medium') bits.push(`priority: ${parsed.priority}`);
-        if (parsed.classHint) bits.push(`class hint: ${parsed.classHint}`);
+        if (parsed.difficulty && parsed.difficulty !== 'medium') bits.push(`difficulty: ${parsed.difficulty}`);
+        if (parsed.type !== 'homework' && !parsed.courseName && parsed.classHint) bits.push(`class hint: ${parsed.classHint}`);
+        // Effort estimate + optional "block focus time" nudge (the plan step).
+        const estMinutes = estimateQuickCaptureMinutes({ ...parsed, type: parsed.type });
+        const blockField = modal.querySelector('#quickCaptureBlockTimeField');
+        const blockLabel = modal.querySelector('#quickCaptureBlockTimeLabel');
+        if (blockField) {
+            blockField.hidden = estMinutes <= 0;
+            if (estMinutes > 0 && blockLabel) {
+                blockLabel.textContent = `Block ${formatQuickCaptureEstimate(estMinutes)} of focus time today to start this`;
+            }
+        }
+        if (estMinutes > 0) bits.push(`≈ ${formatQuickCaptureEstimate(estMinutes)}`);
         previewEl.textContent = `“${parsed.title}” · ${bits.join(' · ')}`;
     };
     input.oninput = updatePreview;
     typeSelect.onchange = () => {
-        syncQuickCaptureApSubjectField({ type: String(typeSelect.value || 'task') }, modal);
+        const manualType = String(typeSelect.value || 'task');
+        syncQuickCaptureApSubjectField({ type: manualType }, modal);
+        syncQuickCaptureCourseField({ type: manualType, courseId: '', classHint: '' }, modal);
+        const bf = modal.querySelector('#quickCaptureBlockTimeField');
+        if (bf) bf.hidden = !['homework', 'task', 'college', 'apsession'].includes(manualType);
     };
     apSubjectSelect.onchange = updatePreview;
+    if (courseSelect) {
+        courseSelect.onchange = () => {
+            if (courseSelect.dataset) courseSelect.dataset.userTouched = '1';
+            if (courseSelect.value === '__new__' && newCourseInput) {
+                newCourseInput.hidden = false;
+                setTimeout(() => { try { newCourseInput.focus(); } catch (err) {} }, 30);
+            } else if (newCourseInput) {
+                newCourseInput.hidden = true;
+            }
+            updatePreview();
+        };
+    }
+    if (newCourseInput) newCourseInput.oninput = updatePreview;
     updatePreview();
 
     modal.classList.add('active');
@@ -65752,6 +70439,95 @@ function closeQuickCaptureModal() {
     if (!modal) return;
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
+}
+
+// Log a quick-captured grade into the Grade Planner and immediately show the
+// before → after course grade (all deterministic, on-device). Closing the loop:
+// a rough score also offers a one-tap "corrections deck" via the review
+// generator, connecting grades → review, which are otherwise parallel systems.
+function guessGradeCategoryId(title, categories) {
+    try {
+        const t = String(title || '').toLowerCase();
+        const cats = Array.isArray(categories) ? categories : [];
+        const kindWords = /\btest\b|\bexam\b|\bmidterm\b|\bfinal\b/.test(t) ? ['test', 'exam']
+            : /\bquiz\b/.test(t) ? ['quiz']
+            : /\blab\b/.test(t) ? ['lab']
+            : /\bessay\b|\bpaper\b/.test(t) ? ['essay', 'paper', 'writing']
+            : /\bproject\b/.test(t) ? ['project']
+            : /\bhomework\b|\bhw\b|\bpset\b/.test(t) ? ['homework', 'classwork', 'practice'] : [];
+        const hit = cats.find(c => kindWords.some(w => String(c && c.name || '').toLowerCase().includes(w)));
+        return hit ? hit.id : '';
+    } catch (err) { return ''; }
+}
+
+function offerMistakesToCards(opts) {
+    const open = () => {
+        try {
+            if (window.SutraReviewGen && typeof window.SutraReviewGen.openGenerator === 'function') {
+                window.SutraReviewGen.openGenerator({
+                    title: `${opts.courseName || 'Class'} — ${opts.title || 'test'} corrections`,
+                    subject: opts.courseName || '',
+                    source: 'grade-log',
+                    description: `Missed points from ${opts.title || 'graded work'} (${opts.score}/${opts.maxScore}). Add each question you missed as a card.`
+                });
+            }
+        } catch (err) { /* non-critical */ }
+    };
+    try {
+        const N = window.SutraNotifications;
+        if (N && typeof N.showToast === 'function') {
+            N.showToast({
+                title: 'Turn mistakes into review cards?',
+                subtitle: 'Tap to build a corrections deck — reviewing misses is the fastest grade repair',
+                icon: 'fa-clone',
+                duration: 12000,
+                onClick: open
+            });
+        }
+    } catch (err) { /* non-critical */ }
+}
+
+function logQuickCaptureGrade(opts) {
+    const GP = window.SutraGradePlanner;
+    if (!GP || typeof GP.addEntryForCourse !== 'function' || !GP.engine) return false;
+    let before = null;
+    let categories = [];
+    try {
+        const planner = GP.getPlanner();
+        const data = GP.engine.normalizeCourseGrades((planner.courses || {})[String(opts.courseId)] || null);
+        categories = (data && data.categories) || [];
+        before = GP.engine.computeCourseGrade(data, planner.settings);
+    } catch (err) { /* fresh course — no baseline */ }
+    try {
+        GP.addEntryForCourse(String(opts.courseId), {
+            title: opts.title,
+            categoryId: guessGradeCategoryId(opts.title, categories),
+            score: opts.score,
+            maxScore: opts.maxScore,
+            status: 'graded',
+            date: opts.date
+        });
+    } catch (err) {
+        window.reportError && window.reportError(err, 'quickCapture:logGrade', 'warning');
+        return false;
+    }
+    let afterTxt = '';
+    try {
+        const p2 = GP.getPlanner();
+        const d2 = GP.engine.normalizeCourseGrades((p2.courses || {})[String(opts.courseId)] || null);
+        const after = GP.engine.computeCourseGrade(d2, p2.settings);
+        if (after && after.percent !== null) {
+            afterTxt = (before && before.percent !== null)
+                ? `${before.percent.toFixed(1)}% → ${after.percent.toFixed(1)}% (${after.letter})`
+                : `${after.percent.toFixed(1)}% (${after.letter})`;
+        }
+    } catch (err) { /* toast falls back to plain confirmation */ }
+    if (typeof showToast === 'function') {
+        showToast(`Logged ${opts.score}/${opts.maxScore} in ${opts.courseName || 'class'}.${afterTxt ? ` Course grade: ${afterTxt}` : ''}`);
+    }
+    const pct = (opts.score / opts.maxScore) * 100;
+    if (pct < 85) offerMistakesToCards(opts);
+    return true;
 }
 
 function submitQuickCapture() {
@@ -65776,26 +70552,112 @@ function submitQuickCapture() {
         switch (type) {
             case 'homework': {
                 if (typeof localStorage === 'undefined') break;
+                // Re-parse to recover difficulty / priority / clean title (no modal field
+                // carries them); the user-editable date/time/type fields stay authoritative.
+                const parsedHw = parseQuickCaptureText(input.value) || {};
+                const hwTitle = (parsedHw.title && parsedHw.title.trim()) ? parsedHw.title.trim() : title;
+
+                // Course comes from the (user-confirmable) Class dropdown; the parsed match
+                // is only the default the dropdown was seeded with.
+                const courseSel = modal.querySelector('#quickCaptureCourse');
+                const newCourseEl = modal.querySelector('#quickCaptureNewCourse');
+                let hwCourseId = String(parsedHw.courseId || '');
+                let hwCourseName = String(parsedHw.courseName || '');
+                if (courseSel) {
+                    const selVal = String(courseSel.value || '');
+                    if (selVal === '__new__') {
+                        hwCourseId = '';
+                        hwCourseName = '';
+                        const newName = String((newCourseEl && newCourseEl.value) || '').trim();
+                        if (newName && window.SutraHomework && typeof window.SutraHomework.addCourse === 'function') {
+                            try {
+                                const created = window.SutraHomework.addCourse(newName);
+                                if (created && created.id) { hwCourseId = String(created.id); hwCourseName = String(created.name || newName); }
+                            } catch (err) { window.reportError && window.reportError(err, 'quickCapture:addCourse', 'warning'); }
+                        }
+                    } else {
+                        hwCourseId = selVal;
+                        hwCourseName = '';
+                        if (selVal) {
+                            const list = (window.SutraHomework && typeof window.SutraHomework.getCourses === 'function') ? window.SutraHomework.getCourses() : [];
+                            const found = Array.isArray(list) ? list.find(c => String(c.id) === selVal) : null;
+                            hwCourseName = found ? String(found.name || '') : '';
+                        }
+                    }
+                }
+
                 const hwTasksRaw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
                 const uid = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
                 hwTasksRaw.push({
                     id: uid,
-                    courseId: '',
-                    title,
-                    text: title,
+                    courseId: hwCourseId,
+                    title: hwTitle,
+                    text: hwTitle,
                     done: false,
                     dueDate,
                     dueTime,
                     due: dueDate,
-                    priority: 'medium',
-                    difficulty: 'medium',
+                    priority: parsedHw.priority || 'medium',
+                    difficulty: parsedHw.difficulty || 'medium',
                     notes: '',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 });
                 localStorage.setItem('hwTasks:v2', JSON.stringify(hwTasksRaw));
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) {}
-                if (typeof showToast === 'function') showToast('Homework captured.');
+                try { window.SutraActivation && window.SutraActivation.record('capture'); } catch (err) {}
+                if (typeof showToast === 'function') showToast(hwCourseName ? `Homework captured in ${hwCourseName}.` : 'Homework captured.');
+                break;
+            }
+            case 'grade': {
+                // Validation failures RETURN (keep the modal open to fix) —
+                // every other capture type breaks and closes.
+                const parsedGrade = parseQuickCaptureText(input.value) || {};
+                const score = Number(parsedGrade.score);
+                const maxScore = Number(parsedGrade.maxScore);
+                if (!Number.isFinite(score) || !(maxScore > 0)) {
+                    if (typeof showToast === 'function') showToast('Include the score, e.g. "got 87/100 on chem test".');
+                    return;
+                }
+                const courseSel = modal.querySelector('#quickCaptureCourse');
+                const newCourseEl = modal.querySelector('#quickCaptureNewCourse');
+                let gCourseId = String(parsedGrade.courseId || '');
+                let gCourseName = String(parsedGrade.courseName || '');
+                if (courseSel) {
+                    const selVal = String(courseSel.value || '');
+                    if (selVal === '__new__') {
+                        gCourseId = '';
+                        gCourseName = '';
+                        const newName = String((newCourseEl && newCourseEl.value) || '').trim();
+                        if (newName && window.SutraHomework && typeof window.SutraHomework.addCourse === 'function') {
+                            try {
+                                const created = window.SutraHomework.addCourse(newName);
+                                if (created && created.id) { gCourseId = String(created.id); gCourseName = String(created.name || newName); }
+                            } catch (err) { window.reportError && window.reportError(err, 'quickCapture:addCourse', 'warning'); }
+                        }
+                    } else if (selVal) {
+                        gCourseId = selVal;
+                        const list = (window.SutraHomework && typeof window.SutraHomework.getCourses === 'function') ? window.SutraHomework.getCourses() : [];
+                        const found = Array.isArray(list) ? list.find(c => String(c.id) === selVal) : null;
+                        gCourseName = found ? String(found.name || '') : '';
+                    }
+                }
+                if (!gCourseId) {
+                    if (typeof showToast === 'function') showToast('Pick the class this grade belongs to.');
+                    return;
+                }
+                const ok = logQuickCaptureGrade({
+                    courseId: gCourseId,
+                    courseName: gCourseName,
+                    title: String(parsedGrade.title || '').trim() || 'Graded work',
+                    score,
+                    maxScore,
+                    date: dueDate || quickCaptureLocalISO(new Date())
+                });
+                if (!ok) {
+                    if (typeof showToast === 'function') showToast('Grade Planner is unavailable — score not logged.');
+                    return;
+                }
                 break;
             }
             case 'note': {
@@ -65973,6 +70835,17 @@ function submitQuickCapture() {
         console.warn('Quick Capture failed', err);
         if (typeof showToast === 'function') showToast('Quick Capture failed.');
     }
+
+    // Plan step: if the student opted in, block focus time for this work capture.
+    // Gated on the live type/difficulty so a stale checkbox can never block a note.
+    try {
+        const blockChk = modal.querySelector('#quickCaptureBlockTime');
+        if (blockChk && blockChk.checked) {
+            const estParsed = parseQuickCaptureText(input.value) || {};
+            const estMinutes = estimateQuickCaptureMinutes({ type, difficulty: estParsed.difficulty, title });
+            if (estMinutes > 0) scheduleQuickCaptureFocusBlock(title, estMinutes, dueDate);
+        }
+    } catch (err) { window.reportError && window.reportError(err, 'quickCapture:blockTime', 'warning'); }
 
     try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) {}
     closeQuickCaptureModal();
@@ -66297,13 +71170,16 @@ function getCommandPaletteCommands() {
         { id: 'open-business', label: 'Open Business', hint: 'Projects & Work', hidden: modeHides('business'), run: () => setActiveView('business') },
         { id: 'open-settings', label: 'Open Settings', hint: 'Workspace control center', run: () => setActiveView('settings') },
         { id: 'open-deadline-radar', label: 'Open Deadline Radar', hint: 'See every upcoming deadline', run: () => { closeCommandPalette(); openDeadlineRadar(); } },
-        { id: 'open-trash', label: 'Open Trash', hint: 'Restore recently-deleted pages', run: () => { closeCommandPalette(); if (typeof openTrashModal === 'function') openTrashModal(); } },
+        { id: 'recover-overdue', label: 'Recover overdue work', hint: 'Catch up on what slipped — mark done or reschedule', run: () => { closeCommandPalette(); try { openOverdueRecovery(); } catch (err) {} } },
+        { id: 'open-trash', label: 'Open Trash', hint: 'Restore recently-deleted pages, tasks, and assignments', run: () => { closeCommandPalette(); if (typeof openTrashModal === 'function') openTrashModal(); } },
         { id: 'workspace-snapshots', label: 'Workspace snapshots', hint: 'Create / restore / diff a whole-workspace restore point', run: () => { closeCommandPalette(); if (typeof openSnapshotBrowserModal === 'function') openSnapshotBrowserModal(); } },
         { id: 'focus-stats', label: 'Focus stats', hint: 'Weekly focus time by subject + chart', run: () => { closeCommandPalette(); try { openFocusStatsModal(); } catch (err) { /* non-critical */ } } },
         { id: 'grade-trends', label: 'Grade trends', hint: 'Each course’s grade over time', run: () => { closeCommandPalette(); try { openGradeTrendsModal(); } catch (err) { /* non-critical */ } } },
+        { id: 'grade-whatif', label: 'Grade what-if calculator', hint: 'What do I need? What if I skip this?', run: () => { closeCommandPalette(); try { openGradeImpactModal(''); } catch (err) { /* non-critical */ } } },
         { id: 'quick-capture', label: 'Quick Capture…', hint: 'Create task/homework/note/block', run: () => { closeCommandPalette(); openQuickCaptureModal(''); } },
         { id: 'search-everywhere', label: 'Search everywhere…', hint: 'Full cross-workspace search', run: () => { closeCommandPalette(); openGlobalSearchPanel(''); } },
         { id: 'homework-paste-import', label: 'Import homework (paste)…', hint: 'Paste assignments from a portal', hidden: modeHides('homework'), run: () => { closeCommandPalette(); openHomeworkPasteImport(''); } },
+        { id: 'activation-funnel', label: 'Activation funnel (local)', hint: 'Milestones + usage on this device — never leaves it', run: () => { closeCommandPalette(); try { window.SutraActivation && window.SutraActivation.openPanel(); } catch (err) { /* non-critical */ } } },
         { id: 'split-presets', label: 'Split-screen workflow…', hint: 'Note + Assignment, Essay + Research, etc.', hidden: modeHides('notes'), run: () => { closeCommandPalette(); setActiveView('notes'); openNotesSplitPresetsPicker(); } },
         { id: 'create-note', label: 'Create note', hint: 'New page', run: () => { try { createNewPage && createNewPage(); } catch (err) {} } },
         { id: 'add-task', label: 'Add task', hint: 'Open task modal', run: () => { try { openTaskModal && openTaskModal(); } catch (err) {} } },
@@ -66321,8 +71197,10 @@ function getCommandPaletteCommands() {
         { id: 'start-focus', label: 'Start focus timer', hint: 'Focus timer', run: () => { try { startTimer && startTimer(); } catch (err) {} } },
         { id: 'toggle-theme-panel', label: 'Toggle theme panel', hint: 'Theme switcher', run: () => { try { toggleThemePanel && toggleThemePanel(); } catch (err) {} } },
         { id: 'export-atelier', label: 'Export encrypted .sutra backup', hint: 'Full workspace backup', run: async () => { closeCommandPalette(); try { if (exportWorkspaceAsAtelierPackage) await exportWorkspaceAsAtelierPackage(); } catch (err) { window.reportError && window.reportError(err, { where: 'command:export-atelier', userMessage: 'Backup export failed — please try again.' }, 'error'); } } },
-        { id: 'create-weekly-review', label: 'Create Weekly Review note', hint: 'Summarize your week', run: () => { closeCommandPalette(); createWeeklyReviewNote(); } },
+        { id: 'weekly-review', label: 'Weekly review', hint: 'Your week + grades + next week, on one screen', run: () => { closeCommandPalette(); try { openWeeklyReviewModal(); } catch (err) {} } },
+        { id: 'create-weekly-review', label: 'Create Weekly Review note', hint: 'Summarize your week as a note', run: () => { closeCommandPalette(); createWeeklyReviewNote(); } },
         { id: 'rerun-onboarding', label: 'Restart Sutra Setup', hint: 'Re-open onboarding wizard', run: () => { closeCommandPalette(); try { markStudentOnboardingCompleted(false); showStudentOnboarding(); } catch (err) {} } },
+        { id: 'quick-start-tour', label: 'Quick start tour (5 essentials)', hint: 'The five things that matter, in ~1 minute', run: () => { closeCommandPalette(); try { startInteractiveTutorial(true, { skipConfirm: true, essentialsOnly: true }); } catch (err) {} } },
         // Sutra Assistant commands — contextual workspace assistant. Each command
         // opens the Flow panel, primes the input with a view-aware prompt, and
         // (in most cases) auto-sends so the user gets immediate context-driven help.
@@ -66854,6 +71732,10 @@ function openClassDashboardDrawer(courseId) {
     const unlinkedNotes = (Array.isArray(pages) ? pages : [])
         .filter(p => p && !p.classLinkId && !isHelpDocsPage(p) && String(p.title || '').trim())
         .slice(0, 50);
+    // Resource Vault (#13): per-class links stored as kind:'link' course files,
+    // keyed by this same course id so add/read/remove stay internally consistent.
+    const resourceLinks = (typeof getFilesForCourse === 'function' ? getFilesForCourse(course.id) : [])
+        .filter(f => f && f.kind === 'link');
 
     body.innerHTML = `
         <div class="class-dash-head">
@@ -66893,6 +71775,20 @@ function openClassDashboardDrawer(courseId) {
                     </select>
                     <button type="button" class="neumo-btn" id="classDashLinkNoteBtn">Link</button>
                     <button type="button" class="neumo-btn" id="classDashNewNoteBtn">+ New note</button>
+                </div>
+            </div>
+            <div class="class-dash-section">
+                <h4>Resources${resourceLinks.length ? ` <span class="class-dash-count">${resourceLinks.length}</span>` : ''}</h4>
+                ${resourceLinks.length === 0
+                    ? '<p class="class-dash-empty">No links yet. Add your syllabus, class portal, or study docs.</p>'
+                    : `<ul class="class-dash-list class-dash-resources">${resourceLinks.map(r => {
+                        const href = /^https?:\/\//i.test(String(r.url || '')) ? String(r.url) : '#';
+                        return `<li><a class="class-dash-resource-link" href="${escH(href)}" target="_blank" rel="noopener noreferrer">${escH(r.name || r.url || 'Link')}</a><button type="button" class="class-dash-note-unlink" data-resource-del="${escH(r.id)}" title="Remove link" aria-label="Remove link">Remove</button></li>`;
+                    }).join('')}</ul>`}
+                <div class="class-dash-link-row class-dash-res-row">
+                    <input type="text" id="classDashResTitle" class="modal-input" placeholder="Title (e.g. Syllabus)" maxlength="120" autocomplete="off" />
+                    <input type="url" id="classDashResUrl" class="modal-input" placeholder="https://…" maxlength="500" autocomplete="off" />
+                    <button type="button" class="neumo-btn" id="classDashAddResBtn">Add</button>
                 </div>
             </div>
             <div class="class-dash-section">
@@ -66946,6 +71842,28 @@ function openClassDashboardDrawer(courseId) {
             closeClassDashboardDrawer();
         }
     });
+
+    // Resource Vault (#13): add + remove per-class links.
+    const addResBtn = body.querySelector('#classDashAddResBtn');
+    if (addResBtn) addResBtn.addEventListener('click', () => {
+        const titleEl = body.querySelector('#classDashResTitle');
+        const urlEl = body.querySelector('#classDashResUrl');
+        const title = titleEl ? String(titleEl.value || '').trim() : '';
+        let url = urlEl ? String(urlEl.value || '').trim() : '';
+        if (!url) { if (typeof showToast === 'function') showToast('Add a URL.'); return; }
+        if (!/^https?:\/\//i.test(url)) url = 'https://' + url.replace(/^\/+/, '');
+        if (typeof addCourseResourceLink === 'function') {
+            addCourseResourceLink(course.id, { name: title || url, title: title || url, url });
+            if (typeof showToast === 'function') showToast('Resource added.');
+            openClassDashboardDrawer(courseId);
+        }
+    });
+    body.querySelectorAll('[data-resource-del]').forEach(btn => btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-resource-del');
+        if (typeof deleteCourseFile === 'function' && deleteCourseFile(id)) {
+            openClassDashboardDrawer(courseId);
+        }
+    }));
 
     drawer.classList.add('active');
     drawer.setAttribute('aria-hidden', 'false');
@@ -67035,15 +71953,18 @@ function parseHomeworkPasteText(text) {
             const yy = m3[3] ? Number(m3[3]) : now.getFullYear();
             return `${yy}-${mm}-${dd}`;
         }
-        if (/\btomorrow\b/i.test(s)) { const t = new Date(now); t.setDate(t.getDate()+1); return t.toISOString().slice(0,10); }
-        if (/\btoday\b/i.test(s)) { return now.toISOString().slice(0,10); }
+        // LOCAL dates, never UTC: toISOString() rolled evening pastes in
+        // western timezones one day forward ("Due Tomorrow" pasted at 9pm EDT
+        // landed two days out). quickCaptureLocalISO builds from local getters.
+        if (/\btomorrow\b/i.test(s)) { const t = new Date(now); t.setDate(t.getDate()+1); return quickCaptureLocalISO(t); }
+        if (/\btoday\b/i.test(s)) { return quickCaptureLocalISO(now); }
         const weekdays = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
         const m4 = s.toLowerCase().match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
         if (m4) {
             const target = weekdays.indexOf(m4[1]);
             const delta = ((target - now.getDay() + 7) % 7) || 7;
             const t = new Date(now); t.setDate(t.getDate()+delta);
-            return t.toISOString().slice(0,10);
+            return quickCaptureLocalISO(t);
         }
         return '';
     };
@@ -67090,6 +72011,77 @@ function parseHomeworkPasteText(text) {
         return '';
     };
 
+    // Bookmarklet-structured import (highest precedence). The Sutra LMS
+    // bookmarklet copies "#sutra-import" then "Class | Title | Due | URL" rows,
+    // so each assignment keeps a link back to its LMS page (task.sourceUrl).
+    if (/^#sutra-import\b/i.test(lines[0] || '')) {
+        const rows = [];
+        lines.slice(1).forEach(line => {
+            const parts = line.split('|').map(p => p.trim());
+            if (parts.length < 2) return;
+            const klass = parts[0] || '';
+            const title = parts[1] || '';
+            const due = parts[2] || '';
+            const url = parts[3] || '';
+            if (!title) return;
+            rows.push({
+                className: klass.replace(/\s+/g, ' ').trim(),
+                title: title.replace(/\s+/g, ' ').trim(),
+                dueDate: parseDateAnywhere(due) || '',
+                dueTime: parseTimeAnywhere(due) || '',
+                difficulty: detectDifficulty(title),
+                priority: detectPriority(title),
+                sourceUrl: /^https?:\/\//i.test(url) ? url : '',
+                raw: line
+            });
+        });
+        if (rows.length) return rows;
+    }
+
+    // Canvas assignment-list paste. Canvas copies come out as a title line
+    // followed by a "Due Oct 15 at 11:59pm" line (plus pts/status noise).
+    // Pair titles with their due lines and drop everything else — the review
+    // table is where the student rescues anything the heuristic missed.
+    const canvasDueLineRe = /^due\s*[:\s]\s*\S|^due\s+(?:[a-z]{3,9}\s+\d{1,2}|\d{1,2}\/\d{1,2})/i;
+    if (lines.some(l => canvasDueLineRe.test(l))) {
+        const noiseRe = /^(assignment|quiz|discussion(?: topic)?|page|module|graded|complete|incomplete|closed|submitted|not submitted|missing|late|-|—|\d+(?:\.\d+)?\s*\/?\s*\d*(?:\.\d+)?\s*pts?|\d+\s*points?(?: possible)?|score:.*|available until.*|not available until.*|opens?\s.*|closes?\s.*)$/i;
+        const rows = [];
+        let pendingTitle = '';
+        const pushRow = (title, dueStr) => {
+            const t = String(title || '').replace(/\s+/g, ' ').trim();
+            if (!t || noiseRe.test(t)) return;
+            rows.push({
+                className: '',
+                title: t,
+                dueDate: parseDateAnywhere(dueStr || '') || '',
+                dueTime: parseTimeAnywhere(dueStr || '') || '',
+                difficulty: detectDifficulty(t),
+                priority: detectPriority(t),
+                sourceUrl: '',
+                raw: `${t}${dueStr ? ` (due ${dueStr})` : ''}`
+            });
+        };
+        lines.forEach(line => {
+            const clean = line.replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!clean || noiseRe.test(clean)) return;
+            const dueOnly = clean.match(/^due\b[:\s]*(.+)$/i);
+            if (dueOnly) {
+                if (pendingTitle) { pushRow(pendingTitle, dueOnly[1]); pendingTitle = ''; }
+                return;
+            }
+            const inline = clean.match(/^(.+?)\s+due\b[:\s]*(.+)$/i);
+            if (inline && parseDateAnywhere(inline[2])) {
+                pushRow(inline[1], inline[2]);
+                pendingTitle = '';
+                return;
+            }
+            // A title only counts once its due line arrives; a stray line
+            // (header, filter chrome) is displaced by the next candidate.
+            pendingTitle = clean;
+        });
+        if (rows.length) return rows;
+    }
+
     // For column-structured input (markdown/pipe tables, CSV/TSV with a header
     // row) the column ORDER varies, so defer to the name-aware multi-format
     // parser in flow-intelligence; map its rows back through the richer date
@@ -67123,6 +72115,7 @@ function parseHomeworkPasteText(text) {
                         dueDate: dd, dueTime: dt,
                         difficulty: /^(easy|medium|hard)$/.test(r.difficulty) ? r.difficulty : detectDifficulty(r.sourceText || r.title || ''),
                         priority: /^(low|medium|high)$/.test(r.priority) ? r.priority : detectPriority(r.sourceText || r.title || ''),
+                        sourceUrl: '',
                         raw: r.sourceText || r.title || ''
                     };
                 }).filter(x => x.title);
@@ -67134,6 +72127,15 @@ function parseHomeworkPasteText(text) {
         if (!rawLine) return;
         // Skip obvious header-ish lines.
         if (/^(class|subject|assignment|title|due|date|priority|difficulty)\s*[:|]/i.test(rawLine) && !/\d/.test(rawLine)) return;
+
+        // A pasted link rides along as the source URL instead of polluting the title.
+        let sourceUrl = '';
+        const urlMatch = rawLine.match(/https?:\/\/\S+/i);
+        if (urlMatch) {
+            sourceUrl = urlMatch[0].replace(/[)>,.;]+$/, '');
+            rawLine = rawLine.replace(urlMatch[0], ' ').replace(/\s+/g, ' ').trim();
+            if (!rawLine) return;
+        }
 
         // Accept pipe-/tab-/dash-separated or free-form formats.
         let parts = rawLine.split(/\s*\|\s*|\s{2,}|\t/).map(p => p.trim()).filter(Boolean);
@@ -67183,11 +72185,40 @@ function parseHomeworkPasteText(text) {
             dueTime: dueTime || '',
             difficulty: detectDifficulty(rawLine),
             priority: detectPriority(rawLine),
+            sourceUrl,
             raw: rawLine
         });
     });
 
     return out;
+}
+
+// The "Send to Sutra" bookmarklet. Runs on the student's LMS page (never
+// inside Sutra), scrapes visible assignment links + their "Due …" text, and
+// copies "#sutra-import" pipe rows (Class | Title | Due | URL) to the
+// clipboard for the paste importer. No network calls; nothing leaves the page
+// except via the user's own clipboard.
+function sutraLmsBookmarkletSource() {
+    var seen = {}; var rows = [];
+    var course = (document.title || '').split(/[>|]/)[0].trim();
+    document.querySelectorAll('a[href*="/assignments/"],a[href*="/quizzes/"],a[href*="/discussion_topics/"]').forEach(function (a) {
+        var t = (a.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!t || t.length < 3 || seen[a.href]) return;
+        seen[a.href] = 1;
+        var box = a.closest('li,tr,div');
+        var m = box && box.textContent.match(/due\s*:?\s*([A-Za-z]{3,9}\s+\d{1,2}(?:,\s*\d{4})?(?:\s+at\s+[\d: ]+(?:am|pm)?)?)/i);
+        rows.push([course, t, m ? m[1].trim() : '', a.href].join(' | '));
+    });
+    if (!rows.length) { alert('No assignment links found on this page. Open your course\'s Assignments page first.'); return; }
+    var out = '#sutra-import\n' + rows.join('\n');
+    function fallback() { prompt('Copy this, then paste into Sutra\'s import box:', out); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out).then(function () { alert('Copied ' + rows.length + ' assignments. Paste into Sutra\'s import box.'); }, fallback);
+    } else { fallback(); }
+}
+
+function getSutraLmsBookmarkletCode() {
+    return 'javascript:(' + sutraLmsBookmarkletSource.toString() + ')();';
 }
 
 function openHomeworkPasteImport(prefillText) {
@@ -67207,6 +72238,36 @@ function openHomeworkPasteImport(prefillText) {
         .map(c => ({ id: c.id, name: c.name || 'Class', type: c.type === 'misc' ? 'misc' : 'class' }));
 
     modal._parsed = [];
+    // Explicit Skip choices survive preview re-renders (the table is rebuilt
+    // on every textarea change, which used to silently re-check Skip on
+    // duplicate rows the user had deliberately unchecked). Keyed by the
+    // parsed row's title+due signature.
+    modal._skipOverrides = new Map();
+
+    // Duplicate detection: same title + same due date as an existing
+    // assignment (open or done) — pre-checked to Skip so re-pasting an LMS
+    // page never doubles up the homework list. Snapshot read ONCE per modal
+    // open (renderPreview runs per keystroke; re-reading + re-parsing the
+    // whole task store there was wasted work).
+    const dupKeyOf = (t) => `${String(t.title || t.text || '').toLowerCase().replace(/\s+/g, ' ').trim()}::${String(t.dueDate || '')}`;
+    let existingKeys = new Set();
+    let existingBySourceUrl = new Map();
+    try {
+        const existingTasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]') || [];
+        existingKeys = new Set(existingTasks.map(dupKeyOf));
+        // Source-link change detection: the same LMS assignment (matched by
+        // its stored URL) arriving with a DIFFERENT due date is an update,
+        // not a duplicate — a Canvas due-date move lands as one "will update"
+        // row instead of leaving a stale twin behind.
+        existingTasks.forEach(t => {
+            if (t && t.sourceUrl) {
+                existingBySourceUrl.set(String(t.sourceUrl), {
+                    dueDate: String(t.dueDate || ''),
+                    dueTime: String(t.dueTime || '')
+                });
+            }
+        });
+    } catch (err) { existingKeys = new Set(); existingBySourceUrl = new Map(); }
 
     const renderPreview = () => {
         const parsed = parseHomeworkPasteText(textarea.value);
@@ -67221,10 +72282,19 @@ function openHomeworkPasteImport(prefillText) {
             const existing = classOptions.map(o => `<option value="${escapeCommandHtml(o.id)}"${selected === o.id ? ' selected' : ''}>${escapeCommandHtml(o.name)}${o.type === 'misc' ? ' (misc)' : ''}</option>`).join('');
             return `<option value="">— Unassigned —</option>${existing}${newOpt}`;
         };
+        let dupCount = 0;
+        let updateCount = 0;
         const rows = parsed.map((row, idx) => {
             const match = classOptions.find(o => String(o.name).toLowerCase() === String(row.className || '').toLowerCase());
-            return `<tr data-hw-paste-row="${idx}">
-                <td><input data-field="title" class="modal-input hw-paste-input" type="text" value="${escapeCommandHtml(row.title || '')}" aria-label="Assignment title" /></td>
+            const linked = row.sourceUrl ? existingBySourceUrl.get(row.sourceUrl) : null;
+            const isUpdate = !!(linked && ((row.dueDate && row.dueDate !== linked.dueDate) || (row.dueTime && row.dueTime !== linked.dueTime)));
+            const isDup = !isUpdate && (!!linked || existingKeys.has(dupKeyOf(row)));
+            if (isDup) dupCount += 1;
+            if (isUpdate) updateCount += 1;
+            const rowKey = dupKeyOf(row);
+            const skipChecked = modal._skipOverrides.has(rowKey) ? modal._skipOverrides.get(rowKey) : isDup;
+            return `<tr data-hw-paste-row="${idx}"${isDup ? ' class="hw-paste-dup"' : (isUpdate ? ' class="hw-paste-update"' : '')}>
+                <td><input data-field="title" class="modal-input hw-paste-input" type="text" value="${escapeCommandHtml(row.title || '')}" aria-label="Assignment title" />${isDup ? '<span class="hw-paste-dup-badge" title="An assignment with this title and due date already exists">Already in Sutra</span>' : ''}${isUpdate ? '<span class="hw-paste-update-badge" title="This LMS assignment is already in Sutra with a different due date; importing updates it in place">Due changed — will update</span>' : ''}${row.sourceUrl ? `<a class="hw-paste-source-link" href="${escapeCommandHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the original LMS page"><i class="fas fa-link" aria-hidden="true"></i></a>` : ''}</td>
                 <td>
                     <select data-field="courseId" class="modal-input hw-paste-input" aria-label="Class">${classOptionHtml(match ? match.id : '')}</select>
                     <input data-field="newClassName" class="modal-input hw-paste-input hw-paste-new-class" type="text" value="${escapeCommandHtml(row.className || '')}" aria-label="New class name" placeholder="New class name" style="${match ? 'display:none;' : ''}" />
@@ -67245,7 +72315,7 @@ function openHomeworkPasteImport(prefillText) {
                         <option value="high"${row.priority==='high'?' selected':''}>High</option>
                     </select>
                 </td>
-                <td><label class="hw-paste-skip"><input type="checkbox" data-field="skip" />Skip</label></td>
+                <td><label class="hw-paste-skip"><input type="checkbox" data-field="skip" data-skip-key="${escapeCommandHtml(rowKey)}"${skipChecked ? ' checked' : ''} />Skip</label></td>
             </tr>`;
         }).join('');
         previewHost.innerHTML = `
@@ -67256,7 +72326,7 @@ function openHomeworkPasteImport(prefillText) {
                 </table>
             </div>
         `;
-        if (statusEl) statusEl.textContent = `${parsed.length} row${parsed.length === 1 ? '' : 's'} parsed · review and import.`;
+        if (statusEl) statusEl.textContent = `${parsed.length} row${parsed.length === 1 ? '' : 's'} parsed${dupCount ? ` · ${dupCount} already in Sutra (skipped)` : ''}${updateCount ? ` · ${updateCount} due-date change${updateCount === 1 ? '' : 's'}` : ''} · review and import.`;
 
         // Toggle new-class name visibility when "__new__" is picked.
         previewHost.querySelectorAll('select[data-field="courseId"]').forEach(sel => {
@@ -67266,10 +72336,46 @@ function openHomeworkPasteImport(prefillText) {
                 if (newInput) newInput.style.display = sel.value === '__new__' ? '' : 'none';
             });
         });
+        // Remember explicit Skip choices so a later re-render honors them.
+        previewHost.querySelectorAll('input[data-field="skip"]').forEach(chk => {
+            chk.addEventListener('change', () => {
+                const key = chk.getAttribute('data-skip-key');
+                if (key) modal._skipOverrides.set(key, chk.checked);
+            });
+        });
     };
 
     textarea.oninput = renderPreview;
     renderPreview();
+
+    // LMS bookmarklet: the drag-to-bookmarks link needs a real javascript:
+    // href, but clicking it INSIDE Sutra is always a no-op.
+    try {
+        const bm = modal.querySelector('#sutraLmsBookmarklet');
+        if (bm && bm.getAttribute('data-armed') !== '1') {
+            bm.setAttribute('href', getSutraLmsBookmarkletCode());
+            bm.setAttribute('data-armed', '1');
+            bm.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (typeof showToast === 'function') showToast('Drag this button to your bookmarks bar, then click it on your LMS assignments page.');
+            });
+        }
+        const copyBtn = modal.querySelector('#sutraLmsBookmarkletCopy');
+        if (copyBtn && copyBtn.getAttribute('data-armed') !== '1') {
+            copyBtn.setAttribute('data-armed', '1');
+            copyBtn.addEventListener('click', () => {
+                const code = getSutraLmsBookmarkletCode();
+                const manual = () => { try { window.prompt('Copy this bookmarklet code (paste it as a bookmark URL):', code); } catch (err) { /* non-critical */ } };
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(code).then(() => {
+                            if (typeof showToast === 'function') showToast('Bookmarklet copied — create a bookmark and paste it as the URL.');
+                        }, manual);
+                    } else manual();
+                } catch (err) { manual(); }
+            });
+        }
+    } catch (err) { /* non-critical */ }
 
     modal.classList.add('active');
     modal.setAttribute('aria-hidden', 'false');
@@ -67282,6 +72388,32 @@ function closeHomeworkPasteImport() {
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
 }
+
+// ================================================================
+// Sutra LMS Capture extension bridge
+// ================================================================
+// The companion browser extension (extension/ in the repo) captures
+// assignments on the student's LMS page and hands them to this tab via
+// window.postMessage. Same-window + same-origin only, text payload only,
+// and everything still goes through the SAME review modal as a manual
+// paste — the student sees and confirms every row before a write happens.
+(function initSutraLmsCaptureBridge() {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('message', (event) => {
+        try {
+            if (event.source !== window) return;
+            if (event.origin !== window.location.origin) return;
+            const data = event.data;
+            if (!data || data.type !== 'sutra:lms-capture' || typeof data.text !== 'string') return;
+            const text = data.text.slice(0, 200000).trim();
+            if (!/^#sutra-import\b/i.test(text)) return;
+            openHomeworkPasteImport(text);
+            if (typeof showToast === 'function') showToast('Assignments received from the capture extension — review and import.');
+            // Ack so the extension's content script clears its pending payload.
+            window.postMessage({ type: 'sutra:lms-capture-ack' }, window.location.origin);
+        } catch (err) { /* a bad bridge message must never break the app */ }
+    });
+})();
 
 function submitHomeworkPasteImport() {
     const modal = document.getElementById('homeworkPasteImportModal');
@@ -67314,8 +72446,14 @@ function submitHomeworkPasteImport() {
     };
 
     let imported = 0;
+    let updated = 0;
     let skipped = 0;
     let invalid = 0;
+
+    // Same-URL tasks get updated in place (LMS due-date changes) instead of
+    // imported as duplicates — mirror of the preview's "will update" badge.
+    const taskBySourceUrl = new Map();
+    tasks.forEach(t => { if (t && t.sourceUrl) taskBySourceUrl.set(String(t.sourceUrl), t); });
 
     rowEls.forEach((row, idx) => {
         const base = parsed[idx] || {};
@@ -67331,7 +72469,26 @@ function submitHomeworkPasteImport() {
         const difficulty = String((row.querySelector('select[data-field="difficulty"]') || {}).value || base.difficulty || 'medium');
         const priority = String((row.querySelector('select[data-field="priority"]') || {}).value || base.priority || 'medium');
         const nowIso = new Date().toISOString();
-        tasks.push({
+        const linkedTask = base.sourceUrl ? taskBySourceUrl.get(String(base.sourceUrl)) : null;
+        if (linkedTask) {
+            const dueChanged = (dueDate && dueDate !== String(linkedTask.dueDate || ''))
+                || (dueTime && dueTime !== String(linkedTask.dueTime || ''));
+            if (dueChanged) {
+                linkedTask.dueDate = dueDate;
+                linkedTask.due = dueDate;
+                linkedTask.dueTime = dueTime;
+                linkedTask.title = title;
+                linkedTask.text = title;
+                // A moved deadline usually means the work is live again.
+                if (linkedTask.done && dueDate >= quickCaptureLocalISO(new Date())) linkedTask.done = false;
+                linkedTask.updatedAt = nowIso;
+                updated++;
+            } else {
+                skipped++;
+            }
+            return;
+        }
+        const task = {
             id: makeId(),
             courseId,
             title,
@@ -67345,19 +72502,29 @@ function submitHomeworkPasteImport() {
             notes: base.raw && base.raw !== title ? `Imported: ${String(base.raw).slice(0, 220)}` : '',
             createdAt: nowIso,
             updatedAt: nowIso
-        });
+        };
+        // Link back to the LMS page it came from (bookmarklet / pasted URL).
+        if (base.sourceUrl && /^https?:\/\//i.test(base.sourceUrl)) task.sourceUrl = base.sourceUrl;
+        tasks.push(task);
         imported++;
     });
 
-    try { localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); } catch (err) {}
-    try { localStorage.setItem('hwTasks:v2', JSON.stringify(tasks)); } catch (err) {}
+    try { localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); } catch (err) {} // sutra-allow-storage: homework courses direct write, same contract as the homework module
+    try { localStorage.setItem('hwTasks:v2', JSON.stringify(tasks)); } catch (err) {} // sutra-allow-storage: homework tasks direct write mirrors hwCourses pattern above
     try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) {}
+    try { if ((imported > 0 || updated > 0) && window.SutraActivation) window.SutraActivation.record('import'); } catch (err) {}
     try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) {}
 
-    const summary = `Imported ${imported}${skipped ? ` · skipped ${skipped}` : ''}${invalid ? ` · ${invalid} invalid` : ''}.`;
+    const summary = `Imported ${imported}${updated ? ` · updated ${updated}` : ''}${skipped ? ` · skipped ${skipped}` : ''}${invalid ? ` · ${invalid} invalid` : ''}.`;
     if (statusEl) statusEl.textContent = summary;
-    if (typeof showToast === 'function') showToast(summary);
-    if (imported > 0) closeHomeworkPasteImport();
+    if (typeof showToast === 'function') {
+        showToast(imported === 0 && updated === 0 && skipped > 0 && skipped === rowEls.length
+            ? `Nothing new to import — all ${skipped} already in Sutra (or skipped).`
+            : summary);
+    }
+    // Close on success AND on the all-skipped re-paste (the common bookmarklet
+    // re-run) — a modal stuck open on "Imported 0" read like a failure.
+    if (imported > 0 || updated > 0 || (imported === 0 && invalid === 0 && skipped === rowEls.length)) closeHomeworkPasteImport();
 }
 
 // ================================================================
@@ -67677,7 +72844,7 @@ function openGlobalSearchPanel(initialQuery) {
 
         const hasAny = groups.some(([, arr]) => Array.isArray(arr) && arr.length);
         if (!hasAny) {
-            results.innerHTML = '<div class="global-search-empty">No matches in this workspace.</div>';
+            results.innerHTML = '<div class="global-search-empty">No matches in this workspace.</div>'; // sutra-allow-html: static trusted markup
             modal._searchResults = null;
             return;
         }
@@ -67690,7 +72857,7 @@ function openGlobalSearchPanel(initialQuery) {
                 </li>`).join('');
             return `<section class="global-search-group"><h4>${escapeCommandHtml(label)}</h4><ul>${items}</ul></section>`;
         }).join('');
-        results.innerHTML = html;
+        results.innerHTML = html; // sutra-allow-html: trusted markup; all dynamic values pass through escapeCommandHtml()
         modal._searchResults = data;
 
         results.querySelectorAll('.global-search-item').forEach(node => {
@@ -68109,7 +73276,7 @@ function restoreFocusSessionIfActive() {
 function _fsUpdateLaunchBtnLabel() {
     var btn = document.getElementById('fsLaunchBtn');
     if (!btn) return;
-    btn.innerHTML = '<i class="fas fa-expand-alt" aria-hidden="true"></i>';
+    btn.innerHTML = '<i class="fas fa-expand-alt" aria-hidden="true"></i>'; // sutra-allow-html: static trusted icon markup
     if (_fsSession && _fsSession.id) {
         btn.setAttribute('aria-label', 'Resume Focus Session');
         btn.setAttribute('title', 'Resume full-screen focus mode');
@@ -68166,6 +73333,7 @@ function startFocusSession(taskId, opts) {
     _fsOpenOverlay();
     _fsPersistSession();
     _fsUpdateLaunchBtnLabel();
+    try { window.SutraActivation && window.SutraActivation.record('focus'); } catch (e) {}
 }
 
 // ---------- Keyboard ----------

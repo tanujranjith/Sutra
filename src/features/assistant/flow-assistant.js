@@ -424,6 +424,17 @@
         } catch (e) { return null; }
     }
 
+    // Testing Hub summary (pinned/recent exams — AP subjects, SAT, ACT, etc.)
+    // via the workspace's own bounded computation, same pattern as business/courses.
+    function summarizeTestingHub() {
+        try {
+            if (typeof window !== 'undefined' && typeof window.getTestingHubAssistantSummary === 'function') {
+                return window.getTestingHubAssistantSummary() || null;
+            }
+            return null;
+        } catch (e) { return null; }
+    }
+
     // Course Hub context. File NAMES/metadata only — never file contents
     // (full contents require explicit user selection per privacy rule).
     function summarizeCourses() {
@@ -557,6 +568,28 @@
             if (selection) ctx.selection = truncate(selection, 1500);
         }
 
+        // Full bounded picture across every workspace area — Today/Timeline
+        // (tasks + schedule), Homework, Testing Hub, College, Life, Business,
+        // Courses, Review/Cram, and all-due rollups. Used for depth==='workspace'
+        // and as the fallback below for any view (like the Assistant tab itself)
+        // that has no single "current view" data to scope to.
+        function applyWorkspaceContext(target) {
+            target.tasks = summarizeTasksFor('focus');
+            target.homework = summarizeHomework();
+            target.timelineUpcoming = summarizeTimeline(7);
+            target.deadlines = summarizeDeadlines();
+            const review = summarizeReviewDue(); if (review) target.review = review;
+            const aps = summarizeApStudy(); if (aps) target.apStudy = aps;
+            const college = summarizeCollege(); if (college) target.college = college;
+            const life = summarizeLife(); if (life) target.life = life;
+            const business = summarizeBusiness(); if (business) target.business = business;
+            const cram = summarizeCram(); if (cram) target.cram = cram;
+            const courses = summarizeCourses(); if (courses) target.courses = courses;
+            const allDue = summarizeAllDue(); if (allDue) target.allDue = allDue;
+            const testingHubSummary = summarizeTestingHub(); if (testingHubSummary) target.testingHub = testingHubSummary;
+            return target;
+        }
+
         if (depth === 'currentView') {
             if (view === 'today') {
                 ctx.tasks = summarizeTasksFor('focus');
@@ -582,24 +615,19 @@
                 ctx.courses = summarizeCourses();
             } else if (view === 'alldue') {
                 ctx.allDue = summarizeAllDue();
+            } else if (view === 'testing') {
+                ctx.testingHub = summarizeTestingHub();
+            } else {
+                // No single view to scope to (e.g. the Assistant tab itself,
+                // or settings) — give the model the full workspace picture
+                // instead of leaving it with only derived risk signals.
+                return applyWorkspaceContext(ctx);
             }
             return ctx;
         }
 
         // depth === 'workspace': full picture (bounded)
-        ctx.tasks = summarizeTasksFor('focus');
-        ctx.homework = summarizeHomework();
-        ctx.timelineUpcoming = summarizeTimeline(7);
-        ctx.deadlines = summarizeDeadlines();
-        const review = summarizeReviewDue(); if (review) ctx.review = review;
-        const aps = summarizeApStudy(); if (aps) ctx.apStudy = aps;
-        const college = summarizeCollege(); if (college) ctx.college = college;
-        const life = summarizeLife(); if (life) ctx.life = life;
-        const business = summarizeBusiness(); if (business) ctx.business = business;
-        const cram = summarizeCram(); if (cram) ctx.cram = cram;
-        const courses = summarizeCourses(); if (courses) ctx.courses = courses;
-        const allDue = summarizeAllDue(); if (allDue) ctx.allDue = allDue;
-        return ctx;
+        return applyWorkspaceContext(ctx);
     }
 
     // --------------------------------------------------------------
@@ -662,6 +690,8 @@
         { type: 'update_task_status', desc: 'Mark existing task(s)/homework complete, reopen them, or archive them. Use taskIds from context (the id values on overdue/dueSoon items) or exact taskTitles. status: completed|open|archived.', risk: 'low', fields: { taskIds: 'string[]?', taskTitles: 'string[]?', status: 'completed|open|archived', reason: 'string?' } },
         { type: 'reschedule_tasks', desc: 'Move existing task(s)/homework to a new due date. Provide newDate (YYYY-MM-DD) or shiftDays (signed integer).', risk: 'medium', fields: { taskIds: 'string[]?', taskTitles: 'string[]?', newDate: 'YYYY-MM-DD?', shiftDays: 'number?', reason: 'string?' } },
         { type: 'change_task_priority', desc: 'Change the priority of existing task(s)/homework.', risk: 'low', fields: { taskIds: 'string[]?', taskTitles: 'string[]?', priority: 'low|medium|high' } },
+        // --- Testing Hub exam status (NOT a task/homework) ---
+        { type: 'update_exam_status', desc: 'Update a Testing Hub EXAM (AP subject, SAT, ACT, etc.) — mark it as taken/finished (taken:true) or reopen it (taken:false), and/or set its study status. Identify it by examName (or examId from context.testingHub). Use this — NOT update_task_status — whenever the user asks to mark an exam done/complete/taken. It only ever matches Testing Hub exams, never a homework task.', risk: 'low', fields: { examName: 'string?', examId: 'string?', taken: 'boolean?', studyStatus: 'planning|studying|reviewing|ready?' } },
         // --- Timeline mutation actions ---
         { type: 'update_timeline_block', desc: 'Move or edit an existing timeline block (new date/start/end/name). Identify it by blockId or by blockName (+ optional current date).', risk: 'medium', fields: { blockId: 'string?', blockName: 'string?', date: 'YYYY-MM-DD?', start: 'HH:MM?', end: 'HH:MM?', name: 'string?' } },
         { type: 'delete_timeline_block', desc: 'Delete an existing timeline block. Use ONLY when the user explicitly asks to remove it.', risk: 'high', fields: { blockId: 'string?', blockName: 'string?', date: 'YYYY-MM-DD?' } },
@@ -675,8 +705,81 @@
         { type: 'run_grade_what_if', desc: 'READ-ONLY: project a course grade if the student scores X on a hypothetical assignment. Computed locally; never compute grade math yourself.', risk: 'read_only', fields: { courseName: 'string', score: 'number', maxScore: 'number?' } },
         { type: 'solve_target_grade', desc: 'READ-ONLY: compute the score needed on the next assignment/final to reach a target percent. Computed locally.', risk: 'read_only', fields: { courseName: 'string', targetPercent: 'number', maxScore: 'number?' } },
         { type: 'rank_missing_work_by_grade_impact', desc: 'READ-ONLY: rank missing/zero work in a course by projected grade impact. Computed locally.', risk: 'read_only', fields: { courseName: 'string?' } },
-        { type: 'explain_grade_risk', desc: 'READ-ONLY: summarize current grade, target, categories, and missing work for a course. Computed locally.', risk: 'read_only', fields: { courseName: 'string?' } }
+        { type: 'explain_grade_risk', desc: 'READ-ONLY: summarize current grade, target, categories, and missing work for a course. Computed locally.', risk: 'read_only', fields: { courseName: 'string?' } },
+        // --- Assistant Memory (long-term, user-controlled; see sutra-assistant-memory.js) ---
+        // Only stable, non-sensitive facts the user explicitly asked to keep. Secrets,
+        // credentials, financial/medical/precise-location, and locked content are blocked.
+        { type: 'create_memory', desc: 'Save a long-term Assistant Memory the user explicitly asked to remember (study habits, goals, preferences). NEVER infer sensitive memories from chat; only certified, non-sensitive facts.', risk: 'medium', fields: { category: 'profile_preferences|study_preferences|schedule_constraints|academic_goals|course_context|recurring_commitments|assistant_preferences|project_context|user_notes|temporary_context', content: 'string', title: 'string?', expiresInDays: 'number?', courseName: 'string?', feature: 'string?' } },
+        { type: 'update_memory', desc: 'Edit an existing Assistant Memory by id.', risk: 'medium', fields: { id: 'string', content: 'string?', title: 'string?', category: 'string?', expiresAt: 'YYYY-MM-DD?' } },
+        { type: 'enable_memory', desc: 'Re-enable a disabled Assistant Memory by id.', risk: 'low', fields: { id: 'string' } },
+        { type: 'disable_memory', desc: 'Disable an Assistant Memory by id (kept, but no longer used).', risk: 'low', fields: { id: 'string' } },
+        { type: 'delete_memory', desc: 'Forget (permanently delete) an Assistant Memory. Destructive — requires confirmation.', risk: 'high', fields: { id: 'string?', ids: 'string[]?' } },
+        { type: 'clear_expired_memories', desc: 'Forget all expired Assistant Memories.', risk: 'medium', fields: {} },
+        { type: 'clear_temporary_memories', desc: 'Forget all temporary (auto-expiring) Assistant Memories.', risk: 'medium', fields: {} },
+        { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'low', fields: {} }
     ];
+
+    // --------------------------------------------------------------
+    // Actions Bank — the ONE structured source of truth for "everything the
+    // assistant can do". Groups ACTION_CATALOG by domain (via
+    // SutraCapabilityRegistry, when loaded) so it can be rendered two ways
+    // from the same data: (1) a clearly-labeled section of the system prompt
+    // the MODEL reads, and (2) a browsable reference a HUMAN can open from
+    // Local Help ("What can Sutra Assistant do?"). Neither can drift from the
+    // real action catalog because both read this function.
+    // --------------------------------------------------------------
+    function domainForActionType(type) {
+        try {
+            const cap = (typeof window !== 'undefined' && window.SutraCapabilityRegistry
+                && typeof window.SutraCapabilityRegistry.get === 'function')
+                ? window.SutraCapabilityRegistry.get(type) : null;
+            if (cap && cap.domain) return { key: cap.domain, label: cap.domainLabel || cap.domain };
+        } catch (e) { /* ignore */ }
+        return { key: 'other', label: 'Other' };
+    }
+
+    function buildActionsBank() {
+        const groups = new Map(); // domain key -> { key, label, actions: [] }
+        ACTION_CATALOG.forEach(entry => {
+            const d = domainForActionType(entry.type);
+            if (!groups.has(d.key)) groups.set(d.key, { key: d.key, label: d.label, actions: [] });
+            groups.get(d.key).actions.push({
+                type: entry.type,
+                description: entry.desc,
+                fields: entry.fields,
+                risk: entry.risk,
+                undoSupported: UNDOABLE_TYPES.has(entry.type)
+            });
+        });
+        // Preserve ACTION_CATALOG's own order (already grouped logically by its
+        // section comments) rather than alphabetizing, which would scatter
+        // related actions across the bank.
+        return { domains: Array.from(groups.values()), totalActions: ACTION_CATALOG.length };
+    }
+
+    // Compact text form for the system prompt: grouped, indented, one action
+    // per line — easier for a model (especially a weak one) to scan than one
+    // long flat list.
+    function renderActionsBankText(bank) {
+        return bank.domains.map(d => `▸ ${d.label}\n` + d.actions
+            .map(a => `  - ${a.type}: ${a.description} — fields: ${JSON.stringify(a.fields)}`)
+            .join('\n')).join('\n');
+    }
+
+    // Markdown form for a human reading it in Local Help.
+    function renderActionsBankMarkdown(bank) {
+        const lines = [`Sutra Assistant can propose **${bank.totalActions} kinds of actions** across ${bank.domains.length} areas. Every one still needs your click on an approval card before anything changes — the assistant never applies a change by itself.`, ''];
+        bank.domains.forEach(d => {
+            lines.push(`### ${d.label}`);
+            d.actions.forEach(a => {
+                const label = a.type.replace(/_/g, ' ');
+                const riskNote = a.risk === 'high' ? ' _(higher-risk — always double-checked)_' : '';
+                lines.push(`- **${label}** — ${a.description}${riskNote}${a.undoSupported ? ' _(undoable)_' : ''}`);
+            });
+            lines.push('');
+        });
+        return lines.join('\n').trim();
+    }
 
     // Alias action types the model (or the local resolver) may emit; they
     // normalize into update_task_status with a fixed status before validation.
@@ -717,14 +820,68 @@
         return Math.max(1, ids + titles);
     }
 
-    function buildSystemPrompt(context) {
-        const catalog = ACTION_CATALOG
-            .map(a => `- ${a.type}: ${a.desc} — fields: ${JSON.stringify(a.fields)}`)
-            .join('\n');
-        const contextJson = (() => { try { return JSON.stringify(context, null, 2); } catch (e) { return '{}'; } })();
-        return [
+    // User-configured personalization (set via the Assistant "Customize" panel).
+    // Read from the global app.js mirrors into (window.SutraAssistantPersonalization).
+    function buildPersonalizationLines() {
+        let p = {};
+        try {
+            if (typeof window !== 'undefined' && typeof window.getSutraAssistantPersonalization === 'function') {
+                p = window.getSutraAssistantPersonalization() || {};
+            } else if (typeof window !== 'undefined' && window.SutraAssistantPersonalization) {
+                p = window.SutraAssistantPersonalization;
+            }
+        } catch (e) { p = {}; }
+        const personaMap = {
+            encouraging: 'Adopt a warm, encouraging tone — motivate the student and acknowledge effort.',
+            direct: 'Be direct and concise — skip pleasantries and get straight to the point.',
+            socratic: 'Use a Socratic approach — guide the student with questions and hints before giving full answers.',
+            formal: 'Maintain a formal, professional tone.'
+        };
+        const lengthMap = {
+            concise: 'Keep responses short and to the point unless the student asks for more detail.',
+            detailed: 'Provide thorough, well-structured explanations with examples.'
+        };
+        const lines = [];
+        if (p.nickname && String(p.nickname).trim()) lines.push('Address the student as "' + String(p.nickname).trim().slice(0, 60) + '".');
+        if (personaMap[p.persona]) lines.push(personaMap[p.persona]);
+        if (lengthMap[p.responseLength]) lines.push(lengthMap[p.responseLength]);
+        if (p.aboutUser && String(p.aboutUser).trim()) lines.push('About the student (use to tailor help): ' + String(p.aboutUser).trim().slice(0, 2000));
+        if (p.customInstructions && String(p.customInstructions).trim()) lines.push('The student\'s custom instructions (follow them unless they conflict with safety or the action rules above): ' + String(p.customInstructions).trim().slice(0, 2000));
+        if (!lines.length) return [];
+        return ['', 'User personalization (the student configured how you should respond — honor this):']
+            .concat(lines.map(l => '- ' + l));
+    }
+
+    // Non-negotiable operating rules. Kept as a named constant so they are
+    // ALWAYS injected (top AND bottom of every system prompt) and can serve as a
+    // hard fallback if the full prompt can't be built. Weak local models
+    // under-weight instructions, so these are short, imperative, and repeated.
+    const HARD_AGENT_RULES = [
+        '════════ OPERATING RULES — these override everything else, always follow them ════════',
+        '1. YOU CANNOT CHANGE ANYTHING YOURSELF. Every change happens only when the user clicks "Apply" on a proposal card that Sutra renders from your flow-actions block. So you PROPOSE; the user decides.',
+        '2. NEVER claim or imply a change happened or will happen. Do NOT write "I\'ve marked…", "I\'ve updated…", "Done", "I\'ll mark…", "I have added…". Instead say "I can mark that as taken — approve the card below" and emit the action. If you skip the flow-actions block, NOTHING happens.',
+        '3. NEVER invent, assume, or guess data. Use ONLY what is in the "Current context" block below. If something is not there, say you don\'t see it — never fabricate exams, tasks, dates, scores, features, or memories.',
+        '4. Use the RIGHT action for the target and touch ONLY what the user referenced: Testing Hub exams → update_exam_status; tasks/homework → update_task_status. Never mutate an unrelated item to fake a match.',
+        '5. If the target, date, or intent is at all ambiguous, ask ONE short clarifying question instead of acting or guessing.',
+        '════════════════════════════════════════════════════════════════════════════════════',
+        ''
+    ];
+
+    // Builds the system prompt as TWO parts so callers that support prompt
+    // caching (Anthropic cache_control, Gemini cachedContents) can send the
+    // static part once and reuse it, instead of re-transmitting/re-billing the
+    // ~70% of the prompt that is byte-identical on every single message.
+    //   static  — identity, operating rules, action rules, the Actions Bank,
+    //             formatting rules, personalization (changes only when the
+    //             user edits Assistant settings — effectively static per session).
+    //   dynamic — the end-of-prompt reminder + the live "Current context" JSON
+    //             (tasks/homework/testingHub/memory/etc — changes every turn).
+    function buildSystemPromptParts(context) {
+        const bankText = renderActionsBankText(buildActionsBank());
+        const staticText = [
             'You are Sutra Assistant, the contextual assistant inside Sutra — a local-first student / creator operating system.',
-            'The app has views: today, notes, homework, timeline, review, cramhub, apstudy, collegeapp, life, business, settings.',
+            ...HARD_AGENT_RULES,
+            'The app has views: today, notes, homework, timeline, review, cramhub, apstudy, collegeapp, life, business, courses, alldue, testing (Testing Hub — AP exams, SAT/ACT/etc., scores, practice tests, mistakes), settings.',
             'All data stays on the user\'s device. No backend.',
             '',
             'You can propose local app actions. When you want the user to change app state, append a single fenced block at the end of your reply:',
@@ -732,10 +889,10 @@
             '[ { "type": "create_task", "title": "Draft outline", "dueDate": "2026-05-26", "priority": "high" } ]',
             '```',
             'Rules for action proposals:',
-            '- Use only the action types in the catalog below.',
+            '- Use only the action types in the Actions Bank below.',
             '- One JSON array per block. Include a "label" field on each action that is a short human-readable description.',
             '- Never put more than ~8 actions in one reply.',
-            '- The user must confirm each action; do not assume anything is applied.',
+            '- The user must confirm each action; do not assume anything is applied. Sutra renders every action as an approval card the user must click — so PROPOSE, never declare. Say "I can mark that as taken — approve the card below" or "Want me to…?", NOT "I\'ve marked…" / "I\'ll mark…". Never claim a change happened; you cannot apply anything yourself.',
             '- If the user just asked a question, do NOT propose actions. Only propose when the action is clearly useful.',
             '- If context.canvas is present, it is a bounded summary of the active Canvas page. Use Canvas actions only for that active Canvas, and expect explicit user confirmation.',
             '- For dates, prefer ISO YYYY-MM-DD. Times are HH:MM 24h.',
@@ -743,19 +900,45 @@
             '- When parsing pasted assignment text or a screenshot, return ONE import_assignments action whose "assignments" array has objects with: title, course, dueDate (YYYY-MM-DD), dueTime, type, priority, difficulty, sourceText, confidence (0-1).',
             '- The "derived" object in the context already contains locally-computed risk signals (overdue, overloaded days, review debt, low-confidence AP subjects, unscheduled priorities, nextBestAction). Use it; do not recompute it.',
             '- To complete, reopen, archive, or reschedule EXISTING tasks/homework, use update_task_status / reschedule_tasks with the exact "id" values from context items (derived.overdue, derived.dueSoon, tasks, homework). When the user says "those"/"these", they mean the items you just listed — include their ids. Never create duplicates, and never delete or archive as a substitute for completing.',
+            '- Testing Hub EXAMS (context.testingHub — AP subjects, SAT, ACT, etc.) are NOT tasks. To mark an exam as taken/finished/done, or to reopen it, use update_exam_status with the examName (or examId). NEVER use update_task_status for an exam, and NEVER substitute an unrelated homework assignment — if the exam name does not match a task, that is expected; use update_exam_status. Exams have no due-date reschedule; only taken state and study status (planning/studying/reviewing/ready).',
             '- NEVER compute grade percentages, GPAs, or required scores yourself. Propose the read-only grade actions (run_grade_what_if, solve_target_grade, rank_missing_work_by_grade_impact, explain_grade_risk) — Sutra computes them locally and shows the result.',
             '',
-            'Action catalog:',
-            catalog,
+            'Product accuracy & memory rules (important):',
+            '- NEVER invent Sutra features, screens, settings, actions, or memories. If unsure whether something exists, say so or ask — do not guess.',
+            '- Only describe features present in context.productKnowledge (when provided) or the Actions Bank. Do not claim a capability that is not there.',
+            '- context.memory (when present) holds the user\'s saved long-term memories that Sutra retrieved as relevant. Use them to personalize; do NOT repeat them verbatim unless asked.',
+            '- NEVER write or change memory on your own. To save a memory, propose a create_memory action (the user confirms). Never infer or store sensitive memories (passwords, keys, financial, medical, precise location, locked-note content).',
+            '- When a target, date, or intent is ambiguous, ask one short clarifying question instead of guessing.',
+            '- Use Sutra\'s deterministic local systems for grade math and schedule-conflict detection — never do that math yourself.',
+            '',
+            '════════ ACTIONS BANK — everything you are able to propose; use ONLY these types ════════',
+            bankText,
+            '════════════════════════════════════════════════════════════════════════════════════',
             '',
             'When you write prose, prefer short markdown bullets over long paragraphs.',
+            'Formatting Sutra understands: standard Markdown — **bold**, *italics*, `inline code`, fenced ``` code blocks, bullet and numbered lists, # headings, > blockquotes, [links](url), and tables.',
+            'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
             'When the user asks about "this note" or "this view", use the context block below.',
+            ...buildPersonalizationLines()
+        ].join('\n');
+
+        const contextJson = (() => { try { return JSON.stringify(context, null, 2); } catch (e) { return '{}'; } })();
+        const dynamicText = [
+            '',
+            'REMINDER before you answer: you cannot apply anything — PROPOSE with a flow-actions block and never say you did it; use ONLY the context below and never invent data; use update_exam_status for Testing Hub exams (not tasks); ask if unsure.',
             '',
             'Current context (do not echo to the user, just use it):',
             '```json',
             contextJson,
             '```'
         ].join('\n');
+
+        return { static: staticText, dynamic: dynamicText };
+    }
+
+    function buildSystemPrompt(context) {
+        const parts = buildSystemPromptParts(context);
+        return parts.static + '\n' + parts.dynamic;
     }
 
     // --------------------------------------------------------------
@@ -786,12 +969,45 @@
         return true;
     }
 
+    // Extract every COMPLETE, balanced {...} object from a string — string- and
+    // escape-aware. Used to salvage actions from a flow-actions block that the
+    // model got cut off mid-stream (unterminated array/object), so a truncated
+    // reply still yields the actions it finished writing instead of leaking raw
+    // JSON into the bubble.
+    function salvageActionObjects(src) {
+        const text = String(src || '');
+        const out = [];
+        const len = text.length;
+        for (let i = 0; i < len; i += 1) {
+            if (text[i] !== '{') continue;
+            let depth = 0, inStr = false, esc = false;
+            for (let j = i; j < len; j += 1) {
+                const c = text[j];
+                if (esc) { esc = false; continue; }
+                if (c === '\\') { esc = true; continue; }
+                if (inStr) { if (c === '"') inStr = false; continue; }
+                if (c === '"') { inStr = true; continue; }
+                if (c === '{') depth += 1;
+                else if (c === '}') {
+                    depth -= 1;
+                    if (depth === 0) {
+                        const parsed = tryParse(text.slice(i, j + 1));
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.type) out.push(parsed);
+                        i = j; // resume scanning after this object
+                        break;
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
     function parseActions(replyText) {
         const src = String(replyText || '');
         const actions = [];
         let cleanText = src;
 
-        // (1) flow-actions fence
+        // (1) flow-actions fence (closed).
         const flowFenceRe = /```flow-actions\s*\n?([\s\S]*?)```/gi;
         let m;
         while ((m = flowFenceRe.exec(src)) !== null) {
@@ -799,8 +1015,23 @@
             if (parsed) {
                 const list = Array.isArray(parsed) ? parsed : [parsed];
                 list.forEach(a => { if (a && typeof a === 'object' && a.type) actions.push(a); });
+            } else {
+                // Closed fence but the JSON didn't parse (trailing comma, a partial
+                // last object, etc.) — salvage every complete action object.
+                salvageActionObjects(m[1]).forEach(a => actions.push(a));
             }
             cleanText = cleanText.replace(m[0], '').trim();
+        }
+        // (1b) TRUNCATED flow-actions fence — the model hit its token limit mid-block
+        // so it never closed. Salvage the actions it finished, and strip the raw
+        // (unclosed) block so it never leaks into the message bubble.
+        if (!actions.length) {
+            const openMatch = src.match(/```flow-actions/i);
+            if (openMatch && !/```flow-actions[\s\S]*?```/i.test(src)) {
+                const openIdx = openMatch.index;
+                salvageActionObjects(src.slice(openIdx)).forEach(a => actions.push(a));
+                cleanText = src.slice(0, openIdx).trim();
+            }
         }
         if (actions.length) return { actions, cleanText };
 
@@ -829,7 +1060,107 @@
             }
         }
 
+        // (4) Safety net for weaker models that DESCRIBE doing something
+        // ("I'll add … to your timeline") but never emit a flow-actions block.
+        // We turn a clear, dated scheduling claim into a REAL proposal card so
+        // the assistant can never just *say* it acted without a confirmable
+        // action. These are confirm-gated like any other proposal.
+        if (!actions.length) {
+            const inferred = inferActionsFromReply(src);
+            if (inferred.length) return { actions: inferred, cleanText, inferred: true };
+        }
+
         return { actions, cleanText };
+    }
+
+    // Weak models (e.g. small local ones) love to DECLARE "I've marked the AP
+    // Networking exam as completed" without emitting an action, so nothing
+    // happens. Turn such an exam-status claim into a REAL, confirm-gated
+    // proposal — but ONLY when the named exam actually exists in the Testing
+    // Hub (so we never fabricate or misfire onto a task).
+    function inferExamStatusFromReply(text) {
+        try {
+            if (typeof window === 'undefined' || typeof window.getTestingHubAssistantSummary !== 'function') return [];
+            const lc = String(text || '').toLowerCase();
+            // A mutation claim aimed at an exam/test.
+            const claim = /\b(mark\w*|complet\w*|finish\w*|updat\w*|record\w*|reopen\w*|set)\b/.test(lc)
+                && /\b(exam|test|taken|complete|completed|done|reviewing|studying)\b/.test(lc);
+            if (!claim) return [];
+            const summary = window.getTestingHubAssistantSummary();
+            const exams = summary && Array.isArray(summary.exams) ? summary.exams : [];
+            if (!exams.length) return [];
+            const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            let hit = null;
+            exams.forEach(e => {
+                const n = String(e.name || '').trim();
+                if (n.length < 3) return;
+                if (new RegExp(`\\b${esc(n)}\\b`, 'i').test(lc) && (!hit || n.length > String(hit.name).length)) hit = e;
+            });
+            if (!hit) return [];
+            const reopen = /\b(reopen|not\s+(?:done|complete|completed|taken|finished)|undo|un-?mark)\b/.test(lc);
+            const taken = !reopen;
+            // Don't propose a no-op (already in the claimed state).
+            if (!!hit.taken === taken) return [];
+            return [{
+                type: 'update_exam_status',
+                examId: hit.id,
+                examName: hit.name,
+                taken,
+                label: `Testing Hub: ${taken ? 'mark as taken' : 'reopen'} "${truncate(hit.name, 50)}"`,
+                _inferred: true
+            }];
+        } catch (e) { return []; }
+    }
+
+    // Turn a model's stated (but un-emitted) scheduling/creation/exam action
+    // into a confirmable proposal. Conservative: requires explicit verbs + a
+    // real target so the assistant can never just *say* it acted.
+    function inferActionsFromReply(replyText) {
+        const text = String(replyText || '');
+        if (!text.trim() || text.length > 4000) return [];
+        const examInferred = inferExamStatusFromReply(text);
+        if (examInferred.length) return examInferred;
+        const lc = text.toLowerCase();
+        const i = intel();
+        const toISO = (i && typeof i.toISODate === 'function') ? i.toISODate : toISODate;
+
+        const verb = /\b(add(?:ing|ed)?|schedul\w*|put(?:ting)?|block(?:ing|ed)?|set\s+(?:it|up|a)|place|creat\w*)\b/.test(lc);
+        const calendarTarget = /\b(calendar|timeline)\b/.test(lc);
+        if (!(verb && calendarTarget)) return [];
+
+        const date = toISO(text);
+        if (!date) return [];
+
+        // Time: "10:00 AM", "10am", "3 pm".
+        let start = '09:00', end = '10:00';
+        const tm = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+        if (tm) {
+            let h = Number(tm[1]) % 12;
+            if (/p/i.test(tm[3])) h += 12;
+            const mm = tm[2] || '00';
+            start = String(h).padStart(2, '0') + ':' + mm;
+            end = String((h + 1) % 24).padStart(2, '0') + ':' + mm;
+        }
+        const title = inferScheduleTitle(text) || 'Event';
+        return [{
+            type: 'create_timeline_block',
+            name: title, date, start, end,
+            label: `Add "${truncate(title, 50)}" to your timeline — ${date} ${start}`,
+            _inferred: true
+        }];
+    }
+
+    function inferScheduleTitle(text) {
+        // "...add the Fitbit delivery as a general event to your timeline..."
+        let m = text.match(/\b(?:add|adding|schedule|scheduling|put|block|create|set up)\s+(?:the\s+|a\s+|an\s+|your\s+|my\s+)?["'“]?(.+?)["'”]?\s+(?:as a|as an|to your|on your|to the|onto|into your|—|-|,)\b/i);
+        if (m && m[1] && m[1].trim().length >= 2 && m[1].trim().length <= 80) return cleanScheduleTitle(m[1]);
+        // "...schedule Fitbit delivery for July 1st"
+        m = text.match(/\b(?:add|schedule|put|block|create)\s+(?:the\s+|a\s+|an\s+|my\s+)?(.+?)\s+(?:for|on|at)\b/i);
+        if (m && m[1] && m[1].trim().length >= 2 && m[1].trim().length <= 60) return cleanScheduleTitle(m[1]);
+        return '';
+    }
+    function cleanScheduleTitle(s) {
+        return String(s || '').replace(/\s+/g, ' ').replace(/^(?:it|this|that|them)$/i, '').trim();
     }
 
     // Walk the text and find substrings that look like top-level JSON arrays
@@ -892,6 +1223,21 @@
         if (a.type === 'apply_recovery_schedule' || a.type === 'create_catch_up_plan') a.type = 'create_recovery_plan';
         if (a.type === 'schedule_study_block') a.type = 'create_timeline_block';
         if (a.type === 'move_timeline_block') a.type = 'update_timeline_block';
+        // --- Testing Hub exam status aliases (keep exams OFF the task path) ---
+        if (['mark_exam_complete', 'mark_exam_taken', 'complete_exam', 'finish_exam'].includes(a.type)) { a.taken = true; a.type = 'update_exam_status'; }
+        if (['reopen_exam', 'unmark_exam'].includes(a.type)) { a.taken = false; a.type = 'update_exam_status'; }
+        if (a.type === 'update_exam' || a.type === 'set_exam_status') a.type = 'update_exam_status';
+        if (a.type === 'update_exam_status') {
+            if (!a.examName) a.examName = a.exam || a.examTitle || a.name || a.title || '';
+            if (!a.examId && a.id) a.examId = a.id;
+            // Coerce a status-style value into the taken flag.
+            const st = String(a.status || a.examStatus || '').toLowerCase().trim();
+            if (a.taken == null && ['taken', 'complete', 'completed', 'done', 'finished', 'past'].includes(st)) a.taken = true;
+            if (a.taken == null && ['upcoming', 'reopen', 'not taken', 'untaken'].includes(st)) a.taken = false;
+            if (typeof a.taken === 'string') a.taken = ['true', 'yes', '1', 'taken', 'done', 'complete', 'completed'].includes(a.taken.toLowerCase());
+            // A study-status word that isn't a taken-state maps to studyStatus.
+            if (!a.studyStatus && ['planning', 'studying', 'reviewing', 'ready'].includes(st)) a.studyStatus = st;
+        }
 
         // --- Task mutation field aliases ---
         if (a.type === 'update_task_status' || a.type === 'reschedule_tasks' || a.type === 'change_task_priority') {
@@ -1239,6 +1585,25 @@
             // rank_missing_work_by_grade_impact / explain_grade_risk: courseName optional.
             // start_focus_session, run_deadline_radar, run_weekly_review,
             // create_quick_capture_item have no required fields.
+            case 'create_memory': {
+                const mem = memStore();
+                if (!mem) return { ok: false, error: 'Assistant Memory is unavailable.' };
+                const v = mem.validateInput({ content: action.content, title: action.title, category: action.category, expiresAt: action.expiresAt });
+                if (!v.ok) return { ok: false, error: v.error };
+                break;
+            }
+            case 'update_memory':
+                if (!action.id) return { ok: false, error: 'Missing memory id' };
+                if (action.content != null && !String(action.content).trim()) return { ok: false, error: 'Memory content cannot be empty' };
+                break;
+            case 'enable_memory':
+            case 'disable_memory':
+                if (!action.id) return { ok: false, error: 'Missing memory id' };
+                break;
+            case 'delete_memory':
+                if (!action.id && !(Array.isArray(action.ids) && action.ids.length)) return { ok: false, error: 'Missing memory id(s)' };
+                break;
+            // clear_expired_memories / clear_temporary_memories / open_memory_manager: no required fields.
         }
         return { ok: true };
     }
@@ -1824,6 +2189,47 @@
         };
     }
 
+    // Testing Hub exam status — delegates to app.js, which resolves the exam
+    // reference against the Testing Hub ONLY (never a homework task) and updates
+    // the unified taken map / study status.
+    function applyUpdateExamStatus(action) {
+        if (typeof window === 'undefined' || typeof window.setTestingHubExamStatus !== 'function') {
+            return { ok: false, message: 'Testing Hub is unavailable.' };
+        }
+        const ref = action.examId || action.examName;
+        if (!ref) return { ok: false, message: 'Name the exam to update (e.g. "AP Networking" or "SAT").' };
+        const wantTaken = action.taken;
+        const prevTaken = (() => {
+            try {
+                const sum = window.getTestingHubAssistantSummary && window.getTestingHubAssistantSummary();
+                const id0 = String(action.examId || '');
+                const match = sum && sum.exams ? sum.exams.find(e => e.id === id0 || String(e.name || '').toLowerCase() === String(action.examName || '').toLowerCase()) : null;
+                return match ? { id: match.id, taken: !!match.taken, studyStatus: match.studyStatus || '' } : null;
+            } catch (e) { return null; }
+        })();
+        const res = window.setTestingHubExamStatus(ref, {
+            taken: (wantTaken === true || wantTaken === false) ? wantTaken : undefined,
+            studyStatus: typeof action.studyStatus === 'string' ? action.studyStatus : undefined
+        });
+        if (!res || !res.ok) {
+            return { ok: false, message: `I couldn't find an exam matching "${truncate(String(ref), 60)}" in your Testing Hub. Open Testing Hub to check the exact name.` };
+        }
+        const bits = [];
+        if (wantTaken === true) bits.push('marked as taken');
+        else if (wantTaken === false) bits.push('reopened');
+        if (typeof action.studyStatus === 'string') bits.push(`study status set to ${action.studyStatus}`);
+        const what = bits.length ? bits.join(' and ') : 'updated';
+        return {
+            ok: true,
+            message: `**${res.examName}** ${what} in the Testing Hub.`,
+            payload: {
+                affected: [{ store: 'testingHub', id: res.examId, title: res.examName }],
+                undoPayload: prevTaken ? { kind: 'exam_status', item: prevTaken } : null,
+                createdObjectIds: []
+            }
+        };
+    }
+
     function applyRescheduleTasks(action) {
         const resolved = resolveTaskTargets(action);
         if (resolved.error) return { ok: false, message: resolved.error };
@@ -2166,6 +2572,58 @@
         });
     }
 
+    // --------------------------------------------------------------
+    // Assistant Memory appliers — delegate to SutraAssistantMemory and return
+    // an undoPayload so the unified Activity/Undo pipeline can reverse them.
+    // --------------------------------------------------------------
+    function applyCreateMemory(action) {
+        const mem = memStore();
+        if (!mem) return { ok: false, message: 'Assistant Memory is unavailable.' };
+        const res = mem.create({
+            category: action.category, content: action.content, title: action.title,
+            expiresInDays: action.expiresInDays, expiresAt: action.expiresAt,
+            source: action.source || 'user_explicit', confidence: action.confidence,
+            courseName: action.courseName, courseId: action.courseId,
+            feature: action.feature, noteId: action.noteId, projectId: action.projectId
+        });
+        if (!res.ok) return { ok: false, message: res.error || 'Could not save memory.' };
+        return { ok: true, message: res.message || 'Saved to memory.', payload: { createdObjectIds: [], undoPayload: res.undo || null } };
+    }
+    function applyUpdateMemory(action) {
+        const mem = memStore();
+        if (!mem) return { ok: false, message: 'Assistant Memory is unavailable.' };
+        const res = mem.update(action.id, { content: action.content, title: action.title, category: action.category, expiresAt: action.expiresAt });
+        if (!res.ok) return { ok: false, message: res.error || 'Could not update memory.' };
+        return { ok: true, message: res.message || 'Memory updated.', payload: { createdObjectIds: [], undoPayload: res.undo || null } };
+    }
+    function applyToggleMemory(action, enabled) {
+        const mem = memStore();
+        if (!mem) return { ok: false, message: 'Assistant Memory is unavailable.' };
+        const res = mem.setEnabled(action.id, enabled);
+        if (!res.ok) return { ok: false, message: res.error || 'Could not change memory.' };
+        return { ok: true, message: res.message, payload: { createdObjectIds: [], undoPayload: res.undo || null } };
+    }
+    function applyDeleteMemory(action) {
+        const mem = memStore();
+        if (!mem) return { ok: false, message: 'Assistant Memory is unavailable.' };
+        const res = Array.isArray(action.ids) && action.ids.length ? mem.removeMany(action.ids) : mem.remove(action.id);
+        if (!res.ok) return { ok: false, message: res.error || 'Could not forget memory.' };
+        return { ok: true, message: res.message, payload: { createdObjectIds: [], undoPayload: res.undo || null } };
+    }
+    function applyClearMemories(action, which) {
+        const mem = memStore();
+        if (!mem) return { ok: false, message: 'Assistant Memory is unavailable.' };
+        const res = which === 'temporary' ? mem.clearTemporary() : mem.clearExpired();
+        if (!res.ok) return { ok: false, message: res.error || 'Could not clear memories.' };
+        return { ok: true, message: res.message, payload: { createdObjectIds: [], undoPayload: res.undo || null } };
+    }
+    function applyOpenMemoryManager() {
+        const mem = memStore();
+        if (!mem || typeof mem.openManager !== 'function') return { ok: false, message: 'Memory manager is unavailable.' };
+        try { mem.openManager(); } catch (e) { return { ok: false, message: 'Could not open the Memory manager.' }; }
+        return { ok: true, message: 'Opened the Memory manager.' };
+    }
+
     function applyAction(rawAction) {
         const valid = validateAction(rawAction);
         if (!valid.ok) return { ok: false, message: valid.error };
@@ -2212,6 +2670,7 @@
             case 'change_context_depth': return applyChangeContextDepth(action);
             case 'add_assignment_milestones': return applyAddAssignmentMilestones(action);
             case 'update_task_status': return applyUpdateTaskStatus(action);
+            case 'update_exam_status': return applyUpdateExamStatus(action);
             case 'reschedule_tasks': return applyRescheduleTasks(action);
             case 'change_task_priority': return applyChangeTaskPriority(action);
             case 'update_timeline_block': return applyUpdateTimelineBlock(action);
@@ -2225,6 +2684,14 @@
             case 'rank_missing_work_by_grade_impact':
             case 'explain_grade_risk': return applyGradeReadOnly(action);
             case 'repair_plan': return runRepairPlan(action);
+            case 'create_memory': return applyCreateMemory(action);
+            case 'update_memory': return applyUpdateMemory(action);
+            case 'enable_memory': return applyToggleMemory(action, true);
+            case 'disable_memory': return applyToggleMemory(action, false);
+            case 'delete_memory': return applyDeleteMemory(action);
+            case 'clear_expired_memories': return applyClearMemories(action, 'expired');
+            case 'clear_temporary_memories': return applyClearMemories(action, 'temporary');
+            case 'open_memory_manager': return applyOpenMemoryManager(action);
             // import_assignments has no atomic applier — it is applied row-by-row
             // through the dedicated review table (see renderImportReview).
             default: return { ok: false, message: 'Unknown action.' };
@@ -2289,6 +2756,14 @@
                 return `Move ${n} ${d >= 0 ? 'forward' : 'back'} ${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'}`;
             }
             case 'change_task_priority': return `Set ${describeTaskTargets(action)} to ${action.priority} priority`;
+            case 'update_exam_status': {
+                const who = truncate(action.examName || action.examId || 'exam', 50);
+                const bits = [];
+                if (action.taken === true) bits.push('mark as taken');
+                else if (action.taken === false) bits.push('reopen');
+                if (typeof action.studyStatus === 'string') bits.push(`set study status to ${action.studyStatus}`);
+                return `Testing Hub: ${bits.length ? bits.join(' & ') : 'update'} "${who}"`;
+            }
             case 'update_timeline_block': return `Update block "${truncate(action.blockName || action.blockId || '', 50)}"${action.date ? ` → ${action.date}` : ''}${action.start ? ` ${action.start}` : ''}${action.end ? `–${action.end}` : ''}`;
             case 'delete_timeline_block': return `Delete block "${truncate(action.blockName || action.blockId || '', 50)}"`;
             case 'append_note_text': return `Append to ${action.noteTitle ? `"${truncate(action.noteTitle, 40)}"` : 'the current note'}: "${truncate(action.text, 70)}"`;
@@ -2300,6 +2775,14 @@
             case 'rank_missing_work_by_grade_impact': return `Rank missing work by grade impact${action.courseName ? ` (${action.courseName})` : ''}`;
             case 'explain_grade_risk': return `Explain grade standing${action.courseName ? ` for ${action.courseName}` : ''}`;
             case 'repair_plan': return 'Check the next 7 days for plan problems';
+            case 'create_memory': return `Remember: "${truncate(action.title || action.content || '', 80)}"${action.category ? ` (${String(action.category).replace(/_/g, ' ')})` : ''}`;
+            case 'update_memory': return `Update a saved memory`;
+            case 'enable_memory': return `Re-enable a saved memory`;
+            case 'disable_memory': return `Disable a saved memory`;
+            case 'delete_memory': return `Forget ${Array.isArray(action.ids) && action.ids.length > 1 ? action.ids.length + ' memories' : 'a memory'}`;
+            case 'clear_expired_memories': return 'Forget all expired memories';
+            case 'clear_temporary_memories': return 'Forget all temporary memories';
+            case 'open_memory_manager': return 'Open the Memory manager';
             default: return `Unknown: ${action.type}`;
         }
     }
@@ -2321,6 +2804,8 @@
         switch (action.type) {
             case 'update_task_status':
                 return action.status === 'completed' ? 'Mark complete' : (action.status === 'open' ? 'Reopen' : 'Archive');
+            case 'update_exam_status':
+                return action.taken === true ? 'Mark exam taken' : (action.taken === false ? 'Reopen exam' : 'Update exam');
             case 'reschedule_tasks': return 'Reschedule';
             case 'change_task_priority': return 'Set priority';
             case 'delete_timeline_block': return 'Delete block';
@@ -2328,6 +2813,11 @@
             case 'plan_day': return 'Apply day plan';
             case 'plan_week': return 'Apply week plan';
             case 'create_note_from_response': return 'Save note';
+            case 'create_memory': return 'Save to memory';
+            case 'delete_memory': return 'Forget';
+            case 'disable_memory': return 'Disable';
+            case 'enable_memory': return 'Enable';
+            case 'open_memory_manager': return 'Open manager';
             default: return 'Apply';
         }
     }
@@ -2337,14 +2827,16 @@
     // risk, conflicts/assumptions. Raw JSON stays under "Technical details".
     // --------------------------------------------------------------
     const UNDOABLE_TYPES = new Set([
-        'update_task_status', 'reschedule_tasks', 'change_task_priority',
+        'update_task_status', 'update_exam_status', 'reschedule_tasks', 'change_task_priority',
         'update_timeline_block', 'delete_timeline_block', 'append_note_text',
         'insert_text', 'replace_selection',
         'create_task', 'create_homework', 'create_timeline_block', 'create_page',
         'create_note_from_response', 'create_review_deck', 'create_study_plan',
         'create_exam_plan', 'create_assignment_plan', 'plan_week', 'plan_day',
         'triage_deadlines', 'create_recovery_plan', 'convert_note_to_study_system',
-        'import_assignments', 'schedule_review_session'
+        'import_assignments', 'schedule_review_session',
+        'create_memory', 'update_memory', 'enable_memory', 'disable_memory',
+        'delete_memory', 'clear_expired_memories', 'clear_temporary_memories'
     ]);
 
     function actionUndoNote(action) {
@@ -2502,6 +2994,8 @@
     }
 
     function getConfirmationMode() {
+        // Master gate (default on) forces always-ask, overriding any auto-apply.
+        if (getPref('assistant.requireApprovalForActions', true) !== false) return 'always';
         const explicit = String(getPref('assistant.confirmationMode', '') || '').trim();
         if (['always', 'auto_low', 'review_batches'].includes(explicit)) return explicit;
         // Legacy fallback: requireConfirmation=false → auto-apply low-risk.
@@ -2549,6 +3043,91 @@
         return false;
     }
 
+    // Where to send the student after an action applies. Prefers the exact
+    // created object (a new note opens itself); otherwise falls back to the
+    // action's domain view via the capability registry. Returns null for
+    // actions with no meaningful destination (navigation, memory, assistant).
+    function receiptLinkForAction(action, result) {
+        try {
+            const created = (result && result.payload && result.payload.createdObjectIds) || [];
+            const page = created.find(o => o && o.kind === 'page' && o.id);
+            if (page) {
+                return { label: 'Open note', go: () => { callApp('loadPage', page.id); callApp('setActiveView', 'notes'); } };
+            }
+            const type = String((action && action.type) || '');
+            if (/^(navigate|open_)/.test(type)) return null;
+            const reg = (typeof window !== 'undefined') ? window.SutraCapabilityRegistry : null;
+            const meta = reg && typeof reg.get === 'function' ? reg.get(type) : null;
+            const DOMAIN_VIEWS = {
+                tasks: { label: 'Open Today', view: 'today' },
+                homework: { label: 'Open Homework', view: 'homework' },
+                timeline: { label: 'Open Timeline', view: 'timeline' },
+                review: { label: 'Open Review', view: 'review' },
+                study: { label: 'Open AP Study', view: 'apstudy' },
+                testing: { label: 'Open Testing Hub', view: 'testing' },
+                grades: { label: 'Open Classes', view: 'courses' },
+                courses: { label: 'Open Classes', view: 'courses' },
+                college: { label: 'Open College', view: 'collegeapp' },
+                notes: { label: 'Open Notes', view: 'notes' },
+                planning: { label: 'Open Timeline', view: 'timeline' },
+                focus: { label: 'Open Today', view: 'today' }
+            };
+            const dest = meta && meta.domain ? DOMAIN_VIEWS[meta.domain] : null;
+            if (!dest) return null;
+            return { label: dest.label, go: () => callApp('setActiveView', dest.view) };
+        } catch (e) { return null; }
+    }
+
+    // Post-apply receipt: a compact "what just happened" row with a deep link
+    // to the affected surface and an inline Undo (when the activity record is
+    // reversible). Replaces the bare "✓ message" line as the closure of the
+    // propose → approve → apply loop.
+    function buildReceiptEl(action, result, meta) {
+        const receipt = document.createElement('div');
+        receipt.className = 'flow-action-receipt';
+        const created = (result && result.payload && result.payload.createdObjectIds) || [];
+        const bits = [];
+        if (created.length) {
+            const byKind = created.reduce((acc, o) => {
+                if (o && o.kind) acc[o.kind] = (acc[o.kind] || 0) + 1;
+                return acc;
+            }, {});
+            bits.push('Created ' + Object.keys(byKind).map(k => `${byKind[k]} ${k}${byKind[k] === 1 ? '' : 's'}`).join(', '));
+        }
+        const summary = document.createElement('span');
+        summary.className = 'flow-action-receipt-text';
+        summary.textContent = `✓ ${result.message || 'Applied.'}${bits.length ? ' · ' + bits.join(' · ') : ''}`;
+        receipt.appendChild(summary);
+
+        const link = receiptLinkForAction(action, result);
+        if (link) {
+            const goBtn = document.createElement('button');
+            goBtn.type = 'button';
+            goBtn.className = 'flow-action-receipt-link';
+            goBtn.textContent = link.label;
+            goBtn.addEventListener('click', () => { try { link.go(); } catch (e) { /* non-critical */ } });
+            receipt.appendChild(goBtn);
+        }
+        if (result.activityId && result.reversible) {
+            const undoBtn = document.createElement('button');
+            undoBtn.type = 'button';
+            undoBtn.className = 'flow-action-receipt-undo';
+            undoBtn.textContent = 'Undo';
+            undoBtn.addEventListener('click', () => {
+                const res = undoActivity(result.activityId);
+                showToast(res.message);
+                if (res.ok) {
+                    undoBtn.disabled = true;
+                    summary.textContent = '↩ Undone.';
+                    receipt.classList.add('flow-action-receipt-undone');
+                    if (meta && typeof meta.onUndone === 'function') meta.onUndone();
+                }
+            });
+            receipt.appendChild(undoBtn);
+        }
+        return receipt;
+    }
+
     function renderActionCards(hostEl, actions, opts) {
         if (!hostEl || !Array.isArray(actions) || actions.length === 0) return;
         const showPreviews = getPref('assistant.showActionPreviews', true) !== false;
@@ -2566,6 +3145,24 @@
         wrap.setAttribute('aria-label', 'Proposed actions');
         const batchId = makeId('batch');
 
+        // Batch progress: "N of M applied" in the review head plus a grouped
+        // Undo-all that appears once anything has applied. Per-card receipt
+        // undos decrement the count so the label stays truthful.
+        let appliedCount = 0;
+        const noteBatchProgress = (delta) => {
+            if (!isBatch) return;
+            appliedCount = Math.max(0, appliedCount + delta);
+            const head = wrap.querySelector('.flow-action-review-head');
+            if (!head) return;
+            const progress = head.querySelector('.flow-action-review-progress');
+            if (progress) progress.textContent = appliedCount ? ` · ${appliedCount} of ${actions.length} applied` : '';
+            const undoBtn = head.querySelector('[data-flow-batch="undo"]');
+            if (undoBtn && !undoBtn.disabled) {
+                undoBtn.hidden = appliedCount === 0;
+                undoBtn.textContent = `Undo all (${appliedCount})`;
+            }
+        };
+
         if (isBatch) {
             const riskCounts = actions.reduce((acc, raw) => {
                 const risk = classifyRisk(normalizeActionFields(raw));
@@ -2576,16 +3173,35 @@
             reviewHead.className = 'flow-action-review-head';
             reviewHead.innerHTML = `
                 <div class="flow-action-review-title">
-                    <strong>Action Review Center</strong>
-                    <span>${actions.length} proposed action${actions.length === 1 ? '' : 's'} · ${riskCounts.high || 0} high risk</span>
+                    <strong>Proposed plan</strong>
+                    <span>${actions.length} step${actions.length === 1 ? '' : 's'}${riskCounts.high ? ` · ${riskCounts.high} high risk` : ''}<span class="flow-action-review-progress"></span></span>
                 </div>
                 <div class="flow-action-review-controls">
                     <button type="button" class="flow-action-select-btn" data-flow-batch="selected">Apply selected</button>
                     <button type="button" class="flow-action-select-btn" data-flow-batch="decline">Decline selected</button>
                     <button type="button" class="flow-action-select-btn" data-flow-batch="all">Apply all</button>
+                    <button type="button" class="flow-action-select-btn flow-action-batch-undo" data-flow-batch="undo" hidden>Undo all</button>
                     <button type="button" class="flow-action-select-btn" data-flow-batch="history">History</button>
                 </div>`;
             wrap.appendChild(reviewHead);
+            const undoAllBtn = reviewHead.querySelector('[data-flow-batch="undo"]');
+            undoAllBtn.addEventListener('click', () => {
+                const res = undoBatch(batchId);
+                showToast(res.message);
+                if (res.ok) {
+                    undoAllBtn.disabled = true;
+                    // Reflect the group undo on every applied card's receipt.
+                    wrap.querySelectorAll('.flow-action-receipt').forEach(r => {
+                        r.classList.add('flow-action-receipt-undone');
+                        const txt = r.querySelector('.flow-action-receipt-text');
+                        if (txt) txt.textContent = '↩ Undone.';
+                        const u = r.querySelector('.flow-action-receipt-undo');
+                        if (u) u.disabled = true;
+                    });
+                    const progress = reviewHead.querySelector('.flow-action-review-progress');
+                    if (progress) progress.textContent = ` · undone`;
+                }
+            });
             reviewHead.querySelector('[data-flow-batch="selected"]').addEventListener('click', async () => {
                 const selected = Array.from(wrap.querySelectorAll('.flow-action-select input:checked'))
                     .map(input => input.closest('.flow-action-card'))
@@ -2717,12 +3333,20 @@
                 }
                 applyBtn.disabled = true;
                 const result = applyActionLogged(action, Object.assign({ batchId }, opts && opts.meta || {}));
-                const status = document.createElement('div');
-                status.className = result.ok ? 'flow-action-ok' : 'flow-action-error';
-                status.textContent = result.ok ? `✓ ${result.message}` : `✗ ${result.message}`;
-                card.appendChild(status);
-                if (result.ok) { showToast(result.message); applyBtn.textContent = 'Applied'; }
-                else { applyBtn.disabled = false; }
+                if (result.ok) {
+                    // Receipt = what happened + deep link + inline undo. This is
+                    // the closure of the propose → approve → apply loop.
+                    card.appendChild(buildReceiptEl(action, result, { onUndone: () => noteBatchProgress(-1) }));
+                    showToast(result.message);
+                    applyBtn.textContent = 'Applied';
+                    noteBatchProgress(1);
+                } else {
+                    const status = document.createElement('div');
+                    status.className = 'flow-action-error';
+                    status.textContent = `✗ ${result.message}`;
+                    card.appendChild(status);
+                    applyBtn.disabled = false;
+                }
                 if (opts && typeof opts.onApplied === 'function') opts.onApplied(action, result);
             };
             applyBtn.addEventListener('click', doApply);
@@ -2756,8 +3380,11 @@
             wrap.appendChild(card);
 
             // Auto-apply only LOW risk actions, only when the user opted into
-            // auto_low mode, and never as part of a multi-action batch.
-            if (valid.ok && risk === 'low' && confirmMode === 'auto_low' && !isBatch) {
+            // auto_low mode, and never as part of a multi-action batch — AND
+            // never when the master approval gate is on (the default). This
+            // guarantees the assistant asks before any action / agentic step.
+            const requireApproval = getPref('assistant.requireApprovalForActions', true) !== false;
+            if (!requireApproval && valid.ok && risk === 'low' && confirmMode === 'auto_low' && !isBatch) {
                 const note = document.createElement('div');
                 note.className = 'flow-action-autonote';
                 note.textContent = 'Auto-applied (low-risk).';
@@ -2783,7 +3410,14 @@
             { label: 'Make outline', prompt: 'Reorganize this note into a clear outline with H2/H3 sections. Propose a replace_selection action only if I have text selected.' },
             { label: 'Improve writing', prompt: 'Improve the writing in the current selection (or the whole note if nothing is selected) — clearer, tighter, same meaning.' },
             { label: 'Selection → tasks', prompt: 'Turn the selected text into concrete tasks. Propose create_task actions, one per task.' },
-            { label: 'Generate review cards', prompt: 'Read this note and propose a create_review_deck action whose cards array contains 8–15 high-quality front/back review pairs covering the key concepts.' }
+            { label: 'Generate review cards', prompt: 'Read this note and propose a create_review_deck action whose cards array contains 8–15 high-quality front/back review pairs covering the key concepts.' },
+            // Folded in from the tab's slash commands (/quiz, /explain, /solve) so
+            // these prompts are available through the SAME adaptive suggestion
+            // source both surfaces now share, not just one surface's local
+            // fallback list.
+            { label: 'Quiz me', prompt: 'Quiz me on the material in my current note. Ask one question at a time.' },
+            { label: 'Explain a concept', prompt: 'Explain this concept to me simply, with an example: ' },
+            { label: 'Solve a problem', prompt: 'Help me solve this step by step: ' }
         ],
         homework: [
             { label: 'Break down assignment', prompt: 'Break the most pressing homework assignment into sub-steps and propose create_task actions for each step.' },
@@ -3004,13 +3638,17 @@
             const chipRow = document.createElement('div');
             chipRow.id = 'flowContextChipRow';
             chipRow.className = 'flow-context-chip-row';
+            // Compact single-line footer: provider + live status on the left,
+            // View context / Activity as right-aligned icon buttons. Attach is
+            // the paperclip in the input bar (this row's #flowAttachInput is the
+            // shared file picker both buttons open), so the old text "Attach"
+            // chip is intentionally gone to avoid the duplicate affordance.
             chipRow.innerHTML = `
                 <button type="button" class="flow-context-chip" id="flowContextChip" aria-live="polite" title="View the exact context Sutra sends"></button>
                 <span class="flow-memory-chip" id="flowMemoryChip" aria-live="polite"></span>
                 <span class="flow-selection-flag" id="flowSelectionFlag" hidden></span>
-                <button type="button" class="flow-chip-btn" id="flowAttachBtn" title="Attach files — PDFs, images, and text files. What each model can read is shown on the file chip.">📎 Attach</button>
-                <button type="button" class="flow-chip-btn" id="flowViewContextBtn" title="View context being sent">View context</button>
-                <button type="button" class="flow-chip-btn" id="flowActivityBtn" title="Assistant activity + undo">Activity</button>
+                <button type="button" class="flow-chip-icon" id="flowViewContextBtn" title="View context being sent" aria-label="View the context being sent"><i class="fas fa-magnifying-glass" aria-hidden="true"></i></button>
+                <button type="button" class="flow-chip-icon" id="flowActivityBtn" title="Assistant activity + undo" aria-label="Assistant activity and undo"><i class="fas fa-rotate-left" aria-hidden="true"></i></button>
                 <input type="file" id="flowAttachInput" multiple hidden aria-label="Attach files to your message" />
             `;
             // Redesign: context/provider chips live in the composer footer;
@@ -3033,12 +3671,12 @@
             if (viewCtx) viewCtx.addEventListener('click', () => { try { showContextModal(); } catch (e) {} });
             const actBtn = document.getElementById('flowActivityBtn');
             if (actBtn) actBtn.addEventListener('click', () => { try { openActivityLog(); } catch (e) {} });
-            const attachBtn = document.getElementById('flowAttachBtn');
+            // The text "Attach" chip was removed; the shared file picker is now
+            // opened only by the input-bar paperclip (#chatAttachBtn, wired
+            // separately). Keep the file-input change handler here so selected
+            // files are still processed regardless of which button opened it.
             const attachInput = document.getElementById('flowAttachInput');
-            if (attachBtn && attachInput) {
-                attachBtn.addEventListener('click', () => {
-                    attachInput.click();
-                });
+            if (attachInput) {
                 attachInput.addEventListener('change', () => {
                     const files = Array.from(attachInput.files || []);
                     // Sequential so chips appear in selection order.
@@ -3113,11 +3751,37 @@
         if (getPref('assistant.enabled', true) === false) return null;
         lastUserPrompt = String(userText || '');
         const ctx = getFlowAssistantContext({});
-        const systemPrompt = buildSystemPrompt(ctx);
+        // Product-aware context: attach a SMALL set of relevant saved memories
+        // and verified product-knowledge snippets so the model stays accurate
+        // and personalized without a giant static prompt. Never dump everything.
+        try {
+            const mem = memStore();
+            if (mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
+                const snips = mem.buildPromptSnippets(userText, { feature: getActiveViewName() }, { limit: 5 });
+                if (snips && snips.length) {
+                    ctx.memory = snips.map(s => s.text);
+                    ctx.memoryUsedIds = snips.map(s => s.id);
+                    if (typeof mem.recordUsed === 'function') mem.recordUsed(ctx.memoryUsedIds);
+                }
+            }
+        } catch (e) { /* memory is best-effort */ }
+        try {
+            const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
+            if (pk && typeof pk.search === 'function') {
+                const hits = pk.search(userText, 2).filter(h => h.score >= 4);
+                if (hits.length) ctx.productKnowledge = hits.map(h => ({ topic: h.entry.title, summary: h.entry.summary, availability: h.entry.availability }));
+            }
+        } catch (e) { /* product knowledge is best-effort */ }
+        // Built once as {static, dynamic} so callers that support prompt
+        // caching (Anthropic/Gemini) can send the static ~70% separately
+        // instead of re-transmitting it whole on every message.
+        const systemPromptParts = buildSystemPromptParts(ctx);
+        const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();
         return {
             systemPrompt,
+            systemPromptParts,
             context: ctx,
             providerType,
             visionCapability: cap,
@@ -3145,6 +3809,91 @@
     // --------------------------------------------------------------
     function intel() {
         return (typeof window !== 'undefined' && window.flowIntelligence) ? window.flowIntelligence : null;
+    }
+
+    // --------------------------------------------------------------
+    // Resizable chat list (full Assistant view). Width persists locally via
+    // SutraSafeStorage — device/screen specific, so it is NOT exported.
+    // --------------------------------------------------------------
+    const ASST_SIDEBAR_WIDTH_KEY = 'sutra:assistantSidebarWidth:v1';
+    const ASST_SIDEBAR_MIN = 190;
+    const ASST_SIDEBAR_MAX = 560;
+
+    function applyAsstSidebarWidth(w) {
+        const shell = document.querySelector('.asst-shell');
+        if (!shell) return;
+        const px = Math.max(ASST_SIDEBAR_MIN, Math.min(ASST_SIDEBAR_MAX, Math.round(w)));
+        shell.style.setProperty('--asst-sidebar-w', px + 'px');
+        return px;
+    }
+
+    function setupAsstSidebarResizer() {
+        if (typeof document === 'undefined') return;
+        const handle = document.getElementById('asstSidebarResizer');
+        const sidebar = document.getElementById('asstSidebar');
+        if (!handle || !sidebar) return;
+        // Restore the saved width once (even before the handle is wired).
+        if (!handle.dataset.widthRestored) {
+            handle.dataset.widthRestored = '1';
+            try {
+                const saved = (window.SutraSafeStorage && typeof window.SutraSafeStorage.get === 'function')
+                    ? Number(window.SutraSafeStorage.get(ASST_SIDEBAR_WIDTH_KEY, null)) : NaN;
+                if (saved >= ASST_SIDEBAR_MIN && saved <= ASST_SIDEBAR_MAX) applyAsstSidebarWidth(saved);
+            } catch (e) { /* ignore */ }
+        }
+        if (handle.dataset.wired) return;
+        handle.dataset.wired = '1';
+
+        let dragging = false, startX = 0, startW = 0;
+        const currentWidth = () => {
+            const w = parseInt(window.getComputedStyle(sidebar).width, 10);
+            return (w && w > 0) ? w : 252;
+        };
+        const persist = (w) => {
+            try { if (window.SutraSafeStorage) window.SutraSafeStorage.set(ASST_SIDEBAR_WIDTH_KEY, w, { importance: 'normal', label: 'Assistant sidebar width' }); } catch (e) { /* ignore */ }
+        };
+        const onMove = (e) => {
+            if (!dragging) return;
+            const x = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+            applyAsstSidebarWidth(startW + (x - startX));
+            if (e.cancelable) e.preventDefault();
+        };
+        const onUp = () => {
+            if (!dragging) return;
+            dragging = false;
+            handle.classList.remove('dragging');
+            document.body.classList.remove('asst-resizing');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
+            persist(currentWidth());
+        };
+        const onDown = (e) => {
+            dragging = true;
+            startX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+            startW = currentWidth();
+            handle.classList.add('dragging');
+            document.body.classList.add('asst-resizing');
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend', onUp);
+            if (e.cancelable) e.preventDefault();
+        };
+        handle.addEventListener('mousedown', onDown);
+        handle.addEventListener('touchstart', onDown, { passive: false });
+        // Keyboard accessibility: arrow keys nudge the width.
+        handle.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            e.preventDefault();
+            const w = applyAsstSidebarWidth(currentWidth() + (e.key === 'ArrowRight' ? 16 : -16));
+            if (w != null) persist(w);
+        });
+    }
+
+    function memStore() {
+        return (typeof window !== 'undefined' && window.SutraAssistantMemory) ? window.SutraAssistantMemory : null;
     }
 
     // Call a function that may live on the bridge or directly on window.
@@ -3515,7 +4264,7 @@
                 const createdObjectIds = (result.payload && result.payload.createdObjectIds) || [];
                 const undoPayload = (result.payload && result.payload.undoPayload) || null;
                 const reversible = createdObjectIds.length > 0 || !!beforeSnapshot || !!undoPayload;
-                i.logActivity({
+                const entry = i.logActivity({
                     actionType: action.type,
                     summary: describeAction(action),
                     userPrompt: m.userPrompt || '',
@@ -3532,6 +4281,12 @@
                     batchId: m.batchId || null,
                     reversible
                 });
+                // Surface the log record so the card UI can offer an inline
+                // Undo (receipt) without re-scanning the whole activity log.
+                if (entry && entry.id) {
+                    result.activityId = entry.id;
+                    result.reversible = !!reversible;
+                }
             }
         }
         return result;
@@ -3550,6 +4305,25 @@
     // Restore previous task/block/page state captured in an undoPayload.
     function applyUndoPayload(payload) {
         if (!payload || typeof payload !== 'object') return 0;
+        // Assistant Memory undo is delegated to the memory module, which owns
+        // its own store and knows how to reverse each operation.
+        if (payload.kind === 'memory') {
+            const mem = memStore();
+            return mem && typeof mem.applyUndo === 'function' ? mem.applyUndo(payload) : 0;
+        }
+        // Testing Hub exam status undo — restore the prior taken/study state.
+        if (payload.kind === 'exam_status' && payload.item && payload.item.id) {
+            try {
+                if (typeof window !== 'undefined' && typeof window.setTestingHubExamStatus === 'function') {
+                    window.setTestingHubExamStatus(payload.item.id, {
+                        taken: !!payload.item.taken,
+                        studyStatus: payload.item.studyStatus || undefined
+                    });
+                    return 1;
+                }
+            } catch (e) { /* ignore */ }
+            return 0;
+        }
         let restored = 0;
         if (payload.kind === 'task_state' && Array.isArray(payload.items)) {
             const b = bridge();
@@ -3689,6 +4463,30 @@
         if (restored) bits.push(`${restored} item(s) restored`);
         if (removed) bits.push(`${removed} created object(s) removed`);
         return { ok: true, message: `Undone${bits.length ? ' — ' + bits.join(', ') : ''}.` };
+    }
+
+    // Undo every still-applied, reversible action in a batch as one unit.
+    // Records are undone newest-first so state restores in reverse order of
+    // application (later actions may depend on earlier ones).
+    function undoBatch(batchId) {
+        const i = intel();
+        if (!i || !batchId) return { ok: false, count: 0, message: 'Nothing to undo.' };
+        const records = (i.getActivityLog() || []).filter(r =>
+            r && r.batchId === batchId && r.status !== 'undone' && r.reversible);
+        if (!records.length) return { ok: false, count: 0, message: 'Nothing in this batch can be undone.' };
+        records.sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+        let undone = 0;
+        let failed = 0;
+        records.forEach(rec => {
+            try {
+                const res = undoActivity(rec.id);
+                if (res && res.ok) undone += 1; else failed += 1;
+            } catch (e) { failed += 1; }
+        });
+        const message = undone
+            ? `Undid ${undone} action${undone === 1 ? '' : 's'}${failed ? ` (${failed} could not be undone)` : ''}.`
+            : 'Undo failed — nothing was restored.';
+        return { ok: undone > 0, count: undone, failed, message };
     }
 
     // --------------------------------------------------------------
@@ -4286,6 +5084,20 @@
 
         const m = (re) => lc.match(re);
 
+        // Imperative ACTION commands ("mark X done", "reschedule Y") are matched
+        // against a copy with any leading politeness/delegation wrapper stripped
+        // ("can you", "could you please", "hey, would you", "I want you to", "go
+        // ahead and", …) so "can you mark X as done" is treated the same as the
+        // bare command. Question routing (routeProductKnowledge) below keeps the
+        // ORIGINAL text/lc so genuine questions like "can you explain AP Study?"
+        // still reach Product Knowledge.
+        const CMD_PREFIX_RE = /^\s*(?:hey|ok|okay|so|yo)?[,\s]*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:(?:i(?:'d| would)?\s+(?:like|want))\s+(?:you\s+)?to\s+|go\s+(?:ahead\s+)?and\s+)?/i;
+        const cmdLc = lc.replace(CMD_PREFIX_RE, '').trim();
+        const mc = (re) => cmdLc.match(re);
+        // Task-mutation verbs that must NEVER be answered with a help card — even
+        // if a keyword like "ap"/"exam" would otherwise match Product Knowledge.
+        const ACTION_VERB_RE = /^(?:mark|set|check|complete|finish|reopen|un-?complete|un-?check|archive|delete|remove|schedule|reschedule|move|push|shift|snooze)\b/;
+
         // ---- Theme generation (Sutra Assistant) ----
         // Routes natural-language theme requests to the AI theme generator, which
         // rides the same Intelligence harness and first-class custom-theme pipeline.
@@ -4310,16 +5122,31 @@
             }
         }
 
+        // ---- Assistant Memory commands (local, deterministic) ----
+        // Kept local even in AI-only mode: the chat model shouldn't freelance
+        // memory writes, and these are consent-first + deterministic.
+        const memCmd = routeMemoryCommand(text, lc);
+        if (memCmd) return memCmd;
+
+        // ---- Local routing kill-switch (assistant.localRouting) ----
+        // Default OFF = AI-only: everything except theme generation (above) and
+        // memory (just handled) goes straight to the provider — no "Answered
+        // locally" help cards, no deterministic command dead-ends. Users who
+        // want offline / no-key answers turn this on in Settings ▸ Assistant.
+        if (getPref('assistant.localRouting', false) !== true) {
+            return { handled: false };
+        }
+
         // ---- Workspace task commands (deterministic, local-first) ----
         // These run BEFORE the generic patterns so "find conflicts" isn't
         // swallowed by search, and "show me my overdue" isn't treated as nav.
 
         // "what's overdue?" — local listing; primes "those" references.
-        if (/^(?:so\s+)?(?:what(?:'s| is| are)\s+(?:currently\s+)?overdue|whats overdue|show(?: me)?(?: my)? overdue(?: work| tasks| items| assignments)?|list(?: my)? overdue(?: work| tasks| items)?|do i have (?:any )?overdue)/.test(lc)) {
+        if (/^(?:so\s+)?(?:what(?:'s| is| are)\s+(?:currently\s+)?overdue|whats overdue|show(?: me)?(?: my)? overdue(?: work| tasks| items| assignments)?|list(?: my)? overdue(?: work| tasks| items)?|do i have (?:any )?overdue)/.test(cmdLc)) {
             return { handled: true, message: buildOverdueListMessage() };
         }
         // "undo that" / "undo" — undo the most recent reversible action.
-        if (/^undo(?:\s+(?:that|it|this|the last(?:\s+\w+)?|last(?:\s+\w+)?))?[.!]?$/.test(lc)) {
+        if (/^undo(?:\s+(?:that|it|this|the last(?:\s+\w+)?|last(?:\s+\w+)?))?[.!]?$/.test(cmdLc)) {
             const i = intel();
             const log = i ? i.getActivityLog() : [];
             const rec = log.find(r => r && r.reversible && r.status !== 'undone');
@@ -4327,6 +5154,17 @@
             const res = undoActivity(rec.id);
             return { handled: true, message: res.ok ? `↩️ ${res.message} (${rec.summary || rec.actionType})` : `Couldn't undo: ${res.message}` };
         }
+
+        // ---- Local Help (no API key) — explicit triggers open the menu ----
+        if (typeof window !== 'undefined' && window.SutraLocalHelp && typeof window.SutraLocalHelp.matchTrigger === 'function') {
+            const helpNode = window.SutraLocalHelp.matchTrigger(text);
+            if (helpNode) {
+                const opened = window.SutraLocalHelp.open(helpNode);
+                if (opened) return { handled: true, silent: true, source: 'local' };
+                return { handled: true, message: 'Open the Sutra Assistant panel to use Local Help.', source: 'local' };
+            }
+        }
+
         // "find schedule conflicts" — local conflict scan.
         if (/(?:find|check|any|show)(?:\s+\w+)?\s+conflicts?\b/.test(lc) && /schedule|timeline|conflict/.test(lc)) {
             const i = intel();
@@ -4340,23 +5178,23 @@
             return { handled: true, message: `Found ${conflicts.length + b2b.length} scheduling issue${conflicts.length + b2b.length === 1 ? '' : 's'}:\n\n${lines.join('\n')}\n\nSay "rebalance today" and I'll propose a fix.` };
         }
         // Complete / mark done.
-        let target = m(/^(?:please\s+)?(?:mark|set|check)\s+(.+?)\s+(?:as\s+|off\s+as\s+)?(?:completed?|done|finished)[.!?]?$/)
-            || m(/^(?:please\s+)?(?:complete|finish)\s+(.+?)[.!?]?$/);
+        let target = mc(/^(?:mark|set|check)\s+(.+?)\s+(?:as\s+|off\s+as\s+)?(?:completed?|done|finished)[.!?]?$/)
+            || mc(/^(?:complete|finish)\s+(.+?)[.!?]?$/);
         if (target && target[1]) {
             const result = resolveTargetPhrase(target[1], { forStatus: 'completed' });
             if (result.clarify) return { handled: true, message: result.clarify };
             return { handled: true, message: buildStatusProposalMessage(result.refs, 'completed', `You asked: "${truncate(text, 120)}"`) };
         }
         // Reopen.
-        target = m(/^(?:please\s+)?(?:reopen|un-?complete|un-?check)\s+(.+?)[.!?]?$/)
-            || m(/^(?:please\s+)?mark\s+(.+?)\s+as\s+(?:open|incomplete|not\s+done)[.!?]?$/);
+        target = mc(/^(?:reopen|un-?complete|un-?check)\s+(.+?)[.!?]?$/)
+            || mc(/^mark\s+(.+?)\s+as\s+(?:open|incomplete|not\s+done)[.!?]?$/);
         if (target && target[1]) {
             const result = resolveTargetPhrase(target[1], { forStatus: 'open' });
             if (result.clarify) return { handled: true, message: result.clarify };
             return { handled: true, message: buildStatusProposalMessage(result.refs, 'open', `You asked: "${truncate(text, 120)}"`) };
         }
         // Archive (planner tasks only; never a completion substitute).
-        target = m(/^(?:please\s+)?archive\s+(.+?)[.!?]?$/);
+        target = mc(/^archive\s+(.+?)[.!?]?$/);
         if (target && target[1] && !/course|class/.test(target[1])) {
             const result = resolveTargetPhrase(target[1], { forStatus: 'archived' });
             if (result.clarify) return { handled: true, message: result.clarify };
@@ -4367,7 +5205,7 @@
             return { handled: true, message: buildStatusProposalMessage(result.refs, 'archived', `You asked: "${truncate(text, 120)}"`) };
         }
         // Reschedule: "move/push/reschedule X to <day>".
-        target = m(/^(?:please\s+)?(?:move|push|reschedule|shift)\s+(.+?)\s+(?:to|until|for)\s+(.+?)[.!?]?$/);
+        target = mc(/^(?:move|push|reschedule|shift)\s+(.+?)\s+(?:to|until|for)\s+(.+?)[.!?]?$/);
         if (target && target[1] && target[2]) {
             const iso = isoFromDayWord(target[2]);
             if (iso) {
@@ -4377,7 +5215,7 @@
             }
         }
         // Daily briefing.
-        if (/^(?:what should i (?:do|work on)(?: today| first)?|plan my day|shape my day|daily briefing|brief me|what's my day look like|what does my day look like)[?.!]?$/.test(lc)) {
+        if (/^(?:what should i (?:do|work on)(?: today| first)?|plan my day|shape my day|daily briefing|brief me|what's my day look like|what does my day look like)[?.!]?$/.test(cmdLc)) {
             return { handled: true, message: buildDailyBriefingMessage() };
         }
         // Auto study planner (deterministic, no key) — spreads work across free
@@ -4493,7 +5331,137 @@
             const view = viewMap[key];
             if (view) { callApp('setActiveView', view); return { handled: true, message: `Switched to ${view}.` }; }
         }
+
+        // ---- Product knowledge Q&A (local, no API key) ----
+        // A FALLBACK after deterministic commands: answer "what is / how do I /
+        // where / does Sutra…" questions from the verified Product Knowledge
+        // registry. Rendered as a Local Help card (badged "Answered locally")
+        // when a matching node exists, else as plain local text.
+        // Guard: an imperative ACTION request ("(can you) mark the ap exams as
+        // done") must never be answered with a help card just because it
+        // contains a keyword like "ap"/"exam" — let it reach the provider, which
+        // can propose the real action. This is the belt to the prefix-strip
+        // suspenders above (in case a command phrasing isn't matched exactly).
+        if (!ACTION_VERB_RE.test(cmdLc)) {
+            const known = routeProductKnowledge(text, lc);
+            if (known) return known;
+        }
+
         return { handled: false };
+    }
+
+    // Route an Assistant Memory command. Returns a command result or null.
+    function routeMemoryCommand(rawText, lc) {
+        const mem = memStore();
+        if (!mem) return null;
+        const text = String(rawText || '').trim();
+
+        // "what do you remember about me?" / "list my memories"
+        if (/^(?:so\s+)?(?:what do you (?:remember|know) about me|what do you remember|what's in (?:your )?memory|list (?:my |saved )?memories|show (?:me )?(?:my )?memories)\b/.test(lc)) {
+            return { handled: true, message: mem.describeAll(), source: 'memory' };
+        }
+        // "open/manage memory"
+        if (/^(?:open|manage|show|edit)\s+(?:my\s+)?memor(?:y|ies)(?:\s+(?:manager|settings))?\b/.test(lc) || /^memory manager$/.test(lc)) {
+            const res = applyActionLogged({ type: 'open_memory_manager' }, { userPrompt: text });
+            return { handled: true, message: res.ok ? 'Opened the Memory manager.' : (res.message || 'Could not open the Memory manager.'), source: 'local' };
+        }
+        // "forget that" / "delete that memory" — most recent memory, with confirmation.
+        if (/^(?:forget (?:that|the last(?: memory)?|what i (?:just )?(?:said|told you))|delete (?:that|the last) memory|don'?t remember (?:that|this))\b/.test(lc)) {
+            const recent = mem.list({})[0];
+            if (!recent) return { handled: true, message: 'There\'s nothing recent to forget — your memory is empty.', source: 'memory' };
+            return { handled: true, source: 'memory', message: `Forget this memory?\n\n- **${truncate(recent.title || recent.content, 90)}**\n${buildActionFence([{ type: 'delete_memory', id: recent.id, label: `Forget: ${truncate(recent.title || recent.content, 60)}` }])}` };
+        }
+        // "forget <thing>" / "stop remembering <thing>" — match by content, confirm.
+        let fm = lc.match(/^(?:please\s+)?(?:forget (?:about |that |my )?|stop remembering (?:about |that |my )?)(.+?)[.!?]?$/);
+        if (fm && fm[1] && !/^(everything|all my memories|all memories|me)$/.test(fm[1].trim())) {
+            const phrase = fm[1].trim();
+            const matches = mem.list({}).map(r => ({ r, score: titleOverlap(phrase, (r.title || '') + ' ' + r.content) }))
+                .filter(x => x.score >= 0.34).sort((a, b) => b.score - a.score);
+            if (!matches.length) return { handled: true, message: `I don't have a saved memory matching "${truncate(phrase, 60)}". Open the Memory manager to review what I remember.`, source: 'memory' };
+            const top = matches.slice(0, 3).map(x => x.r);
+            return { handled: true, source: 'memory', message: `Forget ${top.length === 1 ? 'this memory' : 'these memories'}?\n${top.map(r => `- **${truncate(r.title || r.content, 90)}**`).join('\n')}\n${buildActionFence([{ type: 'delete_memory', ids: top.map(r => r.id), label: `Forget ${top.length} ${top.length === 1 ? 'memory' : 'memories'}` }])}` };
+        }
+        // "remember that …", "can you remember …", "note that …", "keep in mind …",
+        // "i want you to remember …" — save a memory deterministically ON-DEVICE
+        // (so a provider can never just *claim* to remember without saving).
+        // Reminder-style "remember to <task>" is intentionally NOT a memory.
+        const intent = parseRememberIntent(text);
+        if (intent && !intent.reminder) {
+            const fact = intent.fact;
+            if (mem.classifySensitivity(fact) === 'blocked') {
+                return { handled: true, source: 'memory', message: 'I won\'t save that to memory — it looks like sensitive or secret information (a credential, financial, medical, or precise-location detail). Sutra keeps that kind of thing out of memory for your safety.' };
+            }
+            // A "…for N days/weeks/months" phrasing makes it a temporary memory.
+            let category = bestMemoryCategory(fact);
+            let expiresInDays = 0;
+            const span = fact.match(/\bfor\s+(\d{1,3})\s*(day|week|month)s?\b/i);
+            if (span) {
+                const n = Number(span[1]);
+                expiresInDays = n * (/week/i.test(span[2]) ? 7 : (/month/i.test(span[2]) ? 30 : 1));
+                category = 'temporary_context';
+            }
+            const res = applyActionLogged({ type: 'create_memory', category, content: fact, source: 'user_explicit', expiresInDays: expiresInDays || undefined }, { userPrompt: text });
+            if (!res.ok) return { handled: true, message: res.message || 'I couldn\'t save that to memory.', source: 'memory' };
+            const expNote = expiresInDays ? ` It will expire in about ${expiresInDays} day${expiresInDays === 1 ? '' : 's'}.` : '';
+            return { handled: true, source: 'memory', message: `Got it — saved to memory: "${truncate(fact, 90)}".${expNote} _(${String(category).replace(/_/g, ' ')})_\n\nYou can edit, add to, or forget it anytime in **Settings ▸ Assistant ▸ Manage Memory**, or say "undo that".` };
+        }
+        return null;
+    }
+
+    // Parse a natural "remember this" request. Returns { fact } to save, or
+    // { reminder:true } for "remember to <task>" (a reminder, not a memory),
+    // or null when it isn't a remember request at all.
+    function parseRememberIntent(rawText) {
+        const m = String(rawText || '').match(/^\s*(?:hey|ok|okay|so)?[,\s]*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:i(?:'d| would)?\s+(?:like|want)\s+(?:you\s+)?to\s+)?(remember|memori[sz]e|keep in mind|make a note|take note|jot down|note|save)\b\s*(.*)$/i);
+        if (!m) return null;
+        let rest = String(m[2] || '').trim();
+        if (/^to\b\s+\S/i.test(rest)) return { reminder: true };           // "remember to <task>"
+        const conn = rest.match(/^(?:that|this|of|for me|the fact that)\b[:,]?\s+(.+)$/i);
+        if (conn) rest = conn[1].trim();
+        rest = rest.replace(/\s+(?:to|in)\s+memory\b\.?$/i, '').replace(/^[:,]\s*/, '').replace(/[.!]+$/, '').trim();
+        if (rest.length < 2) return null;
+        return { reminder: false, fact: rest };
+    }
+
+    function bestMemoryCategory(text) {
+        const mem = memStore();
+        try {
+            const set = mem && typeof mem.inferCategories === 'function' ? mem.inferCategories(text, {}) : null;
+            if (set && set.size) return Array.from(set)[0];
+        } catch (e) { /* ignore */ }
+        return 'user_notes';
+    }
+
+    function titleOverlap(a, b) {
+        const i = intel();
+        if (i && typeof i.titleSimilarity === 'function') return i.titleSimilarity(a, b);
+        const ta = String(a).toLowerCase().split(/\W+/).filter(Boolean);
+        const tb = new Set(String(b).toLowerCase().split(/\W+/).filter(Boolean));
+        if (!ta.length) return 0;
+        let hits = 0; ta.forEach(t => { if (tb.has(t)) hits += 1; });
+        return hits / ta.length;
+    }
+
+    // Route a product/help question to the local Product Knowledge registry.
+    function routeProductKnowledge(rawText, lc) {
+        const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
+        if (!pk || typeof pk.answer !== 'function') return null;
+        // Only treat clearly question-shaped or help-shaped text as product Q&A,
+        // so ordinary chat still goes to the provider.
+        const looksLikeQuestion = /\?$/.test(rawText.trim())
+            || /^(?:what|what's|whats|how|where|when|does|do|can|is|are|why|which|tell me|explain)\b/.test(lc)
+            || /\bsutra\b/.test(lc);
+        if (!looksLikeQuestion) return null;
+        const hit = pk.answer(rawText, { minScore: 5 });
+        if (!hit) return null;
+        // Prefer a rich, badged Local Help card when a matching node exists.
+        const lh = (typeof window !== 'undefined') ? window.SutraLocalHelp : null;
+        if (lh && typeof lh.nodeIdForKnowledge === 'function' && typeof lh.open === 'function') {
+            const nodeId = lh.nodeIdForKnowledge(hit.entry.id);
+            if (nodeId && lh.open(nodeId)) return { handled: true, silent: true, source: 'local' };
+        }
+        // Fallback: plain local text answer (still clearly labeled local).
+        return { handled: true, source: 'local', message: pk.formatEntry(hit.entry) + '\n\n_Answered locally — no API key used._' };
     }
 
     // --------------------------------------------------------------
@@ -4548,8 +5516,10 @@
                         ${(r.reversible && r.status !== 'undone') ? `<button type="button" class="flow-act-undo" data-undo="${esc(r.id)}">Undo</button>` : (r.reversible ? '' : '<span class="flow-act-noundo">not reversible</span>')}
                     </div>
                 </div>`).join('');
+            const isRealBatch = group.items.length > 1 && !!group.items[0].batchId;
+            const batchUndoable = isRealBatch && group.items.some(r => r.reversible && r.status !== 'undone');
             return `<section class="flow-act-batch" data-batch="${esc(group.key)}">
-                <div class="flow-act-batch-head"><strong>${group.items.length > 1 ? `Batch: ${group.items.length} actions` : 'Single action'}</strong><span>${esc(riskLabels)}${highCount ? ` · ${highCount} high-risk` : ''}</span></div>
+                <div class="flow-act-batch-head"><strong>${group.items.length > 1 ? `Batch: ${group.items.length} actions` : 'Single action'}</strong><span>${esc(riskLabels)}${highCount ? ` · ${highCount} high-risk` : ''}</span>${batchUndoable ? `<button type="button" class="flow-act-undo" data-undo-batch="${esc(group.key)}">Undo batch</button>` : ''}</div>
                 ${body}
             </section>`;
         }).join('') : flatRows;
@@ -4570,6 +5540,14 @@
         overlay.querySelectorAll('[data-undo]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const res = undoActivity(btn.getAttribute('data-undo'));
+                showToast(res.message);
+                overlay.remove();
+                openActivityLog();
+            });
+        });
+        overlay.querySelectorAll('[data-undo-batch]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const res = undoBatch(btn.getAttribute('data-undo-batch'));
                 showToast(res.message);
                 overlay.remove();
                 openActivityLog();
@@ -4617,6 +5595,26 @@
     function buildInspectableContext() {
         const ctx = getFlowAssistantContext({});
         const cap = getVisionCapability();
+        // Surface which long-term memories the assistant could use, so users can
+        // inspect exactly what saved memory informs a response. Retrieval is
+        // relevance-ranked against the most recent prompt (or recent memories).
+        let assistantMemory = null;
+        try {
+            const mem = memStore();
+            if (mem && getPref('assistant.useMemory', true) !== false) {
+                const query = lastUserPrompt || '';
+                const hits = query
+                    ? mem.retrieve(query, { feature: getActiveViewName() }, { limit: 5 })
+                    : mem.list({}).slice(0, 5).map(r => ({ record: r }));
+                assistantMemory = {
+                    enabled: getPref('assistant.useMemory', true) !== false,
+                    totalEnabled: mem.list({}).length,
+                    willUse: hits.map(h => truncate(h.record.title || h.record.content, 80))
+                };
+            } else if (mem) {
+                assistantMemory = { enabled: false, totalEnabled: mem.list({}).length, willUse: [] };
+            }
+        } catch (e) { /* memory is best-effort */ }
         return {
             view: ctx.view,
             depth: ctx.depth,
@@ -4624,6 +5622,7 @@
             selection: ctx.selection ? `[${String(ctx.selection).length} chars]` + (ctx.selection.length > 120 ? '' : '') : null,
             chatMemoryMode: getChatMemoryMode(),
             chatMemoryDepth: getChatMemoryMode() === 'stateful' ? getChatMemoryDepth() : null,
+            assistantMemory,
             visionCapability: cap,
             attachments: pendingAttachments.length,
             context: ctx
@@ -4649,6 +5648,13 @@
         if (ctx.courses) bits.push(`${ctx.courses.courseCount || 0} course summaries (file names only)`);
         if (ctx.allDue) bits.push('your All Due snapshot');
         if (ctx.derived) bits.push('locally computed risk signals');
+        try {
+            const mem = memStore();
+            if (mem && getPref('assistant.useMemory', true) !== false) {
+                const total = mem.list({}).length;
+                if (total) bits.push('a few relevant saved memories (when they help)');
+            }
+        } catch (e) { /* ignore */ }
         const attachments = getAttachments();
         const attachBit = attachments.length ? ` Plus ${attachments.length} attached file${attachments.length === 1 ? '' : 's'} you chose.` : '';
         return `Sutra will send: ${bits.join(', ')}.${attachBit} No Course Hub file contents and no locked-note bodies are included unless you attach or unlock them. Your API key is never part of the message.`;
@@ -5367,10 +6373,11 @@
                         ${providers.map(p => `<button type="button" class="flow-onboarding-provider" data-flow-connect="${esc(p.id)}">${esc(p.label)}</button>`).join('')}
                     </div>
                     <div class="flow-onboarding-foot">
+                        <button type="button" class="flow-onboarding-skip" data-flow-local-help>Browse Local Help</button>
                         <button type="button" class="flow-onboarding-skip" data-flow-skip-ai>Continue without AI</button>
                         <button type="button" class="flow-onboarding-guide" data-flow-open-guide>Read the guide</button>
                     </div>
-                    <p class="flow-onboarding-note">Local tools work without a key: daily briefing, overdue triage, recovery plans, and grade math.</p>
+                    <p class="flow-onboarding-note">No API key needed: Local Help answers questions and guides you through features, plus daily briefing, overdue triage, recovery plans, and grade math.</p>
                 </section>`);
         } else {
             // "What would you like to do?" 2×2 grid.
@@ -5391,6 +6398,7 @@
             if (!configured && continueWithoutAi) {
                 parts.push('<p class="flow-onboarding-note">No AI provider connected — model-powered actions will ask you to add a key. <button type="button" class="flow-link-btn" data-flow-connect="groq">Connect a provider</button></p>');
             }
+            parts.push('<p class="flow-onboarding-note">Prefer to click than type? <button type="button" class="flow-link-btn" data-flow-local-help>Open Local Help</button> — answered locally, no API key.</p>');
         }
 
         // Workspace pulse — only real local signals.
@@ -5470,6 +6478,11 @@
                 renderAssistantEmptyState();
             });
         });
+        host.querySelectorAll('[data-flow-local-help]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                try { if (window.SutraLocalHelp && typeof window.SutraLocalHelp.open === 'function') window.SutraLocalHelp.open('root'); } catch (e) { /* ignore */ }
+            });
+        });
     }
 
     // ---- Header overflow menu + composer wiring ----
@@ -5534,8 +6547,17 @@
         VERSION,
         ACTION_CATALOG,
         CONTEXT_DEPTHS,
+        // Always-available strict rules — used as a hard fallback by the send
+        // path so the agent instructions are NEVER absent, even in degraded flows.
+        AGENT_RULES: HARD_AGENT_RULES.join('\n'),
+        // Actions Bank — the same structured data drives what the MODEL is told
+        // it can do (via buildSystemPromptParts) and what a HUMAN can browse
+        // (Local Help "What can Sutra Assistant do?"), so neither can drift.
+        getActionsBank: buildActionsBank,
+        renderActionsBankMarkdown,
         getFlowAssistantContext,
         buildSystemPrompt,
+        buildSystemPromptParts,
         parseActions,
         validateAction,
         applyAction,
@@ -5553,6 +6575,7 @@
         classifyRisk,
         applyActionLogged,
         undoActivity,
+        undoBatch,
         tryHandleCommand,
         handleOutgoing,
         renderImportReview,
@@ -5591,6 +6614,7 @@
             updateHeaderSubtitle();
             renderAssistantEmptyState();
             injectViewFlowRows();
+            setupAsstSidebarResizer();
         }
     };
 
@@ -5612,6 +6636,12 @@
         if (EXTRA_ACTION_DEFINITIONS[type]) return EXTRA_ACTION_DEFINITIONS[type];
         const entry = ACTION_CATALOG.find(a => a.type === type);
         if (!entry) return null;
+        // Enrich with declarative capability metadata (domain owner, required
+        // Workspace Access scope, reversible/destructive flags) from the
+        // Capability Registry when present.
+        const cap = (typeof window !== 'undefined' && window.SutraCapabilityRegistry
+            && typeof window.SutraCapabilityRegistry.get === 'function')
+            ? window.SutraCapabilityRegistry.get(entry.type) : null;
         return {
             type: entry.type,
             label: entry.type.replace(/_/g, ' '),
@@ -5622,7 +6652,13 @@
             allowsLowRiskAutoApply: entry.risk === 'low',
             allowsBatch: entry.risk !== 'high',
             undoSupported: UNDOABLE_TYPES.has(entry.type),
-            undoNote: actionUndoNote({ type: entry.type })
+            undoNote: actionUndoNote({ type: entry.type }),
+            domain: cap ? cap.domain : null,
+            domainLabel: cap ? cap.domainLabel : null,
+            requiredScope: cap ? cap.scope : 'none',
+            readOnly: cap ? cap.readOnly : (entry.risk === 'read_only'),
+            reversible: cap ? cap.reversible : UNDOABLE_TYPES.has(entry.type),
+            destructive: cap ? cap.destructive : false
         };
     }
 
@@ -5736,6 +6772,7 @@
             ensurePanelChrome();
             renderQuickActions();
             injectViewFlowRows();
+            setupAsstSidebarResizer();
             // Defer the migration until the bridge has finished installing
             // (app.js installs it during chat code init, which runs after
             // this script tag but before DOMContentLoaded handlers complete).

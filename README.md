@@ -273,12 +273,35 @@ You bring your own API key and the exact **Model ID**. Keys live in **sessionSto
 
 ### Controls
 
-- **Workspace Access** — *Current Screen Only* / *Current Area* / *Full Workspace Context*, plus selected-text awareness.
-- **Single Request** vs **Conversation Memory** — whether the assistant remembers the thread.
+- **Workspace Access** — *Current Screen Only* / *Current Area* / *Full Workspace Context*, plus selected-text awareness. Each certified action also declares the minimum access it needs.
+- **Single Request** vs **Conversation Memory** — whether the assistant remembers the thread (this is short-term, session-only).
 - **Suggested Changes** — proposals render as **Apply / Decline** cards (with *Apply all* for multi-action replies); **Confirm Before Applying Changes** keeps approval in your hands. Replies also offer **Insert into Note** and **Suggested Prompts**.
 - **Assistant Activity** — every applied action is logged locally with **undo**.
 
+### Local Help — no API key required
+
+If you have no provider, no API key, or you're offline, **Local Help** answers
+questions and guides you through features entirely on-device. Open it from the
+assistant ("Browse Local Help" / "Open Local Help") or type `help`. Click through
+multiple-choice options to get **local answers** (badged *"Answered locally"*),
+step-by-step setup guidance, **Open in Sutra** navigation, and — only where it
+helps — an optional **"Use provider instead"**. Product questions like *"how do I
+make flashcards?"* or *"does Sutra send my data to a server?"* are answered from a
+verified product-knowledge registry, never invented.
+
+### Assistant Memory
+
+The assistant can keep **long-term, local, user-controlled** memories — stable
+facts you ask it to remember (study hours, goals, course preferences). It is
+consent-first ("remember that …"), and it **never** stores passwords, keys,
+financial/medical/precise-location, or locked/private content. Manage, search,
+edit, enable/disable, or **forget** anything in **Settings ▸ Assistant ▸ Manage
+Memory**; toggle **Use saved memory** to ignore it without deleting. Allowed
+memories travel inside encrypted `.sutra` backups; secrets never do.
+
 On mobile the panel fits the viewport, the composer stays usable with the software keyboard open, action cards stack, and the badge stays compact.
+
+Full architecture, privacy invariants, and the local-vs-provider boundary are documented in [`docs/SUTRA_INTELLIGENCE.md`](docs/SUTRA_INTELLIGENCE.md).
 
 ## Themes, Customization, CSS Overrides, Plugins, Safe Mode
 

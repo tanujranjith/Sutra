@@ -120,14 +120,11 @@ test('heavy workspace: generate, serialize, save, export, import', async ({ page
     const sutraBytes = blob.size;
 
     // --- .sutra import (round trip) ---
-    let importMs = -1;
-    try {
-      s = now();
-      await window.importWorkspaceFile(new File([blob], 'bench.sutra', { type: 'application/zip' }));
-      importMs = now() - s;
-    } catch (e) { importMs = -1; }
-
-    const afterPages = (window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }).pages || []).length;
+    // Whole-workspace imports onto a non-empty device now block on the
+    // restore conflict chooser, so the import must NOT be awaited here —
+    // the test clicks the chooser from outside, then awaits the promise.
+    window.__benchImportStart = now();
+    window.__benchImportPromise = window.importWorkspaceFile(new File([blob], 'bench.sutra', { type: 'application/zip' }));
 
     return {
       notes: pages.length,
@@ -141,11 +138,26 @@ test('heavy workspace: generate, serialize, save, export, import', async ({ page
       lastConfirmedSaveAt: health.lastConfirmedSaveAt || null,
       lastSerializedBytes: health.lastSerializedBytes || null,
       sutraExportMs: round(sutraExportMs),
-      sutraMB: +(sutraBytes / 1048576).toFixed(2),
-      importMs: round(importMs),
-      afterPages
+      sutraMB: +(sutraBytes / 1048576).toFixed(2)
     };
   }, NOTES);
+
+  // Accept the restore conflict chooser, then finish timing the import.
+  await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  const importResult = await page.evaluate(async () => {
+    const round = (x) => Math.round(x);
+    let importMs = -1;
+    try {
+      await window.__benchImportPromise;
+      importMs = performance.now() - window.__benchImportStart;
+    } catch (e) { importMs = -1; }
+    delete window.__benchImportPromise;
+    delete window.__benchImportStart;
+    const afterPages = (window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }).pages || []).length;
+    return { importMs: round(importMs), afterPages };
+  });
+  m.importMs = importResult.importMs;
+  m.afterPages = importResult.afterPages;
 
   // Report.
   console.log('\n===== Sutra heavy-workspace benchmark =====');

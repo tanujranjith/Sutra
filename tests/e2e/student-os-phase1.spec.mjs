@@ -317,7 +317,7 @@ test('Assistant Action Review Center blocks high-risk batch actions and search s
   });
 
   await expect(page.locator('#flowActionReviewOverlay')).toBeVisible();
-  await expect(page.locator('.flow-action-review-head')).toContainText('Action Review Center');
+  await expect(page.locator('.flow-action-review-head')).toContainText('Proposed plan');
   await expect(page.locator('.flow-risk-high')).toBeVisible();
   await expect(page.locator('.flow-before-after').first()).toBeVisible();
   await page.locator('[data-flow-batch="selected"]').click();
