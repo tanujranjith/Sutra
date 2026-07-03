@@ -125,6 +125,36 @@
     border-color: var(--accent);
 }
 
+/* Retry control appended to a failed-request notice bubble (both the
+   floating chatbotPanel and the full-screen Assistant tab reuse this class). */
+.chatbot-notice-retry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: fit-content;
+    margin: 8px auto 0;
+    padding: 3px 12px;
+    border-radius: var(--radius-pill, 999px);
+    border: 1px solid var(--surface-border, rgba(127, 127, 127, 0.3));
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.chatbot-notice-retry:hover,
+.chatbot-notice-retry:focus-visible {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    outline: none;
+}
+
+.chatbot-notice-retry:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
 /* Generate Study Materials modal */
 .sutra-genmat-body { font-size: 0.9rem; line-height: 1.5; }
 

@@ -63081,13 +63081,25 @@ ${cspMeta}
         // "No API key on file", HTTP/network errors, "Cancelled"). They are NEVER
         // pushed into `convo` and are cleared at the start of each new send so a stale
         // notice cannot linger above a later valid answer (Section 11 lifecycle).
-        function appendChatNotice(text) {
+        function appendChatNotice(text, opts = {}) {
             if (typeof messagesEl === 'undefined' || !messagesEl) return;
             const wrap = document.createElement('div');
             wrap.className = 'chatbot-msg assistant chatbot-notice';
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             bubble.textContent = String(text || '');
+            if (typeof opts.onRetry === 'function') {
+                const retryBtn = document.createElement('button');
+                retryBtn.type = 'button';
+                retryBtn.className = 'chatbot-notice-retry';
+                retryBtn.innerHTML = '<i class="fas fa-rotate-right" aria-hidden="true"></i> Retry';
+                retryBtn.setAttribute('aria-label', 'Retry the last message');
+                retryBtn.addEventListener('click', () => {
+                    retryBtn.disabled = true;
+                    try { opts.onRetry(); } catch (e) { /* non-critical */ }
+                });
+                bubble.appendChild(retryBtn);
+            }
             wrap.appendChild(bubble);
             messagesEl.appendChild(wrap);
             messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -66168,7 +66180,7 @@ ${cspMeta}
                                 msg += ' -- this usually means a network issue, blocked API key, or provider CORS policy from browser context.';
                             }
                         }
-                        appendChatNotice(msg);
+                        appendChatNotice(msg, { onRetry: () => sendChat({ presetText: text, skipUserPush: true }) });
                     }
                     return;
                 }
@@ -66204,7 +66216,9 @@ ${cspMeta}
             } catch (err) {
                 hideThinkingIndicator();
                 if (currentChatId === sendChatId) {
-                    appendChatNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'));
+                    appendChatNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'), {
+                        onRetry: () => sendChat({ presetText: text, skipUserPush: true })
+                    });
                 }
             }
         }
@@ -67764,13 +67778,25 @@ ${cspMeta}
             } catch (e) { /* non-critical */ }
         }
 
-        function asstNotice(text) {
+        function asstNotice(text, opts = {}) {
             const { msgs, shell } = asstCache;
             if (!msgs) return;
             if (shell) shell.classList.add('has-msgs');
             const el = document.createElement('div');
             el.className = 'asst-notice';
             el.textContent = text;
+            if (typeof opts.onRetry === 'function') {
+                const retryBtn = document.createElement('button');
+                retryBtn.type = 'button';
+                retryBtn.className = 'chatbot-notice-retry';
+                retryBtn.innerHTML = '<i class="fas fa-rotate-right" aria-hidden="true"></i> Retry';
+                retryBtn.setAttribute('aria-label', 'Retry the last message');
+                retryBtn.addEventListener('click', () => {
+                    retryBtn.disabled = true;
+                    try { opts.onRetry(); } catch (e) { /* non-critical */ }
+                });
+                el.appendChild(retryBtn);
+            }
             msgs.appendChild(el);
             asstScrollToBottom();
         }
@@ -67994,7 +68020,7 @@ ${cspMeta}
                 }
                 if (!result.ok) {
                     asstSetInFlight(false);
-                    if (!isStale) asstNotice(asstFormatError(result));
+                    if (!isStale) asstNotice(asstFormatError(result), { onRetry: () => asstSendCore(displayText, sendText, { pushUser: false }) });
                     return;
                 }
                 try { if (window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
@@ -68027,7 +68053,9 @@ ${cspMeta}
                 asstActiveRequestId = null;
                 asstSetInFlight(false);
                 if (currentChatId === sendChatId) {
-                    asstNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'));
+                    asstNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'), {
+                        onRetry: () => asstSendCore(displayText, sendText, { pushUser: false })
+                    });
                 }
             }
         }
