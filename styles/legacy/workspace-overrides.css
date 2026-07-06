@@ -418,6 +418,30 @@
             box-shadow: none;
         }
         .chatbot-input .chatbot-attach-btn:hover { color: var(--text-primary); filter: none; background: rgba(255,255,255,0.08); }
+        /* Dictation mic — same round affordance as the attach button. */
+        .chatbot-input .chatbot-mic-btn {
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--surface-border);
+            background: var(--surface-bg, rgba(255,255,255,0.04));
+            color: var(--text-muted);
+            cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            box-shadow: none;
+            transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+        }
+        .chatbot-input .chatbot-mic-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+        .chatbot-input .chatbot-mic-btn.is-listening {
+            color: #fff;
+            background: #e0483d;
+            border-color: #e0483d;
+            animation: sutraMicPulse 1.3s ease-in-out infinite;
+        }
+        @keyframes sutraMicPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(224,72,61,0.55); }
+            50% { box-shadow: 0 0 0 6px rgba(224,72,61,0); }
+        }
+        body.motion-off .chatbot-input .chatbot-mic-btn.is-listening { animation: none; }
         .chatbot-input textarea {
             min-height: 42px;
             max-height: 140px;
@@ -661,6 +685,12 @@
         border-color: rgba(124,92,191,0.85);
     }
     .assistant-actions button.flow-reply-regenerate::before { content: "↻"; }
+    .assistant-actions button.flow-reply-speak::before { content: "🔊"; }
+    .assistant-actions button.flow-reply-speak.is-speaking {
+        color: var(--text-primary);
+        border-color: rgba(124,92,191,0.7);
+        background: rgba(124,92,191,0.14);
+    }
     .assistant-actions button.flow-reply-favorite.is-fav,
     .user-message-actions button.flow-reply-favorite.is-fav {
         color: #e0b64a;

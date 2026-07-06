@@ -72,6 +72,8 @@ const SCAN_FILES = [
   'src/features/workspace/notifications.js',
   'src/features/workspace/activation-metrics.js',
   'src/features/workspace/mobile-nav.js',
+  'src/features/workspace/today-command-center.js',
+  'src/features/workspace/custom-tabs.js',
   'src/features/academic/planning-engine.js',
   'src/features/customization/plugin-system.js',
   'src/features/study/review.js',

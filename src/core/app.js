@@ -1722,21 +1722,28 @@ function syncResponsiveViewport(forceReloadSidebar = false) {
         if (isCompactViewport()) {
             chatbotButton.style.setProperty('right', 'calc(env(safe-area-inset-right, 0px) + 12px)', 'important');
             chatbotButton.style.setProperty('left', 'auto', 'important');
-            // Position above the storage save bar with a 16px gap. Storage bar
-            // height varies (Drive accounts add rows), so measure it. Fallback
-            // to 156px if the bar isn't rendered yet.
-            const storageEl = document.getElementById('storageOptions');
-            const storageH = storageEl && getComputedStyle(storageEl).display !== 'none'
-                ? Math.ceil(storageEl.getBoundingClientRect().height)
-                : 0;
-            const storageBottomOffset = 10; // matches .storage-options bottom on mobile
+            // Position above the bottom chrome — the storage bar AND the phone
+            // bottom tab bar (#sutraBottomNav) — with a 16px gap. Both bars
+            // vary in height/offset, so measure their rendered top edges. The
+            // measured rects already include safe-area insets, so the bottom
+            // values in this block are raw pixels (re-adding env() here would
+            // double-count the inset).
+            const layoutViewportH = Math.round(window.innerHeight || viewportHeight || 0);
+            let chromeTopPx = 0;
+            ['storageOptions', 'sutraBottomNav'].forEach(chromeId => {
+                const el = document.getElementById(chromeId);
+                if (!el) return;
+                const cs = getComputedStyle(el);
+                if (cs.display === 'none' || cs.visibility === 'hidden') return;
+                const rect = el.getBoundingClientRect();
+                if (!rect.height) return;
+                chromeTopPx = Math.max(chromeTopPx, layoutViewportH - rect.top);
+            });
             const gap = 16;
-            // The storage bar is a single compact row on phones now (~56px), so
-            // the old 156px floor would strand the FABs mid-screen. The measured
-            // bar height drives the position; the floor only covers first paint.
+            // Floor covers first paint, before the bars have rendered.
             const minBottom = 84;
-            const chatbotBottom = Math.max(minBottom, storageH + storageBottomOffset + gap);
-            chatbotButton.style.setProperty('bottom', `calc(env(safe-area-inset-bottom, 0px) + ${chatbotBottom}px)`, 'important');
+            const chatbotBottom = Math.max(minBottom, Math.ceil(chromeTopPx) + gap);
+            chatbotButton.style.setProperty('bottom', `${chatbotBottom}px`, 'important');
 
             // Stack remaining FABs above the chatbot. The focus-mode FAB is
             // hidden on phones via mobile.css (`@media (max-width: 768px)`),
@@ -1752,7 +1759,7 @@ function syncResponsiveViewport(forceReloadSidebar = false) {
             const focusModeBottom = chatbotBottom + fabHeight + stackGap;
             if (focusModeFab) {
                 if (focusModeVisible) {
-                    focusModeFab.style.setProperty('bottom', `calc(env(safe-area-inset-bottom, 0px) + ${focusModeBottom}px)`, 'important');
+                    focusModeFab.style.setProperty('bottom', `${focusModeBottom}px`, 'important');
                     focusModeFab.style.setProperty('right', 'calc(env(safe-area-inset-right, 0px) + 12px)', 'important');
                 } else {
                     focusModeFab.style.removeProperty('bottom');
@@ -1763,13 +1770,13 @@ function syncResponsiveViewport(forceReloadSidebar = false) {
                 // Short landscape viewports can't afford a vertical stack —
                 // place the feedback FAB beside the chatbot instead.
                 if (shortLandscapeViewport) {
-                    feedbackFab.style.setProperty('bottom', `calc(env(safe-area-inset-bottom, 0px) + ${chatbotBottom}px)`, 'important');
+                    feedbackFab.style.setProperty('bottom', `${chatbotBottom}px`, 'important');
                     feedbackFab.style.setProperty('right', `calc(env(safe-area-inset-right, 0px) + ${12 + fabHeight + 10}px)`, 'important');
                 } else {
                     const feedbackBottom = focusModeVisible
                         ? focusModeBottom + fabHeight + stackGap
                         : chatbotBottom + fabHeight + stackGap;
-                    feedbackFab.style.setProperty('bottom', `calc(env(safe-area-inset-bottom, 0px) + ${feedbackBottom}px)`, 'important');
+                    feedbackFab.style.setProperty('bottom', `${feedbackBottom}px`, 'important');
                     feedbackFab.style.setProperty('right', 'calc(env(safe-area-inset-right, 0px) + 12px)', 'important');
                 }
             }
@@ -4384,6 +4391,30 @@ function populateProgressDashboard() {
             { value: 'approved', label: 'Approved' }
         ];
         const COLLEGE_ESSAY_REVIEWER_VALUES = new Set(COLLEGE_ESSAY_REVIEWER_STATUSES.map(r => r.value));
+        const COLLEGE_REC_LETTER_STATUSES = [
+            { value: 'not_asked', label: 'Not asked' },
+            { value: 'requested', label: 'Requested' },
+            { value: 'in_progress', label: 'In progress' },
+            { value: 'submitted', label: 'Submitted' }
+        ];
+        const COLLEGE_REC_LETTER_STATUS_VALUES = new Set(COLLEGE_REC_LETTER_STATUSES.map(s => s.value));
+        // Reusable starter prompts for the essay organizer. Text is paraphrased
+        // (not verbatim proprietary wording) so it's safe to ship offline.
+        const COLLEGE_ESSAY_PROMPT_BANK = [
+            { category: 'Common App', label: 'Background / identity', essayType: 'personal_statement', text: 'Some students have a background, identity, interest, or talent so meaningful they believe their application would be incomplete without it. Share your story.' },
+            { category: 'Common App', label: 'Challenge / setback', essayType: 'personal_statement', text: 'Recount a time you faced a challenge, setback, or failure. How did it affect you, and what did you learn from the experience?' },
+            { category: 'Common App', label: 'Questioned a belief', essayType: 'personal_statement', text: 'Reflect on a time you questioned or challenged a belief or idea. What prompted your thinking, and what was the outcome?' },
+            { category: 'Common App', label: 'Gratitude', essayType: 'personal_statement', text: 'Reflect on something someone did for you that made you thankful in a surprising way. How has that gratitude motivated you?' },
+            { category: 'Common App', label: 'Personal growth', essayType: 'personal_statement', text: 'Discuss an accomplishment, event, or realization that sparked personal growth and a new understanding of yourself or others.' },
+            { category: 'Common App', label: 'Engaging topic', essayType: 'personal_statement', text: 'Describe a topic or idea so engaging it makes you lose track of time. Why does it captivate you, and where do you go to learn more?' },
+            { category: 'Common App', label: 'Topic of your choice', essayType: 'personal_statement', text: 'Share an essay on any topic of your choice — one you have already written, one that responds to a different prompt, or one of your own design.' },
+            { category: 'Supplemental', label: 'Why this college?', essayType: 'why_us', text: 'Why this school specifically? What draws you to its programs, community, and opportunities?' },
+            { category: 'Supplemental', label: 'Why this major?', essayType: 'why_us', text: 'Why do you want to study your intended major? What experiences led you to this academic interest?' },
+            { category: 'Supplemental', label: 'Community & your role', essayType: 'supplemental', text: 'Describe a community you belong to and your role within it. How has it shaped who you are?' },
+            { category: 'Supplemental', label: 'Extracurricular', essayType: 'activity', text: 'Briefly elaborate on one of your extracurricular activities or work experiences and why it matters to you.' },
+            { category: 'Scholarship', label: 'Leadership', essayType: 'scholarship', text: 'Describe a time you demonstrated leadership. What did you learn about yourself and others?' },
+            { category: 'Scholarship', label: 'Goals & impact', essayType: 'scholarship', text: 'What are your academic and career goals, and how will this scholarship help you achieve them?' }
+        ];
 
         function createCollegeEssayRow(seed = {}) {
             const draftStatus = normalizeCollegeChoice(seed.draftStatus, COLLEGE_ESSAY_DRAFT_STATUSES, 'brainstorming') || 'brainstorming';
@@ -4440,6 +4471,17 @@ function populateProgressDashboard() {
                 level: seed.level || '',
                 date: seed.date || '',
                 description: seed.description || ''
+            };
+        }
+
+        function createCollegeRecommenderRow(seed = {}) {
+            return {
+                id: seed.id || generateId(),
+                name: seed.name || '',
+                relationship: seed.relationship || '',
+                status: normalizeCollegeChoice(seed.status, COLLEGE_REC_LETTER_STATUS_VALUES, 'not_asked') || 'not_asked',
+                dueDate: seed.dueDate || '',
+                notes: seed.notes || ''
             };
         }
 
@@ -4706,6 +4748,7 @@ function populateProgressDashboard() {
                 scoreTracker: [],
                 satExamPlan: createCollegeSatExamPlan(),
                 awardsHonors: [],
+                recommenders: [],
                 scholarships: [],
                 decisionMatrix: {
                     criteria: [criterionFit, criterionCost, criterionCampus, criterionLocation, criterionAid, criterionPrestige, criterionCareer, criterionSize, criterionResearch, criterionDiversity, criterionSafety, criterionAlumni, criterionInternships, criterionHousing, criterionWeather, criterionStudyAbroad, criterionGradSchool, criterionExtracurriculars],
@@ -4747,6 +4790,9 @@ function populateProgressDashboard() {
             normalized.awardsHonors = Array.isArray(source.awardsHonors)
                 ? source.awardsHonors.map(row => createCollegeAwardRow(row))
                 : defaults.awardsHonors;
+            normalized.recommenders = Array.isArray(source.recommenders)
+                ? source.recommenders.map(row => createCollegeRecommenderRow(row))
+                : defaults.recommenders;
             normalized.scholarships = Array.isArray(source.scholarships)
                 ? source.scholarships.map(row => createCollegeScholarshipRow(row))
                 : defaults.scholarships;
@@ -6324,6 +6370,7 @@ function populateProgressDashboard() {
                 gradePlanner: getDefaultGradePlannerSafe(),
                 semesterSetup: getDefaultSemesterSetupSafe(),
                 focusTemplates: getDefaultFocusTemplates(),
+                customTabs: [],
                 splitPaneContexts: getDefaultSplitPaneContexts(),
                 pinnedPages: getDefaultPinnedPages(),
                 settings: {
@@ -6699,6 +6746,7 @@ function populateProgressDashboard() {
             merged.gradePlanner = normalizeGradePlannerSafe(stored && stored.gradePlanner ? stored.gradePlanner : defaults.gradePlanner);
             merged.semesterSetup = normalizeSemesterSetupSafe(stored && stored.semesterSetup ? stored.semesterSetup : defaults.semesterSetup);
             merged.focusTemplates = normalizeFocusTemplates(stored && stored.focusTemplates ? stored.focusTemplates : defaults.focusTemplates);
+            merged.customTabs = normalizeCustomTabsSafe(stored && stored.customTabs ? stored.customTabs : defaults.customTabs);
             merged.splitPaneContexts = normalizeSplitPaneContexts(stored && stored.splitPaneContexts ? stored.splitPaneContexts : defaults.splitPaneContexts);
             merged.pinnedPages = normalizePinnedPages(stored && stored.pinnedPages ? stored.pinnedPages : defaults.pinnedPages);
             // Spaces normalization (Section 6) — ensures default space exists, all pages have spaceId
@@ -6730,7 +6778,9 @@ function populateProgressDashboard() {
             delete merged.settings.liquidGlassBlur;
             merged.settings.glassRefraction = normalizeGlassRefraction(merged.settings.glassRefraction);
             const mergedLastView = String(merged.ui.lastActiveView || '').trim();
-            merged.ui.lastActiveView = (mergedLastView === 'settings' || OPTIONAL_FEATURE_VIEWS.includes(mergedLastView))
+            // "custom-<id>" = user-defined custom tab views; the custom-tabs
+            // module re-activates them (or falls back to Today) once mounted.
+            merged.ui.lastActiveView = (mergedLastView === 'settings' || mergedLastView.startsWith('custom-') || OPTIONAL_FEATURE_VIEWS.includes(mergedLastView))
                 ? mergedLastView
                 : defaults.ui.lastActiveView;
             return merged;
@@ -6991,6 +7041,13 @@ function populateProgressDashboard() {
             gradePlanner = normalizeGradePlannerSafe(appData.gradePlanner);
             semesterSetup = normalizeSemesterSetupSafe(appData.semesterSetup);
             focusTemplates = normalizeFocusTemplates(appData.focusTemplates);
+            customTabsData = normalizeCustomTabsSafe(appData.customTabs);
+            // The custom-tabs module may have initialized before this async
+            // hydrate finished (it sees an empty list at boot) — tell it the
+            // real tab list is ready so it rebuilds nav buttons + sections.
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:custom-tabs-changed'));
+            } catch (e) { /* non-critical */ }
             splitPaneContexts = normalizeSplitPaneContexts(appData.splitPaneContexts);
             appData.pinnedPages = normalizePinnedPages(appData.pinnedPages);
             if (appData.homeworkWorkspace) {
@@ -7075,11 +7132,46 @@ function populateProgressDashboard() {
             appData.ui = { ...defaultUi, ...(appData.ui || {}) };
             const uiState = ensureUiState() || appData.ui;
             const lastView = String(uiState.lastActiveView || '').trim();
-            const validLastView = (lastView === 'settings' || OPTIONAL_FEATURE_VIEWS.includes(lastView))
+            // Custom tabs ("custom-<id>") are user-defined views; accept them here
+            // and let the custom-tabs module re-activate (or fall back to Today)
+            // once its sections exist in the DOM.
+            const validLastView = (lastView === 'settings' || lastView.startsWith('custom-') || OPTIONAL_FEATURE_VIEWS.includes(lastView))
                 ? lastView
                 : defaultUi.lastActiveView;
             uiState.lastActiveView = validLastView;
             activeView = validLastView || defaultUi.lastActiveView;
+        }
+
+        // Custom Tabs — lenient normalizer. Keeps unknown widget types (forward
+        // compat with newer versions) but enforces shape, id uniqueness, and
+        // serializability so a corrupt tab can never poison autosave or export.
+        function normalizeCustomTabsSafe(raw) {
+            if (!Array.isArray(raw)) return [];
+            const seenIds = new Set();
+            const out = [];
+            raw.forEach(tab => {
+                if (!tab || typeof tab !== 'object') return;
+                const id = String(tab.id || '').trim();
+                if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || seenIds.has(id)) return;
+                seenIds.add(id);
+                const name = String(tab.name || '').trim().slice(0, 40) || 'My Tab';
+                const icon = String(tab.icon || '').trim().slice(0, 40);
+                const seenWidgetIds = new Set();
+                const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).map(w => {
+                    if (!w || typeof w !== 'object') return null;
+                    const wid = String(w.id || '').trim();
+                    const type = String(w.type || '').trim().slice(0, 40);
+                    if (!/^[A-Za-z0-9_-]{1,64}$/.test(wid) || seenWidgetIds.has(wid) || !type) return null;
+                    seenWidgetIds.add(wid);
+                    let config = null;
+                    if (w.config != null) {
+                        try { config = JSON.parse(JSON.stringify(w.config)); } catch (e) { config = null; }
+                    }
+                    return { id: wid, type, config, wide: w.wide === true };
+                }).filter(Boolean).slice(0, 16);
+                out.push({ id, name, icon, widgets });
+            });
+            return out.slice(0, 12);
         }
 
         function persistAppData() {
@@ -7133,6 +7225,7 @@ function populateProgressDashboard() {
             appData.gradePlanner = normalizeGradePlannerSafe(gradePlanner);
             appData.semesterSetup = normalizeSemesterSetupSafe(semesterSetup);
             appData.focusTemplates = normalizeFocusTemplates(focusTemplates);
+            appData.customTabs = normalizeCustomTabsSafe(customTabsData);
             appData.splitPaneContexts = normalizeSplitPaneContexts(splitPaneContexts);
             appData.pinnedPages = normalizePinnedPages(appData.pinnedPages);
             appData.settings = appSettings;
@@ -7154,6 +7247,110 @@ function populateProgressDashboard() {
                 setGradePlanner: (next) => { gradePlanner = normalizeGradePlannerSafe(next); persistAppData(); },
                 getSemesterSetup: () => semesterSetup,
                 setSemesterSetup: (next) => { semesterSetup = normalizeSemesterSetupSafe(next); persistAppData(); }
+            };
+            // Custom Tabs bridge — the feature module (custom-tabs.js) owns all UI;
+            // the core owns state + persistence (setTabs routes through
+            // persistAppData so tabs ride autosave, .sutra export, and Drive sync).
+            // Read helpers are defensive and return plain serializable snapshots.
+            window.SutraCustomTabsBridge = {
+                getTabs: () => customTabsData,
+                setTabs: (next) => { customTabsData = normalizeCustomTabsSafe(next); persistAppData(); },
+                getDeadlines: () => {
+                    try { return collectWorkspaceDeadlines(); } catch (e) { return []; }
+                },
+                getHabitsToday: () => {
+                    try {
+                        const state = getHabitDayState(today());
+                        const done = Array.isArray(state.completedHabitIds) ? state.completedHabitIds : [];
+                        return (Array.isArray(habits) ? habits : []).map(h => ({
+                            id: h.id,
+                            name: String(h.name || 'Habit'),
+                            done: done.includes(h.id)
+                        }));
+                    } catch (e) { return []; }
+                },
+                toggleHabit: (habitId) => { try { toggleHabitComplete(habitId); } catch (e) { /* non-critical */ } },
+                getRecentNotes: (limit) => {
+                    try {
+                        const max = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20);
+                        return (Array.isArray(pages) ? pages : [])
+                            .filter(p => p && p.id && !p.isLocked)
+                            .slice()
+                            .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+                            .slice(0, max)
+                            .map(p => ({ id: p.id, title: String(p.title || 'Untitled'), updatedAt: p.updatedAt || null }));
+                    } catch (e) { return []; }
+                },
+                openNote: (pageId) => {
+                    try { setActiveView('notes'); loadPage(pageId); } catch (e) { /* non-critical */ }
+                },
+                getCourses: () => {
+                    try {
+                        const cw = normalizeCourseWorkspace(courseWorkspace) || {};
+                        return (Array.isArray(cw.courses) ? cw.courses : [])
+                            .filter(c => c && !c.archived)
+                            .map(c => ({
+                                id: c.id,
+                                name: String(c.name || 'Course'),
+                                grade: c.currentGrade != null && c.currentGrade !== '' ? String(c.currentGrade) : '',
+                                target: c.targetGrade != null && c.targetGrade !== '' ? String(c.targetGrade) : ''
+                            }));
+                    } catch (e) { return []; }
+                },
+                startFocus: (seconds) => {
+                    try {
+                        const planned = Math.min(Math.max(parseInt(seconds, 10) || 1500, 300), 7200);
+                        startFocusSession(null, { plannedDurationSeconds: planned });
+                    } catch (e) { console.warn('custom tab focus start failed', e); }
+                },
+                getReviewStats: () => {
+                    try { return (typeof window.getReviewTodayStats === 'function') ? window.getReviewTodayStats() : null; }
+                    catch (e) { return null; }
+                },
+                getStudyStats: () => {
+                    try { return (typeof window.getApStudyTodayStats === 'function') ? window.getApStudyTodayStats(today()) : null; }
+                    catch (e) { return null; }
+                },
+                getStreak: () => {
+                    try {
+                        const s = streakState || {};
+                        return { current: Math.max(0, Number(s.globalCurrent) || 0), best: Math.max(0, Number(s.globalBest) || 0) };
+                    } catch (e) { return { current: 0, best: 0 }; }
+                },
+                getFocusStats: (days) => {
+                    try {
+                        const d = Math.min(Math.max(parseInt(days, 10) || 7, 1), 30);
+                        const stats = getFocusStatsBySubject(d);
+                        const series = getFocusDailySeries(d);
+                        return { totalMinutes: stats.totalMinutes || 0, count: stats.count || 0, subjects: (stats.subjects || []).slice(0, 4), series: series || [] };
+                    } catch (e) { return { totalMinutes: 0, count: 0, subjects: [], series: [] }; }
+                },
+                getTaskStats: () => {
+                    try {
+                        const list = Array.isArray(tasks) ? tasks : [];
+                        const open = list.filter(t => t && !t.completed && t.isActive !== false).length;
+                        let completedToday = 0;
+                        try {
+                            const ds = dayStates && dayStates[today()];
+                            completedToday = ds && Array.isArray(ds.completedTaskIds) ? ds.completedTaskIds.length : 0;
+                        } catch (e) { /* non-critical */ }
+                        return { open, total: list.length, completedToday };
+                    } catch (e) { return { open: 0, total: 0, completedToday: 0 }; }
+                },
+                getAllNotes: () => {
+                    try {
+                        return (Array.isArray(pages) ? pages : [])
+                            .filter(p => p && p.id && !p.isLocked)
+                            .map(p => ({ id: p.id, title: String(p.title || 'Untitled') }))
+                            .slice(0, 300);
+                    } catch (e) { return []; }
+                },
+                getNoteTitle: (id) => {
+                    try {
+                        const p = (Array.isArray(pages) ? pages : []).find(x => x && x.id === id);
+                        return p ? String(p.title || 'Untitled') : null;
+                    } catch (e) { return null; }
+                }
             };
             // Minimal ICS parsing surface so feature modules (school-schedule
             // subscriptions, Semester Setup) reuse the battle-tested core
@@ -7230,6 +7427,7 @@ function populateProgressDashboard() {
         let gradePlanner = getDefaultGradePlannerSafe();
         let semesterSetup = getDefaultSemesterSetupSafe();
         let focusTemplates = getDefaultFocusTemplates();
+        let customTabsData = [];
         let splitPaneContexts = getDefaultSplitPaneContexts();
         let activeReviewSession = null;
         let businessUiState = getDefaultBusinessUiState();
@@ -10326,6 +10524,17 @@ function populateProgressDashboard() {
                 ],
                 createFn: seed => createCollegeAwardRow(seed)
             },
+            recommenders: {
+                title: 'Add Recommendation Letter',
+                fields: [
+                    { key: 'name', label: 'Recommender', type: 'text', placeholder: 'e.g. Ms. Rivera' },
+                    { key: 'relationship', label: 'Relationship', type: 'text', placeholder: 'e.g. AP Chem teacher' },
+                    { key: 'status', label: 'Status', type: 'select', options: COLLEGE_REC_LETTER_STATUSES.map(s => ({ value: s.value, label: s.label })), default: 'not_asked' },
+                    { key: 'dueDate', label: 'Needed by', type: 'date', defaultFn: () => offsetDateKey(14) },
+                    { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Which schools, portal, reminders…' }
+                ],
+                createFn: seed => createCollegeRecommenderRow(seed)
+            },
             scholarships: {
                 title: 'Add Scholarship',
                 fields: [
@@ -10759,6 +10968,9 @@ function populateProgressDashboard() {
                 if (field === 'wordTarget') value = String(target.value).trim() === '' ? null : clampWholeNumber(value, 0, 0, 5000);
                 if (field === 'wordCount') value = String(target.value).trim() === '' ? null : clampWholeNumber(value, 0, 0, 20000);
             }
+            if (collection === 'recommenders') {
+                if (field === 'status') value = normalizeCollegeChoice(value, COLLEGE_REC_LETTER_STATUS_VALUES, 'not_asked') || 'not_asked';
+            }
             if (collection === 'scholarships') {
                 if (field === 'status') value = normalizeCollegeChoice(value, COLLEGE_SCHOLARSHIP_STATUS_VALUES, 'researching') || 'researching';
                 if (field === 'scope') value = normalizeCollegeChoice(value, COLLEGE_SCHOLARSHIP_SCOPE_VALUES, '');
@@ -10910,6 +11122,142 @@ function populateProgressDashboard() {
             }).join('');
         }
 
+        function addEssayFromPromptBank(prompt) {
+            if (!prompt) return;
+            getCollegeAppRows('essayOrganizer').push(createCollegeEssayRow({
+                prompt: prompt.text,
+                essayType: prompt.essayType,
+                draftStatus: 'brainstorming',
+                dueDate: offsetDateKey(21)
+            }));
+            persistAppData();
+            renderCollegeAppWorkspace();
+            showCollegeAppPage('essays');
+            try { showToast('Essay added from the prompt bank.'); } catch (e) { /* non-critical */ }
+        }
+
+        // Prompt-bank picker — a small overlay of starter prompts grouped by
+        // category. Built with createElement (no innerHTML) so it stays within
+        // the DOM-safety guardrail. Honors the modal-close/Escape/focus contract.
+        function openEssayPromptBank() {
+            const previouslyFocused = document.activeElement;
+            const overlay = document.createElement('div');
+            overlay.className = 'college-prompt-overlay';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            overlay.setAttribute('aria-label', 'Essay prompt bank');
+
+            const panel = document.createElement('div');
+            panel.className = 'college-prompt-panel';
+            const head = document.createElement('header');
+            head.className = 'college-prompt-head';
+            const title = document.createElement('h3');
+            title.className = 'college-prompt-title';
+            title.textContent = 'Prompt bank';
+            head.appendChild(title);
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'icon-btn college-prompt-close';
+            closeBtn.setAttribute('data-modal-close', '');
+            closeBtn.setAttribute('aria-label', 'Close');
+            const closeIcon = document.createElement('i');
+            closeIcon.className = 'fas fa-xmark';
+            closeIcon.setAttribute('aria-hidden', 'true');
+            closeBtn.appendChild(closeIcon);
+            closeBtn.addEventListener('click', close);
+            head.appendChild(closeBtn);
+            panel.appendChild(head);
+
+            const intro = document.createElement('p');
+            intro.className = 'college-prompt-intro';
+            intro.textContent = 'Pick a starter prompt to create a new essay, prefilled and ready to draft.';
+            panel.appendChild(intro);
+
+            const categories = [];
+            COLLEGE_ESSAY_PROMPT_BANK.forEach(p => { if (categories.indexOf(p.category) === -1) categories.push(p.category); });
+            categories.forEach(cat => {
+                const catLabel = document.createElement('h4');
+                catLabel.className = 'college-prompt-cat';
+                catLabel.textContent = cat;
+                panel.appendChild(catLabel);
+                const list = document.createElement('div');
+                list.className = 'college-prompt-list';
+                COLLEGE_ESSAY_PROMPT_BANK.filter(p => p.category === cat).forEach(p => {
+                    const opt = document.createElement('button');
+                    opt.type = 'button';
+                    opt.className = 'college-prompt-option';
+                    const strong = document.createElement('strong');
+                    strong.textContent = p.label;
+                    const desc = document.createElement('span');
+                    desc.textContent = p.text.length > 130 ? p.text.slice(0, 129) + '…' : p.text;
+                    opt.appendChild(strong);
+                    opt.appendChild(desc);
+                    opt.addEventListener('click', () => { close(); addEssayFromPromptBank(p); });
+                    list.appendChild(opt);
+                });
+                panel.appendChild(list);
+            });
+            overlay.appendChild(panel);
+
+            function onKeydown(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+            function close() {
+                document.removeEventListener('keydown', onKeydown, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                    try { previouslyFocused.focus(); } catch (e) { /* non-critical */ }
+                }
+            }
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+            document.addEventListener('keydown', onKeydown, true);
+            document.body.appendChild(overlay);
+            closeBtn.focus();
+        }
+
+        // Visual pipeline of essay drafts by stage (brainstorm → final) + a
+        // due-soon glance, mounted above the essay table.
+        function renderCollegeAppEssayBoard() {
+            const host = document.getElementById('collegeAppEssayBoard');
+            if (!host) return;
+            const rows = getCollegeAppRows('essayOrganizer');
+            if (!rows.length) { host.textContent = ''; return; }
+            const stages = [
+                { key: 'brainstorming', label: 'Brainstorm', tone: 'neutral' },
+                { key: 'drafting', label: 'Drafting', tone: 'info' },
+                { key: 'review', label: 'Review', tone: 'warn' },
+                { key: 'final', label: 'Final', tone: 'positive' }
+            ];
+            const counts = {};
+            stages.forEach(s => { counts[s.key] = 0; });
+            rows.forEach(r => { const k = String(r.draftStatus || 'brainstorming'); if (counts[k] != null) counts[k] += 1; });
+            const total = rows.length;
+            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const soon = new Date(now); soon.setDate(soon.getDate() + 14);
+            let dueSoon = 0;
+            let overdue = 0;
+            rows.forEach(r => {
+                if (String(r.draftStatus) === 'final' || !r.dueDate) return;
+                const d = new Date(r.dueDate);
+                if (isNaN(d.getTime())) return;
+                d.setHours(0, 0, 0, 0);
+                if (d < now) overdue += 1;
+                else if (d <= soon) dueSoon += 1;
+            });
+            const finalPct = total ? Math.round((counts.final / total) * 100) : 0;
+            const boardHtml = `
+                <div class="college-essay-board">
+                    <div class="college-essay-board-bar" role="img" aria-label="Essay stage distribution">
+                        ${stages.map(s => counts[s.key] ? `<span class="ceb-seg cc-tone-${s.tone}" style="flex:${counts[s.key]}" title="${s.label}: ${counts[s.key]}"></span>` : '').join('')}
+                    </div>
+                    <div class="college-essay-board-legend">
+                        ${stages.map(s => `<span class="ceb-stage"><span class="ceb-dot cc-tone-${s.tone}"></span>${s.label} <strong>${counts[s.key]}</strong></span>`).join('')}
+                        <span class="ceb-final">${finalPct}% final</span>
+                        ${overdue ? `<span class="cc-pill cc-tone-danger">${overdue} overdue</span>` : ''}
+                        ${dueSoon ? `<span class="cc-pill cc-tone-warn">${dueSoon} due in 14d</span>` : ''}
+                    </div>
+                </div>`;
+            host.innerHTML = boardHtml; // sutra-allow-html: developer markup only — stage labels/classes are literals; counts/finalPct/overdue/dueSoon are numbers
+        }
+
         function renderCollegeAppEssayRows() {
             const body = document.getElementById('collegeAppEssayTableBody');
             if (!body) return;
@@ -10997,6 +11345,75 @@ function populateProgressDashboard() {
                     <td class="college-row-actions"><button type="button" class="icon-btn collegeapp-delete-row-btn" data-collegeapp-collection="awardsHonors" data-collegeapp-row-id="${escapeHtml(String(row.id))}" aria-label="Delete award row"><i class="fas fa-trash"></i></button></td>
                 </tr>
             `).join('');
+        }
+
+        function renderCollegeAppRecommenderRows() {
+            const board = document.getElementById('collegeAppRecommenderBoard');
+            if (board) {
+                const rows = getCollegeAppRows('recommenders');
+                if (!rows.length) {
+                    board.textContent = '';
+                } else {
+                    const counts = { not_asked: 0, requested: 0, in_progress: 0, submitted: 0 };
+                    rows.forEach(r => { const k = String(r.status || 'not_asked'); if (counts[k] != null) counts[k] += 1; });
+                    const now = new Date(); now.setHours(0, 0, 0, 0);
+                    const soon = new Date(now); soon.setDate(soon.getDate() + 14);
+                    let overdue = 0;
+                    let dueSoon = 0;
+                    rows.forEach(r => {
+                        if (String(r.status) === 'submitted' || !r.dueDate) return;
+                        const d = new Date(r.dueDate);
+                        if (isNaN(d.getTime())) return;
+                        d.setHours(0, 0, 0, 0);
+                        if (d < now) overdue += 1;
+                        else if (d <= soon) dueSoon += 1;
+                    });
+                    const submittedPct = rows.length ? Math.round((counts.submitted / rows.length) * 100) : 0;
+                    const recBoardHtml = `
+                        <div class="college-essay-board">
+                            <div class="college-essay-board-bar" role="img" aria-label="Recommendation status distribution">
+                                ${counts.not_asked ? `<span class="ceb-seg cc-tone-neutral" style="flex:${counts.not_asked}" title="Not asked: ${counts.not_asked}"></span>` : ''}
+                                ${counts.requested ? `<span class="ceb-seg cc-tone-info" style="flex:${counts.requested}" title="Requested: ${counts.requested}"></span>` : ''}
+                                ${counts.in_progress ? `<span class="ceb-seg cc-tone-warn" style="flex:${counts.in_progress}" title="In progress: ${counts.in_progress}"></span>` : ''}
+                                ${counts.submitted ? `<span class="ceb-seg cc-tone-positive" style="flex:${counts.submitted}" title="Submitted: ${counts.submitted}"></span>` : ''}
+                            </div>
+                            <div class="college-essay-board-legend">
+                                <span class="ceb-stage"><span class="ceb-dot cc-tone-neutral"></span>Not asked <strong>${counts.not_asked}</strong></span>
+                                <span class="ceb-stage"><span class="ceb-dot cc-tone-info"></span>Requested <strong>${counts.requested}</strong></span>
+                                <span class="ceb-stage"><span class="ceb-dot cc-tone-warn"></span>In progress <strong>${counts.in_progress}</strong></span>
+                                <span class="ceb-stage"><span class="ceb-dot cc-tone-positive"></span>Submitted <strong>${counts.submitted}</strong></span>
+                                <span class="ceb-final">${submittedPct}% in</span>
+                                ${overdue ? `<span class="cc-pill cc-tone-danger">${overdue} overdue</span>` : ''}
+                                ${dueSoon ? `<span class="cc-pill cc-tone-warn">${dueSoon} due in 14d</span>` : ''}
+                            </div>
+                        </div>`;
+                    board.innerHTML = recBoardHtml; // sutra-allow-html: developer markup only — status labels/classes are literals; counts/pct/overdue/dueSoon are numbers
+                }
+            }
+            const body = document.getElementById('collegeAppRecommenderTableBody');
+            if (!body) return;
+            const rows = getCollegeAppRows('recommenders');
+            if (!rows.length) {
+                body.innerHTML = '<tr class="college-empty-row"><td colspan="5">No recommenders yet. Track who you asked, their status, and when each letter is due.</td></tr>'; // sutra-allow-html: static literal markup, no user data
+                return;
+            }
+            const recRowsHtml = rows.map(row => `
+                <tr>
+                    <td><input class="college-input" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" data-collegeapp-field="name" value="${escapeHtml(String(row.name || ''))}" placeholder="Recommender"></td>
+                    <td><input class="college-input" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" data-collegeapp-field="relationship" value="${escapeHtml(String(row.relationship || ''))}" placeholder="Relationship"></td>
+                    <td>
+                        <select class="college-select" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" data-collegeapp-field="status">
+                            ${COLLEGE_REC_LETTER_STATUSES.map(s => `<option value="${s.value}" ${(row.status || 'not_asked') === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td><input type="date" class="college-input" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" data-collegeapp-field="dueDate" value="${escapeHtml(String(row.dueDate || ''))}"></td>
+                    <td class="college-row-actions">
+                        <textarea class="college-textarea" rows="1" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" data-collegeapp-field="notes" placeholder="Notes">${escapeHtml(String(row.notes || ''))}</textarea>
+                        <button type="button" class="icon-btn collegeapp-delete-row-btn" data-collegeapp-collection="recommenders" data-collegeapp-row-id="${escapeHtml(String(row.id))}" aria-label="Delete recommender row"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+            body.innerHTML = recRowsHtml; // sutra-allow-html: all row fields escaped via escapeHtml; status option labels are literals
         }
 
         function renderCollegeAppScholarshipRows() {
@@ -12218,9 +12635,11 @@ function populateProgressDashboard() {
             try { renderCollegeTrackerToolbar(); } catch (err) { /* non-critical */ }
             renderCollegeAppSatExamModule();
             renderCollegeAppTrackerRows();
+            renderCollegeAppEssayBoard();
             renderCollegeAppEssayRows();
             renderCollegeAppScoreRows();
             renderCollegeAppAwardRows();
+            renderCollegeAppRecommenderRows();
             renderCollegeAppScholarshipRows();
             renderCollegeAppDecisionMatrix();
             renderCollegeAppMajorDecisionMatrix();
@@ -12339,7 +12758,8 @@ function populateProgressDashboard() {
                     return;
                 }
 
-                const addButton = event.target.closest('#collegeAppAddTrackerBtn, #collegeAppAddEssayBtn, #collegeAppAddScoreBtn, #collegeAppAddAwardBtn, #collegeAppAddScholarshipBtn, #collegeAppAddCriterionBtn, #collegeAppAddDecisionCollegeBtn, #collegeAppAddMajorCriterionBtn, #collegeAppAddMajorBtn, #collegeAppAddVisitBtn, #collegeAppAddVisitCriterionBtn, #collegeAppQuickAddTrackerBtn, #collegeAppQuickAddEssayBtn, #collegeAppQuickAddScholarshipBtn');
+                if (event.target.closest('#collegeAppEssayPromptBankBtn')) { openEssayPromptBank(); return; }
+                const addButton = event.target.closest('#collegeAppAddTrackerBtn, #collegeAppAddEssayBtn, #collegeAppAddScoreBtn, #collegeAppAddAwardBtn, #collegeAppAddRecommenderBtn, #collegeAppAddScholarshipBtn, #collegeAppAddCriterionBtn, #collegeAppAddDecisionCollegeBtn, #collegeAppAddMajorCriterionBtn, #collegeAppAddMajorBtn, #collegeAppAddVisitBtn, #collegeAppAddVisitCriterionBtn, #collegeAppQuickAddTrackerBtn, #collegeAppQuickAddEssayBtn, #collegeAppQuickAddScholarshipBtn');
                 if (addButton) {
                     const map = {
                         collegeAppAddTrackerBtn: 'collegeTracker',
@@ -12348,6 +12768,7 @@ function populateProgressDashboard() {
                         collegeAppQuickAddEssayBtn: 'essayOrganizer',
                         collegeAppAddScoreBtn: 'scoreTracker',
                         collegeAppAddAwardBtn: 'awardsHonors',
+                        collegeAppAddRecommenderBtn: 'recommenders',
                         collegeAppAddScholarshipBtn: 'scholarships',
                         collegeAppQuickAddScholarshipBtn: 'scholarships',
                         collegeAppAddCriterionBtn: 'decisionCriteria',
@@ -12571,6 +12992,38 @@ function populateProgressDashboard() {
             renderLifeWorkspace();
         }
 
+        // ---- Habit excused days (rest/sick days that don't break a streak) ----
+        function getLifeHabitExcusedMap() {
+            return (lifeWorkspace.habitExcused && typeof lifeWorkspace.habitExcused === 'object')
+                ? lifeWorkspace.habitExcused
+                : {};
+        }
+        function isLifeHabitExcusedOn(habitId, key) {
+            const ids = Array.isArray(getLifeHabitExcusedMap()[key]) ? getLifeHabitExcusedMap()[key].map(String) : [];
+            return ids.includes(String(habitId));
+        }
+        function toggleLifeHabitExcusedToday(habitId) {
+            if (!lifeWorkspace.habitExcused || typeof lifeWorkspace.habitExcused !== 'object') lifeWorkspace.habitExcused = {};
+            const key = today();
+            const set = new Set((Array.isArray(lifeWorkspace.habitExcused[key]) ? lifeWorkspace.habitExcused[key] : []).map(String));
+            if (set.has(String(habitId))) {
+                set.delete(String(habitId));
+            } else {
+                set.add(String(habitId));
+                // A day can't be both completed and excused — clear any completion.
+                if (lifeWorkspace.habitCompletions && Array.isArray(lifeWorkspace.habitCompletions[key])) {
+                    const comp = lifeWorkspace.habitCompletions[key].map(String).filter(id => id !== String(habitId));
+                    if (comp.length) lifeWorkspace.habitCompletions[key] = comp;
+                    else delete lifeWorkspace.habitCompletions[key];
+                }
+            }
+            const next = Array.from(set);
+            if (next.length) lifeWorkspace.habitExcused[key] = next;
+            else delete lifeWorkspace.habitExcused[key];
+            persistAppData();
+            renderLifeWorkspace();
+        }
+
         function getLifeHabitStreak(habitId) {
             const completionMap = lifeWorkspace.habitCompletions && typeof lifeWorkspace.habitCompletions === 'object'
                 ? lifeWorkspace.habitCompletions
@@ -12578,11 +13031,17 @@ function populateProgressDashboard() {
             let streak = 0;
             let cursor = new Date();
             cursor.setHours(0, 0, 0, 0);
-            while (true) {
+            let guard = 0;
+            // Excused days keep the streak alive without counting toward it.
+            while (guard < 400) {
+                guard += 1;
                 const key = dateKey(cursor);
                 const ids = Array.isArray(completionMap[key]) ? completionMap[key].map(id => String(id)) : [];
-                if (!ids.includes(String(habitId))) break;
-                streak += 1;
+                if (ids.includes(String(habitId))) {
+                    streak += 1;
+                } else if (!isLifeHabitExcusedOn(habitId, key)) {
+                    break;
+                }
                 cursor.setDate(cursor.getDate() - 1);
             }
             return streak;
@@ -12594,13 +13053,39 @@ function populateProgressDashboard() {
             const completionMap = lifeWorkspace.habitCompletions && typeof lifeWorkspace.habitCompletions === 'object'
                 ? lifeWorkspace.habitCompletions
                 : {};
+            const excusedMap = getLifeHabitExcusedMap();
             let completed = 0;
+            let excused = 0;
             for (let i = 0; i < 7; i += 1) {
                 const key = offsetDateKey(-i);
                 completed += Array.isArray(completionMap[key]) ? completionMap[key].length : 0;
+                excused += Array.isArray(excusedMap[key]) ? excusedMap[key].length : 0;
             }
-            const possible = habits.length * 7;
-            return possible > 0 ? Math.round((completed / possible) * 100) : 0;
+            // Excused slots are removed from the denominator so a rest day never
+            // drags consistency down.
+            const possible = habits.length * 7 - excused;
+            return possible > 0 ? Math.min(100, Math.round((completed / possible) * 100)) : 0;
+        }
+
+        // Tiny inline SVG sparkline of a goal's progressHistory. Trend color:
+        // green if the latest value >= the first, amber if it slipped.
+        function lifeProgressSparkline(history) {
+            const vals = (Array.isArray(history) ? history : [])
+                .map(h => Math.max(0, Math.min(100, normalizeFiniteNumber(h && h.value, 0))));
+            if (vals.length < 2) return '';
+            const w = 116;
+            const h = 26;
+            const pad = 2;
+            const stepX = (w - pad * 2) / (vals.length - 1);
+            const y = v => (h - pad - (v / 100) * (h - pad * 2));
+            let d = '';
+            vals.forEach((v, i) => { d += (i ? 'L' : 'M') + (pad + i * stepX).toFixed(1) + ' ' + y(v).toFixed(1) + ' '; });
+            const first = vals[0];
+            const last = vals[vals.length - 1];
+            const stroke = last >= first ? 'var(--cc-positive)' : 'var(--cc-warn)';
+            const lastX = (pad + (vals.length - 1) * stepX).toFixed(1);
+            const lastY = y(last).toFixed(1);
+            return `<svg class="life-sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Progress trend ${first}% to ${last}%"><path d="${d.trim()}" fill="none" stroke="${stroke}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lastX}" cy="${lastY}" r="2.4" fill="${stroke}"/></svg>`;
         }
 
         function renderLifeGoalRows() {
@@ -12627,7 +13112,7 @@ function populateProgressDashboard() {
                     <td><textarea class="college-textarea" rows="1" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="relevant" placeholder="Relevant">${escapeHtml(String(row.relevant || ''))}</textarea></td>
                     <td><textarea class="college-textarea" rows="1" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="timeBound" placeholder="Time-bound">${escapeHtml(String(row.timeBound || ''))}</textarea></td>
                     <td><input type="date" class="college-input" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="targetDate" value="${escapeHtml(String(row.targetDate || ''))}"></td>
-                    <td><input type="number" min="0" max="100" class="college-input" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="progress" value="${escapeHtml(String(row.progress || 0))}"></td>
+                    <td><input type="number" min="0" max="100" class="college-input" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="progress" value="${escapeHtml(String(row.progress || 0))}">${lifeProgressSparkline(row.progressHistory)}</td>
                     <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="goals" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete goal"><i class="fas fa-trash"></i></button></td>
                 </tr>
             `).join('');
@@ -12645,19 +13130,28 @@ function populateProgressDashboard() {
                 body.innerHTML = '<tr class="college-empty-row"><td colspan="6">No habits yet. Add habits and mark daily completion to build streaks.</td></tr>';
                 return;
             }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input class="college-input" data-life-collection="habits" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="name" value="${escapeHtml(String(row.name || ''))}" placeholder="Habit"></td>
-                    <td><input class="college-input" data-life-collection="habits" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="category" value="${escapeHtml(String(row.category || ''))}" placeholder="Category"></td>
-                    <td><input type="number" min="1" max="14" class="college-input" data-life-collection="habits" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="targetPerWeek" value="${escapeHtml(String(row.targetPerWeek || 7))}"></td>
-                    <td class="college-cell-center"><input type="checkbox" data-life-habit-row-id="${escapeHtml(String(row.id))}" ${todayCompletions.includes(String(row.id)) ? 'checked' : ''}></td>
+            body.innerHTML = rows.map(row => {
+                const rid = escapeHtml(String(row.id));
+                const done = todayCompletions.includes(String(row.id));
+                const excusedToday = isLifeHabitExcusedOn(row.id, todayKey);
+                return `
+                <tr${excusedToday ? ' class="is-excused-today"' : ''}>
+                    <td><input class="college-input" data-life-collection="habits" data-life-row-id="${rid}" data-life-field="name" value="${escapeHtml(String(row.name || ''))}" placeholder="Habit"></td>
+                    <td><input class="college-input" data-life-collection="habits" data-life-row-id="${rid}" data-life-field="category" value="${escapeHtml(String(row.category || ''))}" placeholder="Category"></td>
+                    <td><input type="number" min="1" max="14" class="college-input" data-life-collection="habits" data-life-row-id="${rid}" data-life-field="targetPerWeek" value="${escapeHtml(String(row.targetPerWeek || 7))}"></td>
+                    <td class="college-cell-center">
+                        <div class="life-habit-today">
+                            <input type="checkbox" data-life-habit-row-id="${rid}" ${done ? 'checked' : ''} ${excusedToday ? 'disabled' : ''} aria-label="Mark done today">
+                            <button type="button" class="icon-btn life-excuse-btn ${excusedToday ? 'is-excused' : ''}" data-life-action="toggle-excuse" data-cc-target="${rid}" title="${excusedToday ? 'Excused today — click to un-excuse' : "Excuse today (rest/sick day — won't break your streak)"}" aria-label="Excuse today"><i class="fas fa-mug-hot" aria-hidden="true"></i></button>
+                        </div>
+                    </td>
                     <td>
-                        <div class="life-habit-dots" aria-label="Last 7 days of completion">${getLifeHabitWeekDots(row.id).map(d => `<span class="life-habit-dot ${d.done ? 'is-done' : ''}" title="${escapeHtml(d.key)}"></span>`).join('')}</div>
+                        <div class="life-habit-dots" aria-label="Last 7 days of completion">${getLifeHabitWeekDots(row.id).map(d => `<span class="life-habit-dot ${d.done ? 'is-done' : ''}${d.excused ? ' is-excused' : ''}" title="${escapeHtml(d.key)}${d.excused ? ' (excused)' : (d.done ? ' (done)' : '')}"></span>`).join('')}</div>
                         <span class="life-habit-streak">${getLifeHabitStreak(row.id)}d streak</span>
                     </td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="habits" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete habit"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
+                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="habits" data-life-row-id="${rid}" aria-label="Delete habit"><i class="fas fa-trash"></i></button></td>
+                </tr>`;
+            }).join('');
         }
 
         function renderLifeSkillRows() {
@@ -12907,6 +13401,15 @@ function populateProgressDashboard() {
                     <button type="button" class="icon-btn" data-life-action="del-budget" data-cc-target="${escapeHtml(cat)}" aria-label="Remove ${escapeHtml(cat)} budget"><i class="fas fa-times" aria-hidden="true"></i></button>
                 </div>`;
             }).join('') : '<p class="cc-muted">No category budgets yet. Add a cap to track over/under spending each month.</p>';
+            const fc = getLifeBudgetForecast();
+            const forecastHtml = fc.hasData ? `
+                <div class="life-forecast ${fc.willExceedTotal ? 'is-over' : ''}">
+                    <div class="life-forecast-head"><i class="fas fa-chart-line" aria-hidden="true"></i> Month-end forecast</div>
+                    <div class="life-forecast-main">At this pace, you'll spend about <strong>${money(fc.projectedTotal)}</strong>${fc.totalBudget > 0 ? ` of your ${money(fc.totalBudget)} budget` : ''}${fc.daysLeft > 0 ? ` (${fc.daysLeft} day${fc.daysLeft === 1 ? '' : 's'} left this month)` : ''}.</div>
+                    ${fc.catForecasts.length
+                        ? `<div class="life-forecast-cats">${fc.catForecasts.slice(0, 4).map(c => `<span class="cc-pill cc-tone-danger" title="Projected ${money(c.projected)} vs ${money(c.cap)} cap">${escapeHtml(c.cat)}: ~${money(c.projected)} / ${money(c.cap)}</span>`).join('')}</div>`
+                        : (fc.willExceedTotal ? '' : '<div class="cc-muted">On pace to stay within your caps.</div>')}
+                </div>` : '';
             const recurring = Array.isArray(lifeWorkspace.recurringExpenses) ? lifeWorkspace.recurringExpenses : [];
             const recurringRows = recurring.length ? recurring.map(r => `
                 <div class="life-budget-row">
@@ -12919,6 +13422,7 @@ function populateProgressDashboard() {
                     <div class="academic-module-head"><h3>Budgets &amp; recurring</h3></div>
                     <datalist id="lifeBudgetCatList">${knownCats.map(c => `<option value="${escapeHtml(c)}"></option>`).join('')}</datalist>
                     <div class="life-budget-list">${budgetRows}</div>
+                    ${forecastHtml}
                     <div class="life-budget-add">
                         <input class="college-input" id="lifeBudgetNewCat" list="lifeBudgetCatList" placeholder="Category">
                         <input type="number" min="0" class="college-input" id="lifeBudgetNewCap" placeholder="Monthly cap">
@@ -13544,6 +14048,44 @@ function populateProgressDashboard() {
             });
             return { monthTotal, totalBudget, byCat, budgets, over };
         }
+        // Project month-end spending from the current pace plus recurring
+        // expenses that haven't hit their day-of-month yet.
+        function getLifeBudgetForecast() {
+            const snap = getLifeBudgetSnapshot();
+            const now = new Date();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const dayOfMonth = now.getDate();
+            const paceFactor = daysInMonth / Math.max(1, dayOfMonth);
+            const recurring = Array.isArray(lifeWorkspace.recurringExpenses) ? lifeWorkspace.recurringExpenses : [];
+            const upcomingByCat = {};
+            let upcomingTotal = 0;
+            recurring.forEach(r => {
+                const day = Math.max(1, Math.min(31, Math.round(normalizeFiniteNumber(r.dayOfMonth, 1))));
+                const amt = Math.max(0, normalizeFiniteNumber(r.amount, 0));
+                if (day > dayOfMonth && amt > 0) {
+                    upcomingTotal += amt;
+                    const cat = String(r.category || '').trim();
+                    if (cat) upcomingByCat[cat] = (upcomingByCat[cat] || 0) + amt;
+                }
+            });
+            const projectedTotal = Math.round(snap.monthTotal * paceFactor + upcomingTotal);
+            const catForecasts = [];
+            Object.entries(snap.budgets).forEach(([cat, capRaw]) => {
+                const cap = Math.max(0, normalizeFiniteNumber(capRaw, 0));
+                if (cap <= 0) return;
+                const projected = Math.round((snap.byCat[cat] || 0) * paceFactor + (upcomingByCat[cat] || 0));
+                if (projected > cap) catForecasts.push({ cat, projected, cap });
+            });
+            catForecasts.sort((a, b) => (b.projected - b.cap) - (a.projected - a.cap));
+            return {
+                projectedTotal,
+                totalBudget: snap.totalBudget,
+                willExceedTotal: snap.totalBudget > 0 && projectedTotal > snap.totalBudget,
+                catForecasts,
+                daysLeft: Math.max(0, daysInMonth - dayOfMonth),
+                hasData: snap.monthTotal > 0 || upcomingTotal > 0
+            };
+        }
         function getLifeEnergyTrend() {
             const recent = getLifeRecentCheckIns(7);
             const prior = getLifeCheckIns().filter(c => {
@@ -13653,11 +14195,13 @@ function populateProgressDashboard() {
         // ---- Habit weekly dots (last 7 days, oldest→newest) ----
         function getLifeHabitWeekDots(habitId) {
             const map = (lifeWorkspace.habitCompletions && typeof lifeWorkspace.habitCompletions === 'object') ? lifeWorkspace.habitCompletions : {};
+            const excusedMap = getLifeHabitExcusedMap();
             const dots = [];
             for (let i = 6; i >= 0; i -= 1) {
                 const key = offsetDateKey(-i);
                 const ids = Array.isArray(map[key]) ? map[key].map(String) : [];
-                dots.push({ key, done: ids.includes(String(habitId)) });
+                const excused = Array.isArray(excusedMap[key]) ? excusedMap[key].map(String).includes(String(habitId)) : false;
+                dots.push({ key, done: ids.includes(String(habitId)), excused });
             }
             return dots;
         }
@@ -13698,7 +14242,9 @@ function populateProgressDashboard() {
                     </div>
                     <div class="cc-field"><span class="cc-field-label">Progress — ${progress}%</span>
                         <input type="range" min="0" max="100" class="cc-range" data-life-collection="goals" data-life-row-id="${id}" data-life-field="progress" value="${progress}">
-                        ${history.length ? `<span class="cc-muted">History: ${history.map(h => h.value + '%').join(' → ')}</span>` : ''}
+                        ${history.length >= 2
+                            ? `<div class="life-progress-trend">${lifeProgressSparkline(history)}<span class="cc-muted">${history[0].value}% → ${history[history.length - 1].value}%</span></div>`
+                            : (history.length ? `<span class="cc-muted">History: ${history.map(h => h.value + '%').join(' → ')}</span>` : '')}
                     </div>
                 </div>
                 <div class="cc-drawer-section">
@@ -14034,6 +14580,7 @@ function populateProgressDashboard() {
                     if (act === 'del-budget') { deleteLifeBudgetCap(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'add-recurring') { addLifeRecurring(); return; }
                     if (act === 'del-recurring') { deleteLifeRecurring(lifeActionBtn.dataset.ccTarget); return; }
+                    if (act === 'toggle-excuse') { toggleLifeHabitExcusedToday(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'journal-prompt') { createLifeJournalFromPrompt(lifeActionBtn.dataset.ccTarget); return; }
                 }
 
@@ -19824,7 +20371,7 @@ function populateProgressDashboard() {
                 })
                 : null;
 
-            countEl.textContent = `${blocks.length} ${blocks.length === 1 ? 'block' : 'blocks'}`;
+            countEl.textContent = String(blocks.length);
             if (currentBlock) {
                 stateEl.textContent = `In progress: ${currentBlock.name || 'Untitled block'}`;
             } else if (visibleBlocks.length) {
@@ -20150,26 +20697,35 @@ function populateProgressDashboard() {
             renderTodayStudentHub(todayKey);
             renderHabitTracker();
 
-            // ── Command Center stat blocks ──
+            // ── Next Up footer counts ──
+            // Populated from the same workspace-wide deadline universe as the
+            // Next Up card and the Upcoming Radar so the three never disagree.
             try {
-                const tccOvEl = document.getElementById('tccOverdueCount');
-                if (tccOvEl) tccOvEl.textContent = overdueTasks.length;
-                const tccDtEl = document.getElementById('tccDueTodayCount');
-                if (tccDtEl) tccDtEl.textContent = dueTodayTasks.length;
-                const tccEvEl = document.getElementById('tccEventsCount');
-                if (tccEvEl) tccEvEl.textContent = scheduledBlocksToday.length;
+                const deadlineGroups = groupDeadlinesByTimeframe(collectWorkspaceDeadlines());
+                const setCount = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = String(value);
+                };
+                setCount('tccOverdueCount', deadlineGroups.overdue.length);
+                setCount('tccDueTodayCount', deadlineGroups.today.length);
+                setCount('tccDueWeekCount', deadlineGroups.tomorrow.length + deadlineGroups.thisWeek.length);
                 const tccStatOv = document.getElementById('tccStatOverdue');
-                if (tccStatOv) tccStatOv.classList.toggle('tcc-stat-has-alert', overdueTasks.length > 0);
-                let tccReviewDue = 0;
-                try {
-                    if (typeof window.getReviewTodayStats === 'function') {
-                        const rs = window.getReviewTodayStats();
-                        tccReviewDue = (rs && rs.due) ? rs.due : 0;
-                    }
-                } catch (e2) { /* non-critical */ }
-                const tccRvEl = document.getElementById('tccReviewCount');
-                if (tccRvEl) tccRvEl.textContent = tccReviewDue;
+                if (tccStatOv) tccStatOv.classList.toggle('tcc-stat-has-alert', deadlineGroups.overdue.length > 0);
+                document.querySelectorAll('[data-nextup-count]').forEach(btn => {
+                    if (btn.dataset.bound === 'true') return;
+                    btn.dataset.bound = 'true';
+                    btn.addEventListener('click', () => {
+                        const kind = btn.getAttribute('data-nextup-count');
+                        try {
+                            if (kind === 'overdue' && typeof openOverdueRecovery === 'function') openOverdueRecovery();
+                            else openDeadlineRadar();
+                        } catch (err) { /* non-critical */ }
+                    });
+                });
             } catch (e) { /* non-critical */ }
+
+            // ── Upcoming Radar ──
+            try { renderUpcomingRadar(); } catch (e) { /* non-critical */ }
 
             // ── Greeting tagline ──
             try {
@@ -20820,6 +21376,24 @@ function populateProgressDashboard() {
                     subtitle: name,
                     dueDate,
                     status: normalizedStatus || 'applying'
+                });
+            });
+
+            (Array.isArray(appWorkspace.recommenders) ? appWorkspace.recommenders : []).forEach(row => {
+                if (!row || String(row.status || '') === 'submitted') return;
+                const dueDate = String(row.dueDate || '').trim();
+                if (!dueDate) return;
+                const name = trimCollegeDeadlineLabel(row.name, 'Recommender');
+                pushCollegeDeadlineItem(out, current, {
+                    id: `collegeapp:recommender:${row.id}`,
+                    sourceId: row.id,
+                    sourceView: 'collegeapp',
+                    sourceCollection: 'recommenders',
+                    sourceSubpage: 'recommenders',
+                    title: `${name} · Rec letter`,
+                    subtitle: name,
+                    dueDate,
+                    status: row.status || 'requested'
                 });
             });
 
@@ -21573,71 +22147,94 @@ function populateProgressDashboard() {
                 }
             } catch (err) { nextClass = null; nextClassDue = 0; }
 
+            // "Next Up" hero card (mockup-aligned). Status + relative labels come
+            // from the shared pure helper so tests can pin the exact behavior.
+            const urgency = (item) => {
+                try {
+                    if (window.SutraTodayCenter && typeof window.SutraTodayCenter.getUrgencyStatus === 'function') {
+                        return window.SutraTodayCenter.getUrgencyStatus(item, new Date());
+                    }
+                } catch (err) { /* non-critical */ }
+                return { key: 'later', label: '', daysUntil: null };
+            };
+
             let nbaHtml;
             if (nba && nba.item) {
+                const status = urgency(nba.item);
                 const dueLabel = (() => {
                     try {
                         const d = nba.item.due;
-                        return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                        const mins = d.getHours() * 60 + d.getMinutes();
+                        const hasTime = mins !== 0 && mins !== 1439; // 23:59 = normalized date-only deadline
+                        return d.toLocaleString(undefined, hasTime
+                            ? { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+                            : { weekday: 'short', month: 'short', day: 'numeric' });
                     } catch (err) { return ''; }
                 })();
+                const relLabel = (() => {
+                    const d = status.daysUntil;
+                    if (d === null) return '';
+                    if (d === 0) return 'Today';
+                    if (d === 1) return 'Tomorrow';
+                    if (d > 1) return `In ${d} days`;
+                    return '';
+                })();
+                const context = status.key === 'overdue'
+                    ? "This is your highest priority. Let's get you back on track."
+                    : status.key === 'today'
+                        ? 'Due today — one focused block now keeps you ahead.'
+                        : status.key === 'tomorrow'
+                            ? 'Due tomorrow — a head start today makes it easy.'
+                            : "You're clear for today. This is the next thing on the horizon.";
                 const isHw = nba.item.source === 'homework' && nba.item.sourceId;
                 nbaHtml = `
-                    <div class="today-brief-nba today-brief-donow">
-                        <div class="today-brief-nba-label">Do now · ${escapeHtml(nba.reason || 'next up')}</div>
-                        <div class="today-brief-nba-title">${escapeHtml(nba.item.title)}</div>
-                        <div class="today-brief-nba-meta">${escapeHtml(dueLabel)}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</div>
-                        <div class="today-brief-actions">
-                            <button type="button" class="neumo-btn active" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}">Start focus</button>
-                            <button type="button" class="neumo-btn" data-brief-open-source="${escapeHtml(nba.item.id)}">Open</button>
-                            ${isHw ? `<button type="button" class="neumo-btn" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
-                            ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
+                    <div class="today-brief-nba tnu-body" data-nextup-status="${escapeHtml(status.key)}">
+                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-title tnu-title">${escapeHtml(nba.item.title)}</div>
+                        <div class="today-brief-nba-meta tnu-meta">
+                            <i class="far fa-calendar" aria-hidden="true"></i>
+                            <span>${escapeHtml(dueLabel)}${relLabel ? ' · ' + escapeHtml(relLabel) : ''}${nba.item.subtitle ? ' · ' + escapeHtml(nba.item.subtitle) : ''}</span>
+                        </div>
+                        <div class="tnu-status-pill tnu-status-${escapeHtml(status.key)}">${escapeHtml(status.label)}</div>
+                        <p class="tnu-context">${escapeHtml(context)}</p>
+                        <div class="today-brief-actions tnu-actions">
+                            <button type="button" class="neumo-btn active tnu-primary" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}"><i class="fas fa-play" aria-hidden="true"></i> Start Focus</button>
+                            <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Open Details →</button>
+                            ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
+                            ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn tnu-ghost" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
                         </div>
                     </div>`;
             } else if (items.length === 0) {
                 nbaHtml = `
-                    <div class="today-brief-nba today-brief-nba-empty">
-                        <div class="today-brief-nba-label">Do now</div>
-                        <div class="today-brief-nba-title">Nothing due — you're clear</div>
-                        <div class="today-brief-nba-meta">Capture an assignment (Ctrl/⌘+K)${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</div>
+                    <div class="today-brief-nba today-brief-nba-empty tnu-body">
+                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-title tnu-title">Nothing due — you're clear</div>
+                        <p class="tnu-context">Capture an assignment (Ctrl/⌘+K)${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</p>
                     </div>`;
             } else {
                 nbaHtml = `
-                    <div class="today-brief-nba today-brief-nba-empty">
-                        <div class="today-brief-nba-label">Do now</div>
-                        <div class="today-brief-nba-title">Nothing overdue or due today</div>
-                        <div class="today-brief-nba-meta">Get ahead on what's coming — see the Radar${reviewDue > 0 ? ` or clear your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''}.</div>
+                    <div class="today-brief-nba today-brief-nba-empty tnu-body">
+                        <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
+                        <div class="today-brief-nba-title tnu-title">Nothing overdue or due today</div>
+                        <p class="tnu-context">Get ahead on what's coming — scan the radar${reviewDue > 0 ? ` or clear your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''}.</p>
                     </div>`;
             }
 
             const overloadChip = overloadDays > 0
-                ? `<span class="today-brief-count is-alert"><strong>${overloadDays}</strong> heavy ${overloadDays === 1 ? 'day' : 'days'}</span>`
+                ? `<span class="tnu-chip is-alert">${overloadDays} heavy ${overloadDays === 1 ? 'day' : 'days'} ahead</span>`
                 : '';
 
             const smartRow = `
-                <div class="today-brief-smartrow">
+                <div class="today-brief-smartrow tnu-smartrow">
                     ${overdueN > 0 ? `<button type="button" class="neumo-btn is-recover" data-donow-recover="1">Recover ${overdueN} overdue</button>` : ''}
                     ${nextClass && nextClassDue > 0 ? `<button type="button" class="neumo-btn is-quiz" data-quiz-class="${escapeHtml(nextClass.courseId)}" data-quiz-name="${escapeHtml(nextClass.name)}">Quiz me before ${escapeHtml(nextClass.name)} (${nextClassDue})</button>` : ''}
                     ${reviewDue > 0 ? `<button type="button" class="neumo-btn" data-donow-review="1">Review ${reviewDue} card${reviewDue === 1 ? '' : 's'}</button>` : ''}
-                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar">Plan my day</button>
+                    <button type="button" class="neumo-btn" id="todayBriefOpenRadar" title="All deadlines grouped by timeframe">All deadlines</button>
                     <button type="button" class="neumo-btn" data-donow-calendar="1">Add deadlines to calendar</button>
+                    ${overloadChip}
                 </div>`;
 
             container.innerHTML = `
-                <div class="today-brief-head">
-                    <div>
-                        <div class="eyebrow">Daily Thread</div>
-                        <h3>Your next move</h3>
-                        <p class="today-brief-mode">Mode: ${escapeHtml(modeLabel)}</p>
-                    </div>
-                    <div class="today-brief-counts">
-                        <span class="today-brief-count ${overdueN ? 'is-alert' : ''}"><strong>${overdueN}</strong> overdue</span>
-                        <span class="today-brief-count"><strong>${todayN}</strong> today</span>
-                        <span class="today-brief-count"><strong>${tomorrowN}</strong> tomorrow</span>
-                        <span class="today-brief-count"><strong>${weekN}</strong> this week</span>
-                        ${overloadChip}
-                    </div>
-                </div>
                 ${nbaHtml}
                 ${smartRow}
             `;
@@ -21814,6 +22411,104 @@ function populateProgressDashboard() {
             if (!modal) return;
             modal.classList.remove('active');
             modal.setAttribute('aria-hidden', 'true');
+        }
+
+        // ===== Upcoming Radar (Today hero visualization) =====
+        // Same deadline universe as the Next Up card and Deadline Radar modal,
+        // plus a synthetic "review debt" chip and (filter-only) undated tasks.
+        // All grouping/placement logic lives in SutraTodayCenter (pure, tested);
+        // this wrapper only feeds it live data and routes clicks to sources.
+        let upcomingRadarFilterKey = 'all';
+        let upcomingRadarResizeBound = false;
+
+        function collectUpcomingRadarItems() {
+            let items = [];
+            try { items = collectWorkspaceDeadlines() || []; } catch (err) { items = []; }
+            // Review debt: one chip in the Today band when cards are waiting.
+            try {
+                if (typeof window.getReviewTodayStats === 'function') {
+                    const rs = window.getReviewTodayStats() || {};
+                    const due = (Number(rs.due) || 0) + (Number(rs.overdue) || 0);
+                    if (due > 0) {
+                        const reviewDueDate = new Date();
+                        reviewDueDate.setHours(0, 0, 0, 0);
+                        items.push({
+                            id: 'review:today',
+                            source: 'review',
+                            sourceId: '',
+                            title: `Review ${due} card${due === 1 ? '' : 's'}`,
+                            due: reviewDueDate,
+                            priority: 'medium',
+                            status: 'open',
+                            overdue: false
+                        });
+                    }
+                }
+            } catch (err) { /* non-critical */ }
+            // Undated tasks: surfaced ONLY behind the explicit "No date" filter.
+            try {
+                (Array.isArray(tasks) ? tasks : []).forEach(task => {
+                    if (!task || task.completed || task.dueDate) return;
+                    if (String(task.scheduleType || 'once') !== 'once') return;
+                    items.push({
+                        id: `task:${task.id}`,
+                        source: 'task',
+                        sourceId: String(task.id || ''),
+                        title: String(task.title || 'Untitled task'),
+                        due: null,
+                        priority: String(task.priority || 'medium'),
+                        status: 'open',
+                        overdue: false
+                    });
+                });
+            } catch (err) { /* non-critical */ }
+            return items;
+        }
+
+        function openUpcomingRadarItem(item) {
+            if (!item) return;
+            if (item.source === 'review') {
+                try {
+                    if (typeof window.startReviewSessionFromShortcut === 'function') {
+                        window.startReviewSessionFromShortcut();
+                        return;
+                    }
+                } catch (err) { /* non-critical */ }
+                setActiveView('review');
+                return;
+            }
+            openDeadlineSource(item);
+        }
+
+        function renderUpcomingRadar() {
+            const mount = document.getElementById('upcomingRadarMount');
+            if (!mount || typeof window === 'undefined' || !window.SutraTodayCenter) return;
+            window.SutraTodayCenter.renderRadar(mount, collectUpcomingRadarItems(), {
+                now: new Date(),
+                filter: upcomingRadarFilterKey,
+                onOpen: openUpcomingRadarItem,
+                onOverflow: () => { try { openDeadlineRadar(); } catch (err) { /* non-critical */ } }
+            });
+            const select = document.getElementById('upcomingRadarFilter');
+            if (select && select.dataset.bound !== 'true') {
+                select.dataset.bound = 'true';
+                select.addEventListener('change', () => {
+                    upcomingRadarFilterKey = String(select.value || 'all');
+                    renderUpcomingRadar();
+                });
+            }
+            if (!upcomingRadarResizeBound) {
+                upcomingRadarResizeBound = true;
+                let radarResizeTimer = null;
+                window.addEventListener('resize', () => {
+                    if (radarResizeTimer) clearTimeout(radarResizeTimer);
+                    radarResizeTimer = setTimeout(() => {
+                        if (activeView === 'today') {
+                            try { renderUpcomingRadar(); } catch (err) { /* non-critical */ }
+                        }
+                    }, 180);
+                });
+            }
         }
 
         // ===== Overdue Recovery (#9) =====
@@ -37848,6 +38543,7 @@ function populateProgressDashboard() {
         // chooses an exam to drill into.
         function initTestingHubView() {
             const activeSection = (testingHub && testingHub.activeSection) || 'dashboard';
+            _thOpenExamGroup = null;
             renderTestingHubExamStrip();
             renderTestingHubExamsList();
             renderTestingHubDashboard();
@@ -37895,6 +38591,8 @@ function populateProgressDashboard() {
                 } else {
                     if (detailMount) detailMount.hidden = true;
                     if (listMount) listMount.hidden = false;
+                    // Fresh entry via the nav returns to the calm group overview.
+                    _thOpenExamGroup = null;
                     renderTestingHubExamsList();
                 }
             } else if (sectionId === 'review') {
@@ -37962,13 +38660,150 @@ function populateProgressDashboard() {
         }
 
         // =========================================================================
-        // EXAMS LIST — cards grid (one per pinned/active exam)
+        // EXAM GROUPS — one "family" card per subject (AP, SAT, …) that drills
+        // into its individual exams. AP collapses every AP subject into a single
+        // AP card; other exams keep their own card. Presentation-only.
+        // =========================================================================
+
+        // Which exam group is currently drilled into (e.g. 'ap'), or null for the
+        // group overview. Not persisted: re-entering the Exams section always
+        // returns to the calm overview first.
+        let _thOpenExamGroup = null;
+
+        // Build the list of exam groups from the active (pinned/recent) families.
+        // AP becomes one group holding every AP subject; every other exam is its
+        // own single-child group so it still renders as a rich individual card.
+        function _examGroups() {
+            const base = _activeExamIds();
+            const groups = [];
+            base.forEach(id => {
+                if (id === 'ap') {
+                    const children = _expandApSubjectIds();
+                    groups.push({
+                        key: 'ap',
+                        label: 'AP',
+                        icon: 'fa-graduation-cap',
+                        childIds: children.length ? children : ['ap'],
+                        empty: children.length === 0
+                    });
+                } else {
+                    groups.push({ key: id, label: _examIdLabel(id), icon: _examIdIcon(id), childIds: [id], empty: false });
+                }
+            });
+            return groups;
+        }
+
+        function _examGroupByKey(key) {
+            return _examGroups().find(g => g.key === key) || null;
+        }
+
+        // Aggregate a group's child exams into one summary for the group card:
+        // total exams, how many taken, total practice/mistakes/open tasks, and
+        // the soonest upcoming (not-yet-taken) exam date.
+        function _examGroupMeta(group) {
+            const childIds = (group && group.childIds) || [];
+            let taken = 0, practice = 0, mistakes = 0, openTasks = 0;
+            let soonest = null;
+            childIds.forEach(cid => {
+                const meta = _examMeta(cid);
+                if (!meta) return;
+                const isTaken = _isExamTaken(cid);
+                if (isTaken) taken++;
+                practice += meta.practiceCount || 0;
+                mistakes += meta.unresolvedMistakes || 0;
+                openTasks += meta.openTasks || 0;
+                if (!isTaken && meta.examDate && meta.daysLeft != null) {
+                    if (!soonest || meta.daysLeft < soonest.daysLeft) {
+                        soonest = { daysLeft: meta.daysLeft, examDate: meta.examDate };
+                    }
+                }
+            });
+            const total = group && group.empty ? 0 : childIds.length;
+            return {
+                total,
+                taken: Math.min(taken, total),
+                remaining: Math.max(0, total - taken),
+                practice, mistakes, openTasks,
+                daysLeft: soonest ? soonest.daysLeft : null,
+                examDate: soonest ? soonest.examDate : null,
+                allTaken: total > 0 && taken >= total
+            };
+        }
+
+        // Render a subject "family" card (e.g. AP) that drills into its exams.
+        function _renderExamGroupCard(group) {
+            const meta = _examGroupMeta(group);
+            const icon = group.icon || 'fa-layer-group';
+            const allTaken = meta.allTaken;
+            const countdownClass = allTaken ? 'is-taken'
+                : meta.daysLeft === null || meta.daysLeft === undefined ? ''
+                : meta.daysLeft < 0 ? 'past'
+                : meta.daysLeft <= 7 ? 'critical'
+                : meta.daysLeft <= 30 ? 'urgent' : '';
+            const countdownText = allTaken ? 'All done'
+                : meta.daysLeft === null || meta.daysLeft === undefined ? 'No date'
+                : meta.daysLeft < 0 ? 'Past'
+                : meta.daysLeft === 0 ? 'Next: today'
+                : `Next: ${meta.daysLeft}d`;
+            const dateLine = meta.examDate ? new Date(meta.examDate).toLocaleDateString() : '—';
+            const key = group.key;
+            const subLabel = group.empty
+                ? 'No subjects yet'
+                : `${meta.total} exam${meta.total === 1 ? '' : 's'}${meta.taken ? ` · ${meta.taken} done` : ''}`;
+            const openCall = `openExamGroup('${escapeHtml(key)}')`;
+            return `
+                <article class="th2-exam-card th2-exam-group-card ${countdownClass}" data-group-key="${escapeHtml(key)}" tabindex="0" role="button" onclick="${openCall}" onkeydown="if (event.key==='Enter' || event.key===' ') { event.preventDefault(); ${openCall} }">
+                    <header class="th2-exam-card-head">
+                        <div class="th2-exam-card-icon"><i class="fas ${icon}"></i></div>
+                        <div class="th2-exam-card-title">
+                            <h3>${escapeHtml(group.label)}</h3>
+                            <span class="th2-exam-card-status">${escapeHtml(subLabel)}</span>
+                        </div>
+                        <div class="th2-exam-card-countdown">
+                            <div class="th2-card-countdown-num">${escapeHtml(countdownText)}</div>
+                            <div class="th2-card-countdown-date">${escapeHtml(dateLine)}</div>
+                        </div>
+                    </header>
+                    <div class="th2-exam-card-meta">
+                        <div class="th2-card-meta-item"><span class="th2-card-meta-label">Exams</span><span class="th2-card-meta-value">${meta.total}</span></div>
+                        <div class="th2-card-meta-item"><span class="th2-card-meta-label">Upcoming</span><span class="th2-card-meta-value">${meta.remaining}</span></div>
+                        <div class="th2-card-meta-item"><span class="th2-card-meta-label">Practice</span><span class="th2-card-meta-value">${meta.practice}</span></div>
+                        <div class="th2-card-meta-item ${meta.mistakes > 0 ? 'is-warning' : ''}"><span class="th2-card-meta-label">To review</span><span class="th2-card-meta-value">${meta.mistakes}</span></div>
+                    </div>
+                    <footer class="th2-exam-card-actions">
+                        <button class="th2-card-action th2-card-action-primary" type="button" onclick="event.stopPropagation(); ${openCall}"><i class="fas fa-arrow-right"></i> ${group.empty ? 'Set up' : `View ${meta.total === 1 ? 'exam' : 'exams'}`}</button>
+                    </footer>
+                </article>
+            `;
+        }
+
+        // Drill into a group's individual exams. Single, non-AP groups skip the
+        // intermediate list and open the exam detail directly.
+        function openExamGroup(key) {
+            const group = _examGroupByKey(key);
+            if (!group) return;
+            if (group.key !== 'ap' && group.childIds.length === 1) {
+                openExamDetail(group.childIds[0]);
+                return;
+            }
+            _thOpenExamGroup = key;
+            renderTestingHubExamsList();
+        }
+
+        function closeExamGroup() {
+            _thOpenExamGroup = null;
+            renderTestingHubExamsList();
+        }
+
+        // =========================================================================
+        // EXAMS LIST — group overview, or the drilled-in exams for one group
         // =========================================================================
         function renderTestingHubExamsList() {
             const host = document.getElementById('th2ExamsListMount');
             if (!host) return;
-            const ids = _activeExamCardIds();
-            if (ids.length === 0) {
+            const groups = _examGroups();
+            if (groups.length === 0) {
+                _thOpenExamGroup = null;
                 host.innerHTML = `
                     <div class="th2-empty-state">
                         <i class="fas fa-graduation-cap th2-empty-icon"></i>
@@ -37979,8 +38814,49 @@ function populateProgressDashboard() {
                 `;
                 return;
             }
-            const cards = ids.map(id => _renderExamCard(id)).join('');
-            host.innerHTML = `<div class="th2-exam-grid">${cards}</div>`;
+            // Drilled into a specific group → show that group's individual exams.
+            if (_thOpenExamGroup) {
+                const group = _examGroupByKey(_thOpenExamGroup);
+                if (group) {
+                    const childCards = group.childIds.map(cid => _renderExamCard(cid)).filter(Boolean).join('');
+                    const addBtn = group.key === 'ap'
+                        ? `<button class="th2-card-action th2-group-head-add" type="button" onclick="openExamDetail('ap'); if (typeof window.openApStudyAddSubject === 'function') window.openApStudyAddSubject();"><i class="fas fa-plus"></i> Add AP subject</button>`
+                        : '';
+                    host.innerHTML = `
+                        <div class="th2-group-head">
+                            <button class="th2-group-back" type="button" onclick="closeExamGroup()"><i class="fas fa-arrow-left"></i> All subjects</button>
+                            <div class="th2-group-head-title"><i class="fas ${group.icon}"></i> ${escapeHtml(group.label)}</div>
+                            ${addBtn}
+                        </div>
+                        <div class="th2-exam-grid">${childCards}</div>
+                    `;
+                    return;
+                }
+                // Stale group key — fall through to the overview.
+                _thOpenExamGroup = null;
+            }
+            // Group overview: one card per subject family. AP always renders as a
+            // group card; every other exam renders as its own rich exam card.
+            const cards = groups.map(group => {
+                const isMulti = group.childIds.length >= 2;
+                return (group.key === 'ap' || isMulti)
+                    ? _renderExamGroupCard(group)
+                    : _renderExamCard(group.childIds[0]);
+            }).join('');
+            host.innerHTML = `<div class="th2-exam-grid">${cards}${_renderAddExamTile()}</div>`;
+        }
+
+        // Dashed "add exam" tile at the end of the group overview grid, so exams
+        // can be added right where the cards live (this replaces the Add button
+        // that used to sit in the removed "Active exams" strip).
+        function _renderAddExamTile() {
+            return `
+                <button class="th2-exam-card th2-add-exam-tile" type="button" onclick="openTestingHubExamPicker({ focusAdd: true })">
+                    <span class="th2-add-exam-icon"><i class="fas fa-plus"></i></span>
+                    <span class="th2-add-exam-label">Add exam</span>
+                    <span class="th2-add-exam-hint">AP, SAT, ACT, MCAT, GRE… or a custom exam</span>
+                </button>
+            `;
         }
 
         function _examMeta(id) {
@@ -39055,6 +39931,8 @@ function populateProgressDashboard() {
                 window.toggleTestingHubExamTaken = (id) => { try { _setExamTaken(id, !_isExamTaken(id)); } catch (e) {} };
                 window.openExamDetail = openExamDetail;
                 window.closeExamDetail = closeExamDetail;
+                window.openExamGroup = openExamGroup;
+                window.closeExamGroup = closeExamGroup;
                 window.openTestingHubExamPicker = openTestingHubExamPicker;
                 window.closeTestingHubExamPicker = closeTestingHubExamPicker;
                 window.renderTestingHubDashboard = renderTestingHubDashboard;
@@ -48886,6 +49764,8 @@ function getActiveEditor() {
                 // custom exams, active section + active exam). Now included.
                 testingHub: normalizeTestingHub(testingHub),
                 focusTemplates: normalizeFocusTemplates(focusTemplates),
+                // Custom tabs — user-composed widget dashboards travel in backups.
+                customTabs: normalizeCustomTabsSafe(customTabsData),
                 splitPaneContexts: normalizeSplitPaneContexts(splitPaneContexts),
                 pinnedPages: normalizePinnedPages(appData && appData.pinnedPages),
                 notificationsState,
@@ -48923,6 +49803,7 @@ function getActiveEditor() {
                     focusSessions: payload.focusSessions,
                     testingHub: payload.testingHub,
                     focusTemplates: payload.focusTemplates,
+                    customTabs: payload.customTabs,
                     splitPaneContexts: payload.splitPaneContexts,
                     pinnedPages: payload.pinnedPages,
                     notificationsState: payload.notificationsState,
@@ -53728,6 +54609,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const importedFocusSessions = data.focusSessions || (workspace && workspace.focusSessions) || null;
             const importedTestingHub = data.testingHub || (workspace && workspace.testingHub) || null;
             const importedFocusTemplates = data.focusTemplates || (workspace && workspace.focusTemplates) || null;
+            const importedCustomTabs = data.customTabs || (workspace && workspace.customTabs) || null;
             const importedSplitPaneContexts = data.splitPaneContexts || (workspace && workspace.splitPaneContexts) || null;
             const importedPinnedPages = data.pinnedPages || (workspace && workspace.pinnedPages) || null;
             const importedNotificationsState = data.notificationsState || (workspace && workspace.notificationsState) || null;
@@ -53812,6 +54694,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             gradePlanner = normalizeGradePlannerSafe(importedGradePlanner);
             semesterSetup = normalizeSemesterSetupSafe(importedSemesterSetup);
             focusTemplates = normalizeFocusTemplates(importedFocusTemplates);
+            // Older backups simply produce an empty list here (lossless for them).
+            customTabsData = normalizeCustomTabsSafe(importedCustomTabs);
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:custom-tabs-changed'));
+            } catch (e) { /* non-critical */ }
             splitPaneContexts = normalizeSplitPaneContexts(importedSplitPaneContexts);
             if (!appData) appData = getDefaultAppData();
             appData.pinnedPages = normalizePinnedPages(importedPinnedPages);
@@ -53920,7 +54807,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             appData.ui = { ...uiDefaults, ...importedUiSource };
             const importedUiState = ensureUiState() || appData.ui;
             const importedLastView = String(importedUiState.lastActiveView || '').trim();
-            importedUiState.lastActiveView = (importedLastView === 'settings' || OPTIONAL_FEATURE_VIEWS.includes(importedLastView))
+            importedUiState.lastActiveView = (importedLastView === 'settings' || importedLastView.startsWith('custom-') || OPTIONAL_FEATURE_VIEWS.includes(importedLastView))
                 ? importedLastView
                 : uiDefaults.lastActiveView;
             syncUiScrollSessionFromUi(importedUiState);
@@ -54054,7 +54941,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     'apStudyWorkspace', 'homeworkWorkspace', 'reviewWorkspace',
                     'courseWorkspace', 'schoolSchedule', 'gradePlanner', 'semesterSetup',
                     'cramSessions', 'trash', 'focusSessions', 'testingHub', 'focusTemplates',
-                    'splitPaneContexts', 'pinnedPages', 'notificationsState',
+                    'customTabs', 'splitPaneContexts', 'pinnedPages', 'notificationsState',
                     'assistantChatHistory', 'settings', 'ui', 'globalTheme',
                     'localStorageSnapshot', 'exportedAt'
                 ];
@@ -61740,7 +62627,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!chatInput) return;
             // Redesign: the active provider/model shows on the composer chip, so
             // the placeholder stays a task-oriented invitation.
-            chatInput.placeholder = 'Ask about this note, your schedule, or an attached file…';
+            chatInput.placeholder = 'Ask about your notes, plans, or files…';
         }
 
         function renderModelOptions(provider) {
@@ -62414,6 +63301,12 @@ ${cspMeta}
                 s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                 s = s.replace(/(^|[^*])\*([^*\n][^*]*?)\*([^*]|$)/g, function(_, a, inner, b) {
                     return `${a}<em>${inner}</em>${b}`;
+                });
+                // Sutra Assistant citations: [label](sutra://kind/id) → an inline
+                // chip that deep-links into the workspace. Rendered before the
+                // http rule so the sutra:// scheme is never treated as a web URL.
+                s = s.replace(/\[([^\]]+)\]\(sutra:\/\/([a-zA-Z]+)\/([^\s)]+)\)/g, function(_, label, kind, id) {
+                    return `<a href="#" class="sutra-cite" role="button" data-cite-kind="${escapeHtml(String(kind).toLowerCase())}" data-cite-id="${escapeHtml(id)}" title="Open in Sutra"><span class="sutra-cite-mark" aria-hidden="true">↗</span>${label}</a>`;
                 });
                 s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
                 s = s.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>');
@@ -63190,6 +64083,137 @@ ${cspMeta}
             sendChat({ presetText: userText, skipUserPush: true });
         }
 
+        // Sutra Assistant voice: browser-native speech-to-text dictation into
+        // the composer and text-to-speech read-aloud of replies. 100% local
+        // (Web Speech API), no network, no CSP changes. Feature-detected — the
+        // buttons hide themselves when the browser lacks support.
+        const SutraVoice = (function () {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+            const synth = window.speechSynthesis || null;
+            let rec = null, recBtn = null, recTarget = null, recBaseline = '', recFinal = '';
+            let speakingBtn = null, speakingReset = null;
+
+            function dictationSupported() { return !!SR; }
+            function speechSupported() { return !!(synth && window.SpeechSynthesisUtterance); }
+
+            function cleanupDictation() {
+                if (recBtn) { recBtn.classList.remove('is-listening'); recBtn.setAttribute('aria-pressed', 'false'); }
+                rec = null; recBtn = null; recTarget = null; recBaseline = ''; recFinal = '';
+            }
+            function stopDictation() { if (rec) { try { rec.stop(); } catch (e) {} } }
+
+            function toggleDictation(targetEl, btn) {
+                if (!SR || !targetEl) return;
+                if (rec) { stopDictation(); return; } // second click stops
+                try { rec = new SR(); } catch (e) { rec = null; }
+                if (!rec) return;
+                recTarget = targetEl; recBtn = btn || null;
+                recBaseline = String(targetEl.value || '');
+                if (recBaseline && !/\s$/.test(recBaseline)) recBaseline += ' ';
+                recFinal = '';
+                rec.lang = navigator.language || 'en-US';
+                rec.interimResults = true;
+                rec.continuous = true;
+                if (recBtn) { recBtn.classList.add('is-listening'); recBtn.setAttribute('aria-pressed', 'true'); }
+                rec.onresult = (ev) => {
+                    let interim = '';
+                    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+                        const res = ev.results[i];
+                        if (res.isFinal) recFinal += res[0].transcript;
+                        else interim += res[0].transcript;
+                    }
+                    if (!recTarget) return;
+                    recTarget.value = recBaseline + recFinal + interim;
+                    try { recTarget.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+                };
+                rec.onerror = (ev) => {
+                    if (ev && ev.error === 'not-allowed' && typeof showToast === 'function') {
+                        showToast('Microphone blocked — allow mic access in your browser to dictate.');
+                    }
+                    cleanupDictation();
+                };
+                rec.onend = () => { cleanupDictation(); };
+                try { rec.start(); } catch (e) { cleanupDictation(); }
+            }
+
+            function stripForSpeech(md) {
+                let s = String(md || '');
+                s = s.replace(/```[\s\S]*?```/g, ' (code block) ');
+                s = s.replace(/`([^`]+)`/g, '$1');
+                s = s.replace(/\$\$([\s\S]*?)\$\$/g, ' ').replace(/\$([^$\n]+)\$/g, ' ');
+                s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+                s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+                s = s.replace(/^[>#\s]+/gm, '');
+                s = s.replace(/[*_~`]/g, '');
+                s = s.replace(/\n{2,}/g, '. ').replace(/\n/g, ' ');
+                return s.replace(/\s+/g, ' ').trim();
+            }
+
+            function stopSpeaking() {
+                if (synth) { try { synth.cancel(); } catch (e) {} }
+                if (speakingBtn) { speakingBtn.classList.remove('is-speaking'); speakingBtn.setAttribute('aria-pressed', 'false'); }
+                const reset = speakingReset;
+                speakingBtn = null; speakingReset = null;
+                if (typeof reset === 'function') { try { reset(); } catch (e) {} }
+            }
+
+            function toggleReadAloud(text, btn, onReset) {
+                if (!speechSupported()) return;
+                const wasThis = speakingBtn === btn;
+                stopSpeaking();
+                if (wasThis) return; // clicking the active one just stops
+                const say = stripForSpeech(text);
+                if (!say) return;
+                let u;
+                try { u = new SpeechSynthesisUtterance(say); } catch (e) { return; }
+                u.lang = navigator.language || 'en-US';
+                u.onend = () => { if (speakingBtn === btn) stopSpeaking(); };
+                u.onerror = u.onend;
+                speakingBtn = btn;
+                speakingReset = (typeof onReset === 'function') ? onReset : null;
+                if (btn) { btn.classList.add('is-speaking'); btn.setAttribute('aria-pressed', 'true'); }
+                try { synth.speak(u); } catch (e) { stopSpeaking(); }
+            }
+
+            try { window.addEventListener('beforeunload', stopSpeaking); } catch (e) {}
+            return { dictationSupported, speechSupported, toggleDictation, stopDictation, toggleReadAloud, stopSpeaking };
+        })();
+
+        // Sutra Assistant citation deep-links. A reply may cite a source as
+        // [label](sutra://kind/id); renderMarkdown turns that into an
+        // <a class="sutra-cite"> chip. One delegated listener routes a click to
+        // the right object/view. Best-effort: jump to the exact object when we
+        // can resolve it, otherwise open the relevant view.
+        function navigateToCitation(kind, id) {
+            kind = String(kind || '').toLowerCase();
+            id = String(id || '');
+            try {
+                if (kind === 'page' || kind === 'note') {
+                    const p = Array.isArray(pages) ? pages.find(pg => String(pg.id) === id) : null;
+                    if (p && typeof loadPage === 'function') { loadPage(p.id); return; }
+                    if (typeof setActiveView === 'function') setActiveView('notes');
+                    return;
+                }
+                const viewByKind = {
+                    task: 'today', tasks: 'today',
+                    homework: 'homework',
+                    exam: 'testing', testing: 'testing',
+                    review: 'review',
+                    course: 'courses', courses: 'courses'
+                };
+                const target = viewByKind[kind] || kind;
+                if (typeof setActiveView === 'function') setActiveView(target);
+            } catch (e) { /* navigation is best-effort */ }
+        }
+        try {
+            document.addEventListener('click', (e) => {
+                const cite = e.target && e.target.closest ? e.target.closest('.sutra-cite') : null;
+                if (!cite) return;
+                e.preventDefault();
+                navigateToCitation(cite.getAttribute('data-cite-kind'), cite.getAttribute('data-cite-id'));
+            });
+        } catch (e) { /* no document */ }
+
         function appendMessage(role, text, preStoredThoughts, index) {
             const wrap = document.createElement('div');
             wrap.className = 'chatbot-msg ' + (role === 'user' ? 'user' : 'assistant');
@@ -63307,6 +64331,21 @@ ${cspMeta}
                 copyBtn.title = 'Copy to clipboard';
                 copyBtn.addEventListener('click', ()=> navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(cleanForActions) : null);
                 actions.appendChild(copyBtn);
+
+                // Read aloud — browser TTS of the reply. Hidden when unsupported.
+                if (SutraVoice.speechSupported()) {
+                    const speakBtn = document.createElement('button');
+                    speakBtn.type = 'button';
+                    speakBtn.className = 'flow-reply-speak';
+                    speakBtn.textContent = 'Read aloud';
+                    speakBtn.title = 'Read this reply aloud';
+                    speakBtn.setAttribute('aria-pressed', 'false');
+                    speakBtn.addEventListener('click', () => {
+                        SutraVoice.toggleReadAloud(cleanForActions, speakBtn, () => { speakBtn.textContent = 'Read aloud'; });
+                        speakBtn.textContent = speakBtn.classList.contains('is-speaking') ? 'Stop' : 'Read aloud';
+                    });
+                    actions.appendChild(speakBtn);
+                }
 
                 // Regenerate / Favorite — parity with the full-screen tab's
                 // asstBuildMessage actions. Only shown once this message has a
@@ -66350,6 +67389,14 @@ ${cspMeta}
 
         if (chatbotBtn) chatbotBtn.addEventListener('click', toggleChat);
         if (chatSendBtn) chatSendBtn.addEventListener('click', sendChat);
+        // Dictation mic (panel). Shown only when the browser supports it.
+        const chatMicBtn = document.getElementById('chatMicBtn');
+        if (chatMicBtn && SutraVoice.dictationSupported()) {
+            chatMicBtn.hidden = false;
+            chatMicBtn.addEventListener('click', () => {
+                SutraVoice.toggleDictation(document.getElementById('chatInput'), chatMicBtn);
+            });
+        }
         if (chatNewBtn) chatNewBtn.addEventListener('click', startNewAssistantChat);
         if (chatHistoryBtn) chatHistoryBtn.addEventListener('click', openAssistantHistoryPanel);
         if (chatGuideBtn) chatGuideBtn.addEventListener('click', openAssistantGuide);
@@ -66668,6 +67715,20 @@ ${cspMeta}
                 if (role === 'assistant') {
                     actions.appendChild(makeAct('fa-copy', 'Copy', 'Copy to clipboard', () => asstCopyText(cleanForActions)));
                     actions.appendChild(makeAct('fa-arrow-up-from-bracket', 'Insert', 'Insert into the current note', () => { try { insertIntoEditor(cleanForActions); } catch (e) { if (typeof showToast === 'function') showToast('Open a note to insert into.'); } }));
+                    // Read aloud — browser TTS, parity with the floating panel.
+                    if (SutraVoice.speechSupported()) {
+                        let speakAct;
+                        const setSpeakLabel = (on) => {
+                            if (!speakAct) return;
+                            const lbl = speakAct.querySelector('.asst-msg-act-label');
+                            if (lbl) lbl.textContent = on ? 'Stop' : 'Read aloud';
+                        };
+                        speakAct = makeAct('fa-volume-high', 'Read aloud', 'Read this reply aloud', () => {
+                            SutraVoice.toggleReadAloud(cleanForActions, speakAct, () => setSpeakLabel(false));
+                            setSpeakLabel(speakAct.classList.contains('is-speaking'));
+                        });
+                        actions.appendChild(speakAct);
+                    }
                     // Fill answers / Save as note / Create task — parity with the
                     // floating panel's reply actions (appendMessage), same
                     // visibility rules and same underlying shared functions
@@ -68135,6 +69196,14 @@ ${cspMeta}
                     const isOpen = !!document.querySelector('.asst-ctx-dropdown');
                     document.querySelector('.asst-ctx-dropdown')?.remove();
                     if (!isOpen) asstShowCtxMenu(asstCache.ctxBtn);
+                });
+            }
+            // Dictation mic (full tab). Shown only when the browser supports it.
+            const asstMicBtn = document.getElementById('asstMicBtn');
+            if (asstMicBtn && SutraVoice.dictationSupported()) {
+                asstMicBtn.hidden = false;
+                asstMicBtn.addEventListener('click', () => {
+                    SutraVoice.toggleDictation(asstCache.input || document.getElementById('asstInput'), asstMicBtn);
                 });
             }
             // Topbar controls

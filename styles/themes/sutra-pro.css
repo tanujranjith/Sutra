@@ -4041,6 +4041,96 @@ body.theme-retro .exam-stat {
     border-color: var(--accent);
 }
 
+/* ===== Exam group ("family") cards + drill-in header ===== */
+.th2-exam-group-card .th2-exam-card-status {
+    color: var(--accent-strong);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 12px;
+    font-weight: 600;
+}
+.th2-exam-group-card .th2-exam-card-icon {
+    /* Slightly stronger tint so a group reads as a container, not a single exam. */
+    background: var(--accent);
+    color: #fff;
+}
+.th2-group-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.th2-group-back {
+    background: transparent;
+    border: 1px solid var(--surface-border);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.th2-group-back:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--surface-bg-hover);
+}
+.th2-group-head-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.th2-group-head-title i { color: var(--accent-strong); }
+.th2-group-head-add { margin-left: auto; }
+
+/* Dashed "add exam" tile at the end of the grid. */
+.th2-add-exam-tile {
+    border-style: dashed;
+    border-color: var(--surface-border);
+    background: transparent;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+    min-height: 160px;
+    color: var(--text-secondary);
+}
+.th2-add-exam-tile:hover,
+.th2-add-exam-tile:focus-visible {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--surface-bg);
+}
+.th2-add-exam-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+.th2-add-exam-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.th2-add-exam-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    max-width: 220px;
+}
+
 /* ===== Exam detail ===== */
 .th2-exam-detail { margin-top: 6px; }
 .th2-detail-toolbar {
@@ -6429,6 +6519,30 @@ button.cw-next-action:hover { background: var(--surface-bg-hover); }
 .flow-action-receipt-undone { opacity: 0.75; }
 .flow-action-receipt-undone .flow-action-receipt-text { color: var(--text-muted); }
 .flow-action-batch-undo { color: var(--accent-strong, var(--accent)); }
+/* Assistant answer citations — inline chip deep-linking to the cited source
+   ([label](sutra://kind/id)). Appears in both the panel and full-tab bubbles. */
+.sutra-cite {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    padding: 0 5px;
+    margin: 0 1px;
+    border-radius: 5px;
+    font-size: 0.92em;
+    line-height: 1.4;
+    color: var(--accent-strong, var(--accent));
+    background: color-mix(in srgb, var(--accent-strong, var(--accent)) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-strong, var(--accent)) 30%, transparent);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+.sutra-cite:hover {
+    background: color-mix(in srgb, var(--accent-strong, var(--accent)) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-strong, var(--accent)) 55%, transparent);
+    text-decoration: none;
+}
+.sutra-cite .sutra-cite-mark { font-size: 0.82em; opacity: 0.8; }
 .flow-act-batch {
     border: 1px solid var(--surface-border);
     border-radius: 12px;

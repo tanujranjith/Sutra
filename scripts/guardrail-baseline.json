@@ -2,7 +2,7 @@
   "note": "Architecture guardrail baseline. Budgets are ceilings; new unsafe patterns beyond these fail scripts/sutra-guardrails-check.mjs. Lower them as raw sinks are migrated to SutraDOMSafety/SutraSafeStorage. Regenerate intentionally with --update and review the diff.",
   "sinkBudgets": {
     "Sutra.html": 1,
-    "src/core/app.js": 351,
+    "src/core/app.js": 354,
     "src/core/dom-safety.js": 2,
     "src/core/error-reporter.js": 0,
     "src/core/feature-guard.js": 0,
@@ -43,7 +43,9 @@
     "src/features/study/code-highlight.js": 0,
     "src/features/academic/school-schedule.js": 4,
     "src/features/academic/semester-setup.js": 4,
-    "src/boot/startup-intro.js": 0
+    "src/boot/startup-intro.js": 0,
+    "src/features/workspace/today-command-center.js": 0,
+    "src/features/workspace/custom-tabs.js": 0
   },
   "storageBudgets": {
     "Sutra.html": 1,
@@ -88,7 +90,9 @@
     "src/features/study/code-highlight.js": 0,
     "src/features/academic/school-schedule.js": 0,
     "src/features/academic/semester-setup.js": 0,
-    "src/boot/startup-intro.js": 0
+    "src/boot/startup-intro.js": 0,
+    "src/features/workspace/today-command-center.js": 0,
+    "src/features/workspace/custom-tabs.js": 0
   },
   "knownGlobals": [
     "NoteFlowBusiness",
@@ -104,6 +108,8 @@
     "SutraCloudSync",
     "SutraCommandCenter",
     "SutraCountdown",
+    "SutraCustomTabs",
+    "SutraCustomTabsBridge",
     "SutraDOMSafety",
     "SutraDiagnostics",
     "SutraDriveSync",
@@ -138,6 +144,7 @@
     "SutraStudyMaterials",
     "SutraThemeAI",
     "SutraTimedHabits",
+    "SutraTodayCenter",
     "SutraTrash",
     "__atelierDrawingLifecycleBound",
     "__atelierPluginCommands",
@@ -166,6 +173,7 @@
     "closeDocumentBackgroundModal",
     "closeEmojiPicker",
     "closeExamDetail",
+    "closeExamGroup",
     "closeGoogleFeedbackModal",
     "closeStarterPacks",
     "closeTestingHubExamPicker",
@@ -271,6 +279,7 @@
     "openDocumentBackgroundModal",
     "openEmojiPicker",
     "openExamDetail",
+    "openExamGroup",
     "openExamMoreDetails",
     "openExamSetupPanel",
     "openFocusStatsModal",

@@ -279,6 +279,7 @@
                 .sort((a, b) => (a.due ? a.due.getTime() : Infinity) - (b.due ? b.due.getTime() : Infinity))
                 .slice(0, scope === 'all' ? 25 : 10)
                 .map(r => ({
+                    id: r.t.id != null ? r.t.id : '',
                     title: r.t.title,
                     dueDate: r.t.dueDate || '',
                     dueTime: r.t.dueTime || '',
@@ -318,6 +319,7 @@
                 .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')))
                 .slice(0, 15)
                 .map(t => ({
+                    id: t.id != null ? t.id : '',
                     title: t.title || t.text || 'Assignment',
                     course: courseName(t.courseId),
                     dueDate: t.dueDate || '',
@@ -513,6 +515,82 @@
         } catch (e) { return null; }
     }
 
+    // Summarize a user-built Custom Tab (widget dashboard) so the assistant can
+    // "see" what the student pinned there — checklist items, sticky/scratchpad
+    // text, counters, goals, countdowns, bookmarked notes, links. Data-driven
+    // widgets (deadlines, habits, grades, etc.) are only noted by type because
+    // their underlying data already travels via the workspace context.
+    function summarizeCustomTab(view) {
+        try {
+            const api = window.SutraCustomTabsBridge;
+            if (!api || typeof api.getTabs !== 'function') return null;
+            const id = String(view || '').slice('custom-'.length);
+            if (!id) return null;
+            const tabs = api.getTabs() || [];
+            const tab = tabs.find(t => t && t.id === id);
+            if (!tab) return null;
+            const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).map(w => {
+                const cfg = (w && w.config) || {};
+                const entry = { type: w.type };
+                switch (w.type) {
+                    case 'checklist':
+                        entry.items = (Array.isArray(cfg.items) ? cfg.items : []).slice(0, 30)
+                            .map(it => ({ text: truncate(it.text, 120), done: it.done === true }));
+                        break;
+                    case 'scratchpad':
+                        if (cfg.text) entry.text = truncate(cfg.text, 800);
+                        break;
+                    case 'sticky':
+                        if (cfg.text) entry.text = truncate(cfg.text, 500);
+                        break;
+                    case 'counter':
+                        if (cfg.label) entry.label = truncate(cfg.label, 60);
+                        entry.value = Number(cfg.value) || 0;
+                        break;
+                    case 'progress':
+                        if (cfg.label) entry.label = truncate(cfg.label, 60);
+                        entry.current = Number(cfg.current) || 0;
+                        entry.target = Number(cfg.target) || 0;
+                        break;
+                    case 'countdown':
+                    case 'dayssince':
+                        if (cfg.title) entry.title = truncate(cfg.title, 80);
+                        if (cfg.date) entry.date = String(cfg.date);
+                        break;
+                    case 'heading':
+                        entry.text = truncate(cfg.text, 80);
+                        break;
+                    case 'quote':
+                        // static rotating quote — no user data worth sending
+                        break;
+                    case 'links':
+                        entry.links = (Array.isArray(cfg.links) ? cfg.links : []).slice(0, 20)
+                            .map(l => ({ label: truncate(l.label, 80), url: truncate(l.url, 200) }));
+                        break;
+                    case 'bookmarks':
+                        entry.notes = (Array.isArray(cfg.noteIds) ? cfg.noteIds : []).slice(0, 30)
+                            .map(nid => {
+                                let title = null;
+                                try { title = typeof api.getNoteTitle === 'function' ? api.getNoteTitle(nid) : null; } catch (e) { /* ignore */ }
+                                return { id: String(nid), title: truncate(title || 'Untitled', 80) };
+                            });
+                        break;
+                    default:
+                        // Data-driven widget (nextup/deadlines/habits/focus/courses/
+                        // review/study/tasks/thisweek/overdue/streak/focusstats/clock/
+                        // stopwatch/calculator) — presence only; data is elsewhere.
+                        break;
+                }
+                return entry;
+            });
+            return {
+                name: truncate(tab.name, 60),
+                widgetCount: widgets.length,
+                widgets
+            };
+        } catch (e) { return null; }
+    }
+
     function getFlowAssistantContext(opts) {
         const options = opts || {};
         const depth = normalizeDepth(options.depth);
@@ -532,7 +610,14 @@
         };
 
         if (depth === 'minimal') {
-            ctx.summary = `User is on the ${view} view in Sutra.`;
+            if (view.indexOf('custom-') === 0) {
+                const ct = summarizeCustomTab(view);
+                ctx.summary = ct
+                    ? `User is on their custom tab "${ct.name}" (${ct.widgetCount} widgets) in Sutra.`
+                    : 'User is on a custom tab in Sutra.';
+            } else {
+                ctx.summary = `User is on the ${view} view in Sutra.`;
+            }
             if (selection) ctx.selection = truncate(selection, 1200);
             return ctx;
         }
@@ -559,6 +644,15 @@
                 };
             }
         } catch (e) { /* intelligence is optional */ }
+
+        // Custom Tab awareness: when the user is on one of their own widget
+        // dashboards, tell the model what's on it. Attached for both
+        // currentView and workspace depths (the else-branch of the currentView
+        // switch already adds the full workspace data the widgets reference).
+        if (view.indexOf('custom-') === 0) {
+            const customTab = summarizeCustomTab(view);
+            if (customTab) ctx.customTab = customTab;
+        }
 
         // currentView and workspace both include the current note when in Notes.
         if (view === 'notes') {
@@ -919,6 +1013,7 @@
             'Formatting Sutra understands: standard Markdown — **bold**, *italics*, `inline code`, fenced ``` code blocks, bullet and numbered lists, # headings, > blockquotes, [links](url), and tables.',
             'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
             'When the user asks about "this note" or "this view", use the context block below.',
+            'Citing your sources: when an answer draws on a specific item that is present in the context — a note/page, a task, a homework assignment, or a Testing Hub exam — cite it inline as a Markdown link using the sutra:// scheme so the user can jump straight to it: [short label](sutra://KIND/ID). KIND is one of page, task, homework, exam. Use the EXACT "id" from the context item (pages: activeNote.id or derived.staleNotes[].id; tasks: tasks[].id or derived.overdue/dueSoon[].id; homework: homework[].id; exams: testingHub.exams[].id). Only cite items that actually appear in the context with a non-empty id — NEVER invent an id or a link, and never cite something not in the context. Cite sparingly: just the 1–3 items the answer most depends on, placed right after the relevant sentence. Do not put citations inside the flow-actions block, and do not cite when you are proposing to create a brand-new item (it has no id yet).',
             ...buildPersonalizationLines()
         ].join('\n');
 
@@ -3163,6 +3258,44 @@
             }
         };
 
+        // Whole-plan approval: apply a set of cards with ONE consolidated
+        // confirmation for any high-risk steps (never one dialog per card).
+        // Shared by "Apply selected", "Apply all", and the first-card
+        // "Apply all" button so every batch path asks exactly once.
+        // Resolves true when the cards were applied, false when there was
+        // nothing to do or the user cancelled — callers use that to restore
+        // their trigger button.
+        const confirmAndApplyCards = async (cards) => {
+            const pending = (cards || []).filter(card => {
+                const btn = card && card.querySelector('.flow-action-apply');
+                return btn && !btn.disabled;
+            });
+            if (!pending.length) return false;
+            const highRisk = pending.filter(card => card.dataset.risk === 'high' && card.dataset.confirmed !== 'true');
+            if (highRisk.length) {
+                const labelList = highRisk.map(card => {
+                    const l = card.querySelector('.flow-action-label');
+                    return l ? l.textContent.trim() : 'a change';
+                }).slice(0, 6).join('; ');
+                const ok = await (typeof window.showCustomConfirmDialog === 'function'
+                    ? window.showCustomConfirmDialog({
+                        title: `Apply ${pending.length} step${pending.length === 1 ? '' : 's'}?`,
+                        message: `This plan includes ${highRisk.length} high-risk step${highRisk.length === 1 ? '' : 's'} that can delete, overwrite, or move existing work (${labelList}). Approve the whole plan?`,
+                        confirmText: `Apply all (${pending.length})`,
+                        cancelText: 'Keep reviewing',
+                        confirmVariant: 'danger'
+                    })
+                    : Promise.resolve(false));
+                if (!ok) return false;
+                highRisk.forEach(card => { card.dataset.confirmed = 'true'; });
+            }
+            pending.forEach(card => {
+                const btn = card.querySelector('.flow-action-apply');
+                if (btn && !btn.disabled) btn.click();
+            });
+            return true;
+        };
+
         if (isBatch) {
             const riskCounts = actions.reduce((acc, raw) => {
                 const risk = classifyRisk(normalizeActionFields(raw));
@@ -3202,28 +3335,11 @@
                     if (progress) progress.textContent = ` · undone`;
                 }
             });
-            reviewHead.querySelector('[data-flow-batch="selected"]').addEventListener('click', async () => {
+            reviewHead.querySelector('[data-flow-batch="selected"]').addEventListener('click', () => {
                 const selected = Array.from(wrap.querySelectorAll('.flow-action-select input:checked'))
                     .map(input => input.closest('.flow-action-card'))
                     .filter(Boolean);
-                const highRisk = selected.filter(card => card.dataset.risk === 'high' && card.dataset.confirmed !== 'true');
-                if (highRisk.length) {
-                    const ok = await (typeof window.showCustomConfirmDialog === 'function'
-                        ? window.showCustomConfirmDialog({
-                            title: 'Apply selected high-risk actions?',
-                            message: `${highRisk.length} selected action${highRisk.length === 1 ? '' : 's'} can delete, overwrite, or move existing work. Review each preview before applying.`,
-                            confirmText: 'Apply selected',
-                            cancelText: 'Keep reviewing',
-                            confirmVariant: 'danger'
-                        })
-                        : Promise.resolve(false));
-                    if (!ok) return;
-                    highRisk.forEach(card => { card.dataset.confirmed = 'true'; });
-                }
-                selected.forEach(card => {
-                    const btn = card.querySelector('.flow-action-apply');
-                    if (btn && !btn.disabled) btn.click();
-                });
+                confirmAndApplyCards(selected);
             });
             reviewHead.querySelector('[data-flow-batch="decline"]').addEventListener('click', () => {
                 wrap.querySelectorAll('.flow-action-select input:checked').forEach(input => {
@@ -3234,8 +3350,7 @@
             });
             reviewHead.querySelector('[data-flow-batch="all"]').addEventListener('click', () => {
                 wrap.querySelectorAll('.flow-action-select input').forEach(input => { input.checked = true; });
-                const selectedBtn = reviewHead.querySelector('[data-flow-batch="selected"]');
-                if (selectedBtn) selectedBtn.click();
+                confirmAndApplyCards(Array.from(wrap.querySelectorAll('.flow-action-card')));
             });
             reviewHead.querySelector('[data-flow-batch="history"]').addEventListener('click', () => { try { openActivityLog(); } catch (e) {} });
         }
@@ -3369,9 +3484,12 @@
                 applyAllBtn.type = 'button';
                 applyAllBtn.className = 'flow-action-apply-all';
                 applyAllBtn.textContent = `Apply all (${actions.length})`;
-                applyAllBtn.addEventListener('click', () => {
-                    wrap.querySelectorAll('.flow-action-apply').forEach(btn => { if (!btn.disabled) btn.click(); });
+                applyAllBtn.addEventListener('click', async () => {
+                    // Guard against double-clicks while the confirm dialog is
+                    // up, but restore the button if the user keeps reviewing.
                     applyAllBtn.disabled = true;
+                    const applied = await confirmAndApplyCards(Array.from(wrap.querySelectorAll('.flow-action-card')));
+                    if (!applied) applyAllBtn.disabled = false;
                 });
                 actionsRow.appendChild(applyAllBtn);
             }

@@ -21,7 +21,7 @@
 .acc-header h2 { margin: 3px 0 4px; font-size: clamp(1.2rem, 2vw, 1.55rem); }
 .acc-header p { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
 .acc-eyebrow { color: var(--accent-strong, #6f8cff); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-.acc-refresh { width: 40px; height: 40px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-raised, rgba(255,255,255,.08)); color: inherit; cursor: pointer; }
+.acc-refresh { width: 40px; height: 40px; flex: 0 0 auto; border: 1px solid var(--border-color); border-radius: 12px; background: var(--surface-raised, rgba(255,255,255,.08)); color: inherit; cursor: pointer; }
 .acc-refresh:hover { transform: translateY(-1px); }
 
 .acc-summary { gap: 8px; flex-wrap: wrap; margin: 14px 0; }

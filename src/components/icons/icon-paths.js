@@ -239,6 +239,11 @@
         'plus-icon': '<path d="M12 5v14"/><path d="M5 12h14"/>',
         'lightning-bolt': '<path d="M13 3 5 13.5h5L11 21l8-10.5h-5z"/>',
         'graduation-cap-icon': '<path d="M3 8.5 12 4l9 4.5L12 13z"/><path d="M7 11v3.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V11"/><path d="M20 9v6"/>',
+
+        // ── Voice / audio (Sutra Assistant dictation + read-aloud) ────────────
+        'microphone': '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0"/><path d="M12 17v3"/><path d="M9 20.5h6"/>',
+        'microphone-slash': '<rect x="9" y="3" width="6" height="8.5" rx="3"/><path d="M6 11a6 6 0 0 0 9.5 4.85"/><path d="M12 17v3"/><path d="M9 20.5h6"/><path d="M4 4l16 16"/>',
+        'volume-high': '<path d="M4 9.5v5h3l4.5 3.5V6L7 9.5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/>',
     };
 
     // Maps any FA name (and a few legacy aliases) to a canonical Atelier icon.
@@ -389,6 +394,13 @@
         'fa-exclamation-circle': 'exclamation-circle',
         'fa-triangle-exclamation': 'triangle-warn',
         'fa-universal-access': 'universal-access',
+
+        'fa-microphone': 'microphone',
+        'fa-microphone-lines': 'microphone',
+        'fa-microphone-slash': 'microphone-slash',
+        'fa-microphone-lines-slash': 'microphone-slash',
+        'fa-volume-high': 'volume-high',
+        'fa-volume-up': 'volume-high',
 
         'fa-image': 'image',
         'fa-video': 'video',

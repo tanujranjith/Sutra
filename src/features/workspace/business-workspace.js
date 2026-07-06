@@ -1103,10 +1103,28 @@
         });
     }
 
+    // Prominent, actionable nudge when invoices are past due. The count + total
+    // are already computed in buildModel().metrics; this elevates them from a
+    // quiet stat into a call to action at the top of the workspace.
+    function renderOverdueInvoiceBanner(model) {
+        const count = model.metrics.overdueInvoices || 0;
+        if (count <= 0) return '';
+        const amount = (model.contexts && model.contexts.overdueInvoiceAmount) || 0;
+        return `
+            <article class="glass-card business-card business-overdue-banner" role="alert">
+                <div class="business-overdue-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></div>
+                <div class="business-overdue-copy">
+                    <strong>${count} invoice${count > 1 ? 's' : ''} overdue</strong>
+                    <span>${currency(amount)} outstanding — follow up to get paid.</span>
+                </div>
+                <button class="neumo-btn business-overdue-btn" type="button" data-biz-action="review-overdue-invoices">Review overdue</button>
+            </article>`;
+    }
+
     function renderInvoices(model) {
         const items = invoiceList(model);
         return `
-            <article class="glass-card business-card business-section-card">
+            <article id="business-invoices-section" class="glass-card business-card business-section-card">
                 ${renderSectionHead('Invoices / Payments', 'Track invoice lifecycles, due soon logic, overdue balances, and payment state.', 'invoices', 'Invoice', 'invoice')}
                 <div class="business-inline-summary">
                     <span>${currency(sum(model.workspace.invoices.filter(item => invoiceStatus(item) === 'paid'), invoiceTotal))} paid</span>
@@ -2065,6 +2083,7 @@
             <div class="business-dashboard-grid">
                 <div class="business-main-column">
                     ${renderOverview(model)}
+                    ${renderOverdueInvoiceBanner(model)}
                     ${model.preferences.showAnalytics ? renderAnalytics(model) : ''}
                     ${renderProjects(model)}
                     ${renderOpportunities(model)}
@@ -2116,6 +2135,12 @@
         if (action === 'set-status') return setStatus(entityType, entityId, control.dataset.value || '');
         if (action === 'select-detail') return (() => { setDetail(entityType, entityId, 'summary'); render(); if (typeof isCompactViewport === 'function' && isCompactViewport()) document.querySelector('.business-detail-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); })();
         if (action === 'clear-detail') return (() => { clearDetail(); render(); })();
+        if (action === 'review-overdue-invoices') return (() => {
+            getSectionState('invoices').filter = 'overdue';
+            render();
+            const section = document.getElementById('business-invoices-section');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        })();
         if (action === 'detail-tab') return (() => { getUiState().detail.tab = control.dataset.value || 'summary'; render(); })();
         if (action === 'toggle-compact') return (() => { getUiState().compact = !getUiState().compact; render(); })();
         if (action === 'focus-note') return (() => { getUiState().focusQuickNote = true; render(); })();

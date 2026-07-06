@@ -1,0 +1,1665 @@
+// Sutra Custom Tabs — user-composed tabs built from a palette of widgets.
+// The core (app.js) owns persistence via window.SutraCustomTabsBridge
+// (get/set travel through persistAppData → autosave, .sutra export, Drive
+// sync). This module owns all UI: nav buttons, view sections, the widget
+// grid, edit mode, and the add-widget picker.
+//
+// Hard rules honored here:
+// - DOM is built exclusively with createElement/textContent (guardrail: zero
+//   unsafe innerHTML sinks in this file).
+// - No direct localStorage/sessionStorage access; all state rides the bridge.
+// - Nav buttons are real `.view-tab[data-view="custom-<id>"]` elements so the
+//   existing setActiveView(), overflow menu, and mobile bottom nav pick them
+//   up without special cases. Clicks are handled via document-level
+//   delegation so overflow-menu clones keep working.
+(function () {
+    'use strict';
+
+    var MAX_TABS = 12;
+    var MAX_WIDGETS_PER_TAB = 16;
+    var TAB_ICON_CYCLE = ['fa-star', 'fa-compass', 'fa-layer-group', 'fa-seedling', 'fa-rocket', 'fa-heart', 'fa-fire', 'fa-cube'];
+
+    var bridge = null;
+    var initialized = false;
+    var editingTabs = {}; // tabId -> bool (session-only edit mode)
+    var scratchpadTimers = {};
+    // Live tick intervals for clock / stopwatch widgets, keyed "tabId:widgetId".
+    // Cleared per-widget on re-render and wholesale on view change so hidden or
+    // torn-down widgets never leak intervals.
+    var liveTimers = {};
+
+    var STICKY_COLORS = ['#ffd97d', '#a0e7a0', '#9ad0f0', '#f5a3c7', '#c9b6f5', '#ffb38a'];
+
+    var BUILTIN_QUOTES = [
+        { text: 'The secret of getting ahead is getting started.', by: 'Mark Twain' },
+        { text: 'Discipline is choosing between what you want now and what you want most.', by: 'Abraham Lincoln' },
+        { text: 'It always seems impossible until it’s done.', by: 'Nelson Mandela' },
+        { text: 'Success is the sum of small efforts repeated day in and day out.', by: 'Robert Collier' },
+        { text: 'Don’t watch the clock; do what it does. Keep going.', by: 'Sam Levenson' },
+        { text: 'You don’t have to be great to start, but you have to start to be great.', by: 'Zig Ziglar' },
+        { text: 'Little by little, one travels far.', by: 'J.R.R. Tolkien' },
+        { text: 'The expert in anything was once a beginner.', by: 'Helen Hayes' },
+        { text: 'Focus on being productive instead of busy.', by: 'Tim Ferriss' },
+        { text: 'Study while others are sleeping; work while others are loafing.', by: 'William A. Ward' }
+    ];
+
+    // ---------- tiny DOM helpers (createElement/textContent only) ----------
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+    }
+
+    function btn(className, label, onClick, opts) {
+        opts = opts || {};
+        var b = el('button', className);
+        b.type = 'button';
+        if (opts.icon) b.appendChild(faIcon(opts.icon));
+        if (label) b.appendChild(document.createTextNode((opts.icon ? ' ' : '') + label));
+        if (opts.title) { b.title = opts.title; b.setAttribute('aria-label', opts.title); }
+        if (onClick) b.addEventListener('click', onClick);
+        return b;
+    }
+
+    function faIcon(name) {
+        var i = el('i', 'fas ' + name);
+        i.setAttribute('aria-hidden', 'true');
+        return i;
+    }
+
+    function clone(value) {
+        try { return JSON.parse(JSON.stringify(value)); } catch (e) { return null; }
+    }
+
+    function makeId(prefix) {
+        if (typeof window.generateId === 'function') {
+            try { return prefix + '-' + window.generateId(); } catch (e) { /* fall through */ }
+        }
+        return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    }
+
+    // ---------- live tick timers (clock / stopwatch) ----------
+
+    function timerKey(tabId, widgetId) { return tabId + ':' + widgetId; }
+
+    function clearTimer(key) {
+        if (liveTimers[key]) { clearInterval(liveTimers[key]); delete liveTimers[key]; }
+    }
+
+    function clearTimersForTab(tabId) {
+        var prefix = tabId + ':';
+        Object.keys(liveTimers).forEach(function (key) {
+            if (key.indexOf(prefix) === 0) clearTimer(key);
+        });
+    }
+
+    function clearAllTimers() {
+        Object.keys(liveTimers).forEach(clearTimer);
+    }
+
+    function startTimer(tabId, widgetId, fn, ms) {
+        var key = timerKey(tabId, widgetId);
+        clearTimer(key);
+        try { fn(); } catch (e) { /* non-critical */ }
+        liveTimers[key] = setInterval(function () {
+            try { fn(); } catch (e) { clearTimer(key); }
+        }, ms);
+    }
+
+    // ---------- safe calculator evaluator (no eval / Function) ----------
+    // Tokenizes digits, . and + - * / ( ) and evaluates with a shunting-yard
+    // pass. Returns a number or null; never executes arbitrary code.
+
+    function evalExpression(expr) {
+        var tokens = String(expr).match(/(\d+\.?\d*|\.\d+|[+\-*/()])/g);
+        if (!tokens) return null;
+        var prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+        var output = [];
+        var ops = [];
+        var prevType = 'start';
+        for (var i = 0; i < tokens.length; i += 1) {
+            var t = tokens[i];
+            if (/^(\d|\.)/.test(t)) {
+                var n = Number(t);
+                if (!isFinite(n)) return null;
+                output.push(n);
+                prevType = 'num';
+            } else if (t === '(') {
+                ops.push(t);
+                prevType = 'op';
+            } else if (t === ')') {
+                while (ops.length && ops[ops.length - 1] !== '(') output.push(ops.pop());
+                if (!ops.length) return null;
+                ops.pop();
+                prevType = 'num';
+            } else {
+                // Unary minus: treat leading/after-operator '-' as 0 - x
+                if (t === '-' && (prevType === 'start' || prevType === 'op')) output.push(0);
+                while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[t]) {
+                    output.push(ops.pop());
+                }
+                ops.push(t);
+                prevType = 'op';
+            }
+        }
+        while (ops.length) {
+            var op = ops.pop();
+            if (op === '(') return null;
+            output.push(op);
+        }
+        var stack = [];
+        for (var j = 0; j < output.length; j += 1) {
+            var tok = output[j];
+            if (typeof tok === 'number') { stack.push(tok); continue; }
+            var b = stack.pop();
+            var a = stack.pop();
+            if (a === undefined || b === undefined) return null;
+            if (tok === '+') stack.push(a + b);
+            else if (tok === '-') stack.push(a - b);
+            else if (tok === '*') stack.push(a * b);
+            else if (tok === '/') stack.push(b === 0 ? NaN : a / b);
+        }
+        if (stack.length !== 1) return null;
+        var result = stack[0];
+        return isFinite(result) ? result : null;
+    }
+
+    // ---------- dialogs (reuse the app's promise-based dialogs, degrade to native) ----------
+
+    function promptText(options) {
+        if (typeof window.showCustomPromptDialog === 'function') {
+            try {
+                var r = window.showCustomPromptDialog(options || {});
+                if (r && typeof r.then === 'function') return r;
+            } catch (e) { /* fall through */ }
+        }
+        var v = window.prompt((options && options.title) || 'Enter value', (options && options.defaultValue) || '');
+        return Promise.resolve(v);
+    }
+
+    function confirmDialog(options) {
+        if (typeof window.showCustomConfirmDialog === 'function') {
+            try {
+                var r = window.showCustomConfirmDialog(options || {});
+                if (r && typeof r.then === 'function') return r;
+            } catch (e) { /* fall through */ }
+        }
+        return Promise.resolve(window.confirm((options && options.message) || 'Are you sure?'));
+    }
+
+    // ---------- state via the core bridge ----------
+
+    function getTabs() {
+        try {
+            var tabs = bridge && typeof bridge.getTabs === 'function' ? bridge.getTabs() : [];
+            return Array.isArray(tabs) ? tabs : [];
+        } catch (e) { return []; }
+    }
+
+    function saveTabs(nextTabs, opts) {
+        opts = opts || {};
+        try { bridge.setTabs(nextTabs); } catch (e) {
+            console.warn('SutraCustomTabs: save failed', e);
+            return;
+        }
+        if (opts.rerender !== false) rebuild();
+    }
+
+    function mutateTab(tabId, mutate, opts) {
+        var tabs = clone(getTabs()) || [];
+        var tab = null;
+        for (var i = 0; i < tabs.length; i += 1) {
+            if (tabs[i] && tabs[i].id === tabId) { tab = tabs[i]; break; }
+        }
+        if (!tab) return;
+        mutate(tab, tabs);
+        saveTabs(tabs, opts);
+    }
+
+    function findWidget(tab, widgetId) {
+        var list = Array.isArray(tab.widgets) ? tab.widgets : [];
+        for (var i = 0; i < list.length; i += 1) {
+            if (list[i] && list[i].id === widgetId) return list[i];
+        }
+        return null;
+    }
+
+    // ---------- date helpers ----------
+
+    function startOfDay(d) {
+        var c = new Date(d.getTime());
+        c.setHours(0, 0, 0, 0);
+        return c;
+    }
+
+    function dayDiff(due, now) {
+        return Math.round((startOfDay(due) - startOfDay(now)) / 86400000);
+    }
+
+    function dueLabel(due, now) {
+        if (!due) return 'No date';
+        var diff = dayDiff(due, now);
+        if (diff < 0) return Math.abs(diff) === 1 ? 'Overdue by 1 day' : 'Overdue by ' + Math.abs(diff) + ' days';
+        if (diff === 0) return 'Today';
+        if (diff === 1) return 'Tomorrow';
+        if (diff <= 13) return 'In ' + diff + ' days';
+        return due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function dueStatusKey(due, now) {
+        if (!due) return 'undated';
+        var diff = dayDiff(due, now);
+        if (diff < 0) return 'overdue';
+        if (diff === 0) return 'today';
+        if (diff === 1) return 'tomorrow';
+        return 'later';
+    }
+
+    // ---------- deadline data (shared universe via the core collector) ----------
+
+    function getDeadlines() {
+        try {
+            var items = bridge && typeof bridge.getDeadlines === 'function' ? bridge.getDeadlines() : [];
+            return Array.isArray(items) ? items : [];
+        } catch (e) { return []; }
+    }
+
+    function sortByDue(items) {
+        return items.slice().sort(function (a, b) {
+            var ad = a && a.due instanceof Date ? a.due.getTime() : Infinity;
+            var bd = b && b.due instanceof Date ? b.due.getTime() : Infinity;
+            return ad - bd;
+        });
+    }
+
+    // ---------- widget registry ----------
+
+    var CATEGORIES = [
+        { key: 'planning', label: 'Planning' },
+        { key: 'academics', label: 'Academics' },
+        { key: 'focus', label: 'Focus & Habits' },
+        { key: 'notes', label: 'Notes' },
+        { key: 'time', label: 'Time' },
+        { key: 'tools', label: 'Tools' }
+    ];
+
+    var WIDGET_TYPES = {
+        // --- Planning ---
+        nextup: {
+            label: 'Next Up', icon: 'fa-bolt', cat: 'planning',
+            desc: 'Your single most urgent item across everything.',
+            render: renderNextUpWidget
+        },
+        deadlines: {
+            label: 'Upcoming Deadlines', icon: 'fa-bell', cat: 'planning',
+            desc: 'The next few things due, in order.',
+            render: renderDeadlinesWidget
+        },
+        thisweek: {
+            label: 'This Week', icon: 'fa-calendar-week', cat: 'planning',
+            desc: 'Everything due in the next 7 days, by day.',
+            render: renderThisWeekWidget
+        },
+        overdue: {
+            label: 'Overdue', icon: 'fa-triangle-exclamation', cat: 'planning',
+            desc: 'Only the things that are already late.',
+            render: renderOverdueWidget
+        },
+        tasks: {
+            label: 'Task Summary', icon: 'fa-list-ul', cat: 'planning',
+            desc: 'Open tasks and how many you finished today.',
+            render: renderTasksWidget
+        },
+        checklist: {
+            label: 'Checklist', icon: 'fa-list-check', cat: 'planning',
+            desc: 'A quick list that lives in this tab.',
+            render: renderChecklistWidget
+        },
+        // --- Academics ---
+        courses: {
+            label: 'Course Grades', icon: 'fa-graduation-cap', cat: 'academics',
+            desc: 'Your classes with current grades.',
+            render: renderCoursesWidget
+        },
+        review: {
+            label: 'Review Due', icon: 'fa-layer-group', cat: 'academics',
+            desc: 'Flashcards due and reviewed this week.',
+            render: renderReviewWidget
+        },
+        study: {
+            label: 'Study Snapshot', icon: 'fa-book-open', cat: 'academics',
+            desc: 'Subjects, next exam, and weak areas.',
+            render: renderStudyWidget
+        },
+        // --- Focus & Habits ---
+        focus: {
+            label: 'Focus Timer', icon: 'fa-stopwatch', cat: 'focus',
+            desc: 'Start a focus session in one click.',
+            render: renderFocusWidget
+        },
+        focusstats: {
+            label: 'Focus Stats', icon: 'fa-chart-column', cat: 'focus',
+            desc: 'Minutes focused over the last 7 days.',
+            render: renderFocusStatsWidget
+        },
+        habits: {
+            label: 'Habits', icon: 'fa-circle-check', cat: 'focus',
+            desc: "Today's habits with one-tap check-off.",
+            render: renderHabitsWidget
+        },
+        streak: {
+            label: 'Streak', icon: 'fa-fire', cat: 'focus',
+            desc: 'Your current and best day streak.',
+            render: renderStreakWidget
+        },
+        counter: {
+            label: 'Tally Counter', icon: 'fa-plus-minus', cat: 'focus',
+            desc: 'Count anything — water, pages, reps.',
+            render: renderCounterWidget,
+            setup: setupCounterWidget
+        },
+        progress: {
+            label: 'Progress Goal', icon: 'fa-bullseye', cat: 'focus',
+            desc: 'A progress bar toward a target you set.',
+            render: renderProgressWidget,
+            setup: setupProgressWidget
+        },
+        // --- Notes ---
+        notes: {
+            label: 'Recent Notes', icon: 'fa-file-lines', cat: 'notes',
+            desc: 'Jump back into your latest notes.',
+            render: renderNotesWidget
+        },
+        bookmarks: {
+            label: 'Bookmarked Notes', icon: 'fa-bookmark', cat: 'notes',
+            desc: 'Pin specific notes to this tab.',
+            render: renderBookmarksWidget
+        },
+        scratchpad: {
+            label: 'Scratchpad', icon: 'fa-pen-nib', cat: 'notes',
+            desc: 'Free-form text; saves as you type.',
+            render: renderScratchpadWidget
+        },
+        sticky: {
+            label: 'Sticky Note', icon: 'fa-note-sticky', cat: 'notes',
+            desc: 'A colored sticky note you can recolor.',
+            render: renderStickyWidget
+        },
+        // --- Time ---
+        clock: {
+            label: 'Clock', icon: 'fa-clock', cat: 'time',
+            desc: 'Live time and today’s date.',
+            render: renderClockWidget
+        },
+        countdown: {
+            label: 'Countdown', icon: 'fa-hourglass-half', cat: 'time',
+            desc: 'Days until a date you choose.',
+            render: renderCountdownWidget,
+            setup: setupCountdownWidget
+        },
+        dayssince: {
+            label: 'Days Since', icon: 'fa-calendar-day', cat: 'time',
+            desc: 'Count up from a date that matters.',
+            render: renderDaysSinceWidget,
+            setup: setupDaysSinceWidget
+        },
+        stopwatch: {
+            label: 'Stopwatch', icon: 'fa-stopwatch-20', cat: 'time',
+            desc: 'A simple start/stop/reset stopwatch.',
+            render: renderStopwatchWidget
+        },
+        // --- Tools ---
+        calculator: {
+            label: 'Calculator', icon: 'fa-calculator', cat: 'tools',
+            desc: 'A basic calculator, right on your tab.',
+            render: renderCalculatorWidget
+        },
+        links: {
+            label: 'Quick Links', icon: 'fa-link', cat: 'tools',
+            desc: 'Shortcuts to sites you use a lot.',
+            render: renderLinksWidget
+        },
+        quote: {
+            label: 'Motivation', icon: 'fa-quote-left', cat: 'tools',
+            desc: 'A rotating motivational quote.',
+            render: renderQuoteWidget
+        },
+        heading: {
+            label: 'Section Heading', icon: 'fa-heading', cat: 'tools',
+            desc: 'A label to organize your widgets.',
+            render: renderHeadingWidget,
+            setup: setupHeadingWidget,
+            fullWidth: true
+        }
+    };
+
+    function emptyMsg(text) {
+        return el('p', 'ctab-empty-msg', text);
+    }
+
+    function renderNextUpWidget(body) {
+        var items = getDeadlines();
+        var now = new Date();
+        var pick = null;
+        try {
+            if (window.SutraTodayCenter && typeof window.SutraTodayCenter.getNextPriorityItem === 'function') {
+                pick = window.SutraTodayCenter.getNextPriorityItem(items, { now: now });
+            }
+        } catch (e) { pick = null; }
+        var item = pick && pick.item ? pick.item : (sortByDue(items)[0] || null);
+        if (!item) {
+            body.appendChild(emptyMsg('Nothing urgent — you’re clear.'));
+            return;
+        }
+        var status = dueStatusKey(item.due instanceof Date ? item.due : null, now);
+        var chip = el('span', 'ctab-due-chip is-' + status, dueLabel(item.due instanceof Date ? item.due : null, now));
+        body.appendChild(chip);
+        body.appendChild(el('h4', 'ctab-nextup-title', String(item.title || 'Untitled')));
+        var meta = pick && pick.reason ? String(pick.reason) : (item.subtitle ? String(item.subtitle) : '');
+        if (meta) body.appendChild(el('p', 'ctab-nextup-reason', meta));
+    }
+
+    function renderDeadlinesWidget(body, tab, widget) {
+        var count = widget.config && widget.config.count ? Math.min(Math.max(parseInt(widget.config.count, 10) || 6, 3), 12) : 6;
+        var now = new Date();
+        var items = sortByDue(getDeadlines().filter(function (it) { return it && it.status !== 'done'; })).slice(0, count);
+        if (!items.length) {
+            body.appendChild(emptyMsg('No upcoming deadlines.'));
+            return;
+        }
+        var list = el('ul', 'ctab-list');
+        items.forEach(function (it) {
+            var due = it.due instanceof Date ? it.due : null;
+            var li = el('li', 'ctab-list-row');
+            li.appendChild(el('span', 'ctab-dot is-' + dueStatusKey(due, now)));
+            li.appendChild(el('span', 'ctab-list-title', String(it.title || 'Untitled')));
+            li.appendChild(el('span', 'ctab-due-chip is-' + dueStatusKey(due, now), dueLabel(due, now)));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+    }
+
+    function renderHabitsWidget(body, tab, widget) {
+        var habits = [];
+        try { habits = bridge.getHabitsToday() || []; } catch (e) { habits = []; }
+        if (!habits.length) {
+            body.appendChild(emptyMsg('No habits yet — add some on the Today tab.'));
+            return;
+        }
+        var list = el('ul', 'ctab-list');
+        habits.forEach(function (h) {
+            var li = el('li', 'ctab-list-row ctab-habit-row' + (h.done ? ' is-done' : ''));
+            var toggle = btn('ctab-habit-toggle' + (h.done ? ' is-done' : ''), '', function () {
+                try { bridge.toggleHabit(h.id); } catch (e) { /* non-critical */ }
+                rerenderWidgetBody(tab.id, widget.id);
+            }, { title: h.done ? 'Mark "' + h.name + '" not done' : 'Mark "' + h.name + '" done', icon: 'fa-check' });
+            li.appendChild(toggle);
+            li.appendChild(el('span', 'ctab-list-title', h.name));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+    }
+
+    function renderFocusWidget(body) {
+        body.appendChild(el('p', 'ctab-focus-hint', 'Start a focus session:'));
+        var row = el('div', 'ctab-focus-row');
+        [15, 25, 50].forEach(function (mins) {
+            row.appendChild(btn('ctab-focus-btn', mins + ' min', function () {
+                try { bridge.startFocus(mins * 60); } catch (e) { console.warn('focus start failed', e); }
+            }, { icon: 'fa-play' }));
+        });
+        body.appendChild(row);
+    }
+
+    function renderNotesWidget(body, tab, widget) {
+        var count = widget.config && widget.config.count ? Math.min(Math.max(parseInt(widget.config.count, 10) || 5, 3), 10) : 5;
+        var notes = [];
+        try { notes = bridge.getRecentNotes(count) || []; } catch (e) { notes = []; }
+        if (!notes.length) {
+            body.appendChild(emptyMsg('No notes yet.'));
+            return;
+        }
+        var list = el('ul', 'ctab-list');
+        notes.forEach(function (n) {
+            var li = el('li', 'ctab-list-row');
+            var open = btn('ctab-note-link', String(n.title || 'Untitled'), function () {
+                try { bridge.openNote(n.id); } catch (e) { /* non-critical */ }
+            }, { icon: 'fa-file-lines' });
+            li.appendChild(open);
+            if (n.updatedAt) {
+                var d = new Date(n.updatedAt);
+                if (!isNaN(d)) li.appendChild(el('span', 'ctab-list-meta', d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })));
+            }
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+    }
+
+    function renderCoursesWidget(body) {
+        var courses = [];
+        try { courses = bridge.getCourses() || []; } catch (e) { courses = []; }
+        if (!courses.length) {
+            body.appendChild(emptyMsg('No courses yet — set them up in Homework or Courses.'));
+            return;
+        }
+        var list = el('ul', 'ctab-list');
+        courses.forEach(function (c) {
+            var li = el('li', 'ctab-list-row');
+            li.appendChild(el('span', 'ctab-list-title', c.name));
+            if (c.grade) li.appendChild(el('span', 'ctab-grade-chip', c.grade + (c.target ? ' → ' + c.target : '')));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+    }
+
+    function setupCountdownWidget() {
+        var config = { title: '', date: '' };
+        return promptText({ title: 'Countdown title', label: 'What are you counting down to?', placeholder: 'e.g. AP Chem exam' })
+            .then(function (title) {
+                if (title == null) return null;
+                config.title = String(title).trim().slice(0, 60) || 'Countdown';
+                return promptText({ title: 'Countdown date', label: 'Date (YYYY-MM-DD)', placeholder: '2026-08-15', inputType: 'date' })
+                    .then(function (date) {
+                        if (date == null) return null;
+                        var str = String(date).trim();
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
+                        config.date = str;
+                        return config;
+                    });
+            });
+    }
+
+    function renderCountdownWidget(body, tab, widget) {
+        var config = widget.config || {};
+        if (!config.date) {
+            var setupBtn = btn('ctab-setup-btn', 'Set date', function () {
+                setupCountdownWidget().then(function (cfg) {
+                    if (!cfg) return;
+                    mutateTab(tab.id, function (t) {
+                        var w = findWidget(t, widget.id);
+                        if (w) w.config = cfg;
+                    }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                });
+            }, { icon: 'fa-calendar-plus' });
+            body.appendChild(emptyMsg('Pick a date to count down to.'));
+            body.appendChild(setupBtn);
+            return;
+        }
+        // Date-only target: local midnight so "days left" matches the calendar.
+        var parts = String(config.date).split('-');
+        var target = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        var diff = dayDiff(target, new Date());
+        body.appendChild(el('p', 'ctab-countdown-title', String(config.title || 'Countdown')));
+        var big = diff < 0 ? 'Passed' : (diff === 0 ? 'Today!' : String(diff));
+        body.appendChild(el('div', 'ctab-countdown-big' + (diff <= 3 && diff >= 0 ? ' is-soon' : ''), big));
+        if (diff > 0) body.appendChild(el('p', 'ctab-countdown-sub', diff === 1 ? 'day left' : 'days left'));
+        else if (diff < 0) body.appendChild(el('p', 'ctab-countdown-sub', target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })));
+    }
+
+    function renderChecklistWidget(body, tab, widget) {
+        var items = (widget.config && Array.isArray(widget.config.items)) ? widget.config.items : [];
+        var list = el('ul', 'ctab-list ctab-checklist');
+        items.forEach(function (item) {
+            var li = el('li', 'ctab-list-row' + (item.done ? ' is-done' : ''));
+            var label = el('label', 'ctab-check-label');
+            var box = document.createElement('input');
+            box.type = 'checkbox';
+            box.checked = item.done === true;
+            box.addEventListener('change', function () {
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w || !w.config || !Array.isArray(w.config.items)) return;
+                    for (var i = 0; i < w.config.items.length; i += 1) {
+                        if (w.config.items[i].id === item.id) { w.config.items[i].done = box.checked; break; }
+                    }
+                }, { rerender: false });
+                li.classList.toggle('is-done', box.checked);
+            });
+            label.appendChild(box);
+            label.appendChild(el('span', 'ctab-list-title', String(item.text || '')));
+            li.appendChild(label);
+            li.appendChild(btn('ctab-item-remove', '', function () {
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w || !w.config || !Array.isArray(w.config.items)) return;
+                    w.config.items = w.config.items.filter(function (x) { return x.id !== item.id; });
+                }, { rerender: false });
+                rerenderWidgetBody(tab.id, widget.id);
+            }, { title: 'Remove item', icon: 'fa-xmark' }));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+        var addRow = el('div', 'ctab-add-row');
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'ctab-add-input';
+        input.placeholder = 'Add an item…';
+        input.maxLength = 200;
+        var commit = function () {
+            var text = input.value.trim();
+            if (!text) return;
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                if (!Array.isArray(w.config.items)) w.config.items = [];
+                if (w.config.items.length >= 50) return;
+                w.config.items.push({ id: makeId('ci'), text: text, done: false });
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id, { focusAdd: true });
+        };
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') commit(); });
+        addRow.appendChild(input);
+        addRow.appendChild(btn('ctab-add-btn', 'Add', commit, { icon: 'fa-plus' }));
+        body.appendChild(addRow);
+    }
+
+    function renderScratchpadWidget(body, tab, widget) {
+        var area = document.createElement('textarea');
+        area.className = 'ctab-scratchpad';
+        area.placeholder = 'Jot anything…';
+        area.maxLength = 20000;
+        area.value = widget.config && typeof widget.config.text === 'string' ? widget.config.text : '';
+        area.addEventListener('input', function () {
+            var key = tab.id + ':' + widget.id;
+            if (scratchpadTimers[key]) clearTimeout(scratchpadTimers[key]);
+            scratchpadTimers[key] = setTimeout(function () {
+                delete scratchpadTimers[key];
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w) return;
+                    if (!w.config || typeof w.config !== 'object') w.config = {};
+                    w.config.text = area.value.slice(0, 20000);
+                }, { rerender: false });
+            }, 600);
+        });
+        body.appendChild(area);
+    }
+
+    function safeHttpUrl(raw) {
+        try {
+            var url = new URL(String(raw || '').trim(), window.location.href);
+            if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
+        } catch (e) { /* invalid */ }
+        return null;
+    }
+
+    function renderLinksWidget(body, tab, widget) {
+        var links = (widget.config && Array.isArray(widget.config.links)) ? widget.config.links : [];
+        if (links.length) {
+            var list = el('ul', 'ctab-list');
+            links.forEach(function (lnk) {
+                var href = safeHttpUrl(lnk.url);
+                if (!href) return;
+                var li = el('li', 'ctab-list-row');
+                var a = el('a', 'ctab-link', String(lnk.label || href));
+                a.href = href;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                li.appendChild(faIcon('fa-arrow-up-right-from-square'));
+                li.appendChild(a);
+                li.appendChild(btn('ctab-item-remove', '', function () {
+                    mutateTab(tab.id, function (t) {
+                        var w = findWidget(t, widget.id);
+                        if (!w || !w.config || !Array.isArray(w.config.links)) return;
+                        w.config.links = w.config.links.filter(function (x) { return x.id !== lnk.id; });
+                    }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                }, { title: 'Remove link', icon: 'fa-xmark' }));
+                list.appendChild(li);
+            });
+            body.appendChild(list);
+        } else {
+            body.appendChild(emptyMsg('No links yet.'));
+        }
+        body.appendChild(btn('ctab-add-btn', 'Add link', function () {
+            promptText({ title: 'Link label', label: 'Name for this link', placeholder: 'e.g. Canvas' }).then(function (label) {
+                if (label == null) return;
+                promptText({ title: 'Link URL', label: 'Address (https://…)', placeholder: 'https://' }).then(function (url) {
+                    if (url == null) return;
+                    var href = safeHttpUrl(url);
+                    if (!href) return;
+                    mutateTab(tab.id, function (t) {
+                        var w = findWidget(t, widget.id);
+                        if (!w) return;
+                        if (!w.config || typeof w.config !== 'object') w.config = {};
+                        if (!Array.isArray(w.config.links)) w.config.links = [];
+                        if (w.config.links.length >= 20) return;
+                        w.config.links.push({ id: makeId('lk'), label: String(label).trim().slice(0, 60) || href, url: href });
+                    }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                });
+            });
+        }, { icon: 'fa-plus' }));
+    }
+
+    function statBlock(value, label) {
+        var block = el('div', 'ctab-stat');
+        block.appendChild(el('span', 'ctab-stat-value', String(value)));
+        block.appendChild(el('span', 'ctab-stat-label', String(label)));
+        return block;
+    }
+
+    // ---------- Planning widgets ----------
+
+    function renderThisWeekWidget(body) {
+        var now = new Date();
+        var items = sortByDue(getDeadlines().filter(function (it) {
+            if (!it || it.status === 'done' || !(it.due instanceof Date)) return false;
+            var diff = dayDiff(it.due, now);
+            return diff >= 0 && diff <= 6;
+        }));
+        if (!items.length) {
+            body.appendChild(emptyMsg('Nothing due in the next 7 days.'));
+            return;
+        }
+        var groups = {};
+        var order = [];
+        items.forEach(function (it) {
+            var key = dayDiff(it.due, now);
+            if (!groups[key]) { groups[key] = []; order.push(key); }
+            groups[key].push(it);
+        });
+        order.forEach(function (key) {
+            var label = key === 0 ? 'Today' : (key === 1 ? 'Tomorrow' : groups[key][0].due.toLocaleDateString(undefined, { weekday: 'long' }));
+            body.appendChild(el('div', 'ctab-week-day', label));
+            var list = el('ul', 'ctab-list');
+            groups[key].forEach(function (it) {
+                var li = el('li', 'ctab-list-row');
+                li.appendChild(el('span', 'ctab-dot is-' + dueStatusKey(it.due, now)));
+                li.appendChild(el('span', 'ctab-list-title', String(it.title || 'Untitled')));
+                list.appendChild(li);
+            });
+            body.appendChild(list);
+        });
+    }
+
+    function renderOverdueWidget(body) {
+        var now = new Date();
+        var items = sortByDue(getDeadlines().filter(function (it) {
+            return it && it.status !== 'done' && it.due instanceof Date && dayDiff(it.due, now) < 0;
+        }));
+        if (!items.length) {
+            body.appendChild(emptyMsg('Nothing overdue — nice.'));
+            return;
+        }
+        var list = el('ul', 'ctab-list');
+        items.slice(0, 12).forEach(function (it) {
+            var li = el('li', 'ctab-list-row');
+            li.appendChild(el('span', 'ctab-dot is-overdue'));
+            li.appendChild(el('span', 'ctab-list-title', String(it.title || 'Untitled')));
+            li.appendChild(el('span', 'ctab-due-chip is-overdue', dueLabel(it.due, now)));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+    }
+
+    function renderTasksWidget(body) {
+        var stats = {};
+        try { stats = bridge.getTaskStats() || {}; } catch (e) { stats = {}; }
+        var row = el('div', 'ctab-stat-row');
+        row.appendChild(statBlock(stats.open || 0, 'open'));
+        row.appendChild(statBlock(stats.completedToday || 0, 'done today'));
+        row.appendChild(statBlock(stats.total || 0, 'total'));
+        body.appendChild(row);
+    }
+
+    // ---------- Academics widgets ----------
+
+    function renderReviewWidget(body) {
+        var stats = null;
+        try { stats = bridge.getReviewStats(); } catch (e) { stats = null; }
+        if (!stats) {
+            body.appendChild(emptyMsg('Review isn’t set up yet.'));
+            return;
+        }
+        var row = el('div', 'ctab-stat-row');
+        row.appendChild(statBlock(stats.due || 0, 'due'));
+        row.appendChild(statBlock(stats.overdue || 0, 'overdue'));
+        row.appendChild(statBlock(stats.reviewedThisWeek || 0, 'this week'));
+        body.appendChild(row);
+        if ((stats.due || 0) > 0) {
+            body.appendChild(btn('ctab-add-btn', 'Start review', function () {
+                try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); } catch (e) { /* non-critical */ }
+            }, { icon: 'fa-play' }));
+        }
+    }
+
+    function renderStudyWidget(body) {
+        var stats = null;
+        try { stats = bridge.getStudyStats(); } catch (e) { stats = null; }
+        if (!stats) {
+            body.appendChild(emptyMsg('No study data yet.'));
+            return;
+        }
+        var row = el('div', 'ctab-stat-row');
+        row.appendChild(statBlock(stats.subjectCount || 0, 'subjects'));
+        row.appendChild(statBlock(stats.nextExamDays != null ? stats.nextExamDays : '—', 'days to exam'));
+        row.appendChild(statBlock(stats.weakAreas || 0, 'weak areas'));
+        body.appendChild(row);
+        if (stats.nextExamCountdown) body.appendChild(el('p', 'ctab-nextup-reason', 'Next exam: ' + stats.nextExamCountdown));
+    }
+
+    // ---------- Focus & Habits widgets ----------
+
+    function renderStreakWidget(body) {
+        var s = { current: 0, best: 0 };
+        try { s = bridge.getStreak() || s; } catch (e) { /* non-critical */ }
+        body.appendChild(el('div', 'ctab-countdown-big' + (s.current > 0 ? ' is-soon' : ''), String(s.current)));
+        body.appendChild(el('p', 'ctab-countdown-sub', 'day streak'));
+        body.appendChild(el('p', 'ctab-list-meta', 'Best: ' + s.best + ' days'));
+    }
+
+    function renderFocusStatsWidget(body) {
+        var stats = { totalMinutes: 0, series: [] };
+        try { stats = bridge.getFocusStats(7) || stats; } catch (e) { /* non-critical */ }
+        body.appendChild(el('div', 'ctab-countdown-big', String(stats.totalMinutes || 0)));
+        body.appendChild(el('p', 'ctab-countdown-sub', 'minutes this week'));
+        var series = Array.isArray(stats.series) ? stats.series : [];
+        if (series.length) {
+            var max = Math.max(1, Math.max.apply(null, series.map(function (p) { return Number(p.value) || 0; })));
+            var chart = el('div', 'ctab-bars');
+            series.forEach(function (p) {
+                var col = el('div', 'ctab-bar-col');
+                var bar = el('div', 'ctab-bar');
+                var h = Math.round(((Number(p.value) || 0) / max) * 100);
+                bar.style.height = Math.max(3, h) + '%';
+                bar.title = p.label + ': ' + (Number(p.value) || 0) + ' min';
+                col.appendChild(bar);
+                col.appendChild(el('span', 'ctab-bar-label', String(p.label || '').slice(0, 2)));
+                chart.appendChild(col);
+            });
+            body.appendChild(chart);
+        }
+    }
+
+    function setupCounterWidget() {
+        return promptText({ title: 'Counter label', label: 'What are you counting?', placeholder: 'e.g. Glasses of water' }).then(function (label) {
+            if (label == null) return null;
+            return { label: String(label).trim().slice(0, 40) || 'Count', value: 0, step: 1 };
+        });
+    }
+
+    function adjustCounter(tab, widget, delta) {
+        mutateTab(tab.id, function (t) {
+            var w = findWidget(t, widget.id);
+            if (!w) return;
+            if (!w.config || typeof w.config !== 'object') w.config = {};
+            var step = Number(w.config.step) || 1;
+            w.config.value = Math.max(-99999, Math.min(99999, (Number(w.config.value) || 0) + delta * step));
+        }, { rerender: false });
+        rerenderWidgetBody(tab.id, widget.id);
+    }
+
+    function renderCounterWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        body.appendChild(el('p', 'ctab-countdown-title', String(cfg.label || 'Count')));
+        var row = el('div', 'ctab-counter-row');
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustCounter(tab, widget, -1); }, { title: 'Decrease', icon: 'fa-minus' }));
+        row.appendChild(el('span', 'ctab-counter-value', String(Number(cfg.value) || 0)));
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustCounter(tab, widget, 1); }, { title: 'Increase', icon: 'fa-plus' }));
+        body.appendChild(row);
+    }
+
+    function setupProgressWidget() {
+        var cfg = { label: '', current: 0, target: 100 };
+        return promptText({ title: 'Goal label', label: 'What’s the goal?', placeholder: 'e.g. Pages read' }).then(function (label) {
+            if (label == null) return null;
+            cfg.label = String(label).trim().slice(0, 40) || 'Goal';
+            return promptText({ title: 'Target', label: 'Target number', placeholder: '100', inputType: 'number' }).then(function (target) {
+                if (target == null) return null;
+                cfg.target = Math.max(1, Math.round(Number(target) || 100));
+                return cfg;
+            });
+        });
+    }
+
+    function adjustProgress(tab, widget, delta) {
+        mutateTab(tab.id, function (t) {
+            var w = findWidget(t, widget.id);
+            if (!w) return;
+            if (!w.config || typeof w.config !== 'object') w.config = {};
+            w.config.current = Math.max(0, Math.min(999999, (Number(w.config.current) || 0) + delta));
+        }, { rerender: false });
+        rerenderWidgetBody(tab.id, widget.id);
+    }
+
+    function renderProgressWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var current = Math.max(0, Number(cfg.current) || 0);
+        var target = Math.max(1, Number(cfg.target) || 100);
+        var pct = Math.min(100, Math.round((current / target) * 100));
+        body.appendChild(el('p', 'ctab-countdown-title', String(cfg.label || 'Goal')));
+        var track = el('div', 'ctab-progress-track');
+        var fill = el('div', 'ctab-progress-fill');
+        fill.style.width = pct + '%';
+        track.appendChild(fill);
+        body.appendChild(track);
+        body.appendChild(el('p', 'ctab-progress-label', current + ' / ' + target + ' (' + pct + '%)'));
+        var row = el('div', 'ctab-counter-row');
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustProgress(tab, widget, -1); }, { title: 'Minus one', icon: 'fa-minus' }));
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustProgress(tab, widget, 1); }, { title: 'Plus one', icon: 'fa-plus' }));
+        body.appendChild(row);
+    }
+
+    // ---------- Notes widgets ----------
+
+    function openNotePicker(tab, widget) {
+        var notes = [];
+        try { notes = bridge.getAllNotes() || []; } catch (e) { notes = []; }
+        var previouslyFocused = document.activeElement;
+        var overlay = el('div', 'ctab-picker-overlay');
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Bookmark a note');
+        var panel = el('div', 'ctab-picker-panel');
+        var head = el('header', 'ctab-picker-head');
+        head.appendChild(el('h3', 'ctab-picker-title', 'Bookmark a note'));
+        var closeBtn = btn('ctab-picker-close', '', close, { title: 'Close', icon: 'fa-xmark' });
+        closeBtn.setAttribute('data-modal-close', '');
+        head.appendChild(closeBtn);
+        panel.appendChild(head);
+
+        if (!notes.length) {
+            panel.appendChild(emptyMsg('You have no notes yet.'));
+        } else {
+            var search = document.createElement('input');
+            search.type = 'text';
+            search.className = 'ctab-add-input';
+            search.placeholder = 'Search notes…';
+            panel.appendChild(search);
+            var list = el('ul', 'ctab-list ctab-note-picker-list');
+            var renderList = function (filter) {
+                while (list.firstChild) list.removeChild(list.firstChild);
+                var f = String(filter || '').toLowerCase();
+                notes.filter(function (n) { return !f || n.title.toLowerCase().indexOf(f) !== -1; }).slice(0, 100).forEach(function (n) {
+                    var li = el('li', 'ctab-list-row');
+                    li.appendChild(btn('ctab-note-link', n.title, function () { addBookmark(n.id); }, { icon: 'fa-file-lines' }));
+                    list.appendChild(li);
+                });
+            };
+            search.addEventListener('input', function () { renderList(search.value); });
+            renderList('');
+            panel.appendChild(list);
+        }
+        overlay.appendChild(panel);
+
+        function onKeydown(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+        function close() {
+            document.removeEventListener('keydown', onKeydown, true);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                try { previouslyFocused.focus(); } catch (e) { /* non-critical */ }
+            }
+        }
+        function addBookmark(id) {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                if (!Array.isArray(w.config.noteIds)) w.config.noteIds = [];
+                if (w.config.noteIds.indexOf(id) === -1 && w.config.noteIds.length < 30) w.config.noteIds.push(id);
+            }, { rerender: false });
+            close();
+            rerenderWidgetBody(tab.id, widget.id);
+        }
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+        document.addEventListener('keydown', onKeydown, true);
+        document.body.appendChild(overlay);
+        closeBtn.focus();
+    }
+
+    function renderBookmarksWidget(body, tab, widget) {
+        var ids = (widget.config && Array.isArray(widget.config.noteIds)) ? widget.config.noteIds : [];
+        if (ids.length) {
+            var list = el('ul', 'ctab-list');
+            ids.forEach(function (id) {
+                var title = null;
+                try { title = bridge.getNoteTitle(id); } catch (e) { title = null; }
+                if (title == null) return; // note was deleted — skip silently
+                var li = el('li', 'ctab-list-row');
+                li.appendChild(btn('ctab-note-link', title, function () { try { bridge.openNote(id); } catch (e) { /* non-critical */ } }, { icon: 'fa-file-lines' }));
+                li.appendChild(btn('ctab-item-remove', '', function () {
+                    mutateTab(tab.id, function (t) {
+                        var w = findWidget(t, widget.id);
+                        if (!w || !w.config || !Array.isArray(w.config.noteIds)) return;
+                        w.config.noteIds = w.config.noteIds.filter(function (x) { return x !== id; });
+                    }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                }, { title: 'Remove', icon: 'fa-xmark' }));
+                list.appendChild(li);
+            });
+            body.appendChild(list);
+        } else {
+            body.appendChild(emptyMsg('No bookmarked notes yet.'));
+        }
+        body.appendChild(btn('ctab-add-btn', 'Add note', function () { openNotePicker(tab, widget); }, { icon: 'fa-plus' }));
+    }
+
+    function renderStickyWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var color = cfg.color || STICKY_COLORS[0];
+        var wrap = el('div', 'ctab-sticky');
+        wrap.style.background = color;
+        var area = document.createElement('textarea');
+        area.className = 'ctab-sticky-text';
+        area.placeholder = 'Sticky note…';
+        area.maxLength = 2000;
+        area.value = typeof cfg.text === 'string' ? cfg.text : '';
+        area.addEventListener('input', function () {
+            var key = tab.id + ':' + widget.id;
+            if (scratchpadTimers[key]) clearTimeout(scratchpadTimers[key]);
+            scratchpadTimers[key] = setTimeout(function () {
+                delete scratchpadTimers[key];
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w) return;
+                    if (!w.config || typeof w.config !== 'object') w.config = {};
+                    w.config.text = area.value.slice(0, 2000);
+                }, { rerender: false });
+            }, 600);
+        });
+        wrap.appendChild(area);
+        body.appendChild(wrap);
+        var swatches = el('div', 'ctab-swatches');
+        STICKY_COLORS.forEach(function (c) {
+            var sw = el('button', 'ctab-swatch' + (c === color ? ' is-active' : ''));
+            sw.type = 'button';
+            sw.style.background = c;
+            sw.title = 'Recolor note';
+            sw.setAttribute('aria-label', 'Recolor note');
+            sw.addEventListener('click', function () {
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w) return;
+                    if (!w.config || typeof w.config !== 'object') w.config = {};
+                    w.config.color = c;
+                }, { rerender: false });
+                rerenderWidgetBody(tab.id, widget.id);
+            });
+            swatches.appendChild(sw);
+        });
+        body.appendChild(swatches);
+    }
+
+    // ---------- Time widgets ----------
+
+    function renderClockWidget(body, tab, widget) {
+        var timeEl = el('div', 'ctab-clock-time', '');
+        var dateEl = el('div', 'ctab-clock-date', '');
+        body.appendChild(timeEl);
+        body.appendChild(dateEl);
+        startTimer(tab.id, widget.id, function () {
+            var now = new Date();
+            timeEl.textContent = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            dateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+        }, 1000);
+    }
+
+    function setupDaysSinceWidget() {
+        var cfg = { title: '', date: '' };
+        return promptText({ title: 'Days since…', label: 'What happened?', placeholder: 'e.g. Started studying' }).then(function (title) {
+            if (title == null) return null;
+            cfg.title = String(title).trim().slice(0, 60) || 'Days since';
+            return promptText({ title: 'Since date', label: 'Date (YYYY-MM-DD)', placeholder: '2026-01-01', inputType: 'date' }).then(function (date) {
+                if (date == null) return null;
+                var str = String(date).trim();
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
+                cfg.date = str;
+                return cfg;
+            });
+        });
+    }
+
+    function renderDaysSinceWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        if (!cfg.date) {
+            body.appendChild(emptyMsg('Set a date to count from.'));
+            return;
+        }
+        var parts = String(cfg.date).split('-');
+        var since = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        var diff = dayDiff(new Date(), since);
+        body.appendChild(el('p', 'ctab-countdown-title', String(cfg.title || 'Days since')));
+        body.appendChild(el('div', 'ctab-countdown-big', String(Math.max(0, diff))));
+        body.appendChild(el('p', 'ctab-countdown-sub', Math.abs(diff) === 1 ? 'day' : 'days'));
+    }
+
+    function renderStopwatchWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var display = el('div', 'ctab-clock-time', '00:00');
+        body.appendChild(display);
+
+        function elapsedMs() {
+            var acc = Number(cfg.accumulatedMs) || 0;
+            if (cfg.running && cfg.startedAt) acc += Date.now() - Number(cfg.startedAt);
+            return Math.max(0, acc);
+        }
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+        function fmt(ms) {
+            var total = Math.floor(ms / 1000);
+            var h = Math.floor(total / 3600);
+            var m = Math.floor((total % 3600) / 60);
+            var s = total % 60;
+            return (h > 0 ? pad(h) + ':' : '') + pad(m) + ':' + pad(s);
+        }
+        function paint() { display.textContent = fmt(elapsedMs()); }
+        paint();
+        if (cfg.running) startTimer(tab.id, widget.id, paint, 250);
+
+        var row = el('div', 'ctab-focus-row');
+        row.appendChild(btn('ctab-focus-btn', cfg.running ? 'Pause' : 'Start', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                if (w.config.running) {
+                    w.config.accumulatedMs = (Number(w.config.accumulatedMs) || 0) + (w.config.startedAt ? Date.now() - Number(w.config.startedAt) : 0);
+                    w.config.running = false;
+                    w.config.startedAt = null;
+                } else {
+                    w.config.running = true;
+                    w.config.startedAt = Date.now();
+                }
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: cfg.running ? 'fa-pause' : 'fa-play' }));
+        row.appendChild(btn('ctab-focus-btn', 'Reset', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                w.config = { running: false, startedAt: null, accumulatedMs: 0 };
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: 'fa-rotate-left' }));
+        body.appendChild(row);
+    }
+
+    // ---------- Tools widgets ----------
+
+    function renderCalculatorWidget(body) {
+        var expr = '';
+        var display = el('div', 'ctab-calc-display', '0');
+        body.appendChild(display);
+        var keys = ['7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', '0', '.', '=', '+', 'C'];
+        var grid = el('div', 'ctab-calc-grid');
+        keys.forEach(function (k) {
+            var glyph = k === '*' ? '×' : (k === '/' ? '÷' : k);
+            var key = el('button', 'ctab-calc-key' + (k === '=' ? ' is-eq' : '') + (k === 'C' ? ' is-clear' : ''), glyph);
+            key.type = 'button';
+            key.addEventListener('click', function () {
+                if (k === 'C') { expr = ''; display.textContent = '0'; return; }
+                if (k === '=') {
+                    var r = evalExpression(expr);
+                    if (r == null) { display.textContent = 'Error'; expr = ''; }
+                    else { expr = String(Math.round(r * 1e9) / 1e9); display.textContent = expr; }
+                    return;
+                }
+                if (expr.length >= 32) return;
+                expr += k;
+                display.textContent = expr;
+            });
+            grid.appendChild(key);
+        });
+        body.appendChild(grid);
+    }
+
+    function renderQuoteWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var idx = Number.isInteger(cfg.index) ? cfg.index : 0;
+        idx = ((idx % BUILTIN_QUOTES.length) + BUILTIN_QUOTES.length) % BUILTIN_QUOTES.length;
+        var q = BUILTIN_QUOTES[idx];
+        body.appendChild(el('p', 'ctab-quote-text', '“' + q.text + '”'));
+        body.appendChild(el('p', 'ctab-quote-by', '— ' + q.by));
+        body.appendChild(btn('ctab-add-btn', 'New quote', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                w.config.index = (idx + 1) % BUILTIN_QUOTES.length;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: 'fa-rotate' }));
+    }
+
+    function setupHeadingWidget() {
+        return promptText({ title: 'Section heading', label: 'Heading text', placeholder: 'e.g. Morning routine' }).then(function (text) {
+            if (text == null) return null;
+            return { text: String(text).trim().slice(0, 60) || 'Section' };
+        });
+    }
+
+    function renderHeadingWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        body.appendChild(el('h3', 'ctab-section-heading', String(cfg.text || 'Section')));
+    }
+
+    // ---------- widget card frame + grid ----------
+
+    function renderWidgetCard(tab, widget) {
+        var spec = WIDGET_TYPES[widget.type];
+        var wide = widget.wide === true || (spec && spec.fullWidth === true);
+        var card = el('article', 'ctab-widget' + (wide ? ' is-wide' : ''));
+        card.dataset.widgetId = widget.id;
+
+        var head = el('header', 'ctab-widget-head');
+        var title = el('span', 'ctab-widget-label');
+        title.appendChild(faIcon(spec ? spec.icon : 'fa-puzzle-piece'));
+        title.appendChild(document.createTextNode(' ' + (spec ? spec.label : 'Unavailable widget')));
+        head.appendChild(title);
+
+        var controls = el('span', 'ctab-widget-controls');
+        controls.appendChild(btn('ctab-ctrl', '', function () { moveWidget(tab.id, widget.id, -1); }, { title: 'Move earlier', icon: 'fa-arrow-left' }));
+        controls.appendChild(btn('ctab-ctrl', '', function () { moveWidget(tab.id, widget.id, 1); }, { title: 'Move later', icon: 'fa-arrow-right' }));
+        controls.appendChild(btn('ctab-ctrl', '', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (w) w.wide = w.wide !== true;
+            });
+        }, { title: 'Toggle width', icon: 'fa-left-right' }));
+        controls.appendChild(btn('ctab-ctrl is-danger', '', function () {
+            mutateTab(tab.id, function (t) {
+                t.widgets = (t.widgets || []).filter(function (w) { return w.id !== widget.id; });
+            });
+        }, { title: 'Remove widget', icon: 'fa-xmark' }));
+        head.appendChild(controls);
+        card.appendChild(head);
+
+        var body = el('div', 'ctab-widget-body');
+        card.appendChild(body);
+        renderWidgetBody(body, tab, widget);
+        return card;
+    }
+
+    function renderWidgetBody(body, tab, widget) {
+        // Kill any live tick (clock/stopwatch) from the previous render of this
+        // widget before we tear the body down and rebuild it.
+        clearTimer(timerKey(tab.id, widget.id));
+        while (body.firstChild) body.removeChild(body.firstChild);
+        var spec = WIDGET_TYPES[widget.type];
+        if (!spec) {
+            // Forward compat: a widget type from a newer version — keep the data,
+            // explain rather than crash or silently drop.
+            body.appendChild(emptyMsg('This widget ("' + String(widget.type) + '") isn’t available in this version.'));
+            return;
+        }
+        try {
+            spec.render(body, tab, widget);
+        } catch (e) {
+            console.warn('SutraCustomTabs: widget render failed', widget.type, e);
+            body.appendChild(emptyMsg('This widget hit an error.'));
+        }
+    }
+
+    function rerenderWidgetBody(tabId, widgetId, opts) {
+        var tabs = getTabs();
+        var tab = null;
+        for (var i = 0; i < tabs.length; i += 1) {
+            if (tabs[i] && tabs[i].id === tabId) { tab = tabs[i]; break; }
+        }
+        if (!tab) return;
+        var widget = findWidget(tab, widgetId);
+        var section = document.getElementById('view-custom-' + tabId);
+        if (!widget || !section) return;
+        var card = section.querySelector('.ctab-widget[data-widget-id="' + widgetId + '"]');
+        if (!card) return;
+        var body = card.querySelector('.ctab-widget-body');
+        if (!body) return;
+        renderWidgetBody(body, tab, widget);
+        if (opts && opts.focusAdd) {
+            var input = body.querySelector('.ctab-add-input');
+            if (input) input.focus();
+        }
+    }
+
+    function moveWidget(tabId, widgetId, delta) {
+        mutateTab(tabId, function (t) {
+            var list = Array.isArray(t.widgets) ? t.widgets : [];
+            var idx = -1;
+            for (var i = 0; i < list.length; i += 1) {
+                if (list[i] && list[i].id === widgetId) { idx = i; break; }
+            }
+            if (idx === -1) return;
+            var next = idx + delta;
+            if (next < 0 || next >= list.length) return;
+            var tmp = list[idx];
+            list[idx] = list[next];
+            list[next] = tmp;
+        });
+    }
+
+    // ---------- add-widget picker (modal contract: data-modal-close, Escape, focus restore) ----------
+
+    function openWidgetPicker(tab) {
+        var previouslyFocused = document.activeElement;
+        var overlay = el('div', 'ctab-picker-overlay');
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Add a widget');
+
+        var panel = el('div', 'ctab-picker-panel');
+        var head = el('header', 'ctab-picker-head');
+        head.appendChild(el('h3', 'ctab-picker-title', 'Add a widget'));
+        var closeBtn = btn('ctab-picker-close', '', close, { title: 'Close', icon: 'fa-xmark' });
+        closeBtn.setAttribute('data-modal-close', '');
+        head.appendChild(closeBtn);
+        panel.appendChild(head);
+
+        // Group widget options by category so a large palette stays scannable.
+        CATEGORIES.forEach(function (category) {
+            var types = Object.keys(WIDGET_TYPES).filter(function (type) { return WIDGET_TYPES[type].cat === category.key; });
+            if (!types.length) return;
+            panel.appendChild(el('h4', 'ctab-picker-cat', category.label));
+            var grid = el('div', 'ctab-picker-grid');
+            types.forEach(function (type) {
+                var spec = WIDGET_TYPES[type];
+                var option = btn('ctab-picker-option', '', function () { pick(type); });
+                option.appendChild(faIcon(spec.icon));
+                option.appendChild(el('strong', 'ctab-picker-option-label', spec.label));
+                option.appendChild(el('span', 'ctab-picker-option-desc', spec.desc));
+                grid.appendChild(option);
+            });
+            panel.appendChild(grid);
+        });
+        overlay.appendChild(panel);
+
+        function onKeydown(e) {
+            if (e.key === 'Escape') { e.stopPropagation(); close(); }
+        }
+
+        function close() {
+            document.removeEventListener('keydown', onKeydown, true);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                try { previouslyFocused.focus(); } catch (e) { /* non-critical */ }
+            }
+        }
+
+        function pick(type) {
+            var spec = WIDGET_TYPES[type];
+            var finish = function (config) {
+                mutateTab(tab.id, function (t) {
+                    if (!Array.isArray(t.widgets)) t.widgets = [];
+                    if (t.widgets.length >= MAX_WIDGETS_PER_TAB) return;
+                    t.widgets.push({ id: makeId('cw'), type: type, config: config || null, wide: false });
+                });
+            };
+            close();
+            if (spec.setup) {
+                spec.setup().then(function (config) {
+                    if (config === null) return; // user cancelled setup
+                    finish(config);
+                });
+            } else {
+                finish(null);
+            }
+        }
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) close();
+        });
+        document.addEventListener('keydown', onKeydown, true);
+        document.body.appendChild(overlay);
+        closeBtn.focus();
+    }
+
+    // ---------- tab CRUD ----------
+
+    function createTab() {
+        var tabs = getTabs();
+        if (tabs.length >= MAX_TABS) {
+            confirmDialog({ title: 'Tab limit reached', message: 'You can have up to ' + MAX_TABS + ' custom tabs. Delete one to make room.', confirmText: 'OK', cancelText: '', hideCancel: true });
+            return;
+        }
+        promptText({ title: 'New tab', label: 'Name your tab', placeholder: 'e.g. Morning Dashboard' }).then(function (name) {
+            if (name == null) return;
+            var trimmed = String(name).trim().slice(0, 40);
+            if (!trimmed) return;
+            var next = clone(getTabs()) || [];
+            var tab = {
+                id: makeId('ct'),
+                name: trimmed,
+                icon: TAB_ICON_CYCLE[next.length % TAB_ICON_CYCLE.length],
+                widgets: []
+            };
+            next.push(tab);
+            saveTabs(next);
+            if (typeof window.setActiveView === 'function') window.setActiveView('custom-' + tab.id);
+        });
+    }
+
+    function renameTab(tabId) {
+        var tabs = getTabs();
+        var current = null;
+        for (var i = 0; i < tabs.length; i += 1) {
+            if (tabs[i] && tabs[i].id === tabId) { current = tabs[i]; break; }
+        }
+        if (!current) return;
+        promptText({ title: 'Rename tab', label: 'Tab name', defaultValue: current.name }).then(function (name) {
+            if (name == null) return;
+            var trimmed = String(name).trim().slice(0, 40);
+            if (!trimmed) return;
+            mutateTab(tabId, function (t) { t.name = trimmed; });
+        });
+    }
+
+    function deleteTab(tabId) {
+        var tabs = getTabs();
+        var current = null;
+        for (var i = 0; i < tabs.length; i += 1) {
+            if (tabs[i] && tabs[i].id === tabId) { current = tabs[i]; break; }
+        }
+        if (!current) return;
+        confirmDialog({
+            title: 'Delete tab',
+            message: 'Delete "' + current.name + '" and its widgets? Your notes, tasks, and habits are NOT affected — only this tab layout.',
+            confirmText: 'Delete Tab',
+            cancelText: 'Keep Tab'
+        }).then(function (confirmed) {
+            if (!confirmed) return;
+            var wasActive = document.body.dataset.view === 'custom-' + tabId;
+            var next = (clone(getTabs()) || []).filter(function (t) { return t.id !== tabId; });
+            saveTabs(next);
+            if (wasActive && typeof window.setActiveView === 'function') window.setActiveView('today');
+        });
+    }
+
+    // ---------- tab section rendering ----------
+
+    function renderTabSection(section, tab) {
+        // Any widgets we're about to tear down may own live intervals; clear the
+        // whole tab's timers (covers removed widgets that won't re-register).
+        clearTimersForTab(tab.id);
+        while (section.firstChild) section.removeChild(section.firstChild);
+        var editing = editingTabs[tab.id] === true;
+        section.classList.toggle('is-editing', editing);
+
+        var head = el('header', 'ctab-head');
+        var title = el('h2', 'ctab-title');
+        if (tab.icon) title.appendChild(faIcon(tab.icon));
+        title.appendChild(document.createTextNode(' ' + tab.name));
+        head.appendChild(title);
+
+        var actions = el('div', 'ctab-actions');
+        actions.appendChild(btn('ctab-action', 'Add widget', function () { openWidgetPicker(tab); }, { icon: 'fa-plus' }));
+        actions.appendChild(btn('ctab-action' + (editing ? ' is-active' : ''), editing ? 'Done' : 'Edit', function () {
+            editingTabs[tab.id] = !editing;
+            renderTabSection(section, tab);
+        }, { icon: editing ? 'fa-check' : 'fa-pen' }));
+        actions.appendChild(btn('ctab-action', 'Rename', function () { renameTab(tab.id); }, { icon: 'fa-i-cursor' }));
+        actions.appendChild(btn('ctab-action is-danger', 'Delete', function () { deleteTab(tab.id); }, { icon: 'fa-trash' }));
+        head.appendChild(actions);
+        section.appendChild(head);
+
+        var widgets = Array.isArray(tab.widgets) ? tab.widgets : [];
+        if (!widgets.length) {
+            var zero = el('div', 'ctab-zero');
+            zero.appendChild(el('p', 'ctab-zero-msg', 'This tab is a blank canvas. Add widgets to build your own dashboard.'));
+            zero.appendChild(btn('ctab-zero-btn', 'Add your first widget', function () { openWidgetPicker(tab); }, { icon: 'fa-plus' }));
+            section.appendChild(zero);
+            return;
+        }
+        var grid = el('div', 'ctab-grid');
+        widgets.forEach(function (widget) {
+            grid.appendChild(renderWidgetCard(tab, widget));
+        });
+        section.appendChild(grid);
+    }
+
+    // ---------- nav + sections lifecycle ----------
+
+    function rebuildNav() {
+        document.querySelectorAll('.view-tab[data-custom-tab]').forEach(function (n) { n.parentNode.removeChild(n); });
+        var oldAdd = document.getElementById('customTabAddBtn');
+        if (oldAdd && oldAdd.parentNode) oldAdd.parentNode.removeChild(oldAdd);
+
+        var row = document.querySelector('.view-tabs');
+        if (!row) return;
+        // Insert custom tabs just before the Settings tab so built-in ordering
+        // stays stable and the overflow wrapper stays last.
+        var anchor = row.querySelector('.view-tab[data-view="settings"]') || row.querySelector('.view-more');
+        var activeCustom = String(document.body.dataset.view || '');
+
+        getTabs().forEach(function (tab) {
+            var tabBtn = el('button', 'view-tab' + (activeCustom === 'custom-' + tab.id ? ' active' : ''));
+            tabBtn.type = 'button';
+            tabBtn.dataset.view = 'custom-' + tab.id;
+            tabBtn.dataset.customTab = tab.id;
+            if (tab.icon) tabBtn.appendChild(faIcon(tab.icon));
+            tabBtn.appendChild(document.createTextNode((tab.icon ? ' ' : '') + tab.name));
+            if (anchor) row.insertBefore(tabBtn, anchor);
+            else row.appendChild(tabBtn);
+        });
+
+        var addBtn = btn('view-tab-add', '', createTab, { title: 'New custom tab', icon: 'fa-plus' });
+        addBtn.id = 'customTabAddBtn';
+        if (anchor) row.insertBefore(addBtn, anchor);
+        else row.appendChild(addBtn);
+    }
+
+    function rebuildSections() {
+        var live = {};
+        getTabs().forEach(function (tab) { live[tab.id] = tab; });
+        document.querySelectorAll('section.view[data-custom-tab]').forEach(function (sec) {
+            if (!live[sec.dataset.customTab]) sec.parentNode.removeChild(sec);
+        });
+        var anyView = document.querySelector('section.view');
+        var host = anyView ? anyView.parentElement : null;
+        if (!host) return;
+        getTabs().forEach(function (tab) {
+            var id = 'view-custom-' + tab.id;
+            var sec = document.getElementById(id);
+            if (!sec) {
+                sec = document.createElement('section');
+                sec.id = id;
+                sec.className = 'view view-custom-tab';
+                sec.dataset.customTab = tab.id;
+                sec.style.display = 'none';
+                host.appendChild(sec);
+            }
+            renderTabSection(sec, tab);
+        });
+    }
+
+    function rebuild() {
+        rebuildNav();
+        rebuildSections();
+        // If a custom tab is (or should be) active, re-run setActiveView so the
+        // freshly-built section receives the .active/display state; if the tab
+        // was deleted, land safely on Today.
+        var current = String(document.body.dataset.view || '');
+        if (current.indexOf('custom-') === 0) {
+            var tabId = current.slice('custom-'.length);
+            var exists = getTabs().some(function (t) { return t.id === tabId; });
+            if (typeof window.setActiveView === 'function') {
+                window.setActiveView(exists ? current : 'today');
+            }
+        }
+        // Let the mobile bottom nav + overflow menu resync against the new tab row.
+        try {
+            window.dispatchEvent(new CustomEvent('noteflow:view-changed', { detail: { view: document.body.dataset.view || '' } }));
+        } catch (e) { /* non-critical */ }
+    }
+
+    // ---------- init ----------
+
+    function bindGlobalHandlers() {
+        // Delegated so overflow-menu clones of custom tab buttons work too.
+        document.addEventListener('click', function (e) {
+            var target = e.target && e.target.closest ? e.target.closest('.view-tab[data-view^="custom-"]') : null;
+            if (!target) return;
+            if (typeof window.setActiveView === 'function') window.setActiveView(target.dataset.view);
+        });
+        // Refresh live-data widgets when the user lands on a custom tab.
+        window.addEventListener('noteflow:view-changed', function (e) {
+            var view = e && e.detail ? String(e.detail.view || '') : '';
+            // Leaving any custom tab: stop every live tick so hidden clocks and
+            // stopwatches don't keep firing intervals in the background. The
+            // destination tab's render re-establishes only its own timers.
+            clearAllTimers();
+            if (view.indexOf('custom-') !== 0) return;
+            var tabId = view.slice('custom-'.length);
+            var section = document.getElementById('view-custom-' + tabId);
+            var tabs = getTabs();
+            for (var i = 0; i < tabs.length; i += 1) {
+                if (tabs[i] && tabs[i].id === tabId && section) {
+                    renderTabSection(section, tabs[i]);
+                    break;
+                }
+            }
+        });
+        // Core signals a wholesale replacement (workspace import/restore).
+        window.addEventListener('sutra:custom-tabs-changed', function () {
+            editingTabs = {};
+            rebuild();
+        });
+    }
+
+    function init() {
+        if (initialized) return;
+        bridge = window.SutraCustomTabsBridge;
+        if (!bridge || !document.querySelector('.view-tabs') || !document.querySelector('section.view')) return;
+        initialized = true;
+        bindGlobalHandlers();
+        rebuildNav();
+        rebuildSections();
+        // If the last-active view was a custom tab, its section didn't exist when
+        // the core restored the view at boot — re-activate it now that it does.
+        var current = String(document.body.dataset.view || '');
+        if (current.indexOf('custom-') === 0) {
+            var tabId = current.slice('custom-'.length);
+            var exists = getTabs().some(function (t) { return t.id === tabId; });
+            if (typeof window.setActiveView === 'function') {
+                window.setActiveView(exists ? current : 'today');
+            }
+        }
+    }
+
+    function waitForApp(attempt) {
+        init();
+        if (initialized) return;
+        if (attempt > 100) {
+            console.warn('SutraCustomTabs: core bridge never became available; custom tabs disabled this session.');
+            return;
+        }
+        setTimeout(function () { waitForApp(attempt + 1); }, 200);
+    }
+
+    window.SutraCustomTabs = {
+        refresh: rebuild,
+        getWidgetTypes: function () {
+            return Object.keys(WIDGET_TYPES).map(function (k) {
+                return { type: k, label: WIDGET_TYPES[k].label, desc: WIDGET_TYPES[k].desc };
+            });
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { waitForApp(0); });
+    } else {
+        waitForApp(0);
+    }
+})();

@@ -541,3 +541,96 @@ textarea.cc-input { min-height: 60px; resize: vertical; }
 }
 .cc-drawer-overlay.cc-no-motion,
 .cc-drawer-overlay.cc-no-motion .cc-drawer { transition: none !important; }
+
+/* ===== Life: habit excused (rest/sick) days ===== */
+.life-habit-today { display: inline-flex; align-items: center; gap: 8px; justify-content: center; }
+.life-excuse-btn { color: var(--text-muted, #8a8f98); opacity: 0.7; transition: color 0.15s ease, opacity 0.15s ease; }
+.life-excuse-btn:hover { opacity: 1; color: var(--cc-warn); }
+.life-excuse-btn.is-excused { color: var(--cc-warn); opacity: 1; }
+tr.is-excused-today { background: var(--cc-warn-soft); }
+.life-habit-dot.is-excused { background: var(--cc-warn); opacity: 0.55; border-radius: 2px; }
+
+/* ===== Life: month-end budget forecast ===== */
+.life-forecast {
+    margin: 10px 0 4px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--surface-bg-active);
+    border: 1px solid var(--surface-border, rgba(127,127,127,0.18));
+}
+.life-forecast.is-over { background: var(--cc-danger-soft); border-color: transparent; }
+.life-forecast-head { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted, #8a8f98); display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.life-forecast-head i { color: var(--accent); }
+.life-forecast.is-over .life-forecast-head i { color: var(--cc-danger); }
+.life-forecast-main { font-size: 0.9rem; color: var(--text-primary, inherit); line-height: 1.45; }
+.life-forecast-main strong { color: var(--accent-strong, var(--accent)); }
+.life-forecast.is-over .life-forecast-main strong { color: var(--cc-danger); }
+.life-forecast-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ===== College: essay stage board ===== */
+.college-essay-board-host:empty { display: none; }
+.college-essay-board {
+    margin: 4px 0 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--surface-bg-active);
+    border: 1px solid var(--surface-border, rgba(127,127,127,0.18));
+}
+.college-essay-board-bar { display: flex; gap: 3px; height: 12px; border-radius: 999px; overflow: hidden; background: var(--surface-border, rgba(127,127,127,0.15)); }
+.ceb-seg { display: block; height: 100%; min-width: 6px; }
+.ceb-seg.cc-tone-neutral { background: var(--text-muted, #8a8f98); }
+.ceb-seg.cc-tone-info { background: var(--cc-info); }
+.ceb-seg.cc-tone-warn { background: var(--cc-warn); }
+.ceb-seg.cc-tone-positive { background: var(--cc-positive); }
+.college-essay-board-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: 0.82rem; color: var(--text-secondary, #8a8f98); }
+.ceb-stage { display: inline-flex; align-items: center; gap: 5px; }
+.ceb-stage strong { color: var(--text-primary, inherit); }
+.ceb-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.ceb-dot.cc-tone-neutral { background: var(--text-muted, #8a8f98); }
+.ceb-dot.cc-tone-info { background: var(--cc-info); }
+.ceb-dot.cc-tone-warn { background: var(--cc-warn); }
+.ceb-dot.cc-tone-positive { background: var(--cc-positive); }
+.ceb-final { font-weight: 600; color: var(--accent-strong, var(--accent)); margin-left: auto; }
+
+/* ===== College: essay prompt-bank picker overlay ===== */
+.collegeapp-head-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.college-prompt-overlay {
+    position: fixed; inset: 0; z-index: 4000;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 12, 20, 0.55); backdrop-filter: blur(3px); padding: 20px;
+}
+.college-prompt-panel {
+    width: min(640px, 100%); max-height: min(82vh, 660px); overflow-y: auto;
+    background: var(--bg-elevated, #fff); border: 1px solid var(--surface-border, rgba(127,127,127,0.22));
+    border-radius: var(--radius, 16px); box-shadow: 0 24px 60px rgba(0,0,0,0.35); padding: 18px 20px 22px;
+}
+.college-prompt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.college-prompt-title { margin: 0; font-family: var(--font-heading, inherit); font-size: 1.15rem; color: var(--text-primary, inherit); }
+.college-prompt-intro { margin: 2px 0 12px; font-size: 0.85rem; color: var(--text-secondary, #8a8f98); }
+.college-prompt-cat { margin: 12px 0 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted, var(--text-secondary, #8a8f98)); }
+.college-prompt-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.college-prompt-option {
+    display: flex; flex-direction: column; gap: 4px; padding: 12px; text-align: left; cursor: pointer;
+    border: 1px solid var(--surface-border, rgba(127,127,127,0.2)); border-radius: 12px;
+    background: var(--bg-hover, rgba(127,127,127,0.04)); color: var(--text-primary, inherit);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.college-prompt-option:hover, .college-prompt-option:focus-visible { border-color: var(--accent, #6c5ce7); transform: translateY(-1px); }
+.college-prompt-option strong { font-size: 0.9rem; }
+.college-prompt-option span { font-size: 0.76rem; color: var(--text-secondary, #8a8f98); line-height: 1.4; }
+
+/* ===== Business: overdue-invoice nudge ===== */
+.business-overdue-banner {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+    border-left: 3px solid var(--cc-danger); background: var(--cc-danger-soft);
+}
+.business-overdue-icon { color: var(--cc-danger); font-size: 1.3rem; flex: 0 0 auto; }
+.business-overdue-copy { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.business-overdue-copy strong { color: var(--text-primary, inherit); font-size: 0.98rem; }
+.business-overdue-copy span { color: var(--text-secondary, #8a8f98); font-size: 0.84rem; }
+.business-overdue-btn { flex: 0 0 auto; }
+
+/* ===== Life: goal progress sparkline ===== */
+.life-sparkline { display: block; width: 100%; max-width: 116px; height: 26px; margin-top: 4px; }
+.life-progress-trend { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.life-progress-trend .life-sparkline { margin-top: 0; flex: 0 0 auto; }

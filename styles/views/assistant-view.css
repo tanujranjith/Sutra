@@ -626,6 +626,37 @@ body.motion-off .asst-thinking-label { -webkit-text-fill-color: currentColor; co
     color: var(--asst-accent);
     border-color: rgba(var(--accent-rgb), 0.4);
 }
+/* Dictation mic — same square affordance as the context button. */
+.asst-mic-btn {
+    flex: 0 0 auto;
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--asst-line);
+    background: transparent;
+    color: var(--asst-text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    transition: background .14s, color .14s, border-color .14s, box-shadow .14s;
+    align-self: flex-end;
+    margin-bottom: 2px;
+}
+.asst-mic-btn:hover {
+    background: rgba(var(--accent-rgb), 0.1);
+    color: var(--asst-accent);
+    border-color: rgba(var(--accent-rgb), 0.4);
+}
+.asst-mic-btn.is-listening {
+    color: #fff;
+    background: #e0483d;
+    border-color: #e0483d;
+    animation: asstMicPulse 1.3s ease-in-out infinite;
+}
+@keyframes asstMicPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(224,72,61,0.55); }
+    50% { box-shadow: 0 0 0 6px rgba(224,72,61,0); }
+}
+body.motion-off .asst-mic-btn.is-listening { animation: none; }
 .asst-ctx-btn.has-context {
     color: var(--asst-accent);
     border-color: rgba(var(--accent-rgb), 0.48);
@@ -954,6 +985,7 @@ textarea.asst-cust-input { min-height: 60px; line-height: 1.5; }
 .asst-msg-act:hover { color: var(--asst-text); background: var(--asst-glass); }
 .asst-msg-act.is-fav { color: var(--asst-accent); }
 .asst-msg-act.is-fav:hover { color: var(--asst-accent); }
+.asst-msg-act.is-speaking { color: var(--asst-accent); background: rgba(var(--accent-rgb), 0.12); }
 .asst-msg-act .asst-msg-act-label { font-size: 0.74rem; }
 
 /* Favorite star marker on a bubble */

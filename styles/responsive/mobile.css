@@ -2047,3 +2047,112 @@
     /* Keep content clear of the fixed bar. */
     body { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* =========================================================================
+   37. Mobile optimization pass (2026-07-03) — whole-site audit fixes.
+       Driven by scripts/mobile-audit.mjs findings across all views at
+       360/390/430/landscape. Sections: bottom-chrome stacking, storage bar
+       single row, custom-select chevron room, touch-target floors.
+   ========================================================================= */
+
+/* ---- 37a. Storage bar: the 36a grid has 4 tracks but the bar now holds 5
+        children (save status + Save/Export/Import/Sutra Cloud), so the 5th
+        wrapped to a second row that hid under the bottom nav. One row, five
+        tracks. ---- */
+@media (max-width: 768px), (max-height: 480px) and (orientation: landscape) {
+    #storageOptions,
+    .storage-options {
+        grid-template-columns: auto minmax(0, 2fr) repeat(3, minmax(0, 1fr)) !important;
+    }
+}
+
+/* Tiny phones: the floppy icon costs the exact pixels "Save Locally" needs
+   to render untruncated; the label alone reads better than "Save Loc…". */
+@media (max-width: 400px) {
+    #saveLocalBtn i {
+        display: none !important;
+    }
+}
+
+/* Phones: Export/Import/Sutra Cloud go icon-only (titles keep the meaning);
+   "Save Locally" is the primary action and keeps its label. */
+@media (max-width: 640px) {
+    #exportFileBtn .btn-text,
+    #importFileBtn .btn-text,
+    #sutraCloudOpenBtn .btn-text {
+        display: none !important;
+    }
+}
+
+/* ---- 37b. Bottom chrome stacking (phones with the bottom tab bar).
+        styles.css pins #storageOptions at bottom:10px, but the bottom nav
+        (~58px, z-index 4000) sits on top of it. Lift the bar clear of the
+        nav and move the toast above both. app.js syncResponsiveViewport()
+        measures the real bar/nav rects for the FAB stack; the values here
+        are the pre-JS fallback. ---- */
+@media (max-width: 640px) {
+    #storageOptions,
+    .storage-options {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 66px) !important;
+    }
+    .chatbot-btn {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 138px) !important;
+    }
+    .feedback-fab {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 202px) !important;
+    }
+    .chatbot-panel {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 196px) !important;
+    }
+    .toast {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 136px) !important;
+    }
+    /* Bar (56) + nav (58) both live below the content now; reserve enough
+       scroll clearance that the last card clears the storage bar. */
+    :root {
+        --responsive-bottom-clearance: 100px;
+        --responsive-short-bottom-clearance: 112px;
+    }
+}
+
+/* ---- 37c. Custom selects (select-enhancer): styles.css's ≤640px compaction
+        sets the trigger to `padding: 10px 12px`, but the chevron is absolutely
+        positioned at right:14px — it lands on the label's last characters in
+        every enhanced select site-wide. Restore room for it. ---- */
+@media (max-width: 640px) {
+    .nf-select .nf-select-trigger {
+        padding-right: 34px !important;
+    }
+}
+
+/* ---- 37d. Touch-target floors for controls the audit flagged under 32px. ---- */
+@media (hover: none) and (pointer: coarse) {
+    /* Homework table row actions (24×24 authored). min-* clamps the authored
+       width even though homework-redesign.css loads after this file. */
+    .hw-table-icon-btn {
+        min-width: 32px;
+        min-height: 32px;
+        font-size: 12px;
+    }
+    /* Assistant composer chip icons (28×28 authored). */
+    .flow-chip-icon {
+        min-width: 34px;
+        min-height: 34px;
+    }
+    /* Range sliders (Life check-in energy etc.) — 16px tracks are hard to
+       grab; padding grows the hit area without changing the visual track. */
+    input[type="range"] {
+        min-height: 32px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
+/* ---- 37e. Timeline header: the date stepper shares a half-width grid cell
+        with "Today", squeezing the date trigger to "Sel…". Give the stepper
+        its own full row. ---- */
+@media (max-width: 640px) {
+    #view-timeline .timeline-date-stepper {
+        grid-column: 1 / -1;
+    }
+}

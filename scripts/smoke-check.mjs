@@ -388,6 +388,29 @@ mustContain('Sutra.html', 'id="todayReviewCard"', 'today review card host in HTM
 mustContain('Sutra.html', 'id="todayTrackerSummary"', 'today tracker summary host in HTML');
 mustContain('Sutra.html', 'id="todayMobileShell"', 'today mobile shell host in HTML');
 
+// Today redesign — Next Up card + Upcoming Radar
+mustContain('Sutra.html', 'src/features/workspace/today-command-center.js?v=', 'today command center module cache-busted include');
+mustContain('Sutra.html', 'id="upcomingRadarMount"', 'upcoming radar mount in HTML');
+mustContain('Sutra.html', 'id="upcomingRadarFilter"', 'upcoming radar filter dropdown in HTML');
+mustContain('Sutra.html', 'styles/views/today-redesign.css?v=', 'today redesign stylesheet cache-busted include');
+mustContain('src/features/workspace/today-command-center.js', 'window.SutraTodayCenter', 'today center helpers exposed on window');
+mustContain('src/features/workspace/today-command-center.js', 'getNextPriorityItem', 'deterministic next-priority helper');
+mustContain('src/features/workspace/today-command-center.js', 'groupItemsByTimeHorizon', 'time-horizon grouping helper');
+mustContain('src/core/app.js', 'function renderUpcomingRadar', 'upcoming radar renderer wrapper');
+
+// Custom Tabs — user-composed widget dashboards
+mustContain('Sutra.html', 'src/features/workspace/custom-tabs.js?v=', 'custom tabs module cache-busted include');
+mustContain('Sutra.html', 'styles/views/custom-tabs.css?v=', 'custom tabs stylesheet cache-busted include');
+mustContain('src/core/app.js', 'function normalizeCustomTabsSafe', 'custom tabs normalizer in core');
+mustContain('src/core/app.js', 'window.SutraCustomTabsBridge', 'custom tabs core bridge exposed');
+mustContain('src/core/app.js', 'customTabs: normalizeCustomTabsSafe(customTabsData)', 'custom tabs travel in workspace export payload');
+mustContain('src/core/app.js', 'customTabs: payload.customTabs', 'custom tabs travel in JSON export payload');
+mustContain('src/core/app.js', 'customTabsData = normalizeCustomTabsSafe(importedCustomTabs)', 'custom tabs restored on workspace import');
+mustContain('src/features/workspace/custom-tabs.js', 'window.SutraCustomTabs', 'custom tabs module exposed on window');
+mustContain('docs/architecture/persistence-inventory.json', '"customTabs"', 'custom tabs listed in persistence inventory');
+mustContain('src/features/assistant/flow-assistant.js', 'function summarizeCustomTab', 'assistant summarizes custom tab widget content');
+mustContain('src/features/assistant/flow-assistant.js', 'ctx.customTab = customTab', 'assistant attaches custom-tab context');
+
 // Mobile Today Mode
 mustContain('src/core/app.js', 'function shouldUseMobileTodayMode', 'mobile today mode decider');
 mustContain('src/core/app.js', 'function applyMobileTodayModeClass', 'mobile today mode class applier');
@@ -456,7 +479,7 @@ mustContain('Sutra.html', 'assets/brand/sutra/generated/sutra-icon-32.png', 'Sut
 mustContain('Sutra.html', 'aria-label="Sutra Assistant"', 'assistant panel renamed to Sutra Assistant');
 mustContain('Sutra.html', 'data-sutra-component="assistant-intelligence-badge"', 'Powered by Sutra Intelligence badge hook present');
 mustContain('Sutra.html', 'Powered by Sutra Intelligence', 'Sutra Intelligence badge label present');
-mustContain('Sutra.html', 'placeholder="Ask about this note, your schedule, or an attached file…"', 'composer placeholder reads redesigned prompt');
+mustContain('Sutra.html', 'placeholder="Ask about your notes, plans, or files…"', 'composer placeholder reads redesigned prompt');
 mustContain('Sutra.html', '<span class="app-title-wordmark">Sutra</span>', 'sidebar wordmark rebranded to Sutra');
 mustContain('Sutra.html', 'data-pref-path="assistant.contextDepth"', 'Assistant context depth setting in HTML');
 mustContain('Sutra.html', 'data-pref-path="assistant.showActionPreviews"', 'Assistant show-action-previews setting in HTML');
@@ -627,7 +650,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260702-onboarding5', 'app.js cache-busted so the latest repairs ship');
+mustContain('Sutra.html', 'src/core/app.js?v=20260705-clb2', 'app.js cache-busted so the latest repairs ship');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------

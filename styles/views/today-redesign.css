@@ -1,0 +1,678 @@
+/* =========================================================================
+   TODAY VIEW REDESIGN — student command center
+   Loaded last, so plain (non-!important) overrides win the cascade.
+
+   Layout:
+     1. Hero header   — serif date, subtitle, quick actions
+     2. Hero row      — Next Up card + Upcoming Radar
+     3. Info grid     — Today's Plan / Assignments / Calendar / Tasks / Review
+     4. Focus section — priorities, Shape My Day, plan disclosure (preserved)
+
+   Uses only existing theme tokens (--accent, --bg-*, --text-*, --surface-*)
+   so every theme (incl. dark) keeps working.
+   ========================================================================= */
+
+/* ── 1. Hero header ─────────────────────────────────────────────────────── */
+
+#view-today.today-redesign .today-hero-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+
+#view-today.today-redesign .today-hero-date h2 {
+    font-family: var(--font-heading, Georgia, serif);
+    font-size: clamp(2.1rem, 3.6vw, 2.9rem);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+    margin: 2px 0 0;
+    color: var(--text-primary);
+}
+
+#view-today.today-redesign .today-tagline {
+    font-family: var(--font-heading, Georgia, serif);
+    font-size: 1rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    margin-top: 6px;
+}
+
+#view-today.today-redesign .today-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#view-today.today-redesign .today-header-actions .neumo-btn {
+    border-radius: 12px;
+    padding: 9px 16px;
+    font-size: 0.84rem;
+    font-weight: 600;
+    transition: transform var(--transition-fast, 180ms ease),
+                box-shadow var(--transition-fast, 180ms ease),
+                background var(--transition-fast, 180ms ease);
+}
+
+#view-today.today-redesign .today-hero-primary {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--accent, #d8c4a1) 88%, #ffffff),
+        var(--accent-strong, #b79a73));
+    border: 1px solid color-mix(in srgb, var(--accent-strong, #b79a73) 70%, transparent);
+    color: #fff;
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-strong, #b79a73) 35%, transparent);
+}
+
+#view-today.today-redesign .today-hero-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 9px 20px color-mix(in srgb, var(--accent-strong, #b79a73) 45%, transparent);
+}
+
+#view-today.today-redesign .today-header-actions .neumo-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* ── 2. Hero row: Next Up + Upcoming Radar ──────────────────────────────── */
+
+#view-today.today-redesign .today-hero-row {
+    display: grid;
+    grid-template-columns: minmax(300px, 5fr) minmax(0, 8fr);
+    gap: 20px;
+    align-items: stretch;
+}
+
+#view-today.today-redesign .today-nextup-card,
+#view-today.today-redesign .today-radar-card {
+    border-radius: var(--radius, 18px);
+    border: 1px solid var(--surface-border, rgba(22, 30, 45, 0.13));
+    background: var(--bg-elevated, #fff);
+    box-shadow: var(--shadow-soft, 0 14px 32px rgba(22, 30, 45, 0.08));
+    padding: 22px 24px 16px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Next Up content (rendered by renderTodayDailyBrief) */
+
+.tnu-body { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+.tnu-eyebrow {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.tnu-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.tnu-meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+}
+
+.tnu-meta i { font-size: 0.8rem; opacity: 0.75; }
+
+.tnu-status-pill {
+    align-self: flex-start;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+    color: var(--text-secondary);
+}
+
+.tnu-status-overdue {
+    background: color-mix(in srgb, #c25b4a 16%, transparent);
+    color: #a63d2e;
+}
+
+.tnu-status-today {
+    background: color-mix(in srgb, var(--accent-strong, #b79a73) 20%, transparent);
+    color: color-mix(in srgb, var(--accent-strong, #b79a73) 80%, #4d3d24);
+}
+
+.tnu-status-tomorrow {
+    background: color-mix(in srgb, #5b82c2 16%, transparent);
+    color: #44659c;
+}
+
+[data-theme="dark"] .tnu-status-overdue { color: #e2917f; }
+[data-theme="dark"] .tnu-status-today { color: var(--accent, #d8c4a1); }
+[data-theme="dark"] .tnu-status-tomorrow { color: #8fb0e4; }
+
+.tnu-context {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin: 0;
+}
+
+.tnu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+.tnu-actions .tnu-primary {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--accent, #d8c4a1) 88%, #ffffff),
+        var(--accent-strong, #b79a73));
+    border: 1px solid color-mix(in srgb, var(--accent-strong, #b79a73) 70%, transparent);
+    color: #fff;
+    font-weight: 700;
+    border-radius: 11px;
+    padding: 9px 16px;
+}
+
+.tnu-actions .tnu-primary:hover { filter: brightness(1.04); }
+
+.tnu-actions .tnu-ghost {
+    border-radius: 11px;
+    padding: 9px 14px;
+}
+
+.tnu-smartrow {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.tnu-smartrow .neumo-btn {
+    font-size: 0.72rem;
+    padding: 5px 10px;
+    border-radius: 9px;
+    opacity: 0.9;
+}
+
+.tnu-smartrow .is-recover {
+    border-color: color-mix(in srgb, #c25b4a 45%, transparent);
+    color: #a63d2e;
+}
+
+[data-theme="dark"] .tnu-smartrow .is-recover { color: #e2917f; }
+
+.tnu-chip.is-alert {
+    font-size: 0.7rem;
+    padding: 5px 10px;
+    border-radius: 9px;
+    background: color-mix(in srgb, #c25b4a 12%, transparent);
+    color: #a63d2e;
+    align-self: center;
+}
+
+/* Next Up footer counts */
+
+.today-nextup-footer {
+    display: flex;
+    align-items: stretch;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--surface-border, rgba(22, 30, 45, 0.1));
+}
+
+.tnu-count {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    background: none;
+    border: none;
+    border-left: 1px solid var(--surface-border, rgba(22, 30, 45, 0.1));
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background var(--transition-fast, 180ms ease), color var(--transition-fast, 180ms ease);
+}
+
+.tnu-count:first-child { border-left: none; }
+.tnu-count:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); color: var(--text-primary); }
+.tnu-count:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tnu-count strong {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.tnu-count.tcc-stat-has-alert,
+.tnu-count.tcc-stat-has-alert strong { color: #a63d2e; }
+[data-theme="dark"] .tnu-count.tcc-stat-has-alert,
+[data-theme="dark"] .tnu-count.tcc-stat-has-alert strong { color: #e2917f; }
+
+/* ── Upcoming Radar ─────────────────────────────────────────────────────── */
+
+.today-radar-card {
+    /* Zone/status palette (shared by chips, arcs, legend, list fallback) */
+    --radar-overdue: #c25b4a;
+    --radar-today: var(--accent-strong, #b79a73);
+    --radar-tomorrow: #5b82c2;
+    --radar-thisWeek: #5f9d6e;
+    --radar-later: #8a8f9b;
+    --radar-undated: #8a8f9b;
+}
+
+.radar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.radar-title { margin: 0; }
+
+.radar-filter {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-elevated, #fff);
+    border: 1px solid var(--surface-border, rgba(22, 30, 45, 0.13));
+    border-radius: 9px;
+    padding: 5px 26px 5px 10px;
+    cursor: pointer;
+}
+
+.radar-filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.radar-mount {
+    position: relative;
+    flex: 1;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+}
+
+.radar-stage {
+    position: relative;
+    flex: 1;
+    min-height: 250px;
+}
+
+.radar-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.radar-arc {
+    stroke: color-mix(in srgb, var(--text-muted, #87909d) 26%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 3 5;
+}
+
+.radar-arc-today { stroke: color-mix(in srgb, var(--radar-today) 55%, transparent); stroke-dasharray: none; }
+
+.radar-zone-label {
+    fill: var(--text-muted, #87909d);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    opacity: 0.7;
+}
+
+.radar-chip {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    max-width: 172px;
+    padding: 7px 11px;
+    background: var(--bg-elevated, #fff);
+    border: 1px solid var(--surface-border, rgba(22, 30, 45, 0.13));
+    border-radius: 11px;
+    box-shadow: 0 5px 14px rgba(22, 30, 45, 0.07);
+    cursor: pointer;
+    text-align: left;
+    transition: box-shadow var(--transition-fast, 180ms ease),
+                border-color var(--transition-fast, 180ms ease),
+                scale var(--transition-fast, 180ms ease);
+    animation: radar-chip-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes radar-chip-in {
+    from { opacity: 0; scale: 0.92; }
+    to { opacity: 1; scale: 1; }
+}
+
+.radar-chip:hover,
+.radar-chip:focus-visible {
+    z-index: 5;
+    scale: 1.04;
+    box-shadow: 0 10px 24px rgba(22, 30, 45, 0.14);
+    border-color: color-mix(in srgb, var(--accent, #d8c4a1) 60%, transparent);
+}
+
+.radar-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.radar-chip-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    margin-top: 4px;
+    background: var(--radar-later);
+}
+
+.radar-chip-overdue .radar-chip-dot { background: var(--radar-overdue); }
+.radar-chip-today .radar-chip-dot { background: var(--radar-today); }
+.radar-chip-tomorrow .radar-chip-dot { background: var(--radar-tomorrow); }
+.radar-chip-thisWeek .radar-chip-dot { background: var(--radar-thisWeek); }
+.radar-chip-later .radar-chip-dot,
+.radar-chip-undated .radar-chip-dot { background: var(--radar-later); }
+
+/* Urgent chips get a tinted border so they read first */
+.radar-chip-overdue { border-color: color-mix(in srgb, var(--radar-overdue) 45%, transparent); }
+.radar-chip-today {
+    border-color: color-mix(in srgb, var(--radar-today) 65%, transparent);
+    background: color-mix(in srgb, var(--radar-today) 7%, var(--bg-elevated, #fff));
+}
+
+.radar-chip-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.radar-chip-title {
+    font-size: 0.76rem;
+    font-weight: 650;
+    color: var(--text-primary);
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.radar-chip-meta {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.radar-chip-overflow {
+    border-style: dashed;
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.radar-chip-overflow .radar-chip-title { color: var(--text-secondary); font-weight: 600; }
+
+/* Legend */
+
+.radar-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: auto;
+}
+
+.radar-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.radar-legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--radar-later); }
+.radar-legend-overdue .radar-legend-dot { background: var(--radar-overdue); }
+.radar-legend-today .radar-legend-dot { background: var(--radar-today); }
+.radar-legend-tomorrow .radar-legend-dot { background: var(--radar-tomorrow); }
+.radar-legend-thisWeek .radar-legend-dot { background: var(--radar-thisWeek); }
+
+.radar-legend-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+}
+
+/* Radar list fallback (narrow widths / "No date" filter) */
+
+.radar-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+
+.radar-list-zone { display: flex; flex-direction: column; gap: 5px; }
+
+.radar-list-zone-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 2px;
+}
+
+.radar-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 11px;
+    background: var(--bg-elevated, #fff);
+    border: 1px solid var(--surface-border, rgba(22, 30, 45, 0.1));
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background var(--transition-fast, 180ms ease), border-color var(--transition-fast, 180ms ease);
+}
+
+.radar-list-item:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.035)); }
+.radar-list-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.radar-list-item .radar-chip-title { -webkit-line-clamp: 1; }
+.radar-list-item .radar-chip-meta { white-space: normal; }
+
+/* Radar empty state */
+
+.radar-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    text-align: center;
+    padding: 24px 12px;
+}
+
+.radar-empty-title { font-size: 0.95rem; font-weight: 700; color: var(--text-secondary); }
+.radar-empty-sub { font-size: 0.78rem; color: var(--text-muted); max-width: 320px; }
+
+/* ── 3. Info grid ───────────────────────────────────────────────────────── */
+
+#view-today.today-redesign .today-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(192px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+}
+
+#view-today.today-redesign .today-info-grid .today-attention-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-radius: var(--radius, 18px);
+    border: 1px solid var(--surface-border, rgba(22, 30, 45, 0.13));
+    background: var(--bg-elevated, #fff);
+    box-shadow: 0 8px 22px rgba(22, 30, 45, 0.05);
+    padding: 16px 18px 12px;
+    min-width: 0;
+    transition: box-shadow var(--transition-fast, 180ms ease), transform var(--transition-fast, 180ms ease);
+}
+
+#view-today.today-redesign .today-info-grid .today-attention-card:hover {
+    box-shadow: 0 12px 28px rgba(22, 30, 45, 0.09);
+    transform: translateY(-1px);
+}
+
+#view-today.today-redesign .today-info-grid .tac-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+#view-today.today-redesign .today-info-grid .tac-title {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+#view-today.today-redesign .today-info-grid .tac-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+}
+
+#view-today.today-redesign .today-info-grid .tac-items {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    flex: 1;
+    min-height: 0;
+}
+
+#view-today.today-redesign .today-info-grid .tac-footer-link {
+    margin-top: auto;
+    align-self: flex-start;
+    background: none;
+    border: none;
+    padding: 6px 0 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast, 180ms ease);
+}
+
+#view-today.today-redesign .today-info-grid .tac-footer-link:hover {
+    color: var(--accent-strong, #b79a73);
+}
+
+#view-today.today-redesign .today-info-grid .tac-footer-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+#view-today.today-redesign .today-info-grid .tac-empty {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 10px 0;
+}
+
+/* Today's Plan card — compact agenda rows with timeline dots */
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-state {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-list {
+    gap: 0;
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-item {
+    position: relative;
+    padding: 6px 0 6px 16px;
+    border: none;
+    background: none;
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-item::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 12px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-item.is-current::before {
+    background: var(--accent-strong, #b79a73);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #d8c4a1) 30%, transparent);
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-item-title {
+    font-size: 0.8rem;
+    font-weight: 650;
+    color: var(--text-primary);
+    display: block;
+    line-height: 1.3;
+}
+
+#view-today.today-redesign .today-schedule-snapshot .today-schedule-item-meta {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+/* ── 4. Focus / priorities section (preserved functionality) ────────────── */
+
+#view-today.today-redesign .today-plan-section .today-split {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+    #view-today.today-redesign .today-hero-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    #view-today.today-redesign .today-info-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+    #view-today.today-redesign .today-hero-date h2 { font-size: 1.9rem; }
+}
+
+/* Phone widths use the dedicated mobile shell (body.mobile-today-mode). Hide
+   the desktop hero row + grid there like the other desktop-only sections. */
+body.mobile-today-mode #view-today.today-redesign .today-hero-row,
+body.mobile-today-mode #view-today.today-redesign .today-attention-section {
+    display: none;
+}
+
+/* ── Motion & accessibility ─────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+    .radar-chip { animation: none; }
+    .radar-chip:hover, .radar-chip:focus-visible { scale: none; }
+    #view-today.today-redesign .today-info-grid .today-attention-card,
+    #view-today.today-redesign .today-info-grid .today-attention-card:hover {
+        transform: none;
+        transition: none;
+    }
+    #view-today.today-redesign .today-hero-primary:hover { transform: none; }
+}
+
+/* Dark theme: soften shadows, keep chips legible */
+[data-theme="dark"] #view-today.today-redesign .today-nextup-card,
+[data-theme="dark"] #view-today.today-redesign .today-radar-card,
+[data-theme="dark"] #view-today.today-redesign .today-info-grid .today-attention-card {
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .radar-chip { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); }
