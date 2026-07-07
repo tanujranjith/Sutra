@@ -282,7 +282,18 @@
         { key: 'focus', label: 'Focus & Habits' },
         { key: 'notes', label: 'Notes' },
         { key: 'time', label: 'Time' },
-        { key: 'tools', label: 'Tools' }
+        { key: 'tools', label: 'Tools' },
+        { key: 'wellness', label: 'Wellness' },
+        { key: 'reading', label: 'Reading & Review' },
+        { key: 'overview', label: 'Overview & Trends' },
+        { key: 'mini_os', label: 'College · Life · Business' },
+        { key: 'connections', label: 'Connections' },
+        { key: 'import_today', label: 'Today Page' },
+        { key: 'import_academics', label: 'Academics Imports' },
+        { key: 'import_calendar', label: 'Calendar / Timeline Imports' },
+        { key: 'import_notes', label: 'Notes Imports' },
+        { key: 'import_focus', label: 'Focus / Habits Imports' },
+        { key: 'import_tasks', label: 'Workspace / Tasks Imports' }
     ];
 
     var WIDGET_TYPES = {
@@ -434,6 +445,80 @@
             fullWidth: true
         }
     };
+
+    var IMPORTED_WIDGET_SPECS = [
+        ['imp_today_brief', 'Daily Brief', 'fa-newspaper', 'import_today', 'Compact Today overview.'],
+        ['imp_momentum_heatmap', 'Momentum Heatmap', 'fa-border-all', 'import_today', '30-day consistency heat map.'],
+        ['imp_today_schedule', 'Today Schedule Snapshot', 'fa-calendar-day', 'import_today', 'Current and next blocks.'],
+        ['imp_priority_queue', 'Priority Queue', 'fa-arrow-up-wide-short', 'import_today', 'Top tasks to do now.'],
+        ['imp_review_card', 'Review Card', 'fa-layer-group', 'import_today', 'Today review status.'],
+        ['imp_tracker_summary', 'Tracker Summary', 'fa-square-check', 'import_today', 'Habit and task progress.'],
+        ['imp_student_hub', 'Student Hub Summary', 'fa-school', 'import_today', 'Readiness summary.'],
+        ['imp_upcoming_radar', 'Upcoming Radar', 'fa-satellite-dish', 'import_today', 'What is coming up.'],
+        ['imp_attention_cards', 'Attention Cards', 'fa-bullseye', 'import_today', 'Assignments, tasks, and calendar.'],
+        ['imp_course_progress', 'Course Progress', 'fa-chart-simple', 'import_academics', 'Course status and grades.'],
+        ['imp_grade_whatif', 'Grade What-If', 'fa-scale-balanced', 'import_academics', 'Grade projection sample.'],
+        ['imp_gpa_projection', 'GPA Projection', 'fa-chart-line', 'import_academics', 'Projected GPA summary.'],
+        ['imp_assignment_milestones', 'Assignment Milestones', 'fa-diagram-project', 'import_academics', 'Large assignment steps.'],
+        ['imp_exam_countdown', 'Exam Countdown Ring', 'fa-circle-notch', 'import_academics', 'Next exam countdown.'],
+        ['imp_weak_topics', 'Weak Topics', 'fa-triangle-exclamation', 'import_academics', 'Flagged weak areas.'],
+        ['imp_ap_study_snapshot', 'AP Study Snapshot', 'fa-book-open-reader', 'import_academics', 'AP study status.'],
+        ['imp_review_load', 'Review Load', 'fa-boxes-stacked', 'import_academics', 'Review queue depth.'],
+        ['imp_current_block', 'Current Block', 'fa-location-dot', 'import_calendar', 'What you are in now.'],
+        ['imp_next_block', 'Next Block', 'fa-forward-step', 'import_calendar', 'What starts next.'],
+        ['imp_free_slots', 'Free Slot Finder', 'fa-magnifying-glass', 'import_calendar', 'Open time today.'],
+        ['imp_day_strip', 'Day Strip', 'fa-timeline', 'import_calendar', 'Compact day timeline.'],
+        ['imp_week_strip', 'Week Strip', 'fa-calendar-week', 'import_calendar', 'Compact week load.'],
+        ['imp_event_density', 'Event Density', 'fa-chart-area', 'import_calendar', 'How packed your week is.'],
+        ['imp_recent_notes_stack', 'Recent Notes Stack', 'fa-note-sticky', 'import_notes', 'Latest notes stack.'],
+        ['imp_pinned_notes_board', 'Pinned Notes Board', 'fa-thumbtack', 'import_notes', 'Selected notes board.'],
+        ['imp_linked_notes', 'Linked Notes', 'fa-link', 'import_notes', 'Notes connected to work.'],
+        ['imp_random_note', 'Random Note', 'fa-shuffle', 'import_notes', 'Resurface an old note.'],
+        ['imp_note_inbox', 'Note Inbox', 'fa-inbox', 'import_notes', 'Quick capture and triage.'],
+        ['imp_habit_heatmap', 'Habit Heatmap', 'fa-table-cells', 'import_focus', 'Habit consistency grid.'],
+        ['imp_streak_ribbon', 'Streak Ribbon', 'fa-fire-flame-curved', 'import_focus', 'Current and best streak.'],
+        ['imp_pomodoro', 'Pomodoro', 'fa-hourglass-start', 'import_focus', 'Fixed 25/5 focus cycle.'],
+        ['imp_session_log', 'Session Log', 'fa-clock-rotate-left', 'import_focus', 'Recent focus sessions.'],
+        ['imp_energy_checkin', 'Energy Check-in', 'fa-battery-three-quarters', 'import_focus', 'Recent energy summary.'],
+        ['imp_overdue_recovery', 'Overdue Recovery', 'fa-life-ring', 'import_tasks', 'Recovery-first overdue list.'],
+        ['imp_task_burndown', 'Task Burndown', 'fa-chart-column', 'import_tasks', 'Remaining work over time.'],
+        ['imp_task_load', 'Task Load', 'fa-weight-hanging', 'import_tasks', 'Open task volume.'],
+        ['imp_completion_trend', 'Completion Trend', 'fa-arrow-trend-up', 'import_tasks', 'Recent completion trend.']
+    ];
+
+    IMPORTED_WIDGET_SPECS.forEach(function (spec) {
+        WIDGET_TYPES[spec[0]] = {
+            label: spec[1],
+            icon: spec[2],
+            cat: spec[3],
+            desc: spec[4],
+            render: renderImportedWidget
+        };
+    });
+
+    // Data-driven dashboard widgets — same declarative renderer as the imported
+    // widgets (hero/stats/progress/list/bars via the core bridge), grouped into
+    // their own scannable categories.
+    var DASH_WIDGET_SPECS = [
+        ['dash_semester', 'Semester Progress', 'fa-graduation-cap', 'overview', 'How far through the term you are.'],
+        ['dash_month_compare', 'This Month vs Last', 'fa-not-equal', 'overview', 'Tasks and focus, month over month.'],
+        ['dash_weekly_recap', 'Weekly Recap', 'fa-calendar-check', 'overview', 'Your week at a glance.'],
+        ['dash_college_apps', 'Application Tracker', 'fa-building-columns', 'mini_os', 'College apps and deadlines.'],
+        ['dash_expenses', 'Expense Tally', 'fa-wallet', 'mini_os', 'Spending vs budget this month.'],
+        ['dash_projects', 'Project Pipeline', 'fa-diagram-project', 'mini_os', 'Business projects and task flow.'],
+        ['dash_lms_sync', 'Sync Status', 'fa-rotate', 'connections', 'Last Canvas capture and counts.'],
+        ['dash_recent_grades', 'Latest Grades', 'fa-clipboard-check', 'connections', 'Most recent graded scores.']
+    ];
+
+    DASH_WIDGET_SPECS.forEach(function (spec) {
+        WIDGET_TYPES[spec[0]] = {
+            label: spec[1],
+            icon: spec[2],
+            cat: spec[3],
+            desc: spec[4],
+            render: renderImportedWidget
+        };
+    });
 
     function emptyMsg(text) {
         return el('p', 'ctab-empty-msg', text);
@@ -1237,6 +1322,744 @@
         body.appendChild(el('h3', 'ctab-section-heading', String(cfg.text || 'Section')));
     }
 
+    // ---------- imported page widgets ----------
+
+    function getImportedData(widget) {
+        try {
+            if (!bridge || typeof bridge.getImportedWidgetData !== 'function') return null;
+            return bridge.getImportedWidgetData(widget.type, widget.config || null) || null;
+        } catch (e) { return null; }
+    }
+
+    function runImportedAction(action, payload) {
+        try {
+            if (bridge && typeof bridge.runImportedWidgetAction === 'function') {
+                bridge.runImportedWidgetAction(action, payload || {});
+            }
+        } catch (e) { /* non-critical */ }
+    }
+
+    function appendImportedHero(body, hero) {
+        if (!hero) return false;
+        var wrap = el('div', 'ctab-import-hero');
+        wrap.appendChild(el('strong', 'ctab-import-hero-value', String(hero.value != null ? hero.value : '')));
+        if (hero.label) wrap.appendChild(el('span', 'ctab-import-hero-label', String(hero.label)));
+        if (hero.meta) wrap.appendChild(el('span', 'ctab-import-hero-meta', String(hero.meta)));
+        body.appendChild(wrap);
+        return true;
+    }
+
+    function appendImportedStats(body, stats) {
+        if (!Array.isArray(stats) || !stats.length) return false;
+        var row = el('div', 'ctab-stat-row ctab-import-stats');
+        stats.slice(0, 4).forEach(function (stat) {
+            row.appendChild(statBlock(stat && stat.value != null ? stat.value : 0, stat && stat.label ? stat.label : ''));
+        });
+        body.appendChild(row);
+        return true;
+    }
+
+    function appendImportedList(body, rows) {
+        if (!Array.isArray(rows) || !rows.length) return false;
+        var list = el('ul', 'ctab-list ctab-import-list');
+        rows.slice(0, 8).forEach(function (row) {
+            if (!row) return;
+            var li = el('li', 'ctab-list-row ctab-import-list-row' + (row.tone ? ' is-' + String(row.tone) : ''));
+            var title = row.title != null ? String(row.title) : 'Untitled';
+            if (row.action) {
+                li.appendChild(btn('ctab-import-row-btn', title, function () {
+                    runImportedAction(row.action, row.payload || {});
+                }, { icon: row.icon || 'fa-arrow-up-right-from-square' }));
+            } else {
+                li.appendChild(el('span', 'ctab-list-title', title));
+            }
+            if (row.meta) li.appendChild(el('span', 'ctab-list-meta', String(row.meta)));
+            list.appendChild(li);
+        });
+        body.appendChild(list);
+        return true;
+    }
+
+    function appendImportedActions(body, actions) {
+        if (!Array.isArray(actions) || !actions.length) return false;
+        var row = el('div', 'ctab-import-actions');
+        actions.slice(0, 3).forEach(function (action) {
+            if (!action) return;
+            row.appendChild(btn('ctab-add-btn ctab-import-action', String(action.label || 'Open'), function () {
+                runImportedAction(action.action, action.payload || {});
+            }, { icon: action.icon || 'fa-arrow-up-right-from-square' }));
+        });
+        body.appendChild(row);
+        return true;
+    }
+
+    function appendImportedHeatmap(body, points) {
+        if (!Array.isArray(points) || !points.length) return false;
+        var max = Math.max(1, Math.max.apply(null, points.map(function (p) { return Number(p && p.value) || 0; })));
+        var grid = el('div', 'ctab-import-heatmap');
+        points.forEach(function (point) {
+            var v = Number(point && point.value) || 0;
+            var cell = el('span', 'ctab-import-heat-cell level-' + Math.min(4, Math.ceil((v / max) * 4)));
+            cell.title = (point && point.date ? point.date + ': ' : '') + v + ' activity';
+            grid.appendChild(cell);
+        });
+        body.appendChild(grid);
+        return true;
+    }
+
+    function appendImportedBars(body, bars) {
+        if (!Array.isArray(bars) || !bars.length) return false;
+        var max = Math.max(1, Math.max.apply(null, bars.map(function (p) { return Number(p && p.value) || 0; })));
+        var chart = el('div', 'ctab-bars ctab-import-bars');
+        bars.slice(0, 14).forEach(function (point) {
+            var value = Number(point && point.value) || 0;
+            var col = el('div', 'ctab-bar-col');
+            var bar = el('div', 'ctab-bar');
+            bar.style.height = Math.max(3, Math.round((value / max) * 100)) + '%';
+            bar.title = String(point && point.label || '') + ': ' + value;
+            col.appendChild(bar);
+            col.appendChild(el('span', 'ctab-bar-label', String(point && point.label || '').slice(0, 2)));
+            chart.appendChild(col);
+        });
+        body.appendChild(chart);
+        return true;
+    }
+
+    function appendImportedTimeline(body, blocks) {
+        if (!Array.isArray(blocks) || !blocks.length) return false;
+        var min = 6 * 60;
+        var max = 22 * 60;
+        blocks.forEach(function (block) {
+            if (!block) return;
+            min = Math.min(min, Number(block.start) || min);
+            max = Math.max(max, Number(block.end) || max);
+        });
+        if (max <= min) max = min + 60;
+        var wrap = el('div', 'ctab-import-timeline');
+        blocks.slice(0, 10).forEach(function (block) {
+            var start = Number(block.start) || min;
+            var end = Number(block.end) || start + 30;
+            var seg = el('div', 'ctab-import-time-seg');
+            seg.style.left = Math.max(0, Math.min(100, ((start - min) / (max - min)) * 100)) + '%';
+            seg.style.width = Math.max(4, Math.min(100, ((end - start) / (max - min)) * 100)) + '%';
+            seg.title = [block.title || 'Block', block.meta || ''].filter(Boolean).join(' - ');
+            wrap.appendChild(seg);
+        });
+        body.appendChild(wrap);
+        return true;
+    }
+
+    function appendImportedProgress(body, progress) {
+        if (!progress || progress.pct == null) return false;
+        var pct = Math.max(0, Math.min(100, Math.round(Number(progress.pct) || 0)));
+        var track = el('div', 'ctab-progress-track');
+        var fill = el('div', 'ctab-progress-fill ctab-import-progress-fill' + (progress.tone ? ' is-' + String(progress.tone) : ''));
+        fill.style.width = pct + '%';
+        track.appendChild(fill);
+        body.appendChild(track);
+        if (progress.label) body.appendChild(el('p', 'ctab-progress-label', String(progress.label)));
+        return true;
+    }
+
+    function renderImportedWidget(body, tab, widget) {
+        var data = getImportedData(widget);
+        if (!data) {
+            body.appendChild(emptyMsg('Imported widget data is unavailable.'));
+            return;
+        }
+        var rendered = false;
+        rendered = appendImportedHero(body, data.hero) || rendered;
+        rendered = appendImportedStats(body, data.stats) || rendered;
+        rendered = appendImportedProgress(body, data.progress) || rendered;
+        rendered = appendImportedHeatmap(body, data.heatmap) || rendered;
+        rendered = appendImportedBars(body, data.bars) || rendered;
+        rendered = appendImportedTimeline(body, data.timeline) || rendered;
+        rendered = appendImportedList(body, data.list) || rendered;
+        if (!rendered && data.empty) body.appendChild(emptyMsg(String(data.empty)));
+        else if (!rendered) body.appendChild(emptyMsg('Nothing to show yet.'));
+        appendImportedActions(body, data.actions);
+        if (widget.type === 'imp_pinned_notes_board') {
+            body.appendChild(btn('ctab-add-btn ctab-import-action', 'Pin note', function () {
+                openNotePicker(tab, widget);
+            }, { icon: 'fa-plus' }));
+        }
+    }
+
+    // ---------- interactive widgets (self-contained; state lives in widget.config) ----------
+
+    function localDateKey(d) {
+        var x = d || new Date();
+        return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+    }
+
+    // --- Wellness: Water Tracker ---
+
+    function setupWaterWidget() {
+        return promptText({ title: 'Daily water goal', label: 'How many glasses a day?', placeholder: '8', inputType: 'number' }).then(function (val) {
+            if (val == null) return null;
+            var goal = Math.max(1, Math.min(50, Math.round(Number(val) || 8)));
+            return { goal: goal, count: 0, dateKey: localDateKey() };
+        });
+    }
+
+    function adjustWater(tab, widget, delta) {
+        var todayK = localDateKey();
+        mutateTab(tab.id, function (t) {
+            var w = findWidget(t, widget.id);
+            if (!w) return;
+            if (!w.config || typeof w.config !== 'object') w.config = {};
+            if (w.config.dateKey !== todayK) { w.config.dateKey = todayK; w.config.count = 0; }
+            w.config.count = Math.max(0, Math.min(50, (Number(w.config.count) || 0) + delta));
+        }, { rerender: false });
+        rerenderWidgetBody(tab.id, widget.id);
+    }
+
+    function renderWaterWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var todayK = localDateKey();
+        if (cfg.dateKey !== todayK) {
+            // New day — reset the count so the tracker starts fresh.
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                w.config.dateKey = todayK;
+                w.config.count = 0;
+            }, { rerender: false });
+            cfg = { goal: cfg.goal, count: 0, dateKey: todayK };
+        }
+        var goal = Math.max(1, Number(cfg.goal) || 8);
+        var count = Math.max(0, Number(cfg.count) || 0);
+        var pct = Math.min(100, Math.round((count / goal) * 100));
+        body.appendChild(el('p', 'ctab-countdown-title', 'Water'));
+        var track = el('div', 'ctab-progress-track');
+        var fill = el('div', 'ctab-progress-fill');
+        fill.style.width = pct + '%';
+        track.appendChild(fill);
+        body.appendChild(track);
+        body.appendChild(el('p', 'ctab-progress-label', count + ' / ' + goal + ' glasses'));
+        var row = el('div', 'ctab-counter-row');
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustWater(tab, widget, -1); }, { title: 'Remove a glass', icon: 'fa-minus' }));
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustWater(tab, widget, 1); }, { title: 'Add a glass', icon: 'fa-plus' }));
+        body.appendChild(row);
+    }
+
+    // --- Wellness: 20-20-20 Break Reminder ---
+
+    function renderEyeBreakWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var workMs = Math.max(1, Number(cfg.intervalMin) || 20) * 60000;
+        var breakMs = 20000;
+        var banner = el('div', 'ctab-break-banner');
+        banner.style.display = 'none';
+        var display = el('div', 'ctab-clock-time', '20:00');
+        body.appendChild(banner);
+        body.appendChild(display);
+
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+        function paint() {
+            if (!cfg.running) {
+                banner.style.display = 'none';
+                var d = Math.floor(workMs / 1000);
+                display.textContent = pad(Math.floor(d / 60)) + ':' + pad(d % 60);
+                return;
+            }
+            var now = Date.now();
+            if (!cfg.endsAt || now >= Number(cfg.endsAt)) {
+                var nextPhase = cfg.phase === 'break' ? 'work' : 'break';
+                var nextEnds = now + (nextPhase === 'break' ? breakMs : workMs);
+                cfg.phase = nextPhase;
+                cfg.endsAt = nextEnds;
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (w && w.config) { w.config.phase = nextPhase; w.config.endsAt = nextEnds; }
+                }, { rerender: false });
+            }
+            var rem = Math.max(0, Math.floor((Number(cfg.endsAt) - now) / 1000));
+            if (cfg.phase === 'break') {
+                banner.style.display = '';
+                banner.textContent = 'Look 20 ft away — ' + rem + 's';
+                display.textContent = '00:' + pad(rem);
+            } else {
+                banner.style.display = 'none';
+                display.textContent = pad(Math.floor(rem / 60)) + ':' + pad(rem % 60);
+            }
+        }
+        paint();
+        if (cfg.running) startTimer(tab.id, widget.id, paint, 1000);
+
+        var row = el('div', 'ctab-focus-row');
+        row.appendChild(btn('ctab-focus-btn', cfg.running ? 'Stop' : 'Start', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                if (w.config.running) { w.config.running = false; w.config.endsAt = null; w.config.phase = 'work'; }
+                else { w.config.running = true; w.config.phase = 'work'; w.config.endsAt = Date.now() + workMs; }
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: cfg.running ? 'fa-stop' : 'fa-play' }));
+        body.appendChild(row);
+        body.appendChild(el('p', 'ctab-list-meta', 'Every 20 min, look 20 ft away for 20 sec.'));
+    }
+
+    // --- Wellness: Gratitude Prompt ---
+
+    var GRATITUDE_PROMPTS = [
+        'What went well today?',
+        'Who are you grateful for right now?',
+        'What is one small win from today?',
+        'What made you smile recently?',
+        'What are you looking forward to?',
+        'What is something you have that others might wish for?'
+    ];
+
+    function renderGratitudeWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var len = GRATITUDE_PROMPTS.length;
+        var idx = (((Number(cfg.promptIndex) || 0) % len) + len) % len;
+        var todayK = localDateKey();
+        var entries = (cfg.entries && typeof cfg.entries === 'object') ? cfg.entries : {};
+        body.appendChild(el('p', 'ctab-quote-text', GRATITUDE_PROMPTS[idx]));
+        var area = document.createElement('textarea');
+        area.className = 'ctab-scratchpad ctab-gratitude-text';
+        area.placeholder = 'Write a line…';
+        area.maxLength = 500;
+        area.value = typeof entries[todayK] === 'string' ? entries[todayK] : '';
+        area.addEventListener('input', function () {
+            var key = tab.id + ':' + widget.id;
+            if (scratchpadTimers[key]) clearTimeout(scratchpadTimers[key]);
+            scratchpadTimers[key] = setTimeout(function () {
+                delete scratchpadTimers[key];
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w) return;
+                    if (!w.config || typeof w.config !== 'object') w.config = {};
+                    if (!w.config.entries || typeof w.config.entries !== 'object') w.config.entries = {};
+                    w.config.entries[todayK] = area.value.slice(0, 500);
+                }, { rerender: false });
+            }, 600);
+        });
+        body.appendChild(area);
+        body.appendChild(btn('ctab-add-btn', 'New prompt', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                w.config.promptIndex = (idx + 1) % len;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: 'fa-rotate' }));
+    }
+
+    // --- Reading: Currently Reading ---
+
+    function setupReadingWidget() {
+        var cfg = { title: '', currentPage: 0, totalPages: 0 };
+        return promptText({ title: 'Currently reading', label: 'Book or material title', placeholder: 'e.g. The Great Gatsby' }).then(function (title) {
+            if (title == null) return null;
+            cfg.title = String(title).trim().slice(0, 80) || 'Reading';
+            return promptText({ title: 'Total pages', label: 'How many pages?', placeholder: '180', inputType: 'number' }).then(function (pages) {
+                if (pages == null) return null;
+                cfg.totalPages = Math.max(1, Math.round(Number(pages) || 100));
+                return cfg;
+            });
+        });
+    }
+
+    function adjustReading(tab, widget, delta) {
+        mutateTab(tab.id, function (t) {
+            var w = findWidget(t, widget.id);
+            if (!w) return;
+            if (!w.config || typeof w.config !== 'object') w.config = {};
+            var total = Math.max(1, Number(w.config.totalPages) || 1);
+            w.config.currentPage = Math.max(0, Math.min(total, (Number(w.config.currentPage) || 0) + delta));
+        }, { rerender: false });
+        rerenderWidgetBody(tab.id, widget.id);
+    }
+
+    function renderReadingWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        if (!cfg.totalPages) {
+            body.appendChild(emptyMsg('Set a book to track your reading.'));
+            body.appendChild(btn('ctab-setup-btn', 'Set book', function () {
+                setupReadingWidget().then(function (c) {
+                    if (!c) return;
+                    mutateTab(tab.id, function (t) { var w = findWidget(t, widget.id); if (w) w.config = c; }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                });
+            }, { icon: 'fa-book' }));
+            return;
+        }
+        var total = Math.max(1, Number(cfg.totalPages) || 1);
+        var cur = Math.max(0, Math.min(total, Number(cfg.currentPage) || 0));
+        var pct = Math.round((cur / total) * 100);
+        body.appendChild(el('p', 'ctab-countdown-title', String(cfg.title || 'Reading')));
+        var track = el('div', 'ctab-progress-track');
+        var fill = el('div', 'ctab-progress-fill');
+        fill.style.width = pct + '%';
+        track.appendChild(fill);
+        body.appendChild(track);
+        body.appendChild(el('p', 'ctab-progress-label', 'Page ' + cur + ' / ' + total + ' (' + pct + '%)'));
+        var row = el('div', 'ctab-counter-row');
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustReading(tab, widget, -1); }, { title: 'Back a page', icon: 'fa-minus' }));
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustReading(tab, widget, 1); }, { title: 'Forward a page', icon: 'fa-plus' }));
+        row.appendChild(btn('ctab-counter-btn', '', function () { adjustReading(tab, widget, 10); }, { title: 'Forward 10 pages', icon: 'fa-angles-right' }));
+        body.appendChild(row);
+    }
+
+    // --- Reading: Flashcard of the Day ---
+
+    function renderFlashcardWidget(body, tab, widget) {
+        var card = null;
+        try { card = bridge.getRandomReviewCard(); } catch (e) { card = null; }
+        if (!card) {
+            body.appendChild(emptyMsg('No review cards yet — create a deck in Review.'));
+            return;
+        }
+        var cfg = widget.config || {};
+        var revealed = cfg.revealed === true;
+        if (card.deck) body.appendChild(el('p', 'ctab-list-meta', card.deck));
+        body.appendChild(el('p', 'ctab-flashcard-prompt', card.prompt || '(no prompt)'));
+        if (revealed) {
+            body.appendChild(el('p', 'ctab-flashcard-answer', card.answer || '(no answer)'));
+        } else if (card.hint) {
+            body.appendChild(el('p', 'ctab-list-meta', 'Hint: ' + card.hint));
+        }
+        var row = el('div', 'ctab-focus-row');
+        row.appendChild(btn('ctab-focus-btn', revealed ? 'Hide' : 'Reveal', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                w.config.revealed = !revealed;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: revealed ? 'fa-eye-slash' : 'fa-eye' }));
+        row.appendChild(btn('ctab-focus-btn', 'Study', function () {
+            try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); } catch (e) { /* non-critical */ }
+        }, { icon: 'fa-layer-group' }));
+        body.appendChild(row);
+    }
+
+    // --- Tools: Decision Spinner ---
+
+    function renderDecisionWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var options = Array.isArray(cfg.options) && cfg.options.length ? cfg.options : ['Yes', 'No'];
+        body.appendChild(el('div', 'ctab-countdown-big' + (cfg.last ? ' is-soon' : ''), cfg.last ? String(cfg.last) : '—'));
+        body.appendChild(btn('ctab-add-btn ctab-decision-spin', 'Spin', function () {
+            var pick = options[Math.floor(Math.random() * options.length)];
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = { options: options };
+                w.config.last = pick;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: 'fa-dice' }));
+        var list = el('div', 'ctab-decision-options');
+        options.forEach(function (opt) {
+            var chip = el('span', 'ctab-decision-chip');
+            chip.appendChild(document.createTextNode(String(opt)));
+            chip.appendChild(btn('ctab-item-remove', '', function () {
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w || !w.config || !Array.isArray(w.config.options)) return;
+                    w.config.options = w.config.options.filter(function (x) { return x !== opt; });
+                }, { rerender: false });
+                rerenderWidgetBody(tab.id, widget.id);
+            }, { title: 'Remove option', icon: 'fa-xmark' }));
+            list.appendChild(chip);
+        });
+        body.appendChild(list);
+        body.appendChild(btn('ctab-add-btn', 'Add option', function () {
+            promptText({ title: 'Add option', label: 'Option text', placeholder: 'e.g. Maybe' }).then(function (val) {
+                if (val == null) return;
+                var text = String(val).trim().slice(0, 40);
+                if (!text) return;
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (!w) return;
+                    if (!w.config || typeof w.config !== 'object') w.config = { options: ['Yes', 'No'] };
+                    if (!Array.isArray(w.config.options)) w.config.options = [];
+                    if (w.config.options.length < 20) w.config.options.push(text);
+                }, { rerender: false });
+                rerenderWidgetBody(tab.id, widget.id);
+            });
+        }, { icon: 'fa-plus' }));
+    }
+
+    // --- Tools: Timer (plain countdown) ---
+
+    function renderTimerWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var banner = el('div', 'ctab-break-banner');
+        banner.style.display = 'none';
+        var display = el('div', 'ctab-clock-time', '00:00');
+        body.appendChild(banner);
+        body.appendChild(display);
+
+        function pad(n) { return (n < 10 ? '0' : '') + n; }
+        function fmt(ms) {
+            var s = Math.max(0, Math.floor(ms / 1000));
+            var h = Math.floor(s / 3600);
+            var m = Math.floor((s % 3600) / 60);
+            var sec = s % 60;
+            return (h > 0 ? pad(h) + ':' : '') + pad(m) + ':' + pad(sec);
+        }
+        function paint() {
+            var rem = cfg.running && cfg.endsAt ? Number(cfg.endsAt) - Date.now() : (Number(cfg.durationMs) || 0);
+            if (cfg.running && rem <= 0) {
+                banner.style.display = '';
+                banner.textContent = 'Time’s up! ⏰';
+                display.textContent = '00:00';
+                mutateTab(tab.id, function (t) {
+                    var w = findWidget(t, widget.id);
+                    if (w && w.config) { w.config.running = false; w.config.endsAt = null; }
+                }, { rerender: false });
+                clearTimer(timerKey(tab.id, widget.id));
+                return;
+            }
+            display.textContent = fmt(rem);
+        }
+        paint();
+        if (cfg.running) startTimer(tab.id, widget.id, paint, 250);
+
+        if (cfg.running) {
+            var stopRow = el('div', 'ctab-focus-row');
+            stopRow.appendChild(btn('ctab-focus-btn', 'Stop', function () {
+                mutateTab(tab.id, function (t) { var w = findWidget(t, widget.id); if (w && w.config) { w.config.running = false; w.config.endsAt = null; } }, { rerender: false });
+                rerenderWidgetBody(tab.id, widget.id);
+            }, { icon: 'fa-stop' }));
+            body.appendChild(stopRow);
+        } else {
+            var presets = el('div', 'ctab-focus-row');
+            [5, 10, 15, 25].forEach(function (min) {
+                presets.appendChild(btn('ctab-focus-btn', min + 'm', function () {
+                    var ms = min * 60000;
+                    mutateTab(tab.id, function (t) {
+                        var w = findWidget(t, widget.id);
+                        if (!w) return;
+                        if (!w.config || typeof w.config !== 'object') w.config = {};
+                        w.config.durationMs = ms;
+                        w.config.running = true;
+                        w.config.endsAt = Date.now() + ms;
+                    }, { rerender: false });
+                    rerenderWidgetBody(tab.id, widget.id);
+                }, { icon: 'fa-play' }));
+            });
+            body.appendChild(presets);
+        }
+    }
+
+    // --- Tools: Unit Converter ---
+
+    var UNIT_TABLES = {
+        length: { label: 'Length', units: { m: 1, km: 1000, cm: 0.01, mi: 1609.344, ft: 0.3048, in: 0.0254 } },
+        mass: { label: 'Mass', units: { kg: 1000, g: 1, lb: 453.592, oz: 28.3495 } },
+        temp: { label: 'Temperature', units: { C: 'C', F: 'F', K: 'K' } }
+    };
+
+    function convertUnit(cat, value, from, to) {
+        if (cat === 'temp') {
+            var c = from === 'C' ? value : from === 'F' ? (value - 32) * 5 / 9 : value - 273.15;
+            if (to === 'C') return c;
+            if (to === 'F') return c * 9 / 5 + 32;
+            return c + 273.15;
+        }
+        var table = UNIT_TABLES[cat].units;
+        return value * table[from] / table[to];
+    }
+
+    function renderUnitConverterWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var cat = UNIT_TABLES[cfg.category] ? cfg.category : 'length';
+        var catSel = document.createElement('select');
+        catSel.className = 'ctab-unit-select';
+        Object.keys(UNIT_TABLES).forEach(function (k) {
+            var o = document.createElement('option');
+            o.value = k;
+            o.textContent = UNIT_TABLES[k].label;
+            if (k === cat) o.selected = true;
+            catSel.appendChild(o);
+        });
+        body.appendChild(catSel);
+
+        var unitKeys = Object.keys(UNIT_TABLES[cat].units);
+        var rowIn = el('div', 'ctab-unit-row');
+        var input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'ctab-add-input ctab-unit-input';
+        input.value = '1';
+        var fromSel = document.createElement('select');
+        fromSel.className = 'ctab-unit-select';
+        unitKeys.forEach(function (u) { var o = document.createElement('option'); o.value = u; o.textContent = u; fromSel.appendChild(o); });
+        rowIn.appendChild(input);
+        rowIn.appendChild(fromSel);
+        body.appendChild(rowIn);
+
+        var rowOut = el('div', 'ctab-unit-row');
+        var output = el('div', 'ctab-unit-output', '—');
+        var toSel = document.createElement('select');
+        toSel.className = 'ctab-unit-select';
+        unitKeys.forEach(function (u) { var o = document.createElement('option'); o.value = u; o.textContent = u; toSel.appendChild(o); });
+        if (unitKeys.length > 1) toSel.selectedIndex = 1;
+        rowOut.appendChild(output);
+        rowOut.appendChild(toSel);
+        body.appendChild(rowOut);
+
+        function recompute() {
+            var v = Number(input.value);
+            if (!isFinite(v)) { output.textContent = '—'; return; }
+            var r = convertUnit(cat, v, fromSel.value, toSel.value);
+            output.textContent = (Math.round(r * 1e6) / 1e6).toLocaleString();
+        }
+        input.addEventListener('input', recompute);
+        fromSel.addEventListener('change', recompute);
+        toSel.addEventListener('change', recompute);
+        catSel.addEventListener('change', function () {
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                w.config.category = catSel.value;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        });
+        recompute();
+    }
+
+    // --- Tools: Ask Sutra ---
+
+    function renderAskSutraWidget(body) {
+        body.appendChild(el('p', 'ctab-focus-hint', 'Ask Sutra something:'));
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'ctab-add-input';
+        input.placeholder = 'e.g. What should I do next?';
+        input.maxLength = 300;
+        var send = function () {
+            var q = input.value.trim();
+            if (!q) return;
+            var ok = false;
+            try { ok = bridge.askAssistant(q); } catch (e) { ok = false; }
+            if (ok) input.value = '';
+            else input.placeholder = 'Assistant unavailable right now';
+        };
+        input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
+        var row = el('div', 'ctab-add-row');
+        row.appendChild(input);
+        row.appendChild(btn('ctab-add-btn', 'Ask', send, { icon: 'fa-paper-plane' }));
+        body.appendChild(row);
+    }
+
+    // --- Focus: Streak Garden ---
+
+    function streakPlant(days) {
+        if (days <= 0) return '🌰';
+        if (days < 3) return '🌱';
+        if (days < 7) return '🌿';
+        if (days < 14) return '🪴';
+        if (days < 30) return '🌷';
+        return '🌳';
+    }
+
+    function renderStreakGardenWidget(body) {
+        var s = { current: 0, best: 0 };
+        try { s = bridge.getStreak() || s; } catch (e) { /* non-critical */ }
+        body.appendChild(el('div', 'ctab-streak-garden', streakPlant(s.current)));
+        body.appendChild(el('div', 'ctab-countdown-big' + (s.current > 0 ? ' is-soon' : ''), String(s.current)));
+        body.appendChild(el('p', 'ctab-countdown-sub', 'day streak'));
+        body.appendChild(el('p', 'ctab-list-meta', 'Best: ' + s.best + ' days — keep it growing!'));
+    }
+
+    // --- Focus: Contribution Grid (custom metric) ---
+
+    function setupContribGridWidget() {
+        return promptText({ title: 'Contribution grid', label: 'What are you tracking?', placeholder: 'e.g. Practice sessions' }).then(function (label) {
+            if (label == null) return null;
+            return { label: String(label).trim().slice(0, 40) || 'Activity', log: {} };
+        });
+    }
+
+    function renderContribGridWidget(body, tab, widget) {
+        var cfg = widget.config || {};
+        var log = (cfg.log && typeof cfg.log === 'object') ? cfg.log : {};
+        body.appendChild(el('p', 'ctab-countdown-title', String(cfg.label || 'Activity')));
+        var days = 35;
+        var values = [];
+        var total = 0;
+        for (var i = days - 1; i >= 0; i -= 1) {
+            var d = new Date();
+            d.setDate(d.getDate() - i);
+            var key = localDateKey(d);
+            var v = Number(log[key]) || 0;
+            total += v;
+            values.push({ key: key, value: v });
+        }
+        var max = 1;
+        values.forEach(function (p) { if (p.value > max) max = p.value; });
+        var grid = el('div', 'ctab-import-heatmap ctab-contrib-heatmap');
+        values.forEach(function (p) {
+            var lvl = p.value === 0 ? 0 : Math.min(4, Math.ceil((p.value / max) * 4));
+            var cell = el('span', 'ctab-import-heat-cell level-' + lvl);
+            cell.title = p.key + ': ' + p.value;
+            grid.appendChild(cell);
+        });
+        body.appendChild(grid);
+        body.appendChild(el('p', 'ctab-progress-label', total + ' in 35 days'));
+        var row = el('div', 'ctab-counter-row');
+        row.appendChild(btn('ctab-add-btn', '+1 today', function () {
+            var todayK = localDateKey();
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w) return;
+                if (!w.config || typeof w.config !== 'object') w.config = {};
+                if (!w.config.log || typeof w.config.log !== 'object') w.config.log = {};
+                w.config.log[todayK] = (Number(w.config.log[todayK]) || 0) + 1;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { icon: 'fa-plus' }));
+        row.appendChild(btn('ctab-counter-btn', '', function () {
+            var todayK = localDateKey();
+            mutateTab(tab.id, function (t) {
+                var w = findWidget(t, widget.id);
+                if (!w || !w.config || !w.config.log) return;
+                var cur = Number(w.config.log[todayK]) || 0;
+                if (cur <= 1) delete w.config.log[todayK]; else w.config.log[todayK] = cur - 1;
+            }, { rerender: false });
+            rerenderWidgetBody(tab.id, widget.id);
+        }, { title: 'Undo one', icon: 'fa-minus' }));
+        body.appendChild(row);
+    }
+
+    // Register the interactive widgets (function declarations above are hoisted).
+    var INTERACTIVE_WIDGET_SPECS = [
+        { type: 'water', label: 'Water Tracker', icon: 'fa-glass-water', cat: 'wellness', desc: 'Count glasses toward a daily goal.', render: renderWaterWidget, setup: setupWaterWidget },
+        { type: 'eyebreak', label: '20-20-20 Breaks', icon: 'fa-eye', cat: 'wellness', desc: 'Eye-rest reminders while you work.', render: renderEyeBreakWidget },
+        { type: 'gratitude', label: 'Gratitude Prompt', icon: 'fa-heart', cat: 'wellness', desc: 'One line a day, with a rotating prompt.', render: renderGratitudeWidget },
+        { type: 'reading', label: 'Currently Reading', icon: 'fa-book-open', cat: 'reading', desc: 'Track pages through a book.', render: renderReadingWidget, setup: setupReadingWidget },
+        { type: 'flashcard', label: 'Flashcard of the Day', icon: 'fa-clone', cat: 'reading', desc: 'One card from your decks to review.', render: renderFlashcardWidget },
+        { type: 'decision', label: 'Decision Spinner', icon: 'fa-dice', cat: 'tools', desc: 'Let chance pick from your options.', render: renderDecisionWidget },
+        { type: 'timer', label: 'Timer', icon: 'fa-hourglass-end', cat: 'tools', desc: 'A plain countdown with an alert.', render: renderTimerWidget },
+        { type: 'unitconv', label: 'Unit Converter', icon: 'fa-ruler-combined', cat: 'tools', desc: 'Length, mass, and temperature.', render: renderUnitConverterWidget },
+        { type: 'asksutra', label: 'Ask Sutra', icon: 'fa-wand-magic-sparkles', cat: 'tools', desc: 'Fire a quick question at the assistant.', render: renderAskSutraWidget },
+        { type: 'streakgarden', label: 'Streak Garden', icon: 'fa-seedling', cat: 'focus', desc: 'A plant that grows with your streak.', render: renderStreakGardenWidget },
+        { type: 'contribgrid', label: 'Contribution Grid', icon: 'fa-table-cells', cat: 'focus', desc: 'A tap-to-log GitHub-style grid.', render: renderContribGridWidget, setup: setupContribGridWidget }
+    ];
+
+    INTERACTIVE_WIDGET_SPECS.forEach(function (spec) {
+        WIDGET_TYPES[spec.type] = {
+            label: spec.label,
+            icon: spec.icon,
+            cat: spec.cat,
+            desc: spec.desc,
+            render: spec.render,
+            setup: spec.setup
+        };
+    });
+
     // ---------- widget card frame + grid ----------
 
     function renderWidgetCard(tab, widget) {
@@ -1652,7 +2475,7 @@
         refresh: rebuild,
         getWidgetTypes: function () {
             return Object.keys(WIDGET_TYPES).map(function (k) {
-                return { type: k, label: WIDGET_TYPES[k].label, desc: WIDGET_TYPES[k].desc };
+                return { type: k, label: WIDGET_TYPES[k].label, desc: WIDGET_TYPES[k].desc, cat: WIDGET_TYPES[k].cat };
             });
         }
     };

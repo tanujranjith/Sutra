@@ -38,6 +38,46 @@ async function openApp(page) {
     !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs && !!window.SutraTodayCenter);
 }
 
+const IMPORTED_WIDGETS = [
+  ['imp_today_brief', 'Daily Brief', 'import_today'],
+  ['imp_momentum_heatmap', 'Momentum Heatmap', 'import_today'],
+  ['imp_today_schedule', 'Today Schedule Snapshot', 'import_today'],
+  ['imp_priority_queue', 'Priority Queue', 'import_today'],
+  ['imp_review_card', 'Review Card', 'import_today'],
+  ['imp_tracker_summary', 'Tracker Summary', 'import_today'],
+  ['imp_student_hub', 'Student Hub Summary', 'import_today'],
+  ['imp_upcoming_radar', 'Upcoming Radar', 'import_today'],
+  ['imp_attention_cards', 'Attention Cards', 'import_today'],
+  ['imp_course_progress', 'Course Progress', 'import_academics'],
+  ['imp_grade_whatif', 'Grade What-If', 'import_academics'],
+  ['imp_gpa_projection', 'GPA Projection', 'import_academics'],
+  ['imp_assignment_milestones', 'Assignment Milestones', 'import_academics'],
+  ['imp_exam_countdown', 'Exam Countdown Ring', 'import_academics'],
+  ['imp_weak_topics', 'Weak Topics', 'import_academics'],
+  ['imp_ap_study_snapshot', 'AP Study Snapshot', 'import_academics'],
+  ['imp_review_load', 'Review Load', 'import_academics'],
+  ['imp_current_block', 'Current Block', 'import_calendar'],
+  ['imp_next_block', 'Next Block', 'import_calendar'],
+  ['imp_free_slots', 'Free Slot Finder', 'import_calendar'],
+  ['imp_day_strip', 'Day Strip', 'import_calendar'],
+  ['imp_week_strip', 'Week Strip', 'import_calendar'],
+  ['imp_event_density', 'Event Density', 'import_calendar'],
+  ['imp_recent_notes_stack', 'Recent Notes Stack', 'import_notes'],
+  ['imp_pinned_notes_board', 'Pinned Notes Board', 'import_notes'],
+  ['imp_linked_notes', 'Linked Notes', 'import_notes'],
+  ['imp_random_note', 'Random Note', 'import_notes'],
+  ['imp_note_inbox', 'Note Inbox', 'import_notes'],
+  ['imp_habit_heatmap', 'Habit Heatmap', 'import_focus'],
+  ['imp_streak_ribbon', 'Streak Ribbon', 'import_focus'],
+  ['imp_pomodoro', 'Pomodoro', 'import_focus'],
+  ['imp_session_log', 'Session Log', 'import_focus'],
+  ['imp_energy_checkin', 'Energy Check-in', 'import_focus'],
+  ['imp_overdue_recovery', 'Overdue Recovery', 'import_tasks'],
+  ['imp_task_burndown', 'Task Burndown', 'import_tasks'],
+  ['imp_task_load', 'Task Load', 'import_tasks'],
+  ['imp_completion_trend', 'Completion Trend', 'import_tasks']
+];
+
 test('custom tabs: lifecycle, injection hardening, widget rendering', async ({ page }) => {
   await openApp(page);
 
@@ -149,6 +189,149 @@ test('custom tabs: checklist + scratchpad edits persist through the bridge', asy
   });
   expect(saved.items).toEqual([{ text: 'Buy calculator batteries', done: true }]);
   expect(saved.padText).toBe('scratch persists');
+});
+
+test('custom tabs: imported page widgets register, appear in picker, and render', async ({ page }) => {
+  await openApp(page);
+
+  const registry = await page.evaluate(() =>
+    window.SutraCustomTabs.getWidgetTypes()
+      .filter(widget => String(widget.type || '').startsWith('imp_'))
+      .map(widget => ({ type: widget.type, label: widget.label, cat: widget.cat }))
+  );
+  expect(registry.map(widget => widget.type).sort()).toEqual(IMPORTED_WIDGETS.map(widget => widget[0]).sort());
+  for (const [type, label, cat] of IMPORTED_WIDGETS) {
+    expect(registry).toContainEqual({ type, label, cat });
+  }
+
+  const chunks = [
+    IMPORTED_WIDGETS.slice(0, 14),
+    IMPORTED_WIDGETS.slice(14, 28),
+    IMPORTED_WIDGETS.slice(28)
+  ];
+  await page.evaluate((widgetChunks) => {
+    window.SutraCustomTabsBridge.setTabs(widgetChunks.map((chunk, tabIndex) => ({
+      id: `qa-imported-${tabIndex}`,
+      name: `Imported ${tabIndex + 1}`,
+      icon: 'fa-layer-group',
+      widgets: chunk.map(([type], widgetIndex) => ({
+        id: `iw-${tabIndex}-${widgetIndex}`,
+        type,
+        config: type === 'imp_pinned_notes_board' ? { noteIds: [] } : null
+      }))
+    })));
+    window.SutraCustomTabs.refresh();
+  }, chunks);
+
+  const activateImportedTab = async (tabIndex) => {
+    await page.evaluate((index) => window.setActiveView(`custom-qa-imported-${index}`), tabIndex);
+    await expect(page.locator(`#view-custom-qa-imported-${tabIndex}`)).toBeVisible();
+  };
+
+  await activateImportedTab(0);
+  await page.locator('#view-custom-qa-imported-0 .ctab-action', { hasText: 'Add widget' }).click();
+  const pickerText = await page.locator('.ctab-picker-panel').innerText();
+  for (const [, label] of IMPORTED_WIDGETS) {
+    expect(pickerText).toContain(label);
+  }
+  await page.keyboard.press('Escape');
+
+  for (let tabIndex = 0; tabIndex < chunks.length; tabIndex += 1) {
+    await activateImportedTab(tabIndex);
+    const section = page.locator(`#view-custom-qa-imported-${tabIndex}`);
+    await expect(section.locator('.ctab-widget')).toHaveCount(chunks[tabIndex].length);
+    await expect(section.locator('.ctab-empty-msg', { hasText: 'hit an error' })).toHaveCount(0);
+    for (const [, label] of chunks[tabIndex]) {
+      await expect(section.locator('.ctab-widget-label', { hasText: label }).first()).toBeVisible();
+    }
+  }
+});
+
+const NEW_WIDGETS = [
+  // Data-driven dashboard widgets (dash_ prefix, rendered by the imported renderer).
+  ['dash_semester', 'Semester Progress', 'overview'],
+  ['dash_month_compare', 'This Month vs Last', 'overview'],
+  ['dash_weekly_recap', 'Weekly Recap', 'overview'],
+  ['dash_college_apps', 'Application Tracker', 'mini_os'],
+  ['dash_expenses', 'Expense Tally', 'mini_os'],
+  ['dash_projects', 'Project Pipeline', 'mini_os'],
+  ['dash_lms_sync', 'Sync Status', 'connections'],
+  ['dash_recent_grades', 'Latest Grades', 'connections'],
+  // Interactive widgets (self-contained; state lives in widget.config).
+  ['water', 'Water Tracker', 'wellness'],
+  ['eyebreak', '20-20-20 Breaks', 'wellness'],
+  ['gratitude', 'Gratitude Prompt', 'wellness'],
+  ['reading', 'Currently Reading', 'reading'],
+  ['flashcard', 'Flashcard of the Day', 'reading'],
+  ['decision', 'Decision Spinner', 'tools'],
+  ['timer', 'Timer', 'tools'],
+  ['unitconv', 'Unit Converter', 'tools'],
+  ['asksutra', 'Ask Sutra', 'tools'],
+  ['streakgarden', 'Streak Garden', 'focus'],
+  ['contribgrid', 'Contribution Grid', 'focus']
+];
+
+test('custom tabs: dashboard + interactive widgets register, render, and persist config', async ({ page }) => {
+  await openApp(page);
+
+  const newTypes = NEW_WIDGETS.map(w => w[0]);
+  const registry = await page.evaluate((types) =>
+    window.SutraCustomTabs.getWidgetTypes()
+      .filter(widget => types.includes(widget.type))
+      .map(widget => ({ type: widget.type, label: widget.label, cat: widget.cat })), newTypes);
+  expect(registry.map(widget => widget.type).sort()).toEqual(newTypes.slice().sort());
+  for (const [type, label, cat] of NEW_WIDGETS) {
+    expect(registry).toContainEqual({ type, label, cat });
+  }
+
+  const chunks = [NEW_WIDGETS.slice(0, 10), NEW_WIDGETS.slice(10)];
+  await page.evaluate((widgetChunks) => {
+    window.SutraCustomTabsBridge.setTabs(widgetChunks.map((chunk, tabIndex) => ({
+      id: `qa-new-${tabIndex}`,
+      name: `New ${tabIndex + 1}`,
+      icon: 'fa-layer-group',
+      widgets: chunk.map(([type], widgetIndex) => ({ id: `nw-${tabIndex}-${widgetIndex}`, type, config: null }))
+    })));
+    window.SutraCustomTabs.refresh();
+  }, chunks);
+
+  const activateTab = async (tabIndex) => {
+    await page.evaluate((index) => window.setActiveView(`custom-qa-new-${index}`), tabIndex);
+    await expect(page.locator(`#view-custom-qa-new-${tabIndex}`)).toBeVisible();
+  };
+
+  // Picker lists every new widget label.
+  await activateTab(0);
+  await page.locator('#view-custom-qa-new-0 .ctab-action', { hasText: 'Add widget' }).click();
+  const pickerText = await page.locator('.ctab-picker-panel').innerText();
+  for (const [, label] of NEW_WIDGETS) {
+    expect(pickerText).toContain(label);
+  }
+  await page.keyboard.press('Escape');
+
+  // Every widget renders without hitting the error placeholder.
+  for (let tabIndex = 0; tabIndex < chunks.length; tabIndex += 1) {
+    await activateTab(tabIndex);
+    const section = page.locator(`#view-custom-qa-new-${tabIndex}`);
+    await expect(section.locator('.ctab-widget')).toHaveCount(chunks[tabIndex].length);
+    await expect(section.locator('.ctab-empty-msg', { hasText: 'hit an error' })).toHaveCount(0);
+    for (const [, label] of chunks[tabIndex]) {
+      await expect(section.locator('.ctab-widget-label', { hasText: label }).first()).toBeVisible();
+    }
+  }
+
+  // Interactive state persists through the bridge: tapping the water tracker's
+  // "+" twice should store count: 2 in that widget's config.
+  await activateTab(0);
+  const waterCard = page.locator('#view-custom-qa-new-0 .ctab-widget[data-widget-id="nw-0-8"]');
+  await waterCard.locator('button[title="Add a glass"]').click();
+  await waterCard.locator('button[title="Add a glass"]').click();
+  const waterCount = await page.evaluate(() => {
+    const tab = window.SutraCustomTabsBridge.getTabs().find(t => t.id === 'qa-new-0');
+    const w = tab && tab.widgets.find(x => x.id === 'nw-0-8');
+    return w && w.config ? w.config.count : null;
+  });
+  expect(waterCount).toBe(2);
 });
 
 test('custom tabs: normalizer enforces ids, caps, and serializability', async ({ page }) => {

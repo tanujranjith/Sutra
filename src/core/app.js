@@ -7174,6 +7174,867 @@ function populateProgressDashboard() {
             return out.slice(0, 12);
         }
 
+        function customTabLocalDateKey(dateObj = new Date()) {
+            try { return dateKey(dateObj); } catch (e) {
+                const d = new Date(dateObj);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+        }
+
+        function customTabShiftDateKey(baseKey, offsetDays) {
+            try {
+                const d = parseDate(baseKey || today());
+                d.setDate(d.getDate() + Number(offsetDays || 0));
+                return customTabLocalDateKey(d);
+            } catch (e) {
+                const d = new Date();
+                d.setDate(d.getDate() + Number(offsetDays || 0));
+                return customTabLocalDateKey(d);
+            }
+        }
+
+        function customTabDayLabel(key, offset) {
+            if (offset === 0) return 'Today';
+            if (offset === 1) return 'Tomorrow';
+            try {
+                return parseDate(key).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            } catch (e) { return String(key || ''); }
+        }
+
+        function customTabMinutesLabel(minutes) {
+            const m = Number(minutes);
+            if (!Number.isFinite(m)) return '';
+            const h = Math.floor(m / 60);
+            const min = Math.max(0, Math.round(m % 60));
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const hour = h % 12 || 12;
+            return `${hour}:${String(min).padStart(2, '0')} ${ampm}`;
+        }
+
+        function customTabBlockTimeLabel(block) {
+            const start = parseTimeToMinutes(block && block.start);
+            const end = parseTimeToMinutes(block && block.end);
+            if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
+            return `${customTabMinutesLabel(start)} - ${customTabMinutesLabel(end)}`;
+        }
+
+        function customTabCompletedCountForDate(dateKeyStr) {
+            try {
+                const ds = dayStates && dayStates[dateKeyStr];
+                return ds && Array.isArray(ds.completedTaskIds) ? ds.completedTaskIds.length : 0;
+            } catch (e) { return 0; }
+        }
+
+        function customTabCurrentTasks() {
+            try {
+                return (Array.isArray(tasks) ? tasks : []).filter(task => {
+                    if (!task || task.completed || task.isActive === false) return false;
+                    if (typeof isTaskVisibleForCurrentPreferences === 'function') {
+                        return isTaskVisibleForCurrentPreferences(task, { context: 'today' });
+                    }
+                    return true;
+                });
+            } catch (e) { return []; }
+        }
+
+        function customTabTaskDueLabel(task, todayKey = today()) {
+            const due = String(task && task.dueDate || '');
+            if (!due) return 'No due date';
+            const diff = Math.round((new Date(due + 'T00:00:00') - new Date(todayKey + 'T00:00:00')) / 86400000);
+            if (diff < 0) return `${Math.abs(diff)}d overdue`;
+            if (diff === 0) return 'Due today';
+            if (diff === 1) return 'Due tomorrow';
+            return `Due in ${diff}d`;
+        }
+
+        function customTabDeadlineRow(item) {
+            if (!item) return null;
+            let meta = '';
+            try {
+                if (item.due instanceof Date && !isNaN(item.due)) {
+                    meta = item.due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                }
+            } catch (e) { meta = ''; }
+            return {
+                title: String(item.title || 'Untitled'),
+                meta: [meta, item.subtitle || item.source || ''].filter(Boolean).join(' - '),
+                tone: item.overdue ? 'danger' : '',
+                action: 'open_deadline',
+                payload: { id: String(item.id || '') }
+            };
+        }
+
+        function customTabSortedDeadlines() {
+            try { return collectWorkspaceDeadlines().filter(Boolean).slice().sort((a, b) => (a.due || 0) - (b.due || 0)); }
+            catch (e) { return []; }
+        }
+
+        function customTabBlocksForDateKey(key) {
+            try {
+                return getBlocksForDate(parseDate(key)).map(block => ({
+                    id: String(block.id || ''),
+                    title: String(block.name || block.title || 'Scheduled block'),
+                    date: String(block.date || key || ''),
+                    start: String(block.start || ''),
+                    end: String(block.end || ''),
+                    startMinutes: parseTimeToMinutes(block.start),
+                    endMinutes: parseTimeToMinutes(block.end),
+                    meta: customTabBlockTimeLabel(block),
+                    source: typeof getTimelineBlockSourceLabel === 'function' ? getTimelineBlockSourceLabel(block) : 'Sutra'
+                })).filter(block => Number.isFinite(block.startMinutes));
+            } catch (e) { return []; }
+        }
+
+        function customTabCoursesWithGrades() {
+            try {
+                const cw = normalizeCourseWorkspace(courseWorkspace) || {};
+                const courses = (Array.isArray(cw.courses) ? cw.courses : []).filter(c => c && !c.archived);
+                const gp = window.SutraGradePlanner;
+                const planner = gp && typeof gp.getPlanner === 'function' ? gp.getPlanner() : gradePlanner;
+                const engine = gp && (gp.engine || gp.Engine || gp);
+                return courses.map(course => {
+                    let percent = null;
+                    let letter = '';
+                    let missing = 0;
+                    let target = course.targetGrade != null && course.targetGrade !== '' ? String(course.targetGrade) : '';
+                    try {
+                        if (engine && typeof engine.normalizeCourseGrades === 'function' && typeof engine.computeCourseGrade === 'function') {
+                            const data = engine.normalizeCourseGrades((planner.courses || {})[course.id] || null);
+                            const grade = engine.computeCourseGrade(data, planner.settings || {});
+                            percent = grade && grade.percent != null ? Number(grade.percent) : null;
+                            letter = grade && grade.letter ? String(grade.letter) : '';
+                            missing = grade && grade.missingCount ? Number(grade.missingCount) : 0;
+                            if (data && data.targetPercent != null && data.targetPercent !== '') target = `${data.targetPercent}%`;
+                        }
+                    } catch (e) { /* non-critical */ }
+                    return {
+                        id: String(course.id || ''),
+                        name: String(course.name || 'Course'),
+                        grade: percent != null ? `${Math.round(percent * 10) / 10}%${letter ? ' ' + letter : ''}` : String(course.currentGrade || ''),
+                        percent,
+                        letter,
+                        target,
+                        missing
+                    };
+                });
+            } catch (e) { return []; }
+        }
+
+        function customTabApWeakItems(limit = 6) {
+            try {
+                const ws = apStudyWorkspace || {};
+                const subjects = new Map((Array.isArray(ws.subjects) ? ws.subjects : []).map(s => [String(s.id), String(s.name || 'AP subject')]));
+                const units = new Map((Array.isArray(ws.units) ? ws.units : []).map(u => [String(u.id), String(u.title || 'Unit')]));
+                const rows = [];
+                (Array.isArray(ws.units) ? ws.units : []).forEach(unit => {
+                    if (!(unit.weakFlag || unit.status === 'needs_review' || Number(unit.confidenceLevel) <= 2)) return;
+                    rows.push({ title: String(unit.title || 'Unit'), meta: subjects.get(String(unit.subjectId)) || '', score: Number(unit.confidenceLevel) || 0 });
+                });
+                (Array.isArray(ws.topics) ? ws.topics : []).forEach(topic => {
+                    if (!(topic.weakFlag || topic.status === 'needs_review' || Number(topic.confidenceLevel) <= 2)) return;
+                    rows.push({
+                        title: String(topic.title || 'Topic'),
+                        meta: [subjects.get(String(topic.subjectId)) || '', units.get(String(topic.unitId)) || ''].filter(Boolean).join(' - '),
+                        score: Number(topic.confidenceLevel) || 0
+                    });
+                });
+                return rows.sort((a, b) => a.score - b.score || a.title.localeCompare(b.title)).slice(0, limit);
+            } catch (e) { return []; }
+        }
+
+        function customTabFocusSessionRows(limit = 5) {
+            try {
+                return (Array.isArray(focusSessions) ? focusSessions : []).slice().reverse().slice(0, limit).map(session => {
+                    const mins = Math.round((Number(session.durationSeconds || session.plannedDurationSeconds || session.duration || 0) || 0) / 60);
+                    const ended = session.endedAt || session.completedAt || session.startedAt || '';
+                    const label = ended ? String(ended).slice(0, 10) : '';
+                    return {
+                        title: String(session.subject || session.taskTitle || session.label || 'Focus session'),
+                        meta: [mins ? `${mins} min` : '', label].filter(Boolean).join(' - ')
+                    };
+                });
+            } catch (e) { return []; }
+        }
+
+        function customTabHabitCompletionHeatmap(days = 30) {
+            const base = today();
+            const lifeMap = lifeWorkspace && lifeWorkspace.habitCompletions && typeof lifeWorkspace.habitCompletions === 'object' ? lifeWorkspace.habitCompletions : {};
+            const out = [];
+            for (let i = days - 1; i >= 0; i -= 1) {
+                const key = customTabShiftDateKey(base, -i);
+                const taskDone = customTabCompletedCountForDate(key);
+                const lifeDone = Array.isArray(lifeMap[key]) ? lifeMap[key].length : 0;
+                out.push({ label: customTabDayLabel(key, days - 1 - i), value: taskDone + lifeDone, date: key });
+            }
+            return out;
+        }
+
+        function customTabReviewForecast(days = 7) {
+            const todayKey = today();
+            const out = [];
+            const byDay = {};
+            let overdue = 0;
+            try {
+                (Array.isArray(reviewWorkspace && reviewWorkspace.items) ? reviewWorkspace.items : []).forEach(item => {
+                    if (!item || !item.nextReviewAt) return;
+                    const key = String(item.nextReviewAt).slice(0, 10);
+                    if (key < todayKey) { overdue += 1; return; }
+                    byDay[key] = (byDay[key] || 0) + 1;
+                });
+            } catch (e) { /* non-critical */ }
+            for (let i = 0; i < days; i += 1) {
+                const key = customTabShiftDateKey(todayKey, i);
+                out.push({ label: customTabDayLabel(key, i), value: byDay[key] || 0 });
+            }
+            return { overdue, series: out };
+        }
+
+        function customTabFocusMinutes(session) {
+            if (!session) return 0;
+            const direct = Number(session.minutes);
+            if (Number.isFinite(direct) && direct > 0) return direct;
+            const secs = Number(session.durationSeconds || session.plannedDurationSeconds || session.duration || 0);
+            return Number.isFinite(secs) && secs > 0 ? secs / 60 : 0;
+        }
+
+        function customTabWeekdayLabel(key) {
+            try { return parseDate(key).toLocaleDateString(undefined, { weekday: 'short' }); }
+            catch (e) { return String(key || '').slice(5); }
+        }
+
+        function customTabMonthKey(date) {
+            const d = date instanceof Date ? date : new Date(date);
+            if (isNaN(d)) return '';
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }
+
+        function customTabMoney(amount) {
+            const n = Number(amount) || 0;
+            const rounded = Math.round(n * 100) / 100;
+            const hasCents = Math.abs(rounded % 1) > 0.0001;
+            return '$' + rounded.toLocaleString(undefined, { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 });
+        }
+
+        function customTabRelativeTime(date) {
+            const d = date instanceof Date ? date : new Date(date);
+            if (isNaN(d)) return '';
+            const diffMs = Date.now() - d.getTime();
+            const mins = Math.round(diffMs / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + (mins === 1 ? ' min ago' : ' mins ago');
+            const hrs = Math.round(mins / 60);
+            if (hrs < 24) return hrs + (hrs === 1 ? ' hr ago' : ' hrs ago');
+            const days = Math.round(hrs / 24);
+            if (days < 30) return days + (days === 1 ? ' day ago' : ' days ago');
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        }
+
+        function customTabRandomReviewCard() {
+            const ws = reviewWorkspace || {};
+            const cards = Array.isArray(ws.items) ? ws.items.filter(c => c && (c.prompt || c.answer)) : [];
+            if (!cards.length) return null;
+            const decks = {};
+            (Array.isArray(ws.decks) ? ws.decks : []).forEach(d => { decks[String(d.id)] = String(d.name || 'Deck'); });
+            // Deterministic pick per day so the "card of the day" stays stable across re-renders.
+            const seed = Math.abs(today().split('').reduce((s, ch) => s + ch.charCodeAt(0), 0));
+            const card = cards[seed % cards.length];
+            return {
+                prompt: String(card.prompt || ''),
+                answer: String(card.answer || ''),
+                hint: String(card.hint || ''),
+                deck: decks[String(card.deckId)] || ''
+            };
+        }
+
+        function customTabAskAssistant(query) {
+            const q = String(query || '').trim();
+            if (!q) return false;
+            try {
+                if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') {
+                    window.flowAssistant.askFlow(q, { send: true });
+                    return true;
+                }
+            } catch (e) { /* fall through to lower-level path */ }
+            try {
+                if (typeof window.toggleChat === 'function') {
+                    window.toggleChat();
+                    const input = document.getElementById('chatInput');
+                    if (input) {
+                        input.value = q;
+                        if (typeof window.sendChat === 'function') window.sendChat();
+                    }
+                    return true;
+                }
+            } catch (e) { /* non-critical */ }
+            return false;
+        }
+
+        function customTabImportedWidgetData(type, config = {}) {
+            const todayKey = today();
+            const deadlines = customTabSortedDeadlines();
+            const now = new Date();
+            const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+            const importedType = String(type || '');
+
+            if (importedType === 'imp_today_brief') {
+                const summary = window.SutraTodayCenter && window.SutraTodayCenter.getTodaySummary ? window.SutraTodayCenter.getTodaySummary(deadlines, now) : null;
+                const next = window.SutraTodayCenter && window.SutraTodayCenter.getNextPriorityItem ? window.SutraTodayCenter.getNextPriorityItem(deadlines, { now }) : null;
+                return {
+                    hero: next && next.item ? { value: next.item.title || 'Next up', label: next.reason || 'Highest priority', meta: next.item.subtitle || '' } : { value: 'Clear', label: 'Nothing urgent right now' },
+                    stats: summary ? [
+                        { value: summary.overdue, label: 'overdue' },
+                        { value: summary.dueToday, label: 'today' },
+                        { value: summary.dueThisWeek, label: 'this week' }
+                    ] : [],
+                    actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }]
+                };
+            }
+
+            if (importedType === 'imp_momentum_heatmap' || importedType === 'imp_habit_heatmap' || importedType === 'imp_completion_trend') {
+                const heatmap = importedType === 'imp_completion_trend'
+                    ? Array.from({ length: 14 }, (_, idx) => {
+                        const key = customTabShiftDateKey(todayKey, idx - 13);
+                        return { label: customTabDayLabel(key, idx - 13), value: customTabCompletedCountForDate(key), date: key };
+                    })
+                    : customTabHabitCompletionHeatmap(30);
+                const total = heatmap.reduce((sum, point) => sum + (Number(point.value) || 0), 0);
+                return {
+                    hero: { value: total, label: importedType === 'imp_completion_trend' ? 'completed in 14 days' : 'activity in 30 days' },
+                    heatmap,
+                    bars: importedType === 'imp_completion_trend' ? heatmap : []
+                };
+            }
+
+            if (importedType === 'imp_today_schedule' || importedType === 'imp_current_block' || importedType === 'imp_next_block' || importedType === 'imp_day_strip') {
+                const blocks = customTabBlocksForDateKey(todayKey)
+                    .slice()
+                    .sort((a, b) => Number(a.startMinutes) - Number(b.startMinutes));
+                const current = blocks.find(block => Number(block.startMinutes) <= nowMinutes && Number(block.endMinutes) > nowMinutes);
+                const next = blocks.find(block => Number(block.startMinutes) > nowMinutes && (!current || block.id !== current.id));
+                const pick = importedType === 'imp_current_block' ? current : importedType === 'imp_next_block' ? next : (current || next);
+                return {
+                    hero: pick ? { value: pick.title, label: pick.meta || 'Today', meta: pick.source } : { value: 'No block', label: 'Nothing scheduled right now' },
+                    timeline: blocks.map(block => ({ title: block.title, meta: block.meta, start: block.startMinutes, end: block.endMinutes })),
+                    list: blocks.slice(0, 6).map(block => ({ title: block.title, meta: [block.meta, block.source].filter(Boolean).join(' - ') })),
+                    empty: blocks.length ? '' : 'No timeline blocks today.'
+                };
+            }
+
+            if (importedType === 'imp_priority_queue') {
+                const rows = customTabCurrentTasks().slice().sort((a, b) => {
+                    const ad = a.dueDate || '9999-12-31';
+                    const bd = b.dueDate || '9999-12-31';
+                    return ad.localeCompare(bd) || String(a.title || '').localeCompare(String(b.title || ''));
+                }).slice(0, 6).map(task => ({
+                    title: String(task.title || 'Untitled task'),
+                    meta: customTabTaskDueLabel(task, todayKey),
+                    tone: task.dueDate && task.dueDate < todayKey ? 'danger' : '',
+                    action: 'open_task',
+                    payload: { id: String(task.id || '') }
+                }));
+                return { list: rows, empty: rows.length ? '' : 'No active tasks.', actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }] };
+            }
+
+            if (importedType === 'imp_review_card' || importedType === 'imp_review_load') {
+                const stats = typeof window.getReviewTodayStats === 'function' ? (window.getReviewTodayStats() || {}) : {};
+                const forecast = customTabReviewForecast(7);
+                return {
+                    hero: { value: (Number(stats.due) || 0) + (Number(stats.overdue) || 0), label: 'cards due now' },
+                    stats: [
+                        { value: stats.overdue || 0, label: 'overdue' },
+                        { value: stats.reviewedThisWeek || 0, label: 'reviewed' },
+                        { value: stats.decks || 0, label: 'decks' }
+                    ],
+                    bars: importedType === 'imp_review_load' ? forecast.series : [],
+                    actions: [{ label: 'Start review', action: 'start_review', payload: {} }]
+                };
+            }
+
+            if (importedType === 'imp_tracker_summary') {
+                const habitState = getHabitDayState(todayKey);
+                const habitDone = Array.isArray(habitState.completedHabitIds) ? habitState.completedHabitIds.length : 0;
+                return {
+                    stats: [
+                        { value: customTabCompletedCountForDate(todayKey), label: 'tasks done' },
+                        { value: habitDone, label: 'habits done' },
+                        { value: (Array.isArray(habits) ? habits.length : 0), label: 'habits' }
+                    ]
+                };
+            }
+
+            if (importedType === 'imp_student_hub') {
+                const stats = typeof getTodayStudentHubStats === 'function' ? getTodayStudentHubStats(todayKey) : {};
+                const actionNeeded = (stats.dueSoonTasks || 0) + (stats.homeworkOpen || 0) + (stats.collegeUpcoming || 0) + ((stats.apStudyStats && stats.apStudyStats.weakAreas) || 0);
+                return {
+                    hero: { value: actionNeeded ? 'Action needed' : 'On track', label: 'student hub readiness' },
+                    stats: [
+                        { value: stats.activeTasks || 0, label: 'tasks' },
+                        { value: stats.homeworkOpen || 0, label: 'homework' },
+                        { value: stats.notesPages || 0, label: 'notes' },
+                        { value: (stats.apStudyStats && stats.apStudyStats.weakAreas) || 0, label: 'weak areas' }
+                    ],
+                    actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }]
+                };
+            }
+
+            if (importedType === 'imp_upcoming_radar') {
+                const rows = deadlines.filter(item => item && item.due instanceof Date && item.status !== 'done').slice(0, 8).map(customTabDeadlineRow).filter(Boolean);
+                return { list: rows, empty: rows.length ? '' : 'Nothing on the radar.', actions: [{ label: 'Open Radar', action: 'open_deadline_radar', payload: {} }] };
+            }
+
+            if (importedType === 'imp_attention_cards') {
+                const overdue = deadlines.filter(item => item.overdue).length;
+                const todayDue = deadlines.filter(item => item.due instanceof Date && customTabLocalDateKey(item.due) === todayKey).length;
+                const blocks = customTabBlocksForDateKey(todayKey);
+                return {
+                    stats: [
+                        { value: overdue, label: 'overdue' },
+                        { value: todayDue, label: 'due today' },
+                        { value: blocks.length, label: 'blocks' }
+                    ],
+                    list: deadlines.slice(0, 5).map(customTabDeadlineRow).filter(Boolean)
+                };
+            }
+
+            if (importedType === 'imp_course_progress') {
+                const courses = customTabCoursesWithGrades();
+                return {
+                    stats: [{ value: courses.length, label: 'courses' }],
+                    list: courses.slice(0, 6).map(course => ({ title: course.name, meta: [course.grade || 'No grade', course.target ? `Target ${course.target}` : ''].filter(Boolean).join(' - ') })),
+                    empty: courses.length ? '' : 'No active courses.'
+                };
+            }
+
+            if (importedType === 'imp_grade_whatif' || importedType === 'imp_gpa_projection') {
+                const courses = customTabCoursesWithGrades().filter(course => course.percent != null);
+                const gp = window.SutraGradePlanner;
+                const planner = gp && typeof gp.getPlanner === 'function' ? gp.getPlanner() : gradePlanner;
+                const engine = gp && (gp.engine || gp.Engine || gp);
+                if (importedType === 'imp_gpa_projection') {
+                    let gpa = { unweighted: null, weighted: null, courseCount: 0 };
+                    try {
+                        if (engine && typeof engine.computeGpa === 'function') {
+                            gpa = engine.computeGpa(courses.map(c => ({ percent: c.percent, credits: 1, level: 'regular', includeInGpa: true })), planner.settings || {});
+                        }
+                    } catch (e) { /* non-critical */ }
+                    return {
+                        hero: { value: gpa.weighted == null ? '-' : Number(gpa.weighted).toFixed(2), label: 'weighted GPA' },
+                        stats: [
+                            { value: gpa.unweighted == null ? '-' : Number(gpa.unweighted).toFixed(2), label: 'unweighted' },
+                            { value: gpa.courseCount || courses.length, label: 'courses' }
+                        ]
+                    };
+                }
+                const course = courses[0];
+                let current = null;
+                let projected = null;
+                try {
+                    if (course && engine && typeof engine.normalizeCourseGrades === 'function' && typeof engine.whatIfScore === 'function') {
+                        const data = engine.normalizeCourseGrades((planner.courses || {})[course.id] || null);
+                        current = engine.computeCourseGrade(data, planner.settings || {});
+                        projected = engine.whatIfScore(data, { score: 100, maxScore: 100, categoryId: '' }, planner.settings || {});
+                    }
+                } catch (e) { /* non-critical */ }
+                return {
+                    hero: { value: course ? course.name : 'No grade data', label: current && current.percent != null ? `${current.percent}% now` : 'add scores to model' },
+                    stats: projected && projected.percent != null ? [{ value: `${projected.percent}%`, label: 'if next is 100%' }] : [],
+                    actions: [{ label: 'Open What-if', action: 'open_grade_impact', payload: { courseId: course ? course.id : '' } }]
+                };
+            }
+
+            if (importedType === 'imp_assignment_milestones') {
+                const rows = deadlines.filter(item => item.source === 'milestone').slice(0, 6).map(customTabDeadlineRow).filter(Boolean);
+                return { list: rows, empty: rows.length ? '' : 'No assignment milestones found.' };
+            }
+
+            if (importedType === 'imp_exam_countdown') {
+                const exams = deadlines.filter(item => item.source === 'apexam' || /\b(exam|test|quiz|final|midterm)\b/i.test(String(item.title || ''))).slice(0, 6);
+                const next = exams[0];
+                return {
+                    hero: next ? { value: Math.max(0, Math.ceil((next.due - now) / 86400000)), label: `days to ${next.title}` } : { value: '-', label: 'no exams scheduled' },
+                    list: exams.map(customTabDeadlineRow).filter(Boolean)
+                };
+            }
+
+            if (importedType === 'imp_weak_topics') {
+                const rows = customTabApWeakItems(8).map(item => ({ title: item.title, meta: item.meta, tone: 'warn' }));
+                return { list: rows, empty: rows.length ? '' : 'No weak topics flagged.' };
+            }
+
+            if (importedType === 'imp_ap_study_snapshot') {
+                const stats = typeof window.getApStudyTodayStats === 'function' ? window.getApStudyTodayStats(todayKey) : {};
+                return {
+                    hero: { value: stats.nextExamCountdown || stats.nextExamLabel || 'No exam', label: 'next AP exam' },
+                    stats: [
+                        { value: stats.subjectCount || 0, label: 'subjects' },
+                        { value: stats.upcomingSessions || 0, label: 'sessions' },
+                        { value: stats.weakAreas || 0, label: 'weak areas' },
+                        { value: stats.studyMinutes14d || 0, label: 'min / 14d' }
+                    ]
+                };
+            }
+
+            if (importedType === 'imp_free_slots') {
+                let slots = [];
+                try {
+                    slots = typeof getFreeWindowsForDateKey === 'function' ? getFreeWindowsForDateKey(todayKey, [], { minMinutes: 25 }) : [];
+                } catch (e) { slots = []; }
+                const rows = slots.slice(0, 5).map(slot => ({
+                    title: `${customTabMinutesLabel(slot.startMinutes)} - ${customTabMinutesLabel(slot.endMinutes)}`,
+                    meta: `${Math.round((Number(slot.endMinutes) - Number(slot.startMinutes)) || 0)} min open`
+                }));
+                return { list: rows, empty: rows.length ? '' : 'No open slots found today.' };
+            }
+
+            if (importedType === 'imp_week_strip' || importedType === 'imp_event_density') {
+                const bars = [];
+                let weekBlocks = 0;
+                for (let i = 0; i < 7; i += 1) {
+                    const key = customTabShiftDateKey(todayKey, i);
+                    const count = customTabBlocksForDateKey(key).length;
+                    weekBlocks += count;
+                    bars.push({ label: customTabDayLabel(key, i), value: count });
+                }
+                return {
+                    hero: { value: weekBlocks, label: 'blocks this week' },
+                    bars,
+                    stats: [{ value: customTabBlocksForDateKey(todayKey).length, label: 'today' }]
+                };
+            }
+
+            if (importedType === 'imp_recent_notes_stack' || importedType === 'imp_note_inbox') {
+                const notes = (Array.isArray(pages) ? pages : [])
+                    .filter(p => p && p.id && !p.isLocked)
+                    .slice()
+                    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+                    .slice(0, 6);
+                return {
+                    list: notes.map(note => ({ title: String(note.title || 'Untitled'), meta: String(note.updatedAt || note.createdAt || '').slice(0, 10), action: 'open_note', payload: { id: String(note.id || '') } })),
+                    empty: notes.length ? '' : 'No notes yet.',
+                    actions: importedType === 'imp_note_inbox' ? [{ label: 'Quick capture', action: 'open_quick_capture', payload: {} }] : []
+                };
+            }
+
+            if (importedType === 'imp_pinned_notes_board') {
+                const ids = Array.isArray(config && config.noteIds) ? config.noteIds.map(String) : [];
+                const pinned = (Array.isArray(pages) ? pages : []).filter(page => page && ids.includes(String(page.id)));
+                return {
+                    list: pinned.map(note => ({ title: String(note.title || 'Untitled'), meta: 'Pinned note', action: 'open_note', payload: { id: String(note.id || '') } })),
+                    empty: pinned.length ? '' : 'No pinned notes in this widget.'
+                };
+            }
+
+            if (importedType === 'imp_linked_notes') {
+                const linked = (Array.isArray(pages) ? pages : []).filter(page => {
+                    const meta = page && page.metadata ? page.metadata : {};
+                    return meta.classLinkId || meta.linkedReviewDeckId || (Array.isArray(meta.linkedHomeworkTaskIds) && meta.linkedHomeworkTaskIds.length) || (Array.isArray(meta.linkedCalendarBlockIds) && meta.linkedCalendarBlockIds.length);
+                }).slice(0, 6);
+                return {
+                    list: linked.map(note => ({ title: String(note.title || 'Untitled'), meta: 'Linked note', action: 'open_note', payload: { id: String(note.id || '') } })),
+                    empty: linked.length ? '' : 'No linked notes found.'
+                };
+            }
+
+            if (importedType === 'imp_random_note') {
+                const notes = (Array.isArray(pages) ? pages : []).filter(p => p && p.id && !p.isLocked);
+                const idx = notes.length ? Math.abs(todayKey.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0)) % notes.length : -1;
+                const note = idx >= 0 ? notes[idx] : null;
+                return {
+                    hero: note ? { value: String(note.title || 'Untitled'), label: 'random note to revisit' } : { value: 'No notes', label: 'create a note first' },
+                    actions: note ? [{ label: 'Open note', action: 'open_note', payload: { id: String(note.id || '') } }] : []
+                };
+            }
+
+            if (importedType === 'imp_streak_ribbon') {
+                const s = streakState || {};
+                return {
+                    hero: { value: Math.max(0, Number(s.globalCurrent) || 0), label: 'current streak' },
+                    stats: [{ value: Math.max(0, Number(s.globalBest) || 0), label: 'best' }]
+                };
+            }
+
+            if (importedType === 'imp_pomodoro') {
+                return {
+                    hero: { value: '25 / 5', label: 'pomodoro cycle' },
+                    actions: [{ label: 'Start 25 min', action: 'start_focus', payload: { seconds: 1500 } }]
+                };
+            }
+
+            if (importedType === 'imp_session_log') {
+                const rows = customTabFocusSessionRows(6);
+                return { list: rows, empty: rows.length ? '' : 'No focus sessions logged yet.' };
+            }
+
+            if (importedType === 'imp_energy_checkin') {
+                const checks = lifeWorkspace && lifeWorkspace.wellness && Array.isArray(lifeWorkspace.wellness.checkIns) ? lifeWorkspace.wellness.checkIns : [];
+                const recent = checks.slice(-5).reverse();
+                const avg = recent.length ? Math.round(recent.reduce((sum, row) => sum + (Number(row.energy || row.nextDayEnergy || row.mood || 0) || 0), 0) / recent.length * 10) / 10 : 0;
+                return {
+                    hero: { value: recent.length ? avg : '-', label: 'recent energy' },
+                    list: recent.map(row => ({ title: String(row.title || row.mood || 'Check-in'), meta: String(row.date || row.createdAt || '').slice(0, 10) })),
+                    actions: [{ label: 'Open wellness', action: 'open_view', payload: { view: 'life' } }]
+                };
+            }
+
+            if (importedType === 'imp_overdue_recovery') {
+                const rows = deadlines.filter(item => item.overdue).slice(0, 6).map(customTabDeadlineRow).filter(Boolean);
+                return { list: rows, empty: rows.length ? '' : 'Nothing overdue.', actions: [{ label: 'Recover', action: 'open_overdue_recovery', payload: {} }] };
+            }
+
+            if (importedType === 'imp_task_burndown' || importedType === 'imp_task_load') {
+                const activeTasks = customTabCurrentTasks();
+                const bars = [];
+                for (let i = 0; i < 7; i += 1) {
+                    const key = customTabShiftDateKey(todayKey, i);
+                    bars.push({ label: customTabDayLabel(key, i), value: activeTasks.filter(task => task.dueDate === key).length });
+                }
+                return {
+                    hero: { value: activeTasks.length, label: 'open tasks' },
+                    bars,
+                    stats: [
+                        { value: activeTasks.filter(task => task.dueDate && task.dueDate < todayKey).length, label: 'overdue' },
+                        { value: activeTasks.filter(task => task.dueDate === todayKey).length, label: 'today' }
+                    ]
+                };
+            }
+
+            if (importedType === 'dash_semester') {
+                const term = (schoolSchedule && schoolSchedule.term) || {};
+                const start = term.startDate ? new Date(term.startDate + 'T00:00:00') : null;
+                const end = term.endDate ? new Date(term.endDate + 'T00:00:00') : null;
+                if (!start || !end || isNaN(start) || isNaN(end) || end <= start) {
+                    return { empty: 'Set your term start and end dates in School Schedule to track progress.' };
+                }
+                const nowT = new Date(todayKey + 'T00:00:00');
+                const totalDays = (end - start) / 86400000;
+                const elapsedDays = Math.max(0, Math.min(totalDays, (nowT - start) / 86400000));
+                const pct = Math.round((elapsedDays / totalDays) * 100);
+                const daysLeft = Math.max(0, Math.ceil((end - nowT) / 86400000));
+                return {
+                    hero: { value: pct + '%', label: (term.name ? term.name + ' — ' : '') + 'term elapsed', meta: daysLeft + (daysLeft === 1 ? ' day left' : ' days left') },
+                    progress: { pct, label: Math.round(elapsedDays) + ' of ' + Math.round(totalDays) + ' days' },
+                    stats: [
+                        { value: Math.round(elapsedDays), label: 'days in' },
+                        { value: Math.max(0, Math.round(totalDays - elapsedDays)), label: 'days to go' }
+                    ]
+                };
+            }
+
+            if (importedType === 'dash_month_compare') {
+                const nowD = new Date(todayKey + 'T00:00:00');
+                const thisMonth = customTabMonthKey(nowD);
+                const lastMonth = customTabMonthKey(new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1));
+                let tasksThis = 0, tasksLast = 0;
+                try {
+                    Object.keys(dayStates || {}).forEach(k => {
+                        const ds = dayStates[k];
+                        const c = ds && Array.isArray(ds.completedTaskIds) ? ds.completedTaskIds.length : 0;
+                        if (k.slice(0, 7) === thisMonth) tasksThis += c;
+                        else if (k.slice(0, 7) === lastMonth) tasksLast += c;
+                    });
+                } catch (e) { /* non-critical */ }
+                let focusThis = 0, focusLast = 0;
+                try {
+                    (Array.isArray(focusSessions) ? focusSessions : []).forEach(s => {
+                        const key = String(s.endedAt || s.startedAt || '').slice(0, 7);
+                        const mins = customTabFocusMinutes(s);
+                        if (key === thisMonth) focusThis += mins;
+                        else if (key === lastMonth) focusLast += mins;
+                    });
+                } catch (e) { /* non-critical */ }
+                const delta = tasksThis - tasksLast;
+                return {
+                    hero: { value: tasksThis, label: 'tasks done this month', meta: (delta >= 0 ? '+' : '') + delta + ' vs last month' },
+                    stats: [
+                        { value: tasksLast, label: 'last month' },
+                        { value: Math.round(focusThis / 60 * 10) / 10, label: 'focus hrs' },
+                        { value: Math.round(focusLast / 60 * 10) / 10, label: 'last-mo hrs' }
+                    ],
+                    bars: [{ label: 'Last', value: tasksLast }, { label: 'This', value: tasksThis }]
+                };
+            }
+
+            if (importedType === 'dash_weekly_recap') {
+                let tasksDone = 0, focusMin = 0;
+                const bars = [];
+                const weekKeys = [];
+                for (let i = 6; i >= 0; i -= 1) {
+                    const key = customTabShiftDateKey(todayKey, -i);
+                    weekKeys.push(key);
+                    const c = customTabCompletedCountForDate(key);
+                    tasksDone += c;
+                    bars.push({ label: customTabWeekdayLabel(key), value: c });
+                }
+                try {
+                    (Array.isArray(focusSessions) ? focusSessions : []).forEach(s => {
+                        const k = String(s.endedAt || s.startedAt || '').slice(0, 10);
+                        if (weekKeys.indexOf(k) !== -1) focusMin += customTabFocusMinutes(s);
+                    });
+                } catch (e) { /* non-critical */ }
+                const s = streakState || {};
+                return {
+                    hero: { value: tasksDone, label: 'tasks done this week' },
+                    stats: [
+                        { value: Math.round(focusMin / 60 * 10) / 10, label: 'focus hrs' },
+                        { value: Math.max(0, Number(s.globalCurrent) || 0), label: 'day streak' }
+                    ],
+                    bars
+                };
+            }
+
+            if (importedType === 'dash_college_apps') {
+                const submittedRe = /submit|complete|done|accepted|admitted/i;
+                const rows = (collegeAppWorkspace && Array.isArray(collegeAppWorkspace.collegeTracker) ? collegeAppWorkspace.collegeTracker : [])
+                    .filter(r => r && (r.school || r.deadline))
+                    .slice()
+                    .sort((a, b) => String(a.deadline || '9999-12-31').localeCompare(String(b.deadline || '9999-12-31')));
+                const submitted = rows.filter(r => submittedRe.test(String(r.status || ''))).length;
+                const list = rows.slice(0, 6).map(r => ({
+                    title: String(r.school || 'School'),
+                    meta: [r.status || '', r.deadline ? 'Due ' + r.deadline : '', (r.applicationProgress != null && r.applicationProgress !== '' ? r.applicationProgress + '%' : '')].filter(Boolean).join(' · '),
+                    tone: (r.deadline && r.deadline < todayKey && !submittedRe.test(String(r.status || ''))) ? 'danger' : ''
+                }));
+                return {
+                    hero: { value: rows.length, label: 'schools tracked', meta: submitted + ' submitted' },
+                    list,
+                    empty: rows.length ? '' : 'No schools in your college tracker yet.',
+                    actions: [{ label: 'Open College', action: 'open_view', payload: { view: 'collegeapp' } }]
+                };
+            }
+
+            if (importedType === 'dash_expenses') {
+                const spending = lifeWorkspace && Array.isArray(lifeWorkspace.spending) ? lifeWorkspace.spending : [];
+                const monthKey = todayKey.slice(0, 7);
+                let spent = 0;
+                const byCat = {};
+                spending.forEach(row => {
+                    if (!row || String(row.date || '').slice(0, 7) !== monthKey) return;
+                    const amt = Number(row.amount) || 0;
+                    spent += amt;
+                    const c = String(row.category || 'Other');
+                    byCat[c] = (byCat[c] || 0) + amt;
+                });
+                const budgets = lifeWorkspace && lifeWorkspace.spendingBudgets && typeof lifeWorkspace.spendingBudgets === 'object' ? lifeWorkspace.spendingBudgets : {};
+                const budgetTotal = Object.keys(budgets).reduce((sum, k) => sum + (Number(budgets[k]) || 0), 0);
+                const topCats = Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]).slice(0, 5).map(c => ({ title: c, meta: customTabMoney(byCat[c]) }));
+                const pct = budgetTotal > 0 ? Math.min(100, Math.round((spent / budgetTotal) * 100)) : null;
+                return {
+                    hero: { value: customTabMoney(spent), label: 'spent this month', meta: budgetTotal > 0 ? ('of ' + customTabMoney(budgetTotal) + ' budget') : '' },
+                    progress: pct != null ? { pct, label: pct + '% of budget used', tone: pct >= 100 ? 'danger' : (pct >= 80 ? 'warn' : '') } : null,
+                    list: topCats,
+                    empty: spending.length ? '' : 'No expenses logged yet — track them on the Life tab.',
+                    actions: [{ label: 'Open Life', action: 'open_view', payload: { view: 'life' } }]
+                };
+            }
+
+            if (importedType === 'dash_projects') {
+                const bw = businessWorkspace || {};
+                const bTasks = Array.isArray(bw.tasks) ? bw.tasks : [];
+                const countStatus = st => bTasks.filter(t => String((t && t.status) || 'todo') === st).length;
+                const projects = (Array.isArray(bw.projects) ? bw.projects : []).filter(p => p && p.status !== 'completed');
+                const list = projects.slice(0, 5).map(p => ({
+                    title: String(p.name || 'Project'),
+                    meta: [(p.status || ''), (p.completionPercent != null && p.completionPercent !== '' ? p.completionPercent + '%' : ''), p.dueDate ? 'Due ' + p.dueDate : ''].filter(Boolean).join(' · '),
+                    tone: (p.status === 'at-risk' || p.riskFlag) ? 'warn' : ''
+                }));
+                return {
+                    hero: { value: projects.length, label: 'active projects' },
+                    stats: [
+                        { value: countStatus('todo'), label: 'to do' },
+                        { value: countStatus('doing'), label: 'doing' },
+                        { value: countStatus('done'), label: 'done' }
+                    ],
+                    list,
+                    empty: (bTasks.length || projects.length) ? '' : 'No business projects or tasks yet.',
+                    actions: [{ label: 'Open Business', action: 'open_view', payload: { view: 'business' } }]
+                };
+            }
+
+            if (importedType === 'dash_lms_sync') {
+                let hw = [];
+                try { hw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (e) { hw = []; }
+                const imported = (Array.isArray(hw) ? hw : []).filter(t => t && typeof t.sourceUrl === 'string' && /^https?:\/\//.test(t.sourceUrl));
+                let latest = null;
+                imported.forEach(t => {
+                    const d = new Date(t.createdAt || t.updatedAt || 0);
+                    if (!isNaN(d) && (!latest || d > latest)) latest = d;
+                });
+                const openCount = imported.filter(t => !t.done).length;
+                return {
+                    hero: latest
+                        ? { value: customTabRelativeTime(latest), label: 'last Canvas capture' }
+                        : { value: 'No captures', label: 'Install the Sutra LMS extension to sync' },
+                    stats: [
+                        { value: imported.length, label: 'imported' },
+                        { value: openCount, label: 'still open' }
+                    ],
+                    empty: imported.length ? '' : 'Nothing imported from Canvas yet.',
+                    actions: imported.length ? [{ label: 'Open Homework', action: 'open_view', payload: { view: 'homework' } }] : []
+                };
+            }
+
+            if (importedType === 'dash_recent_grades') {
+                const gp = window.SutraGradePlanner;
+                const planner = gp && typeof gp.getPlanner === 'function' ? gp.getPlanner() : gradePlanner;
+                const courseNames = {};
+                try {
+                    const cw = normalizeCourseWorkspace(courseWorkspace) || {};
+                    (Array.isArray(cw.courses) ? cw.courses : []).forEach(c => { courseNames[String(c.id)] = String(c.name || 'Course'); });
+                } catch (e) { /* non-critical */ }
+                const rows = [];
+                try {
+                    Object.keys((planner && planner.courses) || {}).forEach(cid => {
+                        const entries = Array.isArray(planner.courses[cid].entries) ? planner.courses[cid].entries : [];
+                        entries.forEach(en => {
+                            if (!en || en.status !== 'graded' || en.score == null || en.maxScore == null || Number(en.maxScore) <= 0) return;
+                            rows.push({
+                                title: String(en.title || 'Grade'),
+                                course: courseNames[String(cid)] || '',
+                                date: String(en.date || ''),
+                                pct: Math.round((Number(en.score) / Number(en.maxScore)) * 1000) / 10
+                            });
+                        });
+                    });
+                } catch (e) { /* non-critical */ }
+                rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+                const list = rows.slice(0, 6).map(r => ({ title: r.title, meta: [r.course, r.pct + '%', r.date].filter(Boolean).join(' · ') }));
+                return {
+                    hero: rows.length ? { value: rows.length + ' graded', label: 'latest scores by date' } : { value: 'No grades', label: 'add scores in Grade Planner' },
+                    list,
+                    empty: rows.length ? '' : 'No graded entries yet.'
+                };
+            }
+
+            return { empty: 'Imported widget data is unavailable.' };
+        }
+
+        function runCustomTabImportedWidgetAction(action, payload = {}) {
+            try {
+                const key = String(action || '');
+                if (key === 'open_view' && payload.view && typeof setActiveView === 'function') { setActiveView(String(payload.view)); return true; }
+                if (key === 'open_note' && payload.id) { setActiveView('notes'); loadPage(String(payload.id)); return true; }
+                if (key === 'open_task' && payload.id && typeof openTaskModal === 'function') { openTaskModal(String(payload.id)); return true; }
+                if (key === 'open_deadline' && payload.id) {
+                    const item = collectWorkspaceDeadlines().find(row => String(row.id) === String(payload.id));
+                    if (item && typeof openDeadlineSource === 'function') { openDeadlineSource(item); return true; }
+                }
+                if (key === 'open_deadline_radar' && typeof openDeadlineRadar === 'function') { openDeadlineRadar(); return true; }
+                if (key === 'start_focus' && typeof startFocusSession === 'function') {
+                    startFocusSession(null, { plannedDurationSeconds: Math.min(Math.max(Number(payload.seconds) || 1500, 300), 7200) });
+                    return true;
+                }
+                if (key === 'start_review') {
+                    if (typeof window.startReviewSessionFromShortcut === 'function') window.startReviewSessionFromShortcut();
+                    else if (typeof setActiveView === 'function') setActiveView('review');
+                    return true;
+                }
+                if (key === 'open_grade_impact' && typeof openGradeImpactModal === 'function') { openGradeImpactModal(payload.courseId || ''); return true; }
+                if (key === 'open_overdue_recovery' && typeof openOverdueRecovery === 'function') { openOverdueRecovery(); return true; }
+                if (key === 'open_quick_capture' && typeof openQuickCaptureModal === 'function') { openQuickCaptureModal(); return true; }
+            } catch (e) { return false; }
+            return false;
+        }
+
         function persistAppData() {
             if (!appData) return;
             syncHabitTrackersAcrossViews();
@@ -7350,6 +8211,20 @@ function populateProgressDashboard() {
                         const p = (Array.isArray(pages) ? pages : []).find(x => x && x.id === id);
                         return p ? String(p.title || 'Untitled') : null;
                     } catch (e) { return null; }
+                },
+                getImportedWidgetData: (type, config) => {
+                    try { return customTabImportedWidgetData(type, config || {}); }
+                    catch (e) { return { empty: 'Imported widget data is unavailable.' }; }
+                },
+                runImportedWidgetAction: (action, payload) => {
+                    try { return runCustomTabImportedWidgetAction(action, payload || {}); }
+                    catch (e) { return false; }
+                },
+                getRandomReviewCard: () => {
+                    try { return customTabRandomReviewCard(); } catch (e) { return null; }
+                },
+                askAssistant: (query) => {
+                    try { return customTabAskAssistant(query); } catch (e) { return false; }
                 }
             };
             // Minimal ICS parsing surface so feature modules (school-schedule
@@ -74473,9 +75348,6 @@ function _fsFormatTime(totalSeconds, compact) {
     if (compact) return m + ':' + pad(sec);
     return pad(m) + ':' + pad(sec);
 }
-
-
-
 
 
 

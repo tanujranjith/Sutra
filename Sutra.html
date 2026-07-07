@@ -7111,7 +7111,7 @@
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
     <script src="src/features/workspace/today-command-center.js?v=20260703-today1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
-<script src="src/core/app.js?v=20260705-clb2"></script>
+<script src="src/core/app.js?v=20260706-widgets2"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260616-pwa1"></script>
@@ -7128,7 +7128,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20260620-mobilenav1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260704-ctabs2"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260706-ctabs3"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
     <script src="src/core/issue-prompt.js?v=20260617-issue1"></script>
@@ -7509,7 +7509,7 @@
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260703-today2">
-    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260704-ctabs2">
+    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops
