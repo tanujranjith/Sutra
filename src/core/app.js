@@ -28739,6 +28739,78 @@ function populateProgressDashboard() {
                 if (src === 'note' && item.sourceId) return this.fromNoteId(item.sourceId, { title: `Review: ${item.title}` });
                 if ((src === 'homework' || src === 'milestone') && item.sourceId) return this.fromHomeworkTask(item.sourceId, { title: `Review: ${item.title}` });
                 return this.fromText('', { title: `Review: ${item.title}` });
+            },
+            // Deterministic path from an AP Study unit: extract Q/A pairs from the
+            // unit's linked note and every topic's linked note, then scaffold an
+            // answerless row for each remaining topic so the student fills the
+            // gaps in the editable table. No AI involved.
+            fromApUnit(unitId, opts) {
+                opts = opts || {};
+                const aps = apStudyWorkspace || {};
+                const unit = (Array.isArray(aps.units) ? aps.units : []).find(u => u && String(u.id) === String(unitId));
+                if (!unit) { try { setActiveView('review'); } catch (e) {} return false; }
+                const subject = (Array.isArray(aps.subjects) ? aps.subjects : []).find(s => s && String(s.id) === String(unit.subjectId));
+                const topics = (Array.isArray(aps.topics) ? aps.topics : []).filter(t => t && String(t.unitId) === String(unitId));
+                const lines = [];
+                const seen = new Set();
+                const clean = (s) => String(s || '').replace(/[\t\n]+/g, ' ').trim();
+                const pushPairsFromNote = (noteId) => {
+                    const page = noteId && typeof getPageById === 'function' ? getPageById(noteId) : null;
+                    if (!page || !page.content || page.isLocked) return;
+                    // The shared TSV builder = structural extractor + line-parser
+                    // fallback, so plain "term: definition" paragraphs work too.
+                    String(sutraBuildReviewTsvFromContent(page.content, { max: 40 }) || '').split('\n').forEach(line => {
+                        const tab = line.indexOf('\t');
+                        if (tab <= 0) return;
+                        const q = clean(line.slice(0, tab));
+                        const a = clean(line.slice(tab + 1));
+                        const k = q.toLowerCase();
+                        if (!q || !a || seen.has(k)) return;
+                        seen.add(k);
+                        lines.push(q + '\t' + a);
+                    });
+                };
+                pushPairsFromNote(unit.noteId);
+                topics.forEach(t => pushPairsFromNote(t.noteId));
+                topics.forEach(t => {
+                    const k = clean(t.title).toLowerCase();
+                    if (!k || seen.has(k)) return;
+                    seen.add(k);
+                    lines.push(clean(t.title) + '\t');
+                });
+                const subjName = subject && subject.name ? String(subject.name) : '';
+                return sutraOpenReviewGen({
+                    rawText: lines.join('\n'),
+                    title: opts.title || ('Review: ' + (subjName ? subjName + ' — ' : '') + (unit.title || 'Unit')),
+                    subject: subjName,
+                    source: 'apunit:' + String(unitId)
+                });
+            },
+            // Deterministic path from a Testing Hub exam's mistake bank: every
+            // non-mastered mistake becomes a card (topic → correction).
+            fromTestMistakes(examId, opts) {
+                opts = opts || {};
+                const profile = (typeof getExamProfile === 'function') ? getExamProfile(examId) : null;
+                const rows = profile && Array.isArray(profile.mistakes)
+                    ? profile.mistakes.filter(m => m && m.topic && m.status !== 'mastered')
+                    : [];
+                if (!rows.length) {
+                    showToast('No unresolved mistakes logged for this exam yet — add them in the Mistake bank first.');
+                    return false;
+                }
+                const clean = (s) => String(s || '').replace(/[\t\n]+/g, ' ').trim();
+                const lines = rows.map(m => {
+                    const prompt = clean(m.topic) + (m.section ? ' (' + clean(m.section) + ')' : '');
+                    const answer = clean(m.correction) || ('Watch for: ' + (clean(m.cause) || 'review this topic'));
+                    return prompt + '\t' + answer;
+                });
+                const name = clean(profile.name) || String(examId || 'exam').toUpperCase();
+                return sutraOpenReviewGen({
+                    rawText: lines.join('\n'),
+                    title: opts.title || ('Mistakes: ' + name),
+                    subject: name,
+                    source: 'mistakes:' + String(examId)
+                });
             }
         };
         if (typeof window !== 'undefined') {
@@ -38757,7 +38829,7 @@ function populateProgressDashboard() {
             // Mistake bank
             const mistakesPanel = `
                 <div class="th2-subcard" data-panel="mistakes">
-                    <div class="th2-subcard-head"><i class="fas fa-circle-exclamation"></i> Mistake bank <button class="th2-subcard-add" type="button" onclick="addExamMistake('${escapeHtml(id)}')"><i class="fas fa-plus"></i> Add</button></div>
+                    <div class="th2-subcard-head"><i class="fas fa-circle-exclamation"></i> Mistake bank <button class="th2-subcard-add" type="button" onclick="reviewCardsFromExamMistakes('${escapeHtml(id)}')" title="Turn unresolved mistakes into review cards"><i class="fas fa-layer-group"></i> Cards</button> <button class="th2-subcard-add" type="button" onclick="addExamMistake('${escapeHtml(id)}')"><i class="fas fa-plus"></i> Add</button></div>
                     ${renderMistakeList(profile.mistakes, id)}
                 </div>`;
 
@@ -40837,6 +40909,7 @@ function populateProgressDashboard() {
                 window.editExamMistake = editExamMistake;
                 window.deleteExamMistake = deleteExamMistake;
                 window.cycleExamMistakeStatus = cycleExamMistakeStatus;
+                window.reviewCardsFromExamMistakes = (examId) => SutraReviewGenerator.fromTestMistakes(examId);
                 window.addExamTask = addExamTask;
                 window.toggleExamTask = toggleExamTask;
                 window.deleteExamTask = deleteExamTask;
@@ -56466,6 +56539,25 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, 700);
             } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); }
         }
+        function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
+            const snap = getWorkspaceSnapshots().find(s => s && s.id === snapId);
+            const src = snap && snap.payload && Array.isArray(snap.payload.pages)
+                ? snap.payload.pages.find(p => p && String(p.id) === String(pageId))
+                : null;
+            if (!src) { showToast('That note is no longer in the snapshot.'); return null; }
+            // Non-destructive: the note comes back as a NEW page (fresh id), so
+            // nothing in the live workspace is overwritten. Lock fields are kept
+            // verbatim — a locked note must stay locked in the copy.
+            const copy = JSON.parse(JSON.stringify(src));
+            copy.id = generateId();
+            copy.title = String(copy.title || 'Untitled') + ' (from snapshot)';
+            copy.updatedAt = new Date().toISOString();
+            pages.push(copy);
+            savePagesToLocal();
+            renderPagesList();
+            showToast('Note restored as a copy: ' + copy.title);
+            return copy;
+        }
 
         function openSnapshotBrowserModal() {
             let modal = document.getElementById('sutraSnapshotModal');
@@ -56486,6 +56578,19 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (del) { deleteWorkspaceSnapshot(del.getAttribute('data-snap-delete')); renderSnapshotBrowser(); return; }
                     const diff = e.target.closest('[data-snap-diff]');
                     if (diff) { renderSnapshotBrowser(diff.getAttribute('data-snap-diff')); return; }
+                    const notes = e.target.closest('[data-snap-notes]');
+                    if (notes) { renderSnapshotBrowser(null, notes.getAttribute('data-snap-notes')); return; }
+                    const noteRestore = e.target.closest('[data-snap-note-restore]');
+                    if (noteRestore) {
+                        const copy = restoreNoteFromWorkspaceSnapshot(
+                            noteRestore.getAttribute('data-snap-id'),
+                            noteRestore.getAttribute('data-snap-note-restore'));
+                        if (copy) {
+                            closeSnapshotBrowserModal();
+                            try { setActiveView('notes'); loadPage(copy.id); } catch (err) { /* nc */ }
+                        }
+                        return;
+                    }
                 });
             }
             modal.style.display = 'flex';
@@ -56500,7 +56605,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             modal.classList.remove('active');
             if (window.SutraModalManager && window.SutraModalManager.sync) { try { window.SutraModalManager.sync(); } catch (e) { /* nc */ } }
         }
-        function renderSnapshotBrowser(diffId) {
+        function renderSnapshotBrowser(diffId, notesId) {
             const modal = document.getElementById('sutraSnapshotModal');
             if (!modal) return;
             const list = getWorkspaceSnapshots();
@@ -56520,10 +56625,22 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                             ? '<div class="sutra-snap-diff">' + d.diffs.map(x => `<span class="${x.delta >= 0 ? 'up' : 'down'}">${esc(x.key)} ${x.delta > 0 ? '+' : ''}${x.delta}</span>`).join(' ') + '</div>'
                             : '<div class="sutra-snap-diff">No differences from the current workspace.</div>';
                     }
+                    let notesHtml = '';
+                    if (notesId === s.id) {
+                        const snapPages = (s.payload && Array.isArray(s.payload.pages) ? s.payload.pages : []).filter(p => p && p.id);
+                        notesHtml = snapPages.length
+                            ? '<div class="sutra-snap-notes">' + snapPages.slice(0, 200).map(p =>
+                                `<div class="sutra-snap-note-row"><span class="sutra-snap-note-title">${p.isLocked ? '🔒 ' : ''}${esc(p.title || 'Untitled')}</span>`
+                                + `<button type="button" class="btn btn-ghost" data-snap-id="${esc(s.id)}" data-snap-note-restore="${esc(p.id)}">Restore copy</button></div>`).join('')
+                              + (snapPages.length > 200 ? `<div class="sutra-snap-meta">…and ${snapPages.length - 200} more (restore the whole snapshot to reach them)</div>` : '')
+                              + '</div>'
+                            : '<div class="sutra-snap-notes"><div class="sutra-snap-meta">This snapshot holds no notes.</div></div>';
+                    }
                     return `<div class="sutra-snap-row">
-                        <div class="sutra-snap-info"><div class="sutra-snap-title">${esc(s.label)}</div><div class="sutra-snap-meta">${esc(when)} · ${esc(meta)}</div>${diffHtml}</div>
+                        <div class="sutra-snap-info"><div class="sutra-snap-title">${esc(s.label)}</div><div class="sutra-snap-meta">${esc(when)} · ${esc(meta)}</div>${diffHtml}${notesHtml}</div>
                         <div class="sutra-snap-actions">
                             <button type="button" class="btn btn-ghost" data-snap-diff="${esc(s.id)}">Diff</button>
+                            <button type="button" class="btn btn-ghost" data-snap-notes="${esc(s.id)}">Notes…</button>
                             <button type="button" class="btn btn-secondary" data-snap-restore="${esc(s.id)}">Restore</button>
                             <button type="button" class="btn btn-ghost sutra-trash-purge" data-snap-delete="${esc(s.id)}">Delete</button>
                         </div></div>`;

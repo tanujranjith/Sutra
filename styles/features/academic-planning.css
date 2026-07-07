@@ -229,6 +229,37 @@
 
 .studio-section { margin-bottom: 20px; }
 .studio-section h4 { margin: 0 0 8px; font-size: 0.88rem; }
+
+/* Assignment Studio tab bar (2026-07-07) — sections live in tab panels. */
+.studio-tabs {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+    margin: 4px 0 14px; padding-bottom: 0;
+}
+.studio-tab {
+    appearance: none; background: transparent; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px; font-size: 0.8rem; font-weight: 600;
+    color: var(--text-secondary, #5d574a);
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    border-radius: 6px 6px 0 0;
+}
+.studio-tab:hover { background: color-mix(in srgb, var(--accent, #7c9cf2) 8%, transparent); color: var(--text-primary, #2c2a24); }
+.studio-tab.is-active {
+    color: var(--accent-strong, var(--accent, #7c9cf2));
+    border-bottom-color: var(--accent, #7c9cf2);
+}
+.studio-tab-badge {
+    font-size: 0.68rem; font-weight: 700; line-height: 1;
+    padding: 3px 6px; border-radius: 999px;
+    background: color-mix(in srgb, var(--accent, #7c9cf2) 14%, transparent);
+    color: var(--accent-strong, var(--accent, #7c9cf2));
+}
+.studio-tab-panel[hidden] { display: none; }
+@media (max-width: 640px) {
+    .studio-tabs { gap: 2px; }
+    .studio-tab { padding: 7px 8px; font-size: 0.74rem; }
+}
 .studio-empty-line { font-size: 0.78rem; color: var(--text-muted, #8a8270); padding: 4px 0 8px; }
 .studio-ms-row { display: grid; grid-template-columns: 24px minmax(120px, 2fr) minmax(96px, 0.9fr) minmax(120px, 1fr) 80px 44px 44px; gap: 8px; align-items: center; margin-bottom: 6px; }
 .studio-ms-row select[data-studio-field="ms-type"] { min-width: 0; }

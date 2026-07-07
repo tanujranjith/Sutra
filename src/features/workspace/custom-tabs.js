@@ -1718,7 +1718,10 @@
             return;
         }
         var cfg = widget.config || {};
-        var revealed = cfg.revealed === true;
+        // The reveal is per-day: the card changes with the day-seed, so a sticky
+        // boolean would spoil every future card after the first reveal.
+        var todayK = localDateKey();
+        var revealed = cfg.revealedOn === todayK;
         if (card.deck) body.appendChild(el('p', 'ctab-list-meta', card.deck));
         body.appendChild(el('p', 'ctab-flashcard-prompt', card.prompt || '(no prompt)'));
         if (revealed) {
@@ -1732,7 +1735,8 @@
                 var w = findWidget(t, widget.id);
                 if (!w) return;
                 if (!w.config || typeof w.config !== 'object') w.config = {};
-                w.config.revealed = !revealed;
+                w.config.revealedOn = revealed ? '' : todayK;
+                delete w.config.revealed; // retire the pre-2026-07-07 sticky flag
             }, { rerender: false });
             rerenderWidgetBody(tab.id, widget.id);
         }, { icon: revealed ? 'fa-eye-slash' : 'fa-eye' }));

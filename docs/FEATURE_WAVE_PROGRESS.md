@@ -24,8 +24,9 @@ Anchors below are by symbol name (line numbers drift in `src/core/app.js`).
 
 ## 1. Sutra Cloud — Pre-existing, documented
 Provider abstraction (`makeSutraCloudAdapter`), 9-provider registry (Manual /
-Supabase / WebDAV / Custom HTTP fully wired; Drive / OneDrive / Dropbox / Box /
-S3 honestly labelled scaffolded/preview), CSP enforcement, secret rejection,
+Supabase / WebDAV / Custom HTTP / Google Drive / OneDrive / Dropbox fully wired;
+Box honestly scaffolded — its token exchange needs a confidential secret a
+static app can't hold; S3 SigV4 preview), CSP enforcement, secret rejection,
 encryption reuse, auto-backup, full Settings panel, e2e tests, and the
 `docs/SUTRA_CLOUD_*.md` set were already present. Added
 `docs/features/SUTRA_CLOUD.md`.
@@ -40,7 +41,11 @@ and manual Drive restores get the same comparison; Drive's version-tracked
 background pull passes `skipConflictCheck:true`. Backup timestamps flow through
 via `options.backupTimestamp` (cloud row / Drive `modifiedTime`) with a fallback
 to the payload's `exportedAt`.
-**TODO:** OAuth wiring for OneDrive/Dropbox/Box; S3 SigV4 signing.
+**Update 2026-06-20:** OneDrive and Dropbox OAuth shipped as working in-app
+destinations (user pastes their own public OAuth client ID / app key; browser
+PKCE harness + same-origin `oauth-callback.html`). Box remains an honest
+scaffold by design (confidential-secret token exchange).
+**TODO:** S3 SigV4 signing.
 
 ## 2. All Due — Complete
 - Shared deterministic ranking engine `computeDeadlineRank(item)` +
@@ -105,8 +110,14 @@ risk-gated confirm), the Activity log (`sutra:activityLog:v1`) with undo
   source backlinks ride existing card fields (no new persisted fields).
 - Entry points: Notes page menu, Assignment Studio, All Due, Assistant.
 - Tests + `docs/features/REVIEW_GENERATOR.md`.
-- **TODO:** generate-from-AP-unit and from-test-mistakes deterministic paths;
-  surface a "Generate Review" button directly in the AP Study unit view.
+- **Update 2026-07-07:** the two deterministic paths shipped.
+  `SutraReviewGenerator.fromApUnit(unitId)` extracts Q/A pairs from the unit's
+  linked note + every topic's linked note and scaffolds an answerless row per
+  remaining topic ("Cards" button on each AP Study unit card).
+  `SutraReviewGenerator.fromTestMistakes(examId)` turns every non-mastered
+  Mistake-bank entry into a card (topic → correction; "Cards" button on the
+  Mistake bank panel, `window.reviewCardsFromExamMistakes`). Both open the
+  existing editable generator — nothing saves without review.
 
 ## 6. Assignment Studio 2.0 — Pre-existing + actions
 `task.studio` already carries milestones, subtasks, rubric, linked notes/files,
@@ -122,11 +133,15 @@ Already present: school tracker, essay organizer (essays open as linked notes vi
 tracker, a deterministic per-school **readiness score**
 (`getCollegeAppReadiness`), and college deadlines feeding Timeline/All Due via
 `collectCollegeDeadlineItems`.
+- **Update 2026-07-05:** structured **recommendation-request manager** shipped —
+  `collegeAppWorkspace.recommenders` collection with a not_asked → requested →
+  in_progress → submitted status board, feeding college deadlines. An **essay
+  prompt bank** (13 paraphrased prompts) and an essay stage board also landed.
 - **TODO:** dedicated **activities/extracurricular builder** (new
   `collegeAppWorkspace.activities` collection — wire through defaults → normalize
-  → serialize → `.sutra` → migrations); structured recommendation-request manager;
-  Common App **templates** (activities, honors descriptions, why-major, why-school,
-  additional-information); structured submission-readiness checklist rows.
+  → serialize → `.sutra` → migrations); Common App **templates** (activities,
+  honors descriptions, why-major, why-school, additional-information); structured
+  submission-readiness checklist rows.
 
 ## 8. Import Everything Wizard — Partial / mostly pre-existing
 Smart Import already parses text / CSV / ICS / syllabus deterministically, shows
@@ -154,9 +169,14 @@ checkpoint, secret-safe, single-note restore, `check:versions` invariants). See
   **homework assignments** (including all rows of a deleted subject), not just
   pages — restore/purge from the same Trash modal, with 30-day age-based
   auto-purge on top of the 50-item cap. Producer API: `window.SutraTrash.add`.
-- **TODO:** whole-workspace **snapshot browser**; single-note-from-snapshot
-  restore; **compare/diff** view; **Storage Health** via
-  `navigator.storage.estimate()` with cleanup settings.
+- **Update 2026-07-07:** the whole-workspace **snapshot browser** is live
+  (command palette → "Workspace snapshots": create/restore/delete up to 3
+  restore points with a count-level **diff** against the current workspace),
+  and **single-note-from-snapshot restore** shipped — "Notes…" lists a
+  snapshot's pages and restores any one as a non-destructive copy.
+- **TODO:** per-note textual **compare/diff** view; **Storage Health** cleanup
+  settings (snapshot cap / age trim) on top of the existing
+  `navigator.storage.estimate()` readout.
 
 ## 10. Starter Packs — Complete
 Local data (`src/features/workspace/starter-packs.data.js`,

@@ -20,21 +20,29 @@ records the planned additions (see `docs/FEATURE_WAVE_PROGRESS.md`).
 - History survives the `.sutra` round-trip. Invariants are enforced by
   `npm run check:versions` (`scripts/version-history-check.mjs`).
 
+## Whole-workspace snapshots (available today)
+
+- **Snapshot browser** — command palette → "Workspace snapshots"
+  (`openSnapshotBrowserModal`). Create/restore/delete up to 3 in-app restore
+  points (2.5 MB cap per snapshot; larger workspaces are pointed to `.sutra`
+  export). Restoring saves a "Before restore" snapshot first, then replaces the
+  workspace and reloads.
+- **Diff** — each snapshot can show a summary-level diff (pages/tasks/cards/…
+  counts) against the current workspace.
+- **Single-note restore (2026-07-07)** — "Notes…" on a snapshot lists the pages
+  it holds; "Restore copy" brings one back as a **new** page titled
+  "&lt;title&gt; (from snapshot)" — non-destructive, fresh id, lock fields kept
+  verbatim so a locked note stays locked.
+- **Trash (2026-07-01)** — deleted pages, planner tasks, and homework
+  assignments restore from the Trash modal (30-day age purge on top of the
+  50-item cap).
+
 ## Planned additions (tracked, not yet shipped)
 
-These are documented honestly as follow-ups so the feature isn't overclaimed:
-
-- **Restore deleted page/task** — a local trash/recycle bin with a retention
-  window. (New persisted collection; must be wired through defaults → hydrate →
-  serialize → `.sutra` → migrations, and excluded from secrets.)
-- **Snapshot browser** — browse/restore whole-workspace safety snapshots.
-- **Single-note restore from a snapshot** — pull one page out of a snapshot
-  without replacing the workspace.
-- **Compare view** — title/date/word-count and a simple textual diff between two
-  versions.
-- **Storage Health** — measure snapshot/workspace size (via
-  `navigator.storage.estimate()`), warn when large, and offer cleanup settings
-  (snapshot cap / age trim).
+- **Compare view** — a textual diff between two versions of one note (the
+  snapshot diff is count-level only).
+- **Storage Health settings** — cleanup controls (snapshot cap / age trim) on
+  top of the existing `navigator.storage.estimate()` readout.
 
 ## Privacy
 

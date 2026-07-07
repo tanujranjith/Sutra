@@ -408,6 +408,9 @@
     }
 
     var activeTaskId = null;
+    // Which tab of the studio modal is showing. Survives rerender() (every
+    // field edit rebuilds the body) but resets to the plan on a fresh open().
+    var activeStudioTab = 'plan';
 
     function ensureModal() {
         var modal = document.getElementById('assignmentStudioModal');
@@ -427,6 +430,8 @@
         modal.addEventListener('click', function (e) {
             if (e.target === modal) { close(); return; }
             if (e.target.closest('[data-studio-close]')) { close(); return; }
+            var tabBtn = e.target.closest('[data-studio-tab]');
+            if (tabBtn) { switchStudioTab(tabBtn.getAttribute('data-studio-tab')); return; }
             var btn = e.target.closest('[data-studio-action]');
             if (btn) handleAction(btn);
         });
@@ -444,6 +449,7 @@
             return;
         }
         activeTaskId = String(taskId);
+        activeStudioTab = 'plan';
         if (!task.studio) {
             updateTaskStudio(taskId, function () { /* initialize empty studio */ });
             task = getTask(taskId);
@@ -600,6 +606,9 @@
             + (studio.progressMode === 'manual' ? '<input type="number" min="0" max="100" data-studio-field="progress-pct" value="' + studio.progressPct + '" aria-label="Progress percent">' : '')
             + '</div></div>'
 
+            + renderStudioTabBar(studio)
+
+            + '<div class="studio-tab-panel" data-studio-panel="plan"' + (activeStudioTab === 'plan' ? '' : ' hidden') + '>'
             + '<section class="studio-section"><h4>Milestones</h4>'
             + (milestonesHtml || '<div class="studio-empty-line">Break this into milestones — drafts, builds, rehearsals, submissions.</div>')
             + '<div class="studio-add-row">'
@@ -615,22 +624,25 @@
             + '<button type="button" class="neumo-btn studio-action-btn" data-studio-action="ask-assistant">Ask Sutra to break this down</button>'
             + '</div>'
             + '<div class="studio-empty-line studio-plan-hint">A plan splits the work into dated milestones working back from ' + (task.dueDate ? 'your ' + esc(task.dueDate) + ' due date' : 'the due date') + ' — review and edit before scheduling.</div>'
-            + '</section>'
+            + '</section></div>'
 
+            + '<div class="studio-tab-panel" data-studio-panel="checklist"' + (activeStudioTab === 'checklist' ? '' : ' hidden') + '>'
             + '<section class="studio-section"><h4>Checklist</h4>'
             + (subtasksHtml || '<div class="studio-empty-line">Small steps that don’t deserve a date.</div>')
             + '<div class="studio-add-row">'
             + '<input type="text" id="studioNewSubtask" placeholder="Add a step…" aria-label="New subtask">'
             + '<button type="button" class="studio-mini-btn" data-studio-action="add-subtask">Add</button>'
-            + '</div></section>'
+            + '</div></section></div>'
 
+            + '<div class="studio-tab-panel" data-studio-panel="rubric"' + (activeStudioTab === 'rubric' ? '' : ' hidden') + '>'
             + '<section class="studio-section"><h4>Rubric</h4>'
             + (rubricHtml || '<div class="studio-empty-line">Copy the grading criteria here and check them off before submitting.</div>')
             + '<div class="studio-add-row">'
             + '<input type="text" id="studioNewRubric" placeholder="e.g. Thesis is clearly stated" aria-label="New rubric criterion">'
             + '<button type="button" class="studio-mini-btn" data-studio-action="add-rubric">Add</button>'
-            + '</div></section>'
+            + '</div></section></div>'
 
+            + '<div class="studio-tab-panel" data-studio-panel="links"' + (activeStudioTab === 'links' ? '' : ' hidden') + '>'
             + '<section class="studio-section"><h4>Linked work</h4>'
             + (linkedNotesHtml || '')
             + (linkedFilesHtml || '')
@@ -638,8 +650,9 @@
             + '<div class="studio-add-row">'
             + '<select data-studio-field="link-note" aria-label="Link a note">' + pageOptions + '</select>'
             + (files.length ? '<select data-studio-field="link-file" aria-label="Link a course file">' + fileOptions + '</select>' : '')
-            + '</div></section>'
+            + '</div></section></div>'
 
+            + '<div class="studio-tab-panel" data-studio-panel="effort"' + (activeStudioTab === 'effort' ? '' : ' hidden') + '>'
             + '<section class="studio-section"><h4>Effort</h4>'
             + '<div class="studio-effort-row">'
             + '<label class="studio-inline-field"><span>Estimated</span><input type="number" min="0" step="15" data-studio-field="effort-estimate" value="' + (studio.effort.estimateMinutes || '') + '" placeholder="min"></label>'
@@ -653,7 +666,48 @@
             + '<div class="studio-add-row">'
             + '<input type="text" id="studioNewRevision" placeholder="e.g. Draft 2 — tightened intro, added sources" aria-label="New revision note">'
             + '<button type="button" class="studio-mini-btn" data-studio-action="add-revision">Log</button>'
-            + '</div></section>';
+            + '</div></section></div>';
+    }
+
+    function renderStudioTabBar(studio) {
+        var msDone = studio.milestones.filter(function (m) { return m.done; }).length;
+        var subDone = studio.subtasks.filter(function (s) { return s.done; }).length;
+        var rubMet = studio.rubric.filter(function (r) { return r.met; }).length;
+        var linkCount = studio.linkedPageIds.length + studio.linkedFileIds.length;
+        var tabs = [
+            { id: 'plan', label: 'Plan', badge: studio.milestones.length ? (msDone + '/' + studio.milestones.length) : '' },
+            { id: 'checklist', label: 'Checklist', badge: studio.subtasks.length ? (subDone + '/' + studio.subtasks.length) : '' },
+            { id: 'rubric', label: 'Rubric', badge: studio.rubric.length ? (rubMet + '/' + studio.rubric.length) : '' },
+            { id: 'links', label: 'Links', badge: linkCount ? String(linkCount) : '' },
+            { id: 'effort', label: 'Effort & log', badge: '' }
+        ];
+        return '<div class="studio-tabs" role="tablist" aria-label="Assignment plan sections">'
+            + tabs.map(function (t) {
+                var active = t.id === activeStudioTab;
+                return '<button type="button" class="studio-tab' + (active ? ' is-active' : '') + '"'
+                    + ' role="tab" aria-selected="' + (active ? 'true' : 'false') + '"'
+                    + ' data-studio-tab="' + t.id + '">' + t.label
+                    + (t.badge ? '<span class="studio-tab-badge">' + t.badge + '</span>' : '')
+                    + '</button>';
+            }).join('')
+            + '</div>';
+    }
+
+    function switchStudioTab(tabId) {
+        if (!tabId || tabId === activeStudioTab) return;
+        activeStudioTab = tabId;
+        var body = document.getElementById('assignmentStudioBody');
+        if (!body) return;
+        // Cheap toggle — tab switches change no data, so don't rebuild the DOM
+        // (a rebuild would drop focus and reset scroll).
+        body.querySelectorAll('[data-studio-tab]').forEach(function (b) {
+            var active = b.getAttribute('data-studio-tab') === tabId;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        body.querySelectorAll('.studio-tab-panel').forEach(function (p) {
+            p.hidden = p.getAttribute('data-studio-panel') !== tabId;
+        });
     }
 
     function rerender() {

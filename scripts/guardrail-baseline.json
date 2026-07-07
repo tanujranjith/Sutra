@@ -36,6 +36,8 @@
     "src/features/workspace/notifications.js": 4,
     "src/features/workspace/activation-metrics.js": 0,
     "src/features/workspace/mobile-nav.js": 0,
+    "src/features/workspace/today-command-center.js": 0,
+    "src/features/workspace/custom-tabs.js": 0,
     "src/features/academic/planning-engine.js": 0,
     "src/features/customization/plugin-system.js": 0,
     "src/features/study/review.js": 9,
@@ -43,9 +45,7 @@
     "src/features/study/code-highlight.js": 0,
     "src/features/academic/school-schedule.js": 4,
     "src/features/academic/semester-setup.js": 4,
-    "src/boot/startup-intro.js": 0,
-    "src/features/workspace/today-command-center.js": 0,
-    "src/features/workspace/custom-tabs.js": 0
+    "src/boot/startup-intro.js": 0
   },
   "storageBudgets": {
     "Sutra.html": 1,
@@ -83,6 +83,8 @@
     "src/features/workspace/notifications.js": 0,
     "src/features/workspace/activation-metrics.js": 0,
     "src/features/workspace/mobile-nav.js": 0,
+    "src/features/workspace/today-command-center.js": 0,
+    "src/features/workspace/custom-tabs.js": 0,
     "src/features/academic/planning-engine.js": 0,
     "src/features/customization/plugin-system.js": 0,
     "src/features/study/review.js": 0,
@@ -90,9 +92,7 @@
     "src/features/study/code-highlight.js": 0,
     "src/features/academic/school-schedule.js": 0,
     "src/features/academic/semester-setup.js": 0,
-    "src/boot/startup-intro.js": 0,
-    "src/features/workspace/today-command-center.js": 0,
-    "src/features/workspace/custom-tabs.js": 0
+    "src/boot/startup-intro.js": 0
   },
   "knownGlobals": [
     "NoteFlowBusiness",
@@ -318,6 +318,7 @@
     "rerunAtelierOnboarding",
     "resetAtelierOnboardingForTesting",
     "resetDocBackgroundAdjustments",
+    "reviewCardsFromExamMistakes",
     "runExamNextAction",
     "saveTimeBlocks",
     "saveWorkspaceLocally",

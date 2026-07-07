@@ -2017,6 +2017,7 @@
                                         </div>
                                         <div class="ap-study-inline-actions">
                                             <button class="ap-study-link-btn" type="button" data-ap-action="open-modal" data-ap-entity="topic" data-ap-subject-id="${escapeHtml(subject.id)}" data-ap-unit-id="${escapeHtml(unit.id)}"><i class="fas fa-plus"></i> Topic</button>
+                                            <button class="ap-study-link-btn" type="button" data-ap-action="generate-cards" data-ap-unit-id="${escapeHtml(unit.id)}" title="Build review cards from this unit's notes and topics"><i class="fas fa-layer-group"></i> Cards</button>
                                             <button class="ap-study-link-btn" type="button" data-ap-action="open-modal" data-ap-entity="unit" data-ap-id="${escapeHtml(unit.id)}"><i class="fas fa-pen"></i> Edit</button>
                                             <button class="ap-study-link-btn danger" type="button" data-ap-action="delete-entity" data-ap-entity="unit" data-ap-id="${escapeHtml(unit.id)}">Delete</button>
                                         </div>
@@ -3324,6 +3325,12 @@
         if (action === 'open-class-dashboard') {
             if (trigger.dataset.apCourseId && typeof window.openClassDashboardDrawer === 'function') {
                 window.openClassDashboardDrawer(trigger.dataset.apCourseId);
+            }
+            return;
+        }
+        if (action === 'generate-cards') {
+            if (window.SutraReviewGenerator && typeof window.SutraReviewGenerator.fromApUnit === 'function') {
+                window.SutraReviewGenerator.fromApUnit(trigger.dataset.apUnitId || '');
             }
             return;
         }

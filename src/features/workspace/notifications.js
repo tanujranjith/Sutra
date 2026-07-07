@@ -49,7 +49,30 @@
             college:  [720, 336, 168, 72, 24, 0],
             business: [168, 72, 24, 0],
             milestone: [72, 24, 0]          // assignment-studio milestones
-        }
+        },
+        // Per-course reminder rules. Each rule: { id, courseId (required,
+        // hwCourses:v2 id), source ('' = any category), leadHours: [hours...],
+        // mute: bool }. A matching rule overrides the category thresholds for
+        // that course's deadline reminders; mute suppresses them entirely.
+        rules: []
+    };
+
+    var MAX_REMINDER_RULES = 50;
+    var MAX_LEAD_TIMES = 8;
+    var MAX_LEAD_HOURS = 2160; // 90 days
+
+    var CATEGORY_LABELS = {
+        tasks: 'Tasks',
+        homework: 'Homework',
+        timeline: 'Timeline events',
+        apexam: 'AP exams',
+        college: 'College deadlines',
+        review: 'Review due cards',
+        business: 'Projects & work',
+        release: 'Release notes',
+        timedHabit: 'Timed habits',
+        milestone: 'Assignment milestones',
+        schedule: 'Class schedule'
     };
 
     // ---- In-memory state ---------------------------------------------------
@@ -86,6 +109,7 @@
                 _state.prefs = Object.assign({}, DEFAULT_PREFS, raw.prefs || {});
                 _state.prefs.categories = Object.assign({}, DEFAULT_PREFS.categories, (_state.prefs.categories || {}));
                 _state.prefs.thresholds = Object.assign({}, DEFAULT_PREFS.thresholds, (_state.prefs.thresholds || {}));
+                _state.prefs.rules = _sanitizeRules(_state.prefs.rules);
                 _state.dismissed = raw.dismissed || {};
                 _state.snoozed = raw.snoozed || {};
                 _state.read = raw.read || {};
@@ -121,6 +145,94 @@
         } catch (e) {
             if (typeof global.reportError === 'function') global.reportError(e, { where: 'notifications._saveState' }, 'warning');
         }
+    }
+
+    // ---- Reminder rules ----------------------------------------------------
+    function _sanitizeLeadHours(raw) {
+        if (!Array.isArray(raw)) return [];
+        var seen = {};
+        var out = [];
+        for (var i = 0; i < raw.length && out.length < MAX_LEAD_TIMES; i++) {
+            var n = Number(raw[i]);
+            if (!isFinite(n) || n < 0) continue;
+            n = Math.min(n, MAX_LEAD_HOURS);
+            var k = String(n);
+            if (seen[k]) continue;
+            seen[k] = true;
+            out.push(n);
+        }
+        out.sort(function (a, b) { return b - a; });
+        return out;
+    }
+
+    function _sanitizeRules(raw) {
+        if (!Array.isArray(raw)) return [];
+        var out = [];
+        var seenIds = {};
+        for (var i = 0; i < raw.length && out.length < MAX_REMINDER_RULES; i++) {
+            var r = raw[i];
+            if (!r || typeof r !== 'object') continue;
+            var courseId = String(r.courseId || '');
+            if (!courseId) continue;
+            var id = String(r.id || '');
+            if (!id || seenIds[id]) id = 'rule_' + Date.now().toString(36) + '_' + i;
+            seenIds[id] = true;
+            var source = String(r.source || '');
+            if (source && !DEFAULT_PREFS.thresholds[source]) source = '';
+            var leadHours = _sanitizeLeadHours(r.leadHours);
+            var mute = r.mute === true;
+            if (!mute && !leadHours.length) continue; // rule does nothing
+            out.push({ id: id, courseId: courseId, source: source, leadHours: leadHours, mute: mute });
+        }
+        return out;
+    }
+
+    // First matching rule wins; rules that name a category are more specific
+    // than any-category rules for the same course.
+    function _resolveReminderRule(item, source, prefs) {
+        var rules = prefs.rules;
+        if (!Array.isArray(rules) || !rules.length) return null;
+        var courseId = String(item.sourceCourseId || '');
+        if (!courseId) return null;
+        var anyCat = null;
+        for (var i = 0; i < rules.length; i++) {
+            var r = rules[i];
+            if (r.courseId !== courseId) continue;
+            if (r.source === source) return r;
+            if (!r.source && !anyCat) anyCat = r;
+        }
+        return anyCat;
+    }
+
+    // "7d, 3d, 24h, 30m, 0" -> [168, 72, 24, 0.5, 0]; null when unparseable.
+    function _parseLeadTimes(str) {
+        var tokens = String(str || '').toLowerCase().split(/[,\s]+/).filter(Boolean);
+        if (!tokens.length) return null;
+        var hours = [];
+        for (var i = 0; i < tokens.length; i++) {
+            var m = /^(\d+(?:\.\d+)?)(d|h|m)?$/.exec(tokens[i]);
+            if (!m) return null;
+            var n = parseFloat(m[1]);
+            if (!isFinite(n) || n < 0) return null;
+            if (m[2] === 'd') n *= 24;
+            else if (m[2] === 'm') n /= 60;
+            hours.push(n);
+        }
+        var clean = _sanitizeLeadHours(hours);
+        return clean.length ? clean : null;
+    }
+
+    function _leadLabel(h) {
+        if (h === 0) return 'on the day';
+        if (h < 1) return Math.round(h * 60) + 'm';
+        if (h >= 24 && h % 24 === 0) return (h / 24) + 'd';
+        return h + 'h';
+    }
+
+    function _formatLeadTimes(hours) {
+        return (Array.isArray(hours) ? hours : []).map(function (h) {
+            return h === 0 ? '0' : _leadLabel(h);
+        }).join(', ');
     }
 
     function _pruneOldDismissed() {
@@ -324,7 +436,11 @@
             if (isNaN(dueMs)) return;
 
             var hoursUntil = (dueMs - now) / 3600000;
-            var thresholds = (prefs.thresholds[source] || [168, 72, 24, 0]);
+            var rule = _resolveReminderRule(item, source, prefs);
+            if (rule && rule.mute) return;
+            var thresholds = (rule && rule.leadHours.length)
+                ? rule.leadHours
+                : (prefs.thresholds[source] || [168, 72, 24, 0]);
 
             // Show the most-specific notification that applies.
             // Only one notification per item at any given time.
@@ -1123,6 +1239,12 @@
         if (delta.categories) {
             _state.prefs.categories = Object.assign({}, DEFAULT_PREFS.categories, _state.prefs.categories, delta.categories);
         }
+        if (delta.thresholds) {
+            _state.prefs.thresholds = Object.assign({}, DEFAULT_PREFS.thresholds, _state.prefs.thresholds, delta.thresholds);
+        }
+        if (delta.rules) {
+            _state.prefs.rules = _sanitizeRules(delta.rules);
+        }
         _saveState();
         if (delta.browserNotificationsEnabled) registerBackgroundReminders();
         refresh();
@@ -1195,6 +1317,20 @@
             + _renderCategoryToggles(p)
 
             + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
+            + '<div class="cc-row-label"><span class="cc-row-title">Reminder timing</span>'
+            + '<span class="cc-row-sub">Lead times before due, comma-separated — d days, h hours, m minutes, 0 = on the day (e.g. “7d, 3d, 1d, 0”)</span></div>'
+            + '<button type="button" class="cc-btn cc-btn-quiet" id="notifThrResetBtn" style="font-size:.78rem">Reset to defaults</button></div>'
+
+            + _renderThresholdRows(p)
+
+            + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
+            + '<div class="cc-row-label"><span class="cc-row-title">Course rules</span>'
+            + '<span class="cc-row-sub">Override the timing — or mute reminders — for one class. Rules apply to deadline reminders; category toggles above still win.</span></div></div>'
+
+            + _renderReminderRuleRows(p)
+            + _renderReminderRuleForm()
+
+            + '<div class="cc-row" style="border-top:1px solid var(--cc-divider);margin-top:8px;padding-top:14px">'
             + '<div class="cc-row-label"><span class="cc-row-title">Test notification</span>'
             + '<span class="cc-row-sub">Preview a notification toast</span></div>'
             + '<button type="button" class="cc-btn cc-btn-quiet" id="notifTestBtn" style="font-size:.78rem">Send test</button></div>';
@@ -1264,6 +1400,90 @@
                 updatePreferences({ categories: cats });
             });
         });
+
+        // Reminder timing per category
+        Object.keys(DEFAULT_PREFS.thresholds).forEach(function (cat) {
+            var el = document.getElementById('notifThr-' + cat);
+            if (el) el.addEventListener('change', function () {
+                var parsed = _parseLeadTimes(this.value);
+                if (!parsed) {
+                    showToast({
+                        title: 'Couldn’t read that timing',
+                        subtitle: 'Use comma-separated lead times like “7d, 3d, 1d, 0”',
+                        icon: 'fa-bell',
+                        duration: 5000
+                    });
+                    _renderNotificationSettingsUI(); // revert to the saved value
+                    return;
+                }
+                var thr = Object.assign({}, _state.prefs.thresholds);
+                thr[cat] = parsed;
+                updatePreferences({ thresholds: thr });
+            });
+        });
+
+        var thrResetBtn = document.getElementById('notifThrResetBtn');
+        if (thrResetBtn) thrResetBtn.addEventListener('click', function () {
+            var fresh = {};
+            Object.keys(DEFAULT_PREFS.thresholds).forEach(function (k) {
+                fresh[k] = DEFAULT_PREFS.thresholds[k].slice();
+            });
+            updatePreferences({ thresholds: fresh });
+        });
+
+        // Course rules: remove + add
+        root.querySelectorAll('[data-rule-del]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var id = this.getAttribute('data-rule-del');
+                updatePreferences({
+                    rules: (_state.prefs.rules || []).filter(function (r) { return r.id !== id; })
+                });
+            });
+        });
+
+        var ruleAddBtn = document.getElementById('notifRuleAddBtn');
+        if (ruleAddBtn) ruleAddBtn.addEventListener('click', function () {
+            var courseEl = document.getElementById('notifRuleCourse');
+            var sourceEl = document.getElementById('notifRuleSource');
+            var timingEl = document.getElementById('notifRuleTiming');
+            var muteEl = document.getElementById('notifRuleMute');
+            var courseId = courseEl ? courseEl.value : '';
+            var mute = !!(muteEl && muteEl.checked);
+            var timingRaw = timingEl ? timingEl.value.trim() : '';
+            if (!courseId) return;
+            var leadHours = [];
+            if (timingRaw) {
+                var parsed = _parseLeadTimes(timingRaw);
+                if (!parsed) {
+                    showToast({
+                        title: 'Couldn’t read that timing',
+                        subtitle: 'Use comma-separated lead times like “7d, 1d, 0” — or check Mute',
+                        icon: 'fa-bell',
+                        duration: 5000
+                    });
+                    return;
+                }
+                leadHours = parsed;
+            }
+            if (!mute && !leadHours.length) {
+                showToast({
+                    title: 'Rule needs a timing or Mute',
+                    subtitle: 'Enter lead times (e.g. “7d, 1d, 0”) or check Mute',
+                    icon: 'fa-bell',
+                    duration: 5000
+                });
+                return;
+            }
+            var rule = {
+                id: 'rule_' + Date.now().toString(36),
+                courseId: courseId,
+                source: sourceEl ? sourceEl.value : '',
+                leadHours: leadHours,
+                mute: mute
+            };
+            // Newest first so it wins over an older same-specificity rule.
+            updatePreferences({ rules: [rule].concat(_state.prefs.rules || []) });
+        });
     }
 
     function _getBrowserPermLabel(perm) {
@@ -1275,19 +1495,7 @@
     }
 
     function _renderCategoryToggles(prefs) {
-        var cats = {
-            tasks: 'Tasks',
-            homework: 'Homework',
-            timeline: 'Timeline events',
-            apexam: 'AP exams',
-            college: 'College deadlines',
-            review: 'Review due cards',
-            business: 'Projects & work',
-            release: 'Release notes',
-            timedHabit: 'Timed habits',
-            milestone: 'Assignment milestones',
-            schedule: 'Class schedule'
-        };
+        var cats = CATEGORY_LABELS;
         return Object.keys(cats).map(function (key) {
             var checked = prefs.categories && prefs.categories[key] !== false;
             return '<div class="cc-row cc-row--indent">'
@@ -1296,6 +1504,72 @@
                 + '<input type="checkbox" id="notifCat-' + _esc(key) + '"' + (checked ? ' checked' : '') + '>'
                 + '<div class="cc-switch-track"><div class="cc-switch-thumb"></div></div></label></div>';
         }).join('');
+    }
+
+    function _renderThresholdRows(prefs) {
+        return Object.keys(DEFAULT_PREFS.thresholds).map(function (key) {
+            var hours = (prefs.thresholds && prefs.thresholds[key]) || DEFAULT_PREFS.thresholds[key];
+            return '<div class="cc-row cc-row--indent">'
+                + '<div class="cc-row-label"><span class="cc-row-title">' + _esc(CATEGORY_LABELS[key] || key) + '</span></div>'
+                + '<input type="text" class="modal-input" id="notifThr-' + _esc(key) + '"'
+                + ' value="' + _esc(_formatLeadTimes(hours)) + '"'
+                + ' aria-label="' + _esc(CATEGORY_LABELS[key] || key) + ' reminder timing"'
+                + ' style="width:210px;font-size:.78rem"></div>';
+        }).join('');
+    }
+
+    function _listCoursesSafe() {
+        try {
+            if (global.SutraHomework && typeof global.SutraHomework.getCourses === 'function') {
+                return (global.SutraHomework.getCourses() || []).filter(function (c) { return c && c.id && c.name; });
+            }
+        } catch (e) { /* homework module unavailable */ }
+        return [];
+    }
+
+    function _courseNameById(courseId) {
+        var courses = _listCoursesSafe();
+        for (var i = 0; i < courses.length; i++) {
+            if (String(courses[i].id) === String(courseId)) return String(courses[i].name);
+        }
+        return 'Removed class';
+    }
+
+    function _renderReminderRuleRows(prefs) {
+        var rules = Array.isArray(prefs.rules) ? prefs.rules : [];
+        if (!rules.length) {
+            return '<div class="cc-row cc-row--indent">'
+                + '<div class="cc-row-label"><span class="cc-row-sub">No course rules yet.</span></div></div>';
+        }
+        return rules.map(function (r) {
+            var what = r.source ? (CATEGORY_LABELS[r.source] || r.source) : 'All categories';
+            var when = r.mute ? 'Muted' : _formatLeadTimes(r.leadHours).replace(/\b0\b/, 'on the day');
+            return '<div class="cc-row cc-row--indent">'
+                + '<div class="cc-row-label"><span class="cc-row-title">' + _esc(_courseNameById(r.courseId)) + '</span>'
+                + '<span class="cc-row-sub">' + _esc(what) + ' — ' + _esc(when) + '</span></div>'
+                + '<button type="button" class="cc-btn cc-btn-quiet" data-rule-del="' + _esc(r.id) + '" style="font-size:.78rem">Remove</button></div>';
+        }).join('');
+    }
+
+    function _renderReminderRuleForm() {
+        var courses = _listCoursesSafe();
+        if (!courses.length) {
+            return '<div class="cc-row cc-row--indent">'
+                + '<div class="cc-row-label"><span class="cc-row-sub">Add classes in Homework to create course rules.</span></div></div>';
+        }
+        var courseOpts = courses.map(function (c) {
+            return '<option value="' + _esc(String(c.id)) + '">' + _esc(String(c.name)) + '</option>';
+        }).join('');
+        var catOpts = '<option value="">All categories</option>' + Object.keys(DEFAULT_PREFS.thresholds).map(function (key) {
+            return '<option value="' + _esc(key) + '">' + _esc(CATEGORY_LABELS[key] || key) + '</option>';
+        }).join('');
+        return '<div class="cc-row cc-row--indent" style="flex-wrap:wrap;gap:8px">'
+            + '<select class="modal-input" id="notifRuleCourse" aria-label="Rule class" style="width:150px;font-size:.78rem">' + courseOpts + '</select>'
+            + '<select class="modal-input" id="notifRuleSource" aria-label="Rule category" style="width:140px;font-size:.78rem">' + catOpts + '</select>'
+            + '<input type="text" class="modal-input" id="notifRuleTiming" placeholder="7d, 1d, 0" aria-label="Rule timing" style="width:110px;font-size:.78rem">'
+            + '<label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-muted)">'
+            + '<input type="checkbox" id="notifRuleMute">Mute</label>'
+            + '<button type="button" class="cc-btn cc-btn-quiet" id="notifRuleAddBtn" style="font-size:.78rem">Add rule</button></div>';
     }
 
     // ---- Init --------------------------------------------------------------
@@ -1371,7 +1645,12 @@
 
     function importState(raw) {
         if (!raw || typeof raw !== 'object') return;
-        if (raw.prefs) _state.prefs = Object.assign({}, DEFAULT_PREFS, raw.prefs);
+        if (raw.prefs) {
+            _state.prefs = Object.assign({}, DEFAULT_PREFS, raw.prefs);
+            _state.prefs.categories = Object.assign({}, DEFAULT_PREFS.categories, (_state.prefs.categories || {}));
+            _state.prefs.thresholds = Object.assign({}, DEFAULT_PREFS.thresholds, (_state.prefs.thresholds || {}));
+            _state.prefs.rules = _sanitizeRules(_state.prefs.rules);
+        }
         if (raw.dismissed) _state.dismissed = Object.assign({}, raw.dismissed);
         if (raw.snoozed) _state.snoozed = Object.assign({}, raw.snoozed);
         if (raw.read) _state.read = Object.assign({}, raw.read);

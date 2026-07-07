@@ -33985,6 +33985,10 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
 .sutra-snap-actions { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
 .sutra-snap-diff { margin-top: 6px; font-size: 0.78rem; display: flex; gap: 8px; flex-wrap: wrap; }
 .sutra-snap-diff .up { color: #22a06b; } .sutra-snap-diff .down { color: #d1453b; }
+.sutra-snap-notes { margin-top: 8px; max-height: 220px; overflow-y: auto; border: 1px solid var(--border-color, #e2e5ea); border-radius: 8px; padding: 4px 8px; }
+.sutra-snap-note-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border-color, #e2e5ea); }
+.sutra-snap-note-row:last-child { border-bottom: none; }
+.sutra-snap-note-title { font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* AP Study — computed exam-readiness suggestion */
 .ap-study-readiness-suggest { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
