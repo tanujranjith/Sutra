@@ -439,6 +439,10 @@
 .gp-risk-danger { background: rgba(224, 86, 79, 0.18); color: #b1322b; }
 .gp-risk-unknown { background: rgba(120, 120, 120, 0.14); color: #6a6a6a; }
 
+/* Effort-vs-estimate chip beside the risk badge (2026-07-07). */
+.gp-effort-chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle; margin-left: 8px; background: color-mix(in srgb, var(--accent, #7c9cf2) 14%, transparent); color: var(--accent-strong, var(--accent, #5b7bd8)); cursor: help; }
+.gp-effort-chip.gp-effort-warn { background: rgba(230, 162, 60, 0.16); color: #a9711a; }
+
 .today-plan-repair-row { margin-top: 10px; }
 .plan-repair-list { display: flex; flex-direction: column; gap: 10px; }
 .plan-repair-row { padding: 10px 12px; border-radius: 12px; border-left: 3px solid var(--border-color, rgba(0, 0, 0, 0.12)); background: var(--surface-2, rgba(0, 0, 0, 0.02)); }

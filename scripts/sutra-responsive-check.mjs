@@ -68,12 +68,20 @@ has('src/core/app.js', 'const containerRect = editorContainer.getBoundingClientR
 // FAB stack floor matches the slim storage bar.
 has('src/core/app.js', 'const minBottom = 84;', 'FAB stack floor matches the compact storage bar');
 has('src/core/app.js', 'shortLandscapeViewport', 'FABs lay out side-by-side on short landscape viewports');
+has('styles/legacy/responsive-hardening.css', '#lifeDashboard', 'responsive bottom-clearance covers Life custom mount');
+has('styles/legacy/responsive-hardening.css', '#businessDashboardRoot', 'responsive bottom-clearance covers Business custom mount');
+has('styles/legacy/responsive-hardening.css', '#hwMainArea', 'responsive bottom-clearance covers Homework custom mount');
 // Mobile nav: the More toggle must not echo the visible active tab.
 has('src/core/app.js', /const activeSecondary = \(tabsRow \? Array\.from\(tabsRow\.children\) : \[\]\)/, 'More-menu label derives from strip tabs only (no Today/Today echo)', true);
-// Assistant input: 3-column grid so the textarea is not squeezed to 86px.
-has('styles/legacy/workspace-overrides.css', /\.chatbot-input\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto/, 'assistant input grid fits attach + textarea + send', true);
+// Assistant input: 4-column grid (attach + mic + textarea + send) so the
+// textarea is not squeezed to 86px.
+has('styles/legacy/workspace-overrides.css', /\.chatbot-input\s*\{[^}]*grid-template-columns:\s*auto auto minmax\(0, 1fr\) auto/, 'assistant input grid fits attach + mic + textarea + send', true);
 // Touch-target floors apply on any coarse-pointer device (incl. landscape phones).
 has('styles/responsive/mobile.css', /@media \(max-width: 768px\), \(hover: none\) and \(pointer: coarse\)/, 'touch-target floors keyed to coarse pointers, not just width', true);
+has('styles/responsive/mobile.css', '.view-tab-add', 'view-tab add control has mobile touch-target floor');
+has('styles/responsive/mobile.css', 'input[type="range"]', 'range sliders get coarse-pointer hit-area support');
+has('styles/themes/sutra-pro.css', /\.cw-filter\s*\{[\s\S]*appearance:\s*none/, 'Course Hub filters hide the native select arrow', true);
+has('styles/themes/sutra-pro.css', 'background-image:', 'Course Hub filters render a custom select caret');
 // Template-category pills scroll in one row inside the New Page sheet.
 has('styles/responsive/mobile.css', '.template-picker-category-tabs', 'New Page template pills have mobile rules');
 

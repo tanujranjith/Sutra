@@ -15,7 +15,7 @@
    Bump CACHE_VERSION to invalidate old caches on the next activate.
    ========================================================================== */
 
-const CACHE_VERSION = 'sutra-cache-v1-20260616';
+const CACHE_VERSION = 'sutra-cache-v1-20260709-quickpage';
 const CORE_ASSETS = [
     './Sutra.html',
     './manifest.webmanifest'

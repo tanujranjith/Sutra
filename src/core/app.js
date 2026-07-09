@@ -1934,7 +1934,7 @@ function updateToolbarTimeWidget() {
             const formatSelect = document.getElementById('timeFormatSelect');
             const showSecondsSelect = document.getElementById('showSecondsSelect');
             const format = formatSelect ? formatSelect.value : (appSettings ? appSettings.timeFormat || '12' : '12');
-            const showSeconds = showSecondsSelect ? showSecondsSelect.value === 'true' : (appSettings ? appSettings.showSeconds !== false : true);
+            const showSeconds = showSecondsSelect ? showSecondsSelect.value === 'true' : (appSettings ? appSettings.showSeconds === true : false);
             const now = new Date();
             let hours = now.getHours();
             let minutes = now.getMinutes().toString().padStart(2, '0');
@@ -2080,9 +2080,25 @@ function updateToolbarTimeWidget() {
                     const requiredPadding = Math.ceil(toolbarRect.bottom - containerRect.top + clearance);
                     nextPadding = Math.min(Math.max(requiredPadding, 12), defaultPadding + maxExtraPadding);
                 } else {
-                    const requiredPadding = Math.ceil(toolbarRect.bottom - notesRect.top + clearance);
-                    const boundedRequiredPadding = Math.min(requiredPadding, defaultPadding + maxExtraPadding);
-                    nextPadding = Math.max(defaultPadding, boundedRequiredPadding);
+                    // On desktop the assistant quick-action chips row (.view-flow-row)
+                    // is injected above the editor container as a sibling and (via CSS)
+                    // clears the fixed toolbar itself. When it is present, measure the
+                    // container's own top so the toolbar space is not reserved twice —
+                    // otherwise the chips sit hidden behind the toolbar. Mirrors the
+                    // compact path and the ≤1024px CSS clearance rule.
+                    const flowRow = notesView.querySelector(':scope > .view-flow-row');
+                    const flowRowVisible = !!flowRow
+                        && flowRow.getBoundingClientRect().height > 0
+                        && window.getComputedStyle(flowRow).display !== 'none';
+                    if (flowRowVisible) {
+                        const containerRect = editorContainer.getBoundingClientRect();
+                        const requiredPadding = Math.ceil(toolbarRect.bottom - containerRect.top + clearance);
+                        nextPadding = Math.min(Math.max(requiredPadding, 12), defaultPadding + maxExtraPadding);
+                    } else {
+                        const requiredPadding = Math.ceil(toolbarRect.bottom - notesRect.top + clearance);
+                        const boundedRequiredPadding = Math.min(requiredPadding, defaultPadding + maxExtraPadding);
+                        nextPadding = Math.max(defaultPadding, boundedRequiredPadding);
+                    }
                 }
                 editorContainer.style.setProperty('padding-top', `${nextPadding}px`, 'important');
             }
@@ -3408,7 +3424,8 @@ function populateProgressDashboard() {
                     autosaveMs: 1000,
                     focusModeDefault: false,
                     splitViewDefault: false,
-                    fontScale: 100
+                    fontScale: 100,
+                    editorV2Enabled: true
                 },
                 tasks: {
                     sortStrategy: 'urgent_first',
@@ -3427,7 +3444,7 @@ function populateProgressDashboard() {
                     dayStartHour: 6,
                     dayEndHour: 22,
                     timeFormat: '12',
-                    showSeconds: true,
+                    showSeconds: false,
                     showClock: true,
                     showCompletedPlannerItems: true,
                     showHomeworkPlannerItems: true,
@@ -3602,7 +3619,7 @@ function populateProgressDashboard() {
                     defaultView: normalizeTimelineViewMode(timelineViewMode),
                     defaultSource: normalizeTimelineSourceMode(settings.timelineSource || defaults.calendar.defaultSource),
                     timeFormat: settings.timeFormat === '24' ? '24' : defaults.calendar.timeFormat,
-                    showSeconds: settings.showSeconds !== false,
+                    showSeconds: settings.showSeconds === true,
                     showClock: settings.showClock !== false
                 },
                 study: {
@@ -3672,7 +3689,8 @@ function populateProgressDashboard() {
                     autosaveMs: clampSettingNumber(editorSource.autosaveMs, defaults.editor.autosaveMs, 300, 8000),
                     focusModeDefault: editorSource.focusModeDefault === true,
                     splitViewDefault: editorSource.splitViewDefault === true,
-                    fontScale: clampSettingNumber(editorSource.fontScale, defaults.editor.fontScale, 80, 140)
+                    fontScale: clampSettingNumber(editorSource.fontScale, defaults.editor.fontScale, 80, 140),
+                    editorV2Enabled: editorSource.editorV2Enabled !== false
                 },
                 tasks: {
                     sortStrategy: normalizeTaskSortStrategy(tasksSource.sortStrategy, defaults.tasks.sortStrategy),
@@ -3691,7 +3709,7 @@ function populateProgressDashboard() {
                     dayStartHour: Math.floor(clampSettingNumber(calendarSource.dayStartHour, defaults.calendar.dayStartHour, 0, 22)),
                     dayEndHour: Math.floor(clampSettingNumber(calendarSource.dayEndHour, defaults.calendar.dayEndHour, 1, 24)),
                     timeFormat: calendarSource.timeFormat === '24' ? '24' : '12',
-                    showSeconds: calendarSource.showSeconds !== false,
+                    showSeconds: calendarSource.showSeconds === true,
                     showClock: calendarSource.showClock !== false,
                     showCompletedPlannerItems: calendarSource.showCompletedPlannerItems !== false,
                     showHomeworkPlannerItems: calendarSource.showHomeworkPlannerItems !== false,
@@ -3825,7 +3843,7 @@ function populateProgressDashboard() {
             appSettings.preferences = normalizeWorkspacePreferences(appSettings.preferences, legacySeed);
             appSettings.taskOrderStrategy = normalizeTaskSortStrategy(appSettings.preferences.tasks.sortStrategy, 'urgent_first');
             appSettings.timeFormat = appSettings.preferences.calendar.timeFormat === '24' ? '24' : '12';
-            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds !== false;
+            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds === true;
             appSettings.showClock = appSettings.preferences.calendar.showClock !== false;
             appSettings.motionEnabled = appSettings.preferences.appearance.motionIntensity !== 'off';
             return appSettings.preferences;
@@ -3854,7 +3872,7 @@ function populateProgressDashboard() {
             appSettings.preferences = normalizeWorkspacePreferences(appSettings.preferences, getLegacyPreferenceSeed(appSettings));
             appSettings.taskOrderStrategy = normalizeTaskSortStrategy(appSettings.preferences.tasks.sortStrategy, 'urgent_first');
             appSettings.timeFormat = appSettings.preferences.calendar.timeFormat === '24' ? '24' : '12';
-            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds !== false;
+            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds === true;
             appSettings.showClock = appSettings.preferences.calendar.showClock !== false;
             appSettings.motionEnabled = appSettings.preferences.appearance.motionIntensity !== 'off';
             const section = String(segments[0] || '').toLowerCase();
@@ -3893,7 +3911,7 @@ function populateProgressDashboard() {
             }
             appSettings.taskOrderStrategy = normalizeTaskSortStrategy(appSettings.preferences.tasks.sortStrategy, 'urgent_first');
             appSettings.timeFormat = appSettings.preferences.calendar.timeFormat === '24' ? '24' : '12';
-            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds !== false;
+            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds === true;
             appSettings.showClock = appSettings.preferences.calendar.showClock !== false;
             appSettings.motionEnabled = appSettings.preferences.appearance.motionIntensity !== 'off';
             if (sectionName === 'layout' || sectionName === 'all') {
@@ -3953,7 +3971,7 @@ function populateProgressDashboard() {
 
             appSettings.taskOrderStrategy = prefs.tasks.sortStrategy;
             appSettings.timeFormat = prefs.calendar.timeFormat === '24' ? '24' : '12';
-            appSettings.showSeconds = prefs.calendar.showSeconds !== false;
+            appSettings.showSeconds = prefs.calendar.showSeconds === true;
             appSettings.showClock = prefs.calendar.showClock !== false;
             appSettings.motionEnabled = prefs.appearance.motionIntensity !== 'off';
             // Legacy global floating-controls toggle is retired.
@@ -3964,6 +3982,13 @@ function populateProgressDashboard() {
             if (options.applyBehaviorDefaults === true) {
                 appSettings.focusModeEnabled = prefs.editor.focusModeDefault === true;
                 appSettings.notesSplitViewEnabled = prefs.editor.splitViewDefault === true;
+            }
+
+            // Notes editor v2 (TipTap engine) — applies live, not just at boot.
+            // Default ON (absent pref = modern editor); explicit false = classic.
+            appSettings.notesEditorV2Enabled = prefs.editor.editorV2Enabled !== false;
+            if (typeof syncNotesEditorV2Mode === 'function') {
+                try { syncNotesEditorV2Mode(); } catch (e) { /* editor v2 optional */ }
             }
 
             if (body) {
@@ -6383,6 +6408,7 @@ function populateProgressDashboard() {
                     focusModeEnabled: false,
                     notesSplitViewEnabled: false,
                     notesSplitSecondaryPageId: null,
+                    notesEditorV2Enabled: true,
                     sidebarCollapsed: false,
                     customShortcuts: [],
                     // Mods & Customization (Phase C) — custom CSS snippets + local
@@ -6399,7 +6425,7 @@ function populateProgressDashboard() {
                     taskOrderStrategy: 'urgent_first',
                     autoEventBlocksEnabled: true,
                     timeFormat: '12',
-                    showSeconds: true,
+                    showSeconds: false,
                     showClock: true,
                     timelineViewDate: null,
                     timelineSource: 'atelier',
@@ -6693,7 +6719,7 @@ function populateProgressDashboard() {
                 normalizeTaskSortStrategy(merged.settings.taskOrderStrategy, 'urgent_first')
             );
             merged.settings.timeFormat = merged.settings.preferences.calendar.timeFormat;
-            merged.settings.showSeconds = merged.settings.preferences.calendar.showSeconds !== false;
+            merged.settings.showSeconds = merged.settings.preferences.calendar.showSeconds === true;
             merged.settings.showClock = merged.settings.preferences.calendar.showClock !== false;
             merged.settings.motionEnabled = merged.settings.preferences.appearance.motionIntensity !== 'off';
             merged.settings.customShortcuts = normalizeCustomShortcuts(
@@ -7085,7 +7111,7 @@ function populateProgressDashboard() {
                 normalizeTaskSortStrategy(appSettings.taskOrderStrategy, 'urgent_first')
             );
             appSettings.timeFormat = appSettings.preferences.calendar.timeFormat;
-            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds !== false;
+            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds === true;
             appSettings.showClock = appSettings.preferences.calendar.showClock !== false;
             appSettings.motionEnabled = appSettings.preferences.appearance.motionIntensity !== 'off';
             appSettings.customShortcuts = normalizeCustomShortcuts(
@@ -8315,6 +8341,7 @@ function populateProgressDashboard() {
         let toolbarResizeObserver = null;
         let toolbarMutationObserver = null;
         let toastHideTimer = null;
+        let activeToastElement = null;
         let currentDayPlan = null;
         const HOMEWORK_STORAGE_KEYS = ['hwTasks:v2', 'hwCourses:v2', 'homeworkTasks:v1', 'homeworkCourses:v1'];
         let homeworkSyncBound = false;
@@ -8485,9 +8512,9 @@ function populateProgressDashboard() {
             dark: {
                 name: 'Dark',
                 mode: 'dark',
-                accent: '#d8c4a1',
-                sidebar: '#13161b',
-                button: '#1f242c'
+                accent: '#7c6dff',
+                sidebar: '#101622',
+                button: '#1a2131'
             },
             sutra: {
                 name: 'Sutra',
@@ -17808,7 +17835,11 @@ function populateProgressDashboard() {
             initPageBreakInteractions();
             initModsAndCustomization();
             initIconButtonAriaLabels();
-            
+            // Notes editor v2 (opt-in) — mount after the notes DOM exists.
+            if (typeof syncNotesEditorV2Mode === 'function') {
+                try { syncNotesEditorV2Mode(); } catch (e) { /* editor v2 optional */ }
+            }
+
             // Auto-save every 30 seconds
             setInterval(autoSave, 30000);
             setInterval(() => purgeExpiredTemporaryPages({ silent: true }), 60000);
@@ -28032,7 +28063,131 @@ function populateProgressDashboard() {
                 </div>`;
         }
 
+        // Every deadline in the workspace that belongs to this course, from the
+        // same aggregator every other surface uses (so counts can't disagree).
+        function cwDeadlinesForCourse(courseId) {
+            const cid = String(courseId || '');
+            if (!cid) return [];
+            let all = [];
+            try { all = collectWorkspaceDeadlines({ includeBusiness: false }) || []; } catch (e) { all = []; }
+            const apIds = new Set(getApSubjectsForCourse(cid).map(s => String(s.id)));
+            return all.filter(item => {
+                if (!item || item.status === 'done') return false;
+                if (String(item.sourceCourseId || '') === cid) return true;
+                if (String(item.courseId || '') === cid) return true;
+                // AP exam deadlines belong to the course when its AP subject links here.
+                if (item.source === 'apexam' && apIds.has(String(item.sourceId || ''))) return true;
+                return false;
+            }).sort((a, b) => a.due - b.due);
+        }
+
+        // Deterministic weak-areas model for one course. Combines the three
+        // signals that already exist in the workspace — no AI, no new state:
+        //   1. review decks linked to the course with due/overdue cards,
+        //   2. weak-flagged / low-confidence AP units+topics of linked subjects,
+        //   3. graded entries under 75% in the course's Grade Planner data.
+        // Returns rows sorted worst-first: { kind, title, detail, score } where
+        // score is 0..100-ish severity (higher = weaker).
+        function cwComputeWeakAreas(courseId) {
+            const cid = String(courseId || '');
+            const rows = [];
+            try {
+                const dueCount = typeof window.countReviewDueForCourse === 'function'
+                    ? Number(window.countReviewDueForCourse(cid)) || 0 : 0;
+                if (dueCount > 0) {
+                    rows.push({
+                        kind: 'review', title: `${dueCount} review card${dueCount === 1 ? '' : 's'} due`,
+                        detail: 'Cards waiting in this course’s decks — a short session clears them.',
+                        score: Math.min(100, 40 + dueCount * 5)
+                    });
+                }
+            } catch (e) { /* non-critical */ }
+            try {
+                const aps = apStudyWorkspace || {};
+                const subjectIds = new Set(getApSubjectsForCourse(cid).map(s => String(s.id)));
+                const unitTitles = new Map((Array.isArray(aps.units) ? aps.units : []).map(u => [String(u.id), String(u.title || 'Unit')]));
+                (Array.isArray(aps.units) ? aps.units : []).forEach(u => {
+                    if (!subjectIds.has(String(u.subjectId))) return;
+                    if (!(u.weakFlag || u.status === 'needs_review' || Number(u.confidenceLevel) <= 2)) return;
+                    rows.push({
+                        kind: 'ap', title: `Weak unit: ${String(u.title || 'Unit')}`,
+                        detail: `Confidence ${Number(u.confidenceLevel) || '?'} / 5${u.weakFlag ? ' · flagged' : ''}`,
+                        score: 90 - (Number(u.confidenceLevel) || 0) * 10
+                    });
+                });
+                (Array.isArray(aps.topics) ? aps.topics : []).forEach(t => {
+                    if (!subjectIds.has(String(t.subjectId))) return;
+                    if (!(t.weakFlag || t.status === 'needs_review' || Number(t.confidenceLevel) <= 2)) return;
+                    rows.push({
+                        kind: 'ap', title: `Weak topic: ${String(t.title || 'Topic')}`,
+                        detail: `${unitTitles.get(String(t.unitId)) || ''} · confidence ${Number(t.confidenceLevel) || '?'} / 5`.replace(/^ · /, ''),
+                        score: 85 - (Number(t.confidenceLevel) || 0) * 10
+                    });
+                });
+            } catch (e) { /* non-critical */ }
+            try {
+                const gp = window.SutraGradePlanner;
+                const planner = gp && typeof gp.getPlanner === 'function' ? gp.getPlanner() : null;
+                const data = planner && planner.courses ? planner.courses[cid] : null;
+                (data && Array.isArray(data.entries) ? data.entries : []).forEach(en => {
+                    if (!en || en.status !== 'graded' || en.score == null || !(Number(en.maxScore) > 0)) return;
+                    const pct = (Number(en.score) / Number(en.maxScore)) * 100;
+                    if (pct >= 75) return;
+                    rows.push({
+                        kind: 'grade', title: `Low score: ${String(en.title || 'Assignment')}`,
+                        detail: `${Math.round(pct)}%${en.date ? ' · ' + String(en.date) : ''} — worth turning into review cards`,
+                        score: Math.min(100, Math.round(100 - pct))
+                    });
+                });
+            } catch (e) { /* non-critical */ }
+            return rows.sort((a, b) => b.score - a.score).slice(0, 12);
+        }
+
+        function cwRenderDeadlinesTab(course) {
+            const items = cwDeadlinesForCourse(course.id);
+            const now = new Date();
+            const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 23, 59, 59);
+            const groups = [
+                { label: 'Overdue', rows: items.filter(i => i.overdue) },
+                { label: 'Next 7 days', rows: items.filter(i => !i.overdue && i.due <= weekEnd) },
+                { label: 'Later', rows: items.filter(i => !i.overdue && i.due > weekEnd) }
+            ];
+            const srcLabel = { homework: 'Homework', task: 'Task', tasks: 'Task', timeline: 'Event', milestone: 'Milestone', apexam: 'AP exam', college: 'College', life: 'Life' };
+            const groupHtml = groups.map(g => {
+                if (!g.rows.length) return '';
+                return `<h4 class="cw-subhead">${cwEsc(g.label)} <span class="gp-head-hint">(${g.rows.length})</span></h4>`
+                    + g.rows.map(i => `
+                        <button type="button" class="cw-deadline-row${i.overdue ? ' is-overdue' : ''}" data-cw-deadline="${cwEsc(String(i.id))}">
+                            <span class="cw-deadline-src">${cwEsc(srcLabel[i.source] || i.source || 'Item')}</span>
+                            <span class="cw-deadline-title">${cwEsc(i.title || 'Untitled')}</span>
+                            <span class="cw-deadline-due">${cwEsc(cwFmtDate(i.due))}${i.dueTime && i.dueTime !== '23:59' && i.dueTime !== '00:00' ? ' · ' + cwEsc(cwFormatTime12(i.dueTime)) : ''}</span>
+                        </button>`).join('');
+            }).join('');
+            const weak = cwComputeWeakAreas(course.id);
+            const weakHtml = weak.length
+                ? weak.map(w => `<div class="cw-weak-row cw-weak-${cwEsc(w.kind)}"><span class="cw-weak-kind">${cwEsc(w.kind === 'ap' ? 'AP' : w.kind === 'grade' ? 'Grade' : 'Review')}</span><div class="cw-weak-main"><span class="cw-weak-title">${cwEsc(w.title)}</span><span class="cw-weak-detail">${cwEsc(w.detail)}</span></div></div>`).join('')
+                : '<div class="cw-empty-line">No weak signals — review cards are clear, no flagged AP topics, no low scores.</div>';
+            return `<section class="cw-panel cw-panel-full">
+                    <div class="cw-panel-head"><h3>Deadlines</h3><button type="button" class="cw-link" onclick="setActiveView('alldue')">Open All Due</button></div>
+                    ${groupHtml || '<div class="cw-empty-line">Nothing due for this course — you’re clear.</div>'}
+                </section>
+                <section class="cw-panel cw-panel-full">
+                    <div class="cw-panel-head"><h3>Weak areas</h3><button type="button" class="cw-link" onclick="cwCreateReviewDeck('${cwEsc(course.id)}')">Make review cards</button></div>
+                    <div class="gp-deterministic-note">Computed on-device from your review load, AP flags, and logged scores — no AI</div>
+                    ${weakHtml}
+                </section>`;
+        }
+
+        function cwOpenCourseDeadline(deadlineId) {
+            try {
+                const item = collectWorkspaceDeadlines({ includeBusiness: false }).find(row => String(row.id) === String(deadlineId));
+                if (item && typeof openDeadlineSource === 'function') { openDeadlineSource(item); return true; }
+            } catch (e) { /* non-critical */ }
+            return false;
+        }
+
         function cwRenderCourseTabContent(course, tab) {
+            if (tab === 'deadlines') return cwRenderDeadlinesTab(course);
             if (tab === 'assignments') {
                 const assignments = getAssignmentsForCourse(course.id);
                 return `<section class="cw-panel cw-panel-full">
@@ -28135,7 +28290,7 @@ function populateProgressDashboard() {
         }
 
         function cwRenderCourseDetail(course) {
-            const tabs = [['overview', 'Overview'], ['assignments', 'Assignments'], ['files', 'Files'], ['notes', 'Notes'], ['study', 'Study'], ['calendar', 'Calendar'], ['grades', 'Grades'], ['settings', 'Settings']];
+            const tabs = [['overview', 'Overview'], ['assignments', 'Assignments'], ['deadlines', 'Deadlines'], ['files', 'Files'], ['notes', 'Notes'], ['study', 'Study'], ['calendar', 'Calendar'], ['grades', 'Grades'], ['settings', 'Settings']];
             const tab = tabs.some(t => t[0] === cwActiveCourseTab) ? cwActiveCourseTab : 'overview';
             const meta = [course.teacherName, course.room, cwMeetingDaysLabel(course)].filter(Boolean).join(' · ');
             const tagsHtml = (course.tags || []).map(t => `<span class="cw-tag">${cwEsc(t)}</span>`).join('') + `<button type="button" class="cw-tag cw-tag-add" onclick="cwAddTag('${cwEsc(course.id)}')">+ Add tag</button>`;
@@ -28259,6 +28414,10 @@ function populateProgressDashboard() {
                 const open = (e) => { e.stopPropagation(); cwSelectCourse(menu.dataset.cwCourseMenu); cwSetCourseTab('settings'); };
                 menu.addEventListener('click', open);
                 menu.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } });
+            });
+            // Deadlines-tab rows -> open the underlying task/event/exam.
+            mount.querySelectorAll('[data-cw-deadline]').forEach(row => {
+                row.addEventListener('click', () => cwOpenCourseDeadline(row.dataset.cwDeadline));
             });
             // Search input behavior.
             const search = document.getElementById('cwCourseSearch');
@@ -28784,6 +28943,33 @@ function populateProgressDashboard() {
                     title: opts.title || ('Review: ' + (subjName ? subjName + ' — ' : '') + (unit.title || 'Unit')),
                     subject: subjName,
                     source: 'apunit:' + String(unitId)
+                });
+            },
+            // Deterministic path from a generated practice test: the union of
+            // missed question ids across all recorded attempts becomes cards
+            // (prompt → correct answer + explanation).
+            fromTestAttempts(testId, opts) {
+                opts = opts || {};
+                const list = testingHub && Array.isArray(testingHub.generatedTests) ? testingHub.generatedTests : [];
+                const t = list.find(x => x && String(x.id) === String(testId));
+                if (!t) { showToast('That practice test could not be found.'); return false; }
+                const missed = new Set();
+                (Array.isArray(t.attempts) ? t.attempts : []).forEach(a => {
+                    (a && Array.isArray(a.missedIds) ? a.missedIds : []).forEach(id => missed.add(String(id)));
+                });
+                const clean = (s) => String(s || '').replace(/[\t\n]+/g, ' ').trim();
+                const lines = (Array.isArray(t.questions) ? t.questions : [])
+                    .filter(q => q && missed.has(String(q.id)))
+                    .map(q => {
+                        const answer = clean(q.correctAnswer) + (q.explanation ? ' — ' + clean(q.explanation) : '');
+                        return clean(q.prompt) + '\t' + (answer || '(write the correct answer)');
+                    });
+                if (!lines.length) { showToast('No missed questions recorded for this test yet — submit an attempt first.'); return false; }
+                return sutraOpenReviewGen({
+                    rawText: lines.join('\n'),
+                    title: opts.title || ('Missed: ' + (t.title || 'Practice Test')),
+                    subject: '',
+                    source: 'testmisses:' + String(testId)
                 });
             },
             // Deterministic path from a Testing Hub exam's mistake bank: every
@@ -32315,7 +32501,7 @@ function populateProgressDashboard() {
                 });
             }
             if (showSecondsSelect) {
-                showSecondsSelect.value = getWorkspacePreference('calendar.showSeconds', appSettings ? appSettings.showSeconds !== false : true) ? 'true' : 'false';
+                showSecondsSelect.value = getWorkspacePreference('calendar.showSeconds', appSettings ? appSettings.showSeconds === true : false) ? 'true' : 'false';
                 showSecondsSelect.addEventListener('change', () => {
                     setWorkspacePreference('calendar.showSeconds', showSecondsSelect.value === 'true', { refresh: true });
                     updateToolbarTimeWidget();
@@ -32618,12 +32804,16 @@ function populateProgressDashboard() {
             const normalizedTheme = normalizeStoredThemeKey(themeName, DEFAULT_THEME_KEY);
             const themeEntry = themes[normalizedTheme] || themes[DEFAULT_THEME_KEY];
             const root = document.documentElement;
-            if (normalizedTheme === 'glass') {
-                // Glass owns every surface in styles/themes/glass.css — inline derived
-                // values would sit on top of the stylesheet and defeat the
-                // backdrop-filter translucency stack.
+            // Themes whose layered surfaces are fully authored in the stylesheet.
+            // For these we strip any inherited inline surface vars so the derived
+            // values don't sit on top of (and defeat) the hand-tuned CSS tokens.
+            //   - glass: backdrop-filter translucency stack in styles/themes/glass.css
+            //   - dark:  premium layered dark tokens in [data-theme="dark"] (styles/base/styles.css)
+            if (normalizedTheme === 'glass' || normalizedTheme === 'dark') {
                 ['--theme-gradient-start', '--theme-gradient-mid', '--theme-gradient-end', '--sidebar-bg', '--button-bg', '--button-bg-hover', '--button-border', '--button-text'].forEach(v => root.style.removeProperty(v));
-                applyGlassBlur();
+                if (normalizedTheme === 'glass') {
+                    applyGlassBlur();
+                }
                 return;
             }
             const computed = getComputedStyle(root);
@@ -32733,6 +32923,7 @@ function populateProgressDashboard() {
             const bgElevated = mixHex(normalized.bgPrimary, normalized.bgSecondary, 0.35);
             const textSecondary = mixHex(normalized.textPrimary, normalized.bgPrimary, isDarkBase ? 0.45 : 0.60);
             const textMuted = mixHex(normalized.textPrimary, normalized.bgPrimary, isDarkBase ? 0.62 : 0.74);
+            const warningColor = isDarkBase ? '#fbbf24' : '#b45309';
             const enhancedSurface = deriveEnhancedThemeSurface({
                 bgPrimary: normalized.bgPrimary,
                 bgSecondary: normalized.bgSecondary,
@@ -32784,6 +32975,10 @@ function populateProgressDashboard() {
             root.style.setProperty('--button-bg-hover', hexToRgba(enhancedSurface.buttonHover, isDarkBase ? 0.95 : 0.99));
             root.style.setProperty('--button-border', hexToRgba(enhancedSurface.buttonBorder, isDarkBase ? 0.58 : 0.44));
             root.style.setProperty('--button-text', enhancedSurface.buttonText);
+            root.style.setProperty('--sutra-warning', warningColor);
+            root.style.setProperty('--atelier-scrollbar-track', 'transparent');
+            root.style.setProperty('--atelier-scrollbar-thumb', hexToRgba(normalized.accent, isDarkBase ? 0.5 : 0.42));
+            root.style.setProperty('--atelier-scrollbar-thumb-hover', hexToRgba(normalized.accent, isDarkBase ? 0.72 : 0.64));
         }
 
         function getCustomThemeLabel(themeKey) {
@@ -34881,12 +35076,12 @@ function populateProgressDashboard() {
             const fontSize = fontSizeEl.value;
             const lineHeight = lineHeightEl.value;
             
-            const editor = document.getElementById('editor');
-            if (editor) {
+            [document.getElementById('editor'), document.getElementById('editorV2Host')].forEach(editor => {
+                if (!editor) return;
                 editor.style.fontFamily = fontFamily;
                 editor.style.fontSize = fontSize;
                 editor.style.lineHeight = lineHeight;
-            }
+            });
             
             // Save settings
             saveFontSettings();
@@ -34932,12 +35127,12 @@ function populateProgressDashboard() {
             }
             
             // Apply settings
-            const editor = document.getElementById('editor');
-            if (editor) {
+            [document.getElementById('editor'), document.getElementById('editorV2Host')].forEach(editor => {
+                if (!editor) return;
                 if (settings.fontFamily) editor.style.fontFamily = settings.fontFamily;
                 if (settings.fontSize) editor.style.fontSize = settings.fontSize;
                 if (settings.lineHeight) editor.style.lineHeight = settings.lineHeight;
-            }
+            });
         }
 
         // Animation Settings Functions
@@ -35072,8 +35267,9 @@ function populateProgressDashboard() {
             // Also apply via direct transform/font-size for better browser support
             const editor = document.getElementById('editor');
             const editorSecondary = document.getElementById('editorSecondary');
+            const v2Host = document.getElementById('editorV2Host');
             const scale = editorZoomLevel / 100;
-            [editor, editorSecondary].forEach(ed => {
+            [editor, editorSecondary, v2Host].forEach(ed => {
                 if (!ed) return;
                 ed.style.zoom = scale;
             });
@@ -35113,12 +35309,12 @@ function populateProgressDashboard() {
             const fontSize = fontSizeEl.value;
             const lineHeight = lineHeightEl.value;
             
-            const editor = document.getElementById('editor');
-            if (editor) {
+            [document.getElementById('editor'), document.getElementById('editorV2Host')].forEach(editor => {
+                if (!editor) return;
                 editor.style.fontFamily = fontFamily;
                 editor.style.fontSize = fontSize;
                 editor.style.lineHeight = lineHeight;
-            }
+            });
             
             // Sync with theme panel
             const fontFamilySelect = document.getElementById('fontFamilySelect');
@@ -35219,7 +35415,7 @@ function populateProgressDashboard() {
             const lineHeight = lineHeightEl.value;
 
             // Apply to both editors
-            ['editor', 'editorSecondary'].forEach(id => {
+            ['editor', 'editorSecondary', 'editorV2Host'].forEach(id => {
                 const editor = document.getElementById(id);
                 if (editor) {
                     editor.style.fontFamily = fontFamily;
@@ -35252,7 +35448,7 @@ function populateProgressDashboard() {
             const fontSize = appSettings.notes.fontSize ? appSettings.notes.fontSize + 'px' : null;
             const lineHeight = appSettings.notes.lineHeight;
             if (!fontFamily && !fontSize && !lineHeight) return;
-            ['editor', 'editorSecondary'].forEach(id => {
+            ['editor', 'editorSecondary', 'editorV2Host'].forEach(id => {
                 const editor = document.getElementById(id);
                 if (editor) {
                     if (fontFamily) editor.style.fontFamily = fontFamily;
@@ -35675,7 +35871,7 @@ function populateProgressDashboard() {
 
             function closeViaExistingControl(root) {
                 if (!root || root.getAttribute('data-sutra-no-escape') === 'true') return false;
-                const closeControl = root.querySelector('[data-modal-close], [data-cw-cancel], .close-btn, .modal-close, .modal-close-btn, .cw-modal-close, .th2-modal-close, .version-history-close, .doc-bg-modal-head button, [aria-label^="Close"]');
+                const closeControl = root.querySelector('[data-modal-close], [data-cw-cancel], .close-btn, .modal-close, .modal-close-btn, .cw-modal-close, .th2-modal-close, .version-history-close, .doc-bg-modal-head button, [aria-label="Close"]');
                 if (closeControl && typeof closeControl.click === 'function') {
                     closeControl.click();
                     return true;
@@ -36383,12 +36579,35 @@ function populateProgressDashboard() {
             }
         }
 
+        // When the modern editor owns the primary pane, find/replace must run
+        // over the ProseMirror document (via the SutraSearch decoration engine)
+        // — the legacy TreeWalker path would mutate the hidden mirror and get
+        // clobbered by the next flush.
+        function findReplaceUsesV2() {
+            return isNotesEditorV2Active() &&
+                activeEditorPane !== 'secondary' &&
+                window.SutraNotesEditorV2 &&
+                window.SutraNotesEditorV2.search;
+        }
+
+        function updateFindReplaceInfoFromV2(result) {
+            const info = document.getElementById('findReplaceInfo');
+            if (!info) return;
+            if (!result || !result.query) { info.textContent = 'Type to search'; return; }
+            if (!result.count) { info.textContent = 'No matches'; return; }
+            info.textContent = `${result.index >= 0 ? result.index + 1 : 0} of ${result.count}`;
+        }
+
         function performFind() {
             const input = document.getElementById('findInput');
             const editor = document.getElementById('editor');
             const info = document.getElementById('findReplaceInfo');
             if (!input || !editor) return;
             const query = input.value;
+            if (findReplaceUsesV2()) {
+                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.set(query));
+                return;
+            }
             clearFindHighlights();
             if (!query) { if (info) info.textContent = 'Type to search'; return; }
             // Simple text-based search using TreeWalker
@@ -36435,6 +36654,10 @@ function populateProgressDashboard() {
         }
 
         function clearFindHighlights() {
+            if (findReplaceUsesV2()) {
+                window.SutraNotesEditorV2.search.clear();
+                return;
+            }
             const editor = document.getElementById('editor');
             if (!editor) return;
             const highlights = editor.querySelectorAll('.find-highlight');
@@ -36457,12 +36680,20 @@ function populateProgressDashboard() {
         }
 
         function findNext() {
+            if (findReplaceUsesV2()) {
+                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.next());
+                return;
+            }
             if (!findMatches.length) return;
             currentFindIndex = (currentFindIndex + 1) % findMatches.length;
             markCurrentMatch();
         }
 
         function findPrev() {
+            if (findReplaceUsesV2()) {
+                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.prev());
+                return;
+            }
             if (!findMatches.length) return;
             currentFindIndex = (currentFindIndex - 1 + findMatches.length) % findMatches.length;
             markCurrentMatch();
@@ -36470,7 +36701,13 @@ function populateProgressDashboard() {
 
         function replaceOne() {
             const replaceInput = document.getElementById('replaceInput');
-            if (!replaceInput || !findMatches.length || currentFindIndex < 0) return;
+            if (!replaceInput) return;
+            if (findReplaceUsesV2()) {
+                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.replaceOne(replaceInput.value));
+                if (typeof queueSavePrimaryPage === 'function') { try { queueSavePrimaryPage(); } catch(e) {} }
+                return;
+            }
+            if (!findMatches.length || currentFindIndex < 0) return;
             const replacement = replaceInput.value;
             const target = findMatches[currentFindIndex];
             if (!target) return;
@@ -36487,6 +36724,15 @@ function populateProgressDashboard() {
         function replaceAll() {
             const replaceInput = document.getElementById('replaceInput');
             if (!replaceInput) return;
+            if (findReplaceUsesV2()) {
+                const before = window.SutraNotesEditorV2.search.getState();
+                const count = before.count;
+                window.SutraNotesEditorV2.search.replaceAll(replaceInput.value);
+                const info = document.getElementById('findReplaceInfo');
+                if (info) info.textContent = `Replaced ${count} occurrence${count === 1 ? '' : 's'}`;
+                if (typeof queueSavePrimaryPage === 'function') { try { queueSavePrimaryPage(); } catch(e) {} }
+                return;
+            }
             const replacement = replaceInput.value;
             const count = findMatches.length;
             findMatches.forEach(m => m.replaceWith(document.createTextNode(replacement)));
@@ -36524,7 +36770,10 @@ function populateProgressDashboard() {
 
         function renderDocOutline() {
             const list = document.getElementById('docOutlineList');
-            const editor = document.getElementById('editor');
+            // When v2 owns the primary pane the classic #editor is a hidden
+            // mirror — read (and scroll) the visible ProseMirror host instead.
+            const v2Host = isNotesEditorV2Active() ? document.getElementById('editorV2Host') : null;
+            const editor = v2Host || document.getElementById('editor');
             if (!list) return;
             // Look in both primary and secondary editors
             const sources = [];
@@ -36668,12 +36917,21 @@ function populateProgressDashboard() {
             if (!body._vhRestoreBound) {
                 body._vhRestoreBound = true;
                 body.addEventListener('click', (e) => {
+                    const diffBtn = e.target.closest('.version-diff-btn');
+                    if (diffBtn) {
+                        const did = diffBtn.getAttribute('data-version-id');
+                        versionHistoryDiffId = versionHistoryDiffId === did ? null : did;
+                        const p = getActivePage();
+                        if (p) renderVersionHistoryBody(p);
+                        return;
+                    }
                     const btn = e.target.closest('.version-restore-btn');
                     if (!btn || btn.disabled) return;
                     const id = btn.getAttribute('data-version-id');
                     if (id) restoreVersion(id);
                 });
             }
+            versionHistoryDiffId = null;
             const subtitle = document.getElementById('versionHistorySubtitle');
             if (subtitle) subtitle.textContent = (page.title || 'Untitled').split('::').pop() || 'Untitled';
             renderVersionHistoryBody(page);
@@ -36700,6 +36958,51 @@ function populateProgressDashboard() {
             const closeBtn = modal.querySelector('.version-history-close');
             if (closeBtn) { try { closeBtn.focus(); } catch (e) { /* non-critical */ } }
         }
+
+        // Word-level diff (LCS) between two plain-text strings. Returns
+        // [{ op: 'same'|'del'|'ins', text }] runs. Token counts are capped so
+        // the O(n·m) table stays small; over-cap content diffs truncated with
+        // a notice rather than freezing the UI on huge notes.
+        const VERSION_DIFF_TOKEN_CAP = 1500;
+        function sutraDiffWords(oldText, newText) {
+            const tok = (s) => String(s || '').split(/\s+/).filter(Boolean);
+            let a = tok(oldText);
+            let b = tok(newText);
+            let truncated = false;
+            if (a.length > VERSION_DIFF_TOKEN_CAP || b.length > VERSION_DIFF_TOKEN_CAP) {
+                a = a.slice(0, VERSION_DIFF_TOKEN_CAP);
+                b = b.slice(0, VERSION_DIFF_TOKEN_CAP);
+                truncated = true;
+            }
+            const n = a.length, m = b.length;
+            // LCS length table (Int32Array, (n+1)×(m+1)).
+            const w = m + 1;
+            const table = new Int32Array((n + 1) * w);
+            for (let i = n - 1; i >= 0; i--) {
+                for (let j = m - 1; j >= 0; j--) {
+                    table[i * w + j] = a[i] === b[j]
+                        ? table[(i + 1) * w + j + 1] + 1
+                        : Math.max(table[(i + 1) * w + j], table[i * w + j + 1]);
+                }
+            }
+            const runs = [];
+            const push = (op, word) => {
+                const last = runs[runs.length - 1];
+                if (last && last.op === op) last.text += ' ' + word;
+                else runs.push({ op, text: word });
+            };
+            let i = 0, j = 0;
+            while (i < n && j < m) {
+                if (a[i] === b[j]) { push('same', a[i]); i++; j++; }
+                else if (table[(i + 1) * w + j] >= table[i * w + j + 1]) { push('del', a[i]); i++; }
+                else { push('ins', b[j]); j++; }
+            }
+            while (i < n) { push('del', a[i]); i++; }
+            while (j < m) { push('ins', b[j]); j++; }
+            return { runs, truncated };
+        }
+
+        let versionHistoryDiffId = null;
 
         // Render the modal body for `page`: a Save-version toolbar, an empty
         // state, or the list of snapshots (newest first) with relative + absolute
@@ -36736,6 +37039,23 @@ function populateProgressDashboard() {
                     ? escapeHtml(plain.slice(0, 180)) + (plain.length > 180 ? '…' : '')
                     : '<span class="version-item-empty">(empty note)</span>';
                 const leaf = (v.state.title || '').split('::').pop();
+                let diffHtml = '';
+                if (versionHistoryDiffId === v.id && !isCurrent) {
+                    const versionPlain = (v.state.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    const currentPlain = (page.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    const diff = sutraDiffWords(versionPlain, currentPlain);
+                    const anyChange = diff.runs.some(r => r.op !== 'same');
+                    const runsHtml = diff.runs.map(r => {
+                        const safe = escapeHtml(r.text);
+                        if (r.op === 'del') return `<del class="version-diff-del">${safe}</del>`;
+                        if (r.op === 'ins') return `<ins class="version-diff-ins">${safe}</ins>`;
+                        return `<span>${safe}</span>`;
+                    }).join(' ');
+                    diffHtml = `<div class="version-diff" aria-label="Changes between this version and the current note">
+                        <div class="version-diff-key"><del class="version-diff-del">removed since</del> · <ins class="version-diff-ins">added since</ins>${diff.truncated ? ' · long note — first ' + VERSION_DIFF_TOKEN_CAP + ' words compared' : ''}</div>
+                        <div class="version-diff-body">${anyChange ? runsHtml : '<span class="version-item-empty">Text matches the current note (formatting may differ).</span>'}</div>
+                    </div>`;
+                }
                 return `
                     <div class="version-item${isCurrent ? ' is-current' : ''}" role="listitem">
                         <div class="version-item-header">
@@ -36744,7 +37064,11 @@ function populateProgressDashboard() {
                         </div>
                         ${leaf ? `<div class="version-item-title">${escapeHtml(leaf)}</div>` : ''}
                         <div class="version-item-preview">${preview}</div>
+                        ${diffHtml}
                         <div class="version-item-actions">
+                            <button class="version-diff-btn" type="button" data-version-id="${escapeHtml(v.id)}"${isCurrent ? ' disabled title="This matches the current note"' : ` aria-expanded="${versionHistoryDiffId === v.id}"`}>
+                                <i class="fas fa-exchange-alt" aria-hidden="true"></i> ${versionHistoryDiffId === v.id ? 'Hide changes' : 'Compare'}
+                            </button>
                             <button class="version-restore-btn" type="button" data-version-id="${escapeHtml(v.id)}" aria-label="Restore the version from ${escapeHtml(relative)}"${isCurrent ? ' disabled title="This matches the current note"' : ''}>
                                 <i class="fas fa-rotate-left" aria-hidden="true"></i> Restore
                             </button>
@@ -36867,6 +37191,15 @@ function populateProgressDashboard() {
         // ===== KEYBOARD SHORTCUTS (Section 19) =====
         document.addEventListener('keydown', function(e) {
             const isMeta = e.ctrlKey || e.metaKey;
+            const key = typeof e.key === 'string' ? e.key.toLowerCase() : '';
+            const target = e.target;
+            const inEditorV2 = isNotesEditorV2Active() && isTargetInsideNotesEditorV2(target);
+            if (isMeta && key === 'k' && !e.shiftKey && !e.altKey && inEditorV2) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (typeof insertLink === 'function') insertLink();
+                return;
+            }
             // Ctrl/Cmd+F - Find
             if (isMeta && e.key === 'f' && !e.shiftKey) {
                 const activeTag = (document.activeElement && document.activeElement.tagName) || '';
@@ -36894,7 +37227,7 @@ function populateProgressDashboard() {
             // Ctrl/Cmd+Shift+K - Insert Link (moved off Ctrl/Cmd+K so the
             // Command Palette can own Ctrl/Cmd+K consistently, including inside note text).
             if (isMeta && e.shiftKey && typeof e.key === 'string' && e.key.toLowerCase() === 'k'
-                && document.activeElement && document.activeElement.id === 'editor') {
+                && ((document.activeElement && document.activeElement.id === 'editor') || inEditorV2)) {
                 e.preventDefault();
                 if (typeof insertLink === 'function') insertLink();
             }
@@ -41577,6 +41910,185 @@ ${renderedSections}
             return document.getElementById('editorSecondary');
         }
 
+        /* ================================================================
+         * NOTES EDITOR V2 (TipTap engine) — opt-in via Settings → Editor.
+         * The classic contenteditable #editor stays in the DOM as a hidden
+         * mirror that v2 keeps in sync, so every existing save / export /
+         * version-history path keeps working unchanged. Applies to the
+         * PRIMARY pane only; the split-view secondary pane stays classic.
+         * ============================================================== */
+        let notesEditorV2ToolbarPointerGuardBound = false;
+
+        function isNotesEditorV2Active() {
+            return !!(
+                appSettings &&
+                appSettings.notesEditorV2Enabled &&
+                window.SutraNotesEditorV2 &&
+                window.SutraNotesEditorV2.isMounted()
+            );
+        }
+
+        function getNotesEditorV2Host() {
+            return document.getElementById('editorV2Host');
+        }
+
+        function isTargetInsideNotesEditorV2(target) {
+            return !!(target && target.closest && target.closest('#editorV2Host'));
+        }
+
+        function clearNotesEditorV2ToolbarState() {
+            document.querySelectorAll('#toolbar [data-notes-v2-state]').forEach(btn => {
+                btn.classList.remove('active');
+                btn.setAttribute('aria-pressed', 'false');
+            });
+        }
+
+        function syncNotesEditorV2ToolbarState(formatState) {
+            const state = formatState || {};
+            const hasActiveEditor = isNotesEditorV2Active();
+            document.querySelectorAll('#toolbar [data-notes-v2-state]').forEach(btn => {
+                const key = btn.dataset.notesV2State;
+                const pressed = !!(hasActiveEditor && key && state[key] === true);
+                btn.classList.toggle('active', pressed);
+                btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+            });
+            if (!hasActiveEditor) return;
+            // Reflect the Docs-style dropdown / field current values.
+            const stylesSel = document.getElementById('toolbarStylesSelect');
+            if (stylesSel) {
+                let block = 'p';
+                if (state.h1) block = 'h1';
+                else if (state.h2) block = 'h2';
+                else if (state.h3) block = 'h3';
+                else if (state.blockquote) block = 'blockquote';
+                else if (state.codeblock) block = 'pre';
+                stylesSel.value = block;
+            }
+            const fontSel = document.getElementById('toolbarFontFamily');
+            if (fontSel && document.activeElement !== fontSel) {
+                const match = Array.prototype.find.call(fontSel.options, o => o.value === state.fontFamily);
+                fontSel.value = match ? match.value : '';
+            }
+            const sizeInput = document.getElementById('toolbarFontSize');
+            if (sizeInput && document.activeElement !== sizeInput) {
+                const px = parseInt(state.fontSize, 10);
+                if (Number.isFinite(px)) sizeInput.value = String(px);
+            }
+            const spacingSel = document.getElementById('toolbarLineSpacing');
+            if (spacingSel && document.activeElement !== spacingSel) {
+                const lh = String(state.lineHeight || '');
+                spacingSel.value = Array.prototype.some.call(spacingSel.options, o => o.value === lh) ? lh : '';
+            }
+            if (state.color) {
+                const bar = document.getElementById('toolbarTextColorBar');
+                if (bar) bar.style.background = state.color;
+                const picker = document.getElementById('toolbarTextColor');
+                if (picker) {
+                    const hex = String(state.color).startsWith('rgb') ? rgbToHex(state.color) : state.color;
+                    if (/^#[0-9a-f]{6}$/i.test(hex)) picker.value = hex;
+                }
+            }
+            if (state.highlight) {
+                const bar = document.getElementById('toolbarHighlightBar');
+                if (bar) bar.style.background = state.highlight;
+                const picker = document.getElementById('toolbarHighlightColor');
+                if (picker) {
+                    const hex = String(state.highlight).startsWith('rgb') ? rgbToHex(state.highlight) : state.highlight;
+                    if (/^#[0-9a-f]{6}$/i.test(hex)) picker.value = hex;
+                }
+            }
+        }
+
+        function bindNotesEditorV2ToolbarPointerGuard() {
+            if (notesEditorV2ToolbarPointerGuardBound) return;
+            const toolbar = document.getElementById('toolbar');
+            if (!toolbar) return;
+            notesEditorV2ToolbarPointerGuardBound = true;
+            toolbar.addEventListener('mousedown', (event) => {
+                if (!isNotesEditorV2Active()) return;
+                const button = event.target && event.target.closest ? event.target.closest('.toolbar-btn') : null;
+                if (!button || !toolbar.contains(button)) return;
+                event.preventDefault();
+            });
+        }
+
+        function syncNotesEditorV2Mode() {
+            const wantsV2 = !!(appSettings && appSettings.notesEditorV2Enabled);
+            const legacyEditor = getPrimaryEditor();
+            const bridge = window.SutraNotesEditorV2;
+            if (!legacyEditor) return;
+
+            if (!wantsV2 || !bridge || !bridge.isAvailable()) {
+                if (bridge && bridge.isMounted()) {
+                    bridge.destroy();
+                    const host = getNotesEditorV2Host();
+                    if (host) host.remove();
+                    legacyEditor.style.display = '';
+                    legacyEditor.contentEditable = 'true';
+                    clearNotesEditorV2ToolbarState();
+                    // Reload the current page so the classic editor re-hydrates
+                    // embeds / tables from canonical content.
+                    const page = pages.find(p => p.id === currentPageId);
+                    if (page) loadPageContentIntoEditor(legacyEditor, page);
+                }
+                if (wantsV2 && bridge && !bridge.isAvailable() && typeof showToast === 'function') {
+                    showToast('Modern editor engine failed to load — using classic editor.');
+                }
+                return;
+            }
+
+            if (bridge.isMounted()) return;
+            bindNotesEditorV2ToolbarPointerGuard();
+
+            let host = getNotesEditorV2Host();
+            if (!host) {
+                host = document.createElement('div');
+                host.id = 'editorV2Host';
+                host.className = 'editor editor-v2-host';
+                legacyEditor.insertAdjacentElement('afterend', host);
+            }
+            const mounted = bridge.mount({
+                host,
+                mirror: legacyEditor,
+                placeholder: 'Start writing…',
+                onUserEdit: () => {
+                    updateWordCount();
+                    queueSavePrimaryPage();
+                },
+                onSelectionChange: syncNotesEditorV2ToolbarState
+            });
+            if (!mounted) {
+                host.remove();
+                if (typeof showToast === 'function') showToast('Modern editor engine failed to start — using classic editor.');
+                return;
+            }
+            legacyEditor.style.display = 'none';
+            legacyEditor.contentEditable = 'false';
+            const page = pages.find(p => p.id === currentPageId);
+            if (page) loadPageContentIntoEditor(legacyEditor, page);
+            if (typeof bridge.getToolbarState === 'function') {
+                syncNotesEditorV2ToolbarState(bridge.getToolbarState());
+            }
+        }
+
+        // Toolbar/shortcut bridge: returns true when v2 handled the command,
+        // in which case the legacy execCommand path must be skipped.
+        function notesEditorV2Exec(kind, arg) {
+            if (!isNotesEditorV2Active()) return false;
+            // Commands act on the primary pane; if the user is focused in the
+            // classic secondary pane, let the legacy path handle it.
+            if (activeEditorPane === 'secondary') return false;
+            const handled = window.SutraNotesEditorV2.exec(kind, arg);
+            if (handled) {
+                updateWordCount();
+                queueSavePrimaryPage();
+                if (typeof window.SutraNotesEditorV2.getToolbarState === 'function') {
+                    syncNotesEditorV2ToolbarState(window.SutraNotesEditorV2.getToolbarState());
+                }
+            }
+            return handled;
+        }
+
 function getActiveEditor() {
     const secondary = getSecondaryEditor();
     const secondaryPane = secondary && secondary.closest ? secondary.closest('#notesSecondaryPane') : null;
@@ -42950,6 +43462,36 @@ function getActiveEditor() {
                     try { nameInput.focus({ preventScroll: true }); } catch (err) { /* non-critical */ }
                 }, 30);
             }
+        }
+
+        // Skips the template picker entirely: pushes a blank "Untitled" note and
+        // opens it immediately, mirroring quick-capture patterns like Notion's
+        // sidebar "+" / Keep's new-note button.
+        function createQuickUntitledPage() {
+            if (!Array.isArray(pages)) return;
+            const createdAt = new Date().toISOString();
+            const newPage = {
+                id: generateId(),
+                title: getUniqueGeneratedPageTitle('Untitled'),
+                type: PAGE_TYPES.NOTE,
+                content: '',
+                blocks: [],
+                icon: PAGE_ICONS.DOC,
+                collapsed: false,
+                createdAt,
+                updatedAt: createdAt,
+                theme: globalTheme,
+                isTemporary: false,
+                temporaryCreatedAt: null,
+                temporaryExpiresAt: null,
+                spaceId: activeSpaceId || 'default'
+            };
+            pages.push(newPage);
+            savePagesToLocal();
+            renderPagesList();
+            loadPage(newPage.id);
+            setActiveView('notes');
+            showToast('Untitled page created');
         }
 
         function setNewPageTemplateSelection(templateId, options = {}) {
@@ -55703,7 +56245,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 normalizeTaskSortStrategy(appSettings.taskOrderStrategy, 'urgent_first')
             );
             appSettings.timeFormat = appSettings.preferences.calendar.timeFormat;
-            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds !== false;
+            appSettings.showSeconds = appSettings.preferences.calendar.showSeconds === true;
             appSettings.showClock = appSettings.preferences.calendar.showClock !== false;
             appSettings.motionEnabled = appSettings.preferences.appearance.motionIntensity !== 'off';
             appSettings.customShortcuts = normalizeCustomShortcuts(importedSettingsSource.customShortcuts || importedSettingsSource.shortcutLinks);
@@ -56923,7 +57465,26 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return true;
         }
 
+        const NOTES_EDITOR_V2_FORMAT_MAP = {
+            bold: 'bold',
+            italic: 'italic',
+            underline: 'underline',
+            strikeThrough: 'strike',
+            justifyLeft: 'alignLeft',
+            justifyCenter: 'alignCenter',
+            justifyRight: 'alignRight',
+            insertUnorderedList: 'bulletList',
+            insertOrderedList: 'orderedList',
+            removeFormat: 'clearFormatting',
+            undo: 'undo',
+            redo: 'redo',
+            insertHorizontalRule: 'horizontalRule'
+        };
+
         function formatText(command) {
+            if (NOTES_EDITOR_V2_FORMAT_MAP[command] && notesEditorV2Exec(NOTES_EDITOR_V2_FORMAT_MAP[command])) {
+                return;
+            }
             const editor = getActiveEditor() || getPrimaryEditor();
             if (!editor) return;
 
@@ -56962,6 +57523,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Apply text color using execCommand (works on selection)
         function applyTextColor(color) {
+            if (notesEditorV2Exec('color', color)) return;
             try {
                 // Use foreColor to change text color
                 document.execCommand('foreColor', false, color);
@@ -57006,6 +57568,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Highlight functions: apply and remove background highlight
         function applyHighlight(color) {
+            if (notesEditorV2Exec('highlight', (!color || color === 'none') ? null : color)) return;
             const editor = getActiveEditor() || getPrimaryEditor();
             if (!editor) return;
             editor.focus();
@@ -57578,7 +58141,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return '';
         }
 
+        const NOTES_EDITOR_V2_BLOCK_MAP = {
+            h1: 'h1', h2: 'h2', h3: 'h3',
+            p: 'paragraph',
+            blockquote: 'blockquote',
+            pre: 'codeblock'
+        };
+
         function formatBlock(tag) {
+            const v2Kind = NOTES_EDITOR_V2_BLOCK_MAP[String(tag || '').toLowerCase()];
+            if (v2Kind && notesEditorV2Exec(v2Kind)) return;
             const editor = getActiveEditor() || getPrimaryEditor();
             const target = String(tag || '').toLowerCase();
             const current = editor ? getSelectionBlockTag(editor) : '';
@@ -57589,6 +58161,90 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 updateWordCount(editor);
                 savePage();
             }
+        }
+
+        // ---- Docs-style toolbar controls (Phase 2) ------------------------
+        // Paragraph/block "styles" dropdown reuses formatBlock (v2-routed).
+        function applyStylePreset(value) {
+            formatBlock(String(value || 'p'));
+        }
+
+        // Current editor font size in px, for the +/- stepper.
+        function getCurrentEditorFontSizePx() {
+            if (isNotesEditorV2Active() && window.SutraNotesEditorV2.getToolbarState) {
+                const size = parseInt(window.SutraNotesEditorV2.getToolbarState().fontSize, 10);
+                if (Number.isFinite(size)) return size;
+            }
+            const input = document.getElementById('toolbarFontSize');
+            const parsed = input ? parseInt(input.value, 10) : NaN;
+            return Number.isFinite(parsed) ? parsed : 16;
+        }
+
+        function setEditorFontFamily(value) {
+            const family = String(value || '');
+            if (notesEditorV2Exec('fontFamily', family)) return;
+            // Legacy escape hatch (execCommand is best-effort/deprecated).
+            try {
+                document.execCommand('fontName', false, family || 'inherit');
+                const editor = getActiveEditor() || getPrimaryEditor();
+                if (editor) { editor.focus(); if (typeof savePage === 'function') savePage(); }
+            } catch (e) { /* non-critical */ }
+        }
+
+        function setEditorFontSize(px) {
+            const size = Math.max(8, Math.min(96, parseInt(px, 10) || 16));
+            const input = document.getElementById('toolbarFontSize');
+            if (input && document.activeElement !== input) input.value = String(size);
+            if (notesEditorV2Exec('fontSize', size + 'px')) return;
+            // Legacy escape hatch: map px → execCommand fontSize bucket (1..7).
+            try {
+                const bucket = size <= 10 ? 1 : size <= 13 ? 2 : size <= 16 ? 3 : size <= 18 ? 4 : size <= 24 ? 5 : size <= 32 ? 6 : 7;
+                document.execCommand('fontSize', false, String(bucket));
+                const editor = getActiveEditor() || getPrimaryEditor();
+                if (editor) { editor.focus(); if (typeof savePage === 'function') savePage(); }
+            } catch (e) { /* non-critical */ }
+        }
+
+        function setEditorFontSizeFromInput() {
+            const input = document.getElementById('toolbarFontSize');
+            if (input) setEditorFontSize(input.value);
+        }
+
+        function adjustEditorFontSize(delta) {
+            setEditorFontSize(getCurrentEditorFontSizePx() + (delta > 0 ? 2 : -2));
+        }
+
+        function setEditorLineSpacing(value) {
+            const v = String(value || '');
+            if (!v) return;
+            if (notesEditorV2Exec('lineHeight', v)) return;
+            // Legacy escape hatch: line-height on the selected block (or editor).
+            const editor = getActiveEditor() || getPrimaryEditor();
+            if (!editor) return;
+            try {
+                const sel = window.getSelection();
+                let block = sel && sel.anchorNode
+                    ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement)
+                    : null;
+                while (block && block !== editor && !/^(P|H1|H2|H3|H4|LI|DIV|BLOCKQUOTE|PRE)$/.test(block.tagName || '')) {
+                    block = block.parentElement;
+                }
+                if (block && block !== editor) block.style.lineHeight = v;
+                else editor.style.lineHeight = v;
+                editor.focus();
+                if (typeof savePage === 'function') savePage();
+            } catch (e) { /* non-critical */ }
+        }
+
+        function formatIndent(direction) {
+            const kind = direction === 'outdent' ? 'outdent' : 'indent';
+            if (notesEditorV2Exec(kind)) return;
+            // Legacy escape hatch.
+            try {
+                document.execCommand(kind, false, null);
+                const editor = getActiveEditor() || getPrimaryEditor();
+                if (editor) { editor.focus(); if (typeof savePage === 'function') savePage(); }
+            } catch (e) { /* non-critical */ }
         }
 
         function captureEditorSelectionState() {
@@ -57643,6 +58299,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 showToast('Please enter a valid http(s) URL.');
                 return;
             }
+            if (notesEditorV2Exec('link', safeUrl)) return;
             restoreEditorSelectionState(selectionState);
             document.execCommand('createLink', false, safeUrl);
             const selection = window.getSelection();
@@ -57969,6 +58626,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const selectionState = captureEditorSelectionState();
             const size = await showInsertTableDialog();
             if (!size) return;
+            // Notes editor v2: native schema tables (resizable columns, Tab
+            // navigation, structure commands) instead of media-wrapper HTML.
+            if (notesEditorV2Exec('table', size)) {
+                showToast('Table inserted!');
+                return;
+            }
             const numRows = size.rows;
             const numCols = size.cols;
 
@@ -58023,6 +58686,19 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             
             if (!choice) return;
             
+            // In the modern editor a plain <img> becomes a resizable/alignable
+            // image node (Docs-grade). The classic editor keeps its media-wrapper.
+            const insertImageSrc = (src, alt) => {
+                if (isNotesEditorV2Active() && window.SutraNotesEditorV2) {
+                    window.SutraNotesEditorV2.insertHtml(`<img src="${src}" alt="${escapeHtml(alt || '')}">`);
+                } else {
+                    const imgHtml = `<img src="${src}" alt="${escapeHtml(alt || '')}" style="max-width: 100%; border-radius: 8px;">`;
+                    restoreEditorSelectionState(selectionState);
+                    insertHtmlAtCursor(createMediaWrapper(imgHtml, 'image'));
+                }
+                showToast('Image inserted!');
+            };
+
             if (choice.toLowerCase() === 'upload') {
                 const fileInput = document.createElement('input');
                 fileInput.type = 'file';
@@ -58032,20 +58708,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (file) {
                         const reader = new FileReader();
                         reader.onload = function(event) {
-                            const imgHtml = `<img src="${event.target.result}" alt="Uploaded image" style="max-width: 100%; border-radius: 8px;">`;
-                            restoreEditorSelectionState(selectionState);
-                            insertHtmlAtCursor(createMediaWrapper(imgHtml, 'image'));
-                            showToast('Image inserted!');
+                            insertImageSrc(event.target.result, 'Uploaded image');
                         };
                         reader.readAsDataURL(file);
                     }
                 };
                 fileInput.click();
             } else {
-                const imgHtml = `<img src="${escapeHtml(choice)}" alt="Image" style="max-width: 100%; border-radius: 8px;">`;
-                restoreEditorSelectionState(selectionState);
-                insertHtmlAtCursor(createMediaWrapper(imgHtml, 'image'));
-                showToast('Image inserted!');
+                insertImageSrc(escapeHtml(choice), 'Image');
             }
         }
 
@@ -58767,6 +59437,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function persistEditorSnapshotToPage(editor, page) {
             if (!editor || !page) return;
+            // Notes editor v2: force any pending debounced mirror write NOW so
+            // the snapshot below reads the latest document state.
+            if (editor.id === 'editor' && isNotesEditorV2Active()) {
+                try { window.SutraNotesEditorV2.flushToMirror(); } catch (e) { /* non-critical */ }
+            }
             syncHtmlEmbedBlocksFromEditor(editor, page);
             syncDrawingBlocksFromEditor(editor, page);
             page.content = serializeEditorContentForStorage(editor, page);
@@ -59221,6 +59896,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // DOM state is lost when serialised through innerHTML.
         function loadPageContentIntoEditor(editor, page) {
             if (!editor || !page) return;
+            // Notes editor v2: the primary #editor is a hidden mirror. Fill it
+            // with canonical storage HTML (anchors, not hydrated blocks) and
+            // hand the same HTML to the TipTap document. Skip hydration — the
+            // mirror is never shown, and v2 preserves block anchors verbatim.
+            if (editor.id === 'editor' && isNotesEditorV2Active()) {
+                disposeDrawingControllersForEditor(editor);
+                const storageHtml = sanitizeEditorHtml(page.content || '');
+                editor.contentEditable = 'false';
+                editor.innerHTML = storageHtml; // sutra-allow-html: sanitized canonical note content into the hidden v2 mirror
+                window.SutraNotesEditorV2.setContent(storageHtml);
+                const v2Host = getNotesEditorV2Host();
+                if (v2Host) v2Host.dataset.pageId = String(page.id || '');
+                applyDocumentBackgroundForEditor(editor, page);
+                return;
+            }
             // Toggling contentEditable clears the browser's native undo/redo history
             // for this element, preventing content from a previous page bleeding back
             // in via the browser's own undo stack.
@@ -61117,9 +61807,23 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
             
             if (!items) return;
-            
+
             const itemList = items.split(',').map(i => i.trim()).filter(i => i);
-            
+
+            // Notes editor v2: real task-list nodes (toggle state lives in the
+            // document model) instead of media-wrapper checklist markup.
+            if (isNotesEditorV2Active() && activeEditorPane !== 'secondary') {
+                const legacyItemsHtml = itemList.map(item =>
+                    `<div class="checklist-item"><input type="checkbox"><span contenteditable="true">${escapeHtml(item)}</span></div>`
+                ).join('');
+                if (window.SutraNotesEditorV2.insertHtml(legacyItemsHtml)) {
+                    updateWordCount();
+                    queueSavePrimaryPage();
+                    showToast('Checklist inserted!');
+                    return;
+                }
+            }
+
             let checklistContent = '<div class="checklist-container" style="width: 100%;">';
             itemList.forEach(item => {
                 checklistContent += `
@@ -61258,6 +61962,15 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Helper function to insert HTML at cursor
         function insertHtmlAtCursor(html) {
+            // Notes editor v2 owns insertion for the primary pane: content is
+            // parsed through the document schema (never raw execCommand HTML).
+            if (isNotesEditorV2Active() && activeEditorPane !== 'secondary') {
+                if (window.SutraNotesEditorV2.insertHtml(html)) {
+                    updateWordCount();
+                    queueSavePrimaryPage();
+                    return;
+                }
+            }
             const editor = getActiveEditor() || getPrimaryEditor();
             if (!editor) return;
             editor.focus();
@@ -61622,21 +62335,38 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function showToast(message, options = {}) {
             const toast = document.getElementById('toast');
             if (!toast) return;
+            const messageEl = document.getElementById('toastMessage') || toast;
+            const dismissBtn = document.getElementById('toastDismissBtn');
             const durationRaw = options && typeof options === 'object' ? Number(options.durationMs) : NaN;
             const durationMs = Number.isFinite(durationRaw)
                 ? Math.max(800, Math.min(12000, durationRaw))
                 : 3000;
 
-            toast.textContent = String(message || '');
+            const closeToast = () => {
+                toast.classList.remove('show');
+                toast.hidden = true;
+                activeToastElement = null;
+                if (toastHideTimer) {
+                    clearTimeout(toastHideTimer);
+                    toastHideTimer = null;
+                }
+            };
+
+            messageEl.textContent = String(message || '');
+            toast.hidden = false;
             toast.classList.add('show');
+            activeToastElement = toast;
 
             if (toastHideTimer) {
                 clearTimeout(toastHideTimer);
                 toastHideTimer = null;
             }
+            if (dismissBtn && dismissBtn.dataset.bound !== 'true') {
+                dismissBtn.dataset.bound = 'true';
+                dismissBtn.addEventListener('click', closeToast);
+            }
             toastHideTimer = setTimeout(() => {
-                toast.classList.remove('show');
-                toastHideTimer = null;
+                if (activeToastElement === toast) closeToast();
             }, durationMs);
         }
 
@@ -64755,8 +65485,16 @@ ${cspMeta}
         // Insert text into the main editor at caret (or append at end)
         function insertIntoEditor(text) {
             if (!editorEl) return;
-            editorEl.focus();
             const html = renderMarkdown(text);
+            // Notes editor v2: parse assistant output through the document schema.
+            if (isNotesEditorV2Active()) {
+                if (window.SutraNotesEditorV2.insertHtml(html)) {
+                    updateWordCount();
+                    queueSavePrimaryPage();
+                    return;
+                }
+            }
+            editorEl.focus();
             const sel = window.getSelection();
 
             // Ensure the caret is inside the editor; otherwise place it at the end
@@ -64921,7 +65659,12 @@ ${cspMeta}
 
         // Gradually stream text into a container, then snap to fully-rendered HTML.
         // Gives the "AI is typing" feel without requiring real SSE streaming.
-        function _streamMessageInto(hostEl, plainText, finalHtml, onDone) {
+        function _streamMessageInto(hostEl, plainText, finalHtml, onDone, instant) {
+            if (instant) {
+                hostEl.innerHTML = finalHtml;
+                if (typeof onDone === 'function') onDone();
+                return;
+            }
             const words = (plainText || '').split(/\s+/).filter(Boolean);
             if (words.length <= 4) {
                 hostEl.innerHTML = finalHtml;
@@ -64942,7 +65685,7 @@ ${cspMeta}
                     setTimeout(tick, tickMs);
                 } else {
                     hostEl.classList.remove('assistant-streaming');
-                    hostEl.innerHTML = finalHtml;
+                    hostEl.innerHTML = finalHtml; // sutra-allow-html: renderMarkdown output, same trusted pipeline as the instant path above
                     if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
                     if (typeof onDone === 'function') onDone();
                 }
@@ -65206,7 +65949,31 @@ ${cspMeta}
             });
         } catch (e) { /* no document */ }
 
-        function appendMessage(role, text, preStoredThoughts, index) {
+        // Minimal live bubble shown WHILE a streamed response is arriving —
+        // real network text, not the fake word-timer. Swapped out for the
+        // fully-featured appendMessage() bubble (actions, thoughts, action
+        // cards) the moment the response completes.
+        function appendLiveAssistantPlaceholder() {
+            const wrap = document.createElement('div');
+            wrap.className = 'chatbot-msg assistant';
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            const host = document.createElement('div');
+            host.className = 'assistant-streaming';
+            bubble.appendChild(host);
+            wrap.appendChild(bubble);
+            messagesEl.appendChild(wrap);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return { wrap, host };
+        }
+        function updateLiveAssistantPlaceholder(placeholder, textSoFar) {
+            if (!placeholder) return;
+            const fenceIdx = textSoFar.indexOf('```flow-actions');
+            placeholder.host.textContent = fenceIdx >= 0 ? textSoFar.slice(0, fenceIdx) : textSoFar;
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function appendMessage(role, text, preStoredThoughts, index, buildOpts) {
             const wrap = document.createElement('div');
             wrap.className = 'chatbot-msg ' + (role === 'user' ? 'user' : 'assistant');
             const bubble = document.createElement('div');
@@ -65379,7 +66146,7 @@ ${cspMeta}
                         } catch (e) { console.warn('Sutra Assistant action render failed:', e); }
                     }
                     actions.style.visibility = '';
-                });
+                }, buildOpts && buildOpts.instant);
                 return; // early return — messagesEl.appendChild already called above
             } else {
                 // user content kept as text to avoid injection
@@ -65825,9 +66592,72 @@ ${cspMeta}
         }
 
         /**
+         * Read an SSE response body and call onDelta with the growing visible
+         * answer text as chunks arrive. Reasoning/thinking deltas are buffered
+         * (not streamed to the UI) and folded into the final <think> block so
+         * the returned string matches the shape of the non-streaming extractors
+         * exactly — downstream code (splitThinkBlocks, parseActions) needs no
+         * streaming-awareness at all.
+         */
+        async function consumeIntelligenceStream(bodyStream, providerType, onDelta) {
+            const reader = bodyStream.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let answerText = '';
+            let thoughtText = '';
+            let readerDone = false;
+            while (!readerDone) {
+                const { value, done } = await reader.read();
+                readerDone = done;
+                if (value) buffer += decoder.decode(value, { stream: true });
+                let lineEnd;
+                while ((lineEnd = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, lineEnd).trim();
+                    buffer = buffer.slice(lineEnd + 1);
+                    if (!line.startsWith('data:')) continue;
+                    const payload = line.slice(5).trim();
+                    if (!payload || payload === '[DONE]') continue;
+                    let evt;
+                    try { evt = JSON.parse(payload); } catch (e) { continue; }
+                    if (providerType === 'openai_compatible') {
+                        const delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
+                        if (delta) {
+                            if (typeof delta.content === 'string' && delta.content) { answerText += delta.content; onDelta(answerText); }
+                            if (typeof delta.reasoning === 'string' && delta.reasoning) thoughtText += delta.reasoning;
+                        }
+                    } else if (providerType === 'anthropic') {
+                        if (evt.type === 'content_block_delta' && evt.delta) {
+                            if (evt.delta.type === 'text_delta' && typeof evt.delta.text === 'string') { answerText += evt.delta.text; onDelta(answerText); }
+                            else if (evt.delta.type === 'thinking_delta' && typeof evt.delta.thinking === 'string') { thoughtText += evt.delta.thinking; }
+                        } else if (evt.type === 'error' && evt.error && evt.error.message) {
+                            throw new Error(evt.error.message);
+                        }
+                    } else if (providerType === 'gemini') {
+                        const candidate = evt.candidates && evt.candidates[0];
+                        const parts = (candidate && candidate.content && candidate.content.parts) || [];
+                        parts.forEach(part => {
+                            const t = part && typeof part.text === 'string' ? part.text : '';
+                            if (!t) return;
+                            if (part.thought === true || part.type === 'thought') thoughtText += t;
+                            else { answerText += t; onDelta(answerText); }
+                        });
+                    }
+                }
+            }
+            if (!answerText && !thoughtText) return '';
+            return (thoughtText ? `<think>${thoughtText}</think>\n` : '') + answerText;
+        }
+
+        /**
          * Perform one provider request. Abortable + timed out + normalized.
          * Returns { ok, requestId, status, text, errorCategory, errorMessage,
          *           cancelled, durationMs }.
+         *
+         * Pass { stream: true, onDelta(textSoFar) } to receive the visible
+         * answer live as it arrives (OpenAI-compatible / Anthropic / Gemini).
+         * Omitting them keeps the original single-shot JSON behavior — every
+         * other caller (theme generation, study materials, structured
+         * extraction) is unaffected.
          */
         async function performIntelligenceRequest(opts) {
             const requestId = `intel_${++intelligenceRequestSeq}_${Date.now().toString(36)}`;
@@ -65852,32 +66682,53 @@ ${cspMeta}
             }, opts.timeoutMs || INTELLIGENCE_REQUEST_TIMEOUT_MS);
             try {
                 const { endpoint, headers, body } = await buildProviderRequestPayload(opts);
-                const resp = await fetch(endpoint, {
+                const providerType = opts.providerConfig.type;
+                const wantStream = !!(opts.stream && typeof opts.onDelta === 'function'
+                    && (providerType === 'openai_compatible' || providerType === 'anthropic' || providerType === 'gemini'));
+                let fetchEndpoint = endpoint;
+                if (wantStream) {
+                    if (providerType === 'gemini') {
+                        fetchEndpoint = endpoint.replace(':generateContent', ':streamGenerateContent') + '&alt=sse';
+                    } else {
+                        body.stream = true;
+                    }
+                }
+                const resp = await fetch(fetchEndpoint, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(body),
                     signal: controller.signal
                 });
-                let data;
-                try {
-                    data = await resp.json();
-                } catch (e) {
-                    const raw = await resp.text().catch(() => '');
-                    data = { __raw_text: raw, __parseError: true };
-                }
                 let extracted = null;
-                if (opts.providerConfig.type === 'openai_compatible') extracted = extractOpenAiCompatibleMessage(data);
-                else if (opts.providerConfig.type === 'anthropic') extracted = extractAnthropicMessage(data);
-                else if (opts.providerConfig.type === 'gemini') extracted = extractGeminiMessage(data);
-                if (!extracted && data && data.__raw_text) extracted = data.__raw_text;
-                if (!extracted && data && data.error && data.error.message) extracted = data.error.message;
-                if (!extracted && data) {
-                    // Don't stringify recognized provider response shapes — that produces raw JSON
-                    // in the chat bubble. Only stringify truly unknown/unexpected payloads.
-                    if (data.candidates || data.choices || data.content) {
-                        extracted = '';
-                    } else {
-                        try { extracted = JSON.stringify(data); } catch (e) { extracted = String(data); }
+                if (wantStream && resp.ok && resp.body) {
+                    // Errors on a streamed request still arrive as SSE-shaped bodies
+                    // for these providers, so the same reader handles both; a genuine
+                    // network failure here throws into the outer catch below, same
+                    // as a failed non-streaming fetch would.
+                    extracted = await consumeIntelligenceStream(resp.body, providerType, (textSoFar) => {
+                        try { opts.onDelta(textSoFar); } catch (e) { /* non-critical */ }
+                    });
+                } else {
+                    let data;
+                    try {
+                        data = await resp.json();
+                    } catch (e) {
+                        const raw = await resp.text().catch(() => '');
+                        data = { __raw_text: raw, __parseError: true };
+                    }
+                    if (providerType === 'openai_compatible') extracted = extractOpenAiCompatibleMessage(data);
+                    else if (providerType === 'anthropic') extracted = extractAnthropicMessage(data);
+                    else if (providerType === 'gemini') extracted = extractGeminiMessage(data);
+                    if (!extracted && data && data.__raw_text) extracted = data.__raw_text;
+                    if (!extracted && data && data.error && data.error.message) extracted = data.error.message;
+                    if (!extracted && data) {
+                        // Don't stringify recognized provider response shapes — that produces raw JSON
+                        // in the chat bubble. Only stringify truly unknown/unexpected payloads.
+                        if (data.candidates || data.choices || data.content) {
+                            extracted = '';
+                        } else {
+                            try { extracted = JSON.stringify(data); } catch (e) { extracted = String(data); }
+                        }
                     }
                 }
                 const durationMs = Date.now() - startedAt;
@@ -66740,7 +67591,8 @@ ${cspMeta}
                     <div class="sutra-test-actions">
                         ${attempt.submitted
                             ? `<button type="button" class="btn btn-primary" id="testRetake">Retake test</button>
-                               <button type="button" class="btn btn-secondary" id="testRetryMissed" ${computeScore().correct === computeScore().scored ? 'disabled' : ''}>Retry missed only</button>`
+                               <button type="button" class="btn btn-secondary" id="testRetryMissed" ${computeScore().correct === computeScore().scored ? 'disabled' : ''}>Retry missed only</button>
+                               <button type="button" class="btn btn-secondary" id="testMissedCards" ${computeScore().correct === computeScore().scored ? 'disabled' : ''} title="Turn every missed question into review cards">Missed → review cards</button>`
                             : `<button type="button" class="btn btn-primary" id="testSubmit">Submit test</button>`}
                     </div>`;
                 wire();
@@ -66809,6 +67661,13 @@ ${cspMeta}
                     if (modalHandle) modalHandle.close(true);
                     setActiveView('notes');
                     loadPage(test.guidePageId);
+                });
+                const missedCards = body.querySelector('#testMissedCards');
+                if (missedCards) missedCards.addEventListener('click', () => {
+                    // recordAttempt() ran at submit, so this attempt's misses are
+                    // already in test.attempts — the generator reads from there.
+                    if (modalHandle) modalHandle.close(true);
+                    SutraReviewGenerator.fromTestAttempts(test.id);
                 });
             }
 
@@ -67568,6 +68427,43 @@ ${cspMeta}
                         return;
                     }
                 }
+                // AP course outlines ("Unit 3: Cellular Energetics") → AP Study
+                // units. Checked before the generic sniff so a unit line never
+                // becomes a task named "Unit 3: …".
+                const apUnitMatch = line.match(/^unit\s+(\d{1,2})\s*[:\-–—.]\s*(.{2,80})$/i);
+                if (apUnitMatch) {
+                    proposals.push({
+                        id: `smart_${index}_${atelierHash(line)}`,
+                        type: 'ap unit',
+                        title: apUnitMatch[2].trim().slice(0, 80),
+                        confidence: 'Needs review',
+                        sourceSnippet: line.slice(0, 260),
+                        sourceDocument: sourceTitle,
+                        sourceLocation: `line ${index + 1}`,
+                        proposedFields: { unitNumber: Number(apUnitMatch[1]), className: '', dueDate: '', priority: 'medium' },
+                        warnings: ['Set the AP subject (Class field) this unit belongs to before applying.']
+                    });
+                    return;
+                }
+                // College list rows ("Stanford (reach)", "UCLA — target Nov 30")
+                // → College tracker schools. The tier keyword is the anchor so
+                // ordinary task lines can't match.
+                const collegeMatch = line.match(/^(.{2,60}?)\s*[([\-–—:]\s*(reach|target|safety|likely)\s*[)\]]?\s*(.*)$/i);
+                if (collegeMatch) {
+                    const tierRaw = collegeMatch[2].toLowerCase();
+                    proposals.push({
+                        id: `smart_${index}_${atelierHash(line)}`,
+                        type: 'college school',
+                        title: collegeMatch[1].trim().replace(/[,;|]+$/, '').slice(0, 80),
+                        confidence: 'Needs review',
+                        sourceSnippet: line.slice(0, 260),
+                        sourceDocument: sourceTitle,
+                        sourceLocation: `line ${index + 1}`,
+                        proposedFields: { tier: tierRaw === 'likely' ? 'safety' : tierRaw, className: '', dueDate: normalizeSmartImportDate(collegeMatch[3]) || normalizeSmartImportDate(line) || '', priority: 'medium' },
+                        warnings: []
+                    });
+                    return;
+                }
                 const lower = line.toLowerCase();
                 const dueDate = normalizeSmartImportDate(line);
                 let type = 'task';
@@ -67769,6 +68665,54 @@ ${cspMeta}
                 if (ensured.created) applied.createdCourseId = String(course.id);
                 return applied;
             }
+            if (type === 'ap unit') {
+                const subjName = String(fields.className || '').trim();
+                if (!subjName) throw new Error(`"${title}" needs an AP subject — put its name in the Class field, then re-apply.`);
+                if (!apStudyWorkspace || !Array.isArray(apStudyWorkspace.subjects)) throw new Error('AP Study is unavailable.');
+                let subject = apStudyWorkspace.subjects.find(s => s && String(s.name || '').trim().toLowerCase() === subjName.toLowerCase());
+                if (!subject) {
+                    subject = { id: `apsub_${generateId()}`, name: subjName.slice(0, 80) };
+                    apStudyWorkspace.subjects.push(subject);
+                    applied.createdApSubjectId = String(subject.id);
+                }
+                if (!Array.isArray(apStudyWorkspace.units)) apStudyWorkspace.units = [];
+                const existingUnit = apStudyWorkspace.units.find(u => u && String(u.subjectId) === String(subject.id)
+                    && String(u.title || '').trim().toLowerCase() === title.toLowerCase());
+                if (existingUnit) {
+                    // Duplicate → reuse; undo must NOT delete a pre-import unit.
+                    applied.id = String(existingUnit.id);
+                    applied.reusedUnit = true;
+                    applied.apSubjectId = String(subject.id);
+                    return applied;
+                }
+                const unit = { id: `apunit_${generateId()}`, subjectId: subject.id, title, status: 'not_started', confidenceLevel: 3, weakFlag: false, noteId: '' };
+                apStudyWorkspace.units.push(unit);
+                persistAppData();
+                try { if (typeof window.renderApStudyWorkspace === 'function') window.renderApStudyWorkspace(); } catch (_) { /* view re-renders on nav */ }
+                applied.id = unit.id;
+                applied.apSubjectId = String(subject.id);
+                return applied;
+            }
+            if (type === 'college school') {
+                if (!collegeAppWorkspace || !Array.isArray(collegeAppWorkspace.collegeTracker)) throw new Error('The College workspace is unavailable.');
+                const existing = collegeAppWorkspace.collegeTracker.find(r => r && String(r.school || '').trim().toLowerCase() === title.toLowerCase());
+                if (existing) {
+                    // Never overwrite an existing school row from an import.
+                    applied.id = String(existing.id);
+                    applied.reusedSchool = true;
+                    return applied;
+                }
+                const row = createCollegeAppTrackerRow({
+                    school: title,
+                    deadline: normalizeSmartImportDate(fields.dueDate) || '',
+                    tier: String(fields.tier || '')
+                });
+                collegeAppWorkspace.collegeTracker.push(row);
+                persistAppData();
+                try { if (typeof renderCollegeAppWorkspace === 'function') renderCollegeAppWorkspace(); } catch (_) { /* view re-renders on nav */ }
+                applied.id = String(row.id);
+                return applied;
+            }
             if (type === 'note') {
                 const page = { id: generateId(), title: title.slice(0, 80), content: normalizeTextToHtml(proposal.sourceSnippet || title), blocks: [], icon: PAGE_ICONS.IMPORT, createdAt: now, updatedAt: now, theme: globalTheme };
                 pages.push(page);
@@ -67836,6 +68780,24 @@ ${cspMeta}
                             });
                         }
                         SS.setState(ws);
+                    } else if (item.type === 'ap unit') {
+                        if (apStudyWorkspace) {
+                            if (!item.reusedUnit && Array.isArray(apStudyWorkspace.units)) {
+                                apStudyWorkspace.units = apStudyWorkspace.units.filter(u => String(u.id) !== String(item.id));
+                            }
+                            // A subject the import itself created goes too — but
+                            // only if nothing else ended up attached to it.
+                            if (item.createdApSubjectId && Array.isArray(apStudyWorkspace.subjects)) {
+                                const sid = String(item.createdApSubjectId);
+                                const stillUsed = (apStudyWorkspace.units || []).some(u => String(u.subjectId) === sid)
+                                    || (apStudyWorkspace.topics || []).some(t => String(t.subjectId) === sid);
+                                if (!stillUsed) apStudyWorkspace.subjects = apStudyWorkspace.subjects.filter(s => String(s.id) !== sid);
+                            }
+                        }
+                    } else if (item.type === 'college school' && !item.reusedSchool) {
+                        if (collegeAppWorkspace && Array.isArray(collegeAppWorkspace.collegeTracker)) {
+                            collegeAppWorkspace.collegeTracker = collegeAppWorkspace.collegeTracker.filter(r => String(r.id) !== String(item.id));
+                        }
                     }
                 } catch (_) { /* best-effort undo per engine */ }
             });
@@ -67903,7 +68865,7 @@ ${cspMeta}
                         <div>
                             <div class="smart-import-proposal-fields">
                                 <label>Type<select class="modal-input" data-field="type">
-                                    ${['homework','task','test','quiz','exam','calendar event','class','note','grade category','schedule period'].map(t => `<option value="${t}" ${p.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                                    ${['homework','task','test','quiz','exam','calendar event','class','note','grade category','schedule period','ap unit','college school'].map(t => `<option value="${t}" ${p.type === t ? 'selected' : ''}>${t}</option>`).join('')}
                                 </select></label>
                                 <label>Title<input class="modal-input" data-field="title" value="${escapeHtml(p.title)}"></label>
                                 <label>Date<input class="modal-input" data-field="dueDate" type="date" value="${escapeHtml(p.proposedFields.dueDate || '')}"></label>
@@ -68142,6 +69104,7 @@ ${cspMeta}
             // conversation and never rendered into the wrong transcript.
             const sendChatId = currentChatId;
             const sendConvoRef = convo;
+            let livePlaceholder = null;
             try {
                 setModelForProvider(provider, selectedModel);
 
@@ -68182,6 +69145,15 @@ ${cspMeta}
                     attachments: flowAttachments,
                     maxTokens: 2048,
                     reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
+                    stream: true,
+                    onDelta: (textSoFar) => {
+                        if (currentChatId !== sendChatId) return; // stale — don't touch a transcript the user has left
+                        if (!livePlaceholder) {
+                            hideThinkingIndicator();
+                            livePlaceholder = appendLiveAssistantPlaceholder();
+                        }
+                        updateLiveAssistantPlaceholder(livePlaceholder, textSoFar);
+                    },
                     onRequestStarted: (requestId) => {
                         showThinkingIndicator({
                             onCancel: () => cancelIntelligenceRequest(requestId)
@@ -68192,10 +69164,12 @@ ${cspMeta}
                 hideThinkingIndicator();
                 const isStale = currentChatId !== sendChatId;
                 if (result.cancelled) {
+                    if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                     if (!isStale) appendChatNotice('Stopped — the request was cancelled. Your attachments are kept; send again when ready.');
                     return;
                 }
                 if (!result.ok) {
+                    if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                     if (!isStale) {
                         let msg;
                         if (result.status > 0) {
@@ -68239,13 +69213,19 @@ ${cspMeta}
                     }
                     return;
                 }
-                appendMessage('assistant', assistantText);
+                // The live placeholder already showed the real text as it streamed
+                // in — swap it for the fully-featured bubble (actions/thoughts/
+                // regenerate) instantly, no second fake reveal.
+                const wasLiveStreamed = !!livePlaceholder;
+                if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
+                appendMessage('assistant', assistantText, null, null, { instant: wasLiveStreamed });
                 const _persistMsg = { role: 'assistant', content: persistClean };
                 if (_splitThoughts && _splitThoughts.length) _persistMsg.thoughts = _splitThoughts;
                 convo.push(_persistMsg);
                 saveConvo();
             } catch (err) {
                 hideThinkingIndicator();
+                if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                 if (currentChatId === sendChatId) {
                     appendChatNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'), {
                         onRetry: () => sendChat({ presetText: text, skipUserPush: true })
@@ -68606,7 +69586,7 @@ ${cspMeta}
 
         // Honors asstStream.cancelled so the Stop button can short-circuit it.
         const asstStream = { cancelled: false };
-        function asstStreamInto(host, plainText, finalHtml, onDone) {
+        function asstStreamInto(host, plainText, finalHtml, onDone, instant) {
             const words = String(plainText || '').split(/\s+/).filter(Boolean);
             const commit = () => {
                 host.classList.remove('assistant-streaming');
@@ -68614,7 +69594,7 @@ ${cspMeta}
                 asstScrollToBottom();
                 if (typeof onDone === 'function') onDone();
             };
-            if (words.length <= 4 || asstStream.cancelled) { commit(); return; }
+            if (instant || words.length <= 4 || asstStream.cancelled) { commit(); return; }
             const wordsPerTick = words.length > 200 ? 8 : words.length > 80 ? 4 : 2;
             host.classList.add('assistant-streaming');
             let idx = 0;
@@ -68627,6 +69607,39 @@ ${cspMeta}
                 else commit();
             };
             tick();
+        }
+
+        // Tab-side counterpart to appendLiveAssistantPlaceholder() — same idea,
+        // matching this surface's DOM/class structure (avatar + wrap + bubble).
+        function asstAppendLivePlaceholder() {
+            const { msgs } = asstCache;
+            if (!msgs) return null;
+            const wrap = document.createElement('div');
+            wrap.className = 'asst-msg assistant';
+            const avatar = document.createElement('div');
+            avatar.className = 'asst-msg-avatar';
+            const avatarIcon = document.createElement('i');
+            avatarIcon.className = 'fas fa-feather-pointed';
+            avatarIcon.setAttribute('aria-hidden', 'true');
+            avatar.appendChild(avatarIcon);
+            const col = document.createElement('div');
+            col.className = 'asst-msg-wrap';
+            const bubble = document.createElement('div');
+            bubble.className = 'asst-msg-bubble';
+            const host = document.createElement('div');
+            host.className = 'asst-stream-host assistant-streaming';
+            bubble.appendChild(host);
+            col.appendChild(bubble);
+            wrap.append(avatar, col);
+            msgs.appendChild(wrap);
+            asstScrollToBottom();
+            return { wrap, host };
+        }
+        function updateAsstLivePlaceholder(placeholder, textSoFar) {
+            if (!placeholder) return;
+            const fenceIdx = textSoFar.indexOf('```flow-actions');
+            placeholder.host.textContent = fenceIdx >= 0 ? textSoFar.slice(0, fenceIdx) : textSoFar;
+            asstScrollToBottom();
         }
 
         // role/content come from a `convo` entry; opts carries index + position flags.
@@ -68779,7 +69792,7 @@ ${cspMeta}
                     }
                     actions.style.visibility = '';
                     if (typeof opts.onStreamDone === 'function') { try { opts.onStreamDone(); } catch (e) { /* non-critical */ } }
-                });
+                }, opts.instant);
             } else {
                 renderActionsNow();
                 col.appendChild(actions);
@@ -68889,7 +69902,8 @@ ${cspMeta}
                         isLastUser: i === lastUserIdx,
                         isLastAssistant: i === lastAssistantIdx,
                         stream: i === streamIdx,
-                        onStreamDone: i === streamIdx ? streamDone : null
+                        onStreamDone: i === streamIdx ? streamDone : null,
+                        instant: i === streamIdx && !!(streamOpts && streamOpts.instant)
                     }));
                 } else if (m.role === 'notice' || m.role === 'error') {
                     const el = document.createElement('div');
@@ -70025,6 +71039,7 @@ ${cspMeta}
             const typing = asstShowTyping();
             const sendChatId = currentChatId;
             const sendConvoRef = convo;
+            let livePlaceholder = null;
             try {
                 setModelForProvider(provider, selectedModel);
                 const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
@@ -70060,6 +71075,15 @@ ${cspMeta}
                     attachments: flowAttachments,
                     maxTokens: 2048,
                     reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
+                    stream: true,
+                    onDelta: (textSoFar) => {
+                        if (currentChatId !== sendChatId) return; // stale — don't touch a transcript the user has left
+                        if (!livePlaceholder) {
+                            asstHideTyping(typing);
+                            livePlaceholder = asstAppendLivePlaceholder();
+                        }
+                        updateAsstLivePlaceholder(livePlaceholder, textSoFar);
+                    },
                     onRequestStarted: (rid) => { asstActiveRequestId = rid; }
                 });
 
@@ -70067,11 +71091,13 @@ ${cspMeta}
                 asstActiveRequestId = null;
                 const isStale = currentChatId !== sendChatId;
                 if (result.cancelled) {
+                    if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                     asstSetInFlight(false);
                     if (!isStale) asstNotice('Stopped — the request was cancelled.');
                     return;
                 }
                 if (!result.ok) {
+                    if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                     asstSetInFlight(false);
                     if (!isStale) asstNotice(asstFormatError(result), { onRetry: () => asstSendCore(displayText, sendText, { pushUser: false }) });
                     return;
@@ -70097,14 +71123,19 @@ ${cspMeta}
                 }
                 convo.push(persistMsg);
                 saveConvo();
-                // Render with the just-added assistant message streaming in.
+                // The live placeholder already showed the real text as it streamed
+                // in — the re-render below just swaps in the fully-featured bubble
+                // instantly, no second fake reveal.
+                const wasLiveStreamed = !!livePlaceholder;
+                if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                 asstRenderChatList();
                 asstUpdateTopbar();
-                asstRenderMessages({ streamIndex: convo.length - 1, onDone: () => asstSetInFlight(false) });
+                asstRenderMessages({ streamIndex: convo.length - 1, onDone: () => asstSetInFlight(false), instant: wasLiveStreamed });
             } catch (err) {
                 asstHideTyping(typing);
                 asstActiveRequestId = null;
                 asstSetInFlight(false);
+                if (livePlaceholder) { livePlaceholder.wrap.remove(); livePlaceholder = null; }
                 if (currentChatId === sendChatId) {
                     asstNotice('Request failed: ' + (err && err.message ? err.message : 'unknown error'), {
                         onRetry: () => asstSendCore(displayText, sendText, { pushUser: false })
@@ -70474,7 +71505,7 @@ function buildLegacyTimelineDayCell(dateObj, blocks, options = {}) {
                 <span class="timeline-calendar-daynum">${dayNum}</span>
                 <span class="timeline-calendar-weekday">${weekday}</span>
             </div>
-            <div class="timeline-calendar-count">${count} event${count === 1 ? '' : 's'}</div>
+            ${count > 0 ? `<div class="timeline-calendar-count">${count} event${count === 1 ? '' : 's'}</div>` : ''}
             <div class="timeline-calendar-events">${eventPreview || '<div class="timeline-calendar-empty">No events</div>'}${more}</div>
         </button>
     `;
@@ -75465,20 +76496,6 @@ function _fsFormatTime(totalSeconds, compact) {
     if (compact) return m + ':' + pad(sec);
     return pad(m) + ':' + pad(sec);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

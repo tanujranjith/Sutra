@@ -103,7 +103,11 @@
         var categoryIds = categories.map(function (c) { return c.id; });
         var entries = Array.isArray(source.entries)
             ? source.entries.map(function (e) { return normalizeEntry(e, categoryIds); }).filter(Boolean) : [];
-        var target = Number(source.targetPercent);
+        // Number(null) === 0, which would invent a 0% target and make every
+        // target-less course read "safe" (computeGradeRisk guards this, but the
+        // normalizer must not manufacture the 0 in the first place).
+        var target = (source.targetPercent === null || source.targetPercent === undefined || source.targetPercent === '')
+            ? NaN : Number(source.targetPercent);
         var gpaMeta = source.gpa && typeof source.gpa === 'object' ? source.gpa : {};
         var credits = Number(gpaMeta.credits);
         return {
@@ -539,6 +543,26 @@
         var risk = computeGradeRisk(data, planner.settings);
         var riskHtml = '<span class="gp-risk-badge gp-risk-' + risk.status + '" title="' + esc(risk.reason) + '">' + esc(risk.label) + '</span>';
 
+        // Effort-vs-estimate signal: only when this COURSE has enough logged
+        // times to calibrate (tier 'course'), and only when the ratio is
+        // significant — same 0.15 threshold applyEffortCalibration uses.
+        var effortHtml = '';
+        try {
+            var hw = global.SutraHomework;
+            if (hw && typeof hw.getEffortCalibration === 'function') {
+                var cal = hw.getEffortCalibration({ courseId: course.id });
+                if (cal && cal.tier === 'course' && Math.abs(cal.ratio - 1) >= 0.15) {
+                    var mult = (Math.round(cal.ratio * 10) / 10) + '×';
+                    var slowAndRisky = cal.ratio > 1 && (risk.status === 'watch' || risk.status === 'risk' || risk.status === 'danger');
+                    var effortTitle = cal.ratio > 1
+                        ? 'Based on ' + cal.samples + ' logged times, work in this class takes about ' + mult + ' your estimates'
+                          + (slowAndRisky ? ' — and this grade needs attention. Plan bigger blocks for it.' : '.')
+                        : 'Based on ' + cal.samples + ' logged times, you finish this class’s work faster than you estimate (' + mult + ').';
+                    effortHtml = '<span class="gp-effort-chip' + (slowAndRisky ? ' gp-effort-warn' : '') + '" title="' + esc(effortTitle) + '">Effort ' + mult + ' est.</span>';
+                }
+            }
+        } catch (e) { /* non-critical */ }
+
         var categoryRows = data.categories.map(function (cat) {
             var byCat = null;
             grade.byCategory.forEach(function (b) { if (b.id === cat.id) byCat = b; });
@@ -587,7 +611,7 @@
 
             + '<div class="gp-summary-row">'
             + '<div class="gp-summary-main"><span class="gp-grade-big">' + (grade.percent === null ? '—' : grade.percent.toFixed(1) + '%') + '</span>'
-            + '<span class="gp-grade-letter">' + esc(grade.letter || 'No scores yet') + '</span>' + riskHtml + deltaHtml + '</div>'
+            + '<span class="gp-grade-letter">' + esc(grade.letter || 'No scores yet') + '</span>' + riskHtml + effortHtml + deltaHtml + '</div>'
             + '<label class="gp-target-field"><span>Target</span>'
             + '<input type="number" min="0" max="110" step="0.5" data-gp-field="target" value="' + (data.targetPercent === null ? '' : esc(data.targetPercent)) + '" placeholder="93"></label>'
             + '</div>'

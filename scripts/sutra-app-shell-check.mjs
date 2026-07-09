@@ -41,6 +41,12 @@ while ((match = styleRe.exec(html)) !== null) {
 
 if (/id=["']focus-session-styles["']/.test(html)) failures.push('focus-session styles must stay extracted from Sutra.html');
 if (!html.includes('styles/views/focus-session.css')) failures.push('focus-session.css link missing from Sutra.html');
+if (!html.includes('class="skip-link" href="#mainContent"')) failures.push('app shell skip link missing');
+if (!html.includes('id="mainContent" role="main"')) failures.push('main workspace landmark missing');
+if (!html.includes('id="appWorkspaceTitle" class="sr-only"')) failures.push('app-level workspace heading missing');
+if (!html.includes('role="navigation" aria-label="Primary workspace views"')) failures.push('primary navigation landmark missing');
+if (!html.includes('id="toast" role="status" aria-live="polite"')) failures.push('main toast must be an aria-live status');
+if (!html.includes('id="toastDismissBtn"')) failures.push('main toast dismiss button missing');
 
 console.log(`App shell check - ${count} inline style block(s) inspected.`);
 notes.forEach((note) => console.log(' - ' + note));

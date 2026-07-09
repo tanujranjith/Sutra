@@ -77,6 +77,12 @@ if (!homework.includes('role="dialog"') || !homework.includes('aria-modal="true"
 if (!css.includes('@media (max-width: 720px)') || !css.includes('border-radius: 20px 20px 0 0')) {
   fail('mobile bottom-sheet modal styling missing');
 }
+if (app.includes('[aria-label^="Close"]')) {
+  fail('SutraModalManager must not use broad [aria-label^="Close"] matching');
+}
+if (!app.includes('[aria-label="Close"]')) {
+  fail('SutraModalManager should only use exact aria-label close fallback');
+}
 
 if (failures) {
   console.error(`Modal accessibility check FAILED (${failures} issue${failures === 1 ? '' : 's'}).`);

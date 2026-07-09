@@ -106,6 +106,7 @@
         create_study_plan: { domain: 'planning', scope: 'workspace' },
         create_exam_plan: { domain: 'planning', scope: 'workspace' },
         create_assignment_plan: { domain: 'planning', scope: 'workspace' },
+        create_action_plan: { domain: 'planning', scope: 'workspace' },
         plan_week: { domain: 'planning', scope: 'workspace' },
         plan_day: { domain: 'planning', scope: 'workspace' },
         triage_deadlines: { domain: 'planning', scope: 'workspace' },

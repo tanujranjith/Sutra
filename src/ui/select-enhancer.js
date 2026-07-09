@@ -222,7 +222,8 @@
         if (
             select.closest('.hw-task-control') ||
             select.closest('.hw-inline-add') ||
-            select.closest('#toolbarTimeControls')
+            select.closest('#toolbarTimeControls') ||
+            select.closest('#toolbar')
         ) {
             wrapper.classList.add('nf-select--compact');
         }

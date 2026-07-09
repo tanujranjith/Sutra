@@ -2139,6 +2139,13 @@
         min-width: 34px;
         min-height: 34px;
     }
+    /* View-tabs "+" add button (28×28 authored) — the one control the audit
+       flags on every view. Grow the hit area without disturbing the nav row
+       height (siblings stay ~36px). */
+    .view-tab-add {
+        min-width: 40px;
+        min-height: 40px;
+    }
     /* Range sliders (Life check-in energy etc.) — 16px tracks are hard to
        grab; padding grows the hit area without changing the visual track. */
     input[type="range"] {

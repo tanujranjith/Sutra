@@ -73,8 +73,8 @@
     
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260707-batch1">
-    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260703-voice1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260709-quickpage">
+    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260707-batch7">
     <link rel="stylesheet" href="styles/features/sutra-intelligence.css?v=20260610-intel1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -82,7 +82,7 @@
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
     <script src="src/boot/startup-intro.js?v=20260614-storage1" defer></script>
-    <script src="src/ui/select-enhancer.js?v=20260501-skip-hidden" defer></script>
+    <script src="src/ui/select-enhancer.js?v=20260708-toolbar-compact" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
     <script src="src/data/emoji-keywords.generated.js" defer></script>
@@ -97,6 +97,7 @@
          the user explicitly consents. -->
 </head>
 <body class="no-parallax">
+    <a class="skip-link" href="#mainContent">Skip to workspace</a>
 
     <!-- ═══════════════════════════════════════════════════════════
          Glass theme refraction filter.
@@ -170,7 +171,7 @@
         </button>
         
         <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
+        <div class="sidebar" id="sidebar" role="navigation" aria-label="Pages and workspace tools">
             <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
             <div class="sidebar-header">
                 <div class="app-title-block">
@@ -280,10 +281,15 @@
             <div class="pages-list" id="pagesList"></div>
             
             <div class="sidebar-new-page">
-                <button class="new-page-btn" onclick="createNewPage()" aria-label="Create new page" title="New Page">
-                    <i class="fas fa-plus" aria-hidden="true"></i>
-                    <span class="btn-text">New Page</span>
-                </button>
+                <div class="sidebar-new-page-row">
+                    <button class="new-page-btn" onclick="createNewPage()" aria-label="Create new page" title="New Page">
+                        <i class="fas fa-plus" aria-hidden="true"></i>
+                        <span class="btn-text">New Page</span>
+                    </button>
+                    <button class="quick-new-page-btn" onclick="createQuickUntitledPage()" aria-label="Create blank Untitled page instantly" title="Quick page (blank Untitled)">
+                        <i class="fas fa-bolt" aria-hidden="true"></i>
+                    </button>
+                </div>
             </div>
             <!-- Pinned deadline countdowns — populated by src/features/study/homework.js -->
             <div id="sutraCountdownSidebar" aria-label="Pinned countdowns" style="display:none;"></div>
@@ -327,8 +333,9 @@
         <div id="notifToastContainer" aria-live="polite" aria-atomic="false"></div>
 
         <!-- Main Content -->
-        <div class="main-content">
-            <div class="top-nav glass-panel">
+        <div class="main-content" id="mainContent" role="main" aria-labelledby="appWorkspaceTitle" tabindex="-1">
+            <h1 id="appWorkspaceTitle" class="sr-only">Sutra workspace</h1>
+            <div class="top-nav glass-panel" role="navigation" aria-label="Primary workspace views">
                 <div class="window-chrome" aria-hidden="true">
                     <span class="window-dot window-dot-close"></span>
                     <span class="window-dot window-dot-min"></span>
@@ -336,7 +343,7 @@
                 </div>
                 <div class="nav-left">
                                         <div class="tabs-shell">
-                                            <div class="view-tabs" role="tablist">
+                                            <div class="view-tabs" role="tablist" aria-label="Workspace views">
                                                     <button class="view-tab active" data-view="today">Today</button>
                                                     <button class="view-tab" data-view="timeline">Timeline</button>
                                                     <button class="view-tab" data-view="notes">Notes</button>
@@ -1106,65 +1113,114 @@
                     <i class="fas fa-chevron-left"></i>
                 </button>
                 <div class="toolbar" id="toolbar">
-                <button class="toolbar-btn" onclick="formatText('bold')" title="Bold (Ctrl+B)" aria-label="Bold">
+                <!-- Undo / Redo -->
+                <button class="toolbar-btn" onclick="formatText('undo')" title="Undo (Ctrl+Z)" aria-label="Undo">
+                    <i class="fas fa-rotate-left"></i>
+                </button>
+                <button class="toolbar-btn" onclick="formatText('redo')" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+                    <i class="fas fa-rotate-right"></i>
+                </button>
+
+                <div class="toolbar-separator"></div>
+
+                <!-- Paragraph / block style -->
+                <select class="toolbar-field toolbar-style-select" id="toolbarStylesSelect" onchange="applyStylePreset(this.value)" title="Text style" aria-label="Text style">
+                    <option value="p">Normal text</option>
+                    <option value="h1">Heading 1</option>
+                    <option value="h2">Heading 2</option>
+                    <option value="h3">Heading 3</option>
+                    <option value="blockquote">Quote</option>
+                    <option value="pre">Code block</option>
+                </select>
+
+                <div class="toolbar-separator"></div>
+
+                <!-- Font family + size -->
+                <select class="toolbar-field toolbar-font-select" id="toolbarFontFamily" onchange="setEditorFontFamily(this.value)" title="Font" aria-label="Font family">
+                    <option value="">Default font</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                    <option value="Arial, Helvetica, sans-serif">Arial</option>
+                    <option value="Verdana, Geneva, sans-serif">Verdana</option>
+                    <option value="'Courier New', Courier, monospace">Courier New</option>
+                    <option value="system-ui, -apple-system, sans-serif">System UI</option>
+                </select>
+                <div class="toolbar-size-stepper" role="group" aria-label="Font size">
+                    <button class="toolbar-btn toolbar-size-btn" onclick="adjustEditorFontSize(-1)" title="Decrease font size" aria-label="Decrease font size"><i class="fas fa-minus"></i></button>
+                    <input type="text" inputmode="numeric" class="toolbar-field toolbar-size-input" id="toolbarFontSize" value="16" onchange="setEditorFontSizeFromInput()" aria-label="Font size in pixels">
+                    <button class="toolbar-btn toolbar-size-btn" onclick="adjustEditorFontSize(1)" title="Increase font size" aria-label="Increase font size"><i class="fas fa-plus"></i></button>
+                </div>
+
+                <div class="toolbar-separator"></div>
+
+                <!-- Inline marks + colour -->
+                <button class="toolbar-btn" data-notes-v2-state="bold" aria-pressed="false" onclick="formatText('bold')" title="Bold (Ctrl+B)" aria-label="Bold">
                     <i class="fas fa-bold"></i>
                 </button>
-                <button class="toolbar-btn" onclick="formatText('italic')" title="Italic (Ctrl+I)" aria-label="Italic">
+                <button class="toolbar-btn" data-notes-v2-state="italic" aria-pressed="false" onclick="formatText('italic')" title="Italic (Ctrl+I)" aria-label="Italic">
                     <i class="fas fa-italic"></i>
                 </button>
-                <button class="toolbar-btn" onclick="formatText('underline')" title="Underline (Ctrl+U)" aria-label="Underline">
+                <button class="toolbar-btn" data-notes-v2-state="underline" aria-pressed="false" onclick="formatText('underline')" title="Underline (Ctrl+U)" aria-label="Underline">
                     <i class="fas fa-underline"></i>
                 </button>
-                <button class="toolbar-btn" onclick="formatText('strikeThrough')" title="Strikethrough" aria-label="Strikethrough">
+                <button class="toolbar-btn" data-notes-v2-state="strike" aria-pressed="false" onclick="formatText('strikeThrough')" title="Strikethrough" aria-label="Strikethrough">
                     <i class="fas fa-strikethrough"></i>
                 </button>
+                <label class="toolbar-field toolbar-color-field" title="Text colour" aria-label="Text colour">
+                    <i class="fas fa-font" aria-hidden="true"></i>
+                    <span class="toolbar-color-bar" id="toolbarTextColorBar"></span>
+                    <input type="color" id="toolbarTextColor" value="#111111" oninput="applyTextColor(this.value)">
+                </label>
+                <label class="toolbar-field toolbar-color-field" title="Highlight colour" aria-label="Highlight colour">
+                    <i class="fas fa-highlighter" aria-hidden="true"></i>
+                    <span class="toolbar-color-bar" id="toolbarHighlightBar" style="background:#ffe066"></span>
+                    <input type="color" id="toolbarHighlightColor" value="#ffe066" oninput="applyHighlight(this.value)">
+                </label>
 
                 <div class="toolbar-separator"></div>
 
-                <button class="toolbar-btn" id="alignLeftBtn" onclick="formatText('justifyLeft')" title="Align left" aria-label="Align left">
+                <!-- Align + spacing + indent -->
+                <button class="toolbar-btn" id="alignLeftBtn" data-notes-v2-state="alignLeft" aria-pressed="false" onclick="formatText('justifyLeft')" title="Align left" aria-label="Align left">
                     <i class="fas fa-align-left"></i>
                 </button>
-                <button class="toolbar-btn" id="alignCenterBtn" onclick="formatText('justifyCenter')" title="Align center" aria-label="Align center">
+                <button class="toolbar-btn" id="alignCenterBtn" data-notes-v2-state="alignCenter" aria-pressed="false" onclick="formatText('justifyCenter')" title="Align center" aria-label="Align center">
                     <i class="fas fa-align-center"></i>
                 </button>
-                <button class="toolbar-btn" id="alignRightBtn" onclick="formatText('justifyRight')" title="Align right" aria-label="Align right">
+                <button class="toolbar-btn" id="alignRightBtn" data-notes-v2-state="alignRight" aria-pressed="false" onclick="formatText('justifyRight')" title="Align right" aria-label="Align right">
                     <i class="fas fa-align-right"></i>
                 </button>
+                <select class="toolbar-field toolbar-spacing-select" id="toolbarLineSpacing" onchange="setEditorLineSpacing(this.value)" title="Line spacing" aria-label="Line spacing">
+                    <option value="">Spacing</option>
+                    <option value="1">Single</option>
+                    <option value="1.15">1.15</option>
+                    <option value="1.5">1.5</option>
+                    <option value="2">Double</option>
+                </select>
+                <button class="toolbar-btn" onclick="formatIndent('outdent')" title="Decrease indent (Shift+Tab)" aria-label="Decrease indent">
+                    <i class="fas fa-outdent"></i>
+                </button>
+                <button class="toolbar-btn" onclick="formatIndent('indent')" title="Increase indent (Tab)" aria-label="Increase indent">
+                    <i class="fas fa-indent"></i>
+                </button>
 
                 <div class="toolbar-separator"></div>
 
-                <button class="toolbar-btn" onclick="formatBlock('h1')" title="Heading 1" aria-label="Heading 1">
-                    H1
-                </button>
-                <button class="toolbar-btn" onclick="formatBlock('h2')" title="Heading 2" aria-label="Heading 2">
-                    H2
-                </button>
-                <button class="toolbar-btn" onclick="formatBlock('h3')" title="Heading 3" aria-label="Heading 3">
-                    H3
-                </button>
-
-                <div class="toolbar-separator"></div>
-
-                <button class="toolbar-btn" onclick="formatText('insertUnorderedList')" title="Bulleted list" aria-label="Bulleted list">
+                <!-- Lists -->
+                <button class="toolbar-btn" data-notes-v2-state="bulletList" aria-pressed="false" onclick="formatText('insertUnorderedList')" title="Bulleted list (Ctrl+Shift+8)" aria-label="Bulleted list">
                     <i class="fas fa-list-ul"></i>
                 </button>
-                <button class="toolbar-btn" onclick="formatText('insertOrderedList')" title="Numbered list" aria-label="Numbered list">
+                <button class="toolbar-btn" data-notes-v2-state="orderedList" aria-pressed="false" onclick="formatText('insertOrderedList')" title="Numbered list (Ctrl+Shift+7)" aria-label="Numbered list">
                     <i class="fas fa-list-ol"></i>
                 </button>
-                <button class="toolbar-btn" onclick="formatBlock('blockquote')" title="Quote" aria-label="Quote">
-                    <i class="fas fa-quote-left"></i>
-                </button>
-                <button class="toolbar-btn" onclick="insertChecklist()" title="Checklist" aria-label="Insert checklist">
+                <button class="toolbar-btn" data-notes-v2-state="taskList" aria-pressed="false" onclick="insertChecklist()" title="Checklist (Ctrl+Shift+9)" aria-label="Insert checklist">
                     <i class="fas fa-tasks"></i>
                 </button>
 
                 <div class="toolbar-separator"></div>
 
-                <button class="toolbar-btn" onclick="insertLink()" title="Insert link (Ctrl+Shift+K)" aria-label="Insert link">
+                <!-- Insert -->
+                <button class="toolbar-btn" data-notes-v2-state="link" aria-pressed="false" onclick="insertLink()" title="Insert link (Ctrl+K)" aria-label="Insert link">
                     <i class="fas fa-link"></i>
-                </button>
-                <button class="toolbar-btn" onclick="formatBlock('pre')" title="Code block" aria-label="Code block">
-                    <i class="fas fa-code"></i>
                 </button>
                 <button class="toolbar-btn" onclick="insertTable()" title="Insert table" aria-label="Insert table">
                     <i class="fas fa-table"></i>
@@ -1206,10 +1262,10 @@
 
                 <div class="toolbar-separator"></div>
 
-                <!-- Pages/Pageless Toggle - MOVED TO SETTINGS -->
-                <!-- <button class="toolbar-btn" id="pagesToggleBtn" onclick="togglePagesMode()" title="Switch to Pages view">
+                <!-- Pages / Pageless (page-like layout) -->
+                <button class="toolbar-btn" id="pagesToggleBtn" onclick="togglePagesMode()" title="Switch to Pages" aria-label="Toggle page layout">
                     <i class="fas fa-file-alt"></i>
-                </button> -->
+                </button>
 
                 <!-- Atelier Pro features access -->
                 <button class="toolbar-btn" onclick="toggleFindReplacePanel()" title="Find & Replace (Ctrl+F)" aria-label="Find and replace">
@@ -3351,6 +3407,13 @@
                             </span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="editor.splitViewDefault"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
+                        <label class="cc-row cc-row-toggle" data-setting-item>
+                            <span class="cc-row-text">
+                                <span class="cc-row-name">Modern editor engine</span>
+                                <span class="cc-row-help">On by default: Docs-style toolbar, bubble &amp; slash menus, resizable images, native tables, reliable lists, clean paste and undo. Turn off to use the classic editor. Handwriting/drawing blocks show as read-only cards in the modern editor — turn off to edit them.</span>
+                            </span>
+                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="editor.editorV2Enabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
+                        </label>
                     </div>
                 </section>
 
@@ -4924,7 +4987,7 @@
                             <div class="hw-stat-note">Assignments finished</div>
                         </article>
                         <article class="hw-stat-card">
-                            <div class="hw-stat-label">Active Tracks</div>
+                            <div class="hw-stat-label">Tracks</div>
                             <div class="hw-stat-value" id="hwStatCourses">0</div>
                             <div class="hw-stat-note">Classes + activities</div>
                         </article>
@@ -6834,7 +6897,12 @@
     <input type="file" id="calendarIcsInput" style="display: none;" accept=".ics,text/calendar" onchange="handleCalendarIcsSelected(event)" />
 
     <!-- Toast notification -->
-    <div class="toast" id="toast"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <span id="toastMessage"></span>
+        <button type="button" class="toast-dismiss" id="toastDismissBtn" aria-label="Dismiss notification">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+    </div>
     <div class="timer-done-popup" id="timerDonePopup" role="alert" aria-live="assertive">
         <div class="timer-done-title">Timer Finished</div>
         <div class="timer-done-message">Focus session complete. Alarm will keep ringing until you stop it.</div>
@@ -7077,9 +7145,9 @@
     <!-- Sutra Intelligence Harness: verified product knowledge + certified-action
          capability registry. Loaded BEFORE flow-assistant, which consumes them. -->
     <script src="src/features/assistant/sutra-product-knowledge.js?v=20260629-intel2"></script>
-    <script src="src/features/assistant/sutra-capability-registry.js?v=20260630-assist-hw4"></script>
+    <script src="src/features/assistant/sutra-capability-registry.js?v=20260707-batch7"></script>
     <script src="src/features/assistant/flow-intelligence.js?v=20260614-storage1"></script>
-    <script src="src/features/assistant/flow-assistant.js?v=20260704-ctabs-ctx1"></script>
+    <script src="src/features/assistant/flow-assistant.js?v=20260707-batch7"></script>
     <!-- Assistant Memory store + Local Help decision tree. Loaded AFTER
          flow-assistant: both call its action pipeline at runtime. -->
     <script src="src/features/assistant/sutra-assistant-memory.js?v=20260629-intel3"></script>
@@ -7093,7 +7161,7 @@
          Loaded BEFORE app.js so the core registers their workspaces in
          appData, backups, and import normalization. -->
     <script src="src/features/academic/school-schedule.js?v=20260610-academic1"></script>
-    <script src="src/features/academic/grade-planner.js?v=20260610-academic1"></script>
+    <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260707-batch1"></script>
     <script src="src/features/academic/semester-setup.js?v=20260630-assist-hw1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
@@ -7111,7 +7179,13 @@
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
     <script src="src/features/workspace/today-command-center.js?v=20260703-today1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
-<script src="src/core/app.js?v=20260707-batch3"></script>
+    <!-- Notes editor v2 (opt-in, Settings → Editor): vendored TipTap/ProseMirror
+         engine (window.SutraEditor) + Sutra integration glue (window.SutraNotesEditorV2).
+         Loads before app.js so the flag can mount at boot; app.js only touches it
+         behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
+    <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
+    <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
+<script src="src/core/app.js?v=20260709-quickpage"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260616-pwa1"></script>
@@ -7496,12 +7570,14 @@
     <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260703-mobileopt1">
+    <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260708-editorv2-p2b">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260707-mobileopt2">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260605-notif1">
-    <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch1">
+    <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260701-loops1">
+    <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260708-editorv2-p5">
     <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260703-voice1">
     <link rel="stylesheet" href="styles/features/sutra-assistant-help.css?v=20260629-intel3">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
@@ -8076,10 +8152,6 @@
 
 </body>
 </html>
-
-
-
-
 
 
 

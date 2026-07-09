@@ -108,6 +108,12 @@ test('integration registry truthfully gates external services and Smart Import a
 test('Notes rich paste sanitizes scripts, handlers, and javascript URLs', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
+    // This tests the classic editor's paste sanitiser; opt out of the modern
+    // (v2) editor which is now the default.
+    if (typeof window.setWorkspacePreference === 'function') {
+      window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+      window.applyWorkspacePreferences({});
+    }
     if (typeof window.setActiveView === 'function') window.setActiveView('notes');
   });
   const html = await page.evaluate(() => {

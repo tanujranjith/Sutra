@@ -404,7 +404,7 @@
         /* ---------- Input ---------- */
         .chatbot-input {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-columns: auto auto minmax(0, 1fr) auto;
             gap: 8px;
             padding: 10px 12px 4px;
             align-items: end;
@@ -963,6 +963,20 @@
         color: var(--accent, #6aa3ff);
         line-height: 1;
     }
+
+    /* Desktop: the assistant chips row clears the fixed formatting toolbar so it
+       is not occluded, and the editor container stops double-reserving that
+       space (the JS padding pass measures the container's own top when a
+       flow-row is present). Mirrors the ≤1024px clearance rule. */
+    @media (min-width: 1025px) {
+        #view-notes > .view-flow-row {
+            margin-top: 58px;
+        }
+        #view-notes > .view-flow-row ~ .editor-container,
+        #view-notes > .view-flow-row ~ #notesEditorContainer {
+            padding-top: 14px;
+        }
+    }
         .chatbot-disclaimer { display: none; }
 
         @media (max-width: 480px) {
@@ -972,7 +986,7 @@
             .chatbot-header img { width: 30px; height: 30px; border-radius: 18%; }
             .chatbot-actions button { min-width: 34px; height: 30px; padding: 0 8px; font-size: 11px; }
             .chatbot-messages { min-height: 0; }
-            .chatbot-input { grid-template-columns: auto minmax(0, 1fr) auto; }
+            .chatbot-input { grid-template-columns: auto auto minmax(0, 1fr) auto; }
             .flow-qa-grid { grid-template-columns: 1fr; }
             .chat-settings-row { grid-template-columns: 1fr; }
             .chat-settings-row button { width: 100%; min-height: 40px; }
@@ -1009,7 +1023,7 @@
             }
 
             .chatbot-input {
-                grid-template-columns: auto minmax(0, 1fr) auto;
+                grid-template-columns: auto auto minmax(0, 1fr) auto;
             }
 
             .chat-settings-shell[open] .chatbot-settings {

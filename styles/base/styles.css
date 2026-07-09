@@ -7,6 +7,25 @@
         :root {
             --font-heading: "Cormorant Garamond", "Playfair Display", Georgia, serif;
             --font-body: "DM Sans", "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-5: 20px;
+            --space-6: 24px;
+            --space-7: 32px;
+            --text-xs: 0.75rem;
+            --text-sm: 0.875rem;
+            --text-md: 1rem;
+            --text-lg: 1.125rem;
+            --text-xl: 1.375rem;
+            --line-tight: 1.2;
+            --line-normal: 1.5;
+            --z-nav: 2400;
+            --z-dropdown: 5200;
+            --z-modal: 14000;
+            --z-toast: 14600;
+            --z-takeover: 100000;
             --bg-primary: #ffffff;
             --bg-secondary: #fbfcfe;
             --bg-hover: #f3f5f8;
@@ -52,6 +71,15 @@
             --button-bg-hover: var(--surface-bg-hover);
             --button-border: var(--surface-border);
             --button-text: var(--text-primary);
+            --button-disabled-opacity: 0.48;
+            --danger: #e0564f;
+            --field-bg: var(--surface-bg);
+            --field-bg-focus: var(--bg-elevated);
+            --field-border: var(--surface-border);
+            --field-border-focus: var(--accent-strong);
+            --field-radius: 10px;
+            --field-padding-y: 10px;
+            --field-padding-x: 12px;
             --theme-gradient-start: var(--bg-primary);
             --theme-gradient-mid: var(--bg-secondary);
             --theme-gradient-end: var(--bg-primary);
@@ -135,48 +163,68 @@
                 font-feature-settings: "tnum";
             }
 
-        /* Theme */
+        /* Theme — Dark preset (premium layered dark).
+           Cool near-black shell, warm-neutral text, purple/blue Sutra brand
+           accent for active/focus/selected states, warm gold used sparingly for
+           markers, headings, and the timer play control. Surfaces are stepped by
+           shade + soft elevation rather than hard outlines. */
         [data-theme="dark"] {
             --sutra-warning: #fbbf24;
-            --bg-primary: #1a1d22;
-            --bg-secondary: #232831;
-            --bg-hover: #2c323d;
-            --bg-elevated: #262b33;
-            --text-primary: #f2ede4;
-            --text-secondary: #c7beb3;
-            --text-muted: #9e968c;
-            --border: rgba(255, 255, 255, 0.08);
-            --accent: #d8c4a1;
-            --accent-rgb: 216, 196, 161;
-            --accent-strong: #b79a73;
-            --accent-soft: rgba(var(--accent-rgb), 0.14);
-            --editor-bg: #181c22;
-            --code-bg: #20252d;
-            --glass-01: rgba(29, 33, 40, 0.88);
-            --glass-02: rgba(36, 41, 49, 0.94);
+            /* Layered surfaces: shell darkest → sidebar → editor → elevated */
+            --bg-primary: #0e1421;
+            --bg-secondary: #131a28;
+            --bg-hover: #1b2334;
+            --bg-elevated: #1a2131;
+            --text-primary: #ece6da;
+            --text-secondary: #b6aea2;
+            --text-muted: #7f8794;
+            --text-disabled: #5f6673;
+            --border: rgba(255, 255, 255, 0.07);
+            /* Purple/blue brand accent (interactive: active nav, focus, selected) */
+            --accent: #7c6dff;
+            --accent-rgb: 124, 109, 255;
+            --accent-strong: #9b8dff;
+            --accent-soft: rgba(var(--accent-rgb), 0.16);
+            --accent-blue: #31a8ff;
+            --accent-blue-rgb: 49, 168, 255;
+            /* Warm gold accent (sparingly: markers, headings, timer play) */
+            --accent-gold: #d8b875;
+            --accent-gold-rgb: 216, 184, 117;
+            --accent-gold-soft: rgba(var(--accent-gold-rgb), 0.16);
+            --gold-glow: rgba(216, 184, 117, 0.35);
+            --purple-glow: rgba(124, 109, 255, 0.35);
+            --editor-bg: #111827;
+            --code-bg: #0d1421;
+            --glass-01: rgba(18, 24, 37, 0.9);
+            --glass-02: rgba(22, 28, 43, 0.94);
             --glass-border: rgba(255, 255, 255, 0.08);
-            --shadow-soft: 0 14px 30px rgba(0, 0, 0, 0.34);
-            --shadow-soft-lg: 0 28px 56px rgba(0, 0, 0, 0.4);
-            --neumo-bg: #1d2127;
-            --neumo-shadow-light: rgba(255, 255, 255, 0.035);
-            --neumo-shadow-dark: rgba(0, 0, 0, 0.48);
+            --shadow-soft: 0 16px 34px rgba(0, 0, 0, 0.42);
+            --shadow-soft-lg: 0 30px 60px rgba(0, 0, 0, 0.5);
+            --neumo-bg: #151b29;
+            --neumo-shadow-light: rgba(255, 255, 255, 0.03);
+            --neumo-shadow-dark: rgba(0, 0, 0, 0.5);
             --neumo-inset-dark: rgba(0, 0, 0, 0.5);
-            --neumo-inset-light: rgba(255, 255, 255, 0.06);
-            /* Surface tokens for dark mode */
+            --neumo-inset-light: rgba(255, 255, 255, 0.05);
+            /* Surface tokens for dark mode (translucent white overlays) */
             --surface-bg: rgba(255, 255, 255, 0.03);
             --surface-bg-hover: rgba(255, 255, 255, 0.06);
-            --surface-bg-active: rgba(255, 255, 255, 0.10);
-            --surface-border: rgba(255, 255, 255, 0.08);
-            --surface-border-strong: rgba(255, 255, 255, 0.14);
+            --surface-bg-active: rgba(255, 255, 255, 0.09);
+            --surface-border: rgba(255, 255, 255, 0.07);
+            --surface-border-strong: rgba(255, 255, 255, 0.12);
             --surface-bg-elevated: rgba(255, 255, 255, 0.02);
             --surface-inset: rgba(255, 255, 255, 0.04);
-            --code-inline-bg: rgba(255, 255, 255, 0.08);
-            --code-block-bg: rgba(0, 0, 0, 0.25);
-            --sidebar-bg: rgba(19, 22, 27, 0.96);
-            --button-bg: rgba(255, 255, 255, 0.06);
-            --button-bg-hover: rgba(255, 255, 255, 0.1);
-            --button-border: rgba(255, 255, 255, 0.12);
+            --code-inline-bg: rgba(255, 255, 255, 0.07);
+            --code-block-bg: rgba(0, 0, 0, 0.28);
+            --sidebar-bg: #101622;
+            --button-bg: rgba(255, 255, 255, 0.05);
+            --button-bg-hover: rgba(255, 255, 255, 0.09);
+            --button-border: rgba(255, 255, 255, 0.1);
             --button-text: var(--text-primary);
+            /* Stylesheet owns the shell gradient for dark (JS escape-hatch);
+               values feed body[data-theme-key] linear-gradient. */
+            --theme-gradient-start: #0a0f18;
+            --theme-gradient-mid: #0c1220;
+            --theme-gradient-end: #101624;
         }
 
         /* Sutra — the signature brand theme. Deep navy-black canvas, Sutra blue
@@ -2345,6 +2393,19 @@
             border-color: rgba(255, 255, 255, 0.16);
         }
 
+        /* Timer play/primary control wears the warm gold accent (used sparingly). */
+        [data-theme="dark"] .focus-timer .icon-btn.primary {
+            background: linear-gradient(180deg, var(--accent-gold), color-mix(in srgb, var(--accent-gold) 82%, #000 18%));
+            color: #1c1608;
+            border-color: transparent;
+            box-shadow: 0 4px 14px var(--gold-glow);
+        }
+
+        [data-theme="dark"] .focus-timer .icon-btn.primary:hover {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--accent-gold) 92%, #fff 8%), var(--accent-gold));
+            border-color: transparent;
+        }
+
         [data-theme="dark"] .preset-btn,
         [data-theme="dark"] .timer-field {
             background: rgba(255, 255, 255, 0.08);
@@ -2365,14 +2426,14 @@
         }
 
         [data-theme="dark"] #timerSettings .nf-select .nf-select-trigger {
-            background: #101217;
-            border-color: rgba(96, 165, 250, 0.5);
-            color: #f5f7fb;
+            background: var(--bg-elevated);
+            border-color: var(--surface-border-strong);
+            color: var(--text-primary);
         }
 
         [data-theme="dark"] #timerSettings .nf-select-menu {
-            background: #080c12;
-            border-color: rgba(96, 165, 250, 0.48);
+            background: var(--bg-secondary);
+            border-color: var(--surface-border-strong);
         }
 
         .pages-list {
@@ -4122,6 +4183,21 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         }
 
+        /* Built-in Dark preset: the floating editor toolbar is a clean glassy
+           surface so editor content never bleeds through the gaps between
+           control groups. Scoped to data-theme-key="dark" so the code-editor
+           dark themes above keep their own translucent treatment. */
+        body[data-theme-key="dark"] .toolbar-wrapper {
+            background: linear-gradient(180deg,
+                color-mix(in srgb, var(--bg-elevated) 94%, var(--accent) 6%),
+                var(--bg-secondary));
+            border: 1px solid var(--surface-stroke-soft);
+            border-bottom: 1px solid var(--surface-stroke-soft);
+            -webkit-backdrop-filter: blur(18px) saturate(140%);
+            backdrop-filter: blur(18px) saturate(140%);
+            box-shadow: var(--elevation-2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+
         /* When sidebar is collapsed, the icon-rail is still visible — offset past it. */
         .sidebar.collapsed ~ .main-content .toolbar-wrapper,
         body:has(.sidebar.collapsed) .toolbar-wrapper {
@@ -4316,6 +4392,15 @@
 
         .page-title-input::placeholder {
             color: var(--border);
+        }
+
+        /* Dark: page title carries a soft warm beige/gold tone (heading accent). */
+        body[data-theme-key="dark"] .page-title-input {
+            color: color-mix(in srgb, var(--accent-gold) 52%, var(--text-primary));
+        }
+
+        body[data-theme-key="dark"] .page-title-input::placeholder {
+            color: var(--text-disabled);
         }
 
         /* Media container styles */
@@ -6075,6 +6160,13 @@
             min-width: 0;
             position: relative;
             padding-bottom: 52px; /* leave room for fixed bottom storage bar */
+        }
+
+        /* Dark: editor is the focal lifted surface — subtle inner gradient
+           (#111827 → #0d1421 via tokens) and a soft top edge highlight. */
+        body[data-theme-key="dark"] .main-content {
+            background: linear-gradient(165deg, var(--editor-bg) 0%, var(--code-bg) 100%);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
         }
 
         .toolbar {
@@ -9029,21 +9121,48 @@
             -webkit-backdrop-filter: blur(20px) saturate(180%);
             backdrop-filter: blur(20px) saturate(180%);
             color: #fff;
-            padding: 14px 28px;
+            padding: 12px 14px 12px 18px;
             border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
             display: none;
+            align-items: center;
+            gap: 12px;
+            max-width: min(520px, calc(100vw - 24px));
+            transition: opacity 0.18s ease, transform 0.18s ease;
             /* Sit above the normal modal band (max ~14000) so toast feedback
                stays visible while a modal is open, but below the full-screen
                takeover overlays (AI disclosure / startup-intro / customization
                bar at 99999–100000+), where a covered toast is acceptable. */
-            z-index: 14600;
+            z-index: var(--z-toast, 14600);
             animation: slideUp 0.3s ease;
         }
 
         .toast.show {
-            display: block;
+            display: flex;
+        }
+
+        #toastMessage {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .toast-dismiss {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 28px;
+            height: 28px;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            color: inherit;
+            cursor: pointer;
+        }
+
+        .toast-dismiss:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .mini-celebration-burst {
@@ -9823,6 +9942,27 @@
             border: 0;
         }
 
+        .skip-link {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: var(--z-takeover, 100000);
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            font-weight: 700;
+            text-decoration: none;
+            transform: translateY(-140%);
+            transition: transform 0.16s ease;
+        }
+
+        .skip-link:focus {
+            transform: translateY(0);
+            outline: 3px solid var(--accent);
+            outline-offset: 2px;
+        }
+
         /* -- Today Stats Grid (analytics) -- */
         #view-today .stats-grid {
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -9949,8 +10089,9 @@
         }
 
         [data-theme="dark"] .view-tab.active {
-            background: linear-gradient(165deg, rgba(var(--accent-rgb), 0.14), rgba(var(--accent-rgb), 0.07));
-            box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22), 0 3px 8px rgba(0, 0, 0, 0.18);
+            background: linear-gradient(165deg, rgba(var(--accent-rgb), 0.22), rgba(var(--accent-rgb), 0.1));
+            color: var(--text-primary);
+            box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.34), 0 4px 14px rgba(var(--accent-rgb), 0.16);
         }
 
         [data-theme="dark"] .view-tab:hover:not(.active) {
@@ -18570,20 +18711,36 @@ body[data-theme-key="dark"] .sidebar .focus-timer.neumo-card:hover {
     backdrop-filter: none !important;
 }
 
-body[data-theme-key="dark"] .page-item:hover,
-body[data-theme-key="dark"] .page-item.active,
-body[data-theme-key="dark"] .page-item.active:hover,
+/* Sidebar rows keep a quiet resting state; hover gets a faint lift instead of
+   collapsing back into the sidebar surface (so rows stay legible/interactive). */
 body[data-theme-key="dark"] .sidebar-shortcut-btn:hover,
 body[data-theme-key="dark"] .sidebar .new-page-btn:hover {
-    background: var(--sidebar-bg, rgba(19, 22, 27, 0.96)) !important;
-    border-color: transparent !important;
+    background: var(--surface-bg-hover) !important;
+    border-color: var(--surface-border) !important;
 }
 
-body[data-theme-key="dark"] .pages-list .page-item.active,
-body[data-theme-key="dark"] .pages-list .page-item.active:hover {
-    background: var(--sidebar-bg, rgba(19, 22, 27, 0.96)) !important;
+body[data-theme-key="dark"] .page-item:hover:not(.active) {
+    background: var(--surface-bg-hover) !important;
     border-color: transparent !important;
     color: var(--text-primary) !important;
+}
+
+/* Selected page: soft purple/indigo active surface + small warm gold marker. */
+body[data-theme-key="dark"] .pages-list .page-item.active,
+body[data-theme-key="dark"] .pages-list .page-item.active:hover {
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--accent) 20%, transparent),
+        color-mix(in srgb, var(--accent) 11%, transparent)
+    ) !important;
+    border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent) !important;
+    color: var(--text-primary) !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+body[data-theme-key="dark"] .pages-list .page-item.active::before {
+    background: var(--accent-gold) !important;
+    box-shadow: 0 0 10px var(--gold-glow);
 }
 
 body[data-theme-key="dark"] .pages-list .page-item.active .page-title-text,
@@ -20895,13 +21052,6 @@ body[data-theme-key="chromeos"] .pages-list .page-item.active:hover {
    Atelier visual refinement pass (system + restraint layer)
    ========================================================== */
 :root {
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 20px;
-    --space-6: 24px;
-    --space-7: 32px;
     --surface-stroke-soft: color-mix(in srgb, var(--surface-border) 58%, transparent);
     --surface-stroke-quiet: color-mix(in srgb, var(--surface-border) 36%, transparent);
     --elevation-1: 0 8px 20px color-mix(in srgb, #000 8%, transparent);
@@ -33537,6 +33687,11 @@ body.canvas-page-active .canvas-toolbar {
     border-radius: 8px;
     background: var(--surface-bg, var(--bg-secondary));
     overflow: hidden;
+    /* overflow:hidden gives flex items an automatic min-height of 0 (CSS flexbox
+       spec), so inside .new-page-setup-column's flex column this element got
+       crushed to fit the available space instead of letting the column scroll —
+       clipping the context fields and the Temporary page toggle below them. */
+    flex-shrink: 0;
 }
 
 .new-page-advanced-disclosure > summary {
@@ -33993,4 +34148,48 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
 /* AP Study — computed exam-readiness suggestion */
 .ap-study-readiness-suggest { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .ap-study-readiness-suggest-val { font-size: 0.85rem; color: var(--text-secondary, #666); }
+
+/* Sidebar "New Page" row — adds a quick-create button beside the template-picker
+   button. Overrides .sidebar .new-page-btn's width:100% so the two buttons can
+   share the row; relies on source order (this block loads after that rule) since
+   both selectors have equal specificity. */
+.sidebar-new-page-row {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.sidebar-new-page-row .new-page-btn {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+}
+
+.quick-new-page-btn {
+    flex: 0 0 auto;
+    width: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--button-bg, var(--surface-bg));
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: 1px dashed var(--button-border, var(--surface-border-strong));
+    color: var(--button-text, var(--text-secondary));
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.quick-new-page-btn:hover {
+    border-color: var(--button-border, var(--surface-border-strong));
+    color: var(--button-text, var(--text-primary));
+    background: var(--button-bg-hover, var(--surface-bg-hover));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar.collapsed .quick-new-page-btn {
+    display: none;
+}
 .ap-study-readiness-suggest-val strong { color: var(--accent, #6fa7ff); }

@@ -334,6 +334,14 @@ test('generation can be cancelled mid-flight; nothing is saved and the source is
 
 test('GUI-audit regressions stay fixed: heading toggle, valid list markup, dark-theme persistence', async ({ page }) => {
   await openApp(page);
+  // This exercises the classic contenteditable editor; opt out of the modern
+  // (v2) editor which is now the default.
+  await page.evaluate(() => {
+    if (typeof window.setWorkspacePreference === 'function') {
+      window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+      window.applyWorkspacePreferences({});
+    }
+  });
   const editor = await page.evaluate(async () => {
     window.setActiveView('notes');
     await new Promise(r => setTimeout(r, 200));
@@ -341,13 +349,14 @@ test('GUI-audit regressions stay fixed: heading toggle, valid list markup, dark-
     const sel = window.getSelection();
     const mk = (node) => { sel.removeAllRanges(); const r = document.createRange(); r.selectNodeContents(node); sel.addRange(r); };
     ed.innerHTML = '<p>toggle test</p>'; ed.focus();
-    const h1btn = Array.from(document.querySelectorAll('button')).find(b => (b.title || '') === 'Heading 1');
-    mk(ed.firstChild); h1btn.click();
+    // Heading H1/H2/H3 moved from standalone buttons into the styles dropdown;
+    // drive the same classic-editor command the toolbar invokes.
+    mk(ed.firstChild); window.formatBlock('h1');
     const afterH1 = ed.innerHTML;
-    mk(ed.firstChild); h1btn.click();
+    mk(ed.firstChild); window.formatBlock('h1');
     const afterToggle = ed.innerHTML;
     ed.innerHTML = '<p>item one</p>'; mk(ed.firstChild);
-    Array.from(document.querySelectorAll('button')).find(b => (b.title || '') === 'Bulleted list').click();
+    window.formatText('insertUnorderedList');
     const afterUl = ed.innerHTML;
     return { afterH1, afterToggle, afterUl };
   });

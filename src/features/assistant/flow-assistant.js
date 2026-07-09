@@ -200,22 +200,49 @@
         return messages;
     }
 
+    function rangeInsideElement(range, element) {
+        if (!range || !element) return false;
+        let node = range.commonAncestorContainer;
+        if (node && node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+        return !!(node && (node === element || element.contains(node)));
+    }
+
     function getEditorSelection() {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
+            const text = String(sel.toString() || '').trim();
+            if (!text) return '';
             const range = sel.getRangeAt(0);
+            const v2Host = document.getElementById('editorV2Host');
+            if (v2Host && rangeInsideElement(range, v2Host)) return text;
             const editor = document.getElementById('editor');
             if (!editor) return '';
-            let node = range.commonAncestorContainer;
-            while (node && node !== editor) node = node.parentNode;
-            if (node !== editor) return '';
-            return String(sel.toString() || '').trim();
+            if (!rangeInsideElement(range, editor)) return '';
+            return text;
         } catch (e) { return ''; }
+    }
+
+    function syncActiveV2NoteForContext() {
+        try {
+            const v2 = window.SutraNotesEditorV2;
+            if (!v2 || typeof v2.isMounted !== 'function' || !v2.isMounted()) return;
+            const host = document.getElementById('editorV2Host');
+            const b = bridge();
+            const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
+            if (!host || !pageId || host.dataset.pageId !== String(pageId)) return;
+            if (typeof v2.flushToMirror === 'function') v2.flushToMirror();
+            const mirror = document.getElementById('editor');
+            if (!mirror) return;
+            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(window.pages) ? window.pages : []);
+            const page = pages.find(p => p && p.id === pageId);
+            if (page) page.content = mirror.innerHTML || '';
+        } catch (e) { /* best effort only */ }
     }
 
     function getActiveNoteSummary() {
         try {
+            syncActiveV2NoteForContext();
             const b = bridge();
             const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
             const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(window.pages) ? window.pages : []);
@@ -761,6 +788,7 @@
         { type: 'create_study_plan', desc: 'A linked study plan: a plan note + timeline study blocks (+ optional review deck)', risk: 'high', fields: { title: 'string', note: 'markdown?', blocks: '[{name,date,start,end}]', deck: '{name,cards}?' } },
         { type: 'create_exam_plan', desc: 'A linked exam plan: plan note + study blocks + review deck, linked to an AP subject if given', risk: 'high', fields: { title: 'string', examDate: 'YYYY-MM-DD?', apSubjectId: 'string?', note: 'markdown?', blocks: '[{name,date,start,end}]', deck: '{name,cards}?' } },
         { type: 'create_assignment_plan', desc: 'A linked assignment plan: homework item + task breakdown + timeline blocks + outline note', risk: 'high', fields: { title: 'string', courseName: 'string?', dueDate: 'YYYY-MM-DD?', steps: 'string[]', blocks: '[{name,date,start,end}]?', note: 'markdown?' } },
+        { type: 'create_action_plan', desc: 'A generic ORDERED multi-step plan (NOT tied to a homework item): numbered sequential planner tasks ("1. …", "2. …"), each step optionally dated, plus a checklist note. Use for explicit step sequencing that is not an assignment (projects, routines, applications).', risk: 'medium', fields: { title: 'string', steps: '[{title, dueDate?}] or string[]', note: 'markdown?' } },
         { type: 'plan_week', desc: 'Propose timeline blocks across the coming week from open work', risk: 'high', fields: { blocks: '[{name,date,start,end,category}]' } },
         { type: 'plan_day', desc: 'Propose timeline blocks for a single day', risk: 'high', fields: { date: 'YYYY-MM-DD?', blocks: '[{name,start,end,category}]' } },
         { type: 'repair_plan', desc: 'READ-ONLY: deterministically check the next 7 days for overlaps, missing buffers, overloaded days, unscheduled priorities, AP exams without study, and review backlog. Computed locally — never invent the issues yourself.', risk: 'read_only', fields: {} },
@@ -1500,6 +1528,9 @@
         if (a.type === 'create_assignment_plan' && !Array.isArray(a.steps)) {
             a.steps = Array.isArray(a.subtasks) ? a.subtasks : (Array.isArray(a.tasks) ? a.tasks.map(t => (typeof t === 'string' ? t : (t && t.title) || '')) : []);
         }
+        if (a.type === 'create_action_plan' && !Array.isArray(a.steps)) {
+            a.steps = Array.isArray(a.subtasks) ? a.subtasks : (Array.isArray(a.tasks) ? a.tasks : []);
+        }
         if (a.type === 'start_focus_session') {
             if (a.minutes == null && a.duration != null) a.minutes = a.duration;
         }
@@ -1590,6 +1621,11 @@
             case 'create_assignment_plan':
                 if (!action.title) return { ok: false, error: 'Missing title' };
                 if (!Array.isArray(action.steps) || action.steps.length === 0) return { ok: false, error: 'No steps' };
+                break;
+            case 'create_action_plan':
+                if (!action.title) return { ok: false, error: 'Missing plan title' };
+                if (!Array.isArray(action.steps) || action.steps.length === 0) return { ok: false, error: 'No steps' };
+                if (action.steps.length > 20) return { ok: false, error: 'Too many steps — cap the plan at 20' };
                 break;
             case 'plan_week':
             case 'plan_day':
@@ -2750,6 +2786,7 @@
             case 'create_study_plan': return applyCreateStudyPlan(action);
             case 'create_exam_plan': return applyCreateExamPlan(action);
             case 'create_assignment_plan': return applyCreateAssignmentPlan(action);
+            case 'create_action_plan': return applyCreateActionPlan(action);
             case 'plan_week':
             case 'plan_day':
             case 'triage_deadlines': return applyBlockBatch(action);
@@ -2825,6 +2862,7 @@
             case 'create_study_plan': return `Study plan: "${action.title}" (${(action.blocks || []).length} block(s))`;
             case 'create_exam_plan': return `Exam plan: "${action.title}"${action.examDate ? ` (exam ${action.examDate})` : ''}`;
             case 'create_assignment_plan': return `Assignment plan: "${action.title}" (${(action.steps || []).length} step(s))`;
+            case 'create_action_plan': return `Ordered plan: "${action.title}" (${(action.steps || []).length} sequential step(s))`;
             case 'plan_week': return `Plan week: ${(action.blocks || []).length} block(s)`;
             case 'plan_day': return `Plan day${action.date ? ` ${action.date}` : ''}: ${(action.blocks || []).length} block(s)`;
             case 'triage_deadlines': return `Triage deadlines: ${(action.blocks || []).length} block(s), ${(action.tasks || []).length} task(s)`;
@@ -4187,6 +4225,35 @@
         refreshAll();
         const extra = milestoneCount ? `, ${milestoneCount} milestone${milestoneCount === 1 ? '' : 's'}` : '';
         return { ok: created.length > 0, message: `Assignment plan created (${created.length} object${created.length === 1 ? '' : 's'}${extra}).`, payload: { createdObjectIds: created, pageId } };
+    }
+
+    function applyCreateActionPlan(action) {
+        const created = [];
+        const steps = (Array.isArray(action.steps) ? action.steps : [])
+            .map(s => (typeof s === 'string' ? { title: s, dueDate: '' } : { title: (s && s.title) || '', dueDate: (s && s.dueDate) || '' }))
+            .filter(s => s.title)
+            .slice(0, 20);
+        if (!steps.length) return { ok: false, error: 'No usable steps' };
+        // Checklist note first so tasks can link back to it.
+        const noteBody = action.note
+            || `# ${action.title}\n\n## Steps (in order)\n` + steps.map((s, i) => `- [ ] ${i + 1}. ${s.title}${s.dueDate ? ` (by ${s.dueDate})` : ''}`).join('\n');
+        let pageId = '';
+        const pageRes = applyCreatePage({ type: 'create_page', title: `${action.title} — plan`, body: noteBody });
+        if (pageRes.ok && pageRes.payload) { pageId = pageRes.payload.pageId; mergeCreated(created, pageRes); }
+        // One planner task per step; the numbered prefix carries the ordering
+        // everywhere tasks surface (Today, All Due, planner) without new schema.
+        const taskIds = [];
+        steps.forEach((s, i) => {
+            const r = applyCreateTask({ type: 'create_task', title: `${i + 1}. ${s.title}`, dueDate: s.dueDate || '', priority: 'medium', linkPageId: pageId });
+            if (r.ok && r.payload) { taskIds.push(r.payload.taskId); mergeCreated(created, r); }
+        });
+        if (pageId) addPageLinks(pageId, { taskIds, homeworkIds: [], blockIds: [] });
+        refreshAll();
+        return {
+            ok: created.length > 0,
+            message: `Ordered plan created: ${taskIds.length} sequential step${taskIds.length === 1 ? '' : 's'}${pageId ? ' + checklist note' : ''}.`,
+            payload: { createdObjectIds: created, pageId }
+        };
     }
 
     function applyBlockBatch(action) {
