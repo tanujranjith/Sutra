@@ -55,6 +55,10 @@
     <script src="src/core/migrations.js?v=20260614-migrations1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
+    <!-- Pure student date/time vocabulary shared by Quick Capture, Homework,
+         portal paste import, Timeline scheduling, and Today. Kept before the
+         feature scripts so every entry point resolves phrases consistently. -->
+    <script src="src/core/student-date-parser.js?v=20260709-studentdate1"></script>
     <script src="src/components/icons/icon-paths.js?v=20260703-voice1" defer></script>
     <script src="src/components/icons/index.js?v=20260703-voice1" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
@@ -353,7 +357,7 @@
                                                     <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
                                                     <button id="tabCourses" class="view-tab" data-view="courses" title="Courses — your class cockpit"><i class="fas fa-book" aria-hidden="true"></i> Courses</button>
                                                     <button id="tabAllDue" class="view-tab" data-view="alldue" title="All Due — everything due across your classes"><i class="fas fa-bell" aria-hidden="true"></i> All Due</button>
-                                                    <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Testing Hub — exams, review, cram"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Testing Hub</button>
+                                                    <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
                                                     <!-- Review and Cram Hub consolidated into Testing Hub. Buttons hidden but kept for backward-compat click handlers -->
                                                     <button id="tabReview" class="view-tab" data-view="review" hidden aria-hidden="true" style="display:none;">Review</button>
                                                     <button id="tabCramHub" class="view-tab" data-view="cramhub" hidden aria-hidden="true" style="display:none;" title="Cram Hub"><i class="fas fa-bolt" aria-hidden="true"></i> Cram Hub</button>
@@ -378,7 +382,7 @@
                                                             <button class="view-tab view-more-item" data-view="homework" role="menuitem">Homework</button>
                                                             <button class="view-tab view-more-item" data-view="courses" role="menuitem">Courses</button>
                                                             <button class="view-tab view-more-item" data-view="alldue" role="menuitem">All Due</button>
-                                                            <button class="view-tab view-more-item" data-view="apstudy" role="menuitem">Testing Hub</button>
+                                                            <button class="view-tab view-more-item" data-view="apstudy" role="menuitem">Review &amp; Tests</button>
                                                             <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
                                                             <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;">Review</button>
                                                             <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
@@ -466,7 +470,8 @@
                     </div>
                     <div class="today-header-actions">
                         <button id="topAddTaskBtn" class="neumo-btn today-hero-primary" title="Add task"><i class="fas fa-plus"></i> Add Task</button>
-                        <button class="neumo-btn today-hero-ghost" onclick="openQuickCaptureModal('')" title="Quick Capture (Ctrl/⌘+K)"><i class="fas fa-bolt"></i> Capture</button>
+                        <button id="todayQuickCaptureBtn" class="neumo-btn today-hero-ghost" type="button" title="Quick Capture (Ctrl/⌘+K)"><i class="fas fa-bolt"></i> Capture</button>
+                        <button id="todayFocusBtn" class="neumo-btn today-hero-ghost" type="button" title="Start a 25-minute focus session"><i class="fas fa-play"></i> Focus</button>
                         <button id="planMyDayBtn" class="neumo-btn today-hero-ghost" type="button" title="Shape My Day — sequence today's work against your calendar"><i class="fas fa-calendar-check"></i> Shape My Day</button>
                         <div class="today-hero-more-wrap">
                             <button class="neumo-btn today-hero-ghost today-hero-more" id="todayHeaderMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
@@ -575,6 +580,33 @@
                             </div>
                             <!-- Review (populated by renderTodayReviewCard) -->
                             <section class="today-attention-card glass-card today-review-card" id="todayReviewCard" aria-label="Review due today"></section>
+                            <!-- Upcoming tests / quizzes — one clear study entry point -->
+                            <section class="today-attention-card glass-card" id="tccUpcomingTests" aria-label="Upcoming tests and quizzes">
+                                <div class="tac-header">
+                                    <span class="tac-title">Tests &amp; quizzes</span>
+                                    <span class="neumo-chip tac-badge" id="tccTestsBadge">0</span>
+                                </div>
+                                <div class="tac-items" id="tccTestsList"><div class="tac-empty">No tests or quizzes coming up</div></div>
+                                <button class="tac-footer-link" id="tccTestsOpenBtn" type="button">Open study plan →</button>
+                            </section>
+                            <!-- Evening planning reflects local Timeline availability only. -->
+                            <section class="today-attention-card glass-card" id="tccTonightPlan" aria-label="Tonight plan">
+                                <div class="tac-header">
+                                    <span class="tac-title">Tonight plan</span>
+                                    <span class="neumo-chip tac-badge" id="tccTonightBadge">0 min</span>
+                                </div>
+                                <div class="tac-items" id="tccTonightList"><div class="tac-empty">Check your evening time to plan a study block.</div></div>
+                                <button class="tac-footer-link" id="tccTonightTimelineBtn" type="button">Schedule study time →</button>
+                            </section>
+                            <!-- A small, local-first save signal; it never uploads data. -->
+                            <section class="today-attention-card glass-card" id="tccBackupHealth" aria-label="Save and backup health">
+                                <div class="tac-header">
+                                    <span class="tac-title">Save &amp; backup</span>
+                                    <span class="neumo-chip tac-badge" id="tccBackupBadge">Checking</span>
+                                </div>
+                                <div class="tac-items" id="tccBackupList"><div class="tac-empty">Checking local save health…</div></div>
+                                <button class="tac-footer-link" id="tccBackupOpenBtn" type="button">Open Data Health →</button>
+                            </section>
                         </div>
                     </section>
 
@@ -747,7 +779,7 @@
                             </div>
                             <div class="today-student-hub-actions">
                                 <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> Homework</button>
-                                <button class="neumo-btn" type="button" data-hub-view="apstudy"><i class="fas fa-graduation-cap"></i> Testing Hub</button>
+                                <button class="neumo-btn" type="button" data-hub-view="apstudy"><i class="fas fa-graduation-cap"></i> Review &amp; Tests</button>
                                 <button class="neumo-btn" type="button" data-hub-view="timeline"><i class="fas fa-calendar-days"></i> Calendar</button>
                                 <button class="neumo-btn" type="button" data-hub-view="notes"><i class="fas fa-note-sticky"></i> Notes</button>
                                 <button class="neumo-btn" type="button" data-hub-view="collegeapp"><i class="fas fa-university"></i> College</button>
@@ -3050,7 +3082,7 @@
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-puzzle-piece"></i></span>
                             <span class="cc-sidebar-item-text">
                                 <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Customization</span>
-                                <span class="cc-sidebar-item-copy">Custom CSS, plugins, recovery</span>
+                                <span class="cc-sidebar-item-copy">Custom CSS &amp; Safe Mode</span>
                             </span>
                         </button>
                     </div>
@@ -4417,13 +4449,13 @@
                                 <select class="modal-input cc-select" id="notesExportFormatSelect" data-pref-path="data.defaultExportFormat">
                                     <option value="atelier" selected>Sutra Workspace (.sutra)</option>
                                     <option value="json">Workspace JSON (.json)</option>
-                                    <option value="docx">Word (.doc)</option>
+                                    <option value="docx">Word (.docx)</option>
                                     <option value="pdf">PDF (.pdf)</option>
                                     <option value="html">HTML</option>
                                     <option value="md">Markdown</option>
                                     <option value="txt">TXT</option>
                                     <option value="rtf">RTF</option>
-                                    <option value="doc">Word (.doc)</option>
+                                    <option value="doc">Word 97-2003 (.doc)</option>
                                 </select>
                             </div>
                         </div>
@@ -4441,29 +4473,31 @@
                 <section class="cc-section" data-settings-section="advanced">
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
-                            <h2 class="cc-section-title">Advanced</h2>
-                            <p class="cc-section-copy">Power controls for feature exposure, shortcuts, and maintenance.</p>
+                            <h2 class="cc-section-title">Packs &amp; advanced</h2>
+                            <p class="cc-section-copy">Keep Sutra student-focused by default; turn on a pack only when it helps.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small cc-btn-danger" data-settings-reset-section="all">Reset all</button>
                     </header>
                     <div class="cc-group cc-group-stacked">
-                        <div class="cc-group-head"><span class="cc-group-title">Feature tabs <span class="cc-badge" style="font-size:0.62rem;opacity:0.7;">Labs</span></span></div>
-                        <p class="cc-foot-help">Hide or show top-level views. New workspaces start in the recommended student setup; College, Life and Business are optional modules you can enable here. The current view will not be hidden, and hiding a tab never deletes its data.</p>
+                        <div class="cc-group-head"><span class="cc-group-title">Feature packs</span></div>
+                        <p class="cc-foot-help">Your Student Setup keeps Today, Capture, Homework, Notes, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
                         <div class="cc-feature-grid" id="featureToggleListSettings">
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="today"><span>Today</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="timeline"><span>Timeline</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="notes"><span>Notes</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="collegeapp"><span>College</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="life"><span>Life</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="business"><span>Business</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>Homework</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="apstudy"><span>Testing Hub</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="apstudy"><span>Academic Pack: Review &amp; Tests</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="collegeapp"><span>College Pack</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="life"><span>Life Pack</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="business"><span>Work Pack</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="assistantview"><span>Assistant Pack</span></label>
                             <!-- Cram Hub is now an internal section of Testing Hub. Toggle hidden from UI
-                                 but kept in DOM so old loadFeatureToggles() code paths still work. -->
+                                  but kept in DOM so old loadFeatureToggles() code paths still work. -->
                             <label class="cc-feature-toggle" hidden aria-hidden="true" style="display:none;"><input type="checkbox" class="feature-toggle-input" data-feature-view="cramhub"><span>Cram Hub</span></label>
                         </div>
+                        <p class="cc-foot-help">Academic Pack extras (Course Hub and All Due) live in Layout. Customization Pack (themes, CSS, and optional local plugins) lives in Customization.</p>
                         <div class="cc-stacked-actions" style="margin-top:10px;">
-                            <button class="cc-btn cc-btn-ghost" id="recommendedStudentSetupBtn" type="button" onclick="if(window.applyRecommendedStudentSetup)window.applyRecommendedStudentSetup()">Use recommended student setup</button>
+                            <button class="cc-btn cc-btn-ghost" id="recommendedStudentSetupBtn" type="button">Use recommended student setup</button>
                         </div>
                     </div>
                     <div class="cc-group cc-group-stacked">
@@ -4508,20 +4542,35 @@
                             <button class="cc-btn cc-btn-ghost" id="resetOnboardingBtn" type="button" onclick="confirmResetOnboardingFromSettings()" title="Clear onboarding state for testing. Does not delete notes, tasks, homework, or any workspace data.">Reset onboarding status (testing)</button>
                         </div>
                     </div>
+                    <div class="cc-group cc-group-stacked" id="pluginsExperimentalCard">
+                        <div class="cc-group-head"><span class="cc-group-title">Developer / Experimental</span></div>
+                        <div class="cc-row">
+                            <div class="cc-row-text">
+                                <span class="cc-row-title">Local Plugins (Experimental)</span>
+                                <span class="cc-row-copy">Install local <code>.sutra-plugin</code> bundles that extend Sutra with commands, templates, and optional sandboxed code. Off by default — for developers and advanced testing only. Not a normal feature.</span>
+                            </div>
+                            <label class="cc-switch"><input type="checkbox" id="pluginsExperimentalToggle"><span class="cc-switch-track"></span></label>
+                        </div>
+                        <p class="cc-foot-help">Plugins are <strong>local bundles only</strong> (no marketplace). Runtime code runs in a locked-down sandbox behind an explicit permission allowlist, installs <strong>disabled</strong>, and must be reviewed before it runs. Restored-from-backup plugins come back disabled and require re-review. <strong>Safe Mode</strong> skips all plugins.</p>
+                        <div class="mods-experimental-panel" id="pluginsExperimentalGroup" hidden>
+                            <div class="mods-tabpanel" data-mods-panel="plugins" id="modsPluginsPanel"></div>
+                            <input type="file" id="modsPluginImportInput" hidden>
+                        </div>
+                    </div>
                 </section>
 
                 <section class="cc-section" data-settings-section="mods">
                     <header class="cc-section-head">
                         <h2 class="cc-section-title">Customization</h2>
-                        <p class="cc-section-subtitle">Custom CSS, local plugins, and recovery tools for power users.</p>
+                        <p class="cc-section-subtitle">Style Sutra with your own CSS. Snippets only change how the app looks — they never run code. Safe Mode recovers you without deleting anything.</p>
                     </header>
                     <div class="mods-warning" role="note">
-                        <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
-                        <span>Advanced customization can change how Sutra looks and behaves. Install plugins only from sources you trust. Safe Mode lets you recover without deleting your workspace.</span>
+                        <i class="fas fa-circle-info" aria-hidden="true"></i>
+                        <span>CSS Overrides restyle Sutra using plain CSS. They cannot run code, fetch anything, or read your data. If a snippet ever hides part of the interface, <strong>Safe Mode</strong> restores it without deleting your work.</span>
                     </div>
                     <div class="cc-group">
                         <div class="cc-row">
-                            <div class="cc-row-text"><span class="cc-row-title">Enable mods</span><span class="cc-row-copy">Master switch for custom CSS and plugins.</span></div>
+                            <div class="cc-row-text"><span class="cc-row-title">Enable customization</span><span class="cc-row-copy">Master switch for your custom CSS.</span></div>
                             <label class="cc-switch"><input type="checkbox" id="modsEnabledToggle"><span class="cc-switch-track"></span></label>
                         </div>
                         <div class="cc-row">
@@ -4529,16 +4578,13 @@
                             <label class="cc-switch"><input type="checkbox" id="customCssEnabledToggle"><span class="cc-switch-track"></span></label>
                         </div>
                     </div>
-                    <div class="mods-tabs" role="tablist" aria-label="Mods sections">
+                    <div class="mods-tabs" role="tablist" aria-label="Customization sections">
                         <button type="button" class="mods-tab is-active" role="tab" data-mods-tab="css">CSS Overrides</button>
-                        <button type="button" class="mods-tab" role="tab" data-mods-tab="plugins">Plugins</button>
-                        <button type="button" class="mods-tab" role="tab" data-mods-tab="recovery">Recovery &amp; Developer Tools</button>
+                        <button type="button" class="mods-tab" role="tab" data-mods-tab="recovery">Safe Mode &amp; Recovery</button>
                     </div>
                     <div class="mods-tabpanel" data-mods-panel="css" id="modsCssPanel"></div>
-                    <div class="mods-tabpanel" data-mods-panel="plugins" id="modsPluginsPanel" hidden></div>
                     <div class="mods-tabpanel" data-mods-panel="recovery" id="modsRecoveryPanel" hidden></div>
                     <input type="file" id="modsCssImportInput" accept=".css,application/json,.json" hidden>
-                    <input type="file" id="modsPluginImportInput" hidden>
                 </section>
             </main>
 
@@ -5115,10 +5161,10 @@
     </div>
 
     <div id="quickCaptureModal" class="quick-capture-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="quickCaptureTitle">
-        <div class="quick-capture-backdrop" onclick="closeQuickCaptureModal()"></div>
+        <div class="quick-capture-backdrop" data-quick-capture-close></div>
         <div class="quick-capture-card glass-card">
             <div class="eyebrow" id="quickCaptureTitle">Quick Capture</div>
-            <input id="quickCaptureInput" class="modal-input" type="text" placeholder='Try "Chem homework due Friday hard" or "got 87/100 on bio test"' autocomplete="off" />
+            <input id="quickCaptureInput" class="modal-input" type="text" placeholder='Try “chem lab due Friday”, “APUSH test next Tuesday”, or “review bio chapter 12”' autocomplete="off" />
             <p class="quick-capture-preview" id="quickCapturePreview">Start typing to capture…</p>
             <div class="quick-capture-grid">
                 <label class="quick-capture-field">
@@ -5126,7 +5172,9 @@
                     <select id="quickCaptureType" class="modal-input">
                         <option value="task">Task</option>
                         <option value="homework">Homework</option>
+                        <option value="test">Test / quiz</option>
                         <option value="note">Note</option>
+                        <option value="review">Review item / deck</option>
                         <option value="block">Calendar block</option>
                         <option value="apsession">AP session idea (task)</option>
                         <option value="college">College task</option>
@@ -5142,6 +5190,35 @@
                     <input id="quickCaptureTime" type="time" class="modal-input" />
                 </label>
             </div>
+            <details class="quick-capture-details">
+                <summary>Check details</summary>
+                <div class="quick-capture-grid">
+                    <label class="quick-capture-field">
+                        <span>Priority</span>
+                        <select id="quickCapturePriority" class="modal-input">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </label>
+                    <label class="quick-capture-field">
+                        <span>Difficulty</span>
+                        <select id="quickCaptureDifficulty" class="modal-input">
+                            <option value="easy">Easy</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </label>
+                    <label class="quick-capture-field">
+                        <span>Study time (min)</span>
+                        <input id="quickCaptureEstimate" type="number" min="5" max="720" step="5" class="modal-input" inputmode="numeric" placeholder="Optional" />
+                    </label>
+                </div>
+                <label class="quick-capture-field">
+                    <span>Notes</span>
+                    <input id="quickCaptureNotes" type="text" maxlength="500" class="modal-input" placeholder="Optional context, instructions, or topic" autocomplete="off" />
+                </label>
+            </details>
             <label class="quick-capture-field quick-capture-ap-field" id="quickCaptureApSubjectField" hidden>
                 <span>AP subject</span>
                 <select id="quickCaptureApSubject" class="modal-input">
@@ -5162,10 +5239,10 @@
                 <span id="quickCaptureBlockTimeLabel">Block focus time to work on this</span>
             </label>
             <div class="quick-capture-actions">
-                <button type="button" class="neumo-btn" data-modal-close onclick="closeQuickCaptureModal()">Cancel</button>
-                <button type="button" class="neumo-btn active" onclick="submitQuickCapture()">Capture</button>
+                <button type="button" class="neumo-btn" id="quickCaptureCancelBtn" data-modal-close>Cancel</button>
+                <button type="button" class="neumo-btn active" id="quickCaptureSubmitBtn">Capture</button>
             </div>
-            <p class="quick-capture-note">Parsing is lightweight — correct the type/date/time before capturing if needed.</p>
+            <p class="quick-capture-note">Examples: homework, tests, essays, review, notes, and study blocks. Sutra only saves after you tap Capture.</p>
         </div>
     </div>
 
@@ -5866,7 +5943,7 @@
         <pre class="sutra-save-failure-details" id="sutraSaveFailureDetails" hidden></pre>
     </section>
 
-    <!-- Sutra Cloud — optional, consent-first, encrypted cloud backup (powered by Supabase) -->
+    <!-- Sutra Cloud — optional, consent-first, provider-based encrypted backup -->
     <div class="modal" id="sutraCloudModal">
         <div class="modal-content sutra-cloud-modal" role="dialog" aria-modal="true" aria-labelledby="sutraCloudModalTitle" aria-describedby="sutraCloudStatus">
             <div class="modal-header">
@@ -5961,7 +6038,7 @@
                 <select class="modal-input" id="exportModalFormatSelect" aria-label="Select current note export format">
                     <option value="atelier" selected>Encrypted Sutra Workspace (.sutra)</option>
                     <option value="json">Workspace JSON - unencrypted (.json)</option>
-                    <option value="docx">Word (.doc)</option>
+                    <option value="docx">Word (.docx)</option>
                     <option value="pdf">PDF (.pdf)</option>
                     <option value="html">HTML (.html)</option>
                     <option value="md">Markdown (.md)</option>
@@ -7021,8 +7098,6 @@
                     <div class="chat-empty-folder-body">
                         <span class="chat-empty-icon">📁</span>
                         <p class="chat-empty-desc">Ask Sutra about your notes, plan your day, or anything else. Suggestions adapt to where you are in the workspace.</p>
-                        <hr class="chat-empty-divider">
-                        <p class="chat-empty-disclaimer">⚠️ AI Disclaimer: Sutra Assistant is an AI. It can make mistakes. Please verify important information and use your best judgment.</p>
                     </div>
                 </div>
             </div>
@@ -7186,9 +7261,11 @@
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
 <script src="src/core/app.js?v=20260709-quickpage"></script>
+    <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
+    <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
-    <script src="src/boot/sw-register.js?v=20260616-pwa1"></script>
+    <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
     <script src="src/features/study/ap-study.js?v=20260707-batch1"></script>
     <script src="src/features/study/review.js?v=20260528-flow-upgrade"></script>
     <script src="src/features/study/math-render.js?v=20260620-math1"></script>
@@ -8152,8 +8229,3 @@
 
 </body>
 </html>
-
-
-
-
-

@@ -19,6 +19,10 @@ async function openApp(page) {
   await page.waitForFunction(() =>
     window.SutraProductKnowledge && window.SutraAssistantMemory &&
     window.SutraLocalHelp && window.SutraCapabilityRegistry && window.flowAssistant);
+  // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
+  // defaults OFF), so the chat panel/launcher stays hidden until enabled. Turn it
+  // on here exactly like a user flipping the Settings ▸ Assistant toggle.
+  await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
 }
 
 test('the Intelligence Harness globals load with no provider configured', async ({ page }) => {

@@ -96,7 +96,11 @@ test('capability registry reports honest, conservative modality support', async 
       exe: probe('anthropic', 'claude-sonnet-4', { name: 's.exe', mimeType: '', sizeBytes: 10 }).plan,
       macroDoc: probe('anthropic', 'claude-sonnet-4', { name: 'm.docm', mimeType: '', sizeBytes: 10 }).plan,
       mimeSpoofedZip: probe('anthropic', 'claude-sonnet-4', { name: 'sneaky.zip', mimeType: 'application/pdf', sizeBytes: 10 }).plan,
-      tooBig: probe('groq', 'llama-3.3-70b-versatile', { name: 'big.png', mimeType: 'image/png', sizeBytes: 999999999 }).plan
+      tooBig: probe('groq', 'llama-3.3-70b-versatile', { name: 'big.png', mimeType: 'image/png', sizeBytes: 999999999 }).plan,
+      deepseek: reg.resolveModelCapabilities('deepseek', 'deepseek-chat'),
+      xai: reg.resolveModelCapabilities('xai', 'grok-4'),
+      perplexity: reg.resolveModelCapabilities('perplexity', 'sonar'),
+      unknownGptLike: reg.resolveModelCapabilities('unconfigured-provider', 'gpt-4o')
     };
   });
   expect(plans.pdfOnGroq).toBe('unsupported-model');
@@ -112,6 +116,13 @@ test('capability registry reports honest, conservative modality support', async 
   expect(plans.macroDoc).toBe('blocked-macro');
   expect(plans.mimeSpoofedZip).toBe('blocked-archive');
   expect(plans.tooBig).toBe('too-large');
+  // Explicit adapters retain the audited OpenAI-compatible payload behavior;
+  // unknown IDs must not inherit image support from a familiar model name.
+  expect(plans.deepseek.providerType).toBe('openai_compatible');
+  expect(plans.xai.providerType).toBe('openai_compatible');
+  expect(plans.perplexity.providerType).toBe('openai_compatible');
+  expect(plans.unknownGptLike.providerType).toBe('unknown');
+  expect(plans.unknownGptLike.nativeAttachmentSupport.images).toBe(false);
 });
 
 test('attachments never upload before send, stay visible when incompatible, and block the send', async ({ page }) => {

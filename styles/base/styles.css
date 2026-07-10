@@ -34193,3 +34193,53 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
     display: none;
 }
 .ap-study-readiness-suggest-val strong { color: var(--accent, #6fa7ff); }
+
+/* Service-worker update prompt. The worker never activates until the student
+   chooses this action, so an open local workspace is never replaced mid-edit. */
+.sutra-update-banner {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(520px, calc(100vw - 32px));
+    padding: 12px 14px;
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
+    border-radius: 12px;
+    background: var(--surface, #fff);
+    color: var(--text-primary, #1f2937);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+    font-size: 0.88rem;
+}
+.sutra-update-banner[hidden] { display: none; }
+.sutra-update-message { flex: 1 1 auto; min-width: 0; }
+.sutra-update-primary,
+.sutra-update-dismiss {
+    min-height: 36px;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font: inherit;
+}
+.sutra-update-primary {
+    border: 1px solid var(--accent, #6fa7ff);
+    background: var(--accent, #6fa7ff);
+    color: #fff;
+}
+.sutra-update-dismiss {
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.35));
+    background: transparent;
+    color: inherit;
+}
+@media (max-width: 640px) {
+    .sutra-update-banner {
+        right: 10px;
+        left: 10px;
+        bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+        max-width: none;
+        flex-wrap: wrap;
+    }
+    .sutra-update-message { flex-basis: 100%; }
+}

@@ -3045,8 +3045,16 @@ function populateProgressDashboard() {
                         ? window.SutraSafeStorage.getDegraded()
                         : null;
                 } catch (e) { degraded = null; }
-                degradedEl.textContent = degraded && (degraded.active || degraded.reason || degraded.message)
-                    ? (degraded.reason || degraded.message || 'Active')
+                // SafeStorage returns a map keyed by storage key, not a single
+                // `{ active, reason }` record. Render every active degraded key so
+                // Data Health never says “None” while writes are being buffered.
+                const entries = degraded && typeof degraded === 'object' ? Object.entries(degraded) : [];
+                const labels = entries.map(([key, record]) => {
+                    if (record && typeof record === 'object') return String(record.label || record.reason || record.message || key);
+                    return String(key);
+                }).filter(Boolean);
+                degradedEl.textContent = labels.length
+                    ? `${labels.length} active: ${labels.slice(0, 2).join(', ')}${labels.length > 2 ? '…' : ''}`
                     : 'None';
             }
             if (driveEl) {
@@ -3475,7 +3483,9 @@ function populateProgressDashboard() {
                     defaultView: 'cards'
                 },
                 assistant: {
-                    enabled: true,
+                    // Assistant Pack is opt-in for a fresh student workspace.
+                    // Existing workspaces retain their explicitly saved setting.
+                    enabled: false,
                     panelDefault: 'closed',
                     selectedTextActions: true,
                     autoSuggestions: true,
@@ -3740,7 +3750,7 @@ function populateProgressDashboard() {
                     defaultView: normalizeSettingChoice(businessSource.defaultView, ['cards', 'list', 'compact'], defaults.business.defaultView)
                 },
                 assistant: {
-                    enabled: assistantSource.enabled !== false,
+                    enabled: assistantSource.enabled === true,
                     panelDefault: normalizeSettingChoice(assistantSource.panelDefault, ['closed', 'open'], defaults.assistant.panelDefault),
                     selectedTextActions: assistantSource.selectedTextActions !== false,
                     autoSuggestions: assistantSource.autoSuggestions !== false,
@@ -6418,7 +6428,10 @@ function populateProgressDashboard() {
                         modsEnabled: true,
                         customCssEnabled: true,
                         cssSnippets: [],
-                        installedPlugins: []
+                        installedPlugins: [],
+                        // Plugins are a de-emphasized, experimental developer surface —
+                        // hidden until opted in under Settings ▸ Advanced. Default OFF.
+                        pluginsExperimentalEnabled: false
                     },
                     enabledViews: getDefaultEnabledViews(),
                     featureSelectionCompleted: false,
@@ -21410,6 +21423,77 @@ function populateProgressDashboard() {
                     }
                 }
             } catch (e) { /* non-critical */ }
+
+            // ── Tests & quizzes ──
+            try {
+                const listEl = document.getElementById('tccTestsList');
+                const badgeEl = document.getElementById('tccTestsBadge');
+                if (listEl) {
+                    const now = new Date();
+                    const tests = (collectWorkspaceDeadlines() || [])
+                        .filter(item => item && (item.source === 'apexam' || /\b(test|quiz|exam|final|midterm)\b/i.test(`${item.type || ''} ${item.title || ''}`)))
+                        .filter(item => item.due instanceof Date && item.due >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
+                        .sort((a, b) => a.due - b.due)
+                        .slice(0, 3);
+                    if (badgeEl) badgeEl.textContent = String(tests.length);
+                    listEl.innerHTML = tests.length
+                        ? tests.map(item => {
+                            const due = item.due;
+                            const delta = Math.round((new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
+                            const label = delta === 0 ? 'Today' : delta === 1 ? 'Tomorrow' : `In ${delta}d`;
+                            return `<div class="tac-item${delta < 0 ? ' tac-item-overdue' : delta <= 1 ? ' tac-item-today' : ''}"><span class="tac-item-title">${escapeHtml(item.title || 'Test')}</span><span class="tac-item-meta">${escapeHtml(label)}${item.subtitle ? ` · ${escapeHtml(item.subtitle)}` : ''}</span></div>`;
+                        }).join('')
+                        : '<div class="tac-empty">No tests or quizzes coming up</div>';
+                }
+                const btn = document.getElementById('tccTestsOpenBtn');
+                if (btn && !btn.dataset.bound) {
+                    btn.dataset.bound = 'true';
+                    btn.addEventListener('click', () => {
+                        setActiveView('apstudy');
+                        if (typeof switchTestingHubSection === 'function') switchTestingHubSection('exams');
+                    });
+                }
+            } catch (e) { /* Testing Hub remains optional. */ }
+
+            // ── Tonight plan ──
+            try {
+                const listEl = document.getElementById('tccTonightList');
+                const badgeEl = document.getElementById('tccTonightBadge');
+                if (listEl) {
+                    const freeMinutes = getTonightAvailableMinutes(new Date());
+                    if (badgeEl) badgeEl.textContent = freeMinutes ? `${freeMinutes} min` : 'No gap';
+                    listEl.innerHTML = freeMinutes
+                        ? `<div class="tac-item"><span class="tac-item-title">${escapeHtml(`Largest free window: ${freeMinutes} minutes`)}</span><span class="tac-item-meta">Use it for the Next Step or add a study block.</span></div>`
+                        : '<div class="tac-empty">No open evening window found. Adjust your Timeline or plan tomorrow.</div>';
+                }
+                const btn = document.getElementById('tccTonightTimelineBtn');
+                if (btn && !btn.dataset.bound) {
+                    btn.dataset.bound = 'true';
+                    btn.addEventListener('click', () => setActiveView('timeline'));
+                }
+            } catch (e) { /* Timeline may be unavailable during startup. */ }
+
+            // ── Save & backup health ──
+            try {
+                const listEl = document.getElementById('tccBackupList');
+                const badgeEl = document.getElementById('tccBackupBadge');
+                const health = (appSettings && appSettings.dataHealth) || {};
+                const state = typeof sutraPersistenceState === 'object' && sutraPersistenceState ? sutraPersistenceState : {};
+                const savedAt = state.lastConfirmedSaveAt || '';
+                const backupAt = health.lastAtelierExportAt || '';
+                const failure = state.lastFailure;
+                if (badgeEl) badgeEl.textContent = failure ? 'Action needed' : (backupAt ? 'Backed up' : 'No backup yet');
+                if (listEl) {
+                    const saveText = savedAt ? `Saved ${formatSutraHealthDate(savedAt)}` : 'No confirmed save yet';
+                    const backupText = backupAt ? `Backup ${formatSutraHealthDate(backupAt)}` : 'Make your first encrypted backup.';
+                    listEl.innerHTML = `<div class="tac-item${failure ? ' tac-item-overdue' : ''}"><span class="tac-item-title">${escapeHtml(failure ? 'Storage needs attention' : saveText)}</span><span class="tac-item-meta">${escapeHtml(failure ? 'Export a backup before closing.' : backupText)}</span></div>`;
+                }
+                const btn = document.getElementById('tccBackupOpenBtn');
+                if (btn && !btn.dataset.bound) {
+                    btn.dataset.bound = 'true';
+                    btn.addEventListener('click', () => setActiveView('settings'));
+                }
+            } catch (e) { /* Health UI is best-effort. */ }
         }
 
         function renderTodayView() {
@@ -21916,6 +22000,11 @@ function populateProgressDashboard() {
         function isViewEnabled(view) {
             if (!view) return false;
             if (view === 'settings') return true;
+            // The Assistant tab/view is gated SOLELY by the assistant.enabled
+            // opt-in (the Assistant Pack), never the enabledViews registry — so it
+            // appears the moment the user turns Assistant on and hides when off,
+            // regardless of the student-first default enabled-views.
+            if (view === 'assistantview') return getWorkspacePreference('assistant.enabled', false) === true;
             if (view === 'courses' || view === 'alldue') return isCourseHubEnabled();
             if (!isOptionalFeatureView(view)) return true;
             const enabledViews = normalizeEnabledViews(appSettings && appSettings.enabledViews);
@@ -22312,6 +22401,19 @@ function populateProgressDashboard() {
                 || getActiveWorkspaceMode() === 'business'
                 || (getActiveWorkspaceMode() === 'standard' && hasWorkspaceData('business'));
             const now = new Date();
+            // A timeline block may reference work through several legacy field
+            // names. Normalize those links once so Today can distinguish work
+            // that still needs a time from work that is already on the plan.
+            const scheduledItemIds = new Set();
+            try {
+                (Array.isArray(timeBlocks) ? timeBlocks : []).forEach(block => {
+                    if (!block || typeof block !== 'object') return;
+                    ['taskId', 'homeworkId', 'assignmentId', 'plannerTaskId', 'sourceId'].forEach(key => {
+                        const value = block[key];
+                        if (value !== undefined && value !== null && String(value).trim()) scheduledItemIds.add(String(value));
+                    });
+                });
+            } catch (err) { /* timeline links are optional */ }
 
             // Tasks (global app-level tasks with dueDate)
             try {
@@ -22326,6 +22428,11 @@ function populateProgressDashboard() {
                         title: String(task.title || 'Untitled task'),
                         due,
                         priority: String(task.priority || 'medium'),
+                        difficulty: String(task.difficulty || 'medium'),
+                        estimateMinutes: Number(task.estimateMinutes || task.effortMinutes || 0) || 0,
+                        hasLinkedNote: !!task.noteId,
+                        linkedNoteId: String(task.noteId || ''),
+                        scheduled: scheduledItemIds.has(String(task.id || '')) || task.scheduled === true,
                         status: task.completed ? 'done' : 'open',
                         overdue: due < now
                     });
@@ -22354,12 +22461,44 @@ function populateProgressDashboard() {
                             dueDate: String(hw.dueDate || ''),
                             dueTime: String(hw.dueTime || ''),
                             priority: String(hw.priority || 'medium'),
+                            difficulty: String(hw.difficulty || 'medium'),
+                            estimateMinutes: Number(hw.estimateMinutes || hw.effortMinutes || 0) || 0,
+                            type: String(hw.kind || 'assignment'),
+                            hasLinkedNote: !!(hw.linkedNoteId || (hw.studio && Array.isArray(hw.studio.linkedPageIds) && hw.studio.linkedPageIds.length)),
+                            linkedNoteId: String(hw.linkedNoteId || (hw.studio && Array.isArray(hw.studio.linkedPageIds) ? hw.studio.linkedPageIds[0] || '' : '')),
+                            scheduled: scheduledItemIds.has(String(hw.id || '')) || hw.scheduled === true,
                             status: hw.done ? 'done' : 'open',
                             overdue: due < now
                         });
                     });
                 }
             } catch (err) { /* non-critical */ }
+
+            // Spaced review is student work too. It has no external deadline
+            // record, so represent today's local due-card backlog as one
+            // actionable, synthetic deadline rather than hiding it elsewhere.
+            try {
+                if (typeof window.getReviewTodayStats === 'function') {
+                    const stats = window.getReviewTodayStats() || {};
+                    const reviewDueCount = Math.max(0, Number(stats.due) || 0) + Math.max(0, Number(stats.overdue) || 0);
+                    if (reviewDueCount > 0) {
+                        out.push({
+                            id: 'review:due-now',
+                            source: 'review',
+                            sourceId: 'due-now',
+                            title: `Review: ${reviewDueCount} card${reviewDueCount === 1 ? '' : 's'} due`,
+                            subtitle: stats.overdue ? `${stats.overdue} overdue` : 'Spaced review',
+                            type: 'review',
+                            due: new Date(now),
+                            priority: stats.overdue ? 'high' : 'medium',
+                            estimateMinutes: Math.min(45, Math.max(10, reviewDueCount * 2)),
+                            reviewDueCount,
+                            status: 'open',
+                            overdue: false
+                        });
+                    }
+                }
+            } catch (err) { /* Review remains optional/offline-safe. */ }
 
             // AP exams
             try {
@@ -22565,8 +22704,51 @@ function populateProgressDashboard() {
             return 45;
         }
 
-        function computeDeadlineRank(item, now) {
+        // Integration-only context for the pure SutraTodayCenter ranking engine.
+        // It asks the existing planner for the largest contiguous evening window;
+        // no calendar/provider data is sent anywhere and a missing planner simply
+        // produces 0 (the ranker's safe fallback).
+        function getTonightAvailableMinutes(now) {
+            const current = now instanceof Date ? now : new Date();
+            const dayKey = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+            const eveningStart = Math.max(17 * 60, current.getHours() * 60 + current.getMinutes());
+            try {
+                const windows = getFreeWindowsForDateKey(dayKey, []);
+                return (Array.isArray(windows) ? windows : []).reduce((largest, window) => {
+                    const start = Math.max(eveningStart, Number(window && window.start) || 0);
+                    const end = Number(window && window.end) || 0;
+                    return Math.max(largest, Math.max(0, end - start));
+                }, 0);
+            } catch (err) { return 0; }
+        }
+
+        function getNextStepRankingContext(now) {
+            let reviewDueCount = 0;
+            try {
+                const review = typeof window.getReviewTodayStats === 'function' ? window.getReviewTodayStats() : null;
+                reviewDueCount = review ? Math.max(0, Number(review.due) || 0) + Math.max(0, Number(review.overdue) || 0) : 0;
+            } catch (err) { reviewDueCount = 0; }
+            return {
+                availableTonightMinutes: getTonightAvailableMinutes(now),
+                reviewDueCount
+            };
+        }
+
+        function computeDeadlineRank(item, now, rankingContext) {
             now = now instanceof Date ? now : new Date();
+            // Ranking policy lives in the extracted, pure Today module. Keep the
+            // legacy implementation below as a file-open-safe fallback only.
+            try {
+                const ranking = window.SutraTodayCenter && window.SutraTodayCenter.rankStudentNextStep;
+                if (typeof ranking === 'function') {
+                    const context = rankingContext || getNextStepRankingContext(now);
+                    return ranking({
+                        ...item,
+                        estimateMinutes: estimateItemEffortMinutes(item),
+                        reviewDueCount: Number(item && item.reviewDueCount) || context.reviewDueCount
+                    }, { now, availableTonightMinutes: context.availableTonightMinutes });
+                }
+            } catch (err) { /* retain legacy deterministic ranking below */ }
             let score = 0;
             const due = item && item.due instanceof Date
                 ? item.due
@@ -22619,11 +22801,12 @@ function populateProgressDashboard() {
         function pickNextBestAction(groups) {
             const pools = ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'later'];
             const now = new Date();
+            const rankingContext = getNextStepRankingContext(now);
             let best = null;
             let bestScore = -Infinity;
             pools.forEach(key => (groups[key] || []).forEach(item => {
                 if (!item || item.completed || item.status === 'done') return;
-                const rank = computeDeadlineRank(item, now);
+                const rank = computeDeadlineRank(item, now, rankingContext);
                 if (rank.score > bestScore) { bestScore = rank.score; best = { item, reason: rank.reason }; }
             }));
             return best;
@@ -22631,6 +22814,13 @@ function populateProgressDashboard() {
 
         function openDeadlineSource(item) {
             if (!item || !item.source) return;
+            if (item.source === 'review') {
+                try {
+                    setActiveView('apstudy');
+                    if (typeof switchTestingHubSection === 'function') switchTestingHubSection('review');
+                } catch (err) { /* review is optional */ }
+                return;
+            }
             const selectorsBySource = {
                 task: (id) => `[data-task-id="${CSS.escape(id)}"]`,
                 homework: (id) => `[data-task-id="${CSS.escape(id)}"], [data-hw-task-id="${CSS.escape(id)}"], [data-hw-task="${CSS.escape(id)}"]`,
@@ -22652,6 +22842,7 @@ function populateProgressDashboard() {
                         task: 'today',
                         homework: 'homework',
                         apexam: 'apstudy',
+                        review: 'apstudy',
                         timeline: 'timeline',
                         business: 'business',
                         life: 'life'
@@ -23093,6 +23284,14 @@ function populateProgressDashboard() {
                             ? 'Due tomorrow — a head start today makes it easy.'
                             : "You're clear for today. This is the next thing on the horizon.";
                 const isHw = nba.item.source === 'homework' && nba.item.sourceId;
+                const isWorkItem = (nba.item.source === 'homework' || nba.item.source === 'task') && nba.item.sourceId;
+                const isReviewItem = nba.item.source === 'review';
+                const isTestItem = /\b(test|quiz|exam|final|midterm)\b/i.test(`${nba.item.type || ''} ${nba.item.title || ''}`);
+                const linkedNoteId = String(nba.item.linkedNoteId || '');
+                const primaryLabel = (isReviewItem || isTestItem) ? 'Study now' : 'Start Focus';
+                const primaryAction = isReviewItem
+                    ? `<button type="button" class="neumo-btn active tnu-primary" data-donow-review="1"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`
+                    : `<button type="button" class="neumo-btn active tnu-primary" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}"><i class="fas fa-play" aria-hidden="true"></i> ${primaryLabel}</button>`;
                 nbaHtml = `
                     <div class="today-brief-nba tnu-body" data-nextup-status="${escapeHtml(status.key)}">
                         <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
@@ -23103,9 +23302,14 @@ function populateProgressDashboard() {
                         </div>
                         <div class="tnu-status-pill tnu-status-${escapeHtml(status.key)}">${escapeHtml(status.label)}</div>
                         <p class="tnu-context">${escapeHtml(context)}</p>
+                        ${nba.reason ? `<p class="tnu-context"><strong>Why this first:</strong> ${escapeHtml(nba.reason)}</p>` : ''}
                         <div class="today-brief-actions tnu-actions">
-                            <button type="button" class="neumo-btn active tnu-primary" data-donow-focus="${escapeHtml(nba.item.sourceId || '')}" data-donow-source="${escapeHtml(nba.item.source || '')}" data-donow-title="${escapeHtml(nba.item.title)}"><i class="fas fa-play" aria-hidden="true"></i> Start Focus</button>
+                            ${primaryAction}
                             <button type="button" class="neumo-btn tnu-ghost" data-brief-open-source="${escapeHtml(nba.item.id)}">Open Details →</button>
+                            ${isWorkItem && !nba.item.scheduled ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-schedule="${escapeHtml(nba.item.id)}">Schedule</button>` : ''}
+                            ${isWorkItem ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-done="${escapeHtml(nba.item.id)}">Mark Done</button>` : ''}
+                            ${linkedNoteId ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-note="${escapeHtml(linkedNoteId)}">Open Notes</button>` : ''}
+                            ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-review-cards="${escapeHtml(nba.item.sourceId)}">Make review cards</button>` : ''}
                             ${isHw ? `<button type="button" class="neumo-btn tnu-ghost" data-donow-plan="${escapeHtml(nba.item.sourceId)}">Plan steps</button>` : ''}
                             ${nba.item.source === 'homework' && nba.item.sourceCourseId ? `<button type="button" class="neumo-btn tnu-ghost" data-brief-open-class="${escapeHtml(nba.item.sourceCourseId)}">Class Dashboard</button>` : ''}
                         </div>
@@ -23159,6 +23363,56 @@ function populateProgressDashboard() {
                         openClassDashboardDrawer(courseId);
                     }
                 });
+            });
+            const scheduleBtn = container.querySelector('[data-donow-schedule]');
+            if (scheduleBtn) scheduleBtn.addEventListener('click', () => {
+                const id = scheduleBtn.getAttribute('data-donow-schedule');
+                const target = items.find(i => i.id === id);
+                if (!target || typeof scheduleGenericItemAsBlock !== 'function') return;
+                try {
+                    const d = target.due instanceof Date ? target.due : null;
+                    const dueDate = target.dueDate || (d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : '');
+                    const scheduled = scheduleGenericItemAsBlock({ ...target, dueDate, category: target.source === 'homework' ? 'study' : 'general' });
+                    if (scheduled) renderTodayDailyBrief();
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-schedule', 'warning'); }
+            });
+            const doneBtn = container.querySelector('[data-donow-done]');
+            if (doneBtn) doneBtn.addEventListener('click', () => {
+                const id = doneBtn.getAttribute('data-donow-done');
+                const target = items.find(i => i.id === id);
+                if (!target) return;
+                try {
+                    let changed = false;
+                    if (target.source === 'homework' && window.SutraHomework && typeof window.SutraHomework.markDone === 'function') {
+                        changed = window.SutraHomework.markDone(target.sourceId) === true;
+                    } else if (target.source === 'task') {
+                        const task = (Array.isArray(tasks) ? tasks : []).find(t => String(t && t.id) === String(target.sourceId));
+                        if (task && !task.completed && typeof toggleComplete === 'function') { toggleComplete(task.id); changed = true; }
+                    }
+                    if (changed) {
+                        showToast('Marked done. Nice work.');
+                        renderTodayDailyBrief();
+                    }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-done', 'warning'); }
+            });
+            const noteBtn = container.querySelector('[data-donow-note]');
+            if (noteBtn) noteBtn.addEventListener('click', () => {
+                const noteId = noteBtn.getAttribute('data-donow-note');
+                try {
+                    if (noteId && typeof setActiveView === 'function' && typeof loadPage === 'function') {
+                        setActiveView('notes');
+                        loadPage(noteId);
+                    }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-note', 'warning'); }
+            });
+            const reviewCardsBtn = container.querySelector('[data-donow-review-cards]');
+            if (reviewCardsBtn) reviewCardsBtn.addEventListener('click', () => {
+                const homeworkId = reviewCardsBtn.getAttribute('data-donow-review-cards');
+                try {
+                    if (homeworkId && window.SutraReviewGenerator && typeof window.SutraReviewGenerator.fromHomeworkTask === 'function') {
+                        window.SutraReviewGenerator.fromHomeworkTask(homeworkId);
+                    }
+                } catch (err) { window.reportError && window.reportError(err, 'today:donow-review-cards', 'warning'); }
             });
             const radarBtn = container.querySelector('#todayBriefOpenRadar');
             if (radarBtn) radarBtn.addEventListener('click', openDeadlineRadar);
@@ -24835,7 +25089,7 @@ function populateProgressDashboard() {
                         </section>
                         <section class="atelier-onboarding-setup-section">
                             <h3 class="atelier-onboarding-setup-h">Sutra Cloud <span class="atelier-onboarding-pill-optional">Optional</span></h3>
-                            <p class="atelier-onboarding-setup-help"><strong>Off by default.</strong> When you want cloud backup, open <strong>Sutra Cloud</strong> from the save bar at the bottom of the workspace. Backups are end-to-end encrypted with your password before they leave this device, and you choose where they go &mdash; Google Drive, OneDrive, Dropbox, or your own storage. There&rsquo;s nothing to do now.</p>
+                            <p class="atelier-onboarding-setup-help"><strong>Off by default.</strong> When you want cloud backup, open <strong>Sutra Cloud</strong> from the save bar. The simplest choice is an encrypted download into a folder that already syncs; Google Drive works once configured. Other providers stay advanced. There&rsquo;s nothing to do now.</p>
                         </section>
                     </div>
                 `;
@@ -25376,6 +25630,11 @@ function populateProgressDashboard() {
                 } catch (err) { /* non-critical */ }
                 try {
                     // 7. AI provider (best-effort; keys are session-scoped).
+                    // Choosing a remote provider is an explicit Assistant Pack
+                    // opt-in; choosing “Local only / no AI” leaves it hidden.
+                    if (appSettings && appSettings.preferences && appSettings.preferences.assistant) {
+                        appSettings.preferences.assistant.enabled = !!(d.aiSetup && d.aiSetup.provider && d.aiSetup.provider !== 'local');
+                    }
                     if (d.aiSetup && d.aiSetup.provider && d.aiSetup.provider !== 'local' && CHAT_PROVIDER_CONFIG[d.aiSetup.provider]) {
                         try { setCurrentChatProvider(d.aiSetup.provider); } catch (err) { /* non-critical */ }
                         if (d.aiSetup.apiKey) {
@@ -25763,7 +26022,7 @@ function populateProgressDashboard() {
             document.querySelectorAll('.feature-toggle-input[data-feature-view]').forEach(toggle => {
                 const view = toggle.dataset.featureView;
                 if (!isOptionalFeatureView(view)) return;
-                const checked = enabledViews[view] !== false;
+                const checked = view === 'assistantview' ? isViewEnabled(view) : enabledViews[view] !== false;
                 toggle.checked = checked;
                 const item = toggle.closest('.feature-toggle-item');
                 if (item) item.dataset.checked = checked ? 'true' : 'false';
@@ -25814,7 +26073,11 @@ function populateProgressDashboard() {
         function applyRecommendedStudentSetup() {
             if (!appSettings) return;
             appSettings.enabledViews = getDefaultEnabledViews();
+            if (appSettings.preferences && appSettings.preferences.assistant) {
+                appSettings.preferences.assistant.enabled = false;
+            }
             appSettings.featureSelectionCompleted = true;
+            try { applyWorkspacePreferences({ refresh: true }); } catch (err) { /* non-critical */ }
             try { applyFeatureTabVisibility(); } catch (err) { /* non-critical */ }
             if (!isViewEnabled(activeView) && typeof setActiveView === 'function') {
                 try { setActiveView(getFallbackView('today')); } catch (err) { /* non-critical */ }
@@ -25843,6 +26106,10 @@ function populateProgressDashboard() {
             }
 
             appSettings.enabledViews[view] = nextEnabled;
+            if (view === 'assistantview' && appSettings.preferences && appSettings.preferences.assistant) {
+                appSettings.preferences.assistant.enabled = nextEnabled;
+                try { applyWorkspacePreferences({ refresh: true }); } catch (err) { /* non-critical */ }
+            }
             if (shouldMarkSetupComplete) {
                 appSettings.featureSelectionCompleted = true;
             }
@@ -27263,6 +27530,11 @@ function populateProgressDashboard() {
         const COURSE_ATTACH_STORE = 'blobs';
         const courseAttachmentCache = new Map();
         let _cwAttachDbPromise = null;
+        // Durable attachment writes queued by the most recent import (see
+        // restoreCourseFileBlobsFromImport). Importers await these via
+        // flushImportedAttachmentWrites() so a restore is never reported as
+        // successful while file bytes live only in the in-memory session cache.
+        let _importAttachmentWrites = [];
 
         function cwOpenAttachDb() {
             if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB unavailable'));
@@ -27390,8 +27662,13 @@ function populateProgressDashboard() {
         }
 
         // On import, move any embedded base64 payloads back into IndexedDB and
-        // flag any files whose bytes did not travel.
+        // flag any files whose bytes did not travel. The durable write is TRACKED
+        // (not fire-and-forget) so the importer can await it via
+        // flushImportedAttachmentWrites() and refuse to claim a full restore if a
+        // blob only made it into the session cache. Resets the queue up front so
+        // it only ever holds the current import's writes.
         function restoreCourseFileBlobsFromImport(cw) {
+            _importAttachmentWrites = [];
             if (!cw || !Array.isArray(cw.files)) return;
             cw.files.forEach(f => {
                 if (f && f._exportBlob) {
@@ -27400,12 +27677,34 @@ function populateProgressDashboard() {
                     f.storageType = 'indexeddb';
                     f.missingBlob = false;
                     if (!f.blobKey) f.blobKey = cwId('blob');
-                    courseAttachmentCache.set(f.blobKey, data);
-                    Promise.resolve().then(() => cwPutBlob(f.blobKey, data)).catch(() => {});
+                    courseAttachmentCache.set(f.blobKey, data); // immediate usability
+                    // Start the durable write now (parallel) but keep its promise
+                    // so flushImportedAttachmentWrites() can await it. cwPutBlob
+                    // resolves true/false and never rejects.
+                    _importAttachmentWrites.push({
+                        name: f.name || 'Unnamed attachment',
+                        blobKey: f.blobKey,
+                        promise: cwPutBlob(f.blobKey, data)
+                    });
                 } else if (f && f.storageType === 'indexeddb' && f.blobKey && !courseAttachmentCache.has(f.blobKey)) {
                     f.missingBlob = true;
                 }
             });
+        }
+
+        // Await every durable attachment write queued by the most recent
+        // restoreCourseFileBlobsFromImport() call. Returns { ok, failed, total }
+        // so a caller can surface exactly how many blobs failed to persist.
+        async function flushImportedAttachmentWrites() {
+            const pending = _importAttachmentWrites;
+            _importAttachmentWrites = [];
+            const failed = [];
+            for (const item of pending) {
+                let ok = false;
+                try { ok = await item.promise; } catch (e) { ok = false; }
+                if (!ok) failed.push({ name: item.name, blobKey: item.blobKey });
+            }
+            return { ok: failed.length === 0, failed, total: pending.length };
         }
 
         // =====================================================================
@@ -30122,6 +30421,11 @@ function populateProgressDashboard() {
             if (resolved === 'mods' && typeof renderModsSettings === 'function') {
                 try { renderModsSettings(); } catch (e) { /* non-critical */ }
             }
+            // Plugins are a de-emphasized experimental surface under Advanced — render
+            // (or keep hidden) when that category opens.
+            if (resolved === 'advanced' && typeof renderPluginsExperimental === 'function') {
+                try { renderPluginsExperimental(); } catch (e) { /* non-critical */ }
+            }
         }
 
         function filterSettingsControlsBySearch() {
@@ -32472,6 +32776,11 @@ function populateProgressDashboard() {
                     }
                 });
             });
+            const recommendedStudentSetupBtn = document.getElementById('recommendedStudentSetupBtn');
+            if (recommendedStudentSetupBtn && recommendedStudentSetupBtn.dataset.bound !== 'true') {
+                recommendedStudentSetupBtn.dataset.bound = 'true';
+                recommendedStudentSetupBtn.addEventListener('click', () => applyRecommendedStudentSetup());
+            }
 
             const featureSetupContinueBtn = document.getElementById('featureSetupContinueBtn');
             if (featureSetupContinueBtn && featureSetupContinueBtn.dataset.bound !== 'true') {
@@ -41334,14 +41643,14 @@ function populateProgressDashboard() {
                 },
                 {
                     id: 'mods-customization',
-                    title: 'Customization (Custom CSS, Plugins, Safe Mode)',
+                    title: 'Customization (Custom CSS &amp; Safe Mode)',
                     body: `
 <ul>
-  <li>Open <strong>Settings &gt; Customization</strong> for the power-user layer: <strong>CSS Overrides</strong>, <strong>Plugins</strong>, and <strong>Recovery &amp; Developer Tools</strong>.</li>
-  <li><strong>CSS Overrides</strong>: multiple named snippets with live preview, validation, duplicate, reorder (cascade), and <code>.css</code> / JSON import &amp; export. Custom CSS applies after themes and persists across theme changes and refresh.</li>
-  <li><strong>Plugins</strong>: install local <code>.sutra-plugin</code> bundles (legacy <code>.atelier-plugin</code> still imports; no remote marketplace). Runtime code runs sandboxed with an explicit permission allowlist; plugins install disabled and are reviewed before they run.</li>
-  <li><strong>Safe Mode</strong>: if a mod hides the interface, recover with <code>?atelierSafeMode=1</code>, by holding <kbd>Shift</kbd> during load, or from the recovery banner — without deleting any data.</li>
-  <li>Everything is local-first and travels inside your workspace backup. Imported runtime plugins return disabled and require re-review before running on a new device.</li>
+  <li>Open <strong>Settings &gt; Customization</strong> for the CSS power-user layer: <strong>CSS Overrides</strong> and <strong>Safe Mode &amp; Recovery</strong>. CSS snippets only change how Sutra <em>looks</em> — they never run code.</li>
+  <li><strong>CSS Overrides</strong>: a curated <strong>snippet gallery</strong> of one-click safe presets, plus multiple named snippets with live preview, validation, duplicate, reorder (cascade), and <code>.css</code> / JSON import &amp; export. Custom CSS applies after themes and persists across theme changes and refresh. Imported CSS arrives disabled until you enable it.</li>
+  <li><strong>Safe Mode</strong>: if a snippet hides the interface, recover with <code>?sutraSafeMode=1</code> (legacy <code>?atelierSafeMode=1</code> still works), by holding <kbd>Shift</kbd> during load, or from the recovery banner — without deleting any data.</li>
+  <li><strong>Local Plugins</strong> are a separate <em>experimental developer feature</em> under <strong>Settings &gt; Advanced &gt; Developer / Experimental</strong> (off by default). Runtime code runs sandboxed with an explicit permission allowlist; plugins install disabled and are reviewed before they run. Imported runtime plugins return disabled and require re-review on a new device.</li>
+  <li>Everything is local-first and travels inside your workspace backup.</li>
 </ul>
                     `
                 },
@@ -41629,7 +41938,7 @@ function populateProgressDashboard() {
 <h3>How it works</h3>
 <ul>
   <li>Your workspace is <strong>encrypted on this device</strong> into a <code>.sutra</code> file <em>before</em> anything is uploaded. The provider you choose stores <strong>only the encrypted file</strong> — it can never read your notes, tasks, or files.</li>
-  <li>You pick <strong>where</strong> backups go. Recommended: <strong>Google Drive, OneDrive, Dropbox</strong>. Advanced: <strong>WebDAV (Nextcloud/ownCloud), S3-compatible storage, Supabase, Custom HTTP</strong>. Or <strong>Manual</strong>: download the encrypted file and save it anywhere.</li>
+  <li>You pick <strong>where</strong> backups go. The simplest choice is <strong>Manual encrypted file</strong> into a folder that already syncs; <strong>Google Drive</strong> is recommended once configured. <strong>OneDrive, Dropbox, WebDAV (Nextcloud/ownCloud), Supabase, and Custom HTTP</strong> are advanced. <strong>S3-compatible</strong> is preview/planned.</li>
 </ul>
 <h3>Quick start</h3>
 <ol>
@@ -41638,9 +41947,9 @@ function populateProgressDashboard() {
   <li>Click <strong>Back Up Now</strong> and set a backup passphrase (let your browser save it).</li>
   <li>On another device: open Sutra Cloud, connect the <em>same</em> provider, open <strong>Manage backups</strong>, and restore with the <em>same</em> passphrase.</li>
 </ol>
-<h3>Connecting Google Drive, OneDrive, or Dropbox (one-time, free)</h3>
+<h3>Provider setup (only when you choose it)</h3>
 <ul>
-  <li>These providers need a <strong>public app key you create once</strong> in the provider's developer console — Sutra is a static app and can't ship one for you. It is public configuration, <strong>not</strong> a secret: never paste a client <em>secret</em>, service-role, or admin key.</li>
+  <li>Google Drive, OneDrive, and Dropbox need a <strong>public app key you create once</strong> in the provider's developer console — Sutra is a static app and can't ship one for you. It is public configuration, <strong>not</strong> a secret: never paste a client <em>secret</em>, service-role, or admin key.</li>
   <li><strong>Google Drive:</strong> Google Cloud Console &rsaquo; Credentials &rsaquo; create an <em>OAuth client ID</em> (type "Web application"); add this app's origin and the <em>redirect URI shown in the panel</em>; paste the Client ID, Save, then Connect.</li>
   <li><strong>OneDrive:</strong> Microsoft Entra (Azure) &rsaquo; App registrations &rsaquo; new app with a <em>Single-page application (SPA)</em> platform; add the redirect URI shown in the panel; paste the Application (client) ID, Save, then Connect.</li>
   <li><strong>Dropbox:</strong> Dropbox App Console &rsaquo; create a <em>Scoped access &middot; App folder</em> app; enable <code>files.content.read</code> + <code>files.content.write</code>; add the redirect URI shown in the panel; paste the App key, Save, then Connect.</li>
@@ -41661,7 +41970,7 @@ function populateProgressDashboard() {
 </ul>
 <h3>Provider limitations (important)</h3>
 <ul>
-  <li>Sutra is a static browser app with a strict security policy (CSP). <strong>Custom destinations (your own WebDAV/S3/Custom-HTTP/Supabase project) may be blocked in the hosted app</strong> and require a <strong>self-hosted Sutra build</strong> with your provider's origin added to the CSP. Recommended providers work in the hosted version. Sutra tells you in the panel when a destination is blocked.</li>
+  <li>Sutra is a static browser app with a strict security policy (CSP). <strong>WebDAV, Custom HTTP, and most custom Supabase/S3 destinations need a self-hosted build</strong> with the origin added to the CSP. OneDrive and Dropbox require your own OAuth app configuration. S3 is preview/planned, not a finished transport. Sutra labels each state in the panel.</li>
   <li><strong>Box</strong> can't be connected in the hosted browser app: its sign-in requires a confidential client secret a static app can't hold safely (unlike Google Drive, OneDrive, and Dropbox). Use <strong>Manual encrypted file</strong> and save into a Box-synced folder, or self-host with a small token-exchange proxy.</li>
 </ul>
 <h3>Security model</h3>
@@ -50567,8 +50876,19 @@ function getActiveEditor() {
             // ensures secrets are stripped from shared exports while persisted local data
             // keeps them.
             const payload = buildWorkspaceExportPayload({ mode: 'json', includeSensitiveSettings: false });
+            // Attachment preflight: never present an incomplete JSON export as a
+            // full recovery backup. If any file's bytes are gone, tell the student
+            // the exact count and let them cancel (like the .sutra export does).
+            const missingBlobs = findMissingCourseExportBlobs(payload);
+            if (missingBlobs.length) {
+                const n = missingBlobs.length;
+                const proceed = (typeof confirm === 'function')
+                    ? confirm(`This JSON export is missing the file bytes for ${n} attachment${n === 1 ? '' : 's'} (no longer in this browser's storage). All notes, tasks and other data export normally, but ${n === 1 ? 'that file' : 'those files'} will NOT be recoverable from this backup.\n\nExport anyway?`)
+                    : true;
+                if (!proceed) { showToast('Export cancelled — no file was written.'); return; }
+            }
             const dataStr = JSON.stringify(payload, null, 2);
-            
+
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const linkElement = document.createElement('a');
@@ -50578,9 +50898,14 @@ function getActiveEditor() {
             URL.revokeObjectURL(url);
 
             const showBackupNudge = getWorkspacePreference('data.showBackupNudges', true) !== false;
-            showToast(showBackupNudge
-                ? 'Exported successfully. Save a copy to cloud storage for backup safety.'
-                : 'Exported successfully!');
+            if (missingBlobs.length) {
+                const n = missingBlobs.length;
+                showToast(`Exported, but ${n} attachment${n === 1 ? '' : 's'} could not be included — keep an encrypted .sutra backup for full recovery.`, { durationMs: 6000 });
+            } else {
+                showToast(showBackupNudge
+                    ? 'Exported successfully. Save a copy to cloud storage for backup safety.'
+                    : 'Exported successfully!');
+            }
         }
 
         const ATELIER_FORMAT_NAME = 'noteflow_atelier_project'; // legacy .atelier manifest format — still accepted on import
@@ -50595,7 +50920,12 @@ function getActiveEditor() {
         // dual-licensed; see assets/vendor/jszip/LICENSE.markdown.)
         const SUTRA_JSZIP_LOCAL_PATH = 'assets/vendor/jszip/jszip.min.js';
         const APPROVED_EXTERNAL_SCRIPT_ORIGINS = new Set(['https://cdnjs.cloudflare.com', 'https://unpkg.com', 'https://accounts.google.com']);
-        const ATELIER_SENSITIVE_SETTING_KEYS = new Set(['apikey', 'accesstoken', 'refreshtoken', 'idtoken', 'token', 'clientsecret', 'secret', 'password']);
+        // Normalize keys before comparing so equivalent snake_case, kebab-case,
+        // and camelCase names (for example `api_key`) cannot leak into a backup.
+        const ATELIER_SENSITIVE_SETTING_KEYS = new Set(['apikey', 'accesstoken', 'refreshtoken', 'idtoken', 'token', 'clientsecret', 'secret', 'password', 'authorization', 'authorizationheader', 'bearertoken', 'privatekey', 'servicekey']);
+        function normalizeSensitiveSettingKey(key) {
+            return String(key || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
         const SUTRA_ENCRYPTED_MAGIC_TEXT = 'SUTRAENC';
         const SUTRA_ENCRYPTED_MAGIC_BYTES = [83, 85, 84, 82, 65, 69, 78, 67]; // "SUTRAENC"
         const SUTRA_ENCRYPTED_ENVELOPE_VERSION = 1;
@@ -50937,7 +51267,7 @@ function getActiveEditor() {
             Object.keys(value).forEach(key => {
                 const nextPath = path.concat(key);
                 const raw = value[key];
-                const normalizedKey = String(key || '').trim().toLowerCase();
+                const normalizedKey = normalizeSensitiveSettingKey(key);
                 if (ATELIER_SENSITIVE_SETTING_KEYS.has(normalizedKey)) {
                     if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
                         redactedPaths.push(nextPath.join('.'));
@@ -51003,15 +51333,24 @@ function getActiveEditor() {
             };
         }
 
+        const _assistantSafeStorage = () => (typeof window !== 'undefined' && window.SutraSafeStorage) ? window.SutraSafeStorage : null;
+
         function readAssistantChatStoreFromStorage() {
             try {
-                const parsed = JSON.parse(localStorage.getItem(SUTRA_ASSISTANT_CHATS_KEY) || '{}');
+                const ss = _assistantSafeStorage();
+                const parsedRaw = ss
+                    ? ss.get(SUTRA_ASSISTANT_CHATS_KEY, { fallback: {} })
+                    : JSON.parse(localStorage.getItem(SUTRA_ASSISTANT_CHATS_KEY) || '{}'); // sutra-allow-storage: fallback when SafeStorage is unavailable
+                const parsed = parsedRaw && typeof parsedRaw === 'object' ? parsedRaw : {};
                 const conversations = (Array.isArray(parsed.conversations) ? parsed.conversations : [])
                     .map(row => normalizeAssistantConversation(row, { requireMessages: false }))
                     .filter(Boolean);
+                const currentChatId = ss
+                    ? ss.get(SUTRA_ASSISTANT_CURRENT_CHAT_KEY, { parseJson: false, fallback: '' })
+                    : localStorage.getItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY); // sutra-allow-storage: fallback when SafeStorage is unavailable
                 return {
                     version: SUTRA_ASSISTANT_CHAT_EXPORT_VERSION,
-                    currentChatId: String(parsed.currentChatId || localStorage.getItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY) || '').slice(0, 80),
+                    currentChatId: String(parsed.currentChatId || currentChatId || '').slice(0, 80),
                     conversations
                 };
             } catch (error) {
@@ -51031,9 +51370,19 @@ function getActiveEditor() {
                 currentChatId,
                 conversations
             };
-            localStorage.setItem(SUTRA_ASSISTANT_CHATS_KEY, JSON.stringify(payload));
-            if (currentChatId) localStorage.setItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY, currentChatId);
-            else localStorage.removeItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY);
+            // Chats are user-authored data: route through SafeStorage so a quota /
+            // private-mode failure raises the durable "Export backup" banner and
+            // keeps the value in memory, instead of throwing or silently vanishing.
+            const ss = _assistantSafeStorage();
+            if (ss) {
+                ss.set(SUTRA_ASSISTANT_CHATS_KEY, payload, { importance: 'important', label: 'Assistant chat history' });
+                if (currentChatId) ss.set(SUTRA_ASSISTANT_CURRENT_CHAT_KEY, currentChatId, { importance: 'optional', label: 'Assistant current chat' });
+                else ss.remove(SUTRA_ASSISTANT_CURRENT_CHAT_KEY);
+            } else {
+                localStorage.setItem(SUTRA_ASSISTANT_CHATS_KEY, JSON.stringify(payload)); // sutra-allow-storage: fallback when SafeStorage is unavailable
+                if (currentChatId) localStorage.setItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY, currentChatId); // sutra-allow-storage: fallback when SafeStorage is unavailable
+                else localStorage.removeItem(SUTRA_ASSISTANT_CURRENT_CHAT_KEY); // sutra-allow-storage: fallback when SafeStorage is unavailable
+            }
             return payload;
         }
 
@@ -51734,13 +52083,11 @@ function getActiveEditor() {
         // ====================================================================
         // Sutra Cloud — optional, consent-first, end-to-end-encrypted backup.
         //
-        // Powered by Supabase (Auth + Storage). Each cloud backup is just a
-        // standard encrypted .sutra envelope uploaded to the user's private
-        // bucket folder, so the server only ever stores CIPHERTEXT plus a little
-        // non-sensitive metadata (label/size/time). It can never read the
-        // workspace. The feature is OFF until BOTH the runtime config is set AND
-        // the user signs in; a cold boot with no saved session makes zero
-        // network requests. See supabase/README.md for setup.
+        // Provider-based: every adapter receives a standard encrypted .sutra
+        // envelope, so its destination stores ciphertext plus only minimal
+        // non-sensitive metadata (label/size/time). Supabase is retained as one
+        // advanced adapter. The feature is OFF until the selected provider is
+        // configured and connected; a cold boot makes zero network requests.
         // ====================================================================
         const SUTRA_CLOUD_SESSION_KEY = 'sutra:supabaseSession:v1';
         const SUTRA_CLOUD_META_KEY = 'sutra:supabaseCloud:v1';
@@ -52393,6 +52740,7 @@ function getActiveEditor() {
                 id: spec.id,
                 displayName: spec.displayName,
                 category: spec.category || 'advanced',              // 'recommended' | 'advanced' | 'manual'
+                availability: spec.availability || (spec.category === 'manual' ? 'works-now' : 'needs-configuration'),
                 description: spec.description || '',
                 icon: spec.icon || 'fa-cloud',
                 requiresOAuth: !!spec.requiresOAuth,
@@ -52434,6 +52782,7 @@ function getActiveEditor() {
             id: 'supabase',
             displayName: 'Supabase',
             category: 'advanced',
+            availability: 'needs-configuration',
             description: 'Your own (or the official) Supabase project. Encrypted backups in private Storage with Row Level Security.',
             icon: 'fa-database',
             requiresCustomCredentials: true,
@@ -52496,6 +52845,7 @@ function getActiveEditor() {
             id: 'manual',
             displayName: 'Manual encrypted file',
             category: 'manual',
+            availability: 'works-now',
             description: 'Download the encrypted .sutra file and save it anywhere — a synced folder (Drive/OneDrive/Dropbox/iCloud), USB, or NAS. No account needed.',
             icon: 'fa-file-arrow-down',
             supportsAutoBackup: false,
@@ -52545,6 +52895,7 @@ function getActiveEditor() {
             id: 'webdav',
             displayName: 'WebDAV (Nextcloud / ownCloud)',
             category: 'advanced',
+            availability: 'self-host-only',
             description: 'Any WebDAV server, including Nextcloud and ownCloud. Uses an app password over HTTPS.',
             icon: 'fa-server',
             requiresCustomCredentials: true,
@@ -52631,6 +52982,7 @@ function getActiveEditor() {
             id: 'customhttp',
             displayName: 'Custom HTTP endpoint',
             category: 'advanced',
+            availability: 'self-host-only',
             description: 'Your own server implementing Sutra’s simple encrypted-backup API. For developers/self-hosters.',
             icon: 'fa-code',
             requiresCustomCredentials: true,
@@ -52703,7 +53055,7 @@ function getActiveEditor() {
         // engine. The user pastes their own public OAuth Web Client ID in-app; each
         // backup is a timestamped .sutra file in the private appDataFolder.
         const googleDriveCloudAdapter = makeSutraCloudAdapter({
-            id: 'googledrive', displayName: 'Google Drive', category: 'recommended', icon: 'fa-brands fa-google-drive',
+            id: 'googledrive', displayName: 'Google Drive', category: 'recommended', availability: 'needs-configuration', icon: 'fa-brands fa-google-drive',
             description: 'Encrypted backups to your Google Drive (private app-data folder).', requiresOAuth: true,
             instructions: [
                 'In Google Cloud Console → Credentials, create an OAuth client ID of type "Web application".',
@@ -52784,7 +53136,7 @@ function getActiveEditor() {
             return resp;
         }
         const oneDriveCloudAdapter = makeSutraCloudAdapter({
-            id: 'onedrive', displayName: 'OneDrive', category: 'recommended', icon: 'fa-cloud',
+            id: 'onedrive', displayName: 'OneDrive', category: 'advanced', availability: 'needs-configuration', icon: 'fa-cloud',
             description: 'Encrypted backups to Microsoft OneDrive (private app folder).', requiresOAuth: true,
             instructions: [
                 'In the Microsoft Entra admin center → App registrations, create an app and add a "Single-page application (SPA)" platform.',
@@ -52882,7 +53234,7 @@ function getActiveEditor() {
         }
         function sutraDropboxToken() { return ensureSutraOAuthAccessToken('dropbox', sutraDropboxSpec()); }
         const dropboxCloudAdapter = makeSutraCloudAdapter({
-            id: 'dropbox', displayName: 'Dropbox', category: 'recommended', icon: 'fa-brands fa-dropbox',
+            id: 'dropbox', displayName: 'Dropbox', category: 'advanced', availability: 'needs-configuration', icon: 'fa-brands fa-dropbox',
             description: 'Encrypted backups to Dropbox (scoped app folder).', requiresOAuth: true,
             instructions: [
                 'In the Dropbox App Console, create an app with "Scoped access" → "App folder".',
@@ -52976,7 +53328,7 @@ function getActiveEditor() {
             }
         });
         const boxCloudAdapter = makeScaffoldAdapter({
-            id: 'box', displayName: 'Box', category: 'advanced', icon: 'fa-box',
+            id: 'box', displayName: 'Box', category: 'advanced', availability: 'self-host-only', icon: 'fa-box',
             description: 'Encrypted backups to Box.', requiresOAuth: true,
             reason: 'Box can’t be enabled in a browser-only build: its OAuth token exchange requires a confidential client secret, which a static app cannot hold safely (unlike Google Drive, OneDrive, and Dropbox, which support secretless PKCE). Use the Manual encrypted file option into a Box-synced folder, or self-host Sutra with a small token-exchange proxy.',
             instructions: [
@@ -52985,7 +53337,7 @@ function getActiveEditor() {
             ]
         });
         const s3CloudAdapter = makeScaffoldAdapter({
-            id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', icon: 'fa-brands fa-aws',
+            id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', availability: 'preview', icon: 'fa-brands fa-aws',
             description: 'Any S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces, MinIO.', requiresCustomCredentials: true,
             cspNote: 'Your S3 endpoint origin must be in the app CSP — needs a self-hosted Sutra build.',
             reason: 'S3-compatible storage is in preview (SigV4 request signing is a planned follow-up). Use WebDAV or Custom HTTP today.',
@@ -53293,6 +53645,13 @@ function getActiveEditor() {
             const el = document.getElementById(id);
             if (el) el.textContent = text;
         }
+        function sutraCloudAvailabilityLabel(provider) {
+            const value = String(provider && provider.availability || 'needs-configuration');
+            if (value === 'works-now') return 'Works now';
+            if (value === 'self-host-only') return 'Self-host only';
+            if (value === 'preview') return 'Preview / planned';
+            return 'Needs configuration';
+        }
 
         function updateSutraCloudUi() {
             const modal = document.getElementById('sutraCloudModal');
@@ -53353,6 +53712,7 @@ function getActiveEditor() {
                 r.appendChild(ke); r.appendChild(ve); card.appendChild(r);
             };
             row('Destination', provider.displayName);
+            row('Availability', sutraCloudAvailabilityLabel(provider), provider.availability === 'works-now' ? 'ok' : 'warn');
             row('Status', label, tone);
             if (identity) row(provider.requiresOAuth || provider.id === 'supabase' ? 'Account' : 'Endpoint', identity);
             row('Last backup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'never');
@@ -53380,7 +53740,11 @@ function getActiveEditor() {
                 const desc = document.createElement('div'); desc.className = 'sutra-cloud-card-desc'; desc.textContent = p.description;
                 const st = document.createElement('div'); st.className = 'sutra-cloud-card-status';
                 const status = p.getSetupStatus(); const identity = p.getSignedInIdentity();
-                st.textContent = isActive ? (status.ready ? 'Active · Ready' : (status.cspBlocked ? 'Active · blocked by CSP' : 'Active · needs setup')) : (status.scaffolded ? 'Coming soon' : (identity ? 'Configured' : 'Not connected'));
+                const availability = sutraCloudAvailabilityLabel(p);
+                const connection = isActive
+                    ? (status.ready ? 'Active · Ready' : (status.cspBlocked ? 'Active · blocked by CSP' : 'Active · needs setup'))
+                    : (status.scaffolded ? 'Not available in this build' : (identity ? 'Configured' : 'Not connected'));
+                st.textContent = `${availability} · ${connection}`;
                 body.appendChild(titleRow); body.appendChild(desc); body.appendChild(st);
                 const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'storage-btn' + (isActive ? '' : ' primary');
                 btn.textContent = isActive ? 'Selected' : 'Use this';
@@ -53965,6 +54329,7 @@ function getActiveEditor() {
             const JSZip = await ensureAtelierZipLibrary();
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const zip = await JSZip.loadAsync(arrayBuffer);
+            assertSafeZipArchive(zip);
 
             const manifestFile = zip.file('manifest.json');
             const workspaceFile = zip.file('workspace.json');
@@ -55017,6 +55382,41 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return new Blob([html], { type: 'application/msword' });
         }
 
+        // Build a real OOXML .docx package without a CDN or a server. The note's
+        // already-sanitized, self-contained Word HTML travels as an `altChunk`,
+        // which Word expands on open and preserves rich note content better than a
+        // lossy handwritten HTML-to-OOXML converter. The local JSZip dependency is
+        // also used for encrypted workspace backups, so this remains file://-safe.
+        async function buildDocxBlob(note) {
+            const JSZip = await ensureAtelierZipLibrary();
+            const zip = new JSZip();
+            const wordHtml = buildWordExportHtml(note.title, note.html);
+            zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="html" ContentType="text/html"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+            zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+            zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:altChunk r:id="rIdSutraHtml"/>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>`);
+            zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdSutraHtml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.html"/>
+</Relationships>`);
+            zip.file('word/afchunk.html', wordHtml);
+            return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        }
+
         function openPrintWindowForPdf(note) {
             const printHtml = buildPdfPrintDocumentHtml(note.title, note.html);
 
@@ -55108,16 +55508,19 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
 
             try {
-                if (format === 'docx' || format === 'doc') {
-                    // Word-compatible HTML saved as .doc. Word and Google Docs open
-                    // this at full page width with real margins, it preserves rich
-                    // content (images, tables, colour) better than the old
-                    // html-docx-js OOXML converter, and it needs no library and no
-                    // network. A genuine .docx requires an OOXML zip; the .doc Word
-                    // HTML is the more faithful, fully-offline choice.
+                if (format === 'docx') {
+                    const docxBlob = await buildDocxBlob(note);
+                    triggerBlobDownload(docxBlob, `${note.baseName}.docx`);
+                    showExportToast('Current note exported as Word (.docx).', note.warnings);
+                    return;
+                }
+
+                if (format === 'doc') {
+                    // The legacy .doc option remains Word-compatible HTML. It is a
+                    // distinct 97–2003-compatible format, never a mislabeled .docx.
                     const docBlob = buildDocHtmlBlob(note);
                     triggerBlobDownload(docBlob, `${note.baseName}.doc`);
-                    showExportToast('Current note exported as Word (.doc).', note.warnings);
+                    showExportToast('Current note exported as Word 97-2003 (.doc).', note.warnings);
                     return;
                 }
 
@@ -55898,6 +56301,36 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
         }
 
+        // Conservative limits for UNTRUSTED file import. Generous enough for real
+        // workspace backups (attachments are base64-inflated inside JSON/ZIP) but
+        // low enough to refuse pathological or malicious inputs before we allocate
+        // huge buffers. Legacy backups stay well under these ceilings.
+        const MAX_IMPORT_FILE_BYTES = 750 * 1024 * 1024;       // 750 MB compressed/on-disk
+        const MAX_ZIP_ENTRIES = 5000;                          // parts + attachments
+        const MAX_ZIP_DECOMPRESSED_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB — blocks zip bombs
+
+        // Guard a freshly-loaded JSZip archive against zip bombs: too many entries
+        // or an implausible decompressed size (read from the ZIP central directory
+        // without decompressing). Throws a clear error the import flow surfaces.
+        function assertSafeZipArchive(zip) {
+            const names = (zip && zip.files) ? Object.keys(zip.files) : [];
+            if (names.length > MAX_ZIP_ENTRIES) {
+                throw new Error(`This archive has too many entries (${names.length}). Import is limited to ${MAX_ZIP_ENTRIES} for safety.`);
+            }
+            let totalUncompressed = 0;
+            for (const name of names) {
+                try {
+                    const meta = zip.files[name] && zip.files[name]._data;
+                    const size = meta && Number(meta.uncompressedSize);
+                    if (Number.isFinite(size) && size > 0) totalUncompressed += size;
+                } catch (e) { /* metadata unavailable — fall back to entry-count guard */ }
+            }
+            if (totalUncompressed > MAX_ZIP_DECOMPRESSED_BYTES) {
+                throw new Error(`This archive decompresses to too much data (${formatByteCount(totalUncompressed)}). Import is limited to ${formatByteCount(MAX_ZIP_DECOMPRESSED_BYTES)} for safety.`);
+            }
+            return true;
+        }
+
         function isApprovedExternalScriptSource(src, options = {}) {
             try {
                 const url = new URL(src, window.location.href);
@@ -56226,8 +56659,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // imported disabled-safe via normalizeCustomization; Safe Mode bypass
             // still applies so a hostile CSS payload can't lock the user out.
             appSettings.customization = normalizeCustomizationSettings(importedSettingsSource.customization);
-            if (window.AtelierPlugins && typeof window.AtelierPlugins.markForReviewOnImport === 'function') {
-                appSettings.customization.installedPlugins = window.AtelierPlugins.markForReviewOnImport(appSettings.customization.installedPlugins);
+            const importedPluginsApi = window.SutraPlugins || window.AtelierPlugins;
+            if (importedPluginsApi && typeof importedPluginsApi.markForReviewOnImport === 'function') {
+                appSettings.customization.installedPlugins = importedPluginsApi.markForReviewOnImport(appSettings.customization.installedPlugins);
             }
             appSettings.preferences = normalizeWorkspacePreferences(
                 { ...settingsDefaults.preferences, ...(importedSettingsSource.preferences || {}) },
@@ -56831,6 +57265,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!stripHtml(html)) {
                 const JSZip = await ensureAtelierZipLibrary();
                 const zip = await JSZip.loadAsync(arrayBuffer);
+                assertSafeZipArchive(zip);
                 const names = Object.keys(zip.files).filter(n => /^word\/.*\.xml$/i.test(n)).sort();
                 const chunks = [];
                 for (const name of names) {
@@ -56870,6 +57305,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const JSZip = await ensureAtelierZipLibrary();
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const zip = await JSZip.loadAsync(arrayBuffer);
+            assertSafeZipArchive(zip);
             const names = Object.keys(zip.files);
             const blocks = [];
 
@@ -56902,6 +57338,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const JSZip = await ensureAtelierZipLibrary();
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const zip = await JSZip.loadAsync(arrayBuffer);
+            assertSafeZipArchive(zip);
             const names = Object.keys(zip.files).filter(name => /\.(html|htm|xhtml)$/i.test(name)).sort();
             if (!names.length) {
                 throw new Error('ZIP import supports HTML exports only.');
@@ -57076,9 +57513,19 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             createWorkspaceSnapshot('Before restore');
             try {
                 importWorkspacePayload(snap.payload);
+                // Await durable attachment writes BEFORE the reload below — a reload
+                // mid-write would drop any blob still only in the session cache.
+                let attachmentResult = { ok: true, failed: [], total: 0 };
+                try { attachmentResult = await flushImportedAttachmentWrites(); }
+                catch (e) { attachmentResult = { ok: false, failed: [], total: 0 }; }
                 if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('snapshot-restore');
-                showToast('Workspace restored. Reloading…');
-                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, 700);
+                if (!attachmentResult.ok) {
+                    const n = attachmentResult.failed.length || attachmentResult.total;
+                    showToast(`Restored, but ${n} attachment${n === 1 ? '' : 's'} could not be saved durably — free up space and restore again. Reloading…`, { durationMs: 5000 });
+                } else {
+                    showToast('Workspace restored. Reloading…');
+                }
+                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, attachmentResult.ok ? 700 : 1600);
             } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); }
         }
         function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
@@ -57238,8 +57685,26 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
             }
             showToast('Creating safety snapshot before import...', { durationMs: 1400 });
-            await createPreImportSafetySnapshot();
+            const snapshotOk = await createPreImportSafetySnapshot();
+            // Never silently replace the workspace with no fallback. If the
+            // automatic pre-import snapshot could not be created, block the
+            // destructive import unless the student explicitly opts to continue.
+            if (!snapshotOk) {
+                const proceedAnyway = (typeof confirm === 'function')
+                    ? confirm('The automatic pre-import safety snapshot could NOT be created.\n\nIf you continue, your current workspace will be replaced with no automatic backup to fall back on. Consider exporting a .sutra backup first.\n\nContinue with the import anyway?')
+                    : false;
+                if (!proceedAnyway) {
+                    showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
+                    return false;
+                }
+            }
             importWorkspacePayload(workspacePayload);
+            // Durability gate: block on the imported attachment blob writes so we
+            // never report a successful restore while file bytes are only in the
+            // in-memory session cache (an immediate reload would lose them).
+            let attachmentResult = { ok: true, failed: [], total: 0 };
+            try { attachmentResult = await flushImportedAttachmentWrites(); }
+            catch (error) { attachmentResult = { ok: false, failed: [], total: 0 }; }
             try {
                 if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('import-workspace');
             } catch (error) {
@@ -57254,11 +57719,24 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (Array.isArray(options.warnings) && options.warnings.length) {
                 showToast(`Imported with ${options.warnings.length} warning${options.warnings.length === 1 ? '' : 's'}.`);
             }
+            // Honest reporting: the workspace + attachment metadata are restored,
+            // but some file bytes did not reach durable storage (quota / IndexedDB
+            // failure). Tell the student exactly how many, instead of a silent
+            // "success" that loses attachments on the next reload.
+            if (!attachmentResult.ok) {
+                const n = attachmentResult.failed.length || attachmentResult.total;
+                showToast(`Imported, but ${n} attachment${n === 1 ? '' : 's'} could not be saved to durable storage — free up space and re-import to recover ${n === 1 ? 'it' : 'them'}. Everything else is restored.`, { durationMs: 7000 });
+            }
             return true;
         }
 
         async function handleImportedFile(file) {
             if (!file) return;
+            // Refuse implausibly large untrusted files before allocating buffers.
+            if (typeof file.size === 'number' && file.size > MAX_IMPORT_FILE_BYTES) {
+                showToast(`That file is too large to import (${formatByteCount(file.size)}). The limit is ${formatByteCount(MAX_IMPORT_FILE_BYTES)} — export a fresh .sutra backup if this is a real workspace.`, { durationMs: 6000 });
+                return false;
+            }
             try {
                 const kind = await detectImportedFileKind(file);
                 if (kind === 'encrypted-sutra' || kind === 'workspace-package') {
@@ -60748,7 +61226,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
          * register/unregister cleanly; runtime plugins re-review after restore.
          * ================================================================== */
         const MODS = window.AtelierCustomization || null;
-        const PLUGINS = window.AtelierPlugins || null;
+        const PLUGINS = window.SutraPlugins || window.AtelierPlugins || null;
         let pluginContributedCommands = [];   // injected into the command palette
         let pluginRuntimeHost = null;
 
@@ -60765,6 +61243,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 customCssEnabled: r.customCssEnabled !== false,
                 cssSnippets: Array.isArray(r.cssSnippets) ? r.cssSnippets : [],
                 installedPlugins: Array.isArray(r.installedPlugins) ? r.installedPlugins : [],
+                pluginsExperimentalEnabled: r.pluginsExperimentalEnabled === true,
                 pluginStorage: r.pluginStorage && typeof r.pluginStorage === 'object' ? r.pluginStorage : {}
             };
         }
@@ -60942,6 +61421,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 case 'note.readCurrent': {
                     const cur = pages.find(p => p.id === currentPageId);
                     if (!cur) return Promise.resolve(null);
+                    if (isPageEffectivelyLocked(cur.id)) return Promise.reject(new Error('Unlock the current note before a plugin can access it.'));
                     return Promise.resolve({ id: cur.id, title: cur.title, content: cur.content });
                 }
                 case 'task.create': {
@@ -60953,6 +61433,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 case 'note.writeCurrent': {
                     const cur = pages.find(p => p.id === currentPageId);
                     if (!cur) return Promise.reject(new Error('No current note.'));
+                    if (isPageEffectivelyLocked(cur.id)) return Promise.reject(new Error('Unlock the current note before a plugin can change it.'));
                     if (typeof payload.title === 'string') cur.title = payload.title.slice(0, 200);
                     if (typeof payload.content === 'string') {
                         cur.content = sanitizeEditorHtml(payload.content);
@@ -61147,6 +61628,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 applyPluginContributions();
                 mountEnabledRuntimePlugins();
             }
+            // Sync the experimental plugins toggle/panel to persisted state (stays
+            // hidden unless the user opted in).
+            try { renderPluginsExperimental(); } catch (e) {}
         }
 
         /* ---- Settings UI: Mods & Customization --------------------------- */
@@ -61157,40 +61641,80 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function renderModsSettings() {
             const cssPanel = document.getElementById('modsCssPanel');
-            const pluginsPanel = document.getElementById('modsPluginsPanel');
             const recoveryPanel = document.getElementById('modsRecoveryPanel');
-            if (!cssPanel || !pluginsPanel || !recoveryPanel) return;
+            if (!cssPanel || !recoveryPanel) return;
             const c = getCustomization();
             const modsToggle = document.getElementById('modsEnabledToggle');
             const cssToggle = document.getElementById('customCssEnabledToggle');
             if (modsToggle) modsToggle.checked = c.modsEnabled !== false;
             if (cssToggle) cssToggle.checked = c.customCssEnabled !== false;
 
-            // Tabs
+            // Customization tabs are CSS-only now: CSS Overrides + Safe Mode & Recovery.
+            // Plugins moved to Settings ▸ Advanced ▸ Developer / Experimental.
+            if (modsActiveTab !== 'css' && modsActiveTab !== 'recovery') modsActiveTab = 'css';
             document.querySelectorAll('[data-mods-tab]').forEach(t => t.classList.toggle('is-active', t.getAttribute('data-mods-tab') === modsActiveTab));
             cssPanel.hidden = modsActiveTab !== 'css';
-            pluginsPanel.hidden = modsActiveTab !== 'plugins';
             recoveryPanel.hidden = modsActiveTab !== 'recovery';
 
             cssPanel.innerHTML = renderModsCssPanel(c);
-            pluginsPanel.innerHTML = renderModsPluginsPanel(c);
             recoveryPanel.innerHTML = renderModsRecoveryPanel(c);
+
+            // Keep the (de-emphasized) plugins surface in Advanced in sync.
+            renderPluginsExperimental();
+        }
+
+        // Render the experimental Local Plugins surface under Settings ▸ Advanced.
+        // The panel stays hidden + empty until the user opts in, so normal Settings
+        // never exposes plugin controls.
+        function renderPluginsExperimental() {
+            const panel = document.getElementById('modsPluginsPanel');
+            if (!panel) return;
+            const c = getCustomization();
+            const on = c && c.pluginsExperimentalEnabled === true;
+            const toggle = document.getElementById('pluginsExperimentalToggle');
+            const group = document.getElementById('pluginsExperimentalGroup');
+            if (toggle) toggle.checked = !!on;
+            if (group) group.hidden = !on;
+            panel.hidden = !on;
+            panel.innerHTML = on ? renderModsPluginsPanel(c) : '';
+        }
+
+        // Curated, one-click safe presets. Data comes from the pure engine so it can
+        // be unit-tested; the host just renders the cards.
+        function renderModsCssGallery() {
+            const gallery = (MODS && typeof MODS.snippetGallery === 'function') ? MODS.snippetGallery() : [];
+            if (!gallery.length) return '';
+            const cards = gallery.map(g => `
+                <button type="button" class="mods-gallery-card" data-mods-action="css-gallery-add" data-gallery-id="${escapeHtml(g.id)}" title="Add “${escapeHtml(g.name)}” as a new snippet">
+                    <span class="mods-gallery-name">${escapeHtml(g.name)}</span>
+                    <span class="mods-gallery-desc">${escapeHtml(g.description)}</span>
+                </button>`).join('');
+            return `
+                <details class="mods-gallery" open>
+                    <summary class="mods-gallery-summary"><span>Snippet gallery</span> <span class="mods-gallery-hint">curated &amp; safe · one click adds it</span></summary>
+                    <div class="mods-gallery-grid">${cards}</div>
+                </details>`;
         }
 
         function renderModsCssPanel(c) {
             const snippets = (c.cssSnippets || []).slice().sort((a, b) => a.order - b.order);
             let html = `
                 <div class="mods-panel-head">
-                    <div><h3 class="mods-panel-title">CSS overrides</h3><p class="mods-panel-copy">Custom CSS applies after themes and persists across theme changes &amp; refresh.</p></div>
+                    <div><h3 class="mods-panel-title">CSS Overrides</h3><p class="mods-panel-copy">Custom CSS applies after your theme and persists across theme changes &amp; refresh. Snippets only change appearance — they never run code.</p></div>
                     <div class="mods-panel-actions">
                         <button type="button" class="cc-btn cc-btn-quiet" data-mods-action="css-add"><i class="fas fa-plus"></i> Add snippet</button>
-                        <button type="button" class="cc-btn cc-btn-quiet" data-mods-action="css-add-example">Example</button>
                         <button type="button" class="cc-btn cc-btn-quiet" data-mods-action="css-import">Import…</button>
                         <button type="button" class="cc-btn cc-btn-quiet" data-mods-action="css-export-all">Export all</button>
                     </div>
-                </div>`;
+                </div>
+                ${renderModsCssGallery()}`;
             if (!snippets.length) {
-                html += `<div class="mods-empty">No CSS overrides yet. Add a snippet or import a <code>.css</code> file.</div>`;
+                html += `
+                    <div class="mods-empty">
+                        <p class="mods-empty-title">No CSS Overrides yet.</p>
+                        <p>CSS Overrides are small snippets of styling that change <strong>how Sutra looks</strong> — spacing, colors, corners, type. They <strong>cannot run code</strong>, fetch anything, or read your data, so they're safe to try and instant to undo.</p>
+                        <p>Start from the <strong>gallery</strong> above, use <strong>Add snippet</strong> to write your own, or <strong>Import</strong> a <code>.css</code> file (imported CSS arrives disabled until you turn it on). If anything looks off, <strong>Safe Mode</strong> restores the interface without deleting a thing.</p>
+                    </div>`;
                 return html;
             }
             snippets.forEach((s, i) => {
@@ -61219,7 +61743,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     </div>
                 </div>`;
             });
-            html += `<div class="mods-reset-row"><button type="button" class="cc-btn cc-btn-ghost danger" data-mods-action="css-reset-all">Reset all CSS customization</button></div>`;
+            html += `
+                <div class="mods-reset-row">
+                    <button type="button" class="cc-btn cc-btn-ghost danger" data-mods-action="css-reset-all">Reset all CSS customization</button>
+                    <span class="mods-safe-hint"><i class="fas fa-life-ring" aria-hidden="true"></i> Something looks off? <button type="button" class="cc-link-btn" data-mods-action="go-recovery">Open Safe Mode &amp; Recovery</button> — nothing is deleted.</span>
+                </div>`;
             return html;
         }
 
@@ -61227,11 +61755,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const plugins = c.installedPlugins || [];
             let html = `
                 <div class="mods-panel-head">
-                    <div><h3 class="mods-panel-title">Plugins</h3><p class="mods-panel-copy">Local <code>.sutra-plugin</code> bundles (legacy <code>.atelier-plugin</code> still imports). No remote marketplace. Runtime code runs sandboxed.</p></div>
+                    <div><h3 class="mods-panel-title">Local Plugins <span class="mods-badge">experimental</span></h3><p class="mods-panel-copy">Local <code>.sutra-plugin</code> bundles (legacy <code>.atelier-plugin</code> still imports). No remote marketplace. Runtime code runs sandboxed and installs disabled. For developers and advanced testing.</p></div>
                     <div class="mods-panel-actions"><button type="button" class="cc-btn cc-btn-quiet" data-mods-action="plugin-import"><i class="fas fa-file-import"></i> Import plugin…</button></div>
                 </div>`;
             if (!plugins.length) {
-                html += `<div class="mods-empty">No plugins installed. Import a local <code>.sutra-plugin</code> bundle to extend Sutra.</div>`;
+                html += `<div class="mods-empty">No plugins installed. Import a local <code>.sutra-plugin</code> bundle to extend Sutra. Plugins install <strong>disabled</strong> and are reviewed before they run.</div>`;
                 return html;
             }
             plugins.forEach(rec => {
@@ -61266,7 +61794,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function renderModsRecoveryPanel(c) {
             const safe = isAtelierSafeMode();
             return `
-                <div class="mods-panel-head"><div><h3 class="mods-panel-title">Recovery &amp; developer tools</h3><p class="mods-panel-copy">If custom CSS or a plugin makes Sutra hard to use, recover here. Safe Mode never deletes your data.</p></div></div>
+                <div class="mods-panel-head"><div><h3 class="mods-panel-title">Safe Mode &amp; Recovery</h3><p class="mods-panel-copy">If a custom CSS snippet (or an experimental plugin) makes Sutra hard to use, recover here. Safe Mode never deletes your data.</p></div></div>
                 <div class="mods-card">
                     <p><strong>Safe Mode</strong> skips all custom CSS and plugins at startup. Use it if a mod hides the interface. Your snippets and plugin bundles are preserved; turn things back on when ready.</p>
                     <p class="mods-panel-copy">Status: ${safe ? '<strong style="color:var(--accent)">Safe Mode active</strong>' : 'Normal mode'}</p>
@@ -61345,6 +61873,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (cssImport) cssImport.addEventListener('change', () => handleCssImportFile(cssImport));
             const pluginImport = document.getElementById('modsPluginImportInput');
             if (pluginImport) pluginImport.addEventListener('change', () => handlePluginImportFile(pluginImport));
+
+            // Plugins are a de-emphasized, experimental developer surface that now lives
+            // under Settings ▸ Advanced. Wire the opt-in toggle + delegate plugin card
+            // clicks/changes to the Advanced section (they're outside the mods section).
+            const advSection = document.querySelector('#view-settings [data-settings-section="advanced"]');
+            const pluginsToggle = document.getElementById('pluginsExperimentalToggle');
+            if (pluginsToggle) {
+                pluginsToggle.addEventListener('change', () => {
+                    getCustomization().pluginsExperimentalEnabled = pluginsToggle.checked;
+                    persistAppData();
+                    renderPluginsExperimental();
+                });
+            }
+            if (advSection) {
+                advSection.addEventListener('change', (e) => {
+                    const pcard = e.target.closest('.mods-plugin-card');
+                    if (pcard && e.target.matches('[data-mods-action="plugin-toggle"]')) { setPluginEnabled(pcard.getAttribute('data-plugin-id'), e.target.checked); }
+                });
+                advSection.addEventListener('click', (e) => {
+                    if (e.target.closest('.mods-plugin-card') || e.target.closest('[data-mods-action="plugin-import"]')) handleModsClick(e);
+                });
+            }
         }
 
         function updateCssCardStatus(card, id) {
@@ -61387,6 +61937,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             switch (action) {
                 case 'css-add': { addCssSnippet(MODS.normalizeSnippet({ name: 'New snippet', css: '', enabled: true }, (c.cssSnippets || []).length)); break; }
                 case 'css-add-example': { addCssSnippet(MODS.exampleSnippet()); break; }
+                case 'css-gallery-add': {
+                    const gid = btn.getAttribute('data-gallery-id');
+                    const preset = (typeof MODS.snippetGallery === 'function' ? MODS.snippetGallery() : []).find(g => g.id === gid);
+                    if (preset) {
+                        addCssSnippet(MODS.normalizeSnippet({ name: preset.name, css: preset.css, enabled: true }, (c.cssSnippets || []).length));
+                        showToast('Added “' + preset.name + '” — edit or disable it anytime.');
+                    }
+                    break;
+                }
+                case 'go-recovery': { modsActiveTab = 'recovery'; renderModsSettings(); break; }
                 case 'css-import': { const inp = document.getElementById('modsCssImportInput'); if (inp) inp.click(); break; }
                 case 'css-export-all': { downloadText(MODS.exportAllJson(c.cssSnippets, { exportedAt: new Date().toISOString() }), 'atelier-css-customization.json', 'application/json'); break; }
                 case 'css-rename': break; // handled on blur via change? use input below
@@ -63994,7 +64554,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 } catch (e) { /* fall through to legacy */ }
             }
 
-            const enabled = getWorkspacePreference('assistant.enabled', true) !== false
+            const enabled = getWorkspacePreference('assistant.enabled', false) === true
                 && getWorkspacePreference('assistant.autoSuggestions', true) !== false;
             if (!enabled) {
                 row.style.display = 'none';
@@ -64547,7 +65107,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function toggleChat() {
             if (!chatbotPanel || !chatInput) return;
-            if (getWorkspacePreference('assistant.enabled', true) === false) return;
+            if (getWorkspacePreference('assistant.enabled', false) !== true) return;
             const visible = chatbotPanel.style.display === 'flex';
             chatbotPanel.style.display = visible ? 'none' : 'flex';
             chatbotPanel.setAttribute('aria-hidden', visible ? 'true' : 'false');
@@ -68970,12 +69530,15 @@ ${cspMeta}
                         { id: 'openai', label: 'OpenAI', requiresKey: true, description: 'GPT models; image input supported.', keyUrl: 'https://platform.openai.com/api-keys', docsUrl: 'https://platform.openai.com/docs' },
                         { id: 'anthropic', label: 'Anthropic', requiresKey: true, description: 'Claude models; PDFs and images supported.', keyUrl: 'https://console.anthropic.com/settings/keys', docsUrl: 'https://docs.anthropic.com' },
                         { id: 'openrouter', label: 'OpenRouter', requiresKey: true, description: 'One key for many hosted models.', keyUrl: 'https://openrouter.ai/keys', docsUrl: 'https://openrouter.ai/docs' },
+                        { id: 'deepseek', label: 'DeepSeek', requiresKey: true, description: 'OpenAI-compatible chat and reasoning models.', keyUrl: 'https://platform.deepseek.com/api_keys', docsUrl: 'https://api-docs.deepseek.com/' },
+                        { id: 'xai', label: 'xAI (Grok)', requiresKey: true, description: 'OpenAI-compatible Grok chat models.', keyUrl: 'https://console.x.ai/', docsUrl: 'https://docs.x.ai/' },
+                        { id: 'perplexity', label: 'Perplexity (Sonar)', requiresKey: true, description: 'Web-grounded Sonar chat models; external web results may be used by the provider.', keyUrl: 'https://www.perplexity.ai/settings/api', docsUrl: 'https://docs.perplexity.ai/' },
                         { id: 'local', label: 'Local endpoint', requiresKey: false, description: 'Ollama / LM Studio — fully private, on-device.', keyUrl: '', docsUrl: '' }
                     ],
                     hasKey: (provider) => { try { return !!getProviderApiKey(provider); } catch (e) { return false; } },
                     hasAnyKey: () => {
                         try {
-                            if (['groq', 'openai', 'anthropic', 'gemini', 'openrouter'].some(p => !!getProviderApiKey(p))) return true;
+                            if (['groq', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek', 'xai', 'perplexity'].some(p => !!getProviderApiKey(p))) return true;
                             const local = getWorkspacePreference('assistant.localEndpoint', {});
                             return !!(local && String(local.baseUrl || '').trim());
                         } catch (e) { return false; }
@@ -72972,6 +73535,11 @@ function escapeCommandHtml(value) {
 // Convert a Date to a local YYYY-MM-DD string. Quick Capture deals in local days,
 // never UTC, so we build the string from local getters (matches toISODate elsewhere).
 function quickCaptureLocalISO(d) {
+    try {
+        if (window.SutraStudentDateParser && typeof window.SutraStudentDateParser.localDateKey === 'function') {
+            return window.SutraStudentDateParser.localDateKey(d);
+        }
+    } catch (err) { /* retain the local fallback for legacy/file-open resilience */ }
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -72983,6 +73551,12 @@ function quickCaptureLocalISO(d) {
 // tried most-specific-first; each only consumes text it is confident about so the
 // caller can strip the matched span from the title.
 function parseQuickCaptureDate(text, now) {
+    try {
+        if (window.SutraStudentDateParser && typeof window.SutraStudentDateParser.parseNaturalDate === 'function') {
+            const shared = window.SutraStudentDateParser.parseNaturalDate(text, { now });
+            if (shared && shared.date) return shared;
+        }
+    } catch (err) { /* fall through to the legacy-compatible parser below */ }
     const base = now instanceof Date ? now : new Date();
     const lower = String(text || '').toLowerCase();
     if (!lower.trim()) return null;
@@ -73129,7 +73703,7 @@ function resolveQuickCaptureCourse(text) {
 function parseQuickCaptureText(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
-    const out = { title: raw, type: 'task', dueDate: '', dueTime: '', priority: 'medium', difficulty: 'medium', classHint: '', courseId: '', courseName: '', score: null, maxScore: null };
+    const out = { title: raw, type: 'task', dueDate: '', dueTime: '', priority: 'medium', difficulty: 'medium', classHint: '', courseId: '', courseName: '', score: null, maxScore: null, estimateMinutes: 0 };
     let working = raw;
 
     // Grade log detection — MUST run before date parsing so "9/10 on quiz"
@@ -73153,9 +73727,17 @@ function parseQuickCaptureText(text) {
 
     // Natural-language due date (today/tomorrow, weekdays + abbreviations,
     // "in N days", "next week", explicit + month-name dates) — see parseQuickCaptureDate.
+    const sharedDateParser = window.SutraStudentDateParser;
+    const sharedTimeParsed = sharedDateParser && typeof sharedDateParser.parseNaturalTime === 'function'
+        ? sharedDateParser.parseNaturalTime(working)
+        : null;
+    const sharedDuration = sharedDateParser && typeof sharedDateParser.parseDurationMinutes === 'function'
+        ? sharedDateParser.parseDurationMinutes(working)
+        : null;
     const dateParsed = parseQuickCaptureDate(working, new Date());
     if (dateParsed && dateParsed.date) {
         out.dueDate = dateParsed.date;
+        if (dateParsed.timeHint) out.dueTime = String(dateParsed.timeHint);
         if (dateParsed.match) {
             const dateRe = new RegExp(dateParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
             working = working.replace(dateRe, ' ').replace(/\s+/g, ' ').trim();
@@ -73174,6 +73756,21 @@ function parseQuickCaptureText(text) {
             out.dueTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
             working = working.replace(timeMatch[0], ' ').replace(/\s+/g, ' ').trim();
         }
+    } else if (sharedTimeParsed && sharedTimeParsed.time) {
+        out.dueTime = String(sharedTimeParsed.time);
+        // Phrases such as "after school" may already have been removed by the
+        // date parser; replacing a missing match is harmless and keeps titles clean.
+        if (sharedTimeParsed.match) {
+            const timeRe = new RegExp(sharedTimeParsed.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            working = working.replace(timeRe, ' ').replace(/\s+/g, ' ').trim();
+        }
+    }
+    if (sharedDuration && sharedDuration.minutes) {
+        out.estimateMinutes = sharedDuration.minutes;
+        if (sharedDuration.match) {
+            const durationRe = new RegExp(sharedDuration.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            working = working.replace(durationRe, ' ').replace(/\s+/g, ' ').trim();
+        }
     }
 
     let lower = working.toLowerCase();
@@ -73186,10 +73783,27 @@ function parseQuickCaptureText(text) {
     else if (/\beasy\b/.test(lower)) { out.difficulty = 'easy'; working = working.replace(/\beasy\b/i, ' ').replace(/\s+/g, ' ').trim(); }
 
     // Type hints. A detected grade log keeps its type — "ap bio test" after
-    // "got 40/50 on" is what the grade was ON, not a new AP session.
+    // "got 40/50 on" is what the grade was ON, not a new AP session. Schedule
+    // intent comes first so "schedule AP Chem review tomorrow 7pm" becomes a
+    // real timeline block rather than a generic AP idea.
     if (out.type === 'grade') {
         /* keep */
-    } else if (/\bap\s+\w+|\bfrq\b|\bmcq\b|\bpractice test\b/i.test(working)) {
+    } else if (/\b(schedule|calendar|focus block|study block|work block|block off|block out)\b/i.test(working)
+        || (/\bblock\b/i.test(working) && !/\b(test|quiz|exam|midterm|final)\b/i.test(working))
+        || (/\b(study|review|practice)\b/i.test(working) && (out.estimateMinutes > 0 || !!out.dueTime) && /\b(for|after)\b/i.test(raw))) {
+        // An explicit scheduling phrase ("schedule", "study/focus/work block",
+        // "block off/out") always means a timeline block. A *bare* "block",
+        // though, is often a class-period reference ("physics quiz next block"),
+        // so it defers to a test/quiz/exam word when one is present — the quiz is
+        // the thing to capture, not a calendar block.
+        out.type = 'block';
+        working = working.replace(/\b(schedule|calendar|block|focus block)\b/ig, ' ').replace(/\s+/g, ' ').trim();
+    } else if (/\b(make|create|generate)\s+(?:some\s+)?review\s+(?:cards?|deck|item)|\breview\s+(?:cards?|deck|item)\b|^\s*review\b/i.test(working)) {
+        out.type = 'review';
+        working = working.replace(/\b(make|create|generate)\s+(?:some\s+)?review\s+(?:cards?|deck|item)\b|\breview\s+(?:cards?|deck|item)\b|^\s*review\b/ig, ' ').replace(/\s+/g, ' ').trim();
+    } else if (/\b(test|quiz|exam|midterm|final)\b/i.test(working) && !/\bpractice test\b/i.test(working)) {
+        out.type = 'test';
+    } else if (/\b(ap\s+\w+|apush|apbio|ap\s+bio|sat|act|frq|mcq|practice test)\b/i.test(working)) {
         out.type = 'apsession';
     } else if (/\bhomework\b|\bhw\b|\bassignment\b|\bpset\b|\bproblem set\b/i.test(working)) {
         out.type = 'homework';
@@ -73203,6 +73817,15 @@ function parseQuickCaptureText(text) {
         out.type = 'block';
     }
 
+    // Students often omit the word “homework” ("chem lab due Friday"). When
+    // a dated, school-shaped work noun is present, route it to Homework even
+    // before they have set up classes. Keep explicit college work separate.
+    const explicitCollegeCapture = /\bcollege\b|\bcommon\s*app\b|\bpersonal statement\b|\bscholarship\b/i.test(raw);
+    if (out.type === 'task' && out.dueDate && !explicitCollegeCapture
+        && /\b(lab|worksheet|essay|outline|paper|reading|chapter|problem\s*set|pset|project|presentation|assignment)\b/i.test(working)) {
+        out.type = 'homework';
+    }
+
     // Resolve to an existing Homework course; an unclassified ("task") capture that
     // names a real course is almost always homework, so promote it.
     const courseMatch = resolveQuickCaptureCourse(working);
@@ -73212,8 +73835,7 @@ function parseQuickCaptureText(text) {
         // A named real course means coursework. Promote a plain task, and also a weak
         // "college" guess that only fired on the word "essay" (a class essay, not an app
         // essay) — but leave explicit college/scholarship captures and AP sessions alone.
-        const explicitCollege = /\bcollege\b|\bcommon\s*app\b|\bpersonal statement\b|\bscholarship\b/i.test(raw);
-        if (out.type === 'task' || (out.type === 'college' && !explicitCollege)) out.type = 'homework';
+        if (out.type === 'task' || (out.type === 'college' && !explicitCollegeCapture)) out.type = 'homework';
     } else {
         // Fallback crude class hint when nothing matched ("chem homework" -> "chem").
         const classMatch = working.match(/^([A-Za-z][A-Za-z0-9 &.]{0,30})/);
@@ -73231,9 +73853,12 @@ function parseQuickCaptureText(text) {
 // captures (notes, calendar blocks) return 0 so no suggestion is shown.
 function estimateQuickCaptureMinutes(parsed) {
     if (!parsed) return 0;
-    if (!['homework', 'task', 'college', 'apsession'].includes(parsed.type)) return 0;
+    const explicit = Math.round(Number(parsed.estimateMinutes) || 0);
+    if (explicit > 0) return explicit;
+    if (!['homework', 'task', 'test', 'college', 'apsession'].includes(parsed.type)) return 0;
     const base = { easy: 30, medium: 60, hard: 120 };
     let minutes = base[parsed.difficulty] || 60;
+    if (parsed.type === 'test') minutes = Math.max(minutes, 60);
     // Essays / projects / labs / presentations / practice tests tend to run longer.
     if (/\bessay\b|\bproject\b|\blab\b|\bpaper\b|\bpresentation\b|\bpractice test\b|\bresearch\b/i.test(parsed.title || '')) {
         minutes = Math.max(minutes, 90);
@@ -73390,7 +74015,7 @@ function syncQuickCaptureCourseField(parsed, modal) {
     if (!field || !select) return { selectedCourse: null, isNew: false };
 
     // Homework AND grade logs both belong to a class, so both get the picker.
-    const isCourseWork = parsed && (parsed.type === 'homework' || parsed.type === 'grade');
+    const isCourseWork = parsed && ['homework', 'grade', 'test', 'review', 'note'].includes(parsed.type);
     field.hidden = !isCourseWork;
     if (!isCourseWork) {
         if (newInput) newInput.hidden = true;
@@ -73448,12 +74073,20 @@ function openQuickCaptureModal(prefillText) {
     const dateInput = modal.querySelector('#quickCaptureDate');
     const timeInput = modal.querySelector('#quickCaptureTime');
     const apSubjectSelect = modal.querySelector('#quickCaptureApSubject');
+    const prioritySelect = modal.querySelector('#quickCapturePriority');
+    const difficultySelect = modal.querySelector('#quickCaptureDifficulty');
+    const estimateInput = modal.querySelector('#quickCaptureEstimate');
+    const notesInput = modal.querySelector('#quickCaptureNotes');
     const courseSelect = modal.querySelector('#quickCaptureCourse');
     const newCourseInput = modal.querySelector('#quickCaptureNewCourse');
     if (!input || !previewEl || !typeSelect || !dateInput || !timeInput || !apSubjectSelect) return;
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
+    if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+    [prioritySelect, difficultySelect, estimateInput].forEach(field => {
+        if (field && field.dataset) field.dataset.userTouched = '0';
+    });
     const blockChk = modal.querySelector('#quickCaptureBlockTime');
     if (blockChk) blockChk.checked = false;
 
@@ -73464,9 +74097,16 @@ function openQuickCaptureModal(prefillText) {
             previewEl.textContent = 'Start typing to capture…';
             return;
         }
+        const manualType = typeSelect.dataset && typeSelect.dataset.manualType;
+        if (manualType) parsed.type = manualType;
+        if (prioritySelect && prioritySelect.dataset.userTouched === '1') parsed.priority = prioritySelect.value || 'medium';
+        if (difficultySelect && difficultySelect.dataset.userTouched === '1') parsed.difficulty = difficultySelect.value || 'medium';
+        if (estimateInput && estimateInput.dataset.userTouched === '1') parsed.estimateMinutes = Math.max(0, Math.round(Number(estimateInput.value) || 0));
         typeSelect.value = parsed.type;
         dateInput.value = parsed.dueDate || '';
         timeInput.value = parsed.dueTime || '';
+        if (prioritySelect && prioritySelect.dataset.userTouched !== '1') prioritySelect.value = parsed.priority || 'medium';
+        if (difficultySelect && difficultySelect.dataset.userTouched !== '1') difficultySelect.value = parsed.difficulty || 'medium';
         const apMeta = syncQuickCaptureApSubjectField(parsed, modal);
         const courseMeta = syncQuickCaptureCourseField(parsed, modal);
         const bits = [];
@@ -73493,6 +74133,17 @@ function openQuickCaptureModal(prefillText) {
                 else destination = 'Homework assignment';
                 break;
             }
+            case 'test': {
+                if (courseMeta.isNew) destination = 'Test / quiz · (new class)';
+                else if (courseMeta.selectedCourse) destination = `Test / quiz · ${courseMeta.selectedCourse.name}`;
+                else destination = 'Test / quiz';
+                break;
+            }
+            case 'review': {
+                if (courseMeta.selectedCourse) destination = `Review deck · ${courseMeta.selectedCourse.name}`;
+                else destination = 'Review deck';
+                break;
+            }
             case 'grade': {
                 if (courseMeta.isNew) destination = 'Grade log · (new class)';
                 else if (courseMeta.selectedCourse) destination = `Grade log · ${courseMeta.selectedCourse.name}`;
@@ -73514,6 +74165,7 @@ function openQuickCaptureModal(prefillText) {
         if (parsed.type !== 'homework' && !parsed.courseName && parsed.classHint) bits.push(`class hint: ${parsed.classHint}`);
         // Effort estimate + optional "block focus time" nudge (the plan step).
         const estMinutes = estimateQuickCaptureMinutes({ ...parsed, type: parsed.type });
+        if (estimateInput && estimateInput.dataset.userTouched !== '1') estimateInput.value = parsed.estimateMinutes > 0 ? String(parsed.estimateMinutes) : '';
         const blockField = modal.querySelector('#quickCaptureBlockTimeField');
         const blockLabel = modal.querySelector('#quickCaptureBlockTimeLabel');
         if (blockField) {
@@ -73525,13 +74177,17 @@ function openQuickCaptureModal(prefillText) {
         if (estMinutes > 0) bits.push(`≈ ${formatQuickCaptureEstimate(estMinutes)}`);
         previewEl.textContent = `“${parsed.title}” · ${bits.join(' · ')}`;
     };
-    input.oninput = updatePreview;
+    input.oninput = () => {
+        if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+        updatePreview();
+    };
     typeSelect.onchange = () => {
         const manualType = String(typeSelect.value || 'task');
+        if (typeSelect.dataset) typeSelect.dataset.manualType = manualType;
         syncQuickCaptureApSubjectField({ type: manualType }, modal);
         syncQuickCaptureCourseField({ type: manualType, courseId: '', classHint: '' }, modal);
         const bf = modal.querySelector('#quickCaptureBlockTimeField');
-        if (bf) bf.hidden = !['homework', 'task', 'college', 'apsession'].includes(manualType);
+        if (bf) bf.hidden = !['homework', 'task', 'test', 'college', 'apsession'].includes(manualType);
     };
     apSubjectSelect.onchange = updatePreview;
     if (courseSelect) {
@@ -73547,6 +74203,28 @@ function openQuickCaptureModal(prefillText) {
         };
     }
     if (newCourseInput) newCourseInput.oninput = updatePreview;
+    if (estimateInput) estimateInput.oninput = () => { estimateInput.dataset.userTouched = '1'; updatePreview(); };
+    if (prioritySelect) prioritySelect.onchange = () => { prioritySelect.dataset.userTouched = '1'; updatePreview(); };
+    if (difficultySelect) difficultySelect.onchange = () => { difficultySelect.dataset.userTouched = '1'; updatePreview(); };
+
+    const cancelBtn = modal.querySelector('#quickCaptureCancelBtn');
+    const submitBtn = modal.querySelector('#quickCaptureSubmitBtn');
+    if (cancelBtn && cancelBtn.dataset.bound !== 'true') {
+        cancelBtn.dataset.bound = 'true';
+        cancelBtn.addEventListener('click', closeQuickCaptureModal);
+    }
+    if (submitBtn && submitBtn.dataset.bound !== 'true') {
+        submitBtn.dataset.bound = 'true';
+        submitBtn.addEventListener('click', submitQuickCapture);
+    }
+    if (modal.dataset.bound !== 'true') {
+        modal.dataset.bound = 'true';
+        modal.querySelectorAll('[data-quick-capture-close]').forEach(el => el.addEventListener('click', closeQuickCaptureModal));
+        modal.addEventListener('keydown', event => {
+            if (event.key === 'Escape') { event.preventDefault(); closeQuickCaptureModal(); }
+            if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submitQuickCapture(); }
+        });
+    }
     updatePreview();
 
     modal.classList.add('active');
@@ -73658,6 +74336,10 @@ function submitQuickCapture() {
     const dateInput = modal.querySelector('#quickCaptureDate');
     const timeInput = modal.querySelector('#quickCaptureTime');
     const apSubjectSelect = modal.querySelector('#quickCaptureApSubject');
+    const prioritySelect = modal.querySelector('#quickCapturePriority');
+    const difficultySelect = modal.querySelector('#quickCaptureDifficulty');
+    const estimateInput = modal.querySelector('#quickCaptureEstimate');
+    const notesInput = modal.querySelector('#quickCaptureNotes');
     if (!input || !typeSelect) return;
     const title = String(input.value || '').trim();
     if (!title) {
@@ -73667,14 +74349,21 @@ function submitQuickCapture() {
     const type = String(typeSelect.value || 'task');
     const dueDate = String((dateInput && dateInput.value) || '');
     const dueTime = String((timeInput && timeInput.value) || '');
+    const parsedCapture = parseQuickCaptureText(input.value) || {};
+    const priority = String((prioritySelect && prioritySelect.value) || parsedCapture.priority || 'medium');
+    const difficulty = String((difficultySelect && difficultySelect.value) || parsedCapture.difficulty || 'medium');
+    const estimateMinutes = Math.max(0, Math.round(Number((estimateInput && estimateInput.value) || parsedCapture.estimateMinutes) || 0));
+    const captureNotes = String((notesInput && notesInput.value) || '').trim();
 
     try {
         switch (type) {
-            case 'homework': {
-                if (typeof localStorage === 'undefined') break;
-                // Re-parse to recover difficulty / priority / clean title (no modal field
-                // carries them); the user-editable date/time/type fields stay authoritative.
-                const parsedHw = parseQuickCaptureText(input.value) || {};
+            case 'homework':
+            case 'test': {
+                // Route through the Homework module rather than writing hwTasks:v2
+                // directly. Its SafeStorage facade keeps the capture in memory and
+                // makes a quota/privacy-mode failure visible instead of claiming a
+                // lost assignment was saved.
+                const parsedHw = parsedCapture;
                 const hwTitle = (parsedHw.title && parsedHw.title.trim()) ? parsedHw.title.trim() : title;
 
                 // Course comes from the (user-confirmable) Class dropdown; the parsed match
@@ -73706,27 +74395,32 @@ function submitQuickCapture() {
                     }
                 }
 
-                const hwTasksRaw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-                const uid = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
-                hwTasksRaw.push({
-                    id: uid,
-                    courseId: hwCourseId,
-                    title: hwTitle,
-                    text: hwTitle,
-                    done: false,
-                    dueDate,
-                    dueTime,
-                    due: dueDate,
-                    priority: parsedHw.priority || 'medium',
-                    difficulty: parsedHw.difficulty || 'medium',
-                    notes: '',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                });
-                localStorage.setItem('hwTasks:v2', JSON.stringify(hwTasksRaw));
-                try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) {}
+                const hw = window.SutraHomework;
+                const created = hw && typeof hw.createTask === 'function'
+                    ? hw.createTask({
+                        courseId: hwCourseId,
+                        courseName: hwCourseName,
+                        title: hwTitle,
+                        dueDate,
+                        dueTime,
+                        priority,
+                        difficulty,
+                        estimateMinutes,
+                        notes: captureNotes,
+                        kind: type === 'test' ? (/\bquiz\b/i.test(hwTitle) ? 'quiz' : 'test') : 'assignment'
+                    })
+                    : null;
+                if (!created) {
+                    if (typeof showToast === 'function') showToast('Homework is unavailable right now — nothing was added.');
+                    return;
+                }
                 try { window.SutraActivation && window.SutraActivation.record('capture'); } catch (err) {}
-                if (typeof showToast === 'function') showToast(hwCourseName ? `Homework captured in ${hwCourseName}.` : 'Homework captured.');
+                if (typeof showToast === 'function') {
+                    const label = type === 'test' ? 'Test / quiz' : 'Homework';
+                    showToast(created.persistence && created.persistence.ok === false
+                        ? `${label} captured in this session. Browser storage needs attention — export a backup before closing.`
+                        : (hwCourseName ? `${label} captured in ${hwCourseName}.` : `${label} captured.`));
+                }
                 break;
             }
             case 'grade': {
@@ -73780,6 +74474,36 @@ function submitQuickCapture() {
                 }
                 break;
             }
+            case 'review': {
+                const courseSel = modal.querySelector('#quickCaptureCourse');
+                const courses = (window.SutraHomework && typeof window.SutraHomework.getCourses === 'function')
+                    ? window.SutraHomework.getCourses()
+                    : [];
+                const selectedCourse = courseSel && courseSel.value && courseSel.value !== '__new__'
+                    ? (Array.isArray(courses) ? courses.find(c => String(c.id) === String(courseSel.value)) : null)
+                    : null;
+                const subject = selectedCourse ? String(selectedCourse.name || '') : String(parsedCapture.courseName || '');
+                const reviewTitle = String(parsedCapture.title || title).trim() || 'Review';
+                const deckName = subject && !new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b`, 'i').test(reviewTitle)
+                    ? `${subject} · ${reviewTitle}`
+                    : reviewTitle;
+                if (typeof window.createReviewDeck !== 'function') {
+                    if (typeof showToast === 'function') showToast('Review is still loading — try again in a moment.');
+                    return;
+                }
+                const deck = window.createReviewDeck({
+                    name: deckName.slice(0, 120),
+                    subject: subject.slice(0, 120),
+                    description: captureNotes || 'Created from Quick Capture. Add cards from a note or assignment when you are ready.'
+                });
+                if (!deck) {
+                    if (typeof showToast === 'function') showToast('Could not create that review deck.');
+                    return;
+                }
+                try { window.SutraActivation && window.SutraActivation.record('capture'); } catch (err) {}
+                if (typeof showToast === 'function') showToast('Review deck captured. Add cards from a note or assignment when you are ready.');
+                break;
+            }
             case 'note': {
                 if (typeof pages !== 'undefined') {
                     const now = new Date().toISOString();
@@ -73802,13 +74526,21 @@ function submitQuickCapture() {
             }
             case 'block': {
                 if (typeof timeBlocks !== 'undefined' && Array.isArray(timeBlocks)) {
+                    const start = dueTime || '09:00';
+                    const duration = Math.max(5, Math.min(720, estimateMinutes || 60));
+                    const end = (function(t, minutes) {
+                        const [h, m] = t.split(':').map(Number);
+                        const total = ((Number(h) || 0) * 60 + (Number(m) || 0) + minutes) % 1440;
+                        return `${String(Math.floor(total / 60)).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+                    })(start, duration);
                     timeBlocks.push({
                         id: (typeof generateId === 'function' ? generateId() : `b${Date.now()}`),
-                        date: dueDate || (new Date()).toISOString().slice(0, 10),
-                        start: dueTime || '09:00',
-                        end: dueTime ? (function(t){ const [h,m] = t.split(':').map(Number); const nh = (h+1)%24; return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`; })(dueTime) : '10:00',
-                        name: title,
-                        category: 'general'
+                        date: dueDate || quickCaptureLocalISO(new Date()),
+                        start,
+                        end,
+                        name: String(parsedCapture.title || title).slice(0, 160),
+                        category: 'study',
+                        notes: captureNotes
                     });
                     try { saveTimeBlocks && saveTimeBlocks(); } catch (err) { window.reportError && window.reportError(err, 'persist:saveTimeBlocks', 'warning'); }
                     try { if (activeView === 'timeline' && typeof renderTimeline === 'function') renderTimeline(); } catch (err) {}
@@ -73840,15 +74572,15 @@ function submitQuickCapture() {
                             subjectId: subject.id,
                             unitId: null,
                             topicId: null,
-                            title: title.slice(0, 160),
+                            title: String(parsedCapture.title || title).slice(0, 160),
                             date: dueDate || nowIso.slice(0, 10),
                             time: dueTime || '18:00',
-                            durationMinutes: 60,
-                            priority: 'medium',
+                            durationMinutes: estimateMinutes || 60,
+                            priority,
                             status: 'scheduled',
                             sessionType: /\bfrq\b/i.test(title) ? 'frq' : (/\bmcq\b|\bpractice test\b/i.test(title) ? 'practice' : 'review'),
                             noteId: null,
-                            notes: 'Captured via Quick Capture.',
+                            notes: captureNotes || 'Captured via Quick Capture.',
                             completedAt: null,
                             updatedAt: nowIso,
                             createdAt: nowIso
@@ -73868,11 +74600,12 @@ function submitQuickCapture() {
                 if (!routed && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     tasks.push({
                         id: (typeof generateId === 'function' ? generateId() : `t${Date.now()}`),
-                        title,
-                        notes: '',
+                        title: String(parsedCapture.title || title),
+                        notes: captureNotes,
                         completed: false,
-                        priority: 'medium',
-                        difficulty: 'medium',
+                        priority,
+                        difficulty,
+                        estimateMinutes,
                         dueDate,
                         dueTime,
                         category: 'AP Study',
@@ -73913,11 +74646,12 @@ function submitQuickCapture() {
                 if (!routed && typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     tasks.push({
                         id: (typeof generateId === 'function' ? generateId() : `t${Date.now()}`),
-                        title,
-                        notes: '',
+                        title: String(parsedCapture.title || title),
+                        notes: captureNotes,
                         completed: false,
-                        priority: 'medium',
-                        difficulty: 'medium',
+                        priority,
+                        difficulty,
+                        estimateMinutes,
                         dueDate,
                         dueTime,
                         category: 'College',
@@ -75027,13 +75761,19 @@ function scheduleGenericItemAsBlock(item) {
         const iso = d.toISOString().slice(0, 10);
         const start = item.dueTime || '18:00';
         const end = (function(t){ const [h,m] = String(t).split(':').map(Number); const nh=(Number(h||0)+1)%24; return `${String(nh).padStart(2,'0')}:${String(Number(m||0)).padStart(2,'0')}`; })(start);
+        const source = String(item.source || '');
+        const sourceId = String(item.sourceId || item.id || '').replace(/^(?:task|hw):/, '');
+        const linkage = source === 'task' && sourceId
+            ? { taskId: sourceId }
+            : (source === 'homework' && sourceId ? { homeworkId: sourceId, assignmentId: sourceId } : {});
         timeBlocks.push({
             id: (typeof generateId === 'function' ? generateId() : `b${Date.now()}`),
             date: iso,
             start,
             end,
             name: `Prep: ${String(item.title || item.name || 'Work').slice(0, 120)}`,
-            category: item.category || 'general'
+            category: item.category || 'general',
+            ...linkage
         });
         saveTimeBlocks && saveTimeBlocks();
         if (activeView === 'timeline' && typeof renderTimeline === 'function') { try { renderTimeline(); } catch (err) {} }
@@ -75055,6 +75795,15 @@ function parseHomeworkPasteText(text) {
 
     const parseDateAnywhere = (str) => {
         const s = String(str || '');
+        // One shared local-date policy for portal pastes and Quick Capture.
+        // It covers phrases such as "next Friday", "this weekend", and
+        // "after school" before the legacy portal-format fallbacks below.
+        try {
+            const shared = window.SutraStudentDateParser && typeof window.SutraStudentDateParser.parseNaturalDate === 'function'
+                ? window.SutraStudentDateParser.parseNaturalDate(s, { now })
+                : null;
+            if (shared && shared.date) return shared.date;
+        } catch (err) { /* retain legacy parser */ }
         const m1 = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
         if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
         const m2 = s.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
@@ -75438,14 +76187,20 @@ function openHomeworkPasteImport(prefillText) {
                 <td><label class="hw-paste-skip"><input type="checkbox" data-field="skip" data-skip-key="${escapeCommandHtml(rowKey)}"${skipChecked ? ' checked' : ''} />Skip</label></td>
             </tr>`;
         }).join('');
-        previewHost.innerHTML = `
-            <div class="hw-paste-table-wrap">
-                <table class="hw-paste-table" role="grid">
-                    <thead><tr><th>Title</th><th>Class</th><th>Date</th><th>Time</th><th>Difficulty</th><th>Priority</th><th></th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-        `;
+        if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
+            // `rows` is assembled from escaped field values above; use the
+            // audited DOM channel rather than a raw sink.
+            window.SutraDOMSafety.setTrustedHTML(previewHost, `
+                <div class="hw-paste-table-wrap">
+                    <table class="hw-paste-table" role="grid">
+                        <thead><tr><th>Title</th><th>Class</th><th>Date</th><th>Time</th><th>Difficulty</th><th>Priority</th><th></th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `);
+        } else {
+            previewHost.textContent = 'The homework preview could not be rendered safely.';
+        }
         if (statusEl) statusEl.textContent = `${parsed.length} row${parsed.length === 1 ? '' : 's'} parsed${dupCount ? ` · ${dupCount} already in Sutra (skipped)` : ''}${updateCount ? ` · ${updateCount} due-date change${updateCount === 1 ? '' : 's'}` : ''} · review and import.`;
 
         // Toggle new-class name visibility when "__new__" is picked.
@@ -75867,17 +76622,21 @@ function openNotesSplitPresetsPicker() {
     popover.id = 'notesSplitPresetsPopover';
     popover.className = 'notes-split-presets-popover';
     popover.setAttribute('role', 'menu');
-    popover.innerHTML = `
-        <div class="notes-split-presets-head">Split workflow presets</div>
-        <ul class="notes-split-presets-list">
-            ${NOTES_SPLIT_PRESETS.map(p => `
-                <li><button type="button" class="neumo-btn notes-split-preset-btn" data-preset-id="${p.id}">
-                    <span class="preset-label">${p.label}</span>
-                    <span class="preset-desc">${p.description}</span>
-                </button></li>
-            `).join('')}
-        </ul>
-    `;
+    if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
+        window.SutraDOMSafety.setTrustedHTML(popover, `
+            <div class="notes-split-presets-head">Split workflow presets</div>
+            <ul class="notes-split-presets-list">
+                ${NOTES_SPLIT_PRESETS.map(p => `
+                    <li><button type="button" class="neumo-btn notes-split-preset-btn" data-preset-id="${p.id}">
+                        <span class="preset-label">${p.label}</span>
+                        <span class="preset-desc">${p.description}</span>
+                    </button></li>
+                `).join('')}
+            </ul>
+        `);
+    } else {
+        popover.textContent = 'Split workflow presets are unavailable.';
+    }
     document.body.appendChild(popover);
     if (host && host.getBoundingClientRect) {
         const r = host.getBoundingClientRect();
@@ -75921,7 +76680,12 @@ function openGlobalSearchPanel(initialQuery) {
             const recentHtml = recent.length
                 ? `<section class="global-search-group"><h4>Recent</h4><ul>${recent.map((entry, idx) => `<li class="global-search-item" data-gs-recent="${idx}" tabindex="0"><div class="global-search-item-title">${escapeCommandHtml(entry.query)}</div></li>`).join('')}</ul></section>`
                 : '';
-            results.innerHTML = `<div class="global-search-empty">Type to search notes, tasks, homework, AP, Review, trackers, College, Timeline…</div>${recentHtml}`;
+            if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
+                // Search labels are escaped before interpolation above.
+                window.SutraDOMSafety.setTrustedHTML(results, `<div class="global-search-empty">Type to search notes, tasks, homework, AP, Review, trackers, College, Timeline…</div>${recentHtml}`);
+            } else {
+                results.textContent = 'Type to search this workspace.';
+            }
             results.querySelectorAll('[data-gs-recent]').forEach(node => {
                 node.addEventListener('click', () => {
                     const idx = Number(node.getAttribute('data-gs-recent'));
@@ -76496,9 +77260,3 @@ function _fsFormatTime(totalSeconds, compact) {
     if (compact) return m + ':' + pad(sec);
     return pad(m) + ':' + pad(sec);
 }
-
-
-
-
-
-

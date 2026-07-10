@@ -1,5 +1,13 @@
 # Sutra Plugin SDK
 
+> **Status: experimental / developer feature.** Local Plugins are intentionally
+> de-emphasized in Sutra and are **off by default**. They are *not* part of the
+> normal Customization screen — a user must opt in under **Settings ▸ Advanced ▸
+> Developer / Experimental → Local Plugins (Experimental)** to reveal the controls,
+> and the surface is never shown during onboarding. This document is developer /
+> experimental reference material. For the user-facing appearance layer, see the
+> [CSS Mods Guide](CSS_MODS_GUIDE.md) instead — CSS Overrides never run code.
+
 Sutra plugins are **portable, local JSON files** — exported with the **`.sutra-plugin`**
 extension (the legacy **`.atelier-plugin`** extension still imports). There is no
 build step, no npm, no remote loader, and no marketplace — a plugin is a single JSON

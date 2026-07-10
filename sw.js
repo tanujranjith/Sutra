@@ -15,18 +15,43 @@
    Bump CACHE_VERSION to invalidate old caches on the next activate.
    ========================================================================== */
 
-const CACHE_VERSION = 'sutra-cache-v1-20260709-quickpage';
+const CACHE_VERSION = 'sutra-cache-v2-20260709-studentloop';
 const CORE_ASSETS = [
     './Sutra.html',
-    './manifest.webmanifest'
+    './manifest.webmanifest',
+    './styles/base/styles.css',
+    './styles/legacy/app-shell-base.css',
+    './styles/responsive/mobile.css',
+    './src/core/dom-safety.js',
+    './src/core/safe-storage.js',
+    './src/state/workspace-normalizers.js',
+    './src/core/student-date-parser.js',
+    './src/features/study/homework.js',
+    './src/features/workspace/today-command-center.js',
+    './src/core/app.js',
+    './src/ui/student-loop-actions.js',
+    './src/features/workspace/mobile-nav.js',
+    './assets/vendor/jszip/jszip.min.js'
 ];
+
+const STATIC_ASSET_PATH = /\.(?:js|css|html|webmanifest|ico|png|svg|woff2?|ttf)$/i;
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_VERSION)
-            .then((cache) => cache.addAll(CORE_ASSETS).catch(() => undefined))
-            .then(() => self.skipWaiting())
+            // One optional core asset should not prevent the rest of the shell
+            // from becoming available offline.
+            .then((cache) => Promise.all(CORE_ASSETS.map((asset) => cache.add(asset).catch(() => undefined))))
     );
+});
+
+// Do not activate a new worker underneath an open workspace. The page offers a
+// visible “reload safely” choice and sends this message only after the student
+// accepts it.
+self.addEventListener('message', (event) => {
+    if (event && event.data && event.data.type === 'SUTRA_SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 self.addEventListener('activate', (event) => {
@@ -60,14 +85,18 @@ self.addEventListener('fetch', (event) => {
                     cachePut(req, res);
                     return res.clone();
                 })
-                .catch(() => caches.match(req).then((hit) => hit || caches.match('./Sutra.html')))
+                .catch(() => matchCached(req).then((hit) => hit || caches.match('./Sutra.html')))
         );
         return;
     }
 
+    // Never turn arbitrary same-origin requests into a cache of user content.
+    // Sutra only caches versioned static application assets.
+    if (!STATIC_ASSET_PATH.test(url.pathname)) return;
+
     // Static sub-assets (versioned by ?v=): cache-first, refresh in background.
     event.respondWith(
-        caches.match(req).then((hit) => {
+        matchCached(req).then((hit) => {
             const network = fetch(req)
                 .then((res) => { cachePut(req, res); return res.clone(); })
                 .catch(() => hit);
@@ -79,9 +108,15 @@ self.addEventListener('fetch', (event) => {
 function cachePut(req, res) {
     // Cache only clean, same-origin, complete responses. Never cache opaque
     // (cross-origin) or partial/error responses.
-    if (!res || res.status !== 200 || res.type !== 'basic') return;
+    let url;
+    try { url = new URL(req.url); } catch (e) { return; }
+    if (!res || res.status !== 200 || res.type !== 'basic' || !STATIC_ASSET_PATH.test(url.pathname)) return;
     const copy = res.clone();
     caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => undefined);
+}
+
+function matchCached(req) {
+    return caches.match(req).then((hit) => hit || caches.match(req, { ignoreSearch: true }));
 }
 
 /* Background reminders (local-first). Periodic Background Sync — where the

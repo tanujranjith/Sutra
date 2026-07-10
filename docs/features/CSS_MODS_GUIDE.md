@@ -36,10 +36,21 @@ or read your data — that is what makes them safe to paste from a guide like th
 
 **Settings ▸ Customization** → the **CSS Overrides** section.
 
-Customization has three sections — **CSS Overrides**, **Plugins**, and **Recovery &
-Developer Tools** — plus two master switches at the top: **Enable mods** and
-**Apply custom CSS**. Turning **Apply custom CSS** off disables *all* snippets at
-once without deleting any of them.
+Customization has two sections — **CSS Overrides** and **Safe Mode & Recovery** —
+plus two master switches at the top: **Enable customization** and **Apply custom
+CSS**. Turning **Apply custom CSS** off disables *all* snippets at once without
+deleting any of them.
+
+The CSS Overrides section opens with a **snippet gallery** — a small set of curated,
+hand-vetted presets (Compact Sidebar, Bigger Editor Text, Minimal Today View, Softer
+Cards, High Contrast, Calm Focus Mode). Each is CSS-only and reversible; clicking one
+adds it as a new, editable snippet you can tweak or disable at any time.
+
+> **Local Plugins** are a separate, **experimental developer feature** and are *not*
+> part of the normal Customization screen. They live under **Settings ▸ Advanced ▸
+> Developer / Experimental** (off by default) and are documented in
+> [PLUGIN_SDK.md](PLUGIN_SDK.md). CSS Overrides never run code; plugins are the only
+> place optional sandboxed code can run, which is why they're kept out of the way.
 
 ### CSS Overrides vs themes vs plugins
 
@@ -627,8 +638,8 @@ delete your snippets, plugins, or workspace.
    is also a **Disable all mods** master switch and a **Reset all CSS customization**
    (which *does* remove snippets — use only when you mean it; themes, notes, tasks,
    and plugins are untouched).
-2. **Reload in Safe Mode.** Use **Reload in Safe Mode** in Recovery & Developer
-   Tools. Safe Mode **skips all custom CSS and plugins** for that session and
+2. **Reload in Safe Mode.** Use **Reload in Safe Mode** in the **Safe Mode &
+   Recovery** tab. Safe Mode **skips all custom CSS and plugins** for that session and
    **never deletes** anything.
 3. **`?sutraSafeMode=1`.** Add this query parameter to the app URL to launch straight
    into Safe Mode (canonical).

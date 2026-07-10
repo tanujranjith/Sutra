@@ -28,6 +28,10 @@ async function openApp(page) {
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+  // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
+  // defaults OFF); enable it like a user would, otherwise toggleChat() is a no-op
+  // and the panel never opens.
+  await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
   // Open the assistant panel so the messages container is interactable/visible.
   await page.evaluate(() => {
     const panel = document.getElementById('chatbotPanel');

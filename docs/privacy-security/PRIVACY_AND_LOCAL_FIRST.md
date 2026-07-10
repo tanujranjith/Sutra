@@ -50,7 +50,12 @@ Some things are deliberately kept out of every backup file:
   you export your workspace, the exporter actively **redacts** any nested
   secret-shaped field (keys, tokens, passwords) so credentials cannot ride along
   by accident.
-- **Conversation history** with the Assistant is session-local and not exported.
+- **Assistant conversation history is optional.** When **Save chat history** is
+  enabled, visible chat messages are stored locally in this browser so you can
+  reopen them. They are included in password-encrypted `.sutra` backups by
+  default, excluded from plaintext JSON recovery unless you explicitly opt in,
+  and can be disabled or cleared in Assistant settings. API keys, provider
+  credentials, hidden reasoning, and backup passwords are never included.
 - **Backup passwords, Google Drive sync passwords, OAuth access tokens, refresh
   tokens, client secrets, and derived encryption keys** are never exported.
 - **Google Drive sync metadata** (`sutra:googleDriveSync:v1`) and **Sutra Cloud
@@ -71,11 +76,12 @@ restored workspace keeps its setup and only needs the key re-entered.
 Sutra uses your browser's local storage facilities:
 
 - **IndexedDB** holds the bulk of your workspace and your binary attachments.
-- **localStorage** holds homework data, a small set of preferences, and the
-  Storage Health/save-failure banner state needed to warn you after a reload if
-  IndexedDB could not confirm a save.
-- **sessionStorage** holds only session-scoped, never-persisted items -
-  principally your AI API keys and chat history.
+- **localStorage** holds homework data, a small set of preferences, optional
+  saved Assistant conversations, and the Storage Health/save-failure banner
+  state needed to warn you after a reload if IndexedDB could not confirm a save.
+- **sessionStorage** holds session-scoped, never-persisted items — principally
+  your AI API keys and a compatibility copy of the current chat while the tab is
+  open.
 
 Some of these stores carry **legacy-named compatibility identifiers** - for
 example the workspace database is named `noteflow_atelier_db` and the
@@ -91,8 +97,8 @@ device). For the full layout, see [`DATA_AND_BACKUPS.md`](./DATA_AND_BACKUPS.md)
 Sutra Assistant can use a language model, but **Sutra runs no model servers of
 its own.** When a reply needs a model, the request goes **directly from your
 browser to the AI provider you have chosen** (OpenAI, Anthropic Claude, Google
-Gemini, Groq, OpenRouter, or a Custom OpenAI-Compatible / Local endpoint). There
-is no Sutra relay in the middle.
+Gemini, Groq, OpenRouter, DeepSeek, xAI, Perplexity, or a Custom
+OpenAI-Compatible / Local endpoint). There is no Sutra relay in the middle.
 
 The local signal layer - **Sutra Intelligence** - that reads your workspace to
 understand overdue work, workload, conflicts, weak areas, review backlog, and
@@ -152,9 +158,11 @@ the app is open, online, unlocked, and authorized.
 in the save bar, and only does anything after you choose a destination, connect
 it, and press a button:
 
-- **You choose the destination.** Recommended: Google Drive, OneDrive, Dropbox.
-  Advanced: WebDAV (Nextcloud/ownCloud), S3-compatible storage, Supabase, or a
-  custom HTTP endpoint. Manual: download the encrypted file and save it anywhere.
+- **You choose the destination.** Recommended: download an encrypted file into a
+  folder that already syncs, or use Google Drive when it is configured and
+  working. Advanced: OneDrive, Dropbox, WebDAV (Nextcloud/ownCloud),
+  S3-compatible storage, Supabase, or a custom HTTP endpoint. Manual: download
+  the encrypted file and save it anywhere.
   Sutra does **not** require a central backend of its own for backups.
 - The destination choice and any provider credentials are **device-local** (via
   `SutraSafeStorage`) and **never travel inside a `.sutra` backup**. Advanced
@@ -206,7 +214,7 @@ browser session ends.
 
 | Question | Answer |
 |---|---|
-| Is there a Sutra server storing my data? | No. Static app, no Sutra backend. Optional Drive sync and optional Sutra Cloud (Supabase) store only **browser-encrypted** snapshots in **your own** account — the server never sees plaintext. |
+| Is there a Sutra server storing my data? | No. Static app, no Sutra backend. Optional Drive sync and an optional provider you choose store only **browser-encrypted** snapshots in your account or destination — the provider never sees plaintext. |
 | Do I need an account? | No. |
 | Does Sutra track me / send telemetry? | No. |
 | Where does my workspace live? | Locally - IndexedDB + localStorage in your browser. |
@@ -226,16 +234,15 @@ the on-device Sutra Intelligence layer all work with **no network at all**. A
 locally-saved copy of the app (the `Sutra.html` file and its assets opened from
 disk) also opens offline every time.
 
-**What is not guaranteed (today).** Sutra ships **no service worker**, so when you
-run the *hosted* app, reopening it offline after a full browser restart relies on
-the **browser's ordinary HTTP cache**. That usually works for a recently-used
-tab, but it is **not a guarantee** - a cold start with no network may fail to
-fetch the app shell. We deliberately prefer this honest behavior over bolting on
-last-minute cache infrastructure that could pin a stale shell. If you need
-dependable offline reopen, keep a local copy of the app or a `.sutra` backup.
-(Optional Google Drive sync, AI provider calls, and optional document
-import/export helper libraries require a network when used, and fail gracefully
-when offline.)
+**Hosted offline reopen.** Over `http(s)`, Sutra registers a small service worker
+that precaches the static app shell and core local assets. It caches **only
+same-origin static files** — never workspace data, exports, provider requests,
+or cross-origin requests. A fresh version waits until you choose **Reload safely**
+in the visible update prompt, so it never replaces an open workspace underneath
+you. `file://` remains service-worker-free by browser design and continues to
+open the local app directly. Keep encrypted backups as your durable recovery
+copy; Google Drive sync, AI provider calls, and optional online helpers still
+need a network when you choose to use them.
 
 **Deployment & response headers.** Sutra ships the strongest practical
 **meta-tag** Content-Security-Policy in every HTML entry point (it scopes

@@ -253,24 +253,25 @@ documented in [`GOOGLE_DRIVE_SYNC_SETUP.md`](../features/GOOGLE_DRIVE_SYNC_SETUP
 
 ---
 
-## 5b. Optional encrypted Sutra Cloud backup (Supabase)
+## 5b. Optional encrypted Sutra Cloud backup (provider-based)
 
-**Sutra Cloud** is a second optional, consent-first backup layer, powered by
-Supabase (Auth + Storage). It is **off by default** and lives in the save bar
-(not first-run onboarding — onboarding only *describes* it). Sutra stays
-local-first: IndexedDB/localStorage is the working copy and never depends on
-Sutra Cloud.
+**Sutra Cloud** is a second optional, consent-first backup layer. It is
+**provider-based**; Supabase is one advanced adapter, not a required Sutra
+backend. It is **off by default** and lives in the save bar (not first-run
+onboarding — onboarding only *describes* it). Sutra stays local-first:
+IndexedDB/localStorage is the working copy and never depends on cloud backup.
 
 It is intentionally a **manual backup/restore** model (with an opt-in auto layer),
 **not** continuous sync. "Cross-device" means: back up here, restore there.
 
-- **Provider-based (device-local choice):** Sutra Cloud is now a provider-adapter
+- **Provider-based (device-local choice):** Sutra Cloud is a provider-adapter
   system — the active destination is stored at `sutra:cloudActiveProvider:v1` and
   per-provider config at `sutra:cloudProvider:<id>:v1` (via `SutraSafeStorage`,
-  never inside a `.sutra` backup). Destinations: **Google Drive / OneDrive /
-  Dropbox** (recommended), **WebDAV / S3-compatible / Supabase / Custom HTTP**
-  (advanced), and **Manual** encrypted-file export. **Supabase is now one advanced
-  provider, not the central backend.** All providers share the same
+  never inside a `.sutra` backup). **Manual encrypted-file export to a synced
+  folder** is the simplest recommendation; **Google Drive** is recommended once
+  configured and working. **OneDrive, Dropbox, WebDAV, S3-compatible, Supabase,
+  and Custom HTTP** are advanced; S3 is explicitly preview-only. **Supabase is
+  one advanced provider, not the central backend.** All providers share the same
   encryption/passphrase/retention/restore behavior; only the destination differs.
   Switching destinations ends the current provider's session, resets shared backup
   status, leaves remote backups + the local workspace untouched, and requires
@@ -280,16 +281,20 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   CSP-blocked origin and says so. Sutra **rejects `service_role` / root / admin
   keys** where detectable. Full provider list:
   [`SUTRA_CLOUD_PROVIDERS.md`](../SUTRA_CLOUD_PROVIDERS.md).
-- **Account:** passwordless email **one-time code** (Supabase Auth). The account
-  **email** is the only personal data the provider sees. No password to remember.
+- **Account:** authentication is provider-specific. The Supabase adapter uses a
+  passwordless email **one-time code**; other providers use their own configured
+  OAuth or app-password flow. The destination sees your sign-in identity, never
+  the plaintext workspace or backup passphrase.
 - **Each backup is a standard encrypted `.sutra` envelope**, produced by the same
   `createEncryptedSutraBackupBlob` pipeline as manual export (PBKDF2 600k +
   AES-GCM-256, fresh salt + IV per backup), uploaded to a **private** Storage
   bucket at `backups/<auth.uid()>/<timestamp>-<label>.sutra`. The server stores
   **only ciphertext** plus a tiny `backup_index` row (path, label, size, device,
   time) — never plaintext, never the passphrase.
-- **Row Level Security** isolates every user to their own `<uid>/` folder and
-  their own index rows (see [`supabase/schema.sql`](../../supabase/schema.sql)).
+- **Supabase-specific isolation:** Row Level Security isolates every user to
+  their own `<uid>/` folder and index rows (see
+  [`supabase/schema.sql`](../../supabase/schema.sql)). Other adapters rely on
+  the access controls of the account or server you configure.
 - **Secrets:** the account session token is device-local
   (`sutra:supabaseSession:v1`); the backup **passphrase is in memory only**
   (session-scoped, to allow optional auto-backup) and is **never persisted or
@@ -338,6 +343,9 @@ one-way door that discards your prior state with no recourse.
 - Assistant **preferences** and **provider/model choices**; the **Assistant
   Activity** log (`sutra:activityLog:v1`, migrated from `flow:activityLog:v1`) —
   not a secret, so it travels.
+- Optional visible Assistant conversations when **Save chat history** is enabled:
+  encrypted `.sutra` backups include them by default; plaintext JSON recovery
+  includes them only when you explicitly opt in.
 
 **Excluded by design:**
 
@@ -347,7 +355,8 @@ one-way door that discards your prior state with no recourse.
   tokens, client secrets, and derived encryption keys** — never exported.
 - **Google Drive sync operational metadata** (`sutra:googleDriveSync:v1`) —
   device-local only.
-- **Conversation history** — session-local.
+- **Assistant chat history** when its encrypted/plaintext backup setting is off;
+  chat storage itself remains local and can be disabled or cleared.
 - **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
   in-session unlocked-page set) — not exported; locked pages correctly require
   the PIN again after a reload.
@@ -393,7 +402,8 @@ round-trip in a browser.
 | `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
-| API keys, chat history | sessionStorage | Secrets + conversation | Never persisted, never exported |
+| API keys | sessionStorage | Provider credentials | Never persisted, never exported |
+| Managed Assistant chat store | localStorage | Optional visible conversations | Encrypted backup by default; plaintext recovery opt-in |
 
 For the authoritative, line-referenced behavior and the verification scripts,
 read [`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md).

@@ -46,12 +46,16 @@ async function openApp(page) {
   await completeOnboarding(page);
   await page.waitForFunction(() => !!window.flowAssistant && !!window.SutraAssistantActions
     && !!window.flowIntelligence && !!window.flowAtelier);
-  // This spec exercises the DETERMINISTIC local command layer (overdue
-  // listing, reference resolution, briefing, grade math). That layer sits
-  // behind the assistant.localRouting toggle, which defaults OFF (AI-only)
-  // since 2026-06-30 — opt in explicitly, like a user flipping the
-  // Settings ▸ Assistant toggle.
-  await page.evaluate(() => { window.setWorkspacePreference('assistant.localRouting', true); });
+  // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
+  // defaults OFF), so enable it here exactly like a user flipping the Settings ▸
+  // Assistant toggle — otherwise the chat launcher stays hidden. This spec also
+  // exercises the DETERMINISTIC local command layer (overdue listing, reference
+  // resolution, briefing, grade math), which sits behind assistant.localRouting
+  // (defaults OFF / AI-only since 2026-06-30) — opt into that too.
+  await page.evaluate(() => {
+    window.setWorkspacePreference('assistant.enabled', true);
+    window.setWorkspacePreference('assistant.localRouting', true);
+  });
 }
 
 async function openAssistantPanel(page) {
@@ -351,9 +355,10 @@ test('redesigned panel: WORKING FROM card, onboarding card without key, pulse fr
   expect(ui.workingFrom).toBe(true);
   expect(ui.workingFromLabel).toBe('WORKING FROM');
   expect(ui.signals).toContain('Workspace signals enabled');
-  // No key configured → onboarding card with all six implemented providers.
+  // No key configured → onboarding card with all nine implemented providers
+  // (the original six plus DeepSeek, xAI, and Perplexity).
   expect(ui.onboarding).toBe(true);
-  expect(ui.providerButtons).toBe(6);
+  expect(ui.providerButtons).toBe(9);
   // Pulse shows the REAL overdue signal (4 seeded), not demo data.
   expect(ui.pulse).toBe(true);
   expect(ui.pulseText).toContain('4 overdue assignments');

@@ -35,6 +35,7 @@ const TEXT_EXT = new Set([
 // Files excluded from the scan entirely (vendored / generated noise).
 const SKIP_FILES = new Set([
   'assets/vendor/jszip/jszip.min.js', // vendored minified third-party lib
+  'assets/vendor/editor/sutra-editor.min.js', // vendored minified TipTap engine (embeds a literal U+001F ProseMirror leaf separator)
 ]);
 const SKIP_PREFIXES = [
   'scripts/_',              // local throwaway analysis helpers, never committed

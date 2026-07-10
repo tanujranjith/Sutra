@@ -39,12 +39,14 @@ refresh on demand; cached locally). No change needed.
 
 ## Cloud providers (scope note)
 
-Sutra Cloud already supports encrypted backup/restore to Manual file, Supabase,
-WebDAV, and a Custom HTTP endpoint, plus encrypted Google Drive sync. OneDrive /
-Dropbox / Box remain **scaffolded** — wiring their OAuth requires registering a
-public app id per provider and adding the origin to the CSP, so they are left
-honestly labelled rather than half-wired. The storage-usage gauge above is the
-shipped piece of this item.
+Sutra Cloud supports encrypted Manual file export, Supabase, WebDAV, Custom HTTP,
+and configured Google Drive, OneDrive, and Dropbox connections. Manual encrypted
+backup to a synced folder is the simplest default; OneDrive and Dropbox stay in
+the **Advanced** group because each needs the student's own OAuth app setup.
+Box remains self-host-only (a static browser app cannot safely hold its
+confidential OAuth secret), and S3-compatible storage is explicitly **preview**
+until SigV4 signing ships. The panel labels each provider's availability instead
+of presenting setup-only or preview transports as finished.
 
 ## Verification
 

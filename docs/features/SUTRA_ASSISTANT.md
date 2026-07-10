@@ -158,6 +158,9 @@ You bring your own AI provider. Sutra supports:
 - **Google Gemini**
 - **Groq**
 - **OpenRouter**
+- **DeepSeek**
+- **xAI (Grok)**
+- **Perplexity (Sonar)**
 - **Custom OpenAI-Compatible Endpoint** (also referred to as the **Local
   endpoint**) — point Sutra at any OpenAI-compatible API, including one you run
   yourself on your own machine or network.
@@ -200,6 +203,7 @@ balance.
 | **Local / Custom endpoint** | **Free** (your hardware) | Fully offline, no key | Ollama / LM Studio |
 | **OpenAI** | Paid (add credit) | Top-tier GPT models | platform.openai.com |
 | **Anthropic Claude** | Paid (add credit) | Top-tier Claude models | console.anthropic.com |
+| **DeepSeek / xAI / Perplexity** | Provider-specific | Text-first assistant chat and approved action proposals | Their provider console |
 
 > Tip: start with **Groq** or **Google Gemini** — both are free and take about two
 > minutes to set up.
@@ -237,6 +241,28 @@ balance.
 2. Open **Keys** (account menu) → **Create Key** and **copy** it.
 3. In Sutra: provider **OpenRouter**. To stay free, choose a **Model ID that ends
    in `:free`** from OpenRouter's model list; paid models need account credit.
+
+### DeepSeek, xAI (Grok), and Perplexity (Sonar)
+
+These are implemented provider choices, not placeholder entries. Sutra sends
+their requests through its audited OpenAI-compatible request path and they can
+answer messages and propose the same approval-required Sutra actions as the
+other remote providers.
+
+1. Create an API key in the provider's own console, then paste it into the
+   matching field in **Settings ▸ Assistant ▸ Your API Keys**.
+2. Choose the matching provider in the Assistant's **Provider & Model** picker.
+   DeepSeek and xAI can refresh their model list after you configure a key;
+   Perplexity provides its supported Sonar choices in the picker.
+3. Treat these as **text-first** integrations. Sutra only enables a native image
+   attachment when its local capability registry recognizes the selected model;
+   it does not claim native PDF, document, audio, or video support for these
+   providers. Sutra also leaves provider-specific thinking controls at their
+   defaults rather than sending an unverified reasoning parameter.
+
+Provider model IDs, availability, and pricing change independently of Sutra.
+Use the exact model identifier shown by that provider and rely on Sutra's
+compatibility message before attaching a file.
 
 ### Local / Custom OpenAI-Compatible endpoint — free, offline
 
@@ -448,7 +474,8 @@ all grade math comes from `SutraGradePlanner.engine`, never the model.
 ### Provider registry
 
 `window.SutraProviderMeta` centralizes provider metadata (label, description,
-key dashboard URL, docs URL, requiresKey) plus presence-only `hasKey` /
-`hasAnyKey` booleans and `openKeySettings(provider)`. It feeds the empty-state
-"Connect an AI provider" card and the Assistant guide. Raw keys never pass
-through it.
+key dashboard URL, docs URL, requiresKey) for OpenAI, Anthropic, Gemini, Groq,
+OpenRouter, DeepSeek, xAI, Perplexity, and a Local endpoint. Its presence-only
+`hasKey` / `hasAnyKey` booleans and `openKeySettings(provider)` feed the
+empty-state "Connect an AI provider" card and the Assistant guide. Raw keys
+never pass through it.

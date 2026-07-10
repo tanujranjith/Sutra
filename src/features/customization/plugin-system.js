@@ -1,7 +1,8 @@
 /* ===========================================================================
  * NoteFlow Atelier — Local Plugin System (parser + validator + sandbox bridge)
  * ---------------------------------------------------------------------------
- * Dependency-free, file://-safe module exposed as `window.AtelierPlugins`.
+ * Dependency-free, file://-safe module exposed as `window.SutraPlugins`.
+ * `window.AtelierPlugins` remains a compatibility alias for older extensions.
  *
  * SECURITY MODEL (non-negotiable):
  *   - Plugins are LOCAL `.atelier-plugin` JSON bundles. No remote URLs, no
@@ -395,7 +396,7 @@
         return base.replace('<script>(function(){', wrapper + '<script>(function(){');
     }
 
-    global.AtelierPlugins = {
+    var api = {
         SCHEMA_VERSION: SCHEMA_VERSION,
         MAX_BUNDLE_BYTES: MAX_BUNDLE_BYTES,
         PERMISSIONS: PERMISSIONS,
@@ -412,4 +413,8 @@
         createRuntimeHost: createRuntimeHost,
         buildSandboxDocument: buildSandboxDocument
     };
+    // Sutra-first public name. Keep the old name pointing to the exact same
+    // object so saved workspaces and legacy integrations continue to work.
+    global.SutraPlugins = api;
+    global.AtelierPlugins = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -43,6 +43,27 @@
     return Array.prototype.slice.call(document.querySelectorAll('.view-tab'))
       .filter(function (t) { return t && !t.hidden && t.getAttribute('aria-hidden') !== 'true'; });
   }
+  function mobileTabs() {
+    // The overflow menu contains duplicate .view-tab elements. Deduplicate and
+    // put the student daily loop first so Homework never gets pushed behind
+    // business/advanced views on a phone.
+    var seen = {};
+    var tabs = enabledTabs().filter(function (tab) {
+      var view = tab.getAttribute('data-view');
+      if (!view || seen[view]) return false;
+      seen[view] = true;
+      return true;
+    });
+    var order = ['today', 'homework', 'notes', 'timeline', 'apstudy', 'settings'];
+    tabs.sort(function (a, b) {
+      var ai = order.indexOf(a.getAttribute('data-view'));
+      var bi = order.indexOf(b.getAttribute('data-view'));
+      if (ai === -1) ai = order.length + 1;
+      if (bi === -1) bi = order.length + 1;
+      return ai - bi;
+    });
+    return tabs;
+  }
   function shortLabel(tab) {
     var txt = (tab.textContent || '').replace(/\s+/g, ' ').trim();
     return txt.length > 9 ? txt.slice(0, 8).trim() : txt;
@@ -60,6 +81,15 @@
     navEl.setAttribute('aria-label', 'Primary navigation');
     document.body.appendChild(navEl);
     navEl.addEventListener('click', function (e) {
+      var action = e.target.closest('[data-bn-action]');
+      if (action && action.getAttribute('data-bn-action') === 'capture') {
+        vibrate();
+        try {
+          if (window.SutraStudentLoopActions && typeof window.SutraStudentLoopActions.openCapture === 'function') window.SutraStudentLoopActions.openCapture();
+          else if (typeof window.openQuickCaptureModal === 'function') window.openQuickCaptureModal('');
+        } catch (err) { /* non-critical */ }
+        return;
+      }
       var btn = e.target.closest('[data-bn-view]');
       if (!btn) return;
       var v = btn.getAttribute('data-bn-view');
@@ -76,9 +106,11 @@
 
   function render() {
     if (!navEl) return;
-    var tabs = enabledTabs();
-    var overflow = tabs.length > MAX_ITEMS;
-    var items = overflow ? tabs.slice(0, MAX_ITEMS - 1) : tabs.slice(0, MAX_ITEMS);
+    var tabs = mobileTabs();
+    // Reserve one central, always-present slot for Quick Capture. Three views
+    // plus More (when needed) keep every target comfortably tappable.
+    var overflow = tabs.length > (MAX_ITEMS - 1);
+    var items = overflow ? tabs.slice(0, MAX_ITEMS - 2) : tabs.slice(0, MAX_ITEMS - 1);
     var current = activeView();
     navEl.replaceChildren();
     items.forEach(function (tab) {
@@ -97,10 +129,26 @@
       b.appendChild(span);
       navEl.appendChild(b);
     });
+    var capture = document.createElement('button');
+    capture.type = 'button';
+    capture.className = 'sutra-bn-capture';
+    capture.setAttribute('data-bn-action', 'capture');
+    capture.setAttribute('aria-label', 'Quick Capture');
+    var ci = document.createElement('i');
+    ci.className = 'fas fa-bolt';
+    ci.setAttribute('aria-hidden', 'true');
+    var cs = document.createElement('span');
+    cs.textContent = 'Capture';
+    capture.appendChild(ci);
+    capture.appendChild(cs);
+    // Keep the central action between the two most common student destinations.
+    var insertBefore = navEl.children.length > 2 ? navEl.children[2] : null;
+    if (insertBefore) navEl.insertBefore(capture, insertBefore);
+    else navEl.appendChild(capture);
     if (overflow) {
       var more = document.createElement('button');
       more.type = 'button';
-      more.className = 'sutra-bn-item';
+      more.className = 'sutra-bn-item' + (items.some(function (tab) { return tab.getAttribute('data-view') === current; }) ? '' : ' active');
       more.setAttribute('data-bn-view', '__more');
       more.setAttribute('aria-label', 'More views');
       var mi = document.createElement('i');
@@ -116,7 +164,7 @@
 
   function moveView(dir) {
     if (!isMobile()) return;
-    var tabs = enabledTabs();
+    var tabs = mobileTabs();
     var cur = activeView();
     var idx = tabs.findIndex(function (t) { return t.getAttribute('data-view') === cur; });
     if (idx === -1) return;

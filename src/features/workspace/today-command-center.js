@@ -135,9 +135,41 @@
         return groups;
     }
 
-    // Built-in deterministic score, used when the caller does not inject a
-    // ranking function. Mirrors the shape of app.js computeDeadlineRank.
-    function defaultRank(item, now) {
+    function positiveNumber(value, fallback) {
+        var n = Math.round(Number(value));
+        return n > 0 ? n : (fallback || 0);
+    }
+
+    function effortMinutes(item) {
+        return positiveNumber(item && (item.estimateMinutes || item.estimatedMinutes || item.effortMinutes), 0);
+    }
+
+    function formatMinutes(minutes) {
+        var total = positiveNumber(minutes, 0);
+        if (!total) return '';
+        if (total < 60) return total + ' min';
+        var hours = Math.floor(total / 60);
+        var rest = total % 60;
+        return rest ? hours + 'h ' + rest + 'm' : hours + 'h';
+    }
+
+    function isTestOrQuiz(item) {
+        var text = String(item && item.type || '') + ' ' + String(item && item.title || '');
+        return item && item.source === 'apexam' || /\b(exam|test|quiz|final|midterm|frq|dbq)\b/i.test(text);
+    }
+
+    /**
+     * rankStudentNextStep(item, { now, availableTonightMinutes })
+     *
+     * The shared, deterministic student ranking policy. It deliberately uses
+     * only local workspace facts supplied on the normalized item—never an AI
+     * request. Alongside urgency, it accounts for difficulty, effort, linked
+     * notes, scheduling, review debt, upcoming tests, and whether the work can
+     * fit in the student's remaining evening time.
+     */
+    function rankStudentNextStep(item, options) {
+        options = options || {};
+        var now = toDate(options.now) || new Date();
         var status = getUrgencyStatus(item, now);
         var score = 0;
         var d = status.daysUntil;
@@ -146,13 +178,72 @@
         else if (status.key === 'tomorrow') score = 560;
         else if (d !== null && d < 7) score = Math.max(120, 480 - d * 40);
         else if (d !== null) score = Math.max(20, 200 - d * 3);
-        var priority = String(item.priority || 'medium').toLowerCase();
+        var priority = String(item && item.priority || 'medium').toLowerCase();
         if (priority === 'high') score += 140;
         else if (priority === 'low') score -= 40;
-        var text = String(item.type || '') + ' ' + String(item.title || '');
-        if (/\b(exam|test|final|midterm)\b/i.test(text)) score += 110;
-        else if (/\b(project|essay|paper|portfolio|presentation)\b/i.test(text)) score += 60;
-        return { score: Math.round(score), reason: status.label };
+        var text = String(item && item.type || '') + ' ' + String(item && item.title || '');
+        var test = isTestOrQuiz(item);
+        var major = /\b(project|essay|paper|portfolio|presentation|lab report|build)\b/i.test(text);
+        if (test) score += d !== null && d <= 2 ? 145 : 110;
+        else if (major) score += 60;
+
+        var difficulty = String(item && item.difficulty || 'medium').toLowerCase();
+        if (difficulty === 'hard') score += 28;
+        else if (difficulty === 'easy') score -= 8;
+
+        var scheduled = !!(item && (item.scheduled === true || item.status === 'scheduled'));
+        var unscheduled = !!(item && (item.unscheduled === true || (item.flags && item.flags.unscheduled))) || !scheduled;
+        if (unscheduled && (priority === 'high' || test || major || (d !== null && d <= 2))) score += 45;
+        if (scheduled && item && item.source !== 'timeline') score -= 18;
+
+        var linkedNote = !!(item && item.hasLinkedNote);
+        if (linkedNote) score += 12;
+
+        var reviewDue = positiveNumber(item && (item.reviewDueCount || item.reviewBacklog || item.reviewDue), 0);
+        if (item && item.source === 'review') score += 150 + Math.min(reviewDue, 40);
+        else if (test && reviewDue) score += 70 + Math.min(reviewDue, 30);
+
+        var effort = effortMinutes(item);
+        var tonight = positiveNumber(options.availableTonightMinutes, positiveNumber(item && item.availableTonightMinutes, 0));
+        var fitsTonight = effort > 0 && tonight > 0 && effort <= tonight;
+        if (fitsTonight && (d !== null && d <= 1 || test)) score += 36;
+        else if (effort > 0 && tonight > 0 && effort > tonight && d !== null && d <= 1) score -= 24;
+
+        var reason = status.label;
+        if (status.key === 'overdue') {
+            if (priority === 'high' && unscheduled) reason = status.label + ', high priority, and unscheduled';
+            else if (priority === 'high') reason = status.label + ' and high priority';
+        } else if (test && d !== null && d <= 1 && reviewDue) {
+            reason = 'Test ' + (d === 0 ? 'is today' : 'is tomorrow') + ' and ' + reviewDue + ' review card' + (reviewDue === 1 ? '' : 's') + ' are due';
+        } else if (fitsTonight && d !== null && d <= 1) {
+            reason = status.label + ' · ' + formatMinutes(effort) + ' fits in your ' + formatMinutes(tonight) + ' tonight';
+        } else if (test && d !== null && d <= 2) {
+            reason = 'Upcoming test ' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : 'this week');
+        } else if (item && item.source === 'review' && reviewDue) {
+            reason = reviewDue + ' review card' + (reviewDue === 1 ? '' : 's') + ' due';
+        } else if (unscheduled && priority === 'high') {
+            reason = 'High priority and not scheduled yet';
+        } else if (linkedNote && d !== null && d <= 1) {
+            reason = status.label + ' · linked notes are ready';
+        } else if (difficulty === 'hard' && d !== null && d <= 2) {
+            reason = status.label + ' · hard work';
+        } else if (priority === 'high' && (status.key === 'today' || status.key === 'tomorrow')) {
+            reason = status.label + ' · high priority';
+        }
+        return {
+            score: Math.round(score),
+            reason: reason,
+            daysUntil: d,
+            overdue: status.key === 'overdue',
+            effortMinutes: effort,
+            fitsTonight: fitsTonight
+        };
+    }
+
+    // Built-in deterministic score, used when the caller does not inject a
+    // ranking function. Mirrors the shape of app.js computeDeadlineRank.
+    function defaultRank(item, now) {
+        return rankStudentNextStep(item, { now: now });
     }
 
     /**
@@ -603,6 +694,7 @@
         HORIZON_LABELS: HORIZON_LABELS,
         RADAR_FILTERS: RADAR_FILTERS.map(function (f) { return { key: f.key, label: f.label }; }),
         getUrgencyStatus: getUrgencyStatus,
+        rankStudentNextStep: rankStudentNextStep,
         groupItemsByTimeHorizon: groupItemsByTimeHorizon,
         getNextPriorityItem: getNextPriorityItem,
         getTodaySummary: getTodaySummary,

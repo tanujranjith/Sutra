@@ -813,9 +813,21 @@ mustContain('src/core/app.js', 'css-reset-all', 'CSS reset-all action');
 mustContain('Sutra.html', 'data-settings-nav="mods"', 'Mods settings category nav');
 mustContain('Sutra.html', 'data-settings-section="mods"', 'Mods settings section');
 mustContain('Sutra.html', 'id="modsEnabledToggle"', 'mods master toggle');
-mustContain('Sutra.html', 'Safe Mode lets you recover', 'restrained mods warning copy');
+mustContain('Sutra.html', 'Safe Mode', 'restrained mods warning references Safe Mode');
 mustContain('Sutra.html', '__atelierShiftSafeMode', 'Shift-at-load Safe Mode capture');
 mustContain('styles/features/customization.css', '.atelier-safe-mode-banner', 'Safe Mode banner stylesheet');
+// Customization is now CSS-only (CSS Overrides + Safe Mode & Recovery); plugins moved
+// to Settings ▸ Advanced ▸ Developer / Experimental.
+mustContain('Sutra.html', 'data-mods-tab="css"', 'CSS Overrides tab present');
+mustContain('Sutra.html', 'data-mods-tab="recovery"', 'Safe Mode & Recovery tab present');
+mustNotContain('Sutra.html', 'data-mods-tab="plugins"', 'Plugins tab removed from normal Customization screen');
+// Curated snippet gallery (safe one-click presets).
+mustContain('src/features/customization/customization.js', 'function snippetGallery', 'curated CSS snippet gallery presets');
+mustContain('src/features/customization/customization.js', "id: 'calm-focus'", 'gallery includes Calm Focus Mode preset');
+mustContain('src/features/customization/customization.js', "id: 'high-contrast'", 'gallery includes High Contrast preset');
+mustContain('src/core/app.js', 'function renderModsCssGallery', 'CSS panel renders the snippet gallery');
+mustContain('src/core/app.js', 'css-gallery-add', 'gallery preset one-click add action');
+mustContain('docs/features/CSS_MODS_GUIDE.md', 'snippet gallery', 'CSS guide documents the gallery');
 
 // =====================================================================
 // MODS & CUSTOMIZATION — Local plugins (Phase C)
@@ -857,6 +869,14 @@ mustContain('examples/plugins/study-helper.atelier-plugin', '"id": "example.stud
 mustContain('examples/plugins/study-helper.atelier-plugin', '"schemaVersion": 1', 'example plugin uses documented schema');
 mustContain('docs/features/MODS_AND_CUSTOMIZATION.md', 'Safe Mode', 'mods docs cover Safe Mode');
 mustContain('docs/features/PLUGIN_SDK.md', 'atelier-plugin', 'plugin SDK docs present');
+// Plugins de-emphasized: experimental developer surface under Advanced, hidden by default.
+mustContain('src/features/customization/customization.js', 'pluginsExperimentalEnabled', 'experimental-plugins opt-in flag in engine');
+mustContain('src/core/app.js', 'function renderPluginsExperimental', 'plugins render only under Advanced/Experimental');
+mustContain('src/core/app.js', 'pluginsExperimentalEnabled', 'plugins gated behind experimental flag');
+mustContain('Sutra.html', 'id="pluginsExperimentalToggle"', 'Local Plugins (Experimental) opt-in toggle in Advanced');
+mustContain('Sutra.html', 'Local Plugins (Experimental)', 'plugins labeled experimental in Advanced');
+mustContain('Sutra.html', 'id="modsPluginImportInput" hidden', 'plugin import picker relocated with no restrictive accept filter');
+mustContain('docs/features/PLUGIN_SDK.md', 'experimental', 'plugin SDK marked developer/experimental');
 mustContain('docs/features/HANDWRITING_AND_DRAWING.md', 'highlighter', 'handwriting docs present');
 
 // =====================================================================
@@ -960,8 +980,11 @@ mustContain('src/core/startup-health.js', 'sutraSafeMode', 'startup health recov
 
 // ---- Sutra Cloud S3 brand-icon regression --------------------------------
 // `fa-aws` is a Font Awesome BRAND glyph; rendered with the solid `fas` prefix
-// it never displays. The card renderer keys off a `fa-brands` prefix.
-mustContain('src/core/app.js', "id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', icon: 'fa-brands fa-aws'", 'S3 cloud provider declares a brand-prefixed icon');
+// it never displays. The card renderer keys off a `fa-brands` prefix. Checked
+// independently of neighbouring fields (e.g. `availability`) so honest metadata
+// additions to the S3 adapter don't trip this guard.
+mustContain('src/core/app.js', "id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)'", 'S3 cloud provider present');
+mustContain('src/core/app.js', "id: 's3', displayName: 'S3-compatible (AWS / R2 / B2 / Wasabi / MinIO)', category: 'advanced', availability: 'preview', icon: 'fa-brands fa-aws'", 'S3 cloud provider declares a brand-prefixed icon');
 
 if (failures.length) {
     console.error('SMOKE CHECK FAILED:');

@@ -11,7 +11,10 @@ its status, what it stores, and its limitations. For step-by-step setup see
 
 ## Status legend
 - ✅ **Implemented** — works today (subject to CSP for custom origins).
-- ⚙️ **Needs configuration** — registered, but needs an OAuth app / credentials.
+- ⚙️ **Needs configuration** — the transport is implemented, but needs your
+  OAuth app / credentials before it can connect.
+- 🔒 **Self-host only** — a static browser build cannot complete the provider's
+  secure authentication or CSP requirements on its own.
 - 🧪 **Preview** — UI + config present; transport is a planned follow-up.
 
 ## Provider matrix
@@ -22,15 +25,20 @@ its status, what it stores, and its limitations. For step-by-step setup see
 | Supabase | Advanced | ✅ | email code | only if the build pins a ref (public build ships none) | yes |
 | WebDAV (Nextcloud/ownCloud) | Advanced | ✅ | app password | 🔒 self-host | yes |
 | Custom HTTP | Advanced | ✅ | bearer (opt) | 🔒 self-host | yes |
-| Google Drive | Recommended | ⚙️ via Drive sync | OAuth | ✅ | (sync today) |
-| OneDrive | Recommended | ⚙️ needs app | OAuth | needs app + CSP | yes (planned) |
-| Dropbox | Recommended | ⚙️ needs app | OAuth | needs app + CSP | yes (planned) |
-| Box | Advanced | ⚙️ needs app | OAuth | needs app + CSP | yes (planned) |
+| Google Drive | Recommended | ⚙️ needs client ID | OAuth | ✅ after user configuration | yes |
+| OneDrive | Advanced | ⚙️ needs SPA client ID | OAuth (PKCE) | ✅ after user configuration | yes |
+| Dropbox | Advanced | ⚙️ needs App-folder app key | OAuth (PKCE) | ✅ after user configuration | yes |
+| Box | Advanced | 🔒 self-host only | OAuth + confidential secret | 🔒 token-exchange proxy | no |
 | S3-compatible | Advanced | 🧪 preview | access keys | 🔒 self-host | yes (planned) |
 
 ---
 
 ## Recommended
+
+### Manual encrypted file
+- **Start here:** download an encrypted `.sutra` file into a folder that already
+  syncs (Drive/OneDrive/Dropbox/iCloud), a USB drive, or a NAS. It needs no
+  account, provider setup, or network request from Sutra.
 
 ### Google Drive
 - **Today:** use Sutra's encrypted **Drive sync** (Settings → Data → Google
@@ -39,15 +47,17 @@ its status, what it stores, and its limitations. For step-by-step setup see
 - The Sutra Cloud card points you there; deeper backup-list integration is a
   follow-up.
 
-### OneDrive / Dropbox
-- Registered as recommended destinations.
-- Connecting requires a **registered OAuth app client ID** (Microsoft Azure app /
-  Dropbox app) configured in the build, plus their API origins added to the CSP.
-- Until configured, the card shows **"Needs configuration"** with instructions.
-
 ---
 
 ## Advanced
+
+### OneDrive / Dropbox
+- These transports work after you create and configure your own OAuth app. They
+  are kept in Advanced so the default student backup choice remains simple.
+- Connecting requires a **registered OAuth app client ID** (Microsoft Entra SPA
+  app / Dropbox App-folder app) that you paste into Sutra's setup panel; it is
+  public configuration, not a secret. Until configured, the card says **Needs
+  configuration**.
 
 ### Supabase (reframed)
 Supabase was Sutra Cloud's original backend; it is **now one advanced provider**,

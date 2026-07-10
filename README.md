@@ -155,7 +155,7 @@ The default landing experience — your daily command center.
 - **Shape My Day** — sequences your committed priorities against the calendar; the result appears under a *Recommended sequence* disclosure, and you can apply it back to the Timeline.
 - **Next Step** — the single most useful action computed from your data, runnable in one click.
 - **Deadline Radar** — a modal grouping every deadline (tasks, homework, AP exams, college, timeline blocks, work deadlines) by *overdue / today / tomorrow / this week / later*. Each row offers **Open** and **Schedule this** to convert it into a Timeline block.
-- **Quick Capture** — a natural-language modal (from the *Capture* button or the Command Palette) that parses phrases like *"Chem essay due Friday hard"* into the right surface (task / homework / note / block / AP session / college item).
+- **Quick Capture** — a natural-language modal (from the *Capture* button, mobile action, or Command Palette) that parses phrases like *"Chem lab due Friday"*, *"APUSH test next Tuesday"*, *"review bio chapter 12"*, and *"study chem for 45 min after dinner"* into the right local surface (task / homework / test or quiz / note / review deck / focus block / AP session / college item).
 - Plus habits, a schedule snapshot, a completed-today strip, life signals, an academic planner, and **Momentum** (progress and analytics).
 
 ### Timeline
@@ -248,7 +248,7 @@ A compact **Focus Timer** in the sidebar (quick presets, custom durations, ringt
 
 ## Sutra Assistant & Sutra Intelligence
 
-**Sutra Assistant** is the contextual chat panel — a mascot launcher at the bottom-right that opens a panel which can answer questions about your workspace and **propose local changes** (tasks, timeline blocks, notes, review cards, and more) that you approve one card at a time. It is optional and uses **your own API key**.
+**Sutra Assistant** is the optional contextual chat panel — off in a fresh Student Setup unless you enable the **Assistant Pack**. When enabled, it can answer questions about your workspace and **propose local changes** (tasks, timeline blocks, notes, review cards, and more) that you approve one card at a time. It uses **your own API key**.
 
 **Sutra Intelligence** is the **local signal layer** behind it. It reads *only* your workspace — overdue work, workload, schedule conflicts, weak areas, review backlog, and next steps — to ground the assistant's answers. **It does not call any server itself.**
 
@@ -267,9 +267,18 @@ AI requests go **directly from your browser to the provider you choose** — Sut
 - Google Gemini
 - Groq
 - OpenRouter
+- DeepSeek
+- xAI (Grok)
+- Perplexity (Sonar)
 - Custom OpenAI-Compatible Endpoint (a "Local endpoint")
 
 You bring your own API key and the exact **Model ID**. Keys live in **sessionStorage only** (this browser session), are never exported, and are never included in Google Drive sync snapshots; when you send an Assistant request, the key is sent only to the provider you selected for that request.
+
+DeepSeek, xAI, and Perplexity use Sutra's implemented OpenAI-compatible request
+path. They are text-first: native image input is enabled only when the local
+capability registry recognizes the selected model, and Sutra does not claim
+native PDF, document, audio, video, or provider-specific reasoning controls for
+them.
 
 ### Controls
 
@@ -307,13 +316,14 @@ Full architecture, privacy invariants, and the local-vs-provider boundary are do
 
 Apply any theme to the **current page**, **all pages**, or a **custom subset** (per-page theming). Built-in presets include Default, Dark, Botanical, Editorial, Luxury, Sepia, Ocean, Sunrise, Graphite, Aurora, Rosewater, macOS 26, Windows 11, ChromeOS, Ubuntu, GitHub, Spotify, Netflix, Slack, and Dune. You can create, edit, delete, import, and export **custom themes**, and set motion intensity to full / reduced / off (also tied to your OS *prefers-reduced-motion*).
 
-**Customization** (`Settings → Customization`) is the power-user layer — everything local-first, no marketplace, traveling inside your workspace backup:
+**Customization** (`Settings → Customization`) is the polished power-user layer for restyling Sutra — local-first, no marketplace, traveling inside your workspace backup:
 
-- **CSS Overrides** — multiple named snippets with enable/disable, live preview, brace-balance validation, duplicate, reorder, `.css` and JSON import/export, and a non-destructive reset. Custom CSS applies *after* themes and survives theme changes and refresh.
-- **Plugins** — install local plugin bundles. Plugins are **local bundles only** (no marketplace), run **sandboxed in an iframe** behind an explicit permission allowlist, install **disabled**, and are **reviewed before they run** (forced on import). On import to a new device, runtime plugins return disabled and require re-review.
-- **Safe Mode** — skip all custom CSS and plugins without deleting anything.
+- **CSS Overrides** — multiple named snippets with enable/disable, live preview, brace-balance validation, duplicate, reorder, `.css` and JSON import/export, a non-destructive reset, and a **curated gallery of one-click safe presets** (Compact Sidebar, Bigger Editor Text, Minimal Today View, Softer Cards, High Contrast, Calm Focus Mode). Snippets only change *appearance* — they never run code — and custom CSS applies *after* themes and survives theme changes and refresh.
+- **Safe Mode** — skip all custom CSS (and any experimental plugins) without deleting anything.
 
-Guides: [`docs/features/MODS_AND_CUSTOMIZATION.md`](docs/features/MODS_AND_CUSTOMIZATION.md) and [`docs/features/PLUGIN_SDK.md`](docs/features/PLUGIN_SDK.md).
+Guide: [`docs/features/CSS_MODS_GUIDE.md`](docs/features/CSS_MODS_GUIDE.md) (and the broader [`docs/features/MODS_AND_CUSTOMIZATION.md`](docs/features/MODS_AND_CUSTOMIZATION.md)).
+
+> **Local Plugins are an experimental developer feature**, not a normal user surface. They live under `Settings → Advanced → Developer / Experimental` (off by default, never shown during onboarding) and are documented separately in [`docs/features/PLUGIN_SDK.md`](docs/features/PLUGIN_SDK.md). Plugins are **local bundles only** (no marketplace), run **sandboxed in an iframe** behind an explicit permission allowlist, install **disabled**, and are **reviewed before they run** (forced on import). Restored-from-backup runtime plugins return disabled and require re-review.
 
 ### Safe Mode
 
@@ -428,14 +438,14 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 - **A custom CSS snippet or plugin broke the UI** — load Safe Mode (`?sutraSafeMode=1`, hold **Shift** at load, or the in-app Recovery button) and disable the offending snippet/plugin. Nothing is deleted.
 - **Sutra Assistant returns 401 / model errors** — re-check the API key for the active provider and the exact Model ID. A wrong Model ID fails at the provider, not in Sutra.
 - **An imported backup looks wrong** - a pre-import safety snapshot is written before every workspace import; restore it from `Settings -> Data -> Storage Health`.
-- **Tabs are missing** — check `Settings → Advanced → Feature Tabs` and the active Sutra Mode. Hidden-by-mode tabs with data still appear under the overflow menu.
+- **Tabs are missing** — check `Settings → Packs & advanced → Feature packs` and the active Sutra Mode. Hiding a pack never deletes its data; re-enable it any time.
 - **Fonts look different offline** - external web fonts are not requested on startup. Sutra uses local/system fallbacks unless you explicitly host or allow additional font assets.
 
 ## Limitations
 
 - **Cloud sync is optional and foreground-only.** Google Drive sync runs while Sutra is open, online, unlocked, and authorized. It does not sync after the browser is fully closed, and direct `file://` launch may not support Google OAuth.
 - **Browser storage caps.** IndexedDB and localStorage quotas vary by browser; very large, media-rich workspaces can hit limits. Export `.sutra` regularly.
-- **Document export is native and offline.** PDF uses the browser print pipeline (opens a print-ready view — choose *Save as PDF*); the **Word** option exports a full-page Word-compatible `.doc`; HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
+- **Document export is native and offline.** PDF uses the browser print pipeline (opens a print-ready view — choose *Save as PDF*); **Word (.docx)** creates a local OOXML package and **Word 97-2003 (.doc)** remains available for legacy workflows. HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
 - **External media embeds** depend on the source's CORS / iframe policy and the approved-origin CSP list.
 - **Sutra Assistant Model IDs** must match the provider's exact string; typos fail at the provider.
 - **`file://` sandboxing** — some image-upload paths need an `http(s)://` origin; use a static server if you hit this.

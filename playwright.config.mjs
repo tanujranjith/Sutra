@@ -3,7 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 const responsiveTestMatch = [
   /.*encoding-and-symbols\.spec\.mjs$/,
   /.*modal-accessibility\.spec\.mjs$/,
-  /.*public-beta-surfaces\.spec\.mjs$/
+  /.*public-beta-surfaces\.spec\.mjs$/,
+  // Student-critical phone flows get real device coverage in the scheduled
+  // compatibility matrix, not only a desktop test that resizes itself.
+  /.*mobile-nav\.spec\.mjs$/,
+  /.*quick-capture-student-flow\.spec\.mjs$/,
+  /.*today-redesign\.spec\.mjs$/
 ];
 
 export default defineConfig({
@@ -36,6 +41,7 @@ export default defineConfig({
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     { name: 'mobile-chromium', testMatch: responsiveTestMatch, use: { ...devices['Pixel 7'] } },
+    { name: 'mobile-webkit', testMatch: responsiveTestMatch, use: { ...devices['iPhone 13'] } },
     {
       name: 'tablet',
       testMatch: responsiveTestMatch,

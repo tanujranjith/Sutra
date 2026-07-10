@@ -101,6 +101,11 @@
 
     // What each implemented adapter can place into a request payload.
     var ADAPTER_SUPPORT = {
+        // Unknown providers are deliberately text-only. A provider must be
+        // named below only after an in-repo request adapter can build the
+        // relevant payload; model-name similarity is not enough to claim an
+        // attachment capability.
+        unknown: { images: false, pdf: false, documents: false, audio: false, video: false },
         openai_compatible: { images: true, pdf: false, documents: false, audio: false, video: false },
         anthropic: { images: true, pdf: true, documents: false, audio: false, video: false },
         gemini: { images: true, pdf: true, documents: false, audio: false, video: false }
@@ -110,6 +115,13 @@
         groq: 'openai_compatible',
         openai: 'openai_compatible',
         openrouter: 'openai_compatible',
+        // These adapters all use the same audited OpenAI-compatible request
+        // builder in app.js. They remain text-first unless a selected model is
+        // explicitly recognized as vision-capable below; we do not infer native
+        // PDF/document/audio/video support from provider marketing.
+        deepseek: 'openai_compatible',
+        xai: 'openai_compatible',
+        perplexity: 'openai_compatible',
         local: 'openai_compatible',
         anthropic: 'anthropic',
         gemini: 'gemini'
@@ -163,8 +175,8 @@
     function resolveModelCapabilities(provider, model) {
         var p = String(provider || '').toLowerCase();
         var m = String(model || '').trim();
-        var type = PROVIDER_TYPE[p] || 'openai_compatible';
-        var adapter = ADAPTER_SUPPORT[type] || ADAPTER_SUPPORT.openai_compatible;
+        var type = PROVIDER_TYPE[p] || 'unknown';
+        var adapter = ADAPTER_SUPPORT[type] || ADAPTER_SUPPORT.unknown;
         var limits = providerLimits(p);
 
         var images = !!(adapter.images && m && VISION_MODEL_PATTERN.test(m));
@@ -390,7 +402,7 @@
         var m = String(model || '').trim();
         var none = { supported: false, style: null, levels: [], supportsOff: false, defaultLevel: 'auto' };
         if (!m) return none;
-        var type = PROVIDER_TYPE[p] || 'openai_compatible';
+        var type = PROVIDER_TYPE[p] || 'unknown';
 
         if (p === 'openai' && OPENAI_EFFORT_PATTERN.test(m)) {
             var levels = OPENAI_MINIMAL_PATTERN.test(m) ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];

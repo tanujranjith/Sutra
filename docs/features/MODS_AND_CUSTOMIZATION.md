@@ -6,15 +6,19 @@
 > source.
 
 Sutra ships with a calm, beginner-friendly appearance system (themes, the custom
-theme builder, fonts, motion, density). **Customization** is the opt-in
+theme builder, fonts, motion, density). **Customization** is the opt-in, polished
 power-user layer on top of it — found under **Settings ▸ Customization**.
 
-It has three sections: **CSS Overrides**, **Plugins**, and **Recovery & Developer
-Tools**, plus two master switches (*Enable mods*, *Apply custom CSS*).
+It has two sections: **CSS Overrides** and **Safe Mode & Recovery**, plus two master
+switches (*Enable customization*, *Apply custom CSS*). CSS Overrides only change how
+Sutra *looks* — they never run code.
 
-> Advanced customization can change how Sutra looks and behaves. Install plugins
-> only from sources you trust. **Safe Mode** lets you recover without deleting your
-> workspace.
+> **Local Plugins** are a separate, **experimental developer feature** and are *not*
+> shown on the normal Customization screen. They live under **Settings ▸ Advanced ▸
+> Developer / Experimental** (off by default, never surfaced during onboarding), and
+> are documented in [PLUGIN_SDK.md](PLUGIN_SDK.md). Install plugins only from sources
+> you trust. **Safe Mode** lets you recover from a bad snippet or plugin without
+> deleting your workspace.
 
 Everything here is **local-first**: nothing is uploaded, there is no remote
 marketplace, and all customization travels inside your workspace backup.
@@ -29,8 +33,10 @@ switches and refreshes.
 
 ### Snippets
 
-- **Add snippet** / **Example** — create a new snippet (the Example is a safe,
-  disabled "Compact sidebar" demo).
+- **Snippet gallery** — a curated row of one-click safe presets at the top of the
+  section (Compact Sidebar, Bigger Editor Text, Minimal Today View, Softer Cards,
+  High Contrast, Calm Focus Mode). Clicking one adds it as a new, editable snippet.
+- **Add snippet** — create a blank snippet to write your own CSS.
 - **Rename** — edit the name field at the top of a snippet card.
 - **Edit** — type in the monospace editor. <kbd>Tab</kbd> inserts indentation.
   An *Unsaved changes* indicator and a live brace-balance check are shown.
@@ -67,7 +73,13 @@ Sutra's CSS variables) so your overrides look right across themes.
 
 ---
 
-## Plugins
+## Plugins (experimental developer feature)
+
+> Plugins are **de-emphasized and off by default.** They are *not* on the normal
+> Customization screen — enable **Local Plugins (Experimental)** under **Settings ▸
+> Advanced ▸ Developer / Experimental** to reveal the controls. They are intended for
+> developers and advanced testing, not everyday use. The parsing, sandbox, and
+> backup/restore behavior below is unchanged.
 
 Sutra plugins are **local JSON bundles** — exported as **`.sutra-plugin`** (the
 legacy **`.atelier-plugin`** extension still imports). There is no remote loader and
@@ -80,6 +92,8 @@ no marketplace.
 
 ### Installing
 
+0. Enable **Local Plugins (Experimental)** under **Settings ▸ Advanced ▸ Developer /
+   Experimental** to reveal the plugin controls (they stay hidden otherwise).
 1. **Import plugin…** and choose a `.sutra-plugin` (or legacy `.atelier-plugin`) file.
 2. A review dialog shows the name, version, author, description, requested
    **permissions**, contributed features, and whether runtime code is present.

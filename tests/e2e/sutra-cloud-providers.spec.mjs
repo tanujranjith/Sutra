@@ -119,7 +119,9 @@ test('panel shows recommended cards, hides advanced by default, manual always av
   await openApp(page);
   await page.evaluate(() => window.SutraCloudSync.open());
   await expect(page.locator('#sutraCloudCardsRecommended')).toContainText('Google Drive');
-  await expect(page.locator('#sutraCloudCardsRecommended')).toContainText('Dropbox');
+  // Google Drive is the single recommended student option; OneDrive and Dropbox
+  // (OAuth-client-ID paste) are now grouped under Advanced.
+  await expect(page.locator('#sutraCloudCardsAdvanced')).toContainText('Dropbox');
   await expect(page.locator('#sutraCloudCardsManual')).toContainText('Manual encrypted file');
   expect(await page.locator('#sutraCloudAdvanced').evaluate(el => el.open)).toBe(false); // advanced hidden by default
 });

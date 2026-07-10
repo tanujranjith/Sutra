@@ -1,0 +1,121 @@
+import { expect, test } from '@playwright/test';
+
+// Student-language regression coverage for the shared, local-only date parser
+// and Quick Capture's routing hints. These assertions use a fixed clock so they
+// do not depend on the day this suite happens to run.
+
+async function completeOnboarding(page) {
+  await page.evaluate(() => {
+    try {
+      if (typeof window.markStudentOnboardingCompleted === 'function') {
+        window.markStudentOnboardingCompleted(true);
+      }
+    } catch (_) {}
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+      overlay.hidden = true;
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.style.setProperty('display', 'none', 'important');
+      overlay.style.setProperty('pointer-events', 'none', 'important');
+    }
+  });
+  await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+}
+
+async function openApp(page) {
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await page.waitForFunction(() =>
+    !!window.SutraStudentDateParser && typeof window.parseQuickCaptureText === 'function'
+  );
+}
+
+test('student date words stay deterministic and Quick Capture recognizes schoolwork intent', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    const parser = window.SutraStudentDateParser;
+    const now = new Date(2026, 2, 10, 9, 0, 0); // Tuesday, March 10, 2026.
+    const date = (phrase) => parser.parseNaturalDate(phrase, { now });
+    const parse = (phrase) => window.parseQuickCaptureText(phrase);
+    const compact = (item) => ({
+      type: item.type,
+      title: item.title,
+      dueDate: item.dueDate,
+      dueTime: item.dueTime,
+      estimateMinutes: item.estimateMinutes
+    });
+    return {
+      dates: {
+        tomorrow: date('chem lab due tomorrow'),
+        tonight: date('english essay outline tonight'),
+        nextFriday: date('math worksheet next Friday'),
+        nextTuesday: date('APUSH test next Tuesday'),
+        weekend: date('SAT practice this weekend'),
+        afterSchool: date('study physics after school'),
+        none: date('read chapter')
+      },
+      captures: {
+        homework: compact(parse('chem lab due friday')),
+        test: compact(parse('APUSH test next Tuesday unit 6')),
+        quiz: compact(parse('physics quiz next block')),
+        review: compact(parse('review bio chapter 12')),
+        block: compact(parse('schedule AP Chem review tomorrow 7pm')),
+        sat: compact(parse('SAT reading practice saturday'))
+      }
+    };
+  });
+
+  expect(result.dates.tomorrow).toMatchObject({ date: '2026-03-11', kind: 'tomorrow' });
+  expect(result.dates.tonight).toMatchObject({ date: '2026-03-10', timeHint: '19:00', kind: 'tonight' });
+  // "next" means the following calendar week; bare Friday means the upcoming one.
+  expect(result.dates.nextFriday).toMatchObject({ date: '2026-03-20', kind: 'weekday' });
+  expect(result.dates.nextTuesday).toMatchObject({ date: '2026-03-17', kind: 'weekday' });
+  expect(result.dates.weekend).toMatchObject({ date: '2026-03-14', kind: 'weekend' });
+  expect(result.dates.afterSchool).toMatchObject({ date: '2026-03-10', timeHint: '15:30', kind: 'after-school' });
+  expect(result.dates.none).toBeNull();
+
+  expect(result.captures.homework).toMatchObject({ type: 'homework' });
+  expect(result.captures.test).toMatchObject({ type: 'test' });
+  expect(result.captures.quiz).toMatchObject({ type: 'test' });
+  expect(result.captures.review).toMatchObject({ type: 'review', title: 'bio chapter 12' });
+  expect(result.captures.block).toMatchObject({ type: 'block', dueTime: '19:00' });
+  expect(result.captures.sat).toMatchObject({ type: 'apsession' });
+});
+
+test('Quick Capture offers test and review choices, and Word export labels distinguish docx from legacy doc', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => window.openQuickCaptureModal());
+  await expect(page.locator('#quickCaptureType option[value="test"]')).toHaveText('Test / quiz');
+  await expect(page.locator('#quickCaptureType option[value="review"]')).toHaveText('Review item / deck');
+
+  const formats = await page.evaluate(() => {
+    const labels = (value) => Array.from(document.querySelectorAll(`option[value="${value}"]`))
+      .map((option) => String(option.textContent || '').trim());
+    return { docx: labels('docx'), doc: labels('doc') };
+  });
+
+  expect(formats.docx.length).toBeGreaterThan(0);
+  expect(formats.doc.length).toBeGreaterThan(0);
+  formats.docx.forEach((label) => expect(label).toContain('(.docx)'));
+  formats.doc.forEach((label) => expect(label).toMatch(/^Word 97.?2003 \(\.doc\)$/));
+});
+
+test('empty Homework teaches one primary action: paste or type your homework', async ({ page }) => {
+  await openApp(page);
+  const ui = await page.evaluate(() => {
+    try { localStorage.setItem('hwCourses:v2', '[]'); localStorage.setItem('hwTasks:v2', '[]'); } catch (e) {}
+    if (window.SutraHomework && typeof window.SutraHomework.render === 'function') {
+      try { window.SutraHomework.render(); } catch (e) {}
+    }
+    const view = document.getElementById('view-homework');
+    const html = view ? view.innerHTML : '';
+    const btn = view ? view.querySelector('[data-hw-empty-capture]') : null;
+    return { hasCaptureBtn: !!btn, label: btn ? btn.textContent.trim() : '', html };
+  });
+  expect(ui.hasCaptureBtn).toBe(true);
+  expect(ui.label).toContain('Paste or type your homework');
+});

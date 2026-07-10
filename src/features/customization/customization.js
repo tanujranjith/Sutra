@@ -78,7 +78,11 @@
             modsEnabled: r.modsEnabled !== false,
             customCssEnabled: r.customCssEnabled !== false,
             cssSnippets: normalizeSnippets(r.cssSnippets),
-            installedPlugins: Array.isArray(r.installedPlugins) ? r.installedPlugins : []
+            installedPlugins: Array.isArray(r.installedPlugins) ? r.installedPlugins : [],
+            // Plugins are a de-emphasized, experimental developer surface. The plugin
+            // controls stay hidden (Settings ▸ Advanced ▸ Developer / Experimental)
+            // until the user explicitly opts in. Default OFF; never touched by onboarding.
+            pluginsExperimentalEnabled: r.pluginsExperimentalEnabled === true
         };
     }
 
@@ -258,6 +262,90 @@
         }, 0);
     }
 
+    /* ---- Curated snippet gallery ----------------------------------------- */
+    // A small, hand-vetted set of safe presets for the CSS Overrides gallery. Each
+    // is CSS-only, reversible, targets documented tokens/selectors (see
+    // docs/features/CSS_MODS_GUIDE.md), and never hides an interactive control.
+    // These are DATA — the host renders them as one-click "add snippet" cards.
+    function snippetGallery() {
+        return [
+            {
+                id: 'compact-sidebar',
+                name: 'Compact Sidebar',
+                description: 'Narrower sidebar and tighter item spacing.',
+                css: [
+                    '/* Compact Sidebar — reads Sutra’s own width token, so it stays consistent. */',
+                    ':root { --sidebar-width: 244px; }',
+                    '.sidebar-item, .cc-sidebar-item { padding-top: 5px; padding-bottom: 5px; }'
+                ].join('\n')
+            },
+            {
+                id: 'bigger-editor-text',
+                name: 'Bigger Editor Text',
+                description: 'Larger, roomier body text in the note editor.',
+                css: [
+                    '/* Bigger Editor Text — scoped to the writing surface only. */',
+                    '#view-notes .editor { font-size: 1.08em; line-height: 1.75; }'
+                ].join('\n')
+            },
+            {
+                id: 'minimal-today',
+                name: 'Minimal Today View',
+                description: 'Flatter, quieter Today panels — no controls hidden.',
+                css: [
+                    '/* Minimal Today View — removes card chrome; every control stays clickable. */',
+                    '#view-today .today-panel {',
+                    '  box-shadow: none;',
+                    '  border: 1px solid var(--border, rgba(120,130,150,0.18));',
+                    '  background: transparent;',
+                    '}'
+                ].join('\n')
+            },
+            {
+                id: 'softer-cards',
+                name: 'Softer Cards',
+                description: 'Gentler shadows and rounder corners across surfaces.',
+                css: [
+                    '/* Softer Cards — token-only, theme-aware. */',
+                    ':root {',
+                    '  --shadow-soft: 0 8px 20px rgba(22, 30, 45, 0.05);',
+                    '  --shadow-soft-lg: 0 16px 36px rgba(22, 30, 45, 0.08);',
+                    '  --radius: 20px;',
+                    '  --radius-lg: 30px;',
+                    '}'
+                ].join('\n')
+            },
+            {
+                id: 'high-contrast',
+                name: 'High Contrast',
+                description: 'Stronger text and borders. Pairs best with a Dark theme.',
+                css: [
+                    '/* High Contrast — token-only. Tuned for dark themes; adjust for light. */',
+                    ':root {',
+                    '  --text-primary: #ffffff;',
+                    '  --text-secondary: #e6e6e6;',
+                    '  --text-muted: #c8c8c8;',
+                    '  --border: rgba(255, 255, 255, 0.4);',
+                    '  --surface-border: rgba(255, 255, 255, 0.4);',
+                    '}'
+                ].join('\n')
+            },
+            {
+                id: 'calm-focus',
+                name: 'Calm Focus Mode',
+                description: 'Slower motion and quieter accent washes for calmer focus.',
+                css: [
+                    '/* Calm Focus Mode — softens motion + accent tints; nothing disabled. */',
+                    ':root {',
+                    '  --transition-fast: 220ms cubic-bezier(0.22, 1, 0.36, 1);',
+                    '  --transition-base: 320ms cubic-bezier(0.22, 1, 0.36, 1);',
+                    '  --accent-soft: rgba(var(--accent-rgb), 0.06);',
+                    '}'
+                ].join('\n')
+            }
+        ];
+    }
+
     global.AtelierCustomization = {
         ROOT_STYLE_ID: ROOT_STYLE_ID,
         SNIPPET_STYLE_PREFIX: SNIPPET_STYLE_PREFIX,
@@ -280,6 +368,7 @@
         exportAllJson: exportAllJson,
         importCssAsSnippet: importCssAsSnippet,
         importJson: importJson,
-        exampleSnippet: exampleSnippet
+        exampleSnippet: exampleSnippet,
+        snippetGallery: snippetGallery
     };
 })(typeof window !== 'undefined' ? window : this);

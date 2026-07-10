@@ -11,8 +11,12 @@ Plain-English fixes for common Sutra Cloud issues. See also
   (`…/remote.php/dav/files/USERNAME/`). Supabase needs the **anon** key.
 - Click **Test connection** — it tells you whether it's the URL, the credentials,
   or the browser security policy.
-- OneDrive/Dropbox/Box show **"Needs configuration"** because the build has no
-  registered OAuth app for them.
+- Google Drive, OneDrive, and Dropbox show **"Needs configuration"** until you
+  paste your own public OAuth client ID/app key in their setup card. Their
+  browser transports are implemented; a client secret is never requested.
+- Box is different: its token exchange needs a confidential secret, so it is
+  unavailable in the static build. Use a Manual encrypted file in a Box-synced
+  folder, or a self-hosted token-exchange proxy.
 
 ### "Blocked by browser security policy" / custom provider won't load
 - The hosted build's CSP only allows known origins and **forbids wildcards**.

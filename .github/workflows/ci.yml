@@ -5,7 +5,17 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  # A wider compatibility pass catches Safari/WebKit and phone-layout regressions
+  # without making every pull request wait for every Playwright browser.
+  schedule:
+    - cron: "17 5 * * 1"
   workflow_dispatch:
+    inputs:
+      full_browser_matrix:
+        description: "Also run Firefox, WebKit, and mobile/tablet Playwright projects"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +38,7 @@ jobs:
     name: Browser tests (Chromium)
     runs-on: ubuntu-latest
     needs: static-checks
+    if: ${{ github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,5 +55,31 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
+          path: .tmp/playwright-results/
+          retention-days: 14
+
+  browser-compatibility-matrix:
+    name: Browser compatibility matrix (Firefox, WebKit, mobile)
+    runs-on: ubuntu-latest
+    needs: static-checks
+    # Scheduled runs cover every configured Playwright project. Maintainers can
+    # request the same full pass from the Actions UI before a risky release.
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_browser_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Run full browser and responsive matrix
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-compatibility-report
           path: .tmp/playwright-results/
           retention-days: 14

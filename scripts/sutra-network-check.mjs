@@ -65,6 +65,11 @@ const approved = [
   'https://platform.deepseek.com',
   'https://console.x.ai',
   'https://www.perplexity.ai',
+  // Provider `docsUrl` anchors (DeepSeek / xAI / Perplexity registry entries).
+  // Documentation home pages, opened in a new tab only — never fetched.
+  'https://api-docs.deepseek.com',
+  'https://docs.x.ai',
+  'https://docs.perplexity.ai',
   'https://local.sutra.invalid',
   'https://tanujranjith.github.io',
   // SEO/canonical + structured-data references (metadata only, never fetched).
@@ -77,6 +82,11 @@ const approved = [
   // (buildWordExportHtml). A namespace URI, never fetched — same rationale as
   // the SVG namespace above.
   'http://www.w3.org/TR/REC-html40',
+  // OOXML namespace URIs baked into the genuine .docx package parts
+  // (content-types / relationships / wordprocessingml document). These are
+  // XML namespace identifiers and OOXML relationship-type strings — required
+  // literals inside the .docx XML, never fetched over the network.
+  'http://schemas.openxmlformats.org',
   'http://localhost',
   'http://127.0.0.1'
 ];

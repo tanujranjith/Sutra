@@ -198,6 +198,17 @@
     return 'medium';
   }
 
+  // Keep the default assignment shape deliberately small while preserving a
+  // few student-facing distinctions that other surfaces can use. Unknown
+  // legacy values normalize to assignment so old homework remains unchanged.
+  function normalizeHomeworkKind(rawValue) {
+    const value = String(rawValue || '').toLowerCase();
+    if (value === 'test' || value === 'exam' || value === 'final' || value === 'midterm') return 'test';
+    if (value === 'quiz') return 'quiz';
+    if (value === 'review') return 'review';
+    return 'assignment';
+  }
+
   function ensureCourseIdByName(courseName, type = 'class') {
     const normalizedName = String(courseName || '').trim();
     if (!normalizedName) return '';
@@ -243,6 +254,11 @@
       // conflict summary).
       updatedAt: task.updatedAt || new Date().toISOString()
     };
+
+    const kind = normalizeHomeworkKind(task.kind || task.type);
+    if (kind !== 'assignment') serialized.kind = kind;
+    const estimateMinutes = Math.round(Number(task.estimateMinutes || task.effortMinutes) || 0);
+    if (estimateMinutes > 0) serialized.estimateMinutes = estimateMinutes;
 
     // Optional per-task extras ride the same row (hwTasks:v2) so they survive
     // every existing persistence + export path without new storage keys:
@@ -375,8 +391,8 @@
   function save() {
     normalizeState();
     calibrationCache.clear(); // task data changed — recompute ratios lazily
-    writeArrayToStorage(COURSES_KEY, courses);
-    writeArrayToStorage(TASKS_KEY, tasks.map(task => serializeTask(task)));
+    const coursesResult = writeArrayToStorage(COURSES_KEY, courses);
+    const tasksResult = writeArrayToStorage(TASKS_KEY, tasks.map(task => serializeTask(task)));
     // Schema marker is a low-stakes optional write; never let it throw.
     if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
       window.SutraSafeStorage.set(SCHEMA_KEY, '3', { importance: 'optional' });
@@ -384,6 +400,11 @@
     // Always notify so the UI re-renders the in-memory state, even when the
     // persistence write above failed.
     notifyHomeworkUpdated();
+    return {
+      ok: !!(coursesResult && coursesResult.ok) && !!(tasksResult && tasksResult.ok),
+      courses: coursesResult,
+      tasks: tasksResult
+    };
   }
 
   function normalizeCourseType(rawType) {
@@ -988,7 +1009,18 @@
   }
 
   function renderEmptyStateRedesign(message) {
-    return `<div class="hw-empty-redesign"><i class="fas fa-clipboard-check" aria-hidden="true"></i><p>${escHtml(message || 'Nothing here yet.')}</p></div>`;
+    // One surface, one primary action: teach the fastest way to capture work.
+    // "Paste or type your homework" opens Quick Capture (which parses class,
+    // due date and type); "Add a class" is the lighter secondary path.
+    return `<div class="hw-empty-redesign">
+      <i class="fas fa-clipboard-check" aria-hidden="true"></i>
+      <p class="hw-empty-title">${escHtml(message || 'No homework yet.')}</p>
+      <p class="hw-empty-sub">Paste your assignment list or type one line — Sutra files it by class and due date.</p>
+      <div class="hw-empty-actions">
+        <button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-bolt" aria-hidden="true"></i> Paste or type your homework</button>
+        <button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-plus" aria-hidden="true"></i> Add a class</button>
+      </div>
+    </div>`;
   }
 
   // ---- inline add composer (default add method) -------------------------
@@ -1097,6 +1129,14 @@
     let raw = ` ${String(rawText || '').trim()} `;
     if (!raw.trim()) return null;
 
+    const sharedParser = window.SutraStudentDateParser;
+    const sharedDate = sharedParser && typeof sharedParser.parseNaturalDate === 'function'
+      ? sharedParser.parseNaturalDate(raw, { now: new Date() })
+      : null;
+    const sharedTime = sharedParser && typeof sharedParser.parseNaturalTime === 'function'
+      ? sharedParser.parseNaturalTime(raw)
+      : null;
+
     let difficulty = 'medium';
     const diffMatch = raw.match(/\b(easy|medium|med|hard)\b/i);
     if (diffMatch) {
@@ -1105,11 +1145,13 @@
       raw = raw.replace(diffMatch[0], ' ');
     }
 
-    let dueTime = '';
+    let dueTime = sharedTime && sharedTime.time ? normalizeDueTime(sharedTime.time) : '';
     const timeMatch = raw.match(/\b(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\b/i);
     if (timeMatch) {
       const parsed = normalizeDueTime(timeMatch[0].replace(/\s+/g, '')) || normalizeDueTime(`${timeMatch[0].replace(/[^\d]/g, '')}:00`);
       if (parsed) { dueTime = parsed; raw = raw.replace(timeMatch[0], ' '); }
+    } else if (sharedTime && sharedTime.match) {
+      raw = raw.replace(new RegExp(escapeRegExp(sharedTime.match), 'i'), ' ');
     }
 
     let dueDate = '';
@@ -1124,7 +1166,8 @@
       if (re.test(raw)) { weekdayMatch = { name, match: raw.match(re)[0] }; break; }
     }
 
-    if (isoMatch) { dueDate = normalizeDueDate(isoMatch[1]); raw = raw.replace(isoMatch[0], ' '); }
+    if (sharedDate && sharedDate.date) { dueDate = normalizeDueDate(sharedDate.date); raw = raw.replace(new RegExp(escapeRegExp(sharedDate.match || ''), 'i'), ' '); }
+    else if (isoMatch) { dueDate = normalizeDueDate(isoMatch[1]); raw = raw.replace(isoMatch[0], ' '); }
     else if (todayMatch) { dueDate = formatDateKey(new Date()); raw = raw.replace(todayMatch[0], ' '); }
     else if (tomorrowMatch) { const d = new Date(); d.setDate(d.getDate() + 1); dueDate = formatDateKey(d); raw = raw.replace(tomorrowMatch[0], ' '); }
     else if (nextWeekMatch) { const d = new Date(); d.setDate(d.getDate() + 7); dueDate = formatDateKey(d); raw = raw.replace(nextWeekMatch[0], ' '); }
@@ -1931,7 +1974,7 @@
     const title = String(payload.title || '').trim();
     if (!title) return false;
 
-    tasks.push(serializeTask({
+    const created = serializeTask({
       id: uid(),
       courseId,
       title,
@@ -1941,11 +1984,18 @@
       priority: normalizePriority(payload.priority || inferPriorityFromDueDate(payload.dueDate)),
       difficulty: normalizeDifficulty(payload.difficulty || 'medium'),
       recurrence: normalizeRecurrence(payload.recurrence),
+      kind: normalizeHomeworkKind(payload.kind || payload.type),
+      estimateMinutes: payload.estimateMinutes,
+      notes: payload.notes,
+      sourceUrl: payload.sourceUrl,
       createdAt: new Date().toISOString()
-    }));
+    });
+    tasks.push(created);
 
-    save();
-    return true;
+    const persistence = save();
+    // The task remains in memory even when a browser storage write fails. The
+    // returned status lets callers be honest without dropping a capture.
+    return { ...serializeTask(created), persistence };
   }
 
   async function deleteCourse(courseId) {
@@ -2010,6 +2060,15 @@
     task.updatedAt = new Date().toISOString();
     save();
     render();
+  }
+
+  // Canonical cross-surface completion action. Unlike toggleTaskDone this will
+  // never accidentally reopen work when Today/Assistant calls it twice.
+  function markTaskDone(taskId) {
+    const task = tasks.find(row => String(row.id) === String(taskId));
+    if (!task || task.done) return false;
+    toggleTaskDone(taskId);
+    return true;
   }
 
   function deleteTask(taskId) {
@@ -2186,6 +2245,18 @@
       button.addEventListener('click', () => {
         try { button.focus({ preventScroll: true }); } catch (_) { try { button.focus(); } catch (e) {} }
         promptAddCourse(button.getAttribute('data-course-add'), { returnFocus: button });
+      });
+    });
+
+    // Empty-state primary action: open Quick Capture so a student can paste or
+    // type homework straight away (it parses class, due date and type).
+    board.querySelectorAll('[data-hw-empty-capture]').forEach(button => {
+      button.addEventListener('click', () => {
+        if (typeof window !== 'undefined' && typeof window.openQuickCaptureModal === 'function') {
+          window.openQuickCaptureModal('');
+        } else {
+          promptAddCourse('class', { returnFocus: button });
+        }
       });
     });
 
@@ -2610,6 +2681,18 @@
         const course = courses.find(c => String(c.id) === String(id));
         return { id: String(id), name: course ? String(course.name || normalized) : normalized };
       },
+      // Canonical cross-feature write path. Quick Capture and future import
+      // surfaces must use this instead of writing hwTasks:v2 directly so
+      // quota/security failures keep the new assignment in module memory and
+      // show the shared durable storage warning.
+      createTask: (payload) => {
+        const input = payload && typeof payload === 'object' ? payload : {};
+        let courseId = String(input.courseId || '');
+        if (!courseId && input.courseName) courseId = ensureCourseIdByName(input.courseName, 'class');
+        const created = addTaskToCourse(courseId, input);
+        if (created) render();
+        return created || null;
+      },
       // Effort calibration (deterministic, local): other surfaces (Quick
       // Capture, All Due) scale their estimates by the same history the
       // homework cards use, so every estimate in the app adapts together.
@@ -2618,6 +2701,7 @@
       predictEffortMinutes: (task) => predictEffortMinutes(task),
       calibratedEstimateMinutes: (task) => calibratedEstimateMinutes(task),
       logActualMinutes,
+      markDone: markTaskDone,
       render
     });
     window.SutraCountdown = window.SutraCountdown || {};
@@ -2647,4 +2731,3 @@
     init();
   }
 })();
-

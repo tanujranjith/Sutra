@@ -134,6 +134,9 @@ test('Notes rich paste sanitizes scripts, handlers, and javascript URLs', async 
 
 test('Assistant chat history persists locally and is included in encrypted backups but not plaintext JSON by default', async ({ page }) => {
   await openApp(page);
+  // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
+  // defaults OFF); enable it like a user would so the chat panel can open.
+  await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
   await page.evaluate(() => {
     const panel = document.getElementById('chatbotPanel');
     if (panel && panel.style.display !== 'flex' && typeof window.toggleChat === 'function') window.toggleChat();

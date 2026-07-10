@@ -12,15 +12,18 @@ Open it from **Settings → Data → Sutra Cloud**.
 | Provider | Category | Status |
 |---|---|---|
 | Manual encrypted `.sutra` file | Manual | ✅ first-class (no account, no network) |
-| Supabase | Advanced | ✅ implemented (configured project only, per CSP) |
-| WebDAV (Nextcloud/ownCloud) | Advanced | ✅ implemented (self-hosted origin in CSP) |
-| Custom HTTP endpoint | Advanced | ✅ implemented (self-hosted origin in CSP) |
-| Google Drive | Recommended | uses existing encrypted Drive sync |
-| OneDrive / Dropbox / Box | Recommended/Advanced | planned — needs a registered OAuth app + CSP origin |
+| Google Drive | Recommended | ✅ works after a public OAuth client ID is configured |
+| OneDrive | Recommended | ✅ works after a public SPA client ID is configured |
+| Dropbox | Recommended | ✅ works after a public App-folder app key is configured |
+| Supabase | Advanced | ✅ works after configuration; a custom project needs a CSP-pinned origin |
+| WebDAV (Nextcloud/ownCloud) | Advanced | ✅ works in a self-hosted build with its origin in CSP |
+| Custom HTTP endpoint | Advanced | ✅ works in a self-hosted build with its origin in CSP |
+| Box | Advanced | 🔒 not available in the static build; use Manual or a self-hosted token proxy |
 | S3-compatible | Advanced | preview — config UI present, SigV4 signing is a follow-up |
 
-Providers that aren't fully wired are labelled **"planned"** / **"needs setup"** /
-**"preview"** — never shown as fake-active.
+The provider card distinguishes **works now**, **needs configuration**,
+**self-host only**, and **preview**. A provider is never shown as active merely
+because a configuration form exists.
 
 Full provider matrix, setup, security model, and troubleshooting live in:
 

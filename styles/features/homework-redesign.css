@@ -331,6 +331,11 @@ body.dark .hw-card-meta.hw-meta-conflict { color: #f5c97a; background: rgba(245,
 }
 .hw-empty-redesign i { font-size: 28px; opacity: 0.5; margin-bottom: 10px; }
 .hw-empty-redesign p { margin: 4px 0 14px; }
+.hw-empty-redesign .hw-empty-title { font-weight: 600; color: var(--text-primary, #222); font-size: 1.02rem; margin: 4px 0 4px; }
+.hw-empty-redesign .hw-empty-sub { margin: 0 auto 16px; max-width: 30rem; font-size: 0.88rem; }
+.hw-empty-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.hw-btn-primary { background: var(--accent, #6fa7ff); color: #fff; border-color: transparent; }
+.hw-btn-primary:hover { filter: brightness(1.05); }
 
 /* ===================================================================== */
 /* Countdowns: nav pill, sidebar card, in-note chip                       */

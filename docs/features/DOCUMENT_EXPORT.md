@@ -17,7 +17,8 @@ the unencrypted **JSON** workspace export are separate — see
 | Format | Output | How it is produced |
 | --- | --- | --- |
 | **PDF** | `.pdf` (via print) | The browser's own **print-to-PDF** pipeline. Opens a print-ready view; choose **Save as PDF**. Real pagination, selectable text, honours `@page` margins. |
-| **Word** | `.doc` | **Word-compatible HTML** with an MSO `@page Section1` full-page layout. Opens full-page in Microsoft Word and Google Docs and preserves images, tables, and colour. |
+| **Word** | `.docx` | A genuine, local OOXML Word package. Sutra includes the sanitized, self-contained note HTML in the document so Microsoft Word can preserve rich note content without a server or CDN. |
+| **Word 97-2003** | `.doc` | **Word-compatible HTML** with an MSO `@page Section1` full-page layout for older Word-compatible workflows. |
 | **HTML** | `.html` | A clean, self-contained semantic HTML document, readable in any browser and full-page when printed. |
 | **Markdown** | `.md` | A deterministic local HTML→Markdown converter (headings, nested lists, blockquotes, code blocks, tables, images, page breaks). |
 | **RTF** | `.rtf` | A structure-preserving HTML→RTF converter (headings, bold/italic/underline, lists, blockquotes, code, basic tables). |
@@ -33,13 +34,12 @@ mismatched the Letter page width — the cause of the *text-on-half-the-page* an
 dialog (one extra "Save as PDF" click) is the deliberate trade for correct,
 offline, selectable PDF.
 
-### Why "Word" exports as `.doc`
+### Word formats are labeled by their actual extension
 
-A `.doc` file containing Word-compatible HTML opens at full page width in Word
-and Google Docs and preserves more rich content (images, tables, colour) than a
-hand- or library-built minimal OOXML `.docx`, with **zero dependencies** and no
-network. The `.docx` menu option therefore produces the same reliable `.doc`
-document.
+**Word (.docx)** creates a real OOXML `.docx` package using Sutra's local ZIP
+library—no CDN, account, or server is involved. **Word 97-2003 (.doc)** remains
+available for older workflows and contains Word-compatible HTML. The two menu
+options now download exactly the extension shown in Sutra.
 
 ## Notes & limitations
 

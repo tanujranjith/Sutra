@@ -217,6 +217,15 @@ memory except via a `create_memory` proposal; never infer sensitive memories fro
 chat; ask for clarification when ambiguous; and use Sutra's deterministic local
 systems for grade math and schedule-conflict detection.
 
+DeepSeek, xAI, and Perplexity are real, direct browser integrations using the
+same audited OpenAI-compatible request builder as their compatible peers. They
+are **text-first** in Sutra: model-specific native image input is enabled only
+when `SutraModelCapabilities` recognizes it, while native PDF, document, audio,
+and video input is not claimed for those adapters. Sutra does not send an
+explicit reasoning-effort parameter to those providers; provider defaults apply.
+Unknown provider IDs are treated as text-only by the capability registry rather
+than inheriting attachment support from a similarly named model.
+
 ---
 
 ## 9. Privacy & security invariants
