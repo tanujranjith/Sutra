@@ -39,6 +39,8 @@ async function openApp(page) {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
   });
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() => window.SutraModelCapabilities && window.SutraStudyMaterials && window.SutraIntelligence && window.flowAssistant);
 }
 

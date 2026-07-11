@@ -2681,7 +2681,13 @@ function populateProgressDashboard() {
         const APP_DB_NAME = 'noteflow_atelier_db';
         const APP_DB_STORE = 'workspace';
         const APP_DB_KEY = 'root';
-        const APP_SCHEMA_VERSION = 2;
+        const APP_SCHEMA_VERSION = 4;
+        const workspaceDb = window.SutraWorkspaceDB.create({
+            dbName: APP_DB_NAME,
+            storeName: APP_DB_STORE,
+            version: APP_SCHEMA_VERSION,
+            indexedDB: window.indexedDB
+        });
         let appData = null;
         let pendingAppSave = null;
         let lifecycleSaveFlushScheduled = false;
@@ -6526,51 +6532,26 @@ function populateProgressDashboard() {
             };
         }
 
-        function openAppDb() {
-            return new Promise((resolve, reject) => {
-                if (typeof indexedDB === 'undefined') {
-                    reject(new Error('IndexedDB unavailable'));
-                    return;
-                }
-                let request;
-                try {
-                    request = indexedDB.open(APP_DB_NAME, APP_SCHEMA_VERSION);
-                } catch (error) {
-                    reject(error);
-                    return;
-                }
-                request.onupgradeneeded = () => {
-                    const db = request.result;
-                    if (!db.objectStoreNames.contains(APP_DB_STORE)) {
-                        db.createObjectStore(APP_DB_STORE);
-                    }
-                };
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
+        async function readAppData() {
+            return workspaceDb.read(APP_DB_KEY);
         }
 
-        async function readAppData() {
-            const db = await openAppDb();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(APP_DB_STORE, 'readonly');
-                const store = tx.objectStore(APP_DB_STORE);
-                const request = store.get(APP_DB_KEY);
-                request.onsuccess = () => resolve(request.result || null);
-                request.onerror = () => reject(request.error);
-            });
+        async function writeAppDbRecord(key, data) {
+            return workspaceDb.write(key, data);
         }
 
         async function writeAppData(data) {
-            const db = await openAppDb();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(APP_DB_STORE, 'readwrite');
-                const store = tx.objectStore(APP_DB_STORE);
-                const request = store.put(data, APP_DB_KEY);
-                request.onerror = () => reject(request.error || tx.error || new Error('IndexedDB write request failed'));
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
-                tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+            return writeAppDbRecord(APP_DB_KEY, data);
+        }
+
+        async function writePreMigrationRecoveryBackup(workspace, targetVersion) {
+            const sourceVersion = Number(workspace && workspace.version) || 1;
+            await writeAppDbRecord('workspace-pre-migration', {
+                kind: 'sutra-pre-migration-recovery',
+                createdAt: new Date().toISOString(),
+                fromVersion: sourceVersion,
+                targetVersion: targetVersion,
+                workspace: JSON.parse(JSON.stringify(workspace))
             });
         }
 
@@ -7006,6 +6987,15 @@ function populateProgressDashboard() {
                 recordPersistenceFailure(error, { reason: 'startup-read', phase: 'startup-read', kind: 'indexeddb' });
             }
             if (stored) {
+                try {
+                    if (window.SutraMigrations && window.SutraMigrations.requiresBackup
+                        && window.SutraMigrations.requiresBackup(stored, APP_SCHEMA_VERSION)) {
+                        await writePreMigrationRecoveryBackup(stored, APP_SCHEMA_VERSION);
+                    }
+                } catch (error) {
+                    recordPersistenceFailure(error, { reason: 'pre-migration-backup', phase: 'migration-backup', kind: 'indexeddb' });
+                    throw new Error(`Workspace migration paused because its recovery backup failed: ${error.message || error}`);
+                }
                 appData = mergeAppDataDefaults(stored);
             } else {
                 appData = migrateLegacyData();
@@ -7089,8 +7079,20 @@ function populateProgressDashboard() {
             } catch (e) { /* non-critical */ }
             splitPaneContexts = normalizeSplitPaneContexts(appData.splitPaneContexts);
             appData.pinnedPages = normalizePinnedPages(appData.pinnedPages);
-            if (appData.homeworkWorkspace) {
-                restoreHomeworkWorkspaceFromSnapshot(appData.homeworkWorkspace, { onlyIfEmpty: true });
+            if (window.SutraHomeworkStore && typeof window.SutraHomeworkStore.configure === 'function') {
+                window.SutraHomeworkStore.configure({
+                    getWorkspace: () => appData.homeworkWorkspace,
+                    setWorkspace: (workspace) => { appData.homeworkWorkspace = workspace; },
+                    readLegacy: () => window.SutraLegacyHomework && window.SutraLegacyHomework.readSnapshot
+                        ? window.SutraLegacyHomework.readSnapshot(localStorage)
+                        : { courses: [], tasks: [], quarantine: [] },
+                    persist: () => queueMicrotask(() => {
+                        try { persistAppData(); }
+                        catch (error) { console.warn('Homework workspace save failed', error); }
+                    })
+                });
+                appData.homeworkWorkspace = window.SutraHomeworkStore.getSnapshot();
+                try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (error) { /* non-critical */ }
             }
             // Course Hub: migrate existing Homework courses into the rich course
             // workspace and keep both stores bridged. Idempotent; never wipes.
@@ -7146,6 +7148,7 @@ function populateProgressDashboard() {
                     : appSettings.glassRefraction
             );
             appSettings.enabledViews = normalizeEnabledViews(storedSettings.enabledViews || appSettings.enabledViews);
+            syncLazyFeaturePacks();
             if (!Object.prototype.hasOwnProperty.call(storedSettings, 'featureSelectionCompleted')) {
                 appSettings.featureSelectionCompleted = true;
             }
@@ -7991,7 +7994,7 @@ function populateProgressDashboard() {
 
             if (importedType === 'dash_lms_sync') {
                 let hw = [];
-                try { hw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (e) { hw = []; }
+                try { hw = readLocalArraySafe('hwTasks:v2'); } catch (e) { hw = []; }
                 const imported = (Array.isArray(hw) ? hw : []).filter(t => t && typeof t.sourceUrl === 'string' && /^https?:\/\//.test(t.sourceUrl));
                 let latest = null;
                 imported.forEach(t => {
@@ -9120,6 +9123,13 @@ function populateProgressDashboard() {
 
             root.querySelectorAll('input[type="color"]').forEach((inputEl) => {
                 if (!inputEl || inputEl.dataset.nfColorPickerInit === 'true') return;
+                // The notes toolbar colour fields (.toolbar-color-field) already
+                // provide their own compact icon + swatch-bar UI with a transparent
+                // full-size native <input type="color"> overlay that opens the OS
+                // picker on click. Injecting the large .nf-color-control trigger on
+                // top of them duplicates the control and overflows the toolbar
+                // (the stray swatch + "#FFE066" hex chip), so leave them alone.
+                if (inputEl.closest('.toolbar-color-field')) return;
                 inputEl.dataset.nfColorPickerInit = 'true';
                 inputEl.classList.add('nf-color-native-input');
 
@@ -19491,6 +19501,13 @@ function populateProgressDashboard() {
         }
 
         function readLocalArraySafe(key) {
+            if (key === 'hwCourses:v2' || key === 'hwTasks:v2') {
+                try {
+                    const snapshot = window.SutraHomeworkStore && window.SutraHomeworkStore.getSnapshot();
+                    const rows = key === 'hwCourses:v2' ? snapshot.courses : snapshot.tasks;
+                    return Array.isArray(rows) ? rows : [];
+                } catch (error) { return []; }
+            }
             try {
                 const parsed = JSON.parse(localStorage.getItem(key) || '[]');
                 return Array.isArray(parsed) ? parsed : [];
@@ -19500,6 +19517,16 @@ function populateProgressDashboard() {
         }
 
         function writeLocalArraySafe(key, value) {
+            if (key === 'hwCourses:v2' || key === 'hwTasks:v2') {
+                try {
+                    const store = window.SutraHomeworkStore;
+                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return;
+                    const snapshot = store.getSnapshot();
+                    const update = key === 'hwCourses:v2' ? { courses: value } : { tasks: value };
+                    store.replace({ ...snapshot, ...update }, { reason: 'compat-write-adapter' });
+                } catch (error) { console.warn(`Failed to persist ${key}`, error); }
+                return;
+            }
             try {
                 localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
             } catch (err) {
@@ -19508,31 +19535,25 @@ function populateProgressDashboard() {
         }
 
         function readHomeworkWorkspaceSnapshot() {
-            return {
-                courses: readLocalArraySafe('hwCourses:v2'),
-                tasks: readLocalArraySafe('hwTasks:v2'),
-                legacyCourses: readLocalArraySafe('homeworkCourses:v1'),
-                legacyTasks: readLocalArraySafe('homeworkTasks:v1')
-            };
+            try {
+                if (window.SutraHomeworkStore && typeof window.SutraHomeworkStore.getSnapshot === 'function') {
+                    return window.SutraHomeworkStore.getSnapshot();
+                }
+            } catch (error) { console.warn('Unable to read canonical homework workspace', error); }
+            return appData && appData.homeworkWorkspace && typeof appData.homeworkWorkspace === 'object'
+                ? appData.homeworkWorkspace
+                : { schemaVersion: 2, revision: 0, courses: [], tasks: [], quarantine: [] };
         }
 
         function restoreHomeworkWorkspaceFromSnapshot(snapshot, options = {}) {
             if (!snapshot || typeof snapshot !== 'object') return false;
             const onlyIfEmpty = options.onlyIfEmpty === true;
-            let changed = false;
-            const writeKey = (key, value) => {
-                if (!Array.isArray(value)) return;
-                if (onlyIfEmpty) {
-                    const existing = readLocalArraySafe(key);
-                    if (existing.length > 0) return;
-                }
-                writeLocalArraySafe(key, value);
-                changed = true;
-            };
-            writeKey('hwCourses:v2', snapshot.courses);
-            writeKey('hwTasks:v2', snapshot.tasks);
-            writeKey('homeworkCourses:v1', snapshot.legacyCourses);
-            writeKey('homeworkTasks:v1', snapshot.legacyTasks);
+            const store = window.SutraHomeworkStore;
+            if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return false;
+            const current = store.getSnapshot();
+            if (onlyIfEmpty && ((current.courses && current.courses.length) || (current.tasks && current.tasks.length))) return false;
+            store.replace(snapshot, { reason: options.reason || 'homework-restore' });
+            const changed = true;
             if (changed) {
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) { /* non-critical */ }
             }
@@ -22090,8 +22111,8 @@ function populateProgressDashboard() {
                         );
                     }
                     case 'homework': {
-                        const courses = (typeof localStorage !== 'undefined') ? (function(){ try { return JSON.parse(localStorage.getItem('hwCourses:v2') || '[]'); } catch(e){ return []; } })() : [];
-                        const hwTasks = (typeof localStorage !== 'undefined') ? (function(){ try { return JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch(e){ return []; } })() : [];
+                        const courses = (typeof localStorage !== 'undefined') ? (function(){ try { return readLocalArraySafe('hwCourses:v2'); } catch(e){ return []; } })() : [];
+                        const hwTasks = (typeof localStorage !== 'undefined') ? (function(){ try { return readLocalArraySafe('hwTasks:v2'); } catch(e){ return []; } })() : [];
                         return (Array.isArray(courses) && courses.length > 0) || (Array.isArray(hwTasks) && hwTasks.length > 0);
                     }
                     case 'notes':
@@ -22442,8 +22463,8 @@ function populateProgressDashboard() {
             // Homework
             try {
                 if (typeof localStorage !== 'undefined') {
-                    const hwRaw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-                    const hwCoursesRaw = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                    const hwRaw = readLocalArraySafe('hwTasks:v2');
+                    const hwCoursesRaw = readLocalArraySafe('hwCourses:v2');
                     const courseMap = new Map((Array.isArray(hwCoursesRaw) ? hwCoursesRaw : []).map(c => [String(c.id), c.name || 'Class']));
                     (Array.isArray(hwRaw) ? hwRaw : []).forEach(hw => {
                         if (!hw || hw.done) return;
@@ -23694,14 +23715,14 @@ function populateProgressDashboard() {
             if (!sourceId) return false;
             try {
                 if (item.source === 'homework') {
-                    const raw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                    const raw = readLocalArraySafe('hwTasks:v2');
                     const row = Array.isArray(raw) ? raw.find(t => String(t.id) === sourceId) : null;
                     if (!row) return false;
                     // Same completion contract as the homework module's toggle.
                     if (change.done) { row.done = true; row.completedAt = new Date().toISOString(); }
                     if (change.dueDate) row.dueDate = change.dueDate;
                     row.updatedAt = new Date().toISOString();
-                    localStorage.setItem('hwTasks:v2', JSON.stringify(raw)); // sutra-allow-storage: homework store, same direct-write contract as the homework module + quick capture
+                    writeLocalArraySafe('hwTasks:v2', raw);
                     try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ }
                     return true;
                 }
@@ -23818,7 +23839,7 @@ function populateProgressDashboard() {
                 }
             } catch (e) { /* fall through */ }
             try {
-                const raw = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                const raw = readLocalArraySafe('hwCourses:v2');
                 const m = Array.isArray(raw) ? raw.find(c => String(c.id) === String(id)) : null;
                 if (m && m.name) return String(m.name);
             } catch (e) { /* fall through */ }
@@ -24049,7 +24070,7 @@ function populateProgressDashboard() {
                 return !isNaN(end) && end < now && begin >= start;
             };
             const allTasks = Array.isArray(tasks) ? tasks : [];
-            const hwRaw = (function () { try { return JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (e) { return []; } })();
+            const hwRaw = (function () { try { return readLocalArraySafe('hwTasks:v2'); } catch (e) { return []; } })();
             const hw = Array.isArray(hwRaw) ? hwRaw : [];
             const doneCount = allTasks.filter(t => t.completed && inRange(t.dueDate)).length
                 + hw.filter(h => h.done && inRange(h.dueDate)).length;
@@ -25586,7 +25607,7 @@ function populateProgressDashboard() {
                 try {
                     // 5. Classes → homework subjects.
                     if (Array.isArray(d.classes) && d.classes.length && typeof localStorage !== 'undefined') {
-                        const existing = (function () { try { return JSON.parse(localStorage.getItem('hwCourses:v2') || '[]'); } catch (e) { return []; } })();
+                        const existing = (function () { try { return readLocalArraySafe('hwCourses:v2'); } catch (e) { return []; } })();
                         const known = new Set((Array.isArray(existing) ? existing : []).map(c => String(c.name || '').trim().toLowerCase()));
                         const out = Array.isArray(existing) ? existing.slice() : [];
                         let added = false;
@@ -25598,7 +25619,7 @@ function populateProgressDashboard() {
                             added = true;
                         });
                         if (added) {
-                            try { localStorage.setItem('hwCourses:v2', JSON.stringify(out)); } catch (err) { /* non-critical */ }
+                            try { writeLocalArraySafe('hwCourses:v2', out); } catch (err) { /* non-critical */ }
                             try { localStorage.setItem('hwSchemaVersion', '3'); } catch (err) { /* non-critical */ }
                             try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) { /* non-critical */ }
                         }
@@ -26091,6 +26112,20 @@ function populateProgressDashboard() {
         // are owned by the unified onboarding controller above. Removed legacy
         // duplicates that would otherwise shadow the controller-aware versions.
 
+        function syncLazyFeaturePacks() {
+            const registry = window.SutraFeatureRegistry;
+            if (!registry || typeof registry.configure !== 'function' || !appSettings) return Promise.resolve([]);
+            const enabledViews = normalizeEnabledViews(appSettings.enabledViews);
+            const assistantEnabled = !!(appSettings.preferences && appSettings.preferences.assistant && appSettings.preferences.assistant.enabled);
+            return registry.configure({
+                business: enabledViews.business === true,
+                assistant: assistantEnabled
+            }, { appSettings }).catch(error => {
+                if (typeof window.reportError === 'function') window.reportError(error, { where: 'syncLazyFeaturePacks' }, 'warning');
+                return [];
+            });
+        }
+
         function setFeatureViewEnabled(view, enabled, options = {}) {
             if (!isOptionalFeatureView(view) || !appSettings) return false;
             const shouldMarkSetupComplete = options.markSetupComplete !== false;
@@ -26122,6 +26157,7 @@ function populateProgressDashboard() {
                 setActiveView(nextView);
             }
             persistAppData();
+            if (view === 'business' || view === 'assistantview') syncLazyFeaturePacks();
             return true;
         }
 
@@ -36758,6 +36794,9 @@ function populateProgressDashboard() {
         // Outside-click closing is handled per-open in toggleSpacesDropdown via _spacesDropdownOutsideHandler
 
         // ===== COMMENTS (Section 11) =====
+        // Local-only threaded comments anchored (best-effort) to selected text.
+        let commentsFilter = 'open'; // 'open' | 'resolved'
+
         function toggleCommentsPanel() {
             const panel = document.getElementById('commentsPanel');
             if (!panel) return;
@@ -36770,65 +36809,220 @@ function populateProgressDashboard() {
             return pages.find(p => p.id === currentPageId);
         }
 
+        // Human-friendly "3 min ago"–style timestamps; absolute string on hover.
+        function commentRelativeTime(iso) {
+            if (!iso) return '';
+            const then = new Date(iso).getTime();
+            if (isNaN(then)) return '';
+            const diff = Date.now() - then;
+            if (diff < 0) return 'just now';
+            const s = Math.round(diff / 1000);
+            if (s < 45) return 'just now';
+            const m = Math.round(s / 60);
+            if (m < 60) return m + (m === 1 ? ' min ago' : ' mins ago');
+            const h = Math.round(m / 60);
+            if (h < 24) return h + (h === 1 ? ' hr ago' : ' hrs ago');
+            const d = Math.round(h / 24);
+            if (d < 7) return d + (d === 1 ? ' day ago' : ' days ago');
+            return new Date(iso).toLocaleDateString();
+        }
+
+        function setCommentsFilter(filter) {
+            commentsFilter = (filter === 'resolved') ? 'resolved' : 'open';
+            renderComments();
+        }
+
+        function commentReplyHtml(commentId, reply) {
+            const when = reply.createdAt ? escapeHtml(new Date(reply.createdAt).toLocaleString()) : '';
+            return `<div class="comment-reply" data-reply-id="${reply.id}">
+                <div class="comment-reply-head">
+                    <span class="comment-reply-author">${escapeHtml(reply.author || 'You')}</span>
+                    <span class="comment-reply-time" title="${when}">${escapeHtml(commentRelativeTime(reply.createdAt))}</span>
+                    <button class="comment-reply-del" title="Delete reply" aria-label="Delete reply" onclick="deleteCommentReply('${commentId}','${reply.id}')"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="comment-reply-text">${escapeHtml(reply.text)}</div>
+            </div>`;
+        }
+
+        function commentCardHtml(c) {
+            const resolved = c.resolved ? 'resolved' : '';
+            const created = c.createdAt ? escapeHtml(new Date(c.createdAt).toLocaleString()) : '';
+            const rel = escapeHtml(commentRelativeTime(c.createdAt));
+            const edited = (c.updatedAt && c.updatedAt !== c.createdAt) ? ' · edited' : '';
+            const anchor = c.selectedText
+                ? `<button type="button" class="comment-anchor" onclick="jumpToCommentAnchor('${c.id}')" title="Jump to the referenced text">
+                        <i class="fas fa-quote-left" aria-hidden="true"></i><span>${escapeHtml(c.selectedText)}</span>
+                   </button>`
+                : '';
+            const replies = Array.isArray(c.replies) ? c.replies : [];
+            const repliesHtml = replies.length
+                ? `<div class="comment-replies">${replies.map(r => commentReplyHtml(c.id, r)).join('')}</div>`
+                : '';
+            const composer = c.resolved ? '' : `<div class="comment-reply-compose">
+                    <input type="text" class="comment-reply-input" id="commentReplyInput-${c.id}" placeholder="Reply…" aria-label="Reply to comment" onkeydown="commentReplyKey(event, '${c.id}')" />
+                    <button class="comment-action-btn" onclick="addCommentReply('${c.id}')">Reply</button>
+                </div>`;
+            return `<div class="comment-item ${resolved}" data-comment-id="${c.id}">
+                <div class="comment-header">
+                    <span class="comment-author">${escapeHtml(c.author || 'You')}</span>
+                    <span class="comment-time" title="${created}">${rel}${edited}</span>
+                </div>
+                ${anchor}
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+                ${repliesHtml}
+                ${composer}
+                <div class="comment-actions">
+                    ${c.resolved
+                        ? `<button class="comment-action-btn" onclick="reopenComment('${c.id}')"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reopen</button>`
+                        : `<button class="comment-action-btn primary" onclick="resolveComment('${c.id}')"><i class="fas fa-check" aria-hidden="true"></i> Resolve</button>`}
+                    <button class="comment-action-btn" onclick="editCommentPrompt('${c.id}')">Edit</button>
+                    <button class="comment-action-btn danger" onclick="deleteComment('${c.id}')">Delete</button>
+                </div>
+            </div>`;
+        }
+
         function renderComments() {
             const list = document.getElementById('commentsList');
-            const empty = document.getElementById('commentsEmpty');
             const countEl = document.getElementById('commentsCount');
             if (!list) return;
             const page = getActivePage();
             const comments = (page && Array.isArray(page.comments)) ? page.comments : [];
-            if (countEl) countEl.textContent = String(comments.length);
-            if (!comments.length) {
-                if (empty) empty.style.display = 'block';
-                list.innerHTML = '';
-                if (empty) list.appendChild(empty);
+
+            const openCount = comments.filter(c => !c.resolved).length;
+            const resolvedCount = comments.length - openCount;
+            // The header chip tracks the actionable (open) count.
+            if (countEl) countEl.textContent = String(openCount);
+            const openCountEl = document.getElementById('commentsOpenCount');
+            const resolvedCountEl = document.getElementById('commentsResolvedCount');
+            if (openCountEl) openCountEl.textContent = String(openCount);
+            if (resolvedCountEl) resolvedCountEl.textContent = String(resolvedCount);
+            document.querySelectorAll('#commentsFilterBar .comments-filter-btn').forEach(b => {
+                const active = b.getAttribute('data-filter') === commentsFilter;
+                b.classList.toggle('active', active);
+                b.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+
+            const visible = comments.filter(c => commentsFilter === 'resolved' ? !!c.resolved : !c.resolved);
+            if (!visible.length) {
+                const msg = comments.length
+                    ? (commentsFilter === 'resolved' ? 'No resolved comments yet' : 'No open comments — nice and clear!')
+                    : 'No comments yet';
+                const hint = comments.length ? '' : '<div class="comments-empty-hint">Select text in your note, then “Add comment on selection”.</div>';
+                list.innerHTML = `<div class="comments-empty"><i class="fas fa-comment-slash" aria-hidden="true"></i><div>${escapeHtml(msg)}</div>${hint}</div>`;
                 return;
             }
-            if (empty) empty.style.display = 'none';
-            const html = comments.map(c => {
-                const resolved = c.resolved ? 'resolved' : '';
-                const time = c.createdAt ? new Date(c.createdAt).toLocaleString() : '';
-                return `<div class="comment-item ${resolved}" data-comment-id="${c.id}">
-                    <div class="comment-header">
-                        <span class="comment-author">${escapeHtml(c.author || 'You')}</span>
-                        <span class="comment-time">${time}</span>
-                    </div>
-                    <div class="comment-text">${escapeHtml(c.text)}</div>
-                    <div class="comment-actions">
-                        ${c.resolved
-                            ? `<button class="comment-action-btn" onclick="reopenComment('${c.id}')">Reopen</button>`
-                            : `<button class="comment-action-btn primary" onclick="resolveComment('${c.id}')">Resolve</button>`}
-                        <button class="comment-action-btn" onclick="editCommentPrompt('${c.id}')">Edit</button>
-                        <button class="comment-action-btn" onclick="deleteComment('${c.id}')">Delete</button>
-                    </div>
-                </div>`;
-            }).join('');
-            list.innerHTML = html;
+            // Newest first within the active filter.
+            const ordered = visible.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+            list.innerHTML = ordered.map(commentCardHtml).join('');
         }
 
         async function addCommentFromSelection() {
             const page = getActivePage();
             if (!page) { await atelierAlert('Please open a note first.'); return; }
             const sel = window.getSelection();
-            const selectedText = sel && sel.toString() ? sel.toString().slice(0, 200) : '';
+            const selectedText = sel && sel.toString() ? sel.toString().replace(/\s+/g, ' ').trim().slice(0, 240) : '';
             const text = await atelierPrompt(
                 selectedText ? `Comment on: "${selectedText}"` : 'Add a comment',
                 '',
                 { title: 'New Comment', multiline: true, placeholder: 'Your comment...' }
             );
             if (!text || !text.trim()) return;
+            const now = new Date().toISOString();
             page.comments = page.comments || [];
             page.comments.push({
                 id: generateId(),
                 text: text.trim(),
                 selectedText: selectedText,
                 author: 'You',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                resolved: false
+                createdAt: now,
+                updatedAt: now,
+                resolved: false,
+                replies: []
             });
+            // A brand-new comment is always open — surface it.
+            commentsFilter = 'open';
             persistAppData();
             renderComments();
+        }
+
+        function addCommentReply(id) {
+            const input = document.getElementById('commentReplyInput-' + id);
+            if (!input) return;
+            const text = input.value.trim();
+            if (!text) { input.focus(); return; }
+            const page = getActivePage();
+            if (!page || !Array.isArray(page.comments)) return;
+            const c = page.comments.find(x => x.id === id);
+            if (!c) return;
+            c.replies = Array.isArray(c.replies) ? c.replies : [];
+            c.replies.push({ id: generateId(), text: text, author: 'You', createdAt: new Date().toISOString() });
+            persistAppData();
+            renderComments();
+            // Keep the thread in view and ready for another reply.
+            const next = document.getElementById('commentReplyInput-' + id);
+            if (next) next.focus();
+        }
+
+        function commentReplyKey(event, id) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                addCommentReply(id);
+            }
+        }
+
+        async function deleteCommentReply(commentId, replyId) {
+            const page = getActivePage();
+            if (!page || !Array.isArray(page.comments)) return;
+            const c = page.comments.find(x => x.id === commentId);
+            if (!c || !Array.isArray(c.replies)) return;
+            c.replies = c.replies.filter(r => r.id !== replyId);
+            persistAppData();
+            renderComments();
+        }
+
+        // Best-effort: locate the commented text in the live editor and flash it.
+        // Uses the CSS Custom Highlight API so the document DOM is never mutated
+        // (critical — the editor engines own their DOM and any wrap/unwrap would
+        // dirty the doc or fight ProseMirror).
+        function jumpToCommentAnchor(id) {
+            const page = getActivePage();
+            const c = page && Array.isArray(page.comments) ? page.comments.find(x => x.id === id) : null;
+            const needle = c && c.selectedText ? c.selectedText.trim() : '';
+            if (!needle) return;
+            const container = (typeof getActiveEditor === 'function' && getActiveEditor())
+                || (typeof getPrimaryEditor === 'function' && getPrimaryEditor())
+                || document.getElementById('editor');
+            if (!container) return;
+            // Match on normalized whitespace so anchors survive reflowed text.
+            const norm = needle.replace(/\s+/g, ' ');
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+            let node, foundNode = null, foundOffset = -1;
+            while ((node = walker.nextNode())) {
+                const val = node.nodeValue || '';
+                let idx = val.indexOf(needle);
+                if (idx < 0 && norm !== needle) idx = val.replace(/\s+/g, ' ').indexOf(norm);
+                if (idx >= 0) { foundNode = node; foundOffset = Math.max(0, idx); break; }
+            }
+            if (!foundNode) {
+                if (typeof showToast === 'function') showToast('Referenced text not found — it may have been edited.', { type: 'info' });
+                return;
+            }
+            try {
+                const range = document.createRange();
+                range.setStart(foundNode, Math.min(foundOffset, foundNode.nodeValue.length));
+                range.setEnd(foundNode, Math.min(foundNode.nodeValue.length, foundOffset + needle.length));
+                const anchorEl = foundNode.parentElement;
+                if (anchorEl && anchorEl.scrollIntoView) anchorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (window.CSS && CSS.highlights && typeof Highlight === 'function') {
+                    const hl = new Highlight(range);
+                    CSS.highlights.set('comment-jump', hl);
+                    setTimeout(() => { try { CSS.highlights.delete('comment-jump'); } catch (e) { /* noop */ } }, 1800);
+                } else if (anchorEl) {
+                    // Fallback for engines without the Highlight API: transient class.
+                    anchorEl.classList.add('comment-anchor-flash');
+                    setTimeout(() => anchorEl.classList.remove('comment-anchor-flash'), 1800);
+                }
+            } catch (e) { /* range building can fail on exotic selections — non-fatal */ }
         }
 
         function resolveComment(id) {
@@ -36850,7 +37044,7 @@ function populateProgressDashboard() {
         }
 
         async function deleteComment(id) {
-            const ok = await atelierConfirm('Delete this comment?', { destructive: true, confirmText: 'Delete' });
+            const ok = await atelierConfirm('Delete this comment and its replies?', { destructive: true, confirmText: 'Delete' });
             if (!ok) return;
             const page = getActivePage();
             if (!page || !Array.isArray(page.comments)) return;
@@ -43322,7 +43516,7 @@ function getActiveEditor() {
                     // resolve courseId from name
                     if (ctx.courseName && typeof localStorage !== 'undefined') {
                         try {
-                            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                            const courses = readLocalArraySafe('hwCourses:v2');
                             const match = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').toLowerCase() === ctx.courseName.toLowerCase());
                             if (match) ctx.courseId = String(match.id);
                         } catch (err) { /* non-critical */ }
@@ -43335,7 +43529,7 @@ function getActiveEditor() {
                     if (page && page.classLinkId) {
                         ctx.courseId = String(page.classLinkId);
                         try {
-                            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                            const courses = readLocalArraySafe('hwCourses:v2');
                             const match = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === ctx.courseId);
                             if (match) ctx.courseName = String(match.name || '');
                         } catch (err) { /* non-critical */ }
@@ -43379,7 +43573,7 @@ function getActiveEditor() {
             const title = String(payload && payload.title || '').trim();
             if (!title) return null;
             try {
-                const courses = (function () { try { return JSON.parse(localStorage.getItem('hwCourses:v2') || '[]'); } catch (e) { return []; } })();
+                const courses = (function () { try { return readLocalArraySafe('hwCourses:v2'); } catch (e) { return []; } })();
                 let courseId = String(payload && payload.courseId || '').trim();
                 let courseName = String(payload && payload.courseName || '').trim();
                 if (!courseId && courseName) {
@@ -43389,12 +43583,12 @@ function getActiveEditor() {
                 if (!courseId && courseName) {
                     courseId = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
                     courses.push({ id: courseId, name: courseName, type: 'class' });
-                    try { localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); } catch (err) { /* non-critical */ }
+                    try { writeLocalArraySafe('hwCourses:v2', courses); } catch (err) { /* non-critical */ }
                 } else if (courseId && !courseName) {
                     const match = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === courseId);
                     if (match) courseName = String(match.name || '');
                 }
-                const tasks = (function () { try { return JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (e) { return []; } })();
+                const tasks = (function () { try { return readLocalArraySafe('hwTasks:v2'); } catch (e) { return []; } })();
                 const taskId = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
                 const dueDate = String(payload && payload.dueDate || '').slice(0, 10);
                 const dueTime = String(payload && payload.dueTime || '').trim();
@@ -43420,7 +43614,7 @@ function getActiveEditor() {
                     sourceNoteId: String(payload && payload.sourceNoteId || '')
                 };
                 tasks.push(next);
-                try { localStorage.setItem('hwTasks:v2', JSON.stringify(tasks)); } catch (err) { /* non-critical */ }
+                try { writeLocalArraySafe('hwTasks:v2', tasks); } catch (err) { /* non-critical */ }
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) { /* non-critical */ }
                 return { courseId: String(courseId || ''), courseName: courseName || '', taskId };
             } catch (err) {
@@ -44056,7 +44250,7 @@ function getActiveEditor() {
             if (!select) return;
             let courses = [];
             try {
-                courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                courses = readLocalArraySafe('hwCourses:v2');
             } catch (err) { courses = []; }
             const apSubjects = (apStudyWorkspace && Array.isArray(apStudyWorkspace.subjects) ? apStudyWorkspace.subjects : []);
             select.innerHTML = '';
@@ -44137,7 +44331,7 @@ function getActiveEditor() {
             if (classRaw.startsWith('class:')) {
                 resolvedCourseId = classRaw.slice(6);
                 try {
-                    const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                    const courses = readLocalArraySafe('hwCourses:v2');
                     const match = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === resolvedCourseId);
                     if (match) resolvedCourseName = String(match.name || '');
                 } catch (err) { /* non-critical */ }
@@ -44149,7 +44343,7 @@ function getActiveEditor() {
                         resolvedApSubjectName = String(subj.name || '');
                         // Try to also link an underlying homework class with the same name.
                         try {
-                            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                            const courses = readLocalArraySafe('hwCourses:v2');
                             const match = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').toLowerCase() === resolvedApSubjectName.toLowerCase());
                             if (match) {
                                 resolvedCourseId = String(match.id);
@@ -46175,7 +46369,7 @@ function getActiveEditor() {
             const normalizedId = String(courseId || '').trim();
             if (!normalizedId || typeof localStorage === 'undefined') return '';
             try {
-                const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                const courses = readLocalArraySafe('hwCourses:v2');
                 const row = (Array.isArray(courses) ? courses : []).find(course => String(course.id) === normalizedId);
                 return row ? String(row.name || '') : '';
             } catch (err) {
@@ -56504,6 +56698,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function importWorkspacePayload(data) {
+            const wrappedWorkspace = data && data.workspace && typeof data.workspace === 'object';
+            const migrationSource = wrappedWorkspace ? data.workspace : data;
+            if (window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function') {
+                const migration = window.SutraMigrations.migrateWorkspace(migrationSource, { targetVersion: APP_SCHEMA_VERSION });
+                data = wrappedWorkspace ? { ...data, workspace: migration.workspace } : migration.workspace;
+            }
             const workspace = data && data.workspace && typeof data.workspace === 'object' ? data.workspace : null;
             const defaults = getDefaultAppData();
             const importedPages = data.pages || (workspace && workspace.pages) || [];
@@ -59422,7 +59622,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const embedUrl = safeUrl.replace('/edit', '/preview').replace('/view', '/preview');
                 return `
                     <div style="border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
-                        <iframe src="${escapeHtml(embedUrl)}" style="width: 100%; height: 500px; border: none;"></iframe>
+                        <iframe src="${escapeHtml(embedUrl)}" style="width: 100%; height: 500px; border: none;" sandbox="allow-scripts allow-same-origin allow-forms" referrerpolicy="no-referrer"></iframe>
                     </div>
                 `;
             }
@@ -59432,7 +59632,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const embedUrl = `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(safeUrl)}`;
                 return `
                     <div style="border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
-                        <iframe src="${escapeHtml(embedUrl)}" style="width: 100%; height: 450px; border: none;" allowfullscreen></iframe>
+                        <iframe src="${escapeHtml(embedUrl)}" style="width: 100%; height: 450px; border: none;" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer" allowfullscreen></iframe>
                     </div>
                 `;
             }
@@ -59442,7 +59642,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (codepenMatch) {
                 return `
                     <div style="border-radius: 8px; overflow: hidden;">
-                        <iframe height="400" style="width: 100%;" scrolling="no" src="https://codepen.io/${codepenMatch[1]}/embed/${codepenMatch[2]}?default-tab=result" frameborder="no" loading="lazy" allowtransparency="true" allowfullscreen="true"></iframe>
+                        <iframe height="400" style="width: 100%;" scrolling="no" src="https://codepen.io/${codepenMatch[1]}/embed/${codepenMatch[2]}?default-tab=result" frameborder="no" loading="lazy" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer" allowfullscreen="true"></iframe>
                     </div>
                 `;
             }
@@ -59456,10 +59656,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 `;
             }
             
-            // Generic iframe embed
+            // Unknown hosts stay outbound links. Embedding an arbitrary origin
+            // would grant it a live network surface inside the workspace.
             return `
-                <div style="border-radius: 8px; overflow: hidden; border: 1px solid var(--border);">
-                    <iframe src="${escapeHtml(safeUrl)}" style="width: 100%; height: 400px; border: none;" sandbox="allow-scripts allow-same-origin allow-popups" referrerpolicy="no-referrer"></iframe>
+                <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; text-align: center;">
+                    <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">Open external content</a>
                 </div>
             `;
         }
@@ -59627,9 +59828,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             frame.className = 'html-embed-runtime-frame';
             frame.setAttribute('title', 'Embedded HTML content');
             frame.setAttribute('referrerpolicy', getHtmlEmbedDefaultReferrerPolicy());
-            if (!ALLOW_GLOBAL_HTML_IFRAME_EMBEDS) {
-                frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation');
-            }
+            frame.setAttribute('sandbox', 'allow-scripts');
             frame.style.width = '100%';
             frame.style.height = '100%';
             frame.style.minHeight = '100%';
@@ -65174,9 +65373,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
         }
 
-        const ALLOW_GLOBAL_HTML_IFRAME_EMBEDS = true;
+        const ALLOW_GLOBAL_HTML_IFRAME_EMBEDS = false;
         function getHtmlEmbedDefaultReferrerPolicy() {
-            return 'strict-origin-when-cross-origin';
+            return 'no-referrer';
         }
 
         function hasHttpDocumentOrigin() {
@@ -65428,7 +65627,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (!node.hasAttribute('referrerpolicy')) {
                         node.setAttribute('referrerpolicy', getHtmlEmbedDefaultReferrerPolicy());
                     }
-                    node.removeAttribute('sandbox');
+                    node.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
                     if (!node.hasAttribute('allow')) {
                         node.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
                     }
@@ -65484,10 +65683,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const compact = options.compact === true;
             const padding = compact ? 10 : 14;
             const baseFont = `'Source Sans 3', 'Segoe UI', system-ui, -apple-system, sans-serif`;
-            const permissiveMode = ALLOW_GLOBAL_HTML_IFRAME_EMBEDS === true;
-            const cspMeta = permissiveMode
-                ? ''
-                : `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https: http:; img-src data: blob: https: http:; font-src data: https: http:; media-src data: blob: https: http:; frame-src https: http:; connect-src https: http:;">`;
+            const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://docs.google.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io; child-src 'none'; form-action 'none'; navigate-to 'none';">`;
             return `<!doctype html>
 <html>
 <head>
@@ -68863,7 +69059,7 @@ ${cspMeta}
             if (!needle) return '';
             try {
                 if ((Array.isArray(tasks) ? tasks : []).some(task => String(task.title || '').trim().toLowerCase() === needle)) return 'Possible duplicate task';
-                const hwTasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                const hwTasks = readLocalArraySafe('hwTasks:v2');
                 if ((Array.isArray(hwTasks) ? hwTasks : []).some(task => String(task.title || task.text || '').trim().toLowerCase() === needle)) return 'Possible duplicate homework';
                 if ((Array.isArray(timeBlocks) ? timeBlocks : []).some(block => String(block.title || block.name || '').trim().toLowerCase() === needle)) return 'Possible duplicate timeline item';
             } catch (_) {}
@@ -69069,14 +69265,14 @@ ${cspMeta}
         // blank name until the next reload.
         function smartImportEnsureCourse(className, nowIso) {
             const name = String(className || 'Imported').trim().slice(0, 80) || 'Imported';
-            const courses = (() => { try { return JSON.parse(localStorage.getItem('hwCourses:v2') || '[]') || []; } catch (_) { return []; } })();
+            const courses = (() => { try { return readLocalArraySafe('hwCourses:v2') || []; } catch (_) { return []; } })();
             let course = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').trim().toLowerCase() === name.toLowerCase());
             let created = false;
             if (!course) {
                 course = { id: `course_${generateId()}`, name, color: '#5078f2', createdAt: nowIso || new Date().toISOString() };
                 courses.push(course);
                 created = true;
-                localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); // sutra-allow-storage: homework courses direct write, same contract as the existing Smart Import branches
+                writeLocalArraySafe('hwCourses:v2', courses);
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (_) {}
                 try { if (typeof migrateAndBridgeCourses === 'function') migrateAndBridgeCourses(); } catch (_) { /* name resolves after reload instead */ }
             }
@@ -69096,7 +69292,7 @@ ${cspMeta}
                 // same way the other branches do — the old inline copy didn't
                 // trim, so ' Chem ' and 'Chem' became two courses).
                 const ensured = smartImportEnsureCourse(fields.className, now);
-                const tasksList = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                const tasksList = readLocalArraySafe('hwTasks:v2');
                 const item = {
                     id: `hw_${generateId()}`,
                     courseId: ensured.course.id,
@@ -69110,7 +69306,7 @@ ${cspMeta}
                     createdAt: now
                 };
                 tasksList.push(item);
-                localStorage.setItem('hwTasks:v2', JSON.stringify(tasksList));
+                writeLocalArraySafe('hwTasks:v2', tasksList);
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (_) {}
                 applied.id = item.id;
                 if (ensured.created) applied.createdCourseId = String(ensured.course.id);
@@ -69134,10 +69330,10 @@ ${cspMeta}
                 return applied;
             }
             if (type === 'class') {
-                const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                const courses = readLocalArraySafe('hwCourses:v2');
                 const course = { id: `course_${generateId()}`, name: title.replace(/^class\s*[:|-]\s*/i, '').slice(0, 80), color: '#5078f2', createdAt: now };
                 courses.push(course);
-                localStorage.setItem('hwCourses:v2', JSON.stringify(courses));
+                writeLocalArraySafe('hwCourses:v2', courses);
                 applied.id = course.id;
                 return applied;
             }
@@ -69365,8 +69561,8 @@ ${cspMeta}
             // invisible to the id sweep, leaving ghost classes behind).
             if (undoCreatedCourseIds.size) {
                 try {
-                    const hwCoursesNow = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
-                    localStorage.setItem('hwCourses:v2', JSON.stringify(hwCoursesNow.filter(c => !undoCreatedCourseIds.has(String(c && c.id))))); // sutra-allow-storage: homework courses direct write, same contract as the surrounding undo sweep
+                    const hwCoursesNow = readLocalArraySafe('hwCourses:v2');
+                    writeLocalArraySafe('hwCourses:v2', hwCoursesNow.filter(c => !undoCreatedCourseIds.has(String(c && c.id))));
                 } catch (_) { /* best-effort */ }
             }
             const ids = new Set(smartImportLastApplied.map(item => item.id));
@@ -69375,10 +69571,10 @@ ${cspMeta}
             timeBlocks = timeBlocks.filter(block => !ids.has(block.id));
             pages = pages.filter(page => !ids.has(page.id));
             try {
-                const hwTasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').filter(item => !ids.has(item.id));
-                const hwCourses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]').filter(item => !ids.has(item.id));
-                localStorage.setItem('hwTasks:v2', JSON.stringify(hwTasks));
-                localStorage.setItem('hwCourses:v2', JSON.stringify(hwCourses));
+                const hwTasks = readLocalArraySafe('hwTasks:v2').filter(item => !ids.has(item.id));
+                const hwCourses = readLocalArraySafe('hwCourses:v2').filter(item => !ids.has(item.id));
+                writeLocalArraySafe('hwTasks:v2', hwTasks);
+                writeLocalArraySafe('hwCourses:v2', hwCourses);
             } catch (_) {}
             smartImportLastApplied = [];
             persistAppData();
@@ -73648,7 +73844,7 @@ function parseQuickCaptureDate(text, now) {
 function resolveQuickCaptureCourse(text) {
     let courses = [];
     try {
-        if (typeof localStorage !== 'undefined') courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+        if (typeof localStorage !== 'undefined') courses = readLocalArraySafe('hwCourses:v2');
     } catch (err) { courses = []; }
     if (!Array.isArray(courses) || courses.length === 0) return null;
 
@@ -73996,7 +74192,7 @@ function getQuickCaptureCourses() {
     } catch (err) { /* fall through to storage */ }
     try {
         if (typeof localStorage !== 'undefined') {
-            const list = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const list = readLocalArraySafe('hwCourses:v2');
             if (Array.isArray(list)) return list.filter(c => c && c.id !== undefined && c.id !== null && String(c.name || '').trim());
         }
     } catch (err) { /* ignore */ }
@@ -74776,8 +74972,8 @@ function globalSearchAll(query) {
     // Homework.
     try {
         if (typeof localStorage !== 'undefined') {
-            const hw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const hw = readLocalArraySafe('hwTasks:v2');
+            const courses = readLocalArraySafe('hwCourses:v2');
             const cmap = new Map((Array.isArray(courses) ? courses : []).map(c => [String(c.id), c.name || 'Class']));
             (Array.isArray(hw) ? hw : []).forEach(h => {
                 if (results.homework.length >= MAX) return;
@@ -75070,7 +75266,7 @@ function getCommandPaletteCommands() {
     // Dynamic: one "Open class dashboard" command per existing class.
     try {
         if (typeof localStorage !== 'undefined') {
-            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const courses = readLocalArraySafe('hwCourses:v2');
             (Array.isArray(courses) ? courses : []).slice(0, 12).forEach(course => {
                 if (!course || !course.id) return;
                 const type = course.type === 'misc' ? 'Misc' : 'Class';
@@ -75338,7 +75534,7 @@ function createWeeklyReviewNote() {
         const missedTasks = allTasks.filter(t => !t.completed && t.dueDate && new Date(`${t.dueDate}T23:59:59`) < now && new Date(`${t.dueDate}T00:00:00`) >= start);
 
         // Homework this week.
-        const hwTasksRaw = (typeof localStorage !== 'undefined') ? (function(){ try { return JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch(e){ return []; } })() : [];
+        const hwTasksRaw = (typeof localStorage !== 'undefined') ? (function(){ try { return readLocalArraySafe('hwTasks:v2'); } catch(e){ return []; } })() : [];
         const hwInRange = (h) => {
             const d = h.dueDate ? new Date(`${h.dueDate}T00:00:00`) : null;
             return d && !isNaN(d) && d >= start && d <= now;
@@ -75545,8 +75741,8 @@ function openClassDashboardDrawer(courseId) {
     let courses = [];
     let hw = [];
     try {
-        courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
-        hw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+        courses = readLocalArraySafe('hwCourses:v2');
+        hw = readLocalArraySafe('hwTasks:v2');
     } catch (err) {}
 
     const course = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === String(courseId));
@@ -76101,7 +76297,7 @@ function openHomeworkPasteImport(prefillText) {
 
     // Courses map.
     let courses = [];
-    try { courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]') || []; } catch (err) { courses = []; }
+    try { courses = readLocalArraySafe('hwCourses:v2') || []; } catch (err) { courses = []; }
     const classOptions = courses
         .filter(c => c && c.id)
         .map(c => ({ id: c.id, name: c.name || 'Class', type: c.type === 'misc' ? 'misc' : 'class' }));
@@ -76122,7 +76318,7 @@ function openHomeworkPasteImport(prefillText) {
     let existingKeys = new Set();
     let existingBySourceUrl = new Map();
     try {
-        const existingTasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]') || [];
+        const existingTasks = readLocalArraySafe('hwTasks:v2') || [];
         existingKeys = new Set(existingTasks.map(dupKeyOf));
         // Source-link change detection: the same LMS assignment (matched by
         // its stored URL) arriving with a DIFFERENT due date is an update,
@@ -76305,8 +76501,8 @@ function submitHomeworkPasteImport() {
 
     let courses = [];
     let tasks = [];
-    try { courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]') || []; } catch (err) { courses = []; }
-    try { tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]') || []; } catch (err) { tasks = []; }
+    try { courses = readLocalArraySafe('hwCourses:v2') || []; } catch (err) { courses = []; }
+    try { tasks = readLocalArraySafe('hwTasks:v2') || []; } catch (err) { tasks = []; }
 
     const makeId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
     const ensureCourseId = (courseId, newName) => {
@@ -76384,8 +76580,8 @@ function submitHomeworkPasteImport() {
         imported++;
     });
 
-    try { localStorage.setItem('hwCourses:v2', JSON.stringify(courses)); } catch (err) {} // sutra-allow-storage: homework courses direct write, same contract as the homework module
-    try { localStorage.setItem('hwTasks:v2', JSON.stringify(tasks)); } catch (err) {} // sutra-allow-storage: homework tasks direct write mirrors hwCourses pattern above
+    try { writeLocalArraySafe('hwCourses:v2', courses); } catch (err) {}
+    try { writeLocalArraySafe('hwTasks:v2', tasks); } catch (err) {}
     try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) {}
     try { if ((imported > 0 || updated > 0) && window.SutraActivation) window.SutraActivation.record('import'); } catch (err) {}
     try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) {}
@@ -76425,7 +76621,7 @@ function createNoteLinkedToClass(courseId, titleSeed) {
     if (typeof pages === 'undefined') return null;
     let courseName = '';
     try {
-        const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+        const courses = readLocalArraySafe('hwCourses:v2');
         const c = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === String(courseId));
         if (c) courseName = c.name || '';
     } catch (err) {}
@@ -76564,7 +76760,7 @@ function applyNotesSplitPreset(presetId) {
     switch (preset.id) {
         case 'note-assignment': {
             let hwList = [];
-            try { hwList = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'); } catch (err) {}
+            try { hwList = readLocalArraySafe('hwTasks:v2'); } catch (err) {}
             const open = (Array.isArray(hwList) ? hwList : []).filter(t => !t.done).sort((a,b) => String(a.dueDate||'').localeCompare(String(b.dueDate||'')));
             const first = open[0];
             const title = first ? `Working on: ${first.title || first.text || 'Assignment'}` : 'Assignment notes';

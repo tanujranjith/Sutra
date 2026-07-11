@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
     <title>Sutra</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -53,14 +53,19 @@
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
     <script src="src/core/migrations.js?v=20260614-migrations1"></script>
+    <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
+    <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
+    <script src="src/persistence/workspace-db.js?v=20260709-db1"></script>
+    <script src="src/config/feature-manifest.js?v=20260709-features1"></script>
+    <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
     <!-- Pure student date/time vocabulary shared by Quick Capture, Homework,
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
     <script src="src/core/student-date-parser.js?v=20260709-studentdate1"></script>
-    <script src="src/components/icons/icon-paths.js?v=20260703-voice1" defer></script>
-    <script src="src/components/icons/index.js?v=20260703-voice1" defer></script>
+    <script src="src/components/icons/icon-paths.js?v=20260709-icons-comments" defer></script>
+    <script src="src/components/icons/index.js?v=20260709-icons-comments" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
          Captured very early; AtelierCustomization.isSafeMode() reads this flag.
          ?sutraSafeMode=1 is canonical; ?atelierSafeMode=1 stays supported for legacy links. -->
@@ -77,9 +82,8 @@
     
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260709-quickpage">
-    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260707-batch7">
-    <link rel="stylesheet" href="styles/features/sutra-intelligence.css?v=20260610-intel1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260710-timeline-controls-theme">
+    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
         .view { display: none; }
         .view.active { display: block; }
@@ -6567,7 +6571,7 @@
         <div class="modal-content html-embed-modal-content">
             <div class="modal-header html-embed-modal-header">
                 <h3 class="modal-title" id="htmlEmbedModalTitle">Embed HTML</h3>
-                <p class="html-embed-modal-subtitle" id="htmlEmbedModalSubtitle">Paste trusted HTML. Unsafe content is removed automatically before rendering.</p>
+                <p class="html-embed-modal-subtitle" id="htmlEmbedModalSubtitle">Paste trusted HTML. Scripts run only in an isolated offline sandbox; remote frames are limited to approved media providers. Popups and top-level navigation are blocked.</p>
             </div>
             <div class="modal-body html-embed-modal-body">
                 <label id="htmlEmbedModalLabel" class="custom-prompt-label" for="htmlEmbedModalInput">HTML Markup</label>
@@ -7215,18 +7219,8 @@
         })();
     </script>
 
-    <script src="src/features/workspace/business-workspace.js?v=20260705-clb3"></script>
-    <script src="src/features/assistant/model-capabilities.js?v=20260610-intel1"></script>
-    <!-- Sutra Intelligence Harness: verified product knowledge + certified-action
-         capability registry. Loaded BEFORE flow-assistant, which consumes them. -->
-    <script src="src/features/assistant/sutra-product-knowledge.js?v=20260629-intel2"></script>
-    <script src="src/features/assistant/sutra-capability-registry.js?v=20260707-batch7"></script>
-    <script src="src/features/assistant/flow-intelligence.js?v=20260614-storage1"></script>
-    <script src="src/features/assistant/flow-assistant.js?v=20260707-batch7"></script>
-    <!-- Assistant Memory store + Local Help decision tree. Loaded AFTER
-         flow-assistant: both call its action pipeline at runtime. -->
-    <script src="src/features/assistant/sutra-assistant-memory.js?v=20260629-intel3"></script>
-    <script src="src/features/assistant/sutra-local-help.js?v=20260630-assist-hw8"></script>
+    <!-- Optional Assistant and Business packs load after workspace hydration
+         through the declarative feature registry. -->
     <!-- Mods & handwriting engines: pure, dependency-free modules exposed on window.
          Loaded BEFORE app.js so the core can wire blocks / settings into them. -->
     <script src="src/features/workspace/handwriting.js?v=20260601-handwriting"></script>
@@ -7260,7 +7254,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
-<script src="src/core/app.js?v=20260709-quickpage"></script>
+<script src="src/core/app.js?v=20260709-toolbar-comments"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
@@ -7647,7 +7641,7 @@
     <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260615b-glass-uniform">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
-    <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260708-editorv2-p2b">
+    <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260707-mobileopt2">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
@@ -7655,8 +7649,6 @@
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260701-loops1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260708-editorv2-p5">
-    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260703-voice1">
-    <link rel="stylesheet" href="styles/features/sutra-assistant-help.css?v=20260629-intel3">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
@@ -8135,6 +8127,10 @@
             <button class="comments-panel-close" onclick="toggleCommentsPanel()" title="Close" aria-label="Close comments panel">
                 <i class="fas fa-times"></i>
             </button>
+        </div>
+        <div class="comments-filter" id="commentsFilterBar" role="tablist" aria-label="Filter comments">
+            <button class="comments-filter-btn active" data-filter="open" role="tab" onclick="setCommentsFilter('open')">Open <span class="comments-filter-count" id="commentsOpenCount">0</span></button>
+            <button class="comments-filter-btn" data-filter="resolved" role="tab" onclick="setCommentsFilter('resolved')">Resolved <span class="comments-filter-count" id="commentsResolvedCount">0</span></button>
         </div>
         <div class="comments-list" id="commentsList">
             <div class="comments-empty" id="commentsEmpty">

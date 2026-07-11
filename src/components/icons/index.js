@@ -67,8 +67,11 @@
         var canonical = registry.paths[name] ? name : resolveCanonicalName(name);
         var body = canonical ? registry.paths[canonical] : '';
         if (!body) {
-            // Render an empty placeholder so layout stays stable.
-            body = '<circle cx="12" cy="12" r="3.5"/>';
+            // Unknown icon: render a neutral, low-key placeholder so layout stays
+            // stable WITHOUT masquerading as a meaningful glyph. (This used to fall
+            // back to a star outline, which read as a favourite/rating marker and
+            // caused mystery stars wherever an FA class was missing from the map.)
+            body = '<rect x="5" y="5" width="14" height="14" rx="3.5" opacity="0.32"/>';
             canonical = canonical || 'unknown';
         }
         var size = opts.size != null ? opts.size : '1em';
@@ -127,7 +130,9 @@
         }
 
         var canonical = resolveCanonicalName(classList);
-        var svg = getIconSvg(canonical || 'star-outline', {
+        // Pass the resolved name (or '' → neutral placeholder). Never fall back to
+        // a star — an unmapped icon should look blank, not like a favourite marker.
+        var svg = getIconSvg(canonical, {
             ariaLabel: el.getAttribute('aria-label') || ''
         });
         el.innerHTML = svg;

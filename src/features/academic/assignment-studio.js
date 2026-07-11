@@ -6,18 +6,16 @@
    notes, progress, and Timeline scheduling for the remaining work.
 
    No parallel data model: the Studio payload lives on the homework task
-   itself (hwTasks:v2 → task.studio), so it rides the existing Homework
-   persistence, the appData homework mirror, and encrypted .sutra backups.
+   itself (canonical homework workspace → task.studio), so it rides the primary
+   persistence system and encrypted .sutra backups.
    Milestones surface in All Due / notifications via collectWorkspaceDeadlines.
    ========================================================================== */
 
-/* global window, document, localStorage */
+/* global window, document */
 
 (function (global) {
     'use strict';
 
-    var TASKS_KEY = 'hwTasks:v2';
-    var COURSES_KEY = 'hwCourses:v2';
     var STUDIO_KINDS = ['essay', 'lab', 'research', 'presentation', 'engineering', 'project', 'other'];
     var MILESTONE_TYPES = ['research', 'outline', 'draft', 'revise', 'submit', 'study', 'rehearse', 'build', 'solve', 'review', 'other'];
     var MILESTONE_STATUSES = ['not_started', 'in_progress', 'done'];
@@ -272,33 +270,33 @@
     if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
     if (typeof window === 'undefined') return;
 
-    // ---- Homework store access (same safe-storage contract as homework.js) ----
-    function readTasks() {
+    // ---- Canonical homework store access --------------------------------------
+    function homeworkSnapshot() {
         try {
-            var parsed = JSON.parse(localStorage.getItem(TASKS_KEY) || '[]');
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (e) { return []; }
+            return global.SutraHomeworkStore && typeof global.SutraHomeworkStore.getSnapshot === 'function'
+                ? global.SutraHomeworkStore.getSnapshot()
+                : { courses: [], tasks: [] };
+        } catch (e) { return { courses: [], tasks: [] }; }
+    }
+    function readTasks() {
+        var rows = homeworkSnapshot().tasks;
+        return Array.isArray(rows) ? rows : [];
     }
     function readCourses() {
-        try {
-            var parsed = JSON.parse(localStorage.getItem(COURSES_KEY) || '[]');
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (e) { return []; }
+        var rows = homeworkSnapshot().courses;
+        return Array.isArray(rows) ? rows : [];
     }
     // Returns true only when the write actually persisted, so callers never report
     // a false success (and silently lose the user's edit) when storage is degraded.
     function writeTasks(tasks) {
-        var payload = JSON.stringify(Array.isArray(tasks) ? tasks : []);
         var ok = false;
-        if (global.SutraSafeStorage && typeof global.SutraSafeStorage.set === 'function') {
-            try {
-                var res = global.SutraSafeStorage.set(TASKS_KEY, payload, { importance: 'important', label: 'Your homework' });
-                ok = !!(res && res.ok); // SafeStorage.set returns { ok: true|false }
-            } catch (e) {
-                if (typeof global.reportError === 'function') global.reportError(e, { where: 'assignment-studio.writeTasks' }, 'error');
-            }
-        } else {
-            var error = new Error('SutraSafeStorage is unavailable.');
+        try {
+            if (!global.SutraHomeworkStore || typeof global.SutraHomeworkStore.transact !== 'function') throw new Error('Canonical homework store is unavailable.');
+            global.SutraHomeworkStore.transact(function (draft) {
+                draft.tasks = Array.isArray(tasks) ? tasks : [];
+            }, { reason: 'assignment-studio-update' });
+            ok = true;
+        } catch (error) {
             if (typeof global.reportError === 'function') global.reportError(error, { where: 'assignment-studio.writeTasks' }, 'error');
         }
         if (ok) { try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ } }

@@ -44,6 +44,8 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await completeOnboarding(page);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() => !!window.flowAssistant && !!window.SutraAssistantActions
     && !!window.flowIntelligence && !!window.flowAtelier);
   // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled

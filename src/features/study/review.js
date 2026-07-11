@@ -810,7 +810,10 @@ render();
         } catch (err) { /* non-critical */ }
         try {
             if (typeof localStorage !== 'undefined') {
-                const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+                const homework = window.SutraHomeworkStore && window.SutraHomeworkStore.getSnapshot
+                    ? window.SutraHomeworkStore.getSnapshot()
+                    : { courses: [] };
+                const courses = homework.courses;
                 (Array.isArray(courses) ? courses : []).slice(0, 12).forEach(c => {
                     if (!c || !c.id) return;
                     opts.push({ value: `course:${c.id}`, label: `Class: ${c.name || 'Class'}` });

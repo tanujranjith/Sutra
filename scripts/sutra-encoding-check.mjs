@@ -22,7 +22,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
 
 const ROOT = process.cwd();
 const REPLACEMENT = String.fromCharCode(0xFFFD);
@@ -84,8 +83,18 @@ const isCand = (ch) => { const cp = ch.codePointAt(0); return cp >= 0x80 && INV.
 
 // ---- file gathering ----------------------------------------------------------
 function trackedTextFiles() {
-  const out = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' });
-  return out.split('\n').map((s) => s.trim()).filter(Boolean)
+  const ignoredDirectories = new Set(['.git', '.deploy', '.tmp', 'node_modules', 'playwright-report']);
+  const files = [];
+  function walk(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.isFile()) files.push(path.relative(ROOT, absolute).split(path.sep).join('/'));
+    }
+  }
+  walk(ROOT);
+  return files.sort()
     .filter((f) => TEXT_EXT.has(path.extname(f).toLowerCase()))
     .filter((f) => !SKIP_FILES.has(f))
     .filter((f) => !SKIP_PREFIXES.some((p) => f.startsWith(p)));

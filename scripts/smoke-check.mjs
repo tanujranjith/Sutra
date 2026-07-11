@@ -87,11 +87,11 @@ mustContain('src/config/sutra-runtime-config.js', 'googleDriveClientId', 'public
 mustContain('Sutra.html', 'src/config/sutra-runtime-config.js', 'runtime config loads before app');
 
 // Sutra Intelligence Harness — module load order + wiring.
-mustContain('Sutra.html', 'src/features/assistant/sutra-product-knowledge.js', 'product knowledge registry loaded');
-mustContain('Sutra.html', 'src/features/assistant/sutra-capability-registry.js', 'capability registry loaded');
-mustContain('Sutra.html', 'src/features/assistant/sutra-assistant-memory.js', 'assistant memory module loaded');
-mustContain('Sutra.html', 'src/features/assistant/sutra-local-help.js', 'local help module loaded');
-mustContain('Sutra.html', 'styles/features/sutra-assistant-help.css', 'local help / memory stylesheet linked');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/sutra-product-knowledge.js', 'product knowledge registry lazy-loaded');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/sutra-capability-registry.js', 'capability registry lazy-loaded');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/sutra-assistant-memory.js', 'assistant memory module lazy-loaded');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/sutra-local-help.js', 'local help module lazy-loaded');
+mustContain('src/config/feature-manifest.js', 'styles/features/sutra-assistant-help.css', 'local help / memory stylesheet lazy-loaded');
 mustContain('Sutra.html', 'id="openSutraMemoryManagerBtn"', 'Manage Memory button in Assistant settings');
 mustContain('Sutra.html', 'data-pref-path="assistant.useMemory"', 'use-saved-memory toggle in Assistant settings');
 mustContain('src/core/app.js', "'sutra:assistantMemory:v1'", 'assistant memory key included in export snapshot');
@@ -469,7 +469,7 @@ mustContain('styles/base/styles.css', '.new-page-context-panel', 'context panel 
 // ----------------------------------------------------------------------
 // Flow Assistant — contextual workspace assistant layer.
 // ----------------------------------------------------------------------
-mustContain('Sutra.html', 'src/features/assistant/flow-assistant.js', 'Flow Assistant script included');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/flow-assistant.js', 'Flow Assistant script included in optional pack');
 mustContain('Sutra.html', 'id="chatbotBtn"', 'Flow Assistant mascot button present');
 mustContain('Sutra.html', 'id="chatbotPanel"', 'Flow Assistant panel present');
 
@@ -522,7 +522,7 @@ mustContainAny('src/core/app.js', ['Intentionally NOT exported', 'sessionStorage
 // ----------------------------------------------------------------------
 
 // New intelligence module is loaded and exposes its surface.
-mustContain('Sutra.html', 'src/features/assistant/flow-intelligence.js', 'Flow Intelligence script included');
+mustContain('src/config/feature-manifest.js', 'src/features/assistant/flow-intelligence.js', 'Flow Intelligence script included in optional pack');
 mustContain('src/features/assistant/flow-intelligence.js', 'window.flowIntelligence', 'Flow Intelligence exposed on window');
 mustContain('src/features/assistant/flow-intelligence.js', 'function deriveStudentContext', 'student intelligence layer present');
 mustContain('src/features/assistant/flow-intelligence.js', 'function pickNextBestAction', 'next-best-action picker present');
@@ -650,7 +650,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260709-quickpage', 'app.js cache-busted so the latest repairs ship');
+mustContain('Sutra.html', 'src/core/app.js?v=20260709-toolbar-comments', 'app.js cache-busted so the latest repairs ship');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------

@@ -77,13 +77,13 @@
   };
 
   var GLOBAL_ATTRS = {
-    'class': 1, 'id': 1, 'title': 1, 'dir': 1, 'lang': 1, 'role': 1,
+    'class': 1, 'id': 1, 'title': 1, 'dir': 1, 'lang': 1,
     'alt': 1, 'width': 1, 'height': 1, 'align': 1, 'valign': 1
   };
 
   // Per-tag attribute allowlist (in addition to GLOBAL_ATTRS + aria-*/data-*).
   var TAG_ATTRS = {
-    A: { href: 1, target: 1, rel: 1, name: 1, download: 1 },
+    A: { href: 1, target: 1, rel: 1 },
     IMG: { src: 1, srcset: 1, loading: 1, decoding: 1 },
     SOURCE: { src: 1, srcset: 1, type: 1, media: 1, sizes: 1 },
     VIDEO: { src: 1, poster: 1, controls: 1, muted: 1, loop: 1, preload: 1, playsinline: 1 },
@@ -103,8 +103,8 @@
   // allowlist regardless of which tag they appear on.
   var URL_ATTRS = { href: 1, src: 1, poster: 1, cite: 1, 'xlink:href': 1 };
 
-  var SAFE_URL_SCHEME = /^(?:https?:|mailto:|tel:|sms:|ftp:)/i;
-  var SAFE_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp|svg\+xml);/i;
+  var SAFE_NAVIGATION_SCHEME = /^(?:https?:|mailto:|tel:|sms:)/i;
+  var SAFE_IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp);(?:base64,|charset=[^,]+,)/i;
   // Script-bearing or origin-smuggling schemes. data:/blob:/file: are blocked
   // for generic URL attributes; image data URLs are allowed separately.
   var DANGEROUS_SCHEME = /^(?:javascript|vbscript|data|blob|file):/i;
@@ -123,17 +123,51 @@
     if (!url) return false;
     if (opts && opts.allowImageData && SAFE_IMAGE_DATA_URL.test(url)) return true;
     if (DANGEROUS_SCHEME.test(url)) return false;
-    if (SAFE_URL_SCHEME.test(url)) return true;
+    if (SAFE_NAVIGATION_SCHEME.test(url)) return !(opts && opts.allowNetwork === false);
     // Fragment / query / relative path with no scheme.
-    if (url.indexOf(':') === -1) return true;
-    // Protocol-relative //host/path.
-    if (url.indexOf('//') === 0) return true;
+    if (url.indexOf(':') === -1 && url.indexOf('//') !== 0) return !(opts && opts.allowRelative === false);
     return false;
   }
 
-  function isUnsafeStyle(value) {
+  var SAFE_STYLE_PROPERTIES = {
+    color: 1, 'background-color': 1,
+    'font-family': 1, 'font-size': 1, 'font-style': 1, 'font-weight': 1,
+    'letter-spacing': 1, 'line-height': 1,
+    'text-align': 1, 'text-decoration': 1, 'text-indent': 1, 'text-transform': 1,
+    'white-space': 1, 'word-break': 1, 'overflow-wrap': 1,
+    'border-color': 1, 'border-style': 1, 'border-width': 1, 'border-radius': 1,
+    margin: 1, 'margin-top': 1, 'margin-right': 1, 'margin-bottom': 1, 'margin-left': 1,
+    padding: 1, 'padding-top': 1, 'padding-right': 1, 'padding-bottom': 1, 'padding-left': 1,
+    width: 1, height: 1, 'max-width': 1, 'max-height': 1
+  };
+
+  function isUnsafeStyleValue(value) {
     var css = String(value || '');
-    return /expression\s*\(|url\s*\(\s*['"]?\s*(?:javascript|vbscript|data):|behavior\s*:|-moz-binding|@import/i.test(css);
+    return !css || css.length > 240 || /url\s*\(|expression\s*\(|behavior\s*:|-moz-binding|@import|javascript:|vbscript:|data:|var\s*\(|\\[0-9a-f]{1,6}\s?/i.test(css);
+  }
+
+  function hasExtremeCssNumber(value) {
+    var matches = String(value || '').match(/-?\d+(?:\.\d+)?/g) || [];
+    for (var i = 0; i < matches.length; i += 1) {
+      var number = Number(matches[i]);
+      if (!Number.isFinite(number) || number < 0 || number > 200) return true;
+    }
+    return false;
+  }
+
+  function sanitizeInlineStyle(value) {
+    if (!hasDom || isUnsafeStyleValue(value)) return '';
+    var probe = document.createElement('span');
+    probe.style.cssText = String(value || '');
+    var safe = [];
+    for (var i = 0; i < probe.style.length; i += 1) {
+      var property = String(probe.style[i] || '').toLowerCase();
+      var propertyValue = String(probe.style.getPropertyValue(property) || '').trim();
+      if (!SAFE_STYLE_PROPERTIES[property] || property.indexOf('--') === 0) continue;
+      if (isUnsafeStyleValue(propertyValue) || hasExtremeCssNumber(propertyValue)) continue;
+      safe.push(property + ': ' + propertyValue);
+    }
+    return safe.join('; ');
   }
 
   // ---- Core allowlist sanitizer --------------------------------------------
@@ -165,6 +199,7 @@
 
     try {
       sanitizeNode(container, options);
+      namespaceUserIdentifiers(container, options);
     } catch (e) {
       // Any unexpected failure: fall back to fully-escaped text, never raw.
       return escapeHtml(source);
@@ -240,9 +275,7 @@
         node.removeAttribute(attr.name);
         continue;
       }
-      // srcdoc would re-introduce an un-sandboxed document; style with an
-      // expression()/url(javascript:) payload is script-equivalent.
-      if (name === 'srcdoc' || (name === 'style' && isUnsafeStyle(value))) {
+      if (name === 'srcdoc') {
         node.removeAttribute(attr.name);
         continue;
       }
@@ -252,7 +285,7 @@
         tagAttrs[name] === 1 ||
         name === 'style' ||
         name.indexOf('aria-') === 0 ||
-        name.indexOf('data-') === 0;
+        (options.allowDataAttributes === true && name.indexOf('data-') === 0);
 
       if (!allowed) {
         node.removeAttribute(attr.name);
@@ -261,19 +294,35 @@
 
       if (URL_ATTRS[name]) {
         var allowImageData = tag === 'IMG' || tag === 'SOURCE' || name === 'poster';
-        if (!isSafeUrl(value, { allowImageData: allowImageData })) {
+        var isNavigation = name === 'href' && tag === 'A';
+        if (!isSafeUrl(value, {
+          allowImageData: allowImageData,
+          allowNetwork: isNavigation || options.allowNetworkResources === true,
+          allowRelative: isNavigation || options.allowNetworkResources === true
+        })) {
           node.removeAttribute(attr.name);
           continue;
         }
       }
 
-      if (name === 'srcset' && !isSafeSrcset(value)) {
+      if (name === 'srcset' && !isSafeSrcset(value, options)) {
         node.removeAttribute(attr.name);
         continue;
       }
 
-      if (name === 'target' && tag !== 'A') {
+      if (name === 'target') {
+        var normalizedTarget = value.toLowerCase();
+        if (tag !== 'A' || (normalizedTarget !== '_blank' && normalizedTarget !== '_self')) node.removeAttribute(attr.name);
+      }
+
+      if ((name === 'width' || name === 'height') && (!/^\d{1,4}$/.test(value) || Number(value) > 4096)) {
         node.removeAttribute(attr.name);
+      }
+
+      if (name === 'style') {
+        var safeStyle = sanitizeInlineStyle(value);
+        if (safeStyle) node.setAttribute('style', safeStyle);
+        else node.removeAttribute('style');
       }
     }
 
@@ -284,12 +333,12 @@
     }
   }
 
-  function isSafeSrcset(value) {
+  function isSafeSrcset(value, options) {
     // srcset is a comma-separated list of "url descriptor" pairs.
     var parts = String(value || '').split(',');
     for (var i = 0; i < parts.length; i += 1) {
       var url = parts[i].trim().split(/\s+/)[0];
-      if (url && !isSafeUrl(url, { allowImageData: true })) return false;
+      if (url && !isSafeUrl(url, { allowImageData: true, allowNetwork: !!(options && options.allowNetworkResources), allowRelative: !!(options && options.allowNetworkResources) })) return false;
     }
     return true;
   }
@@ -301,7 +350,7 @@
       : false;
     if (!ok) return false;
     // Strip everything except a minimal, safe attribute set.
-    var keep = { src: 1, width: 1, height: 1, title: 1, loading: 1, allow: 1, allowfullscreen: 1, referrerpolicy: 1 };
+    var keep = { src: 1, width: 1, height: 1, title: 1, loading: 1 };
     var attrs = [];
     for (var i = 0; i < node.attributes.length; i += 1) attrs.push(node.attributes[i]);
     for (var j = 0; j < attrs.length; j += 1) {
@@ -311,7 +360,40 @@
     node.setAttribute('src', src);
     node.removeAttribute('srcdoc');
     node.setAttribute('loading', 'lazy');
+    node.setAttribute('sandbox', '');
+    node.setAttribute('referrerpolicy', 'no-referrer');
     return true;
+  }
+
+  var identifierSequence = 0;
+  function namespaceUserIdentifiers(container, options) {
+    identifierSequence += 1;
+    var prefix = String(options.idPrefix || ('sutra-user-' + identifierSequence + '-'))
+      .replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
+    var idMap = Object.create(null);
+    var nodes = container.querySelectorAll('[id], [class]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      var oldId = String(node.getAttribute('id') || '');
+      if (oldId) {
+        var safeId = prefix + oldId.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
+        idMap[oldId] = safeId;
+        node.setAttribute('id', safeId);
+      }
+      var classes = String(node.getAttribute('class') || '').split(/\s+/).filter(Boolean);
+      if (classes.length) {
+        node.setAttribute('class', classes.slice(0, 40).map(function (name) {
+          return prefix + 'class-' + name.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80);
+        }).join(' '));
+      }
+    }
+    var anchors = container.querySelectorAll('a[href^="#"]');
+    for (var j = 0; j < anchors.length; j += 1) {
+      var href = String(anchors[j].getAttribute('href') || '');
+      var target = href.slice(1);
+      if (idMap[target]) anchors[j].setAttribute('href', '#' + idMap[target]);
+      else anchors[j].removeAttribute('href');
+    }
   }
 
   function unwrap(node, parent) {
@@ -348,14 +430,40 @@
   // host document. The frame gets a locked-down CSP and a restrictive sandbox
   // by default.
 
+  var FRAME_CAPABILITIES = Object.freeze({
+    passive: {
+      sandbox: '',
+      warning: '',
+      csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; media-src 'none'; connect-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; navigate-to 'none'"
+    },
+    'active-local': {
+      sandbox: 'allow-scripts',
+      warning: 'Active embedded content is running in an isolated, offline sandbox.',
+      csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; navigate-to 'none'"
+    },
+    'network-media': {
+      sandbox: '',
+      warning: 'This embedded content may load remote images or media. Your IP address may be shared with those hosts.',
+      csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src 'none'; media-src https:; connect-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; navigate-to 'none'"
+    },
+    interactive: {
+      sandbox: 'allow-scripts allow-forms',
+      warning: 'Interactive embedded content can run scripts, make HTTPS requests, and submit forms inside an isolated sandbox.',
+      csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline'; img-src data: https:; font-src https: data:; media-src https:; connect-src https:; frame-src 'none'; child-src 'none'; form-action https:; navigate-to 'none'"
+    }
+  });
+
+  function getFrameCapability(options) {
+    var requested = String(options && options.mode || 'passive');
+    if (!FRAME_CAPABILITIES[requested]) requested = 'passive';
+    if (requested !== 'passive' && (!options || options.capabilityAcknowledged !== true)) return FRAME_CAPABILITIES.passive;
+    return FRAME_CAPABILITIES[requested];
+  }
+
   function buildFrameDocument(markup, options) {
     options = options || {};
-    var csp = options.permissive
-      ? ''
-      : '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
-        'style-src \'unsafe-inline\' https: http:; img-src data: blob: https: http:; ' +
-        'font-src data: https: http:; media-src data: blob: https: http:; ' +
-        'frame-src https: http:; connect-src https: http:; script-src \'unsafe-inline\' https: http: blob:;">';
+    var capability = getFrameCapability(options);
+    var csp = '<meta http-equiv="Content-Security-Policy" content="' + capability.csp + '">';
     return '<!doctype html><html><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       csp +
@@ -372,13 +480,20 @@
     frame.style.border = '0';
     frame.style.display = 'block';
     if (options.height) frame.style.height = options.height;
-    // Restrictive by default. Callers that genuinely need same-origin/forms
-    // must opt in explicitly and own that decision.
-    var sandbox = options.sandbox || 'allow-scripts allow-popups allow-popups-to-escape-sandbox';
-    if (sandbox !== false) frame.setAttribute('sandbox', sandbox);
+    var capability = getFrameCapability(options);
+    // The sandbox attribute is always present. No mode grants same-origin,
+    // popups, top navigation, downloads, presentation, or pointer lock.
+    frame.setAttribute('sandbox', capability.sandbox);
     frame.setAttribute('referrerpolicy', options.referrerPolicy || 'no-referrer');
     frame.srcdoc = buildFrameDocument(markup, options);
     container.innerHTML = ''; // sutra-allow-html: clearing host before appending the sandboxed frame
+    if (capability.warning) {
+      var warning = document.createElement('div');
+      warning.className = 'sutra-embed-capability-warning';
+      warning.setAttribute('role', 'note');
+      warning.textContent = capability.warning;
+      container.appendChild(warning);
+    }
     container.appendChild(frame);
     return frame;
   }
@@ -393,6 +508,7 @@
     renderUserHTMLToFrame: renderUserHTMLToFrame,
     // Exposed for the embed/editor paths that want the frame document shell.
     buildFrameDocument: buildFrameDocument,
+    frameCapabilities: FRAME_CAPABILITIES,
     _internal: { hasDom: hasDom, hasDomParser: hasDomParser }
   };
 

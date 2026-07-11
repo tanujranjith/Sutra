@@ -230,6 +230,8 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
     return {
       setting: ws.settings.recentSearches[0] && ws.settings.recentSearches[0].query,
       attachment: ws.courseWorkspace.files[0],
+      homeworkCourse: ws.homeworkWorkspace.courses[0],
+      homeworkTask: ws.homeworkWorkspace.tasks[0],
       pluginReviewRequired: plugin.reviewRequired === true,
       pluginDisabled: plugin.enabled === false,
       apiKeyExported: JSON.stringify(ws).includes('sk-secret-IMPORT')
@@ -237,6 +239,8 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   });
   expect(restored.setting).toBe('Settings Sentinel IMPORT');
   expect(restored.attachment.missingBlob).toBe(false);
+  expect(restored.homeworkCourse).toMatchObject({ id: 'course-IMPORT', name: 'Homework Course IMPORT' });
+  expect(restored.homeworkTask).toMatchObject({ id: 'hw-IMPORT', courseId: 'course-IMPORT', title: 'Homework IMPORT', dueDate: '2026-06-07' });
   expect(restored.pluginReviewRequired).toBe(true);
   expect(restored.pluginDisabled).toBe(true);
   expect(restored.apiKeyExported).toBe(false);

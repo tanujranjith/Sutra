@@ -22,6 +22,8 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await completeOnboarding(page);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.serializeWorkspace);
 }
 

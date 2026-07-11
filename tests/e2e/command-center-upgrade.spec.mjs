@@ -34,6 +34,8 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await completeOnboarding(page);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('business', { test: true }));
   await page.waitForFunction(() => !!window.SutraCommandCenter && typeof window.renderCollegeAppWorkspace === 'function'
     && typeof window.renderLifeWorkspace === 'function' && !!window.NoteFlowBusiness);
 }

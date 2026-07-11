@@ -16,6 +16,8 @@ async function openApp(page) {
     if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; }
     document.body.classList.remove('onboarding-open');
   });
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() =>
     window.SutraProductKnowledge && window.SutraAssistantMemory &&
     window.SutraLocalHelp && window.SutraCapabilityRegistry && window.flowAssistant);

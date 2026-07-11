@@ -53,6 +53,8 @@ const approved = [
   'https://w.soundcloud.com',
   'https://codepen.io',
   'https://www.figma.com',
+  'https://embed.figma.com',
+  'https://codesandbox.io',
   'https://cdnjs.cloudflare.com',
   'https://unpkg.com',
   'https://console.groq.com',

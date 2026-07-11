@@ -106,6 +106,44 @@
     cursor: pointer;
 }
 
+/* ------------------------------------------------------------------------
+   Enhanced (nf-select) dropdowns inside the toolbar.
+   The global select-enhancer wraps our native <select>s in an .nf-select
+   widget and hides the native element — but the min-widths above live on the
+   native <select>, so the wrapper had no width and collapsed to 0px in the
+   flex row (only the caret showed, no "Normal text" / "Default font" label).
+   Restore per-control widths and match the 32px colour-field height so the
+   style / font / spacing dropdowns line up with the rest of the toolbar.
+   ------------------------------------------------------------------------ */
+.toolbar .nf-select {
+    flex: 0 0 auto;
+    align-self: center;
+    vertical-align: middle;
+}
+.toolbar .nf-select.nf-select--compact { min-width: 108px; }
+.toolbar .nf-select.nf-select--compact:has(.toolbar-style-select) { min-width: 130px; }
+.toolbar .nf-select.nf-select--compact:has(.toolbar-font-select) { min-width: 112px; }
+.toolbar .nf-select.nf-select--compact:has(.toolbar-spacing-select) { min-width: 96px; }
+
+.toolbar .nf-select.nf-select--compact .nf-select-trigger {
+    min-height: 32px;
+    height: 32px;
+    border-radius: 8px;
+    padding: 4px 26px 4px 10px;
+    font-size: 0.8rem;
+    background: var(--surface-bg, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+.toolbar .nf-select.nf-select--compact:not(.is-disabled) .nf-select-trigger:hover {
+    transform: none;
+    background: var(--surface-bg-hover, rgba(255, 255, 255, 0.08));
+    border-color: var(--glass-border-strong, rgba(255, 255, 255, 0.2));
+    box-shadow: none;
+}
+
 /* Light theme readability for the select caret */
 :root[data-theme="light"] .toolbar select.toolbar-field,
 body[data-theme="light"] .toolbar select.toolbar-field {

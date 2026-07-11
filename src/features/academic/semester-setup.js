@@ -784,58 +784,37 @@
     }
 
     // ---- Apply ------------------------------------------------------------------------
-    function ensureHwCourse(courseName) {
-        var name = String(courseName || '').trim();
-        if (!name) return '';
-        try {
-            var courses = JSON.parse(localStorage.getItem('hwCourses:v2') || '[]');
-            if (!Array.isArray(courses)) courses = [];
-            for (var i = 0; i < courses.length; i++) {
-                if (String(courses[i].name || '').toLowerCase() === name.toLowerCase()) return String(courses[i].id);
-            }
-            var id = uid('hwc');
-            courses.push({ id: id, name: name, type: 'class' });
-            var payload = JSON.stringify(courses);
-            if (global.SutraSafeStorage && global.SutraSafeStorage.set) {
-                global.SutraSafeStorage.set('hwCourses:v2', payload, { importance: 'important', label: 'Your homework' });
-            } else {
-                throw new Error('SutraSafeStorage is unavailable.');
-            }
-            return id;
-        } catch (e) {
-            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.ensureHwCourse' }, 'error');
-            return '';
-        }
-    }
-
     function createHomeworkTask(item, isExam) {
         try {
-            var tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-            if (!Array.isArray(tasks)) tasks = [];
-            var courseId = ensureHwCourse(item.courseName);
+            var store = global.SutraHomeworkStore;
+            if (!store || typeof store.transact !== 'function') throw new Error('Canonical homework store is unavailable.');
             var now = new Date().toISOString();
-            tasks.push({
-                id: uid('hw'),
-                courseId: courseId,
-                title: item.title,
-                text: item.title,
-                done: false,
-                dueDate: item.date,
-                dueTime: item.time || '',
-                due: item.date,
-                priority: isExam ? 'high' : 'medium',
-                difficulty: isExam ? 'hard' : 'medium',
-                recurrence: 'none',
-                notes: 'Imported by Semester Setup' + (item.sourceSnippet ? ' — “' + item.sourceSnippet.slice(0, 120) + '”' : ''),
-                createdAt: now,
-                updatedAt: now
-            });
-            var payload = JSON.stringify(tasks);
-            if (global.SutraSafeStorage && global.SutraSafeStorage.set) {
-                global.SutraSafeStorage.set('hwTasks:v2', payload, { importance: 'important', label: 'Your homework' });
-            } else {
-                throw new Error('SutraSafeStorage is unavailable.');
-            }
+            store.transact(function (workspace) {
+                var name = String(item.courseName || '').trim();
+                var course = workspace.courses.find(function (candidate) {
+                    return String(candidate.name || '').toLowerCase() === name.toLowerCase();
+                });
+                if (!course && name) {
+                    course = { id: uid('hwc'), name: name, type: 'class', createdAt: now, updatedAt: now };
+                    workspace.courses.push(course);
+                }
+                workspace.tasks.push({
+                    id: uid('hw'),
+                    courseId: course ? course.id : '',
+                    title: item.title,
+                    text: item.title,
+                    done: false,
+                    dueDate: item.date,
+                    dueTime: item.time || '',
+                    due: item.date,
+                    priority: isExam ? 'high' : 'medium',
+                    difficulty: isExam ? 'hard' : 'medium',
+                    recurrence: 'none',
+                    notes: 'Imported by Semester Setup' + (item.sourceSnippet ? ' — “' + item.sourceSnippet.slice(0, 120) + '”' : ''),
+                    createdAt: now,
+                    updatedAt: now
+                });
+            }, { reason: 'semester-setup-import' });
             return true;
         } catch (e) {
             if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.createHomeworkTask' }, 'error');

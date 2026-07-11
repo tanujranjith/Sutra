@@ -22,12 +22,16 @@ console.log('--------------------------------');
 const sw = read('sw.js');
 ok(!!sw, 'sw.js exists');
 if (sw) {
-    ok(/CACHE_VERSION\s*=\s*['"][^'"]+['"]/.test(sw), 'sw uses a versioned cache name');
+    ok(/CACHE_VERSION\s*=\s*(?:['"][^'"]+['"]|`[^`]+`)/.test(sw), 'sw uses a versioned cache name');
     ok(/caches\.keys\(\)[\s\S]*caches\.delete/.test(sw), 'sw deletes stale caches on activate');
     ok(/req\.method\s*!==\s*'GET'/.test(sw), 'sw ignores non-GET requests (no POST caching)');
     ok(/url\.origin\s*!==\s*self\.location\.origin/.test(sw), 'sw never intercepts cross-origin requests (AI/Drive untouched)');
-    ok(/isNavigation[\s\S]*fetch\(req\)[\s\S]*catch\([\s\S]*caches\.match/.test(sw), 'navigations are network-first with a cache fallback');
+    ok(/isNavigation[\s\S]*fetch\(req\)[\s\S]*catch\([\s\S]*matchCurrentCache/.test(sw), 'navigations are network-first with a current-cache fallback');
     ok(/res\.type\s*!==\s*'basic'/.test(sw), 'only same-origin (basic) responses are cached — never opaque');
+    ok(!/ignoreSearch\s*:\s*true/.test(sw), 'versioned assets never use search-insensitive cache matching');
+    ok(/cache\.match\(req,\s*\{\s*ignoreSearch:\s*false\s*\}\)/.test(sw), 'asset lookup is exact and scoped to the current cache');
+    ok(/cache\.addAll\(CRITICAL_ASSETS\)/.test(sw), 'critical shell precache is atomic and failures reject install');
+    ok(/Promise\.allSettled\(OPTIONAL_ASSETS/.test(sw), 'only optional precache failures degrade gracefully');
     // Strip comments so the keyword-absence checks inspect executable code only.
     const swCode = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
     ok(!/analytics|telemetry|sendBeacon|gtag|google-analytics|mixpanel|segment\.io/i.test(swCode), 'sw code contains no telemetry/analytics');

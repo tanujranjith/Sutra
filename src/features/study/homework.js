@@ -1,12 +1,6 @@
 ﻿(function () {
   'use strict';
 
-  const COURSES_KEY = 'hwCourses:v2';
-  const TASKS_KEY = 'hwTasks:v2';
-  const SCHEMA_KEY = 'hwSchemaVersion';
-  const LEGACY_COURSES_KEY = 'homeworkCourses:v1';
-  const LEGACY_TASKS_KEY = 'homeworkTasks:v1';
-
   const HARD_DIFFICULTY_WEIGHT = Object.freeze({ easy: 1, medium: 2, hard: 3 });
   const PRIORITY_WEIGHT = Object.freeze({ high: 1, medium: 2, low: 3 });
 
@@ -63,31 +57,6 @@
     const el = document.createElement('div');
     el.textContent = String(value || '');
     return el.innerHTML;
-  }
-
-  function parseArrayFromStorage(key) {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  // Homework courses/assignments are user-authored data. A storage failure
-  // (quota, private mode, etc.) must NOT throw out of save() — that would drop
-  // the in-memory change and skip the homework:updated re-render. Route through
-  // the shared safe-storage wrapper so the user gets a durable warning while the
-  // change stays in memory (exportable as an emergency backup).
-  function writeArrayToStorage(key, value) {
-    const payload = JSON.stringify(Array.isArray(value) ? value : []);
-    if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
-      return window.SutraSafeStorage.set(key, payload, { importance: 'important', label: 'Your homework' });
-    }
-    const error = new Error('SutraSafeStorage is unavailable.');
-    if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
-    showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
-    return { ok: false, error };
   }
 
   function formatDateKey(date) {
@@ -349,33 +318,12 @@
 
   function load() {
     calibrationCache.clear(); // task data may change underneath the cache
-    // If a recent write to the homework keys failed (quota / private mode), the
-    // bytes in storage are STALE. Reloading would clobber the user's in-memory
-    // changes (the homework:updated round-trip calls load()). Keep what we have
-    // in memory until a write succeeds again and clears the degraded flag.
-    try {
-      const degraded = window.SutraSafeStorage && typeof window.SutraSafeStorage.getDegraded === 'function'
-        ? window.SutraSafeStorage.getDegraded()
-        : null;
-      if (degraded && (degraded[COURSES_KEY] || degraded[TASKS_KEY])) {
-        normalizeState();
-        return;
-      }
-    } catch (error) {
-      /* fall through to a normal load */
-    }
-
-    courses = parseArrayFromStorage(COURSES_KEY);
-    tasks = parseArrayFromStorage(TASKS_KEY);
-
-    if (courses.length === 0 && tasks.length === 0) {
-      const legacyCourses = parseArrayFromStorage(LEGACY_COURSES_KEY);
-      const legacyTasks = parseArrayFromStorage(LEGACY_TASKS_KEY);
-      if (legacyCourses.length || legacyTasks.length) {
-        courses = legacyCourses;
-        tasks = legacyTasks;
-      }
-    }
+    const store = window.SutraHomeworkStore;
+    const snapshot = store && typeof store.getSnapshot === 'function'
+      ? store.getSnapshot()
+      : { courses: [], tasks: [] };
+    courses = Array.isArray(snapshot.courses) ? snapshot.courses : [];
+    tasks = Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
 
     normalizeState();
   }
@@ -391,19 +339,21 @@
   function save() {
     normalizeState();
     calibrationCache.clear(); // task data changed — recompute ratios lazily
-    const coursesResult = writeArrayToStorage(COURSES_KEY, courses);
-    const tasksResult = writeArrayToStorage(TASKS_KEY, tasks.map(task => serializeTask(task)));
-    // Schema marker is a low-stakes optional write; never let it throw.
-    if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
-      window.SutraSafeStorage.set(SCHEMA_KEY, '3', { importance: 'optional' });
+    const store = window.SutraHomeworkStore;
+    let result = null;
+    try {
+      if (!store || typeof store.replace !== 'function') throw new Error('Canonical homework store is unavailable.');
+      result = store.replace({ courses, tasks: tasks.map(task => serializeTask(task)) }, { reason: 'homework-ui' });
+    } catch (error) {
+      if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.save' }, 'error');
+      showHomeworkToast('Homework could not be saved to the workspace. Your change remains on screen — export a backup before closing.');
     }
     // Always notify so the UI re-renders the in-memory state, even when the
     // persistence write above failed.
     notifyHomeworkUpdated();
     return {
-      ok: !!(coursesResult && coursesResult.ok) && !!(tasksResult && tasksResult.ok),
-      courses: coursesResult,
-      tasks: tasksResult
+      ok: !!result,
+      workspace: result
     };
   }
 
@@ -1407,6 +1357,33 @@
     } catch (_) { /* no-op */ }
   }
 
+  // Homework "pins" (nav/sidebar shortcuts) are a small localStorage-backed
+  // list, separate from the canonical course/task store. These two helpers were
+  // shared with the (now store-backed) course/task load path; that path moved to
+  // SutraHomeworkStore, but pins still need a direct read/write here.
+  function parseArrayFromStorage(key) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // A storage failure (quota, private mode, etc.) must NOT throw — route through
+  // the shared safe-storage wrapper so the user gets a durable warning while the
+  // change stays in memory (exportable as an emergency backup).
+  function writeArrayToStorage(key, value) {
+    const payload = JSON.stringify(Array.isArray(value) ? value : []);
+    if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
+      return window.SutraSafeStorage.set(key, payload, { importance: 'important', label: 'Your homework' });
+    }
+    const error = new Error('SutraSafeStorage is unavailable.');
+    if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
+    showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
+    return { ok: false, error };
+  }
+
   function getPins() {
     return parseArrayFromStorage(COUNTDOWN_KEY)
       .filter(pin => pin && pin.taskId && (pin.target === 'nav' || pin.target === 'sidebar'))
@@ -2383,7 +2360,8 @@
 
   function exportJSON() {
     const payload = {
-      schema: 'noteflow_homework_v3',
+      schema: 'sutra-homework',
+      schemaVersion: 2,
       exportedAt: new Date().toISOString(),
       courses,
       tasks: tasks.map(task => serializeTask(task))

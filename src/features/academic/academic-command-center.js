@@ -237,11 +237,12 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
   if (typeof window === 'undefined') return;
 
-  function readStoredArray(key) {
+  function homeworkSnapshot() {
     try {
-      var parsed = JSON.parse(localStorage.getItem(key) || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) { return []; }
+      return global.SutraHomeworkStore && typeof global.SutraHomeworkStore.getSnapshot === 'function'
+        ? global.SutraHomeworkStore.getSnapshot()
+        : { courses: [], tasks: [] };
+    } catch (error) { return { courses: [], tasks: [] }; }
   }
 
   function readSnapshot() {
@@ -265,7 +266,7 @@
     return {
       now: new Date(),
       courses: courses,
-      homeworkTasks: readStoredArray('hwTasks:v2'),
+      homeworkTasks: arr(homeworkSnapshot().tasks),
       pages: arr(bridge.pages),
       timeBlocks: arr(bridge.timeBlocks),
       gradePlanner: Object.assign({}, planner, { courses: plannerCourses }),
@@ -326,7 +327,7 @@
   }
 
   function taskById(id) {
-    return readStoredArray('hwTasks:v2').find(function (task) { return text(task && task.id) === text(id); }) || null;
+    return arr(homeworkSnapshot().tasks).find(function (task) { return text(task && task.id) === text(id); }) || null;
   }
 
   function handleClick(event) {

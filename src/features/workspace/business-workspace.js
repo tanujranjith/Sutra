@@ -2209,6 +2209,18 @@
         render();
     }
 
+    const handleEntitySubmit = event => {
+        event.preventDefault();
+        saveEntityFromForm(event.currentTarget);
+    };
+    const handleEntityCancel = () => closeModal();
+    const handleModalBackdrop = event => {
+        if (event.target === getModal()) closeModal();
+    };
+    const handleDocumentKeydown = event => {
+        if (event.key === 'Escape' && getModal()?.classList.contains('active')) closeModal();
+    };
+
     function init() {
         const root = document.getElementById('view-business');
         if (!root) return;
@@ -2220,19 +2232,28 @@
         root.addEventListener('click', handleClick);
         root.addEventListener('input', handleInput);
         root.addEventListener('change', handleChange);
-        document.getElementById('businessEntityForm')?.addEventListener('submit', event => {
-            event.preventDefault();
-            saveEntityFromForm(event.currentTarget);
-        });
-        document.getElementById('businessEntityCancelBtn')?.addEventListener('click', closeModal);
-        document.getElementById('businessEntityModalClose')?.addEventListener('click', closeModal);
-        getModal()?.addEventListener('click', event => {
-            if (event.target === getModal()) closeModal();
-        });
-        document.addEventListener('keydown', event => {
-            if (event.key === 'Escape' && getModal()?.classList.contains('active')) closeModal();
-        });
+        document.getElementById('businessEntityForm')?.addEventListener('submit', handleEntitySubmit);
+        document.getElementById('businessEntityCancelBtn')?.addEventListener('click', handleEntityCancel);
+        document.getElementById('businessEntityModalClose')?.addEventListener('click', handleEntityCancel);
+        getModal()?.addEventListener('click', handleModalBackdrop);
+        document.addEventListener('keydown', handleDocumentKeydown);
         render();
+    }
+
+    function teardown() {
+        const root = document.getElementById('view-business');
+        if (root) {
+            root.removeEventListener('click', handleClick);
+            root.removeEventListener('input', handleInput);
+            root.removeEventListener('change', handleChange);
+            delete root.dataset.businessBound;
+        }
+        document.getElementById('businessEntityForm')?.removeEventListener('submit', handleEntitySubmit);
+        document.getElementById('businessEntityCancelBtn')?.removeEventListener('click', handleEntityCancel);
+        document.getElementById('businessEntityModalClose')?.removeEventListener('click', handleEntityCancel);
+        getModal()?.removeEventListener('click', handleModalBackdrop);
+        document.removeEventListener('keydown', handleDocumentKeydown);
+        closeModal();
     }
 
     // Compact summary for the Sutra Assistant / Intelligence context. Bounded,
@@ -2273,6 +2294,7 @@
         getAssistantSummary,
         openEntity: (type, defaults) => { try { openEntityModal(type, '', defaults || {}); } catch (err) { /* non-critical */ } },
         render,
-        init
+        init,
+        teardown
     };
 })();

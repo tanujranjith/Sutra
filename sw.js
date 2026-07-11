@@ -15,33 +15,31 @@
    Bump CACHE_VERSION to invalidate old caches on the next activate.
    ========================================================================== */
 
-const CACHE_VERSION = 'sutra-cache-v2-20260709-studentloop';
-const CORE_ASSETS = [
-    './Sutra.html',
-    './manifest.webmanifest',
-    './styles/base/styles.css',
-    './styles/legacy/app-shell-base.css',
-    './styles/responsive/mobile.css',
-    './src/core/dom-safety.js',
-    './src/core/safe-storage.js',
-    './src/state/workspace-normalizers.js',
-    './src/core/student-date-parser.js',
-    './src/features/study/homework.js',
-    './src/features/workspace/today-command-center.js',
-    './src/core/app.js',
-    './src/ui/student-loop-actions.js',
-    './src/features/workspace/mobile-nav.js',
-    './assets/vendor/jszip/jszip.min.js'
-];
+importScripts('./src/config/asset-manifest.generated.js?v=20260709-cache-v3');
+
+const CACHE_FAMILY = 'sutra-cache-';
+const CACHE_VERSION = `${CACHE_FAMILY}v3-20260709-exact-assets`;
+const ASSET_MANIFEST = self.SUTRA_ASSET_MANIFEST;
+if (!ASSET_MANIFEST || !Array.isArray(ASSET_MANIFEST.critical) || !ASSET_MANIFEST.shell) {
+    throw new Error('Sutra service worker asset manifest is missing or invalid.');
+}
+const CRITICAL_ASSETS = ASSET_MANIFEST.critical;
+const OPTIONAL_ASSETS = Array.isArray(ASSET_MANIFEST.optional) ? ASSET_MANIFEST.optional : [];
 
 const STATIC_ASSET_PATH = /\.(?:js|css|html|webmanifest|ico|png|svg|woff2?|ttf)$/i;
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_VERSION)
-            // One optional core asset should not prevent the rest of the shell
-            // from becoming available offline.
-            .then((cache) => Promise.all(CORE_ASSETS.map((asset) => cache.add(asset).catch(() => undefined))))
+        caches.open(CACHE_VERSION).then(async (cache) => {
+            // addAll is intentionally allowed to reject. A worker with a missing
+            // script, stylesheet, or shell document must never install and take
+            // control with a partially cached application runtime.
+            await cache.addAll(CRITICAL_ASSETS);
+            // Icons and other cosmetic assets can degrade without invalidating
+            // the executable shell. Their failures remain isolated and visible
+            // to diagnostics through the returned settled results.
+            await Promise.allSettled(OPTIONAL_ASSETS.map((asset) => cache.add(asset)));
+        })
     );
 });
 
@@ -57,7 +55,9 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
-            .then((keys) => Promise.all(keys.map((key) => (key === CACHE_VERSION ? null : caches.delete(key)))))
+            .then((keys) => Promise.all(keys
+                .filter((key) => key.startsWith(CACHE_FAMILY) && key !== CACHE_VERSION)
+                .map((key) => caches.delete(key))))
             .then(() => self.clients.claim())
     );
 });
@@ -85,7 +85,7 @@ self.addEventListener('fetch', (event) => {
                     cachePut(req, res);
                     return res.clone();
                 })
-                .catch(() => matchCached(req).then((hit) => hit || caches.match('./Sutra.html')))
+                .catch(() => matchCurrentCache(req).then((hit) => hit || matchCurrentCache(ASSET_MANIFEST.shell)))
         );
         return;
     }
@@ -94,16 +94,25 @@ self.addEventListener('fetch', (event) => {
     // Sutra only caches versioned static application assets.
     if (!STATIC_ASSET_PATH.test(url.pathname)) return;
 
-    // Static sub-assets (versioned by ?v=): cache-first, refresh in background.
-    event.respondWith(
-        matchCached(req).then((hit) => {
-            const network = fetch(req)
-                .then((res) => { cachePut(req, res); return res.clone(); })
-                .catch(() => hit);
-            return hit || network;
-        })
-    );
+    if (url.search) {
+        // Versioned assets are immutable cache-first entries. Matching is exact
+        // (including the query string) and restricted to this worker's cache.
+        event.respondWith(matchCurrentCache(req).then((hit) => hit || fetchAndCache(req)));
+        return;
+    }
+
+    // Unversioned static assets are network-first to avoid keeping a stale path
+    // alive after deployment. The exact current-cache entry is only an offline
+    // fallback; old cache generations are never searched.
+    event.respondWith(fetchAndCache(req).catch(() => matchCurrentCache(req)));
 });
+
+function fetchAndCache(req) {
+    return fetch(req).then((res) => {
+        cachePut(req, res);
+        return res.clone();
+    });
+}
 
 function cachePut(req, res) {
     // Cache only clean, same-origin, complete responses. Never cache opaque
@@ -115,8 +124,8 @@ function cachePut(req, res) {
     caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy)).catch(() => undefined);
 }
 
-function matchCached(req) {
-    return caches.match(req).then((hit) => hit || caches.match(req, { ignoreSearch: true }));
+function matchCurrentCache(req) {
+    return caches.open(CACHE_VERSION).then((cache) => cache.match(req, { ignoreSearch: false }));
 }
 
 /* Background reminders (local-first). Periodic Background Sync — where the

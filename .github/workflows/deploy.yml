@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy verified artifact to GitHub Pages
 
 on:
   push:
@@ -6,102 +6,87 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+
+env:
+  NODE_VERSION: "20"
+  PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
 
 jobs:
-  checks:
-    name: Release gate (static checks + browser matrix + artifact)
+  release-gate:
+    name: Build and verify deploy artifact once
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Static checks
-        run: npm run check:all
-
-      - name: Browser matrix
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check:all
+      - run: npm run test:unit
+      - run: npm run build:deploy
+      - run: npm run check:deploy
+      - uses: actions/cache@6849a6489940f00c2f30c0fb92c6274307ccb58a # v4.1.2
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-all
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Test the exact artifact that will be uploaded
+        env:
+          SUTRA_SERVE_ROOT: .deploy
         run: npm run test:e2e
-
-      - name: Build clean deploy artifact
-        run: npm run build:deploy
-
-      - name: Verify deploy artifact
-        run: npm run check:deploy
+      - name: Upload failure diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: deploy-gate-failure-${{ github.sha }}
+          path: .tmp/playwright-results/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload the already-tested Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: .deploy
 
   deploy:
-    needs: checks
+    name: Deploy without rebuilding
+    needs: release-gate
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Fresh checkout; the artifact is rebuilt from the allowlist so the Pages
-      # upload only ever contains the runtime surface (never node_modules, tests,
-      # scripts, docs, .github, package metadata, or legacy pages).
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Build clean deploy artifact
-        run: npm run build:deploy
-
-      - name: Verify deploy artifact
-        run: npm run check:deploy
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact (.deploy only)
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ".deploy"
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - id: deployment
+        uses: actions/deploy-pages@decdde0ac072f6dda20e68cb7378e2b123d56205 # v4.0.5
 
   live-smoke:
     name: Post-deploy live smoke
     needs: deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@6849a6489940f00c2f30c0fb92c6274307ccb58a # v4.1.2
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-chromium
+      - run: npx playwright install --with-deps chromium
       - name: Wait for deployment to propagate
         env:
           BASE: ${{ needs.deploy.outputs.page_url }}
@@ -112,9 +97,7 @@ jobs:
             if [ "$code" = "200" ]; then exit 0; fi
             sleep 5
           done
-          echo "Deployment did not become reachable in time" >&2
           exit 1
-
       - name: Live smoke check
         env:
           SUTRA_BASE_URL: ${{ needs.deploy.outputs.page_url }}

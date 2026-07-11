@@ -23,6 +23,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync
@@ -31,6 +32,7 @@ import { dirname, join, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const outDir = join(repoRoot, '.deploy');
+const assetManifest = JSON.parse(readFileSync(join(repoRoot, 'src/config/asset-manifest.generated.json'), 'utf8'));
 
 /**
  * Allowlist of runtime files and directories, relative to the repo root.
@@ -45,6 +47,7 @@ const FILES = [
   'manifest.webmanifest',
   'robots.txt', // SEO: allows crawling + points at the sitemap
   'sitemap.xml', // SEO: canonical public URLs for search engines
+  'sw.js',
   'LICENSE' // HomePage.html footer links to ./LICENSE (Apache 2.0)
 ];
 
@@ -60,7 +63,7 @@ const DIRS = [
  * Required runtime entry points. If any of these are missing from the SOURCE
  * tree the build aborts — we never want to publish a half-broken artifact.
  */
-const REQUIRED_SOURCE = [
+const REQUIRED_SOURCE = [...new Set([
   'index.html',
   'HomePage.html',
   'Sutra.html',
@@ -72,8 +75,12 @@ const REQUIRED_SOURCE = [
   'src/core/app.js',
   'assets/brand/sutra/generated/favicon.ico',
   'assets/brand/sutra/generated/social-preview.png',
-  'assets/vendor/jszip/jszip.min.js'
-];
+  'assets/vendor/jszip/jszip.min.js',
+  'sw.js',
+  ...assetManifest.critical.map((asset) => asset.replace(/^\.\//, '').replace(/[?#].*$/, '')),
+  ...assetManifest.optional.map((asset) => asset.replace(/^\.\//, '').replace(/[?#].*$/, '')),
+  ...assetManifest.lazy.map((asset) => asset.replace(/^\.\//, '').replace(/[?#].*$/, ''))
+])];
 
 function fail(message) {
   console.error(`build:deploy FAILED — ${message}`);

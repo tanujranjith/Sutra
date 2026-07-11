@@ -1,5 +1,22 @@
 node_modules/
 
+# Local secrets / env files (none currently committed — keep it that way)
+.env
+.env.*
+!.env.example
+
+# Vercel CLI local project link (machine-specific project/org IDs)
+.vercel/
+
+# Claude Code local session state (was previously excluded only via
+# .git/info/exclude, which isn't shared — codified here so it's ignored
+# for every clone, not just this machine)
+.claude/scheduled_tasks.lock
+
+# Editor / IDE folders
+.vscode/
+.idea/
+
 # Playwright / test artifacts (generated; never committed)
 test-results/
 playwright-report/
@@ -36,3 +53,5 @@ assets/legacy/noteflow-text-editing.png
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+desktop.ini
+*.log

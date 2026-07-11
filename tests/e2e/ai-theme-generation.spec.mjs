@@ -42,6 +42,8 @@ async function openApp(page) {
     const overlay = document.getElementById('studentOnboardingOverlay');
     if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; overlay.style.setProperty('display', 'none', 'important'); }
   });
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() => window.SutraThemeAI && window.flowAssistant && window.serializeWorkspace);
 }
 
