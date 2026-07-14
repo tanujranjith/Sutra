@@ -94,7 +94,79 @@ test('styles are property-allowlisted and user identifiers cannot collide with t
   expect(out).not.toMatch(/role="dialog"/);
   expect(out).not.toMatch(/position|z-index|cursor|pointer-events|inset/i);
   expect(out).toMatch(/color:\s*red/i);
-  expect(out).toMatch(/padding:\s*12px/i);
+  // Chromium may serialize the safe `padding` shorthand as four longhand
+  // declarations. Assert the security contract (the allowed value survives),
+  // not one browser-specific CSS serialization shape.
+  expect(out).toMatch(/padding(?:\s*:|-top\s*:)\s*12px/i);
+});
+
+test('safe CSS color channels survive while oversized layout values are rejected', async ({ page }) => {
+  await openApp(page);
+  const out = await page.evaluate(() => window.SutraDOMSafety.sanitizeUserHTML(
+    '<span style="color:rgb(255, 128, 0);width:99999px;line-height:1.6">safe color</span>'
+  ));
+  expect(out).toMatch(/color:\s*rgb\(255,\s*128,\s*0\)/i);
+  expect(out).toMatch(/line-height:\s*1\.6/i);
+  expect(out).not.toMatch(/99999/);
+});
+
+test('note tags render hostile names as inert text in the editor and sidebar', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await page.waitForFunction(() => !!window.flowAtelier
+    && typeof window.setActiveView === 'function'
+    && !!document.querySelector('#tagsContainer .add-tag-btn'));
+  await page.evaluate(() => {
+    window.__tagXss = 0;
+    try { window.markStudentOnboardingCompleted?.(true); } catch (error) {}
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) { overlay.hidden = true; overlay.classList.remove('active'); }
+    window.setActiveView?.('notes');
+  });
+  const payload = '<img src=x onerror="window.__tagXss=1"><button onclick="window.__tagXss=2">owned</button>';
+  const result = await page.evaluate((hostile) => {
+    const bridge = window.flowAtelier;
+    const current = bridge.getPageById(bridge.currentPageId);
+    current.tags = [{ name: hostile, color: '"><img src=x onerror="window.__tagXss=3">' }];
+    window.loadPage?.(current.id);
+    bridge.renderPagesList();
+    // Exercise the normal tag mutation path too; it refreshes the sidebar tag
+    // filter from the same imported hostile value.
+    window.addTag?.('safe-regression-tag');
+    return {
+      fired: window.__tagXss,
+      editorText: document.querySelector('#tagsContainer .tag-label')?.textContent || '',
+      editorColor: document.querySelector('#tagsContainer .tag')?.dataset.color || '',
+      editorActiveNodes: document.querySelectorAll('#tagsContainer img, #tagsContainer .tag-label button').length,
+      sidebarText: document.getElementById('sidebarTagsList')?.textContent || '',
+      sidebarActiveNodes: document.querySelectorAll('#sidebarTagsList img, #sidebarTagsList .sidebar-tag button').length
+    };
+  }, payload);
+  expect(result.fired).toBe(0);
+  expect(result.editorText).toBe(payload);
+  expect(result.editorColor).toBe('gray');
+  expect(result.editorActiveNodes).toBe(0);
+  expect(result.sidebarText).toContain(payload);
+  expect(result.sidebarActiveNodes).toBe(0);
+});
+
+test('course attachment previews accept only verified passive raster/PDF bytes', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks?.validateCourseAttachmentPreview);
+  const verdicts = await page.evaluate(() => {
+    const validate = window.__sutraPublicBetaTestHooks.validateCourseAttachmentPreview;
+    return {
+      html: validate('data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==', 'text/html'),
+      svg: validate('data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+', 'image/svg+xml'),
+      spoofedPng: validate('data:image/png;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==', 'image/png'),
+      mimeMismatch: validate('data:image/png;base64,iVBORw0KGgo=', 'application/pdf'),
+      png: validate('data:image/png;base64,iVBORw0KGgo=', 'image/png')
+    };
+  });
+  expect(verdicts.html).toBeNull();
+  expect(verdicts.svg).toBeNull();
+  expect(verdicts.spoofedPng).toBeNull();
+  expect(verdicts.mimeMismatch).toBeNull();
+  expect(verdicts.png).toMatchObject({ type: 'image/png', size: 8 });
 });
 
 test('sanitizer strips application hooks, escape targets, and abusive dimensions', async ({ page }) => {

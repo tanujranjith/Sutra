@@ -146,11 +146,16 @@
     return !css || css.length > 240 || /url\s*\(|expression\s*\(|behavior\s*:|-moz-binding|@import|javascript:|vbscript:|data:|var\s*\(|\\[0-9a-f]{1,6}\s?/i.test(css);
   }
 
-  function hasExtremeCssNumber(value) {
+  function hasExtremeCssNumber(property, value) {
     var matches = String(value || '').match(/-?\d+(?:\.\d+)?/g) || [];
+    var colorProperty = property === 'color' || property === 'background-color' || property === 'border-color';
+    var allowsNegative = property.indexOf('margin') === 0 || property === 'text-indent' || property === 'letter-spacing';
+    var maximum = colorProperty ? 360 : 4096;
+    if (property === 'font-weight') maximum = 1000;
+    if (property === 'line-height') maximum = 20;
     for (var i = 0; i < matches.length; i += 1) {
       var number = Number(matches[i]);
-      if (!Number.isFinite(number) || number < 0 || number > 200) return true;
+      if (!Number.isFinite(number) || (!allowsNegative && number < 0) || Math.abs(number) > maximum) return true;
     }
     return false;
   }
@@ -164,7 +169,7 @@
       var property = String(probe.style[i] || '').toLowerCase();
       var propertyValue = String(probe.style.getPropertyValue(property) || '').trim();
       if (!SAFE_STYLE_PROPERTIES[property] || property.indexOf('--') === 0) continue;
-      if (isUnsafeStyleValue(propertyValue) || hasExtremeCssNumber(propertyValue)) continue;
+      if (isUnsafeStyleValue(propertyValue) || hasExtremeCssNumber(property, propertyValue)) continue;
       safe.push(property + ': ' + propertyValue);
     }
     return safe.join('; ');

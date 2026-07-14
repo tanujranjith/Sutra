@@ -59,7 +59,7 @@ body[data-theme="liquidglass"] {
     /* Saturation boost that makes the backdrop colour pop through frost. */
     --glass-saturate:        180%;
     /* Base translucency of a glass fill (0 = clear, 1 = opaque). */
-    --glass-opacity:         0.55;
+    --glass-opacity:         0.4;
     /* Bright 1px rim that reads as the lit edge of a glass slab. */
     --glass-rim:             rgba(255, 255, 255, 0.55);
     /* Inner top highlight — the specular line where light enters. */
@@ -154,13 +154,19 @@ body[data-theme="glass"],
 body[data-theme="liquidglass"] {
     position: relative;
     overflow-x: hidden;
+    /* Four large, overlapping colour pools spread across the FULL viewport
+       (not just corners) so translucent glass surfaces sitting anywhere on
+       screen — dashboard cards included, not only the chrome bars — have
+       real colour to blur and reveal. Radii are deliberately larger than
+       the viewport so they blend into one continuous field. */
     background:
-        radial-gradient(1200px 720px at 50% -14%, rgba(255, 255, 255, 0.95), transparent 62%),
-        radial-gradient(980px 760px at 84% 110%, rgba(10, 132, 255, 0.06), transparent 60%),
-        radial-gradient(760px 620px at 8% 86%, rgba(120, 200, 255, 0.06), transparent 64%),
-        linear-gradient(176deg, #fbfcff 0%, #eef1f7 50%, #e3e8f0 100%);
+        radial-gradient(1500px 1100px at 18% 12%, rgba(10, 132, 255, 0.24), transparent 60%),
+        radial-gradient(1400px 1050px at 84% 18%, rgba(255, 150, 205, 0.16), transparent 58%),
+        radial-gradient(1600px 1150px at 55% 96%, rgba(120, 205, 255, 0.28), transparent 62%),
+        radial-gradient(1300px 1000px at 92% 90%, rgba(10, 132, 255, 0.2), transparent 58%),
+        linear-gradient(176deg, #eef4ff 0%, #dfe9f7 50%, #cfdcee 100%);
     background-attachment: fixed;
-    background-color: #f4f6fa;
+    background-color: #e5ebf4;
 }
 
 /* ─── 2c. SCROLL CONTAINMENT (double-scrollbar fix) ────────────────
@@ -436,6 +442,16 @@ body[data-theme="liquidglass"] .main-content {
     body[data-theme="glass"]:not(.notes-split-active) #view-notes #notesEditorContainer,
     body[data-theme="liquidglass"]:not(.notes-split-active) #view-notes #notesEditorContainer {
         margin-top: -24px !important;
+    }
+    /* …but when the assistant is enabled, its .view-flow-row chip row sits
+       between the toolbar and the editor. The -24px pull above was tuned for the
+       no-assistant layout; with the chip row present it yanks the opaque editor
+       card UP over the bottom of the chips, clipping them. Cancel the pull in
+       that case (the chip row already fills the gap the -24px was compensating
+       for), so the card sits below the chips like every other theme. */
+    body[data-theme="glass"]:not(.notes-split-active) #view-notes > .view-flow-row ~ #notesEditorContainer,
+    body[data-theme="liquidglass"]:not(.notes-split-active) #view-notes > .view-flow-row ~ #notesEditorContainer {
+        margin-top: 0 !important;
     }
 }
 

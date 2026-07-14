@@ -194,7 +194,7 @@ mustContain('src/core/app.js', 'resetAtelierOnboardingForTesting', 'Settings res
 mustContain('src/core/app.js', 'ONBOARDING_USER_INTENTS', 'unified onboarding user intent options');
 mustContain('src/core/app.js', 'ONBOARDING_WORKSPACE_FOCUS_OPTIONS', 'unified onboarding workspace focus options');
 mustContain('src/core/app.js', 'ONBOARDING_FEATURE_VIEWS', 'unified onboarding feature tile catalog');
-mustContain('src/core/app.js', "ONBOARDING_STEPS = ['welcome', 'focus', 'setup', 'ai', 'tour']", 'unified onboarding 5-step ordering (Cloud folded into AI & Backups, spaces into Focus)');
+mustContain('src/core/app.js', "const ONBOARDING_STEPS = ['welcome', 'classes', 'setup', 'mode', 'protect', 'finish']", 'unified onboarding daily-loop steps');
 mustContain('src/core/app.js', 'syncOnboardingStatusUi', 'onboarding status text updater');
 mustContain('Sutra.html', 'atelier-onboarding-rail', 'unified onboarding left rail markup');
 mustContain('Sutra.html', 'id="onboardingSteps"', 'unified onboarding step list anchor');
@@ -214,7 +214,7 @@ mustContain('Sutra.html', 'feature-setup-overlay legacy-overlay-hidden', 'legacy
 // Fresh-install defaults + existing-user preservation (Phase 8).
 // Fresh installs emphasize the student-first modules; secondary modules stay
 // opt-in. Existing users keep whatever enabled-view choices they already stored.
-mustContain('src/state/workspace-normalizers.js', "STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'timeline', 'notes', 'homework', 'apstudy', 'review', 'cramhub'])", 'fresh-install defaults emphasize the student-first modules');
+mustContain('src/state/workspace-normalizers.js', "STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'homework', 'notes', 'timeline', 'review', 'cramhub'])", 'fresh-install defaults emphasize the student daily-loop surfaces');
 mustContain('src/state/workspace-normalizers.js', 'function getDefaultEnabledViews', 'default enabled-views factory present');
 mustContain('src/state/workspace-normalizers.js', 'function normalizeEnabledViews', 'enabled-views normalizer present');
 mustContain('src/state/workspace-normalizers.js', 'normalized[view] = raw[view] !== false', 'existing-user enabled-view choices are preserved on load');
@@ -650,7 +650,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260709-toolbar-comments', 'app.js cache-busted so the latest repairs ship');
+mustContain('Sutra.html', 'src/core/app.js?v=20260714-assistant-trust1', 'app.js cache-busted so the latest Assistant trust repairs ship');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------

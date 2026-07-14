@@ -77,28 +77,41 @@
         container.classList.add('daily-lock-in-quote--hydrated');
     }
 
-    // ---- Date-change watcher (wakes up at the next midnight) -----------------
+    function millisecondsUntilNextLocalMidnight(date) {
+        var now = date instanceof Date ? date : new Date();
+        var nextMidnight = new Date(
+            now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0
+        );
+        // Wake just after the boundary. The minimum prevents a malformed Date
+        // or a clock adjustment from creating a zero-delay rescheduling loop.
+        var delay = nextMidnight.getTime() - now.getTime() + 1000;
+        if (!Number.isFinite(delay)) return 60000;
+        return Math.max(1000, Math.min(delay, 2147483647));
+    }
+
+    // ---- Date-change watcher (wakes up at the next local midnight) -----------
     function scheduleMidnightRefresh() {
-        var now = new Date();
-        var msUntilMidnight = (
-            Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1) -
-            Date.now()
-        ) + 1000;   // +1 s margin
+        var msUntilMidnight = millisecondsUntilNextLocalMidnight(new Date());
 
         setTimeout(function () {
             hydrate();
             scheduleMidnightRefresh();  // reschedule for the following midnight
-        }, Math.min(msUntilMidnight, 2147483647));  // clamp to max safe timeout
+        }, msUntilMidnight);
     }
 
     // ---- Public API ----------------------------------------------------------
     var SutraQuote = {
         hydrate: hydrate,
         pickDailyQuote: pickDailyQuote,
-        getLocalDayNumber: getLocalDayNumber
+        getLocalDayNumber: getLocalDayNumber,
+        millisecondsUntilNextLocalMidnight: millisecondsUntilNextLocalMidnight
     };
 
     global.SutraQuote = SutraQuote;
+    if (typeof module !== 'undefined' && module.exports) module.exports = SutraQuote;
+
+    // The deterministic helpers are also exercised directly in Node tests.
+    if (typeof document === 'undefined') return;
 
     // ---- Auto-init when DOM is ready ----------------------------------------
     function init() {
@@ -114,4 +127,4 @@
         setTimeout(init, 0);
     }
 
-}(typeof window !== 'undefined' ? window : this));
+}(typeof window !== 'undefined' ? window : globalThis));

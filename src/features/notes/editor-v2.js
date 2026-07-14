@@ -402,8 +402,8 @@
                 }
             });
         } catch (err) {
-            if (typeof window.reportError === 'function') {
-                try { window.reportError('notes-editor-v2 mount failed', err); } catch (e) { /* noop */ }
+            if (typeof window.SutraReportError === 'function') {
+                try { window.SutraReportError('notes-editor-v2 mount failed', err); } catch (e) { /* noop */ }
             }
             state.editor = null;
             return false;

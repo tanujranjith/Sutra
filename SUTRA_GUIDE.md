@@ -44,32 +44,20 @@ On first launch, Sutra creates a welcome page and a built-in **Help & Docs** pag
 
 ## 2. Sutra Setup (onboarding)
 
-The first time you open Sutra, the **Sutra Setup** wizard appears. It's optional, and it's quick. It offers to:
+The first time you open Sutra, the **Sutra Setup** wizard appears. It follows your daily academic loop and is completely optional. It walks you through:
 
-1. Add your **classes**.
-2. Add your **AP subjects**.
-3. Decide whether to turn on **College** tools.
-4. Pick a **Sutra Mode** (which views are front-and-center).
-5. Export an immediate **`.sutra`** backup.
-6. Drop you on **Today**.
+1. **Welcome** — choose how you'll use Sutra: as a student, for school & work, or just exploring.
+2. **Classes** — type your class names (or import from your school portal later).
+3. **Setup** — paste a syllabus or assignment list, or browse starter packs.
+4. **Mode** — pick a focus: **Student** (homework, reviews, notes), **AP Crunch** (AP exam tracking), or **Writer** (notes-first workspace).
+5. **Protect** — create an encrypted `.sutra` backup or defer for later.
+6. **Finish** — land on **Today** and see your next step.
 
-Skip any step you like - you can finish later. To run it again anytime: `Settings -> Advanced -> Restart Sutra Setup`.
+Skip any step with the **Skip** button. Close and return later from **Continue later**. To run setup again anytime: `Settings -> Advanced -> Restart Sutra Setup`.
 
 > Everything here is local by default. Nothing leaves your browser unless you export it, send it to an AI provider, or explicitly enable encrypted Google Drive sync. Your completed setup is included in your `.sutra` backups.
 
-**Choosing a Sutra Mode:** modes promote the views you actually use and tuck the rest into a *More* menu (they never delete anything).
-
-| Mode | Best for |
-| --- | --- |
-| **All Tools** | "Show me everything." |
-| **Student** | Classes, AP, college, life. |
-| **AP Crunch** | The days before an AP exam. |
-| **College Apps** | Senior-fall application season. |
-| **Writing** | Notes-first, with planning aids. |
-| **Life** | Habits, sleep, journal, spending, goals. |
-| **Projects & Work** | A full operations dashboard. |
-
-If you're a student, **Student** is a great default.
+**Choosing a Mode:** the mode you pick during setup sets your default surfaces and focus. Advanced features — AP Study, College planning, Life, Projects & Work, and the Assistant — stay **available from Settings → Feature packs** and never delete data when hidden.
 
 ---
 
@@ -199,14 +187,14 @@ Separately, **Focus Mode** (`Alt+Shift+F`) strips the chrome away from the writi
 
 ## 10. Meet the Sutra Assistant
 
-The **Sutra Assistant** is the assistant icon button at the bottom-right. It's **optional** and uses **your own API key** - Sutra runs no AI servers and proxies nothing.
+The **Sutra Assistant** is the assistant icon button at the bottom-right. Its local notes/help experience is available by default. Connecting a remote model is optional and uses **your own API key** - Sutra runs no AI servers and proxies nothing.
 
 ### Connect a provider
 
 1. Click the Sutra Assistant icon to open the panel.
 2. Pick a provider: OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter, or a Custom OpenAI-Compatible Endpoint.
 3. Enter the **exact Model ID** for that provider (a wrong ID fails at the provider, not in Sutra).
-4. Open `Settings -> Assistant` (or the panel's key field), paste your key, and save. **Keys live in sessionStorage for this browser session only and are never exported.**
+4. Open `Settings -> Assistant` (or the setup wizard), paste your key, and save. **Session-only storage is the default.** You may optionally remember it in a user-secret-protected encrypted vault; neither raw keys nor vault envelopes are exported.
 
 ### What it knows, and what it can do
 

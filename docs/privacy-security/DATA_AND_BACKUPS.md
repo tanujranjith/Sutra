@@ -56,8 +56,7 @@ fixtures by `npm run check:migrations`.
 - A curated allow-list of standalone **localStorage preferences** is embedded in
   exports (focus-timer state, streak settings, AI provider/model **choices**, the
   Assistant Activity log, and a couple of feature flags).
-- **Secrets** (AI provider API keys) live in **`sessionStorage` only** — never in
-  localStorage, never in IndexedDB, never exported.
+- **Secrets** (AI provider API keys) use **`sessionStorage` only** and are never persisted or exported.
 
 ---
 
@@ -349,8 +348,7 @@ one-way door that discards your prior state with no recourse.
 
 **Excluded by design:**
 
-- **AI provider API keys / secrets** — `sessionStorage` only; redacted from
-  exports. Re-enter after import.
+- **AI provider API keys / secrets** — session-only and excluded from every export and sync snapshot.
 - **Backup passwords, Google Drive sync passwords, OAuth access tokens, refresh
   tokens, client secrets, and derived encryption keys** — never exported.
 - **Google Drive sync operational metadata** (`sutra:googleDriveSync:v1`) —
@@ -402,7 +400,7 @@ round-trip in a browser.
 | `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
-| API keys | sessionStorage | Provider credentials | Never persisted, never exported |
+| API keys | sessionStorage (default) | Provider credentials | Never exported |
 | Managed Assistant chat store | localStorage | Optional visible conversations | Encrypted backup by default; plaintext recovery opt-in |
 
 For the authoritative, line-referenced behavior and the verification scripts,

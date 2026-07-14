@@ -35,6 +35,7 @@
     let apStudyModalState = null;
     let apStudyModalReturnFocus = null;
     let apStudyExamCountdownTimer = null;
+    let normalizedWorkspaceRef = null;
 
     function fallbackGenerateId(prefix) {
         return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -215,15 +216,19 @@
         };
     }
 
-    function normalizeTopic(rawTopic, index, unitMap) {
+    function normalizeTopic(rawTopic, index, unitMap, validSubjectIds) {
         const now = nowIso();
         const unitId = normalizeText(rawTopic && rawTopic.unitId);
         const unit = unitMap.get(unitId);
-        if (!unit) return null;
+        const rawSubjectId = normalizeText(rawTopic && rawTopic.subjectId);
+        const subjectId = unit ? unit.subjectId : rawSubjectId;
+        if (!validSubjectIds.has(subjectId)) return null;
         return {
             id: normalizeText(rawTopic && rawTopic.id) || makeId('aptopic'),
-            subjectId: unit.subjectId,
-            unitId,
+            subjectId,
+            // An explicit null represents a valid, visible unassigned topic.
+            // Missing/deleted subject relationships remain invalid above.
+            unitId: unit ? unit.id : null,
             title: normalizeText(rawTopic && rawTopic.title) || `Topic ${index + 1}`,
             order: normalizeNumberValue(rawTopic && rawTopic.order, index + 1, 1, 999),
             status: normalizeStatus(rawTopic && rawTopic.status),
@@ -323,7 +328,7 @@
         const topicMap = new Map();
         const topics = [];
         (Array.isArray(workspace.topics) ? workspace.topics : []).forEach((rawTopic, index) => {
-            const normalized = normalizeTopic(rawTopic, index, unitMap);
+            const normalized = normalizeTopic(rawTopic, index, unitMap, validSubjectIds);
             if (!normalized) return;
             if (topicMap.has(normalized.id)) normalized.id = makeId('aptopic');
             topicMap.set(normalized.id, normalized);
@@ -392,7 +397,12 @@
     }
 
     function ensureWorkspace() {
-        apStudyWorkspace = normalizeApStudyWorkspace(apStudyWorkspace || getDefaultApStudyWorkspace());
+        // Normalize only when hydration/import replaces the workspace object.
+        // Feature mutations keep the same, already-normalized identity.
+        if (!apStudyWorkspace || apStudyWorkspace !== normalizedWorkspaceRef) {
+            apStudyWorkspace = normalizeApStudyWorkspace(apStudyWorkspace || getDefaultApStudyWorkspace());
+            normalizedWorkspaceRef = apStudyWorkspace;
+        }
         if (!AP_SECTIONS.includes(apStudyWorkspace.settings.activeSection)) {
             apStudyWorkspace.settings.activeSection = DEFAULT_SECTION;
         }
@@ -429,8 +439,9 @@
     }
 
     function getTopicsForUnit(unitId) {
+        const normalizedUnitId = normalizeText(unitId) || null;
         return ensureWorkspace().topics
-            .filter(topic => topic.unitId === unitId)
+            .filter(topic => (topic.unitId || null) === normalizedUnitId)
             .sort((left, right) => (left.order - right.order) || left.title.localeCompare(right.title));
     }
 
@@ -1992,6 +2003,7 @@
 
     function buildUnitsPanel(subject) {
         const units = getUnitsForSubject(subject.id);
+        const unassignedTopics = getTopicsForUnit(null).filter(topic => topic.subjectId === subject.id);
         return `
             <section class="glass-card ap-study-panel">
                 <div class="ap-study-panel-head">
@@ -2001,6 +2013,7 @@
                     </div>
                     <div class="ap-study-inline-actions">
                         <button class="neumo-btn" type="button" data-ap-action="open-modal" data-ap-entity="unit" data-ap-subject-id="${escapeHtml(subject.id)}"><i class="fas fa-plus"></i> Add Unit</button>
+                        <button class="neumo-btn" type="button" data-ap-action="open-modal" data-ap-entity="topic" data-ap-subject-id="${escapeHtml(subject.id)}"><i class="fas fa-plus"></i> Add Topic</button>
                     </div>
                 </div>
                 ${units.length ? `
@@ -2090,6 +2103,23 @@
                         }).join('')}
                     </div>
                 ` : '<div class="ap-study-empty-state compact"><strong>No units yet</strong><p>Add the unit structure for this AP to turn the workspace into a full review map.</p></div>'}
+                ${unassignedTopics.length ? `
+                    <div class="ap-study-nested-panel" data-ap-unassigned-topics="${escapeHtml(subject.id)}">
+                        <div class="ap-study-nested-head"><h4>Unassigned topics</h4><span>${unassignedTopics.length} topic${unassignedTopics.length === 1 ? '' : 's'}</span></div>
+                        <div class="ap-study-activity-list">
+                            ${unassignedTopics.map(topic => `
+                                <div class="ap-study-activity-item">
+                                    <strong>${escapeHtml(topic.title)}</strong>
+                                    <span>${escapeHtml(getStatusLabel(topic.status))} · confidence ${escapeHtml(String(topic.confidenceLevel))}/5</span>
+                                    <div class="ap-study-inline-actions">
+                                        <button class="ap-study-link-btn" type="button" data-ap-action="open-modal" data-ap-entity="topic" data-ap-id="${escapeHtml(topic.id)}">Edit</button>
+                                        <button class="ap-study-link-btn danger" type="button" data-ap-action="delete-entity" data-ap-entity="topic" data-ap-id="${escapeHtml(topic.id)}">Delete</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
             </section>
         `;
     }
@@ -2876,7 +2906,7 @@
         } else if (apStudyModalState.entityType === 'topic') {
             title.textContent = entity ? 'Edit Topic' : 'Add Topic / Subtopic';
             const subjectId = defaultSubjectId || (ensureWorkspace().subjects[0] ? ensureWorkspace().subjects[0].id : '');
-            const unitId = apStudyModalState.unitId || (entity ? entity.unitId : '') || (getUnitsForSubject(subjectId)[0] ? getUnitsForSubject(subjectId)[0].id : '');
+            const unitId = apStudyModalState.unitId || (entity ? entity.unitId : '') || '';
             body.innerHTML = `
                 <form id="apStudyForm" class="ap-study-modal-form" data-ap-form-entity="topic">
                     <label><span>AP subject</span><select class="modal-input" name="subjectId" data-ap-modal-subject>${buildSubjectOptions(subjectId)}</select></label>
@@ -3031,7 +3061,7 @@
         const unit = getUnitById(normalizeText(formData.get('unitId')));
         const subjectId = unit ? unit.subjectId : (normalizeText(formData.get('subjectId')) || ensureWorkspace().settings.activeSubjectId);
         topic.subjectId = subjectId;
-        topic.unitId = unit ? unit.id : '';
+        topic.unitId = unit ? unit.id : null;
         topic.title = normalizeText(formData.get('title')) || 'New Topic';
         topic.order = normalizeNumberValue(formData.get('order'), getTopicsForUnit(topic.unitId).length + 1, 1, 999);
         topic.status = normalizeStatus(formData.get('status'));
@@ -3413,10 +3443,7 @@
                 const target = event.target;
                 if (!target || !target.hasAttribute || !target.hasAttribute('data-ap-readiness-input')) return;
                 const subjectId = target.dataset.apReadinessInput || '';
-                const subject = getSubjectById(subjectId);
-                if (!subject) return;
                 const nextValue = normalizeReadiness(target.value);
-                subject.readiness = nextValue;
                 const display = mount.querySelector(`[data-ap-readiness-display="${cssEscapeValue(subjectId)}"]`);
                 if (display) display.textContent = `${nextValue}%`;
             });

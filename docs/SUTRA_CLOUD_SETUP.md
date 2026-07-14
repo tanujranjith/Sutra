@@ -169,8 +169,9 @@ cannot be allowed dynamically.
 | Manual encrypted file | ✅ Always | No network |
 
 **To use a custom origin (self-hosting):** add your provider origin to the
-`connect-src` directive of the CSP `<meta>` tag in `Sutra.html` (and
-`scripts/serve-static.mjs` for local runs), then rebuild/redeploy. Sutra detects
+`connect-src` directive in `scripts/lib/csp-policy.mjs`, run
+`npm run csp:generate`, then rebuild/redeploy. The generator keeps the HTML,
+local server, and Vercel header synchronized. Sutra detects
 a CSP-blocked origin and tells you in the panel rather than failing silently.
 
 Sutra ships a small, **reviewed** set of CSP `connect-src` wildcards only for

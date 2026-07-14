@@ -2,6 +2,49 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-07 - Onboarding redesign & simplified navigation
+
+Onboarding now follows the student daily loop: capture schoolwork → see what is
+due → know what to do next → take notes → schedule work → study → keep data safe.
+The default navigation exposes only the core daily surfaces (Today, Homework,
+Notes, Timeline, Review, Focus) and hides advanced packs behind progressive
+disclosure in Settings. Existing users keep their saved preferences unchanged.
+
+- **Redesigned onboarding steps** (`src/core/app.js`) — replaced the old
+  `['welcome','focus','setup','ai','tour']` flow with
+  `['welcome','classes','setup','mode','protect','finish']`. New steps: classes
+  (collect class names), mode (choose student/academic/life), protect (visible
+  backup setup). Removed: intro tour (deferred to empty states) and AI setup
+  (deferred to Assistant first use). Existing users who completed onboarding
+  never replay it and restart is idempotent.
+- **Simplified default navigation** (`src/state/workspace-normalizers.js`) —
+  `STUDENT_DEFAULT_ENABLED_VIEWS` narrowed from
+  `['today','timeline','notes','homework','apstudy','review','cramhub']` to
+  `['today','homework','notes','timeline','review','cramhub']`. AP Study,
+  College, Life, Business, Courses, All Due, and Assistant are now opt-in from
+  Settings → Feature packs. Existing preferences survive via
+  `normalizeEnabledViews`.
+- **Navigation tabs reordered** (`Sutra.html`) — primary tabs: Today, Homework,
+  Notes, Timeline, Review & Tests, then secondary surfaces (College, Life,
+  Business, Courses, All Due, Assistant, Settings).
+- **Unit tests** (`tests/unit/workspace-normalizers.test.mjs`) — covers default
+  views, advanced-surfaces exclusion, merge behavior, packs, and constants.
+- **Assertion updates** (`scripts/smoke-check.mjs`) — guardrails updated for new
+  ONBOARDING_STEPS and STUDENT_DEFAULT_ENABLED_VIEWS values.
+- **Removed stale render-focus/ai/tour references** (`src/core/app.js`) — cleaned
+  up three unreachable render-function calls (`renderFocusStep`, `renderAiStep`,
+  `renderTourStep`) from the old retired-step code paths.
+- **Updated tutorial status text** (`src/core/app.js`) — `syncOnboardingStatusUi`
+  now reflects the new step names instead of the retired "Welcome, Focus, Setup,
+  AI & Backups, and Tour" wording.
+- **Documentation alignment** (`SUTRA_GUIDE.md`, `README.md`) — onboarding
+  section steps match the redesigned flow.
+- **Expanded E2E coverage** (`tests/e2e/onboarding-redesign.spec.mjs`) — 13
+  tests: full class-entry flow, skip path, Continue later with reopen, keyboard
+  Tab/Enter navigation, reduced motion, 200% zoom, and 320px mobile viewport.
+- **Playwright config** (`playwright.config.mjs`) — onboarding test added to
+  `responsiveTestMatch` so it runs across mobile and narrow-desktop projects.
+
 ## 2026-06 - Academic planning upgrade
 
 One coherent semester-planning layer across five fronts. All new state lives in
@@ -177,7 +220,7 @@ The app formerly released as **NoteFlow Atelier** is now **Sutra** - a private, 
 - **`.sutra`** is the default full-workspace backup format. Current exports are password-encrypted `SUTRAENC` binary envelopes containing the canonical internal workspace package (`manifest.json`, `workspace.json`, `assets/*`, `metadata/export-summary.json`, `metadata/checksums.json`). Export filename: `sutra_workspace_<YYYY-MM-DD>_<HH-mm-ss>.sutra` (local-timezone date and 24-hour time, zero-padded, colons replaced with hyphens for Windows safety; emergency exports use the `sutra_emergency_workspace_` prefix and Drive downloads use `sutra_drive_workspace_`).
 - **Legacy unencrypted `.sutra` and `.atelier` backups still import.** The validator accepts both `sutra-workspace` and legacy `noteflow_atelier_project` manifests, and the dispatcher routes both `.sutra` and `.atelier` to the same package importer after envelope detection.
 - **`.sutra-plugin`** is the new plugin export extension; legacy **`.atelier-plugin`** bundles still import. Plugins remain local-only, sandboxed, install disabled, and reviewed before they run.
-- API keys, provider credentials, and tokens are still **never exported** (sessionStorage only).
+- API keys, provider credentials, and tokens remain **session-only and never exported**.
 
 ### Sutra Assistant + Sutra Intelligence
 

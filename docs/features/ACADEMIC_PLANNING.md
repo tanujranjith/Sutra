@@ -69,7 +69,9 @@ under `module.exports` for Node and are executed by
   points, drop-lowest, missing-as-zero, excused/pending excluded),
   `scoreNeededForTarget` (exact affine solve for "what do I need on the final"),
   `whatIfScore`, `rankImpact` (which missing/pending item moves the grade most),
-  and `computeGpa` (weighted/unweighted with honors/AP boosts).
+  and `computeGpa` (weighted/unweighted with honors/AP boosts). Per-course
+  credit weights accept 0.5 through 8 credits, preserving legitimate 4- and
+  5-credit courses while bounding malformed imports.
 - **`semester-setup.js`** — `parseSourceText` / `parseIcsSource` extract courses,
   teachers, grading weights, assignments, exams, recurring meetings, and
   no-school days from free text and calendars, with date/time/day-token parsing
@@ -91,7 +93,7 @@ Because the engines are deterministic and tested in isolation, the academic
   (`window.SutraIntelligenceBridge.extractStructured` →
   `performIntelligenceRequest`), and triggers the same explicit send-disclosure
   modal as every other AI feature. The provider is the one the user already
-  configured; API keys stay session-only and are never exported.
+  configured; API keys are session-only and are never persisted or exported.
 - **No silent writes.** Nothing reaches the workspace until the user approves it
   on the review screen. Applied imports are logged to Assistant Activity.
 - **Deterministic stays separate from interpretation.** Grades are computed by

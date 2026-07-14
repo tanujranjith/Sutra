@@ -60,6 +60,12 @@
       var definition = definitions[id];
       if (!definition) throw new Error('Unknown feature: ' + id);
       var current = state[id];
+      if (global.SutraRecoveryMode && typeof global.SutraRecoveryMode.shouldLoadOptionalFeature === 'function'
+          && !global.SutraRecoveryMode.shouldLoadOptionalFeature(id)) {
+        current.enabled = false;
+        current.error = 'Skipped while Recovery Mode is active.';
+        return clone(current);
+      }
       current.enabled = true;
       var start = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
       for (var d = 0; d < (definition.dependencies || []).length; d += 1) await enable(definition.dependencies[d], options);

@@ -277,6 +277,24 @@
     line-height: 1.5;
 }
 
+.notif-empty-action {
+    margin-top: 4px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--accent, #4a90d9);
+    background: transparent;
+    color: var(--accent, #4a90d9);
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.notif-empty-action:hover {
+    background: color-mix(in srgb, var(--accent, #4a90d9) 8%, transparent);
+    opacity: 0.9;
+}
+
 /* ---- Notification row ---------------------------------------------------- */
 .notif-row {
     display: grid;

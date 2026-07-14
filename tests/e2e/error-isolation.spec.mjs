@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 
 async function openApp(page) {
   await page.goto('/Sutra.html');
-  await page.waitForFunction(() => !!window.SutraFeatureGuard && !!window.reportError, null, { timeout: 20000 });
+  await page.waitForFunction(() => !!window.SutraFeatureGuard && !!window.SutraReportError, null, { timeout: 20000 });
 }
 
 test('a feature that throws during BOOT degrades but the app still boots', async ({ page }) => {
@@ -67,13 +67,13 @@ test('SutraFeatureGuard.run preserves the return value on success and catches as
   expect(res.asyncDegraded).toBe(true);
 });
 
-test('reportError records structured, severity-tagged, de-duplicated diagnostics', async ({ page }) => {
+test('SutraReportError records structured, severity-tagged, de-duplicated diagnostics', async ({ page }) => {
   await openApp(page);
   const res = await page.evaluate(() => {
     window.SutraDiagnostics.clear();
-    window.reportError(new Error('first'), { where: 'unit-test', detail: 'x' }, 'warning');
-    window.reportError(new Error('first'), { where: 'unit-test', detail: 'x' }, 'warning'); // duplicate burst -> deduped
-    window.reportError(new Error('second'), 'string-context', 'critical');
+    window.SutraReportError(new Error('first'), { where: 'unit-test', detail: 'x' }, 'warning');
+    window.SutraReportError(new Error('first'), { where: 'unit-test', detail: 'x' }, 'warning'); // duplicate burst -> deduped
+    window.SutraReportError(new Error('second'), 'string-context', 'critical');
     const entries = window.SutraDiagnostics.getEntries();
     return {
       count: entries.length,
@@ -106,16 +106,28 @@ test('global error and unhandledrejection nets funnel into diagnostics', async (
   expect(res.join('|')).toContain('global-rejection-net');
 });
 
-test('reportError shows a non-blocking toast only when a userMessage is provided', async ({ page }) => {
+test('SutraReportError shows a non-blocking toast only when a userMessage is provided', async ({ page }) => {
   await openApp(page);
   const toastText = await page.evaluate(async () => {
     const calls = [];
     const real = window.showToast;
     window.showToast = (m) => { calls.push(m); };
-    window.reportError(new Error('silent'), { where: 'no-toast' }, 'error');           // no userMessage -> no toast
-    window.reportError(new Error('x'), { where: 'with-toast', userMessage: 'Could not save your note.' }, 'error');
+    window.SutraReportError(new Error('silent'), { where: 'no-toast' }, 'error');           // no userMessage -> no toast
+    window.SutraReportError(new Error('x'), { where: 'with-toast', userMessage: 'Could not save your note.' }, 'error');
     window.showToast = real;
     return calls;
   });
   expect(toastText).toEqual(['Could not save your note.']);
+});
+
+test('Sutra diagnostics do not replace the browser reportError platform API', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => ({
+    nativeType: typeof window.reportError,
+    sutraType: typeof window.SutraReportError,
+    distinct: window.reportError !== window.SutraReportError
+  }));
+  expect(result.nativeType).toBe('function');
+  expect(result.sutraType).toBe('function');
+  expect(result.distinct).toBe(true);
 });

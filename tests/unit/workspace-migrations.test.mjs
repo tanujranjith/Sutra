@@ -9,9 +9,9 @@ const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`,
 const NOW = '2026-07-09T12:00:00.000Z';
 
 for (const [name, from, expected] of [
-  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4']],
-  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4']],
-  ['workspace-v3.json', 3, ['v3->v4']]
+  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4', 'v4->v5']],
+  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4', 'v4->v5']],
+  ['workspace-v3.json', 3, ['v3->v4', 'v4->v5']]
 ]) {
   test(`${name} migrates sequentially to the current schema`, () => {
     const source = fixture(name);
@@ -43,6 +43,19 @@ test('invalid collections are quarantined and relationship defects are reported'
   assert.ok(result.validation.issues.some((issue) => issue.code === 'missing-course-reference'));
 });
 
+test('recovered/quarantined data in a current workspace survives a re-migration (import round-trip)', () => {
+  // On import the workspace is re-migrated. A v5 backup carrying recovered data
+  // (quarantine, legacy homework snapshot) must keep it — this is what the
+  // export/import round-trip now relies on to avoid silently dropping the only
+  // copy of migration-recovered content.
+  const current = migrations.migrateWorkspace(fixture('workspace-v3.json'), { now: NOW }).workspace;
+  assert.ok(current.migrationDiagnostics.quarantine.length >= 1, 'setup: expected quarantined data');
+  const carriedQuarantine = current.migrationDiagnostics.quarantine.slice();
+  const reimported = migrations.migrateWorkspace(current, { now: NOW });
+  assert.deepEqual(reimported.applied, [], 'a current workspace re-migrates with zero steps');
+  assert.deepEqual(reimported.workspace.migrationDiagnostics.quarantine, carriedQuarantine, 'quarantine must not be dropped on re-import');
+});
+
 test('destructive migrations announce backup requirements before execution', () => {
   const source = fixture('workspace-v2.json');
   let backup = null;
@@ -53,7 +66,7 @@ test('destructive migrations announce backup requirements before execution', () 
   assert.ok(backup);
   assert.equal(backup.workspace.version, 2);
   assert.ok(backup.plan.some((step) => step.destructive));
-  assert.equal(result.workspace.version, 4);
+  assert.equal(result.workspace.version, 5);
 });
 
 test('current migrations are idempotent and future workspaces are preserved', () => {
@@ -64,6 +77,19 @@ test('current migrations are idempotent and future workspaces are preserved', ()
   const future = migrations.migrateWorkspace({ version: 99, custom: true });
   assert.equal(future.futureVersion, true);
   assert.equal(future.workspace.custom, true);
+});
+
+test('v5 adds Sutra 2.0 contracts without dropping plugin-owned fields', () => {
+  const source = fixture('workspace-v3.json');
+  const result = migrations.migrateWorkspace(source, { now: NOW }).workspace;
+  assert.equal(result.version, 5);
+  assert.equal(result.schema.version, 5);
+  assert.equal(result.studentDecisionState.preset, 'balanced');
+  assert.equal(result.assistantPermissions.mode, 'off');
+  assert.deepEqual(result.taskDependencies, []);
+  assert.deepEqual(result.masteryRecords, []);
+  assert.deepEqual(result.collegeAppWorkspace.activities, []);
+  assert.equal(result.pluginData.unknownSafeField, 'keep');
 });
 
 test('recursive and non-serializable imports fail validation before migration', () => {

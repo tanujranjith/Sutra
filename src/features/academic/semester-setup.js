@@ -748,7 +748,7 @@
                 text: added ? ('AI found ' + added + ' additional item' + (added === 1 ? '' : 's') + '.') : 'AI didn’t find anything new beyond the local parse.'
             });
         }).catch(function (e) {
-            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.improveWithAi' }, 'error');
+            if (typeof global.SutraReportError === 'function') global.SutraReportError(e, { where: 'semester-setup.improveWithAi' }, 'error');
             finish({ kind: 'error', text: 'AI request failed — nothing was changed.' });
         });
     }
@@ -817,7 +817,7 @@
             }, { reason: 'semester-setup-import' });
             return true;
         } catch (e) {
-            if (typeof global.reportError === 'function') global.reportError(e, { where: 'semester-setup.createHomeworkTask' }, 'error');
+            if (typeof global.SutraReportError === 'function') global.SutraReportError(e, { where: 'semester-setup.createHomeworkTask' }, 'error');
             return false;
         }
     }

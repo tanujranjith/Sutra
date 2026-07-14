@@ -14,6 +14,10 @@ import {
   scanWindowGlobals,
   extractWorkspaceFields
 } from './lib/guardrail-scan.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { discoverRuntimeSources } from './lib/runtime-source-discovery.mjs';
 
 let failures = 0;
 function assert(cond, label) {
@@ -42,6 +46,8 @@ assert(domScan.byKey.innerHTML === 1, 'classifies innerHTML');
 assert(domScan.byKey.outerHTML === 1, 'classifies outerHTML');
 assert(domScan.byKey.insertAdjacentHTML === 1, 'classifies insertAdjacentHTML');
 assert(domScan.byKey['document.write'] === 2, 'classifies document.write/writeln');
+assert(domScan.hits.every(hit => /^[-\w.]+:[a-z0-9]+$/.test(hit.fingerprint)), 'assigns stable fingerprints to unsafe findings');
+assert(scanSinks(hostileDom).hits[0].fingerprint === domScan.hits[0].fingerprint, 'finding fingerprints are deterministic');
 
 // 2) The allow-marker suppresses a reviewed line.
 const annotatedDom = 'el.innerHTML = STATIC_TEMPLATE; // sutra-allow-html: developer markup';
@@ -72,6 +78,20 @@ assert(globals.has('BracketGlobal'), "collects window['BracketGlobal']");
 assert(!globals.has('NotAGlobal'), 'ignores === comparison');
 assert(!globals.has('Other'), 'ignores == comparison');
 
+// 4b) IIFE-alias globals (`global.X` / `globalThis.X`) are collected too, so a
+// module that captures the global object cannot bypass the ratchet. Property
+// accesses like `config.global.x` must NOT be collected.
+const aliasGlobals = scanWindowGlobals([
+  'global.SutraAliasFeature = api;',
+  "globalThis['BracketAlias'] = 1;",
+  'if (global.NotAlias === 2) {}',
+  'var x = config.global.ignoredProp = 3;'
+].join('\n'));
+assert(aliasGlobals.has('SutraAliasFeature'), 'collects global.SutraAliasFeature');
+assert(aliasGlobals.has('BracketAlias'), "collects globalThis['BracketAlias']");
+assert(!aliasGlobals.has('NotAlias'), 'ignores === comparison on alias');
+assert(!aliasGlobals.has('ignoredProp'), 'ignores config.global.* property access');
+
 // 5) Workspace-field extraction picks up persisted + exported fields.
 const fakeApp = `
 function persistAppData() {
@@ -92,6 +112,27 @@ function buildWorkspaceExportPayload(options = {}) {
 const fields = extractWorkspaceFields(fakeApp);
 assert(fields.persistFields.includes('brandNewField'), 'extracts persisted field');
 assert(fields.exportFields.includes('brandNewField'), 'extracts exported field');
+
+// 6) Runtime discovery automatically includes new first-party files while
+// excluding source categories that have their own verification path.
+const fixtureRoot = mkdtempSync(join(tmpdir(), 'sutra-guardrail-discovery-'));
+try {
+  mkdirSync(join(fixtureRoot, 'src', 'features'), { recursive: true });
+  mkdirSync(join(fixtureRoot, 'src', 'vendor'), { recursive: true });
+  mkdirSync(join(fixtureRoot, 'src', 'generated'), { recursive: true });
+  writeFileSync(join(fixtureRoot, 'Sutra.html'), '<!doctype html>');
+  writeFileSync(join(fixtureRoot, 'src', 'features', 'brand-new.js'), 'window.BrandNew = {};');
+  writeFileSync(join(fixtureRoot, 'src', 'asset-manifest.generated.js'), 'generated');
+  writeFileSync(join(fixtureRoot, 'src', 'vendor', 'third-party.js'), 'vendor');
+  writeFileSync(join(fixtureRoot, 'src', 'generated', 'output.js'), 'generated');
+  const discovered = discoverRuntimeSources(fixtureRoot);
+  assert(discovered.files.includes('src/features/brand-new.js'), 'automatically discovers a new runtime source file');
+  assert(discovered.files.includes('Sutra.html'), 'discovers top-level application HTML');
+  assert(!discovered.files.some(file => /vendor|generated/.test(file)), 'excludes vendor and generated sources');
+  assert(discovered.excluded.every(item => item.reason), 'every source exclusion carries a reason');
+} finally {
+  rmSync(fixtureRoot, { recursive: true, force: true });
+}
 
 console.log('');
 if (failures) {

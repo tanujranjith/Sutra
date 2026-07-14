@@ -168,7 +168,7 @@ test('"what\'s overdue" then "mark those as complete": batch card, both stores, 
   await page.waitForTimeout(400);
   const applied = await page.evaluate(() => {
     const open = window.flowAssistant.listOpenWorkspaceTasks().filter((t) => !t.completed && !t.archived);
-    const hwDone = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').filter((t) => t.done).length;
+    const hwDone = (window.SutraHomeworkStore.getSnapshot().tasks || []).filter((t) => t.done).length;
     const rec = window.flowIntelligence.getActivityLog()[0];
     return {
       remainingOpen: open.length,
@@ -187,7 +187,7 @@ test('"what\'s overdue" then "mark those as complete": batch card, both stores, 
   await page.waitForTimeout(2400);
   const restored = await page.evaluate(() => ({
     open: window.flowAssistant.listOpenWorkspaceTasks().filter((t) => !t.completed && !t.archived).length,
-    hwDone: JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').filter((t) => t.done).length,
+    hwDone: (window.SutraHomeworkStore.getSnapshot().tasks || []).filter((t) => t.done).length,
     recStatus: window.flowIntelligence.getActivityLog()[0].status,
     totalTasksKept: (window.flowAtelier.tasks || []).filter((t) => t.origin !== 'homework').length
   }));
@@ -222,7 +222,7 @@ test('quantifier references and ambiguity: "complete the first two" works, ambig
   const cardsAfter = await page.locator('#chatbotMessages .flow-action-card').count();
   expect(cardsAfter).toBe(cardsBefore);
   // Nothing mutated.
-  const mutated = await page.evaluate(() => JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').filter((t) => t.done).length);
+  const mutated = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).filter((t) => t.done).length);
   expect(mutated).toBe(0);
 });
 

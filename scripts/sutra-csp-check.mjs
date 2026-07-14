@@ -1,43 +1,14 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { APPROVED_CONNECT_WILDCARDS, INLINE_CODE_BUDGETS, buildCsp } from './lib/csp-policy.mjs';
 
 const files = ['index.html', 'HomePage.html', 'Sutra.html'];
-const required = [
-  "default-src 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "script-src 'self' 'unsafe-inline'",
-  'https://accounts.google.com',
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  'https://api.groq.com',
-  'https://api.openai.com',
-  'https://api.anthropic.com',
-  'https://generativelanguage.googleapis.com',
-  'https://openrouter.ai',
-  'https://www.googleapis.com',
-  'http://localhost:*',
-  'http://127.0.0.1:*',
-  'https://docs.google.com',
-  'https://www.figma.com',
-  'https://i.ytimg.com',
-  'worker-src',
-  'form-action'
-];
-
 // OneDrive restore fetches encrypted backup bytes from Microsoft's sharded
 // content CDN, whose host is dynamic per account/region. These SPECIFIC provider
 // wildcard families are a reviewed connect-src exception; any OTHER connect/
 // frame-src wildcard still fails the check below.
-const APPROVED_CONNECT_WILDCARDS = [
-  'https://*.1drv.com',
-  'https://*.sharepoint.com',
-  'https://*.microsoftpersonalcontent.com',
-  'https://*.dms.live.net'
-];
-
 let failures = 0;
+const expectedMeta = buildCsp();
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
   const match = text.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i);
@@ -47,16 +18,37 @@ for (const file of files) {
     continue;
   }
   const csp = match[1];
-  for (const token of required) {
-    if (!csp.includes(token)) {
-      console.error(`FAIL ${file}: CSP missing ${token}`);
-      failures += 1;
-    }
+  if (csp !== expectedMeta) {
+    console.error(`FAIL ${file}: CSP differs from scripts/lib/csp-policy.mjs; run npm run csp:generate`);
+    failures += 1;
   }
   let connectForWildcardCheck = csp.replace(/localhost:\*/g, '').replace(/127\.0\.0\.1:\*/g, '');
   for (const wildcard of APPROVED_CONNECT_WILDCARDS) connectForWildcardCheck = connectForWildcardCheck.split(wildcard).join('');
   if (/frame-src[^;]*\*/.test(csp) || /connect-src[^;]*\*/.test(connectForWildcardCheck)) {
     console.error(`FAIL ${file}: CSP contains an arbitrary frame/connect wildcard`);
+    failures += 1;
+  }
+}
+
+const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
+const wildcardHeader = (vercel.headers || []).find((entry) => entry.source === '/(.*)');
+const vercelCsp = wildcardHeader && (wildcardHeader.headers || []).find((entry) => String(entry.key).toLowerCase() === 'content-security-policy');
+if (!vercelCsp || vercelCsp.value !== buildCsp({ includeFrameAncestors: true })) {
+  console.error('FAIL vercel.json: CSP header differs from the canonical policy');
+  failures += 1;
+}
+const server = readFileSync('scripts/serve-static.mjs', 'utf8');
+if (!server.includes("buildCsp({ includeFrameAncestors: true })")) {
+  console.error('FAIL scripts/serve-static.mjs: local server does not consume the canonical CSP');
+  failures += 1;
+}
+
+for (const [file, budget] of Object.entries(INLINE_CODE_BUDGETS)) {
+  const text = readFileSync(file, 'utf8');
+  const scriptCount = Array.from(text.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi)).length;
+  const styleCount = Array.from(text.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/gi)).length;
+  if (scriptCount > budget.scripts || styleCount > budget.styles) {
+    console.error(`FAIL ${file}: inline-code budget increased (scripts ${scriptCount}/${budget.scripts}, styles ${styleCount}/${budget.styles})`);
     failures += 1;
   }
 }

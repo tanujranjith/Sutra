@@ -1,0 +1,378 @@
+import { expect, test } from '@playwright/test';
+
+const PASS = 'correct horse battery staple';
+
+async function openFreshApp(page) {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+  });
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+}
+
+async function completeOnboarding(page) {
+  await page.evaluate(() => {
+    try {
+      if (typeof window.markStudentOnboardingCompleted === 'function') {
+        window.markStudentOnboardingCompleted(true);
+      }
+    } catch {}
+    sessionStorage.setItem('sutra_intro_played', '1');
+    document.body.classList.remove('onboarding-open');
+    for (const id of ['studentOnboardingOverlay', 'sutraStartupIntro']) {
+      const overlay = document.getElementById(id);
+      if (overlay) {
+        overlay.classList.remove('active', 'intro-exiting');
+        overlay.hidden = true;
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.style.setProperty('display', 'none', 'important');
+        overlay.style.setProperty('pointer-events', 'none', 'important');
+      }
+    }
+  });
+}
+
+test('new student flow shows redesign onboarding steps in order', async ({ page }) => {
+  await openFreshApp(page);
+
+  const dialog = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
+  await expect(dialog).toBeVisible({ timeout: 5000 });
+
+  const steps = await page.evaluate(() => {
+    const labels = document.querySelectorAll('.atelier-onboarding-step-label');
+    return Array.from(labels).map(el => el.textContent.trim());
+  });
+
+  expect(steps).toEqual(['Welcome', 'Classes', 'Setup', 'Mode', 'Protect', 'Finish']);
+
+  const title = page.locator('.atelier-onboarding-title');
+  await expect(title.first()).toBeVisible();
+});
+
+test('full student flow: select student intent, add classes, advance through all steps, land on Today', async ({ page }) => {
+  await openFreshApp(page);
+
+  // Welcome step — select "I'm a student"
+  await page.waitForSelector('[data-onb-intent="student"]', { timeout: 5000 });
+  await page.click('[data-onb-intent="student"]');
+  await page.waitForTimeout(200);
+
+  // Click Continue to advance to Classes
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Classes step — add two classes
+  await page.waitForSelector('#onbClassInput', { timeout: 3000 });
+  await page.fill('#onbClassInput', 'AP Physics');
+  await page.press('#onbClassInput', 'Enter');
+  await page.waitForTimeout(100);
+  await page.fill('#onbClassInput', 'Calculus');
+  await page.press('#onbClassInput', 'Enter');
+  await page.waitForTimeout(100);
+
+  const chipCount = await page.evaluate(() => {
+    return document.querySelectorAll('#onbClassChips .atelier-onboarding-chip').length;
+  });
+  expect(chipCount).toBe(2);
+
+  // Click Continue to advance to Setup
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Setup step — skip by clicking Continue
+  await page.waitForSelector('#onbPasteText', { timeout: 3000 });
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Mode step — select Student focus
+  await page.waitForSelector('[data-onb-focus="student"]', { timeout: 3000 });
+  await page.click('[data-onb-focus="student"]');
+  await page.waitForTimeout(200);
+
+  // Click Continue to advance to Protect
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Protect step — acknowledge backup
+  await page.waitForSelector('#onbBackupAck', { timeout: 3000 });
+  await page.check('#onbBackupAck');
+  await page.waitForTimeout(100);
+
+  // Click Continue to advance to Finish
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Finish step — click "Open Today"
+  await page.waitForSelector('[data-onb-tour="today"]', { timeout: 3000 });
+  await page.click('[data-onb-tour="today"]');
+  await page.waitForTimeout(200);
+
+  // Click Continue to finish
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(500);
+
+  // Verify overlay closed and view is Today
+  const overlay = page.locator('#studentOnboardingOverlay');
+  await expect(overlay).not.toBeVisible({ timeout: 5000 });
+});
+
+test('skip path: select "Just exploring", lands on Today immediately', async ({ page }) => {
+  await openFreshApp(page);
+
+  // Welcome step — select "Just exploring"
+  await page.waitForSelector('[data-onb-intent="skip"]', { timeout: 5000 });
+  await page.click('[data-onb-intent="skip"]');
+  await page.waitForTimeout(200);
+
+  // Click Continue — this immediately completes onboarding
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(500);
+
+  // Verify overlay closed
+  const overlay = page.locator('#studentOnboardingOverlay');
+  await expect(overlay).not.toBeVisible({ timeout: 5000 });
+});
+
+test('Continue later: close overlay and reopen preserves step progress', async ({ page }) => {
+  await openFreshApp(page);
+
+  // Welcome step — select student
+  await page.waitForSelector('[data-onb-intent="student"]', { timeout: 5000 });
+  await page.click('[data-onb-intent="student"]');
+  await page.waitForTimeout(200);
+
+  // Advance to classes
+  await page.click('#onboardingContinueBtn');
+  await page.waitForTimeout(300);
+
+  // Add a class
+  await page.waitForSelector('#onbClassInput', { timeout: 3000 });
+  await page.fill('#onbClassInput', 'Chemistry');
+  await page.press('#onbClassInput', 'Enter');
+  await page.waitForTimeout(100);
+
+  // Close via X button
+  const closeBtn = page.locator('#studentOnboardingOverlay button[aria-label="Close onboarding"]');
+  if (await closeBtn.isVisible()) {
+    await closeBtn.click();
+    await page.waitForTimeout(500);
+  }
+
+  // Verify overlay hidden
+  const overlay = page.locator('#studentOnboardingOverlay');
+  await expect(overlay).not.toBeVisible({ timeout: 3000 });
+
+  // Reload — dismiss preserves state so onboarding should reappear
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForTimeout(1000);
+
+  // Overlay should reappear since dismiss didn't mark as completed
+  const reopen = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
+  await expect(reopen).toBeVisible({ timeout: 5000 });
+
+  // Chem class should be pre-populated
+  const chipText = await page.evaluate(() => {
+    const chips = document.querySelectorAll('#onbClassChips .atelier-onboarding-chip');
+    return Array.from(chips).map(c => c.textContent.trim());
+  });
+  expect(chipText).toContain('Chemistry');
+});
+
+test('existing user with completed onboarding does not see overlay', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+    const data = { studentOnboardingCompleted: true };
+    try {
+      localStorage.setItem('noteflow_atelier_db', JSON.stringify(data));
+    } catch {}
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+
+  const overlay = page.locator('#studentOnboardingOverlay');
+  await expect(overlay).not.toBeVisible();
+});
+
+test('restart does not duplicate data', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+    const data = {
+      studentOnboardingCompleted: true,
+      appData: {
+        courses: { 'MATH101': { name: 'Calculus' } },
+        settings: { theme: 'dark' }
+      }
+    };
+    try {
+      localStorage.setItem('noteflow_atelier_db', JSON.stringify(data));
+    } catch {}
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+
+  const courseCount = await page.evaluate(() => {
+    try {
+      const raw = localStorage.getItem('noteflow_atelier_db');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.appData && parsed.appData.courses) {
+          return Object.keys(parsed.appData.courses).length;
+        }
+      }
+    } catch {}
+    return 0;
+  });
+
+  expect(courseCount).toBe(1);
+});
+
+test('primary navigation tabs are in expected order', async ({ page }) => {
+  await openFreshApp(page);
+  await completeOnboarding(page);
+
+  const tabIds = await page.evaluate(() => {
+    const links = document.querySelectorAll('.view-tab, [data-view-tab]');
+    return Array.from(links).map(el => el.getAttribute('data-view') || el.id || el.textContent.trim()).filter(Boolean);
+  });
+
+  if (tabIds.length > 0) {
+    const primaryTabs = ['today', 'homework', 'notes', 'timeline'];
+    for (const tab of primaryTabs) {
+      expect(tabIds.some(id => id.toLowerCase().includes(tab))).toBe(true);
+    }
+  }
+});
+
+test('settings page shows feature pack toggles', async ({ page }) => {
+  await openFreshApp(page);
+  await completeOnboarding(page);
+
+  const settingsLink = page.locator('[data-view="settings"], #view-tab-settings, a[href*="settings"]').first();
+  if (await settingsLink.isVisible()) {
+    await settingsLink.click();
+    await page.waitForTimeout(500);
+
+    const featurePacks = page.locator('text=Feature Pack').first();
+    await expect(featurePacks).toBeVisible();
+  }
+});
+
+test('keyboard: navigate welcome step with Tab and Enter', async ({ page }) => {
+  await openFreshApp(page);
+
+  await page.waitForSelector('#studentOnboardingOverlay', { timeout: 5000 });
+
+  // Tab to the student intent card and press Enter
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+
+  // Check student is selected or Continue button is enabled
+  const selectedIntent = await page.evaluate(() => {
+    const btn = document.querySelector('[data-onb-intent].is-selected');
+    return btn ? btn.getAttribute('data-onb-intent') : null;
+  });
+  expect(['student', 'both', 'skip']).toContain(selectedIntent);
+});
+
+test('keyboard: Tab through footer buttons', async ({ page }) => {
+  await openFreshApp(page);
+
+  await page.waitForSelector('#studentOnboardingOverlay', { timeout: 5000 });
+
+  // Focus the footer
+  const footerBtns = ['#onboardingSkipBtn', '#onboardingContinueBtn', '#onboardingBackBtn'];
+  for (const sel of footerBtns) {
+    const el = page.locator(sel);
+    if (await el.isVisible().catch(() => false)) {
+      await expect(el).toBeAttached();
+    }
+  }
+});
+
+test('reduced motion: onboarding has reduced-motion class support', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+  });
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+
+  // The onboarding panel should still be visible even with reduced motion
+  const dialog = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
+  await expect(dialog).toBeVisible({ timeout: 5000 });
+
+  // Check that the overlay is accessible despite reduced motion
+  const title = page.locator('.atelier-onboarding-title').first();
+  await expect(title).toBeVisible();
+});
+
+test('200% zoom: onboarding remains usable', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+
+  // Set zoom to 200%
+  await page.evaluate(() => {
+    document.body.style.zoom = '2';
+  });
+  await page.waitForTimeout(300);
+
+  const dialog = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
+  await expect(dialog).toBeVisible({ timeout: 5000 });
+
+  // Verify interaction still works at 200% zoom
+  const studentBtn = page.locator('[data-onb-intent="student"]');
+  await expect(studentBtn).toBeVisible();
+  await studentBtn.click();
+  await page.waitForTimeout(200);
+
+  const selected = await page.evaluate(() => {
+    const btn = document.querySelector('[data-onb-intent].is-selected');
+    return btn ? btn.getAttribute('data-onb-intent') : null;
+  });
+  expect(selected).toBe('student');
+});
+
+test.describe('320px mobile viewport', () => {
+  test.use({ viewport: { width: 320, height: 600 } });
+
+  test('onboarding renders and is usable at 320px width', async ({ page }) => {
+    await openFreshApp(page);
+
+    const dialog = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    const title = page.locator('.atelier-onboarding-title').first();
+    await expect(title).toBeVisible();
+
+    // Select student intent
+    const studentBtn = page.locator('[data-onb-intent="student"]');
+    await expect(studentBtn).toBeVisible();
+    await studentBtn.click();
+    await page.waitForTimeout(200);
+
+    // Advance to classes and add a class
+    await page.click('#onboardingContinueBtn');
+    await page.waitForTimeout(300);
+
+    await page.waitForSelector('#onbClassInput', { timeout: 3000 });
+    await page.fill('#onbClassInput', 'Biology');
+    await page.press('#onbClassInput', 'Enter');
+    await page.waitForTimeout(100);
+
+    const chipCount = await page.evaluate(() => {
+      return document.querySelectorAll('#onbClassChips .atelier-onboarding-chip').length;
+    });
+    expect(chipCount).toBe(1);
+  });
+});

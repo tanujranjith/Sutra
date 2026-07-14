@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net https://YOUR-PROJECT-REF.supabase.co http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.supabase.co https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
     <title>Sutra</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -12,6 +12,7 @@
     <meta name="application-name" content="Sutra">
     <meta name="apple-mobile-web-app-title" content="Sutra">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Sutra is a local-first academic workspace for students — notes, assignments, planning, review, and an optional AI assistant. Your workspace stays in your browser by default.">
     <meta name="theme-color" content="#07111f">
     <link rel="manifest" href="manifest.webmanifest">
@@ -53,10 +54,20 @@
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
     <script src="src/core/migrations.js?v=20260614-migrations1"></script>
+    <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
-    <script src="src/persistence/workspace-db.js?v=20260709-db1"></script>
-    <script src="src/config/feature-manifest.js?v=20260709-features1"></script>
+    <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
+    <script src="src/domain/planner.js?v=20260710-planner1"></script>
+    <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
+    <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
+    <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
+    <script src="src/domain/import-engine.js?v=20260710-import1"></script>
+    <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
+    <script src="src/persistence/workspace-db.js?v=20260714-idb-factory1"></script>
+    <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
+    <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
+    <script src="src/config/feature-manifest.js?v=20260714-assistant-trust1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -82,7 +93,8 @@
     
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260710-timeline-controls-theme">
+    <link rel="stylesheet" href="styles/base/tokens.css?v=20260710-tokens1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -353,18 +365,18 @@
                                         <div class="tabs-shell">
                                             <div class="view-tabs" role="tablist" aria-label="Workspace views">
                                                     <button class="view-tab active" data-view="today">Today</button>
-                                                    <button class="view-tab" data-view="timeline">Timeline</button>
-                                                    <button class="view-tab" data-view="notes">Notes</button>
-                                                    <button class="view-tab" data-view="collegeapp">College</button>
-                                                    <button class="view-tab" data-view="life">Life</button>
-                                                    <button class="view-tab" data-view="business">Business</button>
                                                     <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
-                                                    <button id="tabCourses" class="view-tab" data-view="courses" title="Courses — your class cockpit"><i class="fas fa-book" aria-hidden="true"></i> Courses</button>
-                                                    <button id="tabAllDue" class="view-tab" data-view="alldue" title="All Due — everything due across your classes"><i class="fas fa-bell" aria-hidden="true"></i> All Due</button>
+                                                    <button class="view-tab" data-view="notes">Notes</button>
+                                                    <button class="view-tab" data-view="timeline">Timeline</button>
                                                     <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
                                                     <!-- Review and Cram Hub consolidated into Testing Hub. Buttons hidden but kept for backward-compat click handlers -->
                                                     <button id="tabReview" class="view-tab" data-view="review" hidden aria-hidden="true" style="display:none;">Review</button>
                                                     <button id="tabCramHub" class="view-tab" data-view="cramhub" hidden aria-hidden="true" style="display:none;" title="Cram Hub"><i class="fas fa-bolt" aria-hidden="true"></i> Cram Hub</button>
+                                                    <button class="view-tab" data-view="collegeapp">College</button>
+                                                    <button class="view-tab" data-view="life">Life</button>
+                                                    <button class="view-tab" data-view="business">Business</button>
+                                                    <button id="tabCourses" class="view-tab" data-view="courses" title="Courses — your class cockpit"><i class="fas fa-book" aria-hidden="true"></i> Courses</button>
+                                                    <button id="tabAllDue" class="view-tab" data-view="alldue" title="All Due — everything due across your classes"><i class="fas fa-bell" aria-hidden="true"></i> All Due</button>
                                                     <button id="tabAssistantView" class="view-tab" data-view="assistantview" title="Sutra Assistant — full-screen AI chat"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
                                                     <button class="view-tab" data-view="settings" aria-label="Settings" title="Settings">
                                                         <i class="fas fa-cog" aria-hidden="true"></i>
@@ -378,17 +390,17 @@
                                                         </button>
                                                         <div class="view-more-menu" id="moreViewsMenu" role="menu" aria-label="Overflow tabs">
                                                             <button class="view-tab view-more-item" data-view="today" role="menuitem">Today</button>
-                                                            <button class="view-tab view-more-item" data-view="timeline" role="menuitem">Timeline</button>
-                                                            <button class="view-tab view-more-item" data-view="notes" role="menuitem">Notes</button>
-                                                            <button class="view-tab view-more-item" data-view="collegeapp" role="menuitem">College</button>
-                                                            <button class="view-tab view-more-item" data-view="life" role="menuitem">Life</button>
-                                                            <button class="view-tab view-more-item" data-view="business" role="menuitem">Business</button>
                                                             <button class="view-tab view-more-item" data-view="homework" role="menuitem">Homework</button>
-                                                            <button class="view-tab view-more-item" data-view="courses" role="menuitem">Courses</button>
-                                                            <button class="view-tab view-more-item" data-view="alldue" role="menuitem">All Due</button>
+                                                            <button class="view-tab view-more-item" data-view="notes" role="menuitem">Notes</button>
+                                                            <button class="view-tab view-more-item" data-view="timeline" role="menuitem">Timeline</button>
                                                             <button class="view-tab view-more-item" data-view="apstudy" role="menuitem">Review &amp; Tests</button>
                                                             <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
                                                             <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;">Review</button>
+                                                            <button class="view-tab view-more-item" data-view="collegeapp" role="menuitem">College</button>
+                                                            <button class="view-tab view-more-item" data-view="life" role="menuitem">Life</button>
+                                                            <button class="view-tab view-more-item" data-view="business" role="menuitem">Business</button>
+                                                            <button class="view-tab view-more-item" data-view="courses" role="menuitem">Courses</button>
+                                                            <button class="view-tab view-more-item" data-view="alldue" role="menuitem">All Due</button>
                                                             <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
                                                             <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings">
                                                                 <i class="fas fa-cog" aria-hidden="true"></i>
@@ -3099,8 +3111,8 @@
             <main class="cc-main">
                 <div class="cc-search">
                     <i class="fas fa-magnifying-glass cc-search-icon" aria-hidden="true"></i>
-                    <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search this category" aria-label="Search settings" />
-                    <p class="cc-search-hint" id="settingsSearchHint">Search filters only the active category.</p>
+                    <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search all settings" aria-label="Search all settings" />
+                    <p class="cc-search-hint" id="settingsSearchHint">Searches all settings.</p>
                 </div>
 
                 <section class="cc-section active" data-settings-section="appearance">
@@ -7241,6 +7253,13 @@
     <!-- Deterministic conflict-aware Plan/Repair engine (preview-before-apply).
          Pure core + browser adapter; reads free windows + intelligence signals,
          writes nothing until the student approves a block. -->
+    <!-- Time utilities — shared pure primitives for timeline/scheduling.
+         Canonical source; eliminates duplicated helpers across app.js,
+         planning-engine, smart-reschedule, and timeline-drag. -->
+    <script src="src/core/time-utils.js?v=20260712-timeu1"></script>
+    <!-- Planning engine — deterministic scheduling, deadline ranking,
+         rescheduling, and daily plan generation for the command center.
+         No DOM coupling; pure data transformations on provided inputs. -->
     <script src="src/features/academic/planning-engine.js?v=20260616-plan1"></script>
     <!-- Starter Packs: local, declarative workspace seeds (window.SUTRA_STARTER_PACKS).
          Pure data, no logic; the app.js controller previews + applies on demand. -->
@@ -7254,7 +7273,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
-<script src="src/core/app.js?v=20260709-toolbar-comments"></script>
+<script src="src/core/app.js?v=20260714-assistant-trust1"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
@@ -7274,6 +7293,18 @@
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260707-batch1"></script>
+    <!-- Web Share Target — accepts shared text, URLs, files, and images from
+         the OS share sheet when Sutra is installed as a PWA. -->
+    <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
+    <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
+         Timeline and dragging blocks to reschedule them. -->
+    <script src="src/features/workspace/timeline-drag.js?v=20260712-drag1"></script>
+    <!-- Smart Reschedule — deterministic rescheduling with conflict detection
+         and proposal review. -->
+    <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
+    <!-- Backup Confidence — derives a confidence level from persistence-health,
+         backup, and cloud signals for the Today trust indicator. -->
+    <script src="src/features/workspace/backup-confidence.js?v=20260712-bc1"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
     <script src="src/core/issue-prompt.js?v=20260617-issue1"></script>
@@ -7638,8 +7669,8 @@
         })();
     </script>
     <!-- storage/taskbar measurement script removed because the taskbar was deleted -->
-    <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260615b-glass-uniform">
-    <link rel="stylesheet" href="styles/themes/glass.css?v=20260615b-glass-uniform">
+    <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260712-glass-fix">
+    <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260707-mobileopt2">
@@ -7655,6 +7686,7 @@
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260703-today2">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
+    <link rel="stylesheet" href="styles/base/contracts.css?v=20260710-contracts1">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

@@ -177,6 +177,85 @@
 
   function requiresConfirmation(def) { return def.confirmation === 'always' || def.confirmation === 'writes' || def.confirmation === 'destructive' || def.destructive; }
 
+  function stableHash(value) {
+    var text = JSON.stringify(value);
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function normalizePlanRows(input) {
+    var source = Array.isArray(input) ? input : (input && Array.isArray(input.actions) ? input.actions : []);
+    return source.map(function (row, index) {
+      var wrapped = isObject(row) && isObject(row.action);
+      return {
+        id: String((wrapped && row.id) || (!wrapped && row && row.planActionId) || ('step-' + (index + 1))),
+        action: clone(wrapped ? row.action : row),
+        dependsOn: (wrapped && Array.isArray(row.dependsOn) ? row.dependsOn : []).map(String),
+        index: index
+      };
+    });
+  }
+
+  /**
+   * Validate an entire assistant plan without mutating workspace state. The
+   * result is suitable for a human review screen and is the only accepted
+   * input to applyPlan(). Dependencies must reference an earlier step so the
+   * displayed order is also the execution order.
+   */
+  function previewPlan(input, context) {
+    var ctx = context || {};
+    var rows = normalizePlanRows(input);
+    if (!rows.length) return { ok: false, code: 'empty_plan', steps: [], issues: ['Plan has no actions.'] };
+    if (rows.length > (ctx.maxActions || MAX_PLAN_ACTIONS)) return { ok: false, code: 'plan_too_large', steps: [], issues: ['Plan has too many actions.'] };
+    var seenIds = new Set();
+    var issues = [];
+    var steps = rows.map(function (row, index) {
+      if (!row.id || seenIds.has(row.id)) issues.push('Step ' + (index + 1) + ': duplicate or missing id.');
+      row.dependsOn.forEach(function (dependency) {
+        if (!seenIds.has(dependency)) issues.push('Step ' + (index + 1) + ': dependency "' + dependency + '" must reference an earlier step.');
+      });
+      seenIds.add(row.id);
+      var checked = validate(row.action, ctx);
+      if (!checked.ok) issues.push('Step ' + (index + 1) + ': ' + checked.error);
+      var def = checked.definition || get(row.action && row.action.type);
+      var preview = null;
+      if (checked.ok && def) {
+        try { preview = def.preview(checked.value, ctx); }
+        catch (error) { issues.push('Step ' + (index + 1) + ': preview failed: ' + (error.message || String(error))); }
+      }
+      return {
+        id: row.id,
+        index: index,
+        type: String(row.action && row.action.type || ''),
+        dependsOn: row.dependsOn.slice(),
+        action: checked.ok ? checked.value : row.action,
+        preview: preview || { label: String(row.action && row.action.type || 'Unknown action') },
+        permissions: def ? def.permissions.slice() : [],
+        affectedEntities: def ? def.affectedEntities.slice() : [],
+        destructive: !!(def && def.destructive),
+        requiresConfirmation: !!(def && requiresConfirmation(def)),
+        valid: checked.ok
+      };
+    });
+    var normalizedActions = steps.map(function (step) { return step.action; });
+    var previewId = 'plan_' + stableHash({ actions: normalizedActions, dependencies: steps.map(function (step) { return [step.id, step.dependsOn]; }) });
+    return {
+      ok: issues.length === 0,
+      code: issues.length ? 'validation_failed' : 'ready_for_review',
+      previewId: previewId,
+      steps: steps,
+      issues: issues,
+      affectedEntities: Array.from(new Set(steps.flatMap(function (step) { return step.affectedEntities; }))).sort(),
+      permissions: Array.from(new Set(steps.flatMap(function (step) { return step.permissions; }))).sort(),
+      destructive: steps.some(function (step) { return step.destructive; }),
+      normalizedActions: normalizedActions
+    };
+  }
+
   function executeSync(action, context) {
     var ctx = context || {};
     var checked = validate(action, ctx);
@@ -242,6 +321,76 @@
     }
   }
 
+  async function applyPlan(preview, context) {
+    var ctx = context || {};
+    if (!preview || preview.ok !== true || !preview.previewId || !Array.isArray(preview.normalizedActions)) {
+      return { ok: false, code: 'invalid_preview', outcomes: [], warnings: ['Create a fresh valid preview before applying this plan.'] };
+    }
+    if (ctx.reviewed !== true) {
+      return { ok: false, code: 'review_required', outcomes: [], warnings: ['Explicit review is required before applying assistant actions.'] };
+    }
+    var expectedId = previewPlan(preview.steps.map(function (step) {
+      return { id: step.id, action: step.action, dependsOn: step.dependsOn };
+    }), ctx).previewId;
+    if (expectedId !== preview.previewId) {
+      return { ok: false, code: 'stale_preview', outcomes: [], warnings: ['The plan changed after preview. Review it again before applying.'] };
+    }
+    var planKey = 'plan:' + preview.previewId;
+    if (journal[planKey] && journal[planKey].status === 'committed') {
+      return Object.assign({ repeated: true }, journal[planKey].result);
+    }
+    var executionContext = Object.assign({}, ctx, { confirmed: true });
+    var result = await executePlan(preview.normalizedActions, executionContext);
+    var changedIds = [];
+    (result.outcomes || []).forEach(function (outcome) {
+      var value = outcome && outcome.result;
+      if (!value || typeof value !== 'object') return;
+      ['id', 'changedId', 'createdId'].forEach(function (key) { if (value[key] != null) changedIds.push(String(value[key])); });
+      if (Array.isArray(value.changedIds)) value.changedIds.forEach(function (id) { changedIds.push(String(id)); });
+    });
+    var planReceipt = Object.assign({}, result, {
+      planId: preview.previewId,
+      changedIds: Array.from(new Set(changedIds)),
+      warnings: result.ok ? [] : ['The plan did not fully apply. Review the per-step outcomes.'],
+      undo: result.ok ? { kind: 'assistant-plan', planId: preview.previewId, available: true } : { kind: 'assistant-plan', planId: preview.previewId, available: false },
+      persistence: { status: result.ok ? 'persisted' : (result.code === 'partial_rollback' ? 'uncertain' : 'rolled_back') }
+    });
+    if (planReceipt.ok) journal[planKey] = { status: 'committed', result: planReceipt };
+    return planReceipt;
+  }
+
+  async function rollbackPlan(receipt, context) {
+    if (!receipt || receipt.ok !== true || !Array.isArray(receipt.receipts)) {
+      return { ok: false, code: 'rollback_unavailable', outcomes: [], persistence: { status: 'unchanged' } };
+    }
+    var ctx = context || {};
+    var outcomes = [];
+    for (var i = receipt.receipts.length - 1; i >= 0; i -= 1) {
+      var committed = receipt.receipts[i];
+      try {
+        await committed.row.checked.definition.rollback(committed, ctx);
+        outcomes.push({ index: committed.index, type: committed.row.checked.value.type, status: 'rolled_back' });
+      } catch (error) {
+        outcomes.push({ index: committed.index, type: committed.row.checked.value.type, status: 'rollback_failed', message: error.message || String(error) });
+      }
+    }
+    var ok = outcomes.every(function (row) { return row.status === 'rolled_back'; });
+    if (ok && receipt.planId && journal['plan:' + receipt.planId]) journal['plan:' + receipt.planId].status = 'rolled_back';
+    if (ok && typeof ctx.persist === 'function') {
+      try { await ctx.persist('assistant-action-plan-rollback'); }
+      catch (error) { return { ok: false, code: 'rollback_persistence_failed', outcomes: outcomes, message: error.message || String(error), persistence: { status: 'failed' } }; }
+    }
+    return {
+      ok: ok,
+      code: ok ? 'rolled_back' : 'partial_rollback',
+      outcomes: outcomes.sort(function (a, b) { return a.index - b.index; }),
+      changedIds: Array.isArray(receipt.changedIds) ? receipt.changedIds.slice() : [],
+      warnings: ok ? [] : ['Some actions could not be rolled back.'],
+      undo: { kind: 'assistant-plan', planId: receipt.planId || '', available: false },
+      persistence: { status: ok ? 'persisted' : 'uncertain' }
+    };
+  }
+
   async function undoReceipt(receipt, context) {
     if (!receipt || !receipt.definition || typeof receipt.definition.undo !== 'function') return { ok: false, code: 'undo_unavailable' };
     try {
@@ -250,7 +399,7 @@
     } catch (error) { return { ok: false, code: 'undo_failed', message: error.message || String(error) }; }
   }
 
-  var api = { VERSION: '2.0.0', register: register, get: get, list: list, validate: validate, executeSync: executeSync, executePlan: executePlan, undo: undoReceipt, schemaFromLegacyFields: schemaFromLegacyFields, _journal: journal };
+  var api = { VERSION: '2.1.0', register: register, get: get, list: list, validate: validate, executeSync: executeSync, executePlan: executePlan, previewPlan: previewPlan, applyPlan: applyPlan, rollbackPlan: rollbackPlan, undo: undoReceipt, schemaFromLegacyFields: schemaFromLegacyFields, _journal: journal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantActionSystem = api;
 }(typeof window !== 'undefined' ? window : globalThis));

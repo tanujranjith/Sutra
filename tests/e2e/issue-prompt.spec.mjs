@@ -24,13 +24,13 @@ async function openApp(page) {
       overlay.style.setProperty('display', 'none', 'important');
     }
   });
-  await page.waitForFunction(() => !!window.SutraIssuePrompt && typeof window.reportError === 'function');
+  await page.waitForFunction(() => !!window.SutraIssuePrompt && typeof window.SutraReportError === 'function');
 }
 
 test('a reported error shows the issue prompt and highlights the issue button', async ({ page }) => {
   await openApp(page);
 
-  await page.evaluate(() => window.reportError(new Error('e2e forced failure'), { where: 'e2e' }, 'error'));
+  await page.evaluate(() => window.SutraReportError(new Error('e2e forced failure'), { where: 'e2e' }, 'error'));
 
   // Prompt becomes visible…
   await expect(page.locator('#sutraIssuePrompt.is-visible')).toBeVisible();
@@ -49,7 +49,7 @@ test('a reported error shows the issue prompt and highlights the issue button', 
 
 test('clicking Report issue opens the feedback modal', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => window.reportError(new Error('e2e forced failure'), { where: 'e2e' }, 'error'));
+  await page.evaluate(() => window.SutraReportError(new Error('e2e forced failure'), { where: 'e2e' }, 'error'));
   await expect(page.locator('#sutraIssuePrompt.is-visible')).toBeVisible();
 
   await page.locator('.issue-prompt-report').click();
@@ -93,9 +93,9 @@ test('warnings and already-handled errors do not nudge', async ({ page }) => {
 
   await page.evaluate(() => {
     // a mere warning
-    window.reportError(new Error('just a warning'), { where: 'e2e' }, 'warning');
+    window.SutraReportError(new Error('just a warning'), { where: 'e2e' }, 'warning');
     // an error the app already surfaced to the user (graceful path)
-    window.reportError(new Error('handled'), { where: 'e2e', userMessage: 'Saved locally instead.' }, 'error');
+    window.SutraReportError(new Error('handled'), { where: 'e2e', userMessage: 'Saved locally instead.' }, 'error');
   });
 
   // Give the listener a beat; nothing should appear.

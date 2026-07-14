@@ -198,11 +198,57 @@ test('study-material generation creates an editable guide Note and an interactiv
   expect(result.linked).toBe(true);
   expect(result.inHub).toBe(1);
 
+  // A section replacement is transactional: it creates an Activity receipt,
+  // supports authoritative Undo, and rolls back if the receipt cannot be made.
+  const regeneration = await page.evaluate(() => {
+    const api = window.SutraStudyMaterials;
+    const test = api.listTests()[0];
+    const original = JSON.parse(JSON.stringify(test.questions[0]));
+    const preview = {
+      testId: test.id,
+      index: 0,
+      baseUpdatedAt: test.updatedAt || '',
+      before: original,
+      after: { ...original, prompt: 'Which structure contains chlorophyll?', explanation: 'Chlorophyll is embedded in thylakoid membranes.' }
+    };
+    const applied = api.applyQuestionReplacement(preview);
+    const activity = window.SutraAssistantActions.getActivityLog().find(row => row.id === applied.activityId);
+    const changed = api.getTestById(test.id).questions[0].prompt;
+    const undone = window.SutraAssistantActions.undoAction(applied.activityId);
+    const restored = api.getTestById(test.id).questions[0].prompt;
+
+    const second = api.getTestById(test.id);
+    const rollbackPreview = {
+      testId: second.id,
+      index: 0,
+      baseUpdatedAt: second.updatedAt || '',
+      before: JSON.parse(JSON.stringify(second.questions[0])),
+      after: { ...second.questions[0], prompt: 'This must roll back.' }
+    };
+    const actions = window.SutraAssistantActions;
+    window.SutraAssistantActions = null;
+    const refused = api.applyQuestionReplacement(rollbackPreview);
+    window.SutraAssistantActions = actions;
+    return {
+      applied, activityType: activity && activity.actionType, changed,
+      undone, restored, original: original.prompt,
+      refused, afterRefusal: api.getTestById(test.id).questions[0].prompt
+    };
+  });
+  expect(regeneration.applied.ok).toBe(true);
+  expect(regeneration.applied.reversible).toBe(true);
+  expect(regeneration.activityType).toBe('regenerate_study_material_section');
+  expect(regeneration.changed).toBe('Which structure contains chlorophyll?');
+  expect(regeneration.restored).toBe(regeneration.original);
+  expect(regeneration.refused).toMatchObject({ ok: false, code: 'activity-failure' });
+  expect(regeneration.afterRefusal).toBe(regeneration.original);
+
   // The Testing Hub practice tab shows the generated test + Experimental badge
   // + Create from PDF entry point.
   const hub = await page.evaluate(async () => {
     window.setActiveView('testing');
     await new Promise(r => setTimeout(r, 300));
+
     window.switchTestingHubSection('practice');
     await new Promise(r => setTimeout(r, 300));
     const panel = document.querySelector('.sutra-gen-tests-panel');

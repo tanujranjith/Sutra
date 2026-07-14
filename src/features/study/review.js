@@ -574,12 +574,12 @@
             prompt: String(it.prompt || ''),
             answer: String(it.answer || ''),
             cloze: hasCloze(it.prompt),
-            image: (it.imageUrl && /^(data:image\/|https?:)/i.test(String(it.imageUrl))) ? String(it.imageUrl) : ''
+            image: (it.imageUrl && /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]{1,2800000}$/i.test(String(it.imageUrl))) ? String(it.imageUrl) : ''
         }));
         const data = JSON.stringify(cards).replace(/</g, '\\u003c');
         const title = esc(deck && deck.name ? deck.name : 'Flashcards');
         return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} — Flashcards</title>
 <style>
 :root{--bg:#0f1216;--card:#1b212b;--fg:#eef1f6;--muted:#9aa3b2;--accent:#6fa7ff;}
@@ -595,21 +595,19 @@ button:hover{border-color:var(--accent)}.count{color:var(--muted);font-size:.85r
 .hint{color:var(--muted);font-size:.8rem;margin-top:10px}
 </style></head><body>
 <h1>${title}</h1>
-<div class="card" id="card" onclick="flip()"></div>
-<div class="bar"><button onclick="prev()">← Prev</button><span class="count" id="count"></span><button onclick="next()">Next →</button></div>
+<button class="card" id="card" type="button" aria-label="Flip flashcard"></button>
+<div class="bar"><button id="prev" type="button">← Prev</button><span class="count" id="count"></span><button id="next" type="button">Next →</button></div>
 <div class="hint">Click the card to flip · ${cards.length} card${cards.length === 1 ? '' : 's'} · made with Sutra</div>
 <script>
 var CARDS=${data};var i=0,showBack=false;
-function clozeFront(t){return String(t).replace(/\\{\\{[^}]+\\}\\}/g,'<span class="cloze">[…]</span>')}
-function clozeBack(t){return String(t).replace(/\\{\\{([^}]+)\\}\\}/g,'<span class="fill">$1</span>')}
-function escq(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function render(){var c=CARDS[i]||{prompt:'',answer:''};var el=document.getElementById('card');var img=c.image?'<img src="'+c.image.replace(/"/g,'&quot;')+'" alt="">':'';
-if(!showBack){el['innerHTML']='<div class="ey">Prompt</div><div class="face">'+(c.cloze?clozeFront(c.prompt):escq(c.prompt))+'</div>'+(c.cloze?'':img);}
-else{el['innerHTML']='<div class="ey">Answer</div><div class="face">'+(c.cloze?clozeBack(c.prompt):escq(c.answer||'(no answer)'))+'</div>'+img;}
-document.getElementById('count').textContent=(i+1)+' / '+CARDS.length;}
+function text(tag,cls,value){var el=document.createElement(tag);if(cls)el.className=cls;el.textContent=String(value==null?'':value);return el}
+function appendCloze(el,value,reveal){var source=String(value==null?'':value),re=/\\{\\{([^}]+)\\}\\}/g,last=0,match;while((match=re.exec(source))){el.appendChild(document.createTextNode(source.slice(last,match.index)));el.appendChild(text('span',reveal?'fill':'cloze',reveal?match[1]:'[…]'));last=re.lastIndex}el.appendChild(document.createTextNode(source.slice(last)))}
+function appendImage(el,src){if(!src)return;var img=document.createElement('img');img.alt='';img.src=src;el.appendChild(img)}
+function render(){var c=CARDS[i]||{prompt:'',answer:''};var el=document.getElementById('card');el.replaceChildren();el.appendChild(text('div','ey',showBack?'Answer':'Prompt'));var face=text('div','face','');if(c.cloze)appendCloze(face,c.prompt,showBack);else face.textContent=showBack?(c.answer||'(no answer)'):c.prompt;el.appendChild(face);if(showBack||!c.cloze)appendImage(el,c.image);document.getElementById('count').textContent=(i+1)+' / '+CARDS.length;}
 function flip(){showBack=!showBack;render()}
 function next(){if(i<CARDS.length-1){i++;showBack=false;render()}}
 function prev(){if(i>0){i--;showBack=false;render()}}
+document.getElementById('card').addEventListener('click',flip);document.getElementById('prev').addEventListener('click',prev);document.getElementById('next').addEventListener('click',next);
 document.addEventListener('keydown',function(e){if(e.key===' '){e.preventDefault();flip()}else if(e.key==='ArrowRight')next();else if(e.key==='ArrowLeft')prev()});
 render();
 <\/script></body></html>`;
@@ -940,7 +938,7 @@ render();
             dupCount: marked.duplicates
         };
         viewState.view = 'create';
-        try { if (typeof setActiveView === 'function') setActiveView('review'); } catch (err) { /* non-critical */ }
+        try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); } catch (err) { /* non-critical */ }
         if (!reviewUiBound) { try { initReviewWorkspaceUI(); } catch (err) { /* non-critical */ } }
         render();
         try {
@@ -1949,11 +1947,24 @@ render();
             const btn = target.closest('[data-review-action]');
             if (!btn) return;
             const action = btn.getAttribute('data-review-action');
-            const deckId = btn.getAttribute('data-deck-id') || '';
-            const cardId = btn.getAttribute('data-card-id') || '';
-            const mode = btn.getAttribute('data-mode') || '';
-            handleAction(action, { deckId, cardId, mode });
+            handleAction(action, extractActionContext(btn));
         });
+    }
+
+    function extractActionContext(element) {
+        const read = (name) => element && element.getAttribute ? (element.getAttribute(name) || '') : '';
+        return {
+            deckId: read('data-deck-id'),
+            cardId: read('data-card-id'),
+            mode: read('data-mode'),
+            grade: read('data-grade'),
+            tileId: read('data-tile-id'),
+            correct: read('data-correct'),
+            answerId: read('data-answer-id'),
+            pairId: read('data-pair-id'),
+            questionId: read('data-question-id') || read('data-test-q'),
+            choiceId: read('data-choice-id') || read('data-choice-index')
+        };
     }
 
     function handleAction(action, ctx) {
@@ -2557,6 +2568,7 @@ render();
         session._queue = queue;
         session._index = 0;
         session._answerRevealed = false;
+        session._relearnCounts = Object.create(null);
         // Mode-specific bootstrap.
         if (mode === 'learn') {
             session._learnPool = queue.slice();
@@ -3409,6 +3421,14 @@ render();
         if (!item) return;
         applyGrade(item, grade);
         recordResult(session, item.id, grade);
+        if (grade === 'again') {
+            const counts = session._relearnCounts || (session._relearnCounts = Object.create(null));
+            const seen = Math.max(0, Number(counts[item.id]) || 0);
+            // Keep an "Again" card in this active session, but cap relearning
+            // appearances so one difficult card cannot create an infinite loop.
+            if (seen < 2) queue.push(item);
+            counts[item.id] = seen + 1;
+        }
         session._index = (session._index || 0) + 1;
         session._answerRevealed = false;
         persist();
@@ -3624,7 +3644,7 @@ render();
                     id: deck.id, type: 'review-deck',
                     title: `Deck: ${deck.name || 'Untitled'}`,
                     context: `${getItems(deck.id).length} cards`,
-                    action: () => { try { setActiveView('review'); openDeckById(deck.id); } catch (err) {} }
+                    action: () => { try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); openDeckById(deck.id); } catch (err) {} }
                 });
             }
         });
@@ -3637,7 +3657,7 @@ render();
                     id: item.id, type: 'review-card',
                     title: `Card: ${String(item.prompt || '').slice(0, 60)}`,
                     context: item.tags && item.tags.length ? item.tags.join(', ') : '',
-                    action: () => { try { setActiveView('review'); openDeckById(item.deckId); } catch (err) {} }
+                    action: () => { try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); openDeckById(item.deckId); } catch (err) {} }
                 });
             }
         });
@@ -3652,7 +3672,7 @@ render();
 
     function startReviewSessionFromShortcut(mode) {
         try {
-            if (typeof setActiveView === 'function') setActiveView('review');
+            if (typeof window.setActiveView === 'function') window.setActiveView('review');
             const dueItems = getDueItems();
             if (!dueItems.length) {
                 notify('No cards due right now.');
@@ -3701,7 +3721,7 @@ render();
     // when the class has no matching decks at all.
     function startReviewForCourse(courseRef, mode) {
         try {
-            if (typeof setActiveView === 'function') setActiveView('review');
+            if (typeof window.setActiveView === 'function') window.setActiveView('review');
             const deckIds = matchDecksForCourse(courseRef);
             const label = (courseRef && courseRef.name) ? courseRef.name : 'that class';
             if (!deckIds.length) {
@@ -3721,7 +3741,7 @@ render();
     window.renderReviewWorkspace = renderReviewWorkspace;
     window.getReviewTodayStats = getReviewTodayStats;
     window.getReviewSearchResults = getReviewSearchResults;
-    window.openReviewTab = function () { try { if (typeof setActiveView === 'function') setActiveView('review'); } catch (err) {} };
+    window.openReviewTab = function () { try { if (typeof window.setActiveView === 'function') window.setActiveView('review'); } catch (err) {} };
     window.startReviewSessionFromShortcut = startReviewSessionFromShortcut;
     window.startReviewForCourse = startReviewForCourse;
     window.countReviewDueForCourse = countDueForCourse;
@@ -3741,6 +3761,7 @@ render();
         parseImportLine: parseImportLine,
         getRetentionRate: getRetentionRate,
         getDueForecast: getDueForecast,
+        extractActionContext: (element) => extractActionContext(element),
         addCard: (input) => createItem(input || {}),
         getItems: (deckId) => getItems(deckId),
         buildShareableDeckHtml: (deck, items) => buildShareableDeckHtml(deck, items)

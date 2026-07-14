@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   'use strict';
 
   const HARD_DIFFICULTY_WEIGHT = Object.freeze({ easy: 1, medium: 2, hard: 3 });
@@ -345,7 +345,7 @@
       if (!store || typeof store.replace !== 'function') throw new Error('Canonical homework store is unavailable.');
       result = store.replace({ courses, tasks: tasks.map(task => serializeTask(task)) }, { reason: 'homework-ui' });
     } catch (error) {
-      if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.save' }, 'error');
+      if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.save' }, 'error');
       showHomeworkToast('Homework could not be saved to the workspace. Your change remains on screen — export a backup before closing.');
     }
     // Always notify so the UI re-renders the in-memory state, even when the
@@ -938,7 +938,7 @@
       : 'Estimated time to finish (from your plan)';
     const conflicts = sameDayConflictCount(task);
     return `
-      <li class="hw-card ${task.done ? 'is-done' : ''}" data-task-id="${escHtml(task.id)}">
+      <li class="hw-card ${task.done ? 'is-done' : ''}" data-task-id="${escHtml(task.id)}" draggable="true" data-drag-title="${escHtml(task.title)}" data-drag-source="homework" data-drag-source-id="${escHtml(task.id)}" data-drag-due-date="${escHtml(task.dueDate || '')}">
         <button type="button" class="hw-card-check" data-task-toggle="${escHtml(task.id)}" aria-label="${task.done ? 'Mark as open' : 'Mark as done'}"><i class="fas ${task.done ? 'fa-check-circle' : 'fa-circle'}" aria-hidden="true"></i></button>
         <div class="hw-card-main">
           <div class="hw-card-title" data-task-open="${escHtml(task.id)}" role="button" tabindex="0">${escHtml(task.title)}${pct != null ? ` <span class="hw-card-studio">&middot; ${pct}%</span>` : ''}</div>
@@ -1379,7 +1379,7 @@
       return window.SutraSafeStorage.set(key, payload, { importance: 'important', label: 'Your homework' });
     }
     const error = new Error('SutraSafeStorage is unavailable.');
-    if (typeof window.reportError === 'function') window.reportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
+    if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
     showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
     return { ok: false, error };
   }

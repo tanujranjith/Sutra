@@ -45,9 +45,11 @@ enable optional encrypted Google Drive sync.
 Some things are deliberately kept out of every backup file:
 
 - **AI provider API keys / credentials / tokens.** These live in
-  **`sessionStorage` only** (this browser session) and are **never written to
-  long-term storage and never included in any export** - `.sutra` or JSON. When
-  you export your workspace, the exporter actively **redacts** any nested
+  **`sessionStorage` by default**. If you explicitly enable remembered
+  credentials, only an AES-GCM encrypted envelope is written to localStorage;
+  its local secret remains in memory and is never saved. Raw keys and encrypted
+  credential envelopes are **never included in any export** - `.sutra` or JSON.
+  When you export your workspace, the exporter actively **redacts** any nested
   secret-shaped field (keys, tokens, passwords) so credentials cannot ride along
   by accident.
 - **Assistant conversation history is optional.** When **Save chat history** is
@@ -79,9 +81,8 @@ Sutra uses your browser's local storage facilities:
 - **localStorage** holds homework data, a small set of preferences, optional
   saved Assistant conversations, and the Storage Health/save-failure banner
   state needed to warn you after a reload if IndexedDB could not confirm a save.
-- **sessionStorage** holds session-scoped, never-persisted items — principally
-  your AI API keys and a compatibility copy of the current chat while the tab is
-  open.
+- **sessionStorage** holds session-scoped items — principally default-mode AI
+  API keys and a compatibility copy of the current chat while the tab is open.
 
 Some of these stores carry **legacy-named compatibility identifiers** - for
 example the workspace database is named `noteflow_atelier_db` and the
@@ -200,8 +201,11 @@ local storage:
    (`noteflow_atelier_db`, `noteflow_attachments_db`) and the localStorage keys.
 3. Reload. Sutra comes back **empty / at defaults**, as a fresh workspace.
 
-Session-only items (API keys, chat history) also clear automatically when the
-browser session ends.
+Session-only items such as API keys and the compatibility copy of the active
+chat clear automatically when the browser session ends. When **Save chat
+history** is enabled, visible managed conversations remain in local storage
+until you clear them; encrypted backups include them by default and plaintext
+recovery includes them only by explicit opt-in.
 
 > Tip: if Sutra ever misbehaves and you only want to disable custom CSS and
 > plugins **without** deleting anything, use **Safe Mode** instead of wiping -
@@ -219,7 +223,7 @@ browser session ends.
 | Does Sutra track me / send telemetry? | No. |
 | Where does my workspace live? | Locally - IndexedDB + localStorage in your browser. |
 | Do AI requests go through Sutra? | No. Browser -> the provider you choose. Sutra runs no model servers. |
-| Are my API keys saved or exported? | No. Session-only, never persisted, never exported (and actively redacted from exports). |
+| Are my API keys saved or exported? | No. Provider keys are session-only and are never persisted, exported, or synced. |
 | Does the local Intelligence layer call a server? | No. It computes signals on-device. |
 | Can I take my data with me? | Yes - export encrypted `.sutra` or JSON; legacy `.atelier` still imports. |
 | Can I delete everything? | Yes - clear this site's storage; nothing remains on any server. |

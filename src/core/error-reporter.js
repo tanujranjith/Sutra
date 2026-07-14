@@ -1,7 +1,7 @@
 /*
  * error-reporter.js — structured error handling for Sutra.
  *
- * Loaded right after safe-storage.js so `window.reportError` and the global
+ * Loaded right after safe-storage.js so `window.SutraReportError` and the global
  * error/rejection handlers exist before any feature module or app.js runs and
  * can therefore capture boot-time failures.
  *
@@ -55,6 +55,38 @@
     }
   }
 
+  // Defense-in-depth: strip anything that looks like a provider credential
+  // before it lands in the exportable diagnostics ring buffer. Error messages,
+  // stacks, and location.href can contain a provider endpoint — notably Gemini,
+  // which carries the API key in the URL (`?key=...`) rather than a header.
+  // Diagnostics are user-exportable, so a leaked key here would ride along.
+  var SECRET_SCRUBBERS = [
+    [/([?&](?:key|api[_-]?key|access_token|token)=)[^&#\s"']+/gi, '$1[redacted]'],
+    [/\bBearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [redacted]'],
+    [/\bAIza[0-9A-Za-z._\-]{10,}/g, 'AIza[redacted]'],
+    [/\b(sk|gsk|xai|pplx|sess)[-_][A-Za-z0-9]{6,}/gi, '$1-[redacted]']
+  ];
+  function scrubSecrets(value) {
+    if (typeof value !== 'string' || !value) return value;
+    var out = value;
+    try {
+      for (var i = 0; i < SECRET_SCRUBBERS.length; i++) {
+        out = out.replace(SECRET_SCRUBBERS[i][0], SECRET_SCRUBBERS[i][1]);
+      }
+    } catch (e) { /* regex is static; never let scrubbing throw */ }
+    return out;
+  }
+  function scrubDeep(value) {
+    if (typeof value === 'string') return scrubSecrets(value);
+    if (Array.isArray(value)) return value.map(scrubDeep);
+    if (value && typeof value === 'object') {
+      var out = {};
+      try { Object.keys(value).forEach(function (k) { out[k] = scrubDeep(value[k]); }); } catch (e) { return value; }
+      return out;
+    }
+    return value;
+  }
+
   function normalizeError(error) {
     if (!error) return { message: 'Unknown error', name: 'Error', stack: '' };
     if (typeof error === 'string') return { message: error, name: 'Error', stack: '' };
@@ -102,7 +134,7 @@
   }
 
   /**
-   * reportError(error, context, severity)
+   * SutraReportError(error, context, severity)
    *   error    — Error | string | unknown
    *   context  — string (a "where") OR object. Recognized object fields:
    *                where:        short location label
@@ -134,9 +166,9 @@
         at: t,
         severity: sev,
         name: info.name,
-        message: info.message,
-        stack: info.stack,
-        context: ctx
+        message: scrubSecrets(info.message),
+        stack: scrubSecrets(info.stack),
+        context: scrubDeep(ctx)
       };
       entries.push(entry);
       if (entries.length > MAX_ENTRIES) entries.shift();
@@ -189,7 +221,7 @@
     var env = {};
     try {
       env = {
-        href: location.href,
+        href: scrubSecrets(location.href),
         userAgent: navigator.userAgent,
         language: navigator.language,
         viewport: (window.innerWidth || 0) + 'x' + (window.innerHeight || 0),
@@ -254,8 +286,9 @@
     });
   } catch (e) { /* addEventListener always present in supported browsers */ }
 
-  window.reportError = reportError;
-  window.SutraReportError = reportError; // namespaced alias (reportError is a DOM-ish name)
+  // `window.reportError` is a browser platform API. Never replace it: doing so
+  // changes native error-reporting semantics for third-party and browser code.
+  window.SutraReportError = reportError;
   window.SutraErrorGuard = guard;
   window.SutraDiagnostics = {
     report: reportError,
@@ -264,6 +297,7 @@
     buildReport: buildReport,
     exportText: exportText,
     download: download,
+    scrubSecrets: scrubSecrets,
     clear: function () { entries.length = 0; }
   };
 })();

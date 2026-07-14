@@ -40,8 +40,20 @@
     // at render time, keeping help text and product facts in lockstep.
     // --------------------------------------------------------------
     const ROOT_CHOICES = [
+        // Guided Local Mode — workspace task paths first (no API key required).
+        { label: 'What should I do next?', to: 'next-step' },
+        { label: 'Show what is due', to: 'whats-due' },
+        { label: 'Handle overdue work', to: 'overdue' },
+        { label: 'Check grade risk', to: 'grade-risk' },
+        { label: 'Plan my day', to: 'plan-day' },
+        { label: 'Prepare for an exam', to: 'prepare-exam' },
+        { label: 'Break down an assignment', to: 'break-assignment' },
+        { label: 'Build a study plan', to: 'build-study-plan' },
+        { label: 'Organize my notes', to: 'organize-notes' },
+        { label: 'Run a weekly review', to: 'weekly-review' },
         { label: 'What is Sutra?', to: 'what-is-sutra' },
         { label: 'What can Sutra Assistant do?', to: 'assistant-capabilities' },
+        { label: 'Study with tutoring modes', to: 'tutoring-provider' },
         { label: 'How do I make flashcards?', to: 'flashcards' },
         { label: 'Back up my workspace', to: 'backup' },
         { label: 'Open Homework', nav: { view: 'homework' }, close: true },
@@ -80,6 +92,231 @@
             question: 'What would you like help with?',
             triggers: ['local help', 'help', 'i need help', 'show help', 'get help', 'open help', 'help menu', 'sutra help', 'help me with sutra', 'what can sutra help with'],
             choices: ROOT_CHOICES,
+            source: 'sutra-local-help'
+        },
+
+        // ---- Guided Local Mode: student task paths (no API key required) ----
+        // Unlike the how-to topic nodes below, these answer questions about the
+        // student's OWN workspace using Sutra's deterministic local engines and
+        // certified read-only / navigation actions. Anything that genuinely needs
+        // generation (a full recovery plan, a timed day plan) is offered only as
+        // an explicit "Use provider instead" follow-up — the local path never
+        // calls a provider on its own.
+        'next-step': {
+            id: 'next-step',
+            title: 'What should I do next?',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Sutra ranks your open work **locally — no AI needed**. It weighs due dates, how overdue something is, priority, grade impact, and what is already scheduled to surface what matters most right now.',
+                'Open **All Due** for the full ranked list, or run the **Deadline Radar** to see the next 7 days at a glance.'
+            ].join('\n\n'),
+            nav: { view: 'alldue' },
+            extraChoices: [
+                { label: 'Open All Due', action: { type: 'navigate_to_all_due' }, close: true },
+                { label: 'Run Deadline Radar', action: { type: 'run_deadline_radar' }, close: true }
+            ],
+            provider: 'Looking at my current workload, what is the single highest-leverage thing I should do right now? Explain why in one sentence.',
+            followups: ['whats-due', 'overdue'],
+            source: 'sutra-local-help'
+        },
+        'whats-due': {
+            id: 'whats-due',
+            title: 'Show what is due',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Everything with a due date lives in **All Due** and on your **Timeline**, tracked entirely on this device.',
+                'All Due groups your work by **overdue / today / this week**; the Timeline lays the same items out by day so you can see your load.'
+            ].join('\n\n'),
+            nav: { view: 'alldue' },
+            extraChoices: [
+                { label: 'Open All Due', action: { type: 'navigate_to_all_due' }, close: true },
+                { label: 'Open Timeline', nav: { view: 'timeline' }, close: true }
+            ],
+            followups: ['overdue', 'next-step'],
+            source: 'sutra-local-help'
+        },
+        overdue: {
+            id: 'overdue',
+            title: 'Handle overdue work',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Overdue items are flagged in the **Overdue** group of **All Due**. Locally — no AI required — you can reschedule them onto the Timeline, mark them complete, or bump their priority.',
+                'For a full recovery plan that re-sequences everything realistically around your free time, connect an AI provider.'
+            ].join('\n\n'),
+            steps: [
+                'Open **All Due** and look at the **Overdue** group.',
+                'Reschedule, complete, or reprioritize each item.',
+                'Optionally schedule focus blocks for them on the **Timeline**.'
+            ],
+            nav: { view: 'alldue' },
+            extraChoices: [
+                { label: 'Open All Due', action: { type: 'navigate_to_all_due' }, close: true }
+            ],
+            provider: 'Build me a realistic recovery plan for my overdue work as timeline blocks and tasks.',
+            followups: ['next-step', 'plan-day'],
+            source: 'sutra-local-help'
+        },
+        'grade-risk': {
+            id: 'grade-risk',
+            title: 'Check grade risk',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Grade math in Sutra is always **deterministic and local** — the AI never computes it.',
+                'The **Grade Planner** shows your current standing. Sutra can also rank which missing assignments hurt your grade the most, or explain the risk for a course — all computed on this device.'
+            ].join('\n\n'),
+            nav: { view: 'courses' },
+            extraChoices: [
+                { label: 'Explain my grade risk', action: { type: 'explain_grade_risk' }, close: true },
+                { label: 'Rank missing work by grade impact', action: { type: 'rank_missing_work_by_grade_impact' }, close: true }
+            ],
+            followups: ['whats-due', 'next-step'],
+            source: 'sutra-local-help'
+        },
+        'plan-day': {
+            id: 'plan-day',
+            title: 'Plan my day',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Sutra can check your next 7 days **locally** for overloaded days, scheduling conflicts, unscheduled priorities, AP exams without study time, and review backlog — no AI needed.',
+                'Building a full **timed** day plan around your available hours uses AI generation; connect a provider for that.'
+            ].join('\n\n'),
+            nav: { view: 'timeline' },
+            extraChoices: [
+                { label: 'Check my schedule for problems (local)', action: { type: 'repair_plan' }, close: true },
+                { label: 'Open Timeline', nav: { view: 'timeline' }, close: true }
+            ],
+            provider: 'Plan my day from my open tasks and timeline. Propose timeline blocks for the most important items.',
+            followups: ['next-step', 'overdue'],
+            source: 'sutra-local-help'
+        },
+        'prepare-exam': {
+            id: 'prepare-exam',
+            title: 'Prepare for an exam',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Your exams live in **AP Study** and the **Cram Hub**, tracked on this device. Sutra\'s local 7-day schedule check flags **AP exams that have no study time** blocked out yet.',
+                'A full, personalized study plan sized around your available days uses AI generation — connect a provider for that.'
+            ].join('\n\n'),
+            nav: { view: 'apstudy' },
+            extraChoices: [
+                { label: 'Check my schedule for gaps (local)', action: { type: 'repair_plan' }, close: true },
+                { label: 'Open Cram Hub', nav: { view: 'cramhub' }, close: true }
+            ],
+            provider: 'Build me a study plan for my next exam as realistic timeline blocks.',
+            followups: ['build-study-plan', 'plan-day'],
+            source: 'sutra-local-help'
+        },
+        'break-assignment': {
+            id: 'break-assignment',
+            title: 'Break down an assignment',
+            category: 'guided',
+            local: true,
+            answer: [
+                '**Assignment Studio** (in Homework) breaks a big assignment into milestones you can schedule and check off — all managed locally.',
+                'Auto-generating a milestone breakdown with sensible due dates uses AI; connect a provider for that.'
+            ].join('\n\n'),
+            nav: { view: 'homework' },
+            extraChoices: [
+                { label: 'Open Homework', nav: { view: 'homework' }, close: true }
+            ],
+            provider: 'Break my next big assignment into milestones with realistic due dates.',
+            followups: ['build-study-plan', 'next-step'],
+            source: 'sutra-local-help'
+        },
+        'build-study-plan': {
+            id: 'build-study-plan',
+            title: 'Build a study plan',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Sutra schedules study blocks on your **Timeline**. Its local schedule check finds overloaded days, conflicts, and unscheduled priorities so you can place blocks where they fit.',
+                'Generating a full plan sized around your open work and free time uses AI — connect a provider for that.'
+            ].join('\n\n'),
+            nav: { view: 'timeline' },
+            extraChoices: [
+                { label: 'Check my schedule for problems (local)', action: { type: 'repair_plan' }, close: true },
+                { label: 'Open Timeline', nav: { view: 'timeline' }, close: true }
+            ],
+            provider: 'Build a realistic study plan as timeline blocks around my open work.',
+            followups: ['prepare-exam', 'plan-day'],
+            source: 'sutra-local-help'
+        },
+        'organize-notes': {
+            id: 'organize-notes',
+            title: 'Organize my notes',
+            category: 'guided',
+            local: true,
+            answer: [
+                '**Notes** supports folders, spaces, tags, and full-text search — everything you need to organize by class or project, entirely on this device.',
+                'Want Sutra to suggest a structure for you? That uses AI generation; connect a provider.'
+            ].join('\n\n'),
+            nav: { view: 'notes' },
+            extraChoices: [
+                { label: 'Open Notes', nav: { view: 'notes' }, close: true }
+            ],
+            provider: 'Suggest a clean folder and tag structure for my classes.',
+            followups: ['next-step', 'whats-due'],
+            source: 'sutra-local-help'
+        },
+        'weekly-review': {
+            id: 'weekly-review',
+            title: 'Run a weekly review',
+            category: 'guided',
+            local: true,
+            answer: [
+                'A weekly review is a quick pass over what you finished, what slipped, and what is coming — Sutra keeps the raw material (tasks, homework, timeline, review stats) on this device.',
+                'Sutra can draft a Weekly Review note for you; generating the written reflection uses AI.'
+            ].join('\n\n'),
+            nav: { view: 'today' },
+            extraChoices: [
+                { label: 'Open Today', nav: { view: 'today' }, close: true }
+            ],
+            provider: 'Draft a weekly review note from what I finished, what slipped, and what is due next week.',
+            followups: ['next-step', 'plan-day'],
+            source: 'sutra-local-help'
+        },
+        // Reusable "this needs generative AI" gate. Guided paths route here when a
+        // task genuinely can't be done locally, so a no-key student always gets a
+        // clear fork instead of a dead end or a silent provider call.
+        'needs-provider': {
+            id: 'needs-provider',
+            title: 'This step needs generative AI',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Sutra did as much as it can on this device. Finishing this step — writing, open-ended planning, or generating new content — needs a connected AI provider.',
+                'You can connect one (your key stays on this device), or keep going with what Sutra does locally.'
+            ].join('\n\n'),
+            choices: [
+                { label: 'Connect an AI provider', to: 'providers' },
+                { label: 'Show what Sutra does locally', to: 'assistant-capabilities' },
+                { label: 'Back to the guided menu', to: 'root' }
+            ],
+            source: 'sutra-local-help'
+        },
+        'tutoring-provider': {
+            id: 'tutoring-provider',
+            title: 'Structured tutoring modes',
+            category: 'guided',
+            local: true,
+            answer: [
+                'Explain, Hint First, Check My Attempt, Quiz Me, Diagnose My Mistake, Create Practice, Review Cards, Study Plan, Rubric feedback, Summarize Notes, and Teach From My Materials use a connected AI provider.',
+                'Sutra does not simulate a local free-text tutor. Without a provider, use the local study tools below or connect your own provider.'
+            ].join('\n\n'),
+            choices: [
+                { label: 'Connect a provider', to: 'providers' },
+                { label: 'Browse local study tools', to: 'assistant-capabilities' },
+                { label: 'Open Review', nav: { view: 'review' }, close: true },
+                { label: 'Open Testing Hub', nav: { view: 'testing' }, close: true },
+                { label: 'Open Notes', nav: { view: 'notes' }, close: true },
+                { label: 'Back', to: 'root' }
+            ],
             source: 'sutra-local-help'
         },
 

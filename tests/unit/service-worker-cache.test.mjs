@@ -80,8 +80,8 @@ function createWorker({ version, manifest, cacheStorage, network }) {
     addEventListener(type, listener) { listeners.set(type, listener); }
   };
   const source = SW_SOURCE.replace(
-    "v3-20260709-exact-assets",
-    version
+    /const CACHE_VERSION = `\$\{CACHE_FAMILY\}[^`]+`;/,
+    `const CACHE_VERSION = \`\${CACHE_FAMILY}${version}\`;`
   );
   vm.runInNewContext(source, {
     self,

@@ -25,6 +25,21 @@
     "cramSessions",
     "trash",
     "focusSessions",
+    "energyProfile",
+    "protectedTime",
+    "taskDependencies",
+    "studySessions",
+    "masteryRecords",
+    "confidenceObservations",
+    "studentDecisionState",
+    "assistantPermissions",
+    "assistantMemory",
+    "syncAuditLog",
+    "workspaceMeta",
+    "privateDocuments",
+    "sharedStudySessions",
+    "operatingManual",
+    "portfolioWorkspace",
     "testingHub",
     "focusTemplates",
     "customTabs",
@@ -35,9 +50,21 @@
     "settings",
     "ui",
     "globalTheme",
+    "migrationDiagnostics",
+    "compatibility",
     "localStorageSnapshot",
     "exportedAt"
   ],
+  "nestedPersistentContracts": {
+    "assistantChatHistory.messages": [
+      "role",
+      "content",
+      "claimType",
+      "sources",
+      "memoryUsedIds",
+      "receipt"
+    ]
+  },
   "localStorageSnapshotKeys": [
     "noteflow_focus_timer",
     "streakApp:settings",

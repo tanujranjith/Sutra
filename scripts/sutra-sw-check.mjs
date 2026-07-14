@@ -24,7 +24,10 @@ ok(!!sw, 'sw.js exists');
 if (sw) {
     ok(/CACHE_VERSION\s*=\s*(?:['"][^'"]+['"]|`[^`]+`)/.test(sw), 'sw uses a versioned cache name');
     ok(/caches\.keys\(\)[\s\S]*caches\.delete/.test(sw), 'sw deletes stale caches on activate');
-    ok(/req\.method\s*!==\s*'GET'/.test(sw), 'sw ignores non-GET requests (no POST caching)');
+    ok(/req\.method\s*!==\s*'GET'/.test(sw), 'sw ignores non-GET requests outside explicit local handlers');
+    ok(/req\.method\s*===\s*'POST'[\s\S]*\/share-target/.test(sw) && /handleShareTargetRequest\(req\)/.test(sw), 'sw explicitly handles the installed-PWA Share Target POST');
+    const shareHandler = sw.match(/async function handleShareTargetRequest\(request\)\s*\{[\s\S]*?\n\}/)?.[0] || '';
+    ok(!!shareHandler && !/caches\.|cachePut|fetch\(/.test(shareHandler), 'Share Target POST is retained locally and never cached or forwarded');
     ok(/url\.origin\s*!==\s*self\.location\.origin/.test(sw), 'sw never intercepts cross-origin requests (AI/Drive untouched)');
     ok(/isNavigation[\s\S]*fetch\(req\)[\s\S]*catch\([\s\S]*matchCurrentCache/.test(sw), 'navigations are network-first with a current-cache fallback');
     ok(/res\.type\s*!==\s*'basic'/.test(sw), 'only same-origin (basic) responses are cached — never opaque');
@@ -51,6 +54,21 @@ if (reg) {
 
 const html = read('Sutra.html');
 ok(!!html && /src=["']src\/boot\/sw-register\.js/.test(html), 'Sutra.html loads sw-register.js');
+
+const manifestText = read('manifest.webmanifest');
+let manifest = null;
+try { manifest = manifestText ? JSON.parse(manifestText) : null; } catch (error) { /* reported below */ }
+ok(!!manifest, 'manifest.webmanifest is valid JSON');
+if (manifest) {
+    const target = manifest.share_target || {};
+    ok(target.method === 'POST' && target.enctype === 'multipart/form-data', 'Share Target uses POST multipart receipt');
+    ok(target.params && target.params.title === 'title' && target.params.text === 'text' && target.params.url === 'url', 'Share Target preserves source title, text, and URL');
+    ok(Array.isArray(target.params && target.params.files) && target.params.files.some((entry) => entry && entry.name === 'files' && Array.isArray(entry.accept) && entry.accept.includes('application/pdf') && entry.accept.includes('image/png')), 'Share Target declares image, PDF, and document file intake');
+}
+
+const shareTarget = read('src/features/workspace/share-target.js') || '';
+ok(!/\blocalStorage\b/.test(shareTarget), 'Share Target avoids raw localStorage for temporary or permanent data');
+ok(/showShareConfirmModal/.test(shareTarget) && /routeApprovedShare/.test(shareTarget), 'Share Target separates preview from confirmed routing');
 
 if (failures) {
     console.error(`\nService worker check FAILED (${failures} issue${failures === 1 ? '' : 's'}).`);

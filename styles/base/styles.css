@@ -5028,6 +5028,13 @@
         }
         
         .tag .tag-remove {
+            appearance: none;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            line-height: 1;
             font-size: 10px;
             opacity: 0.7;
             margin-left: 2px;
@@ -5116,6 +5123,7 @@
         }
         
         .sidebar-tag {
+            appearance: none;
             padding: 2px 8px;
             border-radius: 10px;
             font-size: 11px;
@@ -12238,6 +12246,40 @@
     color: var(--text-secondary);
 }
 
+.timeline-empty-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.timeline-empty-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--accent, #4a90d9);
+    background: var(--accent, #4a90d9);
+    color: #fff;
+    transition: opacity 0.15s;
+}
+
+.timeline-empty-btn:hover {
+    opacity: 0.85;
+}
+
+.timeline-empty-btn-ghost {
+    background: transparent;
+    color: var(--accent, #4a90d9);
+    border-color: var(--border);
+}
+
+.timeline-empty-btn-ghost:hover {
+    background: color-mix(in srgb, var(--accent, #4a90d9) 8%, transparent);
+}
+
 .timeline-calendar-view {
     display: grid;
     gap: 12px;
@@ -18810,10 +18852,26 @@ body[data-theme-key="dark"] .pages-list .page-item.active > i {
     .editor pre,
     .editor code
 ) {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
+}
+
+/* The Glass theme is built around backdrop-filter translucency on exactly
+   these selectors (styles/themes/macos26-redesign.css §5 "SHARED GLASS
+   LAYER") — killing it here for every [class*="card"] silently flattened
+   every glass-themed card app-wide. Scope the kill to the other themes,
+   which never opted into blur on these elements anyway. */
+body:not([data-theme="glass"]):not([data-theme="liquidglass"]) :where(
+    [class*="card"],
+    .glass-panel,
+    .today-panel,
+    .page-item,
+    .neumo-chip,
+    .editor pre,
+    .editor code
+) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
 }
 
 :where(
@@ -34291,4 +34349,304 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
         flex-wrap: wrap;
     }
     .sutra-update-message { flex-basis: 100%; }
+}
+
+/* ── Share target modal ──────────────────────────────────────────────── */
+.sutra-share-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.sutra-share-card {
+    display: grid;
+    gap: 12px;
+    width: min(480px, 100%);
+    padding: 20px;
+    background: var(--surface, #fff);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.sutra-share-card h3,
+.sutra-share-card p { margin: 0; }
+
+.sutra-share-card label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.sutra-share-card select { min-height: 44px; }
+
+.sutra-share-title { font-weight: 700; }
+
+.sutra-share-text {
+    max-height: 160px;
+    margin: 0;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
+}
+
+.sutra-share-file {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.sutra-share-file img {
+    grid-column: 1 / -1;
+    max-width: 100%;
+    max-height: 220px;
+    margin: auto;
+    border-radius: 8px;
+}
+
+.sutra-share-file-name { overflow-wrap: anywhere; }
+.sutra-share-file-size,
+.sutra-share-status { color: var(--text-muted); font-size: 0.82rem; }
+
+.sutra-share-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.sutra-share-btn-primary {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: var(--accent, #4a90d9);
+    color: #fff;
+    transition: opacity 0.15s;
+}
+
+.sutra-share-btn-primary:hover { opacity: 0.85; }
+
+.sutra-share-btn-ghost {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    transition: background 0.15s;
+}
+
+.sutra-share-btn-ghost:hover {
+    background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
+}
+
+/* ── Timeline drag-and-drop ──────────────────────────────────────────── */
+.timeline-drop-zone {
+    position: relative;
+}
+
+.timeline-drop-zone.timeline-drop-hover {
+    outline: 2px dashed var(--accent, #4a90d9);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent, #4a90d9) 5%, transparent);
+}
+
+.timeline-drop-zone.timeline-drop-invalid {
+    outline: 2px solid var(--danger, #c43d4b);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--danger, #c43d4b) 8%, transparent);
+}
+
+.timeline-dragging {
+    opacity: 0.4;
+}
+
+.timeline-drag-ghost {
+    pointer-events: none;
+}
+
+[draggable="true"] {
+    cursor: grab;
+}
+
+[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.timeline-block-card[draggable="true"] {
+    touch-action: pan-y;
+}
+
+.timeline-schedule-trigger {
+    margin-inline-start: auto;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface, #fff);
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.timeline-schedule-trigger:hover,
+.timeline-schedule-trigger:focus-visible {
+    border-color: var(--accent, #4a90d9);
+    outline: 2px solid color-mix(in srgb, var(--accent, #4a90d9) 35%, transparent);
+    outline-offset: 2px;
+}
+
+.sutra-timeline-schedule-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.sutra-timeline-schedule-card {
+    display: grid;
+    gap: 0.8rem;
+    width: min(30rem, 100%);
+    max-height: 90vh;
+    padding: 1.25rem;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    background: var(--surface, #fff);
+    color: var(--text-primary);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.sutra-timeline-schedule-card label {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.sutra-timeline-schedule-card input {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--surface, #fff);
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.sutra-timeline-schedule-card button {
+    min-height: 2.75rem;
+}
+
+/* ── Smart Reschedule modal ──────────────────────────────────────────── */
+.sutra-reschedule-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.sutra-reschedule-card {
+    background: var(--surface, #fff);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.sutra-reschedule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sutra-reschedule-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--glass-01, rgba(0,0,0,0.02));
+    font-size: 0.82rem;
+}
+
+.sutra-reschedule-unplaced {
+    opacity: 0.6;
+    border-style: dashed;
+}
+
+.sutra-reschedule-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent, #4a90d9);
+}
+
+.sutra-reschedule-title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sutra-reschedule-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.sutra-reschedule-time {
+    font-weight: 600;
+    color: var(--accent, #4a90d9);
+    white-space: nowrap;
+}
+
+.sutra-reschedule-reason {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+    .sutra-reschedule-card {
+        width: 97% !important;
+        max-height: 90vh;
+    }
+    .sutra-reschedule-row {
+        grid-template-columns: auto 1fr;
+        gap: 6px;
+    }
+    .sutra-reschedule-time,
+    .sutra-reschedule-reason {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 520px) {
+    .sutra-share-card {
+        width: 95% !important;
+        max-height: 90vh;
+    }
 }

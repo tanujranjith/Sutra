@@ -186,7 +186,7 @@ test('Semester Setup extracts locally and applies only approved items', async ({
 
   const after = await page.evaluate(() => ({
     courses: window.courseHub.getCourses({ filter: 'all' }).map((c) => c.name),
-    hw: JSON.parse(localStorage.getItem('hwTasks:v2') || '[]'),
+    hw: window.SutraHomeworkStore.getSnapshot().tasks || [],
     overrides: window.SutraSchoolSchedule.getState().overrides,
     planner: window.SutraGradePlanner.getPlanner()
   }));
@@ -209,7 +209,9 @@ test('Assignment Studio milestones persist and surface as deadlines', async ({ p
       priority: 'high', difficulty: 'hard', recurrence: 'none', notes: '',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     }];
-    localStorage.setItem('hwTasks:v2', JSON.stringify(tasks));
+    // Seed into the canonical homework store (the source of truth Assignment Studio
+    // reads), not the legacy hwTasks:v2 localStorage key.
+    window.SutraHomeworkStore.replace({ courses: [], tasks }, { reason: 'test-seed' });
     window.dispatchEvent(new CustomEvent('homework:updated'));
     const added = window.SutraAssignmentStudio.addMilestones('qa-hw-studio-1', [
       { title: 'Outline', dueDate: '2099-04-01' },
@@ -220,7 +222,7 @@ test('Assignment Studio milestones persist and surface as deadlines', async ({ p
   expect(taskId).toBe('qa-hw-studio-1');
 
   const state = await page.evaluate(() => {
-    const tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
+    const tasks = window.SutraHomeworkStore.getSnapshot().tasks || [];
     const task = tasks.find((t) => t.id === 'qa-hw-studio-1');
     const deadlines = window.collectWorkspaceDeadlines ? window.collectWorkspaceDeadlines() : [];
     return {

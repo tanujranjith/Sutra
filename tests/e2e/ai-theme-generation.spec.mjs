@@ -89,6 +89,27 @@ test('generates a valid theme from a description through the Intelligence harnes
   Object.values(res.theme.colors).forEach(v => expect(v).toMatch(/^#[0-9a-f]{6}$/));
 });
 
+test('Gemini theme generation requests JSON mode and safely recovers a fenced response with a trailing comma', async ({ page }) => {
+  await openApp(page);
+  let requestBody = null;
+  await page.route('https://generativelanguage.googleapis.com/**', async route => {
+    requestBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        candidates: [{ content: { parts: [{ text: `<think>Choosing calm paper colors.</think>\nHere you go:\n\`\`\`json\n${JSON.stringify(THEME_OK, null, 2).replace(/\n}/, '\n,}') }\n\`\`\`` }] } }]
+      })
+    });
+  });
+  await armProvider(page, 'gemini', 'gemma-3-27b-it');
+
+  const result = await page.evaluate(() => window.SutraThemeAI.generate('warm Japanese stationery'));
+  expect(result.ok).toBe(true);
+  expect(result.theme.name).toBe('Kyoto Paper');
+  expect(requestBody.generationConfig.responseMimeType).toBe('application/json');
+});
+
 test('validation repairs garbage, rejects unsafe values, and fills safe defaults (no network)', async ({ page }) => {
   await openApp(page);
   const out = await page.evaluate(() => {

@@ -96,11 +96,21 @@ const exportJsonFields = Array.from(new Set(
 ));
 
 // Fields read by importWorkspacePayload via `data.foo` accesses
-const importReadFields = importBody
+const directImportReadFields = importBody
     ? Array.from(new Set(
         Array.from(importBody.matchAll(/data\.([a-zA-Z_$][\w$]*)/g)).map(m => m[1])
     ))
     : [];
+// Some cohesive schema groups are intentionally restored through a reviewed
+// key list so migration/default handling stays uniform. Treat those literal
+// keys as importer reads as well as direct `data.foo` accesses.
+const groupedImportMatch = importBody && importBody.match(/sutra2WorkspaceFields\s*=\s*\[([\s\S]*?)\]/);
+const groupedImportFields = groupedImportMatch
+    ? Array.from(new Set(
+        Array.from(groupedImportMatch[1].matchAll(/'([a-zA-Z_$][\w$]*)'/g)).map(m => m[1])
+    ))
+    : [];
+const importReadFields = Array.from(new Set([...directImportReadFields, ...groupedImportFields]));
 
 // ---- 2) Field parity assertions --------------------------------------
 

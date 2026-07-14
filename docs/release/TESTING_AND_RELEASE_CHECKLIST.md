@@ -107,7 +107,7 @@ Sutra never breaks old data. Verify each:
       loading). Confirm custom CSS and plugins are skipped and **nothing is deleted**.
 - [ ] **Secrets excluded.** Export a workspace that has an API key configured and
       confirm **no API keys / provider credentials / tokens** appear anywhere in the
-      exported file (they live in sessionStorage only). The activity-log key
+      exported file (provider API keys are session-only). The activity-log key
       (`sutra:activityLog:v1`, migrated from `flow:activityLog:v1`) is **not** a
       secret and may appear.
 

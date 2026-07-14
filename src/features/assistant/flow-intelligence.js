@@ -215,19 +215,58 @@
     // --------------------------------------------------------------
     // Schedule helpers
     // --------------------------------------------------------------
-    // Does any timeline block reference this object (by linked id, source id,
-    // or fuzzy title match on the same day)? Used to detect "unscheduled" work.
-    function isItemScheduled(item) {
+    // Per-synchronous-frame schedule index. `isItemScheduled` used to run a
+    // fuzzy titleSimilarity() over every timeline block for every task/homework
+    // item — an O(items × blocks) scan that re-normalized every block name on
+    // each comparison (~2M regex passes on a heavy workspace, ~13s per Today /
+    // Timeline render because refresh() derives context several times). Building
+    // the linked-id set and pre-normalizing block-name token sets ONCE per frame
+    // makes each lookup an O(1) id check plus a cheap token-overlap pass with no
+    // repeated normalization. Matching semantics are unchanged (same id fields,
+    // same 0.6 overlap threshold). The cache clears on the next microtask so any
+    // later data change recomputes from scratch.
+    let __scheduleIndex = null;
+    function getScheduleIndex() {
+        if (__scheduleIndex) return __scheduleIndex;
         const blocks = liveTimeBlocks();
-        if (!blocks.length) return false;
-        const id = item && item.id;
-        const title = item && item.title;
-        return blocks.some(b => {
-            if (!b) return false;
-            if (id && (b.linkedTaskId === id || b.linkedHomeworkId === id || b.sourceId === id || b.taskId === id)) return true;
-            if (title && b.name && titleSimilarity(title, b.name) >= 0.6) return true;
-            return false;
+        const linkedIds = new Set();
+        const named = [];
+        blocks.forEach(b => {
+            if (!b) return;
+            [b.linkedTaskId, b.linkedHomeworkId, b.sourceId, b.taskId].forEach(v => {
+                if (v != null && String(v).trim()) linkedIds.add(String(v));
+            });
+            if (b.name) {
+                const toks = normalizeForMatch(b.name).split(' ').filter(Boolean);
+                if (toks.length) named.push({ set: new Set(toks), len: toks.length });
+            }
         });
+        __scheduleIndex = { count: blocks.length, linkedIds, named };
+        const clear = () => { __scheduleIndex = null; };
+        if (typeof queueMicrotask === 'function') queueMicrotask(clear);
+        else Promise.resolve().then(clear);
+        return __scheduleIndex;
+    }
+
+    // Does any timeline block reference this object (by linked id, source id,
+    // or fuzzy title match)? Used to detect "unscheduled" work.
+    function isItemScheduled(item) {
+        const idx = getScheduleIndex();
+        if (!idx.count) return false;
+        const id = item && item.id;
+        if (id != null && String(id).trim() && idx.linkedIds.has(String(id))) return true;
+        const title = item && item.title;
+        if (!title) return false;
+        const ta = normalizeForMatch(title).split(' ').filter(Boolean);
+        if (!ta.length) return false;
+        const named = idx.named;
+        for (let i = 0; i < named.length; i += 1) {
+            const nb = named[i];
+            let hits = 0;
+            for (let j = 0; j < ta.length; j += 1) if (nb.set.has(ta[j])) hits += 1;
+            if (hits / Math.max(ta.length, nb.len) >= 0.6) return true;
+        }
+        return false;
     }
 
     function detectConflicts() {
@@ -293,7 +332,27 @@
     // --------------------------------------------------------------
     // Derived student-intelligence context
     // --------------------------------------------------------------
+    // A single Assistant refresh() derives context several times (quick actions,
+    // context chip, header subtitle, empty state, view-flow rows). Each
+    // derivation scans every task, homework row, timeline block and page. Cache
+    // the no-options result for the current synchronous frame and clear it on the
+    // next microtask so later data changes recompute. Callers never mutate the
+    // returned object in place, so the shared reference is safe.
+    let __studentContextCache = null;
     function deriveStudentContext(options) {
+        const hasOptions = options && Object.keys(options).length > 0;
+        if (!hasOptions && __studentContextCache) return __studentContextCache;
+        const result = computeStudentContext(options);
+        if (!hasOptions) {
+            __studentContextCache = result;
+            const clear = () => { __studentContextCache = null; };
+            if (typeof queueMicrotask === 'function') queueMicrotask(clear);
+            else Promise.resolve().then(clear);
+        }
+        return result;
+    }
+
+    function computeStudentContext(options) {
         const opts = options || {};
         const today = startOfToday();
         const todayKey = toISODate(today);
@@ -514,12 +573,21 @@
             window.SutraSafeStorage.set(ACTIVITY_LOG_KEY, trimmed, { importance: 'important', label: 'Assistant Activity' });
             return;
         }
-        if (typeof window.reportError === 'function') {
-            window.reportError(new Error('SutraSafeStorage is unavailable.'), { where: 'flow-intelligence.writeActivityLog' }, 'error');
+        if (typeof window.SutraReportError === 'function') {
+            window.SutraReportError(new Error('SutraSafeStorage is unavailable.'), { where: 'flow-intelligence.writeActivityLog' }, 'error');
         }
     }
     // record: { actionType, summary, userPrompt, provider, model, confidence,
     //   createdObjectIds:[{kind,id}], beforeSnapshot, reversible, status, batchId }
+    function redactActivityText(value) {
+        if (typeof value !== 'string' || !value) return value;
+        try {
+            if (window.SutraAssistantSafety && typeof window.SutraAssistantSafety.redactText === 'function') {
+                return window.SutraAssistantSafety.redactText(value);
+            }
+        } catch (e) { /* fall through to unredacted rather than drop the record */ }
+        return value;
+    }
     function logActivity(record) {
         const list = getActivityLog();
         const entry = Object.assign({
@@ -529,6 +597,12 @@
             reversible: true,
             createdObjectIds: []
         }, record || {});
+        // The activity log persists to sutra:activityLog:v1 and rides along in
+        // every export/import. A generic action prompt (unlike memory writes) is
+        // not sensitivity-screened upstream, so scrub credential-shaped strings
+        // from the free-text fields before they touch disk.
+        if (typeof entry.userPrompt === 'string') entry.userPrompt = redactActivityText(entry.userPrompt);
+        if (typeof entry.summary === 'string') entry.summary = redactActivityText(entry.summary);
         list.unshift(entry);
         writeActivityLog(list);
         return entry;

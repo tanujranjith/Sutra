@@ -41,6 +41,10 @@ const approved = [
   'https://*.sharepoint.com',
   'https://*.microsoftpersonalcontent.com',
   'https://*.dms.live.net',
+  // Sutra Cloud (Supabase) targets the user's own project ref, so the CSP pins a
+  // https://*.supabase.co wildcard. Allow the literal wildcard token where it
+  // appears in the embedded CSP strings (runtime host checks use the regex above).
+  'https://*.supabase.co',
   'https://docs.google.com',
   'https://aistudio.google.com',
   'https://myap.collegeboard.org',
@@ -118,8 +122,8 @@ for (const file of files) {
       continue;
     }
     // Sutra Cloud: any project on the Supabase platform is an approved family.
-    // The exact project origin is pinned in the CSP (no wildcard there); this
-    // lint only needs to confirm the host belongs to *.supabase.co.
+    // The CSP pins the https://*.supabase.co wildcard (the user's project ref is
+    // dynamic); this lint only needs to confirm the host belongs to *.supabase.co.
     if (/^https:\/\/[a-z0-9-]+\.supabase\.co\b/i.test(url)) {
       continue;
     }

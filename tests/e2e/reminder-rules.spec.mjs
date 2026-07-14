@@ -47,12 +47,14 @@ async function seedHomework(page, hoursAhead) {
     const iso = due.getFullYear() + '-' +
       String(due.getMonth() + 1).padStart(2, '0') + '-' +
       String(due.getDate()).padStart(2, '0');
-    const tasks = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]');
-    tasks.push({
-      id: 'rulespec_1', courseId, title: 'Rules Spec Lab', dueDate: iso,
-      dueTime: '', done: false, createdAt: Date.now()
-    });
-    localStorage.setItem('hwTasks:v2', JSON.stringify(tasks));
+    // Seed the homework into the canonical store (the source the notification/reminder
+    // system reads), not the legacy hwTasks:v2 localStorage key.
+    window.SutraHomeworkStore.transact((draft) => {
+      draft.tasks = (draft.tasks || []).concat([{
+        id: 'rulespec_1', courseId, title: 'Rules Spec Lab', dueDate: iso,
+        dueTime: '', done: false, createdAt: Date.now()
+      }]);
+    }, { reason: 'test-seed' });
     return { courseId };
   }, hoursAhead);
 }

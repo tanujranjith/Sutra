@@ -27,7 +27,7 @@
     // assistant action catalog / app router). Used to validate nav targets.
     const KNOWN_VIEWS = [
         'today', 'notes', 'homework', 'courses', 'alldue', 'timeline', 'review',
-        'cramhub', 'apstudy', 'collegeapp', 'life', 'business', 'settings', 'assistantview'
+        'cramhub', 'apstudy', 'testing', 'collegeapp', 'life', 'business', 'settings', 'assistantview'
     ];
 
     const AVAILABILITY = ['available', 'requires_setup', 'requires_provider', 'not_supported'];
@@ -447,6 +447,38 @@
             nav: { view: 'settings', section: 'assistant' },
             relatedActions: ['navigate', 'change_context_depth'],
             related: ['workspace-access', 'assistant-memory', 'activity-undo']
+        },
+        {
+            id: 'assistant-answer-receipts',
+            title: 'How this was answered receipts',
+            category: 'assistant',
+            availability: 'available',
+            summary: 'Each Assistant answer has a keyboard-accessible disclosure showing local/provider handling, workspace scope, sources, memory influence, attachments, actions, and transmission categories.',
+            body: [
+                'Open **How this was answered** under an Assistant response to inspect its provenance.',
+                'Local answers say **Answered locally** and **No provider contacted**. Provider answers name the provider/model, Workspace Access, selected text or conversation use, live-validated sources, attachment processing paths, deterministic engines, proposed actions, and information categories transmitted.',
+                'Deleted sources become **Source no longer available** with no deep link. Receipts never reveal API keys, tokens, locked-note bodies, sensitive memory text, raw prompts/context, or provider reasoning.'
+            ],
+            keywords: ['how was this answered', 'receipt', 'provenance', 'sources used', 'data transmitted', 'provider contacted', 'context sent', 'privacy disclosure'],
+            nav: { view: 'assistantview' },
+            relatedActions: [],
+            related: ['workspace-access', 'privacy-local-first', 'assistant-memory']
+        },
+        {
+            id: 'assistant-tutoring-modes',
+            title: 'Structured tutoring modes',
+            category: 'assistant',
+            availability: 'requires_provider',
+            summary: 'Provider-connected modes support explanations, progressive hints, attempt checking, one-question-at-a-time quizzes, mistake diagnosis, practice, Review cards, study plans, rubric feedback, summaries, and teaching from selected materials.',
+            body: [
+                'Choose **Explain, Hint First, Check My Attempt, Quiz Me, Diagnose My Mistake, Create Practice, Turn This Into Review Cards, Build a Study Plan, Compare My Work to a Rubric, Summarize My Notes,** or **Teach From My Materials** in the Assistant.',
+                'These are provider-backed generative modes. Without a provider Sutra does not simulate a free-text tutor; Guided Local Mode offers Connect a provider, local study tools, Review, Testing Hub, Notes, and Back.',
+                'For likely active assessments Sutra offers hints, concept help, attempt checking, or analogous practice. It never fabricates citations, quotes, interviews, experiments, or data.'
+            ],
+            keywords: ['tutor', 'tutoring', 'hint first', 'check my attempt', 'quiz me', 'diagnose mistake', 'practice questions', 'rubric feedback', 'teach from materials'],
+            nav: { view: 'assistantview' },
+            relatedActions: ['navigate'],
+            related: ['assistant-providers', 'local-help', 'action-confirmation']
         },
         {
             id: 'workspace-access',

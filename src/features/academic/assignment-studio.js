@@ -286,23 +286,6 @@
         var rows = homeworkSnapshot().courses;
         return Array.isArray(rows) ? rows : [];
     }
-    // Returns true only when the write actually persisted, so callers never report
-    // a false success (and silently lose the user's edit) when storage is degraded.
-    function writeTasks(tasks) {
-        var ok = false;
-        try {
-            if (!global.SutraHomeworkStore || typeof global.SutraHomeworkStore.transact !== 'function') throw new Error('Canonical homework store is unavailable.');
-            global.SutraHomeworkStore.transact(function (draft) {
-                draft.tasks = Array.isArray(tasks) ? tasks : [];
-            }, { reason: 'assignment-studio-update' });
-            ok = true;
-        } catch (error) {
-            if (typeof global.reportError === 'function') global.reportError(error, { where: 'assignment-studio.writeTasks' }, 'error');
-        }
-        if (ok) { try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ } }
-        return ok;
-    }
-
     function getTask(taskId) {
         var tasks = readTasks();
         for (var i = 0; i < tasks.length; i++) {
@@ -312,21 +295,35 @@
     }
 
     function updateTaskStudio(taskId, mutate) {
-        var tasks = readTasks();
         var found = false;
-        for (var i = 0; i < tasks.length; i++) {
-            if (String(tasks[i].id) === String(taskId)) {
-                var studio = normalizeStudio(tasks[i].studio) || normalizeStudio({ enabled: true });
-                mutate(studio, tasks[i]);
-                studio.updatedAt = new Date().toISOString();
-                tasks[i].studio = studio;
-                tasks[i].updatedAt = new Date().toISOString();
-                found = true;
-                break;
+        try {
+            if (!global.SutraHomeworkStore || typeof global.SutraHomeworkStore.transact !== 'function') {
+                throw new Error('Canonical homework store is unavailable.');
             }
+            // Locate and mutate the task inside the canonical transaction. A
+            // snapshot taken before transact() can overwrite reminder, Timeline,
+            // Homework, or Assistant edits that land between read and commit.
+            global.SutraHomeworkStore.transact(function (draft) {
+                var rows = Array.isArray(draft.tasks) ? draft.tasks : [];
+                for (var i = 0; i < rows.length; i++) {
+                    if (String(rows[i].id) !== String(taskId)) continue;
+                    var studio = normalizeStudio(rows[i].studio) || normalizeStudio({ enabled: true });
+                    mutate(studio, rows[i]);
+                    studio.updatedAt = new Date().toISOString();
+                    rows[i].studio = studio;
+                    rows[i].updatedAt = new Date().toISOString();
+                    found = true;
+                    break;
+                }
+            }, { reason: 'assignment-studio-update' });
+        } catch (error) {
+            if (typeof global.SutraReportError === 'function') {
+                global.SutraReportError(error, { where: 'assignment-studio.updateTaskStudio' }, 'error');
+            }
+            return false;
         }
-        if (!found) return false;
-        return writeTasks(tasks); // false if the persist failed → caller can warn
+        if (found) { try { global.dispatchEvent(new CustomEvent('homework:updated')); } catch (e) { /* non-critical */ } }
+        return found;
     }
 
     // ---- Deadlines bridge: milestones become first-class deadlines -------------

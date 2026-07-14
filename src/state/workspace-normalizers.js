@@ -32,9 +32,10 @@ const SUTRA_FEATURE_PACKS = Object.freeze({
     customization: Object.freeze({ label: 'Customization Pack', views: Object.freeze([]) })
 });
 
-// Public-beta default: a focused, student-first navigation. Core academic views
-// are on; broader optional modules (College planning, Life, Business, Course Hub)
-// are off by default and can be enabled from Settings → Feature tabs (Labs).
+// Student-first default navigation: the daily-loop core surfaces are on;
+// broader optional modules (AP Study, College planning, Life, Business, Course Hub,
+// Assistant) are off by default and enabled from Settings → Feature packs or
+// through onboarding.
 // Existing users keep their saved selections — normalizeEnabledViews only
 // overrides keys actually present in stored preferences. Review/Cram Hub stay
 // "enabled" so their consolidated Testing Hub redirects work even though they
@@ -44,7 +45,9 @@ const SUTRA_FEATURE_PACKS = Object.freeze({
 // which isViewEnabled() consults directly for 'assistantview' regardless of this
 // set — so listing it here would only be misleading, not functional. Existing
 // students who opted into Assistant keep it via their saved assistant.enabled.
-const STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'timeline', 'notes', 'homework', 'apstudy', 'review', 'cramhub']);
+// Focus is not a top-level tab — it is accessed from the sidebar, Today view,
+// and command palette across every mode.
+const STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'homework', 'notes', 'timeline', 'review', 'cramhub']);
 
 function getDefaultEnabledViews() {
     return OPTIONAL_FEATURE_VIEWS.reduce((acc, view) => {
@@ -62,4 +65,8 @@ function normalizeEnabledViews(raw) {
         }
     });
     return normalized;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { OPTIONAL_FEATURE_VIEWS, SUTRA_FEATURE_PACKS, STUDENT_DEFAULT_ENABLED_VIEWS, getDefaultEnabledViews, normalizeEnabledViews };
 }

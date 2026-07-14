@@ -34,7 +34,7 @@ function configureSupabase(page) {
 }
 
 async function installSupabaseMock(page) {
-  const state = { objects: new Map(), index: [], uploads: [], nextId: 1, nextVer: 1, settingsHits: 0 };
+  const state = { objects: new Map(), index: [], uploads: [], nextId: 1, nextVer: 1, settingsHits: 0, failNextIndex: false };
   await page.route(`${SUPA_URL}/**`, async route => {
     const req = route.request(); const url = new URL(req.url()); const method = req.method(); const path = url.pathname;
     const json = (s, b) => route.fulfill({ status: s, contentType: 'application/json', body: JSON.stringify(b) });
@@ -55,7 +55,10 @@ async function installSupabaseMock(page) {
       return json(200, { Key: `backups/${key}` });
     }
     if (path.startsWith('/storage/v1/object/backups/') && method === 'DELETE') { state.objects.delete(decodeURIComponent(path.replace('/storage/v1/object/backups/', ''))); return json(200, {}); }
-    if (path === '/rest/v1/backup_index' && method === 'POST') { const b = JSON.parse(req.postData() || '{}'); state.index.push({ id: `i${state.nextId++}`, path: b.path, label: b.label || 'Backup', size_bytes: b.size_bytes || 0, device_id: b.device_id || '', created_at: new Date(Date.UTC(2026, 5, 18, 12, state.nextVer++, 0)).toISOString() }); return route.fulfill({ status: 201, body: '' }); }
+    if (path === '/rest/v1/backup_index' && method === 'POST') {
+      if (state.failNextIndex) { state.failNextIndex = false; return json(500, { message: 'index unavailable' }); }
+      const b = JSON.parse(req.postData() || '{}'); state.index.push({ id: `i${state.nextId++}`, path: b.path, label: b.label || 'Backup', size_bytes: b.size_bytes || 0, device_id: b.device_id || '', created_at: new Date(Date.UTC(2026, 5, 18, 12, state.nextVer++, 0)).toISOString() }); return route.fulfill({ status: 201, body: '' });
+    }
     if (path === '/rest/v1/backup_index' && method === 'GET') return json(200, [...state.index].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)));
     if (path === '/rest/v1/backup_index' && method === 'DELETE') { const id = (url.searchParams.get('id') || '').replace('eq.', ''); state.index = state.index.filter(r => r.id !== id); return route.fulfill({ status: 204, body: '' }); }
     return route.fulfill({ status: 500, body: `Unhandled: ${method} ${url.href}` });
@@ -197,6 +200,37 @@ test('Supabase provider: backup uploads encrypted bytes only (no plaintext)', as
   expect(txt).not.toContain('sk-secret-UP');
   const ls = await page.evaluate(() => JSON.stringify({ ...localStorage }));
   expect(ls).not.toContain(PASS);
+});
+
+test('Supabase session credentials are tab-session only and legacy durable tokens are removed', async ({ page }) => {
+  await openApp(page);
+  await useSupabaseSignedIn(page);
+  const storage = await page.evaluate(() => ({
+    local: localStorage.getItem('sutra:supabaseSession:v1'),
+    session: sessionStorage.getItem('sutra:supabaseSession:v1')
+  }));
+  expect(storage.local).toBeNull();
+  expect(storage.session).toContain('"refreshToken":"r1"');
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  expect(await page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
+});
+
+test('Supabase upload rolls back ciphertext when metadata indexing fails', async ({ page }) => {
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'ROLLBACK');
+  await useSupabaseSignedIn(page);
+  supa.failNextIndex = true;
+  const result = page.evaluate(() => window.SutraCloudSync.backupNow({ passphrase: 'correct horse battery staple' })
+    .then(() => ({ ok: true }))
+    .catch(error => ({ ok: false, name: error.name, message: error.message })));
+  const outcome = await result;
+  expect(outcome.ok).toBe(false);
+  expect(outcome.name).toBe('CloudBackupRolledBackError');
+  expect(outcome.message).toMatch(/removed automatically/i);
+  expect(supa.objects.size).toBe(0);
+  expect(supa.index).toHaveLength(0);
 });
 
 test('Supabase provider: restore reproduces workspace; wrong passphrase is safe', async ({ page }) => {

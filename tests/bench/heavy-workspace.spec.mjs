@@ -87,7 +87,14 @@ test('heavy workspace: real startup, render, encrypted export, import, and resto
   const measurements = await page.evaluate(async ({ pass }) => {
     const measure = async (fn) => { const start = performance.now(); const value = await fn(); return { ms: Math.round(performance.now() - start), value }; };
     const beforeResources = performance.getEntriesByType('resource').map((entry) => entry.name);
-    const disabledOptionalResources = beforeResources.filter((url) => /flow-assistant|business-workspace|assistant-view\.css/.test(url)).length;
+    const disabledPackAssets = Object.values(window.SUTRA_FEATURE_MANIFEST || {})
+      .filter(definition => definition && definition.defaultEnabled !== true)
+      .flatMap(definition => [...(definition.scripts || []), ...(definition.styles || [])])
+      .map(path => String(path).replace(/^\.\//, '').split('?')[0]);
+    const disabledOptionalResources = beforeResources.filter(url => {
+      const path = new URL(url).pathname.replace(/^\//, '');
+      return disabledPackAssets.some(asset => path.endsWith(asset));
+    }).length;
 
     const today = await measure(async () => { window.setActiveView('today'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return document.querySelectorAll('#view-today [data-task-id], #view-today .task-item, #view-today .today-item').length; });
     const timeline = await measure(async () => { window.setActiveView('timeline'); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return document.querySelectorAll('#view-timeline .time-block, #view-timeline [data-block-id]').length; });

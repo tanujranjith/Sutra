@@ -261,6 +261,14 @@
         'microphone': '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0"/><path d="M12 17v3"/><path d="M9 20.5h6"/>',
         'microphone-slash': '<rect x="9" y="3" width="6" height="8.5" rx="3"/><path d="M6 11a6 6 0 0 0 9.5 4.85"/><path d="M12 17v3"/><path d="M9 20.5h6"/><path d="M4 4l16 16"/>',
         'volume-high': '<path d="M4 9.5v5h3l4.5 3.5V6L7 9.5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/>',
+
+        // ── Assistant chat list & table toolbar (no longer fall through to the placeholder) ──
+        'message': '<path d="M4 6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 3.5v-3.5H6a2 2 0 0 1-2-2z"/>',
+        'box-archive': '<rect x="4" y="4" width="16" height="4" rx="1"/><rect x="5" y="8" width="14" height="12" rx="1"/><path d="M10 12.5h4"/>',
+        'arrow-up': '<path d="M12 19V5.5"/><path d="m7 10 5-5 5 5"/>',
+        'arrow-down': '<path d="M12 5v13.5"/><path d="m7 14 5 5 5-5"/>',
+        'object-group': '<rect x="4" y="4" width="9" height="9" rx="1.5"/><rect x="11" y="11" width="9" height="9" rx="1.5"/>',
+        'object-ungroup': '<rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.2"/>',
     };
 
     // Maps any FA name (and a few legacy aliases) to a canonical Atelier icon.
@@ -360,6 +368,7 @@
         'fa-location-dot': 'map-pin',
         'fa-marker': 'highlighter',
         'fa-feather': 'pen-fancy',
+        'fa-feather-pointed': 'pen-fancy',
         'fa-school': 'university',
         'fa-shapes': 'grid-large',
         'fa-icons': 'grid',
@@ -550,7 +559,18 @@
         'fa-file-pdf': 'file-lines',
         'fa-file-word': 'file-lines',
         'fa-file-excel': 'file-lines',
-        'fa-file-powerpoint': 'file-lines'
+        'fa-file-powerpoint': 'file-lines',
+
+        // Assistant chat list & table toolbar aliases.
+        'fa-message': 'message',
+        'fa-comment-alt': 'message',
+        'fa-pencil': 'pencil-alt',
+        'fa-box-archive': 'box-archive',
+        'fa-archive': 'box-archive',
+        'fa-arrow-up': 'arrow-up',
+        'fa-arrow-down': 'arrow-down',
+        'fa-object-group': 'object-group',
+        'fa-object-ungroup': 'object-ungroup'
     };
 
     // FA classes that aren't icons; ignored when looking up the icon name.

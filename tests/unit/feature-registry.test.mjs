@@ -59,3 +59,17 @@ test('feature definitions expose the full declarative contract', () => {
     assert.equal(Object.prototype.hasOwnProperty.call(feature, field), true, field);
   }
 });
+
+test('recovery mode prevents optional assets and initializers from loading', async () => {
+  globalThis.SutraRecoveryMode = { shouldLoadOptionalFeature: () => false };
+  try {
+    const { registry, calls } = harness();
+    const result = await registry.enable('heavy');
+    assert.equal(result.enabled, false);
+    assert.equal(result.loaded, false);
+    assert.match(result.error, /Recovery Mode/);
+    assert.deepEqual(calls, []);
+  } finally {
+    delete globalThis.SutraRecoveryMode;
+  }
+});

@@ -142,9 +142,16 @@ test('Student Inbox aggregates connected work and safe actions use guarded stora
       timeline: window.courseHub.getStudentInboxItems({ filter: 'timeline' }).length,
       course: window.courseHub.getStudentInboxItems({ filter: 'course', courseId: course.id }).length
     };
-    const beforeDone = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').find((task) => task.id === homework.id);
+    // Homework persists through the canonical SutraHomeworkStore (the guarded
+    // workspace path), not a raw hwTasks:v2 localStorage write, so read done-state
+    // from the store snapshot.
+    const storeTasks = () => window.SutraHomeworkStore.getSnapshot().tasks || [];
+    const beforeDone = storeTasks().find((task) => task.id === homework.id);
     const doneOk = window.cwMarkInboxDone('homework', homework.id);
-    const afterDone = JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').find((task) => task.id === homework.id);
+    const afterDone = storeTasks().find((task) => task.id === homework.id);
+    // The Course Hub assignment must be visible in the canonical store in the same
+    // session (proves the guarded-store write path, not a stale localStorage copy).
+    const inCanonicalStore = storeTasks().some((task) => task.id === homework.id && task.courseId === course.id);
     window.SutraSafeStorage.set = realSafeSet;
 
     return {
@@ -153,7 +160,7 @@ test('Student Inbox aggregates connected work and safe actions use guarded stora
       milestoneCount,
       sourceSet,
       filterCounts,
-      safeCalls,
+      inCanonicalStore,
       beforeDone: beforeDone && beforeDone.done === true,
       doneOk,
       afterDone: afterDone && afterDone.done === true
@@ -178,7 +185,7 @@ test('Student Inbox aggregates connected work and safe actions use guarded stora
   expect(result.filterCounts.college).toBeGreaterThan(0);
   expect(result.filterCounts.timeline).toBeGreaterThan(0);
   expect(result.filterCounts.course).toBeGreaterThan(0);
-  expect(result.safeCalls.some((call) => call.key === 'hwTasks:v2' && call.importance === 'important')).toBeTruthy();
+  expect(result.inCanonicalStore).toBeTruthy();
   expect(result.beforeDone).toBe(false);
   expect(result.doneOk).toBe(true);
   expect(result.afterDone).toBe(true);

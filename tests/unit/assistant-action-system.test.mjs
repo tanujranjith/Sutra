@@ -115,3 +115,67 @@ test('idempotency prevents repeated execution and undo uses definition metadata'
   assert.equal(undone.ok, true);
   assert.equal(undos, 1);
 });
+
+test('public plan API requires ordered dependencies and explicit reviewed apply', async () => {
+  const events = [];
+  const first = register({ confirmation: 'writes', permissions: [], affectedEntities: ['tasks'], preview: (action) => ({ label: `Create ${action.title}` }) });
+  const second = register({ confirmation: 'writes', permissions: [], affectedEntities: ['timeBlocks'], preview: (action) => ({ label: `Schedule ${action.title}` }) });
+  const invalid = system.previewPlan([
+    { id: 'later', action: { type: second.type, title: 'Schedule' }, dependsOn: ['missing'] }
+  ]);
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.issues[0], /earlier step/);
+
+  const preview = system.previewPlan([
+    { id: 'create', action: { type: first.type, title: 'Essay' } },
+    { id: 'schedule', action: { type: second.type, title: 'Essay' }, dependsOn: ['create'] }
+  ]);
+  assert.equal(preview.ok, true);
+  assert.deepEqual(preview.affectedEntities, ['tasks', 'timeBlocks']);
+  assert.equal((await system.applyPlan(preview, {})).code, 'review_required');
+
+  const receipt = await system.applyPlan(preview, {
+    reviewed: true,
+    commit(action) { events.push(`commit:${action.title}`); return { ok: true, changedId: `${action.type}-id` }; },
+    rollback(row) { events.push(`rollback:${row.result.changedId}`); return true; },
+    persist() { events.push('persist'); }
+  });
+  assert.equal(receipt.ok, true);
+  assert.equal(receipt.changedIds.length, 2);
+  assert.equal(receipt.persistence.status, 'persisted');
+  const rolledBack = await system.rollbackPlan(receipt, {
+    rollback(row) { events.push(`rollback:${row.result.changedId}`); return true; },
+    persist() { events.push('persist-rollback'); }
+  });
+  assert.equal(rolledBack.ok, true);
+  assert.deepEqual(rolledBack.outcomes.map((row) => row.status), ['rolled_back', 'rolled_back']);
+});
+
+test('reviewed plans are idempotent across retry and can run again only after confirmed rollback', async () => {
+  let commits = 0;
+  const def = register({ confirmation: 'never', permissions: [], persistence: { required: false } });
+  const preview = system.previewPlan([{ id: 'once', action: { type: def.type, title: 'Only once' } }]);
+  const context = {
+    reviewed: true,
+    commit: () => ({ ok: true, changedId: 'created-' + (++commits) }),
+    rollback: () => true
+  };
+  const first = await system.applyPlan(preview, context);
+  const retry = await system.applyPlan(preview, context);
+  assert.equal(first.ok, true);
+  assert.equal(retry.repeated, true);
+  assert.equal(commits, 1);
+  assert.equal((await system.rollbackPlan(first, context)).ok, true);
+  const reapplied = await system.applyPlan(preview, context);
+  assert.equal(reapplied.ok, true);
+  assert.equal(reapplied.repeated, undefined);
+  assert.equal(commits, 2);
+});
+
+test('applyPlan rejects a preview mutated after review', async () => {
+  const def = register({ confirmation: 'never', permissions: [] });
+  const preview = system.previewPlan([{ id: 'one', action: { type: def.type, title: 'Original' } }]);
+  preview.steps[0].action.title = 'Changed';
+  const result = await system.applyPlan(preview, { reviewed: true, commit: () => ({ ok: true }) });
+  assert.equal(result.code, 'stale_preview');
+});

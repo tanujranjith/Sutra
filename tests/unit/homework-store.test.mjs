@@ -38,14 +38,14 @@ test('workspace-only homework is normalized without needing legacy input', () =>
   assert.equal(migrated.tasks[0].courseId, 'math');
 });
 
-test('overlapping stores deduplicate by ID and semantic identity while preserving canonical IDs', () => {
+test('overlapping stores deduplicate stable IDs while preserving canonical IDs', () => {
   const primary = {
     courses: [{ id: 'canonical-course', name: 'Biology', updatedAt: '2026-07-01T00:00:00Z' }],
     tasks: [{ id: 'canonical-task', title: 'Read chapter 4', courseId: 'canonical-course', dueDate: '2026-07-20', notes: 'primary', updatedAt: '2026-07-01T00:00:00Z' }]
   };
   const legacy = {
-    courses: [{ id: 'legacy-course', name: 'biology', updatedAt: '2026-07-02T00:00:00Z' }],
-    tasks: [{ id: 'legacy-task', title: 'Read chapter 4', courseId: 'legacy-course', dueDate: '2026-07-20', notes: 'newer legacy detail', updatedAt: '2026-07-02T00:00:00Z' }]
+    courses: [{ id: 'canonical-course', name: 'Biology', updatedAt: '2026-07-02T00:00:00Z' }],
+    tasks: [{ id: 'canonical-task', title: 'Read chapter 4', courseId: 'canonical-course', dueDate: '2026-07-20', notes: 'newer legacy detail', updatedAt: '2026-07-02T00:00:00Z' }]
   };
   const merged = canonical.mergeLegacy(primary, legacy, { now: NOW });
   assert.equal(merged.courses.length, 1);
@@ -54,6 +54,36 @@ test('overlapping stores deduplicate by ID and semantic identity while preservin
   assert.equal(merged.tasks[0].id, 'canonical-task');
   assert.equal(merged.tasks[0].courseId, 'canonical-course');
   assert.equal(merged.tasks[0].notes, 'newer legacy detail');
+});
+
+test('same-looking courses and tasks with different IDs remain distinct', () => {
+  const normalized = canonical.normalizeWorkspace({
+    courses: [
+      { id: 'bio-fall', name: 'Biology' },
+      { id: 'bio-spring', name: 'Biology' }
+    ],
+    tasks: [
+      { id: 'worksheet-a', title: 'Chapter questions', courseId: 'bio-fall', dueDate: '2026-07-20' },
+      { id: 'worksheet-b', title: 'Chapter questions', courseId: 'bio-fall', dueDate: '2026-07-20' }
+    ]
+  }, { now: NOW });
+  assert.deepEqual(normalized.courses.map((item) => item.id), ['bio-fall', 'bio-spring']);
+  assert.deepEqual(normalized.tasks.map((item) => item.id), ['worksheet-a', 'worksheet-b']);
+
+  const ambiguous = canonical.normalizeWorkspace({
+    courses: normalized.courses,
+    tasks: [{ id: 'unassigned', title: 'Lab', courseName: 'Biology' }]
+  }, { now: NOW });
+  assert.equal(ambiguous.tasks[0].courseId, '');
+});
+
+test('task normalization preserves unknown cross-feature fields', () => {
+  const custom = { plugin: 'future', nested: { rubric: 5 }, flags: ['keep'] };
+  const normalized = canonical.normalizeWorkspace({
+    courses: [{ id: 'chem', name: 'Chemistry' }],
+    tasks: [{ id: 'lab', title: 'Lab', courseId: 'chem', custom }]
+  }, { now: NOW });
+  assert.deepEqual(normalized.tasks[0].custom, custom);
 });
 
 test('malformed legacy JSON is quarantined instead of silently discarded', () => {
@@ -97,6 +127,59 @@ test('course and assignments commit as one transaction and rollback on persisten
   assert.throws(() => store.transact((workspace) => workspace.tasks.push({ id: 'bad', title: 'Lost' }), { reason: 'fail' }), /disk full/);
   assert.deepEqual(store.getSnapshot(), before);
   assert.deepEqual(persisted, before);
+});
+
+test('durable Homework mutations await the real persistence promise', async () => {
+  const store = canonical.createStore({ courses: [{ id: 'c', name: 'Calculus' }], tasks: [] });
+  let release;
+  let persisted = store.getSnapshot();
+  let completed = false;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: (reason) => reason === 'homework-migration' ? undefined : new Promise((resolve) => { release = resolve; })
+  });
+  const pending = store.transactDurably((workspace) => {
+    workspace.tasks.push({ id: 'limits', title: 'Limits', courseId: 'c' });
+    return 'created';
+  }, { reason: 'create-task' }).then((receipt) => { completed = true; return receipt; });
+
+  await Promise.resolve();
+  assert.equal(completed, false);
+  assert.equal(typeof release, 'function');
+  release();
+  const receipt = await pending;
+  assert.equal(receipt.result, 'created');
+  assert.equal(receipt.workspace.tasks[0].id, 'limits');
+  assert.equal(completed, true);
+});
+
+test('async persistence failure rolls back before the next queued mutation', async () => {
+  const store = canonical.createStore({ courses: [{ id: 'c', name: 'Calculus' }], tasks: [] });
+  let persisted = store.getSnapshot();
+  let failNext = true;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: (reason) => {
+      if (reason === 'homework-migration') return undefined;
+      if (failNext) { failNext = false; return Promise.reject(new Error('async disk full')); }
+      return Promise.resolve();
+    }
+  });
+  const failed = store.transactDurably((workspace) => {
+    workspace.tasks.push({ id: 'lost', title: 'Must roll back', courseId: 'c' });
+  }, { reason: 'first' });
+  const succeeded = store.transactDurably((workspace) => {
+    workspace.tasks.push({ id: 'kept', title: 'Keep me', courseId: 'c' });
+  }, { reason: 'second' });
+
+  await assert.rejects(failed, /async disk full/);
+  await succeeded;
+  assert.deepEqual(store.getSnapshot().tasks.map((task) => task.id), ['kept']);
+  assert.deepEqual(persisted.tasks.map((task) => task.id), ['kept']);
 });
 
 test('normalization rejects unsafe URLs, repairs duplicate IDs, and records orphans', () => {

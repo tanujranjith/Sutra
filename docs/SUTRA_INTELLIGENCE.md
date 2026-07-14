@@ -78,6 +78,24 @@ offline.
 Each help topic is one data entry in `sutra-local-help.js`, usually referencing a
 Product Knowledge id so help text and product facts stay in lockstep.
 
+**Guided Local Mode — workspace task paths.** Beyond how-to help, the Local Help
+root menu leads with task paths about *your own* workspace, answered by Sutra's
+deterministic local engines and certified read-only / navigation actions — no API
+key required: **What should I do next?**, **Show what is due**, **Handle overdue
+work**, **Check grade risk**, and **Plan my day**. Each explains what Sutra does
+locally, links straight into the relevant view (All Due, Timeline, Grade Planner)
+via a certified action, and never dead-ends. Grade risk stays fully local (grade
+math is deterministic). Where a task genuinely needs generation — a full recovery
+plan, a timed day plan — the local path stops at a reusable **"this step needs
+generative AI"** gate that offers *Connect a provider* / *Show what Sutra does
+locally* / *Back to the guided menu*, so a no-key student always gets a clear fork
+instead of a dead end or a silent provider call. Paths include next step, what's
+due, overdue, grade risk, plan my day, prepare for an exam, break down an
+assignment, build a study plan, organize notes, and run a weekly review. These
+paths, their reachability from the root menu, no-dead-end guarantee, and their
+certified-action references are locked by the Intelligence Harness
+(`scripts/sutra-intelligence-harness-check.mjs`).
+
 ---
 
 ## 4. Workspace Access (context depth)
@@ -121,8 +139,10 @@ log). Undo restores prior state where technically safe.
 
 ## 6. Assistant Memory
 
-Assistant Memory is persistent, local, user-controlled long-term memory, separate
-from short-term conversation memory (which stays session-only).
+Assistant Memory is persistent, local, user-controlled long-term memory,
+separate from conversation context. Saved visible chats may persist locally;
+the Single Request / Conversation Memory setting controls whether prior turns
+are sent with the next provider request.
 
 ### What it remembers
 
@@ -160,11 +180,23 @@ saved (and therefore never exported).
 ### Retrieval
 
 Deterministic and explainable — keyword + category + linked-object + recency +
-confidence ranking. No embeddings, no cloud, no telemetry. Only a small, relevant
-set of **enabled, non-expired** memories is retrieved; expired, disabled, and
-deleted records are excluded. When a provider request is made, only those compact
-snippets are attached (never a dump of everything), and the records used are
-recorded.
+confidence ranking, each surfaced as a plain reason ("matches 'exam', relevant
+Course context, updated recently, high confidence"). No embeddings, no cloud, no
+telemetry. Only a small, relevant set of **enabled, non-expired** memories is
+retrieved; expired, disabled, and deleted records are excluded. When a provider
+request is made, only those compact snippets are attached (never a dump of
+everything), and the records used are recorded.
+
+### Deduplication & merge
+
+An exact restatement of an existing memory is kept up to date in place (never
+duplicated). A **near-duplicate** — highly similar but not identical, in the same
+category — is still saved, but the result carries a **merge suggestion** so you
+can fold the two together instead of silently accumulating overlapping notes.
+`mergeMemories` combines two records' detail lines and links, keeps the higher
+confidence, records provenance in `mergedFrom`, and is fully reversible via Undo.
+All merge metadata rides inside the existing `sutra:assistantMemory:v1` store and
+round-trips through export/import with no secrets.
 
 ---
 
@@ -187,9 +219,9 @@ the localStorage snapshot).
 **Never exported** (deliberate security exclusions): AI provider **API keys**,
 access/refresh tokens, client secrets, passwords, `.sutra` passphrases, derived
 encryption keys, Google Drive device-local sync metadata, transient chat history,
-in-session unlocked-page state, and regenerable caches. API keys remain
-session-only and never appear in `.sutra`, JSON, Activity logs, Memory,
-diagnostics, prompts, or cloud snapshots.
+in-session unlocked-page state, and regenerable caches. API keys are session-only
+and never appear in `.sutra`, JSON, Activity logs,
+Memory, diagnostics, prompts, or cloud snapshots.
 
 **Import** restores into the correct authoritative store, migrates older exports,
 tolerates missing or newer sections, validates before writing, avoids partial
@@ -226,15 +258,51 @@ explicit reasoning-effort parameter to those providers; provider defaults apply.
 Unknown provider IDs are treated as text-only by the capability registry rather
 than inheriting attachment support from a similarly named model.
 
+**Verification freshness.** Sutra only claims capabilities its in-repo adapter
+actually implements, and each claim is dated in
+`model-capabilities.js → CAPABILITY_VERIFICATION`. A static check
+(`scripts/sutra-capability-freshness-check.mjs`, part of `check:all`) warns when a
+record is over 9 months old and fails past 15 months, so stale provider-API
+assumptions surface deliberately instead of silently misclassifying new models.
+The Intelligence Harness additionally asserts every reasoning provider carries a
+dated record.
+
 ---
 
-## 9. Privacy & security invariants
+## 9. Provider-request trust pipeline
+
+Every provider request is assembled locally through one deterministic pipeline:
+rank explicit targets and current context, exclude locked/expired/disabled/private
+records, enforce a provider/model budget, fence untrusted material, then perform a
+last-mile scope and privacy audit. The audit sees no key or authorization header.
+It blocks secrets, locked-content markers, unsafe URL schemes, and categories
+outside the chosen Workspace Access level before fetch construction.
+
+Each response carries a versioned provenance receipt that explains local versus
+provider handling, inspected areas, live-validated sources, memory influence by
+safe count, attachment processing paths, deterministic engines, proposed certified
+actions, context reduction, and transmitted categories. Interrupted, cancelled,
+partial, stale-source, action, and error states use the same receipt contract.
+Provider reasoning and raw system/context prompts are never displayed or saved.
+
+Streaming is enabled only for provider/model adapters whose implemented
+capabilities say so. Stop uses an isolated AbortController, preserves and labels
+partial text, and never parses incomplete action JSON. Retry reuses the existing
+user turn and action idempotency keys. Structured output is validated only after a
+complete response. Errors distinguish authentication, rate limits, overload,
+timeouts, network/CSP, unavailable models/endpoints, malformed/empty responses,
+attachment problems, cancellation/partial output, stale sources,
+action/storage/Undo failures, and partial batches.
+
+---
+
+## 10. Privacy & security invariants
 
 - Sutra Intelligence is local-first and makes no server calls itself.
 - Product Knowledge, Local Help, Memory, and deterministic intelligence work
   fully offline.
-- API keys are session-only and never enter Memory, exports, Activity logs,
-  prompts, diagnostics, or UI text.
+- API keys are session-only. Credentials never enter Memory,
+  exports, Activity logs, prompts, diagnostics, or UI text.
 - Locked-note contents are never read by the assistant.
 - No analytics, tracking, telemetry, or Sutra backend.
 - CSP, DOM safety (`SutraDOMSafety`), safe storage (`SutraSafeStorage`),
@@ -243,7 +311,7 @@ than inheriting attachment support from a similarly named model.
 
 ---
 
-## 10. Limitations & intentionally unsupported behaviors
+## 11. Limitations & intentionally unsupported behaviors
 
 - The assistant has **no task-delete action** by design; complete/archive
   instead. Timeline-block deletion exists but requires explicit user intent and

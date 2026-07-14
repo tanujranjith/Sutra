@@ -47,13 +47,14 @@ test('Assignment Studio 2.0 generates a work-backward plan that round-trips', as
       text: 'Persuasive essay on climate policy', done: false, dueDate: iso, dueTime: '23:59',
       priority: 'high', difficulty: 'hard', notes: ''
     };
-    window.SutraSafeStorage.set('hwTasks:v2', JSON.stringify([task]), { importance: 'important' });
+    // Seed into the canonical homework store (Assignment Studio's source of truth).
+    window.SutraHomeworkStore.replace({ courses: [], tasks: [task] }, { reason: 'test-seed' });
 
     // Generate a deterministic plan (essay → research…submit), work-backward scheduled.
     const plan = window.SutraAssignmentStudio.applyPlanToTask('studio_e2e_1', { kind: 'essay' });
 
-    // Read it back from storage to confirm persistence + extended fields.
-    const stored = JSON.parse(window.localStorage.getItem('hwTasks:v2') || '[]');
+    // Read it back from the store to confirm persistence + extended fields.
+    const stored = window.SutraHomeworkStore.getSnapshot().tasks || [];
     const studio = window.SutraAssignmentStudio.normalizeStudio(stored[0].studio);
     return {
       planCount: plan && plan.count,

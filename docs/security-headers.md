@@ -5,6 +5,10 @@ static-server use. Production deployments must also send response headers:
 some directives, especially frame-ancestors, are not enforceable from a meta
 element.
 
+- **Canonical source:** `scripts/lib/csp-policy.mjs`; `npm run csp:generate`
+  updates all HTML entry points and `vercel.json`, while the local server imports
+  the same builder directly.
+
 ## Supported targets
 
 - **Vercel:** vercel.json applies CSP, frame-ancestors, MIME sniffing,

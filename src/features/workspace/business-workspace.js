@@ -2073,6 +2073,52 @@
         render();
     }
 
+    function renderSearchableSections(model) {
+        return `
+            ${renderProjects(model)}
+            ${renderOpportunities(model)}
+            ${renderClients(model)}
+            ${renderInvoices(model)}
+            ${renderFinance(model)}
+            ${renderMeetings(model)}
+            ${renderTasks(model)}
+            ${renderProposals(model)}
+            ${renderNotes(model)}
+            ${renderDocuments(model)}
+            ${renderGoals(model)}
+        `;
+    }
+
+    function captureResultsScroll(results) {
+        const saved = new Map();
+        results.querySelectorAll('[id]').forEach(element => {
+            if (element.scrollTop || element.scrollLeft) saved.set(element.id, { top: element.scrollTop, left: element.scrollLeft });
+        });
+        return saved;
+    }
+
+    function refreshSearchableSections() {
+        const root = getRoot();
+        const results = root && root.querySelector('[data-business-search-results]');
+        if (!results) { render(); return; }
+        const rootTop = root.scrollTop;
+        const rootLeft = root.scrollLeft;
+        const pageX = window.scrollX;
+        const pageY = window.scrollY;
+        const scrollState = captureResultsScroll(results);
+        const model = buildModel();
+        results.innerHTML = renderSearchableSections(model); // sutra-allow-html: escaped developer templates for results only; the search input shell remains mounted
+        scrollState.forEach((position, id) => {
+            const element = document.getElementById(id);
+            if (element) { element.scrollTop = position.top; element.scrollLeft = position.left; }
+        });
+        root.scrollTop = rootTop;
+        root.scrollLeft = rootLeft;
+        if (window.scrollX !== pageX || window.scrollY !== pageY) window.scrollTo(pageX, pageY);
+        if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(results);
+        if (typeof window.refreshCustomDates === 'function') window.refreshCustomDates(results);
+    }
+
     function render() {
         const root = getRoot();
         if (!root) return;
@@ -2085,17 +2131,9 @@
                     ${renderOverview(model)}
                     ${renderOverdueInvoiceBanner(model)}
                     ${model.preferences.showAnalytics ? renderAnalytics(model) : ''}
-                    ${renderProjects(model)}
-                    ${renderOpportunities(model)}
-                    ${renderClients(model)}
-                    ${renderInvoices(model)}
-                    ${renderFinance(model)}
-                    ${renderMeetings(model)}
-                    ${renderTasks(model)}
-                    ${renderProposals(model)}
-                    ${renderNotes(model)}
-                    ${renderDocuments(model)}
-                    ${renderGoals(model)}
+                    <div class="business-search-results" data-business-search-results>
+                        ${renderSearchableSections(model)}
+                    </div>
                 </div>
                 <div class="business-side-column">
                     ${renderDetailPanel(model)}
@@ -2173,10 +2211,12 @@
         }
     }
 
+    let businessSearchComposing = false;
+
     function handleInput(event) {
         if (event.target.matches('[data-biz-control="search"]')) {
             getUiState().search = String(event.target.value || '');
-            render();
+            if (!businessSearchComposing && !event.isComposing) refreshSearchableSections();
             return;
         }
         if (event.target.id === 'bizQuickCaptureInput') {
@@ -2187,6 +2227,17 @@
             const status = document.querySelector('[data-biz-quick-capture-status]');
             if (status) status.textContent = `Autosaved ${longDate(workspace.quickCaptureUpdatedAt)}`;
         }
+    }
+
+    function handleCompositionStart(event) {
+        if (event.target.matches('[data-biz-control="search"]')) businessSearchComposing = true;
+    }
+
+    function handleCompositionEnd(event) {
+        if (!event.target.matches('[data-biz-control="search"]')) return;
+        businessSearchComposing = false;
+        getUiState().search = String(event.target.value || '');
+        refreshSearchableSections();
     }
 
     function handleChange(event) {
@@ -2231,6 +2282,8 @@
         root.dataset.businessBound = 'true';
         root.addEventListener('click', handleClick);
         root.addEventListener('input', handleInput);
+        root.addEventListener('compositionstart', handleCompositionStart);
+        root.addEventListener('compositionend', handleCompositionEnd);
         root.addEventListener('change', handleChange);
         document.getElementById('businessEntityForm')?.addEventListener('submit', handleEntitySubmit);
         document.getElementById('businessEntityCancelBtn')?.addEventListener('click', handleEntityCancel);
@@ -2245,6 +2298,8 @@
         if (root) {
             root.removeEventListener('click', handleClick);
             root.removeEventListener('input', handleInput);
+            root.removeEventListener('compositionstart', handleCompositionStart);
+            root.removeEventListener('compositionend', handleCompositionEnd);
             root.removeEventListener('change', handleChange);
             delete root.dataset.businessBound;
         }

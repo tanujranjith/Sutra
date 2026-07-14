@@ -82,9 +82,8 @@ persistence inventory.
   `appData.homeworkWorkspace` at save time and restored to localStorage on import.
 - **Standalone localStorage preferences:** a curated allow-list
   `ATELIER_RAW_LOCALSTORAGE_KEYS` (app.js:35831) is embedded in exports.
-- **Secrets:** AI provider API keys live in **sessionStorage** only
-  (`readSensitiveValue`/`writeSensitiveValue`, app.js:42454+), never localStorage,
-  never exported.
+- **Secrets:** AI provider API keys use **sessionStorage only**
+  (`readSensitiveValue`/`writeSensitiveValue`) and are never persisted or exported.
 
 ### Export / import
 - **Serializer:** `buildWorkspaceExportPayload({mode, includeSensitiveSettings})`
@@ -182,8 +181,8 @@ Legend: **R** = survives refresh / IndexedDB reload · **X** = in export payload
 | Sutra Assistant | provider/model choices | localStorage `chat_provider`/`chat_model_by_provider`/`chat_custom_model_by_provider` | ✓ | ✓ | ✓ | PASS |
 | Sutra Assistant | activity log | localStorage `flow:activityLog:v1` | ✓ | ✓ | ✓ | PASS |
 | Sutra Assistant–created items | notes/tasks/timeline/homework/review decks | flow into the normal stores above | ✓ | ✓ | ✓ | PASS |
-| AI secrets | provider API keys | **sessionStorage only** | ✗ (by design) | ✗ (by design) | ✗ | INTENTIONALLY EXCLUDED |
-| Chat history | conversation | sessionStorage `chat_history` | ✗ (session) | ✗ | ✗ | INTENTIONALLY EXCLUDED |
+| AI secrets | provider API keys | sessionStorage only | ✗ | ✗ (by design) | ✗ | INTENTIONALLY EXCLUDED FROM EXPORT/SYNC |
+| Chat history | visible conversations | managed localStorage store + session compatibility copy | ✓ | encrypted `.sutra` default; plaintext recovery opt-in | ✓ | PASS |
 | Caches | `chat_models_cache_<provider>`, `hwSchemaVersion` | localStorage | ✓ | ✗ (regenerable) | n/a | INTENTIONALLY EXCLUDED |
 | UI scroll restore | scroll positions | sessionStorage | ✗ (session) | ✗ | ✗ | INTENTIONALLY EXCLUDED |
 
@@ -210,12 +209,13 @@ Legend: **R** = survives refresh / IndexedDB reload · **X** = in export payload
 only when no `appData` exists; their data now lives in `appData` and travels via
 the export. They are NOT separately exported and do not need to be._
 
-**localStorage — cache/marker (intentionally not exported)**
+**localStorage — device-local / intentionally not exported**
 `chat_models_cache_<provider>`, `hwSchemaVersion`.
 
-**sessionStorage — never persisted, never exported (secrets/ephemeral)**
+**sessionStorage — never exported (default credentials/ephemeral)**
 `groq_api_key`, `openai_api_key`, `anthropic_api_key`, `gemini_api_key`,
-`openrouter_api_key`, `local_api_key`, `chat_history`,
+`openrouter_api_key`, `deepseek_api_key`, `xai_api_key`,
+`perplexity_api_key`, `local_api_key`, `chat_history`,
 `noteflow_ui_scroll_state_v1`.
 
 ---
@@ -279,9 +279,8 @@ snapshot is restored (app.js:37920) so links reconcile against final state. Page
 `spaceId`s pointing at missing spaces are remapped to `default` (app.js:37910).
 
 ## 14. Security & secrets handling
-- AI provider API keys are **sessionStorage-only** and migrated out of any legacy
-  localStorage location on read (`readSensitiveValue`). They are never in
-  `ATELIER_RAW_LOCALSTORAGE_KEYS` and never exported.
+- AI provider API keys are **session-only** and migrated out of any legacy raw
+  localStorage location on read (`readSensitiveValue`). They are never exported.
 - Both export paths call `buildWorkspaceExportPayload({includeSensitiveSettings:false})`,
   which runs `stripSensitiveSettingFields` to redact any nested
   `apikey/token/secret/password/...` value and records the redacted paths in
@@ -361,9 +360,10 @@ File: `scripts/sutra-persistence-qa.js` (new)
 - Reusable in-browser round-trip harness (see §16).
 
 ## 20. Intentionally excluded data
-- **AI provider API keys / secrets** — sessionStorage only; excluded for privacy.
-  Re-enter after import. (Provider/model **choices** are exported.)
-- **Chat history** (`chat_history`) — session-local by product design.
+- **AI provider API keys / secrets** — sessionStorage only and excluded for
+  privacy. (Provider/model **choices** are exported.)
+- **Chat history** — optional managed local conversations are included in
+  encrypted backups by default; plaintext recovery is opt-in.
 - **Regenerable caches** — `chat_models_cache_<provider>`, `hwSchemaVersion`.
 - **Ephemeral UI state** — scroll-restore session, in-session unlocked-page set
   (`unlockedPageIds`): locked pages correctly require PIN re-entry after reload.

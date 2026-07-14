@@ -1,7 +1,8 @@
 // Sutra Assistant Memory — persistent, local, user-controlled long-term memory.
 //
-// This is SEPARATE from short-term conversation memory (which is session-only
-// and lives in flow-assistant). Assistant Memory persists across sessions as
+// This is separate from conversation context. Visible chats may be saved
+// locally, while the chat-memory mode controls what is sent to a provider.
+// Assistant Memory persists across sessions as
 // part of the Sutra workspace and rides along inside .sutra exports via the
 // localStorage key below (registered in ATELIER_RAW_LOCALSTORAGE_KEYS).
 //
@@ -10,8 +11,9 @@
 //     (study hours, planning style, goals, course preferences, etc.).
 //   - A deterministic sensitivity classifier that BLOCKS secrets/credentials/
 //     financial/medical/precise-location content from ever being saved.
-//   - Deterministic, explainable retrieval/ranking (keyword + category + link +
-//     recency + confidence) — no embeddings, no network, no telemetry.
+//   - Deterministic, explainable retrieval/ranking through the shared local
+//     Notes Knowledge Core when available, with a pure keyword fallback for
+//     tests/degraded mode — no network, no telemetry.
 //   - Core CRUD that returns undo payloads so the assistant's unified Activity
 //     + Undo pipeline can reverse memory changes.
 //   - A keyboard-accessible Memory Manager UI.
@@ -25,7 +27,7 @@
 
     const VERSION = '1.0.0';
     const STORAGE_KEY = 'sutra:assistantMemory:v1';
-    const SCHEMA_VERSION = 1;
+    const SCHEMA_VERSION = 2;   // v2 adds record.mergedFrom (merge provenance)
 
     const MAX_CONTENT = 2000;
     const MAX_TITLE = 160;
@@ -132,6 +134,21 @@
         return normalizeForMatch(text).split(' ').filter(t => t && t.length > 1 && !STOP.has(t));
     }
 
+    // Content-overlap similarity for near-duplicate detection: max of Jaccard and
+    // containment over content tokens (containment catches "subset" restatements
+    // that Jaccard alone underweights). Range 0..1.
+    function tokenSet(text) { return new Set(tokenize(text)); }
+    function tokenSimilarity(aSet, bSet) {
+        if (!aSet.size || !bSet.size) return 0;
+        let inter = 0;
+        aSet.forEach(t => { if (bSet.has(t)) inter += 1; });
+        const union = aSet.size + bSet.size - inter;
+        const jaccard = union ? inter / union : 0;
+        const containment = inter / Math.min(aSet.size, bSet.size);
+        return Math.max(jaccard, containment);
+    }
+    const NEAR_DUP_THRESHOLD = 0.6;   // >= this (but not exact) → suggest a merge
+
     // --------------------------------------------------------------
     // Sensitivity classifier — deterministic. 'blocked' must NEVER be stored.
     // --------------------------------------------------------------
@@ -211,7 +228,8 @@
             links: (r.links && typeof r.links === 'object') ? r.links : {},
             sensitivity: SENSITIVITY.includes(r.sensitivity) ? r.sensitivity : 'normal',
             enabled: r.enabled !== false,
-            history: Array.isArray(r.history) ? r.history.slice(-20) : []
+            history: Array.isArray(r.history) ? r.history.slice(-20) : [],
+            mergedFrom: Array.isArray(r.mergedFrom) ? r.mergedFrom.map(String).slice(-20) : []
         };
     }
 
@@ -312,7 +330,7 @@
         }
 
         const links = {};
-        ['courseId', 'courseName', 'feature', 'noteId', 'taskId', 'projectId'].forEach(k => {
+        ['courseId', 'courseName', 'feature', 'noteId', 'taskId', 'projectId', 'conversationId'].forEach(k => {
             if (input[k]) links[k] = String(input[k]).slice(0, 120);
             if (input.links && input.links[k]) links[k] = String(input.links[k]).slice(0, 120);
         });
@@ -320,6 +338,28 @@
         const source = SOURCES.includes(input.source) ? input.source : 'user_explicit';
         let confidence = Number(input.confidence);
         if (!(confidence >= 0 && confidence <= 1)) confidence = source === 'user_explicit' ? 0.95 : 0.6;
+
+        // Near-duplicate detection (non-destructive): if a same-category enabled
+        // memory is highly similar but NOT identical, still save this one but hand
+        // back a mergeSuggestion so the UI can offer to merge instead of quietly
+        // accumulating overlapping restatements. Exact dups took the fast path above.
+        let mergeSuggestion = null;
+        {
+            const newTokens = tokenSet(content);
+            let best = null, bestScore = 0;
+            state.records.forEach(r => {
+                if (!r.enabled || r.category !== category) return;
+                const sim = tokenSimilarity(newTokens, tokenSet(r.content));
+                if (sim > bestScore) { bestScore = sim; best = r; }
+            });
+            if (best && bestScore >= NEAR_DUP_THRESHOLD) {
+                mergeSuggestion = {
+                    intoId: best.id,
+                    score: Math.round(bestScore * 100) / 100,
+                    reason: `Looks similar to an existing ${CATEGORY_LABEL[category] || category} memory ("${deriveTitle(best.content)}")`
+                };
+            }
+        }
 
         const record = normalizeRecord({
             id: makeId(),
@@ -339,7 +379,9 @@
         });
         state.records.unshift(record);
         writeState(state);
-        return { ok: true, record, message: 'Saved to memory.', undo: { kind: 'memory', op: 'create', id: record.id } };
+        const result = { ok: true, record, message: 'Saved to memory.', undo: { kind: 'memory', op: 'create', id: record.id } };
+        if (mergeSuggestion) result.mergeSuggestion = mergeSuggestion;
+        return result;
     }
 
     function deriveTitle(content) {
@@ -373,6 +415,52 @@
         Object.assign(rec, normalizeRecord(next));
         writeState(state);
         return { ok: true, record: rec, message: 'Memory updated.', undo: { kind: 'memory', op: 'update', id: rec.id, before } };
+    }
+
+    // Merge two memories: fold `fromId`'s detail lines + links into `intoId`
+    // (deduping lines), keep the higher confidence, then remove `fromId`. Returns
+    // a single compound undo (op:'merge') that restores the pre-merge `into` and
+    // re-adds the removed `from` record. Re-runs the sensitivity guard on the
+    // merged content so a merge can never produce blockable content.
+    function mergeMemories(intoId, fromId, options) {
+        if (!intoId || !fromId || String(intoId) === String(fromId)) {
+            return { ok: false, error: 'Pick two different memories to merge.' };
+        }
+        const state = readState();
+        const into = state.records.find(r => r.id === intoId);
+        const from = state.records.find(r => r.id === fromId);
+        if (!into || !from) return { ok: false, error: 'One of those memories no longer exists.' };
+
+        const beforeInto = JSON.parse(JSON.stringify(into));
+        const removedFrom = JSON.parse(JSON.stringify(from));
+
+        const lines = splitLines(into.content);
+        const seen = new Set(lines.map(normalizeForMatch));
+        splitLines(from.content).forEach(l => {
+            const key = normalizeForMatch(l);
+            if (!seen.has(key)) { lines.push(l); seen.add(key); }
+        });
+        let merged = lines.join('\n');
+        if (merged.length > MAX_CONTENT) merged = clampStr(merged, MAX_CONTENT);
+        if (classifySensitivity(merged) === 'blocked' && !(options && options.allowBlocked)) {
+            return { ok: false, blocked: true, error: 'Merging those would create sensitive content — not merged.' };
+        }
+
+        into.content = merged;
+        into.links = Object.assign({}, from.links, into.links);
+        into.confidence = Math.max(into.confidence || 0, from.confidence || 0);
+        into.updatedAt = nowIso();
+        into.mergedFrom = (into.mergedFrom || []).concat([String(fromId)]).slice(-20);
+        into.history = (into.history || []).concat([{ at: nowIso(), action: 'merged', from: String(fromId) }]).slice(-20);
+        Object.assign(into, normalizeRecord(into));
+
+        const idx = state.records.findIndex(r => r.id === fromId);
+        if (idx >= 0) state.records.splice(idx, 1);
+        writeState(state);
+        return {
+            ok: true, record: into, message: 'Merged the two memories.',
+            undo: { kind: 'memory', op: 'merge', id: intoId, before: beforeInto, removed: removedFrom }
+        };
     }
 
     // A memory's content is treated as a list of "details" (one per line) so the
@@ -500,6 +588,15 @@
             // op names the inverse to apply: 'enable' means "re-enable" (it was disabled).
             const rec = state.records.find(r => r.id === undoPayload.id);
             if (rec) { rec.enabled = undoPayload.op === 'enable'; n = 1; }
+        } else if (undoPayload.op === 'merge') {
+            // Restore the pre-merge `into` record and re-add the removed `from`.
+            if (undoPayload.before) {
+                const rec = state.records.find(r => r.id === undoPayload.id);
+                if (rec) { Object.assign(rec, normalizeRecord(undoPayload.before)); n += 1; }
+            }
+            if (undoPayload.removed && undoPayload.removed.id && !state.records.some(r => r.id === undoPayload.removed.id)) {
+                state.records.push(normalizeRecord(undoPayload.removed)); n += 1;
+            }
         }
         if (n) writeState(state);
         return n;
@@ -553,14 +650,34 @@
         const candidates = readState().records.filter(r => r.enabled && !isExpired(r));
         const qTokens = tokenize(query);
         const inferred = inferCategories(query, ctx);
+        let sharedScores = null;
+        try {
+            const knowledge = typeof window !== 'undefined' ? window.SutraNotesKnowledgeCore : null;
+            if (knowledge && typeof knowledge.buildIndex === 'function' && typeof knowledge.search === 'function') {
+                const index = knowledge.buildIndex(candidates.map(record => ({
+                    id: record.id,
+                    title: record.title,
+                    content: record.content,
+                    tags: [record.category],
+                    updatedAt: record.updatedAt
+                })));
+                const results = knowledge.search(index, query, { limit: Math.max(1, candidates.length) }).sources;
+                sharedScores = new Map(results.map(source => [String(source.noteId), source]));
+            }
+        } catch (e) { sharedScores = null; }
 
         const scored = candidates.map(r => {
             let score = 0;
             const reasons = [];
             const hay = normalizeForMatch(r.title + ' ' + r.content + ' ' + (CATEGORY_LABEL[r.category] || ''));
 
-            // Keyword overlap.
-            if (qTokens.length) {
+            // Shared Knowledge Core score (same fuzzy/exact vocabulary as
+            // notes); pure keyword fallback keeps Node/degraded mode stable.
+            const shared = sharedScores && sharedScores.get(String(r.id));
+            if (shared) {
+                score += Math.min(10, Number(shared.score) || 0);
+                (shared.reasonCodes || []).slice(0, 3).forEach(reason => reasons.push(String(reason).replace(/_/g, ' ')));
+            } else if (qTokens.length) {
                 let hits = 0;
                 qTokens.forEach(t => { if (hay.includes(t)) hits += 1; });
                 if (hits) { score += hits * 2; reasons.push(`matches "${qTokens.filter(t => hay.includes(t)).slice(0, 3).join(', ')}"`); }
@@ -573,9 +690,11 @@
             if (ctx.projectId && r.links && r.links.projectId && String(r.links.projectId) === String(ctx.projectId)) { score += 3; reasons.push('linked to this project'); }
             // Recency.
             const age = daysSince(r.updatedAt);
-            if (age <= 7) score += 1.5; else if (age <= 30) score += 0.5;
+            if (age <= 7) { score += 1.5; reasons.push('updated recently'); }
+            else if (age <= 30) score += 0.5;
             // Confidence + source.
             score += (r.confidence || 0);
+            if ((r.confidence || 0) >= 0.9) reasons.push('high confidence');
             if (r.source === 'user_explicit') score += 0.5;
 
             return { record: r, score: Math.round(score * 100) / 100, reasons };
@@ -640,6 +759,46 @@
 
     let managerState = { query: '', category: '', editingId: null };
 
+    function knowledgeOverview() {
+        var b = typeof window !== 'undefined' ? window.flowAtelier : null;
+        var pages = b && Array.isArray(b.pages) ? b.pages : [];
+        var tasks = b && Array.isArray(b.tasks) ? b.tasks : [];
+        var unlocked = b && b.unlockedPageIds && typeof b.unlockedPageIds.has === 'function' ? b.unlockedPageIds : null;
+        var privacy = typeof window !== 'undefined' ? window.SutraAssistantPrivacy : null;
+        var permissions = privacy && typeof privacy.getPermissions === 'function' ? privacy.getPermissions() : { mode: 'off', areas: {} };
+        var allowLocked = permissions.allowLockedNotes === true;
+        var readableNotes = pages.filter(function (page) {
+            return page && (page.isLocked !== true || (allowLocked && unlocked && unlocked.has(page.id)));
+        }).length;
+        var memories = list({ includeDisabled: true, includeExpired: true });
+        var linked = memories.filter(function (record) {
+            return !!(record.links && (record.links.noteId || record.links.conversationId));
+        }).length;
+        var projects = new Set();
+        function addProject(value) {
+            var name = String(value || '').trim();
+            if (name && !/^(default|inbox|none)$/i.test(name)) projects.add(name.slice(0, 80));
+        }
+        pages.forEach(function (page) {
+            if (!page) return;
+            addProject(page.projectName || page.project || page.folderName);
+            if (Array.isArray(page.tags) && page.tags.some(function (tag) { return /^project(?::|$)/i.test(String(tag)); })) {
+                addProject(page.title);
+            }
+        });
+        tasks.forEach(function (task) { if (task) addProject(task.projectName || task.project); });
+        return {
+            totalNotes: pages.length,
+            readableNotes: readableNotes,
+            lockedNotes: pages.filter(function (page) { return page && page.isLocked === true; }).length,
+            memories: memories.length,
+            enabledMemories: memories.filter(function (record) { return record.enabled && !isExpired(record); }).length,
+            linkedMemories: linked,
+            permissions: permissions,
+            projects: Array.from(projects).sort().slice(0, 8)
+        };
+    }
+
     function openManager(options) {
         if (typeof document === 'undefined') return null;
         const opts = options || {};
@@ -654,10 +813,10 @@
         const modal = el('div', 'flow-modal sutra-memory-modal');
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-modal', 'true');
-        modal.setAttribute('aria-label', 'Assistant Memory');
+        modal.setAttribute('aria-label', 'What Sutra knows about me');
 
         const head = el('div', 'flow-modal-head');
-        head.appendChild(el('strong', null, 'Assistant Memory'));
+        head.appendChild(el('strong', null, 'What Sutra knows about me'));
         const headBtns = el('div');
         const addBtn = el('button', 'sutra-mem-add', '+ Add memory');
         addBtn.type = 'button';
@@ -681,8 +840,33 @@
 
             // Explainer
             const note = el('p', 'sutra-mem-explain');
-            note.textContent = 'Sutra Assistant remembers stable facts you ask it to keep (study habits, goals, preferences) to personalize help across sessions. It never saves passwords, keys, financial, medical, precise-location, or locked-note content. Everything here is local and travels inside encrypted .sutra backups.';
+            note.textContent = 'This local view combines the notes Sutra may retrieve, explicit Assistant Memory, permission boundaries, and active project context. It never saves passwords, keys, financial, medical, precise-location, or locked-note content as memory.';
             body.appendChild(note);
+
+            const overview = knowledgeOverview();
+            const summary = el('section', 'sutra-knowledge-overview');
+            summary.setAttribute('aria-label', 'Sutra knowledge summary');
+            const noteCard = el('div', 'sutra-knowledge-card');
+            noteCard.appendChild(el('strong', null, String(overview.readableNotes)));
+            noteCard.appendChild(el('span', null, 'notes readable now'));
+            noteCard.appendChild(el('small', null, overview.lockedNotes ? overview.lockedNotes + ' locked note' + (overview.lockedNotes === 1 ? '' : 's') + ' remain permission-gated' : 'No locked notes detected'));
+            const memoryCard = el('div', 'sutra-knowledge-card');
+            memoryCard.appendChild(el('strong', null, String(overview.enabledMemories)));
+            memoryCard.appendChild(el('span', null, 'active memories'));
+            memoryCard.appendChild(el('small', null, overview.linkedMemories + ' linked to a note or conversation'));
+            const accessCard = el('div', 'sutra-knowledge-card');
+            accessCard.appendChild(el('strong', null, String(overview.permissions.mode || 'off').replace(/_/g, ' ')));
+            accessCard.appendChild(el('span', null, 'Assistant access mode'));
+            accessCard.appendChild(el('small', null, overview.permissions.allowLockedNotes ? 'Unlocked notes may be included' : 'Locked notes excluded'));
+            const projectCard = el('div', 'sutra-knowledge-card');
+            projectCard.appendChild(el('strong', null, String(overview.projects.length)));
+            projectCard.appendChild(el('span', null, 'active project contexts'));
+            projectCard.appendChild(el('small', null, overview.projects.length ? overview.projects.join(', ') : 'No project labels detected'));
+            summary.appendChild(noteCard);
+            summary.appendChild(memoryCard);
+            summary.appendChild(accessCard);
+            summary.appendChild(projectCard);
+            body.appendChild(summary);
 
             // Controls
             const controls = el('div', 'sutra-mem-controls');
@@ -904,7 +1088,7 @@
         validateInput, classifySensitivity,
         // mutate (each returns an undo payload)
         create, update, enable, disable, setEnabled, remove, removeMany,
-        clearExpired, clearTemporary, applyUndo,
+        clearExpired, clearTemporary, applyUndo, mergeMemories,
         // per-detail editing (add / remove individual lines)
         appendDetail, removeDetail, memoryLines,
         // retrieval

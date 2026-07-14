@@ -52,7 +52,7 @@ Renaming these would have orphaned every existing user's data, so they were deli
 
 **Legacy unencrypted `.sutra` and `.atelier` backups still import.** The import validator accepts **both** the new `sutra-workspace` manifest and the legacy `noteflow_atelier_project` manifest, and the import dispatcher routes both `.sutra` and `.atelier` files to the same package importer. **Old backups are never broken.** You can keep restoring any `.atelier` file you exported under the old name.
 
-**Never exported, in any format:** API keys, provider credentials, tokens, backup passwords, cloud sync passwords, OAuth tokens, and derived keys. API keys are session-only; Drive access tokens and derived sync keys are memory-only. The assistant activity log is not a secret and does travel in backups.
+**Never exported, in any format:** API keys, provider credentials, tokens, backup passwords, cloud sync passwords, OAuth tokens, and derived keys. API keys are session-only. Drive access tokens and derived sync keys are memory-only. The assistant activity log is not a secret and does travel in backups.
 
 ---
 
@@ -128,6 +128,6 @@ If anything looks off after upgrading:
 - **The UI looks broken** - load **Safe Mode** (`?sutraSafeMode=1`, hold **Shift** at load, or the in-app Recovery button). This skips all custom CSS and plugins without deleting anything, so you can disable the offending snippet or plugin and reload normally.
 - **An import went wrong** - Sutra writes a **pre-import safety snapshot** before every workspace import. Restore it from `Settings -> Data -> Storage Health`.
 - **Your data didn't appear** - confirm you opened Sutra in the **same browser and profile** where you used NoteFlow Atelier (browser storage is per-browser, per-profile, per-origin). If you switched browsers or machines, import your most recent `.sutra` or `.atelier` backup.
-- **The assistant lost its key** - that's expected. API keys live in sessionStorage only and are never exported; re-enter your key from `Settings -> Assistant`.
+- **The assistant lost its key** - that's expected. Re-enter it for this browser session; credentials are never persisted or exported.
 
 For the full backup/format reference, see the [README](../../README.md) and [CHANGELOG](../release/CHANGELOG.md).

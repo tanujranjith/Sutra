@@ -18,6 +18,18 @@ async function openApp(page) {
   await page.waitForFunction(() => !!(window.SutraHighlight && window.SutraMath && window.SutraReviewTesting));
 }
 
+async function openReviewDeck(page, cards) {
+  const deckId = await page.evaluate((rows) => {
+    const deck = window.createReviewDeck({ name: 'Mode Regression Deck' });
+    rows.forEach((row) => window.SutraReviewTesting.addCard({ deckId: deck.id, prompt: row[0], answer: row[1] }));
+    window.openReviewTab();
+    window.openReviewDeck(deck.id);
+    return deck.id;
+  }, cards);
+  await expect(page.locator('#reviewMount')).toBeVisible();
+  return deckId;
+}
+
 test('code highlighting tokenizes keywords, strings and comments (offline, no deps)', async ({ page }) => {
   await openApp(page);
   const html = await page.evaluate(() =>
@@ -104,4 +116,59 @@ test('analytics helpers return well-formed shapes', async ({ page }) => {
   expect(r.ret.rate).toBeLessThanOrEqual(100);
   expect(r.len).toBe(7);
   expect(r.hasOverdue).toBe(true);
+});
+
+test('shared Review actions extract every mode-specific data attribute', async ({ page }) => {
+  await openApp(page);
+  const ctx = await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.setAttribute('data-deck-id', 'deck-1');
+    button.setAttribute('data-card-id', 'card-1');
+    button.setAttribute('data-mode', 'match');
+    button.setAttribute('data-grade', 'again');
+    button.setAttribute('data-tile-id', 'tile-1');
+    button.setAttribute('data-correct', 'true');
+    button.setAttribute('data-answer-id', 'answer-1');
+    button.setAttribute('data-pair-id', 'pair-1');
+    button.setAttribute('data-question-id', 'question-1');
+    button.setAttribute('data-choice-id', 'choice-1');
+    return window.SutraReviewTesting.extractActionContext(button);
+  });
+  expect(ctx).toEqual({
+    deckId: 'deck-1', cardId: 'card-1', mode: 'match', grade: 'again',
+    tileId: 'tile-1', correct: 'true', answerId: 'answer-1', pairId: 'pair-1',
+    questionId: 'question-1', choiceId: 'choice-1'
+  });
+});
+
+test('Flashcards Again stays in the active session and grading works by mouse and keyboard', async ({ page }) => {
+  await openApp(page);
+  const deckId = await openReviewDeck(page, [['Capital of France?', 'Paris']]);
+  await page.locator('[data-review-action="study"][data-mode="flashcards"]').first().click();
+  await expect(page.locator('.review-study-shell[data-mode="flashcards"]')).toBeVisible();
+
+  await page.locator('[data-review-action="flashcards-flip"]').first().click();
+  await page.locator('[data-review-action="flashcards-grade"][data-grade="again"]').click();
+  // A one-card queue must still show the card after Again instead of ending and
+  // postponing all relearning until tomorrow.
+  await expect(page.locator('[data-review-action="flashcards-flip"]').first()).toBeVisible();
+  const afterMouse = await page.evaluate((id) => {
+    const card = window.SutraReviewTesting.getItems(id)[0];
+    return { lapses: card.lapses, status: card.status };
+  }, deckId);
+  expect(afterMouse).toMatchObject({ lapses: 1, status: 'lapsed' });
+
+  await page.keyboard.press('Space');
+  await page.keyboard.press('1');
+  await expect(page.locator('[data-review-action="flashcards-flip"]').first()).toBeVisible();
+  const afterKeyboard = await page.evaluate((id) => window.SutraReviewTesting.getItems(id)[0].lapses, deckId);
+  expect(afterKeyboard).toBe(2);
+
+  // The bounded policy permits two relearning appearances, then completes.
+  await page.keyboard.press('Space');
+  await page.keyboard.press('1');
+  // Scope to the review shell's exact eyebrow: a bare getByText('Session complete')
+  // also matches the Focus-timer "Focus session complete. Alarm…" element that is
+  // always present in the shell markup (strict-mode ambiguity).
+  await expect(page.locator('.review-study-shell').getByText('Session complete', { exact: true })).toBeVisible();
 });

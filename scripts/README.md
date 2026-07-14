@@ -53,7 +53,9 @@ Playwright `webServer`.
 
 ### Data
 `guardrail-baseline.json` — per-file unsafe-sink/storage budgets + known globals
-for `sutra-guardrails-check`. Regenerate with `npm run check:guardrails:update`.
+for `sutra-guardrails-check`. The check discovers all top-level HTML and every
+first-party `src/**/*.js` file automatically, so a new runtime file begins with
+a zero budget until reviewed. Regenerate with `npm run check:guardrails:update`.
 
 ## Adding a check
 Add `check:<name>` to `package.json`, append it to the `check:all` chain, and

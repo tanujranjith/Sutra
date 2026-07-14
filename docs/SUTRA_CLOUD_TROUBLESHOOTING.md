@@ -22,8 +22,8 @@ Plain-English fixes for common Sutra Cloud issues. See also
 - The hosted build's CSP only allows known origins and **forbids wildcards**.
   Your custom WebDAV/S3/Custom-HTTP/other-Supabase origin isn't allowed.
 - **Fix:** run a **self-hosted Sutra build** and add your origin to the
-  `connect-src` of the CSP `<meta>` in `Sutra.html` (and `scripts/serve-static.mjs`
-  for local dev). Recommended providers work in the hosted build.
+  `connect-src` in `scripts/lib/csp-policy.mjs`, run `npm run csp:generate`,
+  then rebuild or redeploy. Recommended providers work in the hosted build.
 
 ### I forgot my passphrase
 - It's **unrecoverable** — Sutra never stores it and providers never receive it.

@@ -155,6 +155,23 @@ test('assistant.useMemory defaults to ON', async ({ page }) => {
   expect(val).toBe(true);
 });
 
+// The local "forget this memory?" card builds a delete_memory action carrying a
+// display-only `label`. delete_memory is a strict-validated action, so the label
+// must be tolerated (and stripped) or Apply silently fails without deleting.
+test('a forget-memory card (delete_memory with a label field) actually deletes', async ({ page }) => {
+  await openApp(page);
+  const out = await page.evaluate(() => {
+    const mem = window.SutraAssistantMemory;
+    if (mem.__resetForTests) mem.__resetForTests();
+    mem.create({ category: 'user_notes', content: 'fact to forget', source: 'user_explicit' });
+    const id = mem.getAll()[0].id;
+    const res = window.flowAssistant.applyAction({ type: 'delete_memory', id, label: 'Forget: fact to forget' });
+    return { ok: res.ok, remaining: mem.getAll().length };
+  });
+  expect(out.ok).toBe(true);
+  expect(out.remaining).toBe(0);
+});
+
 test('Memory manager supports adding and removing individual details', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {

@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var CURRENT_VERSION = 4;
+  var CURRENT_VERSION = 5;
   var registry = Object.create(null);
 
   function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
@@ -147,6 +147,42 @@
     next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 4 });
     return next;
   }, { destructive: true, description: 'Quarantine invalid collection shapes and record schema metadata.' });
+
+  register(4, function migrateV4ToV5(workspace) {
+    var next = workspace;
+    function arrayOrEmpty(value) { return Array.isArray(value) ? value : []; }
+    function objectOrDefault(value, fallback) { return isObject(value) ? value : clone(fallback); }
+    next.energyProfile = objectOrDefault(next.energyProfile, {
+      version: 1, enabled: false, timezone: '', windows: [], sleepWindow: { start: '23:00', end: '07:00' }, protectedRecoveryMinutes: 30
+    });
+    next.protectedTime = arrayOrEmpty(next.protectedTime);
+    next.taskDependencies = arrayOrEmpty(next.taskDependencies);
+    next.studySessions = arrayOrEmpty(next.studySessions);
+    next.masteryRecords = arrayOrEmpty(next.masteryRecords);
+    next.confidenceObservations = arrayOrEmpty(next.confidenceObservations);
+    next.syncAuditLog = arrayOrEmpty(next.syncAuditLog);
+    next.privateDocuments = arrayOrEmpty(next.privateDocuments);
+    next.sharedStudySessions = arrayOrEmpty(next.sharedStudySessions);
+    next.studentDecisionState = objectOrDefault(next.studentDecisionState, {
+      version: 1, preset: 'balanced', snoozed: {}, dismissed: [], pinned: []
+    });
+    next.assistantPermissions = objectOrDefault(next.assistantPermissions, {
+      version: 1, mode: 'off', areas: {}, allowLockedNotes: false, allowWellness: false, allowFinancial: false, allowPrivateDocuments: false
+    });
+    next.assistantMemory = objectOrDefault(next.assistantMemory, { version: 1, enabled: false, items: [] });
+    next.workspaceMeta = objectOrDefault(next.workspaceMeta, { version: 1, revision: 0, lastWriterTabId: '', lastSavedAt: '' });
+    next.operatingManual = objectOrDefault(next.operatingManual, {
+      version: 1, preferredStudyTimes: [], reminderStyle: 'calm', planningStyle: 'balanced', accessibility: {}, notes: ''
+    });
+    next.portfolioWorkspace = objectOrDefault(next.portfolioWorkspace, { version: 1, entries: [], settings: {} });
+    next.collegeAppWorkspace = objectOrDefault(next.collegeAppWorkspace, {});
+    next.collegeAppWorkspace.activities = arrayOrEmpty(next.collegeAppWorkspace.activities);
+    next.collegeAppWorkspace.submissionReadiness = arrayOrEmpty(next.collegeAppWorkspace.submissionReadiness);
+    next.collegeAppWorkspace.applicationCosts = arrayOrEmpty(next.collegeAppWorkspace.applicationCosts);
+    next.collegeAppWorkspace.financialAidDeadlines = arrayOrEmpty(next.collegeAppWorkspace.financialAidDeadlines);
+    next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 5 });
+    return next;
+  }, { description: 'Add Sutra 2.0 planning, mastery, privacy, collaboration, and portfolio contracts.' });
 
   function plan(input, targetVersion) {
     var target = normalizeVersion(targetVersion || CURRENT_VERSION);

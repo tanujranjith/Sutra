@@ -188,6 +188,26 @@
         return out;
     }
 
+    function cloneSchedule(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    function scheduleFingerprint(value) {
+        return JSON.stringify(normalizeSchoolSchedule(value));
+    }
+
+    function createDraftSession(persisted) {
+        var baseline = normalizeSchoolSchedule(persisted);
+        var draft = cloneSchedule(baseline);
+        var baselineFingerprint = scheduleFingerprint(baseline);
+        return {
+            persisted: cloneSchedule(baseline),
+            draft: draft,
+            isDirty: function (candidate) { return scheduleFingerprint(candidate || draft) !== baselineFingerprint; },
+            commitValue: function (candidate) { return normalizeSchoolSchedule(candidate || draft); }
+        };
+    }
+
     // ---- Deterministic rotation engine --------------------------------------
     function getOverrideForDate(ws, dateKey) {
         var list = Array.isArray(ws.overrides) ? ws.overrides : [];
@@ -375,7 +395,9 @@
         countSchoolDaysFromAnchor: countSchoolDaysFromAnchor,
         getBusyWindowsForDate: getBusyWindowsForDate,
         getStudyWindowsForDate: getStudyWindowsForDate,
-        timeToMinutes: timeToMinutes
+        timeToMinutes: timeToMinutes,
+        createDraftSession: createDraftSession,
+        scheduleFingerprint: scheduleFingerprint
     };
 
     // Node export for deterministic engine tests (browser script tags skip this).
@@ -493,6 +515,9 @@
 
     // ---- Manager modal -------------------------------------------------------
     var managerDraft = null;
+    var managerDraftSession = null;
+    var managerRemovedSubscriptionIds = null;
+    var discardPrompt = null;
 
     function ensureModal() {
         var modal = document.getElementById('schoolScheduleModal');
@@ -516,20 +541,25 @@
         document.body.appendChild(modal);
 
         modal.addEventListener('click', function (e) {
-            if (e.target === modal) closeManager();
+            if (e.target === modal) requestCloseManager();
             var closeBtn = e.target.closest('[data-ssched-close]');
-            if (closeBtn) { closeManager(); return; }
+            if (closeBtn) { requestCloseManager(); return; }
             var saveBtn = e.target.closest('[data-ssched-save]');
             if (saveBtn) { saveManager(); return; }
             handleManagerClick(e);
         });
         modal.addEventListener('change', handleManagerChange);
+        modal.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !discardPrompt) { e.preventDefault(); requestCloseManager(); }
+        });
         return modal;
     }
 
     function openManager() {
         var modal = ensureModal();
-        managerDraft = getState();
+        managerDraftSession = createDraftSession(getState());
+        managerDraft = managerDraftSession.draft;
+        managerRemovedSubscriptionIds = new Set();
         renderManagerBody();
         modal.__sutraReturnFocus = document.activeElement;
         modal.hidden = false;
@@ -539,13 +569,70 @@
         if (firstInput) setTimeout(function () { try { firstInput.focus(); } catch (e) {} }, 40);
     }
 
-    function closeManager() {
+    function closeManagerNow() {
         var modal = document.getElementById('schoolScheduleModal');
         if (!modal) return;
+        var returnFocus = modal.__sutraReturnFocus;
         modal.hidden = true;
         modal.classList.remove('is-visible');
         managerDraft = null;
+        managerDraftSession = null;
+        managerRemovedSubscriptionIds = null;
         syncModalManager();
+        if (returnFocus && typeof returnFocus.focus === 'function' && document.contains(returnFocus)) {
+            setTimeout(function () { try { returnFocus.focus(); } catch (e) {} }, 0);
+        }
+    }
+
+    function hasUnsavedManagerDraft() {
+        if (!managerDraft || !managerDraftSession) return false;
+        syncDraftFromDom();
+        return managerDraftSession.isDirty(managerDraft);
+    }
+
+    function closeDiscardPrompt() {
+        if (!discardPrompt) return;
+        var prompt = discardPrompt;
+        discardPrompt = null;
+        prompt.remove();
+        var modal = document.getElementById('schoolScheduleModal');
+        var closeButton = modal && modal.querySelector('[data-ssched-close]');
+        if (closeButton) closeButton.focus();
+    }
+
+    function showDiscardPrompt() {
+        if (discardPrompt) return discardPrompt;
+        var overlay = document.createElement('div');
+        overlay.className = 'sutra-academic-modal is-visible ssched-discard-overlay';
+        overlay.setAttribute('role', 'alertdialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'sschedDiscardTitle');
+        overlay.setAttribute('aria-describedby', 'sschedDiscardCopy');
+        var card = document.createElement('div'); card.className = 'sutra-academic-card ssched-discard-card';
+        var title = document.createElement('h3'); title.id = 'sschedDiscardTitle'; title.textContent = 'Discard schedule changes?';
+        var copy = document.createElement('p'); copy.id = 'sschedDiscardCopy'; copy.textContent = 'Your unsaved school schedule edits will be lost.';
+        var actions = document.createElement('div'); actions.className = 'sutra-academic-foot-actions';
+        var keep = document.createElement('button'); keep.type = 'button'; keep.className = 'neumo-btn'; keep.textContent = 'Keep editing';
+        var discard = document.createElement('button'); discard.type = 'button'; discard.className = 'neumo-btn btn-danger'; discard.textContent = 'Discard changes';
+        actions.appendChild(keep); actions.appendChild(discard); card.appendChild(title); card.appendChild(copy); card.appendChild(actions); overlay.appendChild(card);
+        document.body.appendChild(overlay); discardPrompt = overlay;
+        keep.addEventListener('click', closeDiscardPrompt);
+        discard.addEventListener('click', function () { closeDiscardPrompt(); closeManagerNow(); });
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeDiscardPrompt(); });
+        overlay.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); closeDiscardPrompt(); return; }
+            if (e.key !== 'Tab') return;
+            if (e.shiftKey && document.activeElement === keep) { e.preventDefault(); discard.focus(); }
+            else if (!e.shiftKey && document.activeElement === discard) { e.preventDefault(); keep.focus(); }
+        });
+        keep.focus();
+        return overlay;
+    }
+
+    function requestCloseManager() {
+        if (!hasUnsavedManagerDraft()) { closeManagerNow(); return true; }
+        showDiscardPrompt();
+        return false;
     }
 
     function syncModalManager() {
@@ -861,7 +948,7 @@
         } else if (action === 'remove-sub') {
             var subRow = btn.closest('.ssched-sub-row');
             if (subRow) {
-                removeSubscriptionBlocks(subRow.dataset.sub);
+                if (managerRemovedSubscriptionIds) managerRemovedSubscriptionIds.add(subRow.dataset.sub);
                 ws.subscriptions = ws.subscriptions.filter(function (s) { return s.id !== subRow.dataset.sub; });
             }
         } else if (action === 'refresh-sub') {
@@ -883,7 +970,10 @@
         var ws = normalizeSchoolSchedule(managerDraft);
         // Auto-enable when the user has built a usable schedule.
         setState(ws);
-        closeManager();
+        if (managerRemovedSubscriptionIds) {
+            managerRemovedSubscriptionIds.forEach(function (subId) { removeSubscriptionBlocks(subId); });
+        }
+        closeManagerNow();
         toast(ws.enabled ? 'School schedule saved.' : 'School schedule saved (disabled).');
         try {
             if (global.SutraNotifications && typeof global.SutraNotifications.refresh === 'function') {
@@ -1082,6 +1172,8 @@
         getStudyWindowsForDate: function (dateKey, options) { return getStudyWindowsForDate(getState(), dateKey, options); },
         getNotifications: getNotifications,
         openManager: openManager,
+        hasUnsavedDraft: hasUnsavedManagerDraft,
+        requestCloseManager: requestCloseManager,
         renderTodayStrip: renderTodayStrip,
         applyIcsTextToSubscription: applyIcsTextToSubscription
     };

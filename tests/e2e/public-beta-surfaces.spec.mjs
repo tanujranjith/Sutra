@@ -43,7 +43,11 @@ test('Release notes open locally from the notification center without network fe
   const externalRequests = [];
   page.on('request', request => {
     const url = request.url();
-    if (!url.startsWith('http://127.0.0.1:5173/')) externalRequests.push(url);
+    let local = false;
+    try { const host = new URL(url).hostname; local = host === '127.0.0.1' || host === 'localhost'; } catch (e) {}
+    // Any local dev-server asset (on whatever port the harness chose) is fine; only
+    // genuinely remote hosts count as an unexpected network fetch.
+    if (!local) externalRequests.push(url);
   });
   await openApp(page);
 
@@ -92,16 +96,18 @@ test('integration registry truthfully gates external services and Smart Import a
   await page.locator('#smartImportAnalyzeBtn').click();
   await expect(page.locator('.smart-import-proposal')).toHaveCount(1);
 
-  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').length);
+  // Smart Import writes through the canonical SutraHomeworkStore (workspace/IndexedDB),
+  // not the legacy hwTasks:v2 localStorage key — read homework from the store.
+  const before = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).length);
   expect(before).toBe(0);
 
   await page.locator('#smartImportApplyBtn').click();
   await expect(page.locator('#smartImportStatus')).toContainText('Applied 1 approved item');
-  const after = await page.evaluate(() => JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').map(item => item.title));
+  const after = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).map(item => item.title));
   expect(after).toContain('Lab homework');
 
   await page.locator('#smartImportUndoBtn').click();
-  const undone = await page.evaluate(() => JSON.parse(localStorage.getItem('hwTasks:v2') || '[]').length);
+  const undone = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).length);
   expect(undone).toBe(0);
 });
 

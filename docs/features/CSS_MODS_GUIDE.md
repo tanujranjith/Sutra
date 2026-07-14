@@ -81,8 +81,8 @@ CSS snippets travel inside your workspace backup:
 
 What is **never** exported, from anywhere in Sutra:
 
-- API keys, provider credentials, and tokens. These live in **sessionStorage only**
-  (this browser session) and are stripped from every shared export.
+- API keys, provider credentials, and tokens. These use **sessionStorage only**
+  and are stripped from every shared export.
 
 Because CSS Overrides are pure CSS, importing them can never run code. And if an
 imported snippet is broken or hostile, **Safe Mode** bypasses it so it can't lock

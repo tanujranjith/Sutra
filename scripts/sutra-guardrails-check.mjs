@@ -30,61 +30,22 @@ import {
   scanWindowGlobals,
   extractWorkspaceFields
 } from './lib/guardrail-scan.mjs';
+import { discoverRuntimeSources } from './lib/runtime-source-discovery.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const BASELINE_PATH = resolve(repoRoot, 'scripts/guardrail-baseline.json');
 
-// Files scanned for unsafe sinks + storage writes + globals.
-const SCAN_FILES = [
-  'Sutra.html',
-  'src/core/app.js',
-  'src/core/dom-safety.js',
-  'src/core/error-reporter.js',
-  'src/core/feature-guard.js',
-  'src/core/issue-prompt.js',
-  'src/core/migrations.js',
-  'src/core/safe-storage.js',
-  'src/core/startup-health.js',
-  'src/core/student-date-parser.js',
-  'src/config/sutra-runtime-config.js',
-  'src/state/workspace-normalizers.js',
-  'src/components/icons/index.js',
-  'src/ui/date-enhancer.js',
-  'src/ui/time-enhancer.js',
-  'src/ui/select-enhancer.js',
-  'src/ui/student-loop-actions.js',
-  'src/features/study/ap-study.js',
-  'src/features/academic/academic-command-center.js',
-  'src/features/academic/assignment-studio.js',
-  'src/features/workspace/business-workspace.js',
-  'src/features/academic/command-center.js',
-  'src/features/customization/customization.js',
-  'src/features/workspace/daily-lock-in-quote.js',
-  'src/features/assistant/flow-assistant.js',
-  'src/features/assistant/flow-intelligence.js',
-  'src/features/assistant/sutra-product-knowledge.js',
-  'src/features/assistant/sutra-capability-registry.js',
-  'src/features/assistant/sutra-assistant-memory.js',
-  'src/features/assistant/sutra-local-help.js',
-  'src/features/academic/grade-planner.js',
-  'src/features/workspace/handwriting.js',
-  'src/features/study/homework.js',
-  'src/features/assistant/model-capabilities.js',
-  'src/features/workspace/notifications.js',
-  'src/features/workspace/activation-metrics.js',
-  'src/features/workspace/mobile-nav.js',
-  'src/features/workspace/today-command-center.js',
-  'src/features/workspace/custom-tabs.js',
-  'src/features/academic/planning-engine.js',
-  'src/features/customization/plugin-system.js',
-  'src/features/study/review.js',
-  'src/features/study/math-render.js',
-  'src/features/study/code-highlight.js',
-  'src/features/academic/school-schedule.js',
-  'src/features/academic/semester-setup.js',
-  'src/boot/startup-intro.js'
-];
+// New first-party runtime files enter the ratchet automatically. Generated,
+// fixture, vendor, legacy, test-output, and deploy trees are deliberately
+// excluded with reasons in the shared discovery module.
+const discovery = discoverRuntimeSources(repoRoot);
+const SCAN_FILES = discovery.files;
+
+if (!SCAN_FILES.length) {
+  console.error('FAIL no first-party runtime files were discovered for guardrail scanning.');
+  process.exit(1);
+}
 
 // Fields that legitimately appear in persist/export but are not user-data
 // workspace fields tracked by the persistence inventory (version markers, etc.).
@@ -98,15 +59,21 @@ function read(file) {
 function buildState() {
   const sinks = {};
   const storage = {};
+  const sinkFindings = {};
+  const storageFindings = {};
   const globals = new Set();
   for (const file of SCAN_FILES) {
     const text = read(file);
     if (text == null) continue;
-    sinks[file] = scanSinks(text).total;
-    storage[file] = scanStorage(text).total;
+    const sinkScan = scanSinks(text);
+    const storageScan = scanStorage(text);
+    sinks[file] = sinkScan.total;
+    storage[file] = storageScan.total;
+    sinkFindings[file] = sinkScan.hits.map(hit => hit.fingerprint).sort();
+    storageFindings[file] = storageScan.hits.map(hit => hit.fingerprint).sort();
     scanWindowGlobals(text).forEach(name => globals.add(name));
   }
-  return { sinks, storage, globals: Array.from(globals).sort() };
+  return { sinks, storage, sinkFindings, storageFindings, globals: Array.from(globals).sort() };
 }
 
 const args = process.argv.slice(2);
@@ -120,6 +87,8 @@ if (args.includes('--update')) {
       + 'Regenerate intentionally with --update and review the diff.',
     sinkBudgets: state.sinks,
     storageBudgets: state.storage,
+    sinkFindings: state.sinkFindings,
+    storageFindings: state.storageFindings,
     knownGlobals: state.globals,
     inventoryParityIgnore: []
   };
@@ -142,6 +111,16 @@ const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
 const failures = [];
 const notes = [];
 
+function addedFindings(current, approved) {
+  const remaining = new Map();
+  (approved || []).forEach(value => remaining.set(value, (remaining.get(value) || 0) + 1));
+  return (current || []).filter(value => {
+    const count = remaining.get(value) || 0;
+    if (count > 0) { remaining.set(value, count - 1); return false; }
+    return true;
+  });
+}
+
 // ---- 1 + 2) Sink and storage ratchets ---------------------------------------
 
 for (const file of SCAN_FILES) {
@@ -150,6 +129,9 @@ for (const file of SCAN_FILES) {
 
   const sinkBudget = baseline.sinkBudgets[file] ?? 0;
   const sinkScan = scanSinks(text);
+  const approvedSinkFindings = baseline.sinkFindings && baseline.sinkFindings[file];
+  const newSinkFindings = approvedSinkFindings
+    ? addedFindings(sinkScan.hits.map(hit => hit.fingerprint), approvedSinkFindings) : [];
   if (sinkScan.total > sinkBudget) {
     const extra = sinkScan.total - sinkBudget;
     const likely = sinkScan.hits.slice(-extra).map(h => `        L${h.line} ${h.key}: ${h.text}`);
@@ -162,9 +144,17 @@ for (const file of SCAN_FILES) {
   } else if (sinkScan.total < sinkBudget) {
     notes.push(`${file}: sink budget can be lowered to ${sinkScan.total} (was ${sinkBudget}).`);
   }
+  if (newSinkFindings.length) {
+    const hits = sinkScan.hits.filter(hit => newSinkFindings.includes(hit.fingerprint));
+    failures.push(`${file}: new unsafe sink fingerprint(s) detected even though the aggregate budget may be flat.\n`
+      + hits.map(hit => `        L${hit.line} ${hit.fingerprint} ${hit.text}`).join('\n'));
+  }
 
   const storageBudget = baseline.storageBudgets[file] ?? 0;
   const storageScan = scanStorage(text);
+  const approvedStorageFindings = baseline.storageFindings && baseline.storageFindings[file];
+  const newStorageFindings = approvedStorageFindings
+    ? addedFindings(storageScan.hits.map(hit => hit.fingerprint), approvedStorageFindings) : [];
   if (storageScan.total > storageBudget) {
     const extra = storageScan.total - storageBudget;
     const likely = storageScan.hits.slice(-extra).map(h => `        L${h.line} ${h.key}: ${h.text}`);
@@ -176,6 +166,11 @@ for (const file of SCAN_FILES) {
     );
   } else if (storageScan.total < storageBudget) {
     notes.push(`${file}: storage budget can be lowered to ${storageScan.total} (was ${storageBudget}).`);
+  }
+  if (newStorageFindings.length) {
+    const hits = storageScan.hits.filter(hit => newStorageFindings.includes(hit.fingerprint));
+    failures.push(`${file}: new direct-storage fingerprint(s) detected even though the aggregate budget may be flat.\n`
+      + hits.map(hit => `        L${hit.line} ${hit.fingerprint} ${hit.text}`).join('\n'));
   }
 }
 
@@ -225,6 +220,7 @@ if (appJs) {
 console.log('Sutra architecture guardrails');
 console.log('-----------------------------');
 console.log(`  files scanned:  ${SCAN_FILES.length}`);
+console.log(`  excluded paths: ${discovery.excluded.length}`);
 console.log(`  known globals:  ${known.size}`);
 console.log('');
 

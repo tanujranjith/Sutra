@@ -13,6 +13,7 @@ Start here, then follow the topic folders. The canonical map of the whole app is
 | Folder | What's inside |
 |---|---|
 | `architecture/` | `SUTRA_ARCHITECTURE.md` (the map — load order, path-coupling, "where do I edit X", staged extraction plan), `persistence-inventory.json` (the source-of-truth workspace-field inventory the guardrail/round-trip checks read), `sutra-save-systems-audit.md`. |
+| `design-system.md` | Shared spacing, typography, semantic color, motion, accessibility, safe-area, and z-index contracts. |
 | `features/` | Per-feature guides: Assistant, academic planning, document backgrounds, handwriting, canvas/timed habits, mods & customization, CSS mods, plugin SDK, Google Drive sync, mobile/responsive behavior, scrollytelling/landing, brand assets, daily-quotes source audit, rebrand & compatibility. |
 | `privacy-security/` | `PRIVACY_AND_LOCAL_FIRST.md`, `DATA_AND_BACKUPS.md`. |
 | `release/` | `CHANGELOG.md`, `TESTING_AND_RELEASE_CHECKLIST.md`. |

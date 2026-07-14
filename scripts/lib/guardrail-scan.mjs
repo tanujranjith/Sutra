@@ -39,6 +39,16 @@ function splitLines(text) {
   return String(text).split(/\r\n|\r|\n/);
 }
 
+export function stableFindingFingerprint(key, text) {
+  const normalized = `${key}|${String(text).trim().replace(/\s+/g, ' ')}`;
+  let hash = 2166136261;
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash ^= normalized.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${key}:${(hash >>> 0).toString(36)}`;
+}
+
 /**
  * Count unsafe DOM sinks in a source string.
  * Returns { total, byKey, hits: [{line, key, text}] } counting only lines that
@@ -69,7 +79,8 @@ function scanPatterns(text, patterns, allowMarker) {
       if (matches) {
         byKey[key] = (byKey[key] || 0) + matches.length;
         total += matches.length;
-        hits.push({ line: i + 1, key, text: line.trim().slice(0, 200) });
+        const excerpt = line.trim().slice(0, 200);
+        hits.push({ line: i + 1, key, text: excerpt, fingerprint: stableFindingFingerprint(key, excerpt) });
       }
     }
   }
@@ -77,22 +88,33 @@ function scanPatterns(text, patterns, allowMarker) {
 }
 
 /**
- * Collect the set of window.* global NAMES assigned in a source string.
- * Matches `window.Foo =` and `window['Foo'] =` (but not `==`/`===`).
- * Lines annotated `sutra-allow-global` are still collected (so they register)
- * — the marker is informational here.
+ * Collect the set of global NAMES assigned in a source string.
+ * Matches `window.Foo =`, `window['Foo'] =`, and the IIFE-alias forms
+ * `global.Foo =` / `globalThis.Foo =` (Sutra modules commonly capture the
+ * global as `(function (global) { ... global.SutraX = api }(window))`, which
+ * the window-only patterns would miss — letting a global bypass the ratchet).
+ * The alias forms require the identifier not to be a property access
+ * (`config.global.x`) so we don't collect unrelated `.global.*` chains.
+ * Comparisons (`==`/`===`) are excluded. Lines annotated `sutra-allow-global`
+ * are still collected (so they register) — the marker is informational here.
  */
 export function scanWindowGlobals(text) {
   const names = new Set();
   const lines = splitLines(text);
   const dotRe = /\bwindow\s*\.\s*([A-Za-z_$][\w$]*)\s*=(?!=)/g;
   const idxRe = /\bwindow\s*\[\s*['"]([^'"]+)['"]\s*\]\s*=(?!=)/g;
+  const aliasDotRe = /(?<![.\w$])(?:global|globalThis)\s*\.\s*([A-Za-z_$][\w$]*)\s*=(?!=)/g;
+  const aliasIdxRe = /(?<![.\w$])(?:global|globalThis)\s*\[\s*['"]([^'"]+)['"]\s*\]\s*=(?!=)/g;
   for (const line of lines) {
     let m;
     dotRe.lastIndex = 0;
     while ((m = dotRe.exec(line))) names.add(m[1]);
     idxRe.lastIndex = 0;
     while ((m = idxRe.exec(line))) names.add(m[1]);
+    aliasDotRe.lastIndex = 0;
+    while ((m = aliasDotRe.exec(line))) names.add(m[1]);
+    aliasIdxRe.lastIndex = 0;
+    while ((m = aliasIdxRe.exec(line))) names.add(m[1]);
   }
   return names;
 }

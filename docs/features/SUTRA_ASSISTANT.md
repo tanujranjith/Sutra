@@ -1,7 +1,8 @@
 # Sutra Assistant
 
-_Sutra is a private, local-first workspace for students. Sutra Assistant is its
-contextual chat panel — the part of Sutra that can answer questions, summarize
+_Sutra is a private, local-first workspace for students. The local Assistant
+experience is available in every fresh workspace; connecting an AI provider is
+optional. Sutra Assistant is the part of Sutra that can answer questions, summarize
 your work, and propose changes you approve. This document explains exactly what
 it does, what stays on your device, and what (only ever) leaves it._
 
@@ -85,6 +86,10 @@ Choose the narrowest level that still lets the Assistant be useful. Whatever you
 pick, the context is assembled **locally** first; only the portion needed for
 your message is included when a request is sent to your chosen provider.
 
+With local routing enabled, requests such as “search my notes for…” and “what do
+my notes say about…” run entirely on-device and return quoted, clickable note
+evidence without requiring a provider.
+
 ### Selected-text awareness
 
 The Assistant is aware of **text you have selected**. If you highlight a passage
@@ -107,8 +112,12 @@ The Assistant has two memory modes:
   conversation so you can follow up naturally ("now make it shorter," "do the
   same for chapter 3").
 
-Conversation history is held for the session and is **not** written into your
-exported backups (see §8).
+Visible conversations are saved locally by default so both the docked panel and
+full Assistant view share the same chats. You can disable **Save chat history**
+or clear chats at any time. Saved chats are included in encrypted Sutra backups
+by default; plaintext recovery includes them only when you explicitly enable
+that separate option. API keys, hidden prompts, action fences, and provider
+reasoning are never stored with chats.
 
 ### Suggested Prompts
 
@@ -132,10 +141,105 @@ something, it proposes — you decide.
   confirmation step before any proposed change is written, for an extra guardrail.
 - **Insert into Note** — drop the Assistant's response (or generated content)
   directly into the note you are working in.
+- **Anchored note edits** — rewrites can carry note, version, block, and
+  character anchors. Sutra shows before/after hunks, lets you approve or decline
+  each hunk, checkpoints the prior version, and refuses a stale proposal until
+  it is rebased or regenerated.
+- **Structural note operations** — heading renames, block moves, deduplication,
+  and splits use the same anchored hunk review. Merges preserve every source
+  note and append provenance links; tag changes, backlinks, and structured-field
+  conversions also produce activity receipts and undo snapshots.
 
 Items the Assistant creates — notes, tasks, timeline blocks, homework, review
 decks — flow into the same normal stores as anything you make by hand, so they
 persist and travel in backups exactly like the rest of your workspace.
+
+### Grounded answers and Sources used
+
+When a question may depend on your notes, Sutra builds a local, chunked index of
+unlocked notes and retrieves ranked quoted spans using text, fuzzy, metadata,
+backlink, and recency signals. Grounded replies show a **Sources used** panel
+with note title, heading path, exact excerpt, update date, confidence, and why
+the source matched. Source links open the note directly. Locked-note bodies are
+always excluded from Assistant context; safe metadata may identify a locked
+source without quoting or linking its contents.
+
+The **What Sutra knows about me** view combines readable-note counts, explicit
+memories and their source links, current Assistant permissions, and detected
+project context. It is a transparency and management view over the same local
+Notes Knowledge Core, not a second hidden profile store.
+
+### How this was answered
+
+Pre-send disclosures and every local or provider response include a compact,
+keyboard-accessible **How this was answered** receipt. Local receipts say that no
+provider was contacted and name the local engine, inspected workspace areas,
+referenced object types, and whether saved memory influenced the result. Provider
+receipts identify provider/model, Workspace Access, selected text and conversation
+inclusion, live-validated source titles and object types, attachment processing
+paths, deterministic engines, proposed actions, transmission status, and the
+categories sent. Stale or deleted sources render as **Source no longer available**
+without a deep link. Receipts never contain credentials, locked-note bodies, raw
+prompts, full context, sensitive memory text, or provider reasoning.
+
+A configured OpenAI-compatible localhost endpoint is a model provider for receipt
+purposes: its receipt names **Local endpoint** and the model, and reports the
+categories sent to that on-device endpoint. It is not mislabeled as a deterministic local answer.
+
+### Context selection and request budgets
+
+Provider context is selected deterministically in this order: explicit targets,
+current screen, selected text, linked notes/assignments, course context, due or
+active work, enabled relevant memories, then recent conversation when enabled.
+Locked sources, disabled/expired memories, secrets, credentials, unrelated areas,
+and unnecessary history are excluded. Model-aware budgets reserve answer capacity
+and account for attachments. Oversized structured records are compressed locally
+while retaining identifiers, titles, dates, relationships, and source links; Sutra
+does not split a record mid-object. The receipt discloses reductions and offers a
+control to narrow future context.
+
+### Untrusted material and prompt-injection defense
+
+Notes, attachments, LMS imports, pasted documents, URLs, and provider output are
+untrusted data. Sutra fences imported text explicitly, audits the final request for
+scope and privacy, blocks unsafe URL schemes and unsafe attachment types, and
+sanitizes rendered markup. Untrusted content cannot expand Workspace Access,
+select a provider, change security settings, authorize a write, save memory,
+initiate backup/sync, or create a non-certified action. Only the certified action
+registry can define an action type, and every write still requires its normal
+preview and approval.
+
+### Structured tutoring and academic integrity
+
+Provider-connected tutoring modes are **Explain, Hint First, Check My Attempt,
+Quiz Me, Diagnose My Mistake, Create Practice, Turn This Into Review Cards, Build
+a Study Plan, Compare My Work to a Rubric, Summarize My Notes,** and **Teach From
+My Materials**. They reuse the same Notes, Homework, Review, Testing Hub, Course
+Hub, Assignment Studio, Timeline, and Focus data. Without a provider, Sutra does
+not simulate a free-text tutor; Guided Local Mode offers provider setup and direct
+links to local study tools.
+
+Hint First reveals one progressively stronger hint at a time. Check My Attempt
+keeps the student's work, identifies the first meaningful error, and suggests the
+next correction. Quiz Me asks one question at a time and waits. Mistake diagnosis
+classifies conceptual, arithmetic, syntax, or reading errors. Teach From My
+Materials lists what it actually used and separates source-grounded claims from
+general model knowledge. Likely active assessments receive hints, concept help,
+attempt checking, or analogous practice instead of silent completion. Writing help
+can outline, revise, organize real sources, and flag unsupported claims, but never
+fabricates citations, quotes, interviews, experiments, or data.
+
+### Study-material quality and regeneration
+
+Generated quizzes, practice, cards, and guides run through deterministic checks
+for duplicates and near-duplicates, repeated choices, answer leakage, malformed
+keys, multiple correct choices, missing explanations, unsupported types, empty or
+oversized sections, weak requested-topic coverage, unsafe markup, duplicate cards,
+and missing source attribution. A quality report shows coverage, gaps, duplicates,
+leakage, explanations, sources, and sections needing regeneration. **Regenerate
+this section** changes only the selected generated Testing Hub question, previews
+the replacement, reruns validation, supports Stop/Retry, logs Activity, and offers
+Undo when authoritative state confirms it is safe.
 
 ---
 
@@ -146,6 +250,16 @@ Activity** — a running log of what was done and when. Each applied action can 
 **undone** from the log. The activity log lives entirely on your device. It is
 **not a secret**, so it does travel inside your `.sutra` backups (stored under
 the key `sutra:activityLog:v1`, migrated from the legacy `flow:activityLog:v1`).
+
+Targets are resolved by stable canonical ID before preview, before receipt/deep
+link rendering, immediately before Apply, and before Undo. Deleted or invented
+IDs fail closed; renamed objects keep working; same-titled objects remain
+distinguishable. A material change after Preview refreshes the preview and renews
+confirmation. Batch execution orders dependencies, reports conflicts and partial
+failures, rolls back compensating steps where possible, and uses idempotency keys
+so Retry cannot duplicate tasks, homework, blocks, note insertions, cards, plans,
+or memories. Sutra reports Undo/rollback success only after authoritative state
+confirms it.
 
 ---
 
@@ -170,10 +284,26 @@ provider's own model identifier). Your provider, model choices, and the custom
 endpoint configuration are **preferences** — they are saved with your workspace
 and travel in backups, so a restored workspace keeps its setup.
 
+The setup wizard can test the connection, discover available models, show
+detected input capabilities, and explain the provider's cost/privacy boundary
+before selection. Local endpoints use the same health/model-discovery step.
+
+Sutra extracts TXT, Markdown, CSV, code, DOCX, PPTX, and XLSX content locally
+within bounded limits. Supported models can receive PDFs and images natively.
+Optional local integrations may register an on-device OCR or transcription
+processor for scans, audio, and video; only the resulting bounded text is sent.
+Without such a processor, Sutra blocks unsupported media and recommends a local
+TXT/VTT transcript or a compatible model instead of silently dropping the file.
+
+Both Assistant surfaces support cancellation, timeout reporting, retry, stale
+chat protection, and offline local routes. If a streaming provider disconnects
+after returning text, Sutra saves the partial response with an interruption
+label before offering retry rather than discarding what already arrived.
+
 ### API keys are session-only
 
-Your provider **API keys live in this browser session only** (`sessionStorage`).
-They are:
+Provider **API keys live in this browser session only**
+(`sessionStorage`). This is the safest mode. Session-only keys are:
 
 - **never written to long-term storage** (not in localStorage, not in IndexedDB),
 - **never included in Google Drive sync snapshots** and never uploaded as Sutra
@@ -214,8 +344,9 @@ balance.
 2. Click the **provider chip** in the panel header to open **Provider & Model**,
    choose your provider, and enter the exact **Model ID**.
 3. Enter the **API key** in **Settings ▸ Assistant ▸ Your API Keys** (one field
-   per provider). The key is kept in this browser session only and is never
-   exported.
+   per provider). Session-only storage is the default; the optional encrypted
+   vault requires your local secret after restart. Keys and vault envelopes are
+   never exported.
 
 ---
 
@@ -275,6 +406,11 @@ compatibility message before attaching a file.
    required (use any placeholder if a field is mandatory). Nothing leaves your
    machine.
 
+Text, Markdown, CSV, code, DOCX, PPTX, and XLSX can be converted to bounded
+inert text locally. Compatible models may receive selected PDFs or images
+natively. Unsupported scans, audio, and video are blocked rather than silently
+dropped, and the attachment chip explains the safest supported next step.
+
 ### OpenAI — paid
 
 1. Go to **https://platform.openai.com** and sign in.
@@ -308,7 +444,9 @@ compatibility message before attaching a file.
 - **AI requests go browser → the provider you chose**, and nowhere else. Sutra
   operates no model servers and no relay.
 - **API keys never leave the session** and are never exported.
-- **Conversation history** is held for the session and is **not** exported.
+- **Visible conversation history** is saved locally when enabled, included in
+  encrypted backups by default, and included in plaintext recovery only by
+  explicit opt-in.
 - **What is sent to the provider** is your message plus the context permitted by
   your **Workspace Access** level (and your current selection, if any) — not your
   whole workspace by default.
@@ -364,14 +502,12 @@ to keep even the AI side on your own machine or network.
 ## 12. Troubleshooting
 
 **The Assistant won't return a model answer.**
-Confirm you have selected a provider and entered its API key for **this**
-session (keys are session-only and clear when the session ends). Check that you
-are online, or that your Local / Custom endpoint is running and reachable.
+Confirm you have selected a provider and entered its API key for this session. Check that you are online,
+or that your Local / Custom endpoint is running and reachable.
 
 **My API key disappeared.**
-Expected. Keys are stored in `sessionStorage` for privacy and are never
-persisted or exported. Re-enter it; your provider and model selection are
-remembered.
+Expected. Re-enter it for the current browser session. Provider/model choices
+remain remembered; credentials are never persisted or exported.
 
 **The Assistant doesn't seem to know about my other notes/tasks.**
 Check **Workspace Access**. **Current Screen Only** and **Current Area**

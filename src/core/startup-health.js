@@ -83,7 +83,7 @@
     {
       name: 'migrations', label: 'Workspace migration registry', severity: 'warning',
       fn: function () {
-        return !!(window.SutraMigrations && typeof window.SutraMigrations.migrate === 'function');
+        return !!(window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function');
       }
     },
     {
@@ -154,10 +154,10 @@
       // nudge (it skips entries carrying a userMessage). The recovery banner is
       // the single, data-safety-focused surface for a critical boot failure.
       try {
-        if (typeof window.reportError === 'function') {
+        if (typeof window.SutraReportError === 'function') {
           var failed = checks.filter(function (x) { return !x.ok && x.severity === 'critical'; })
             .map(function (x) { return x.label; }).join('; ');
-          window.reportError(
+          window.SutraReportError(
             new Error('Startup health: critical subsystem(s) unavailable: ' + failed),
             { where: 'startup-health', userMessage: 'Sutra could not finish starting up.' },
             'critical'
@@ -192,8 +192,12 @@
 
   function enterSafeMode() {
     try {
+      if (window.SutraRecoveryMode && typeof window.SutraRecoveryMode.enter === 'function') {
+        window.SutraRecoveryMode.enter('startup-health');
+        return;
+      }
       var url = new URL(window.location.href);
-      url.searchParams.set('sutraSafeMode', '1');
+      url.searchParams.set('sutraRecoveryMode', '1');
       window.location.href = url.toString();
     } catch (e) {
       try {
@@ -248,7 +252,7 @@
     actions.appendChild(makeButton('Reload', 'sutra-health-reload', function () {
       try { window.location.reload(); } catch (e) { /* noop */ }
     }));
-    actions.appendChild(makeButton('Open in Safe Mode', 'sutra-health-safemode', enterSafeMode));
+    actions.appendChild(makeButton('Open Safe Mode', 'sutra-health-safemode', enterSafeMode));
     var reloadBtn = actions.firstChild;
     if (reloadBtn) reloadBtn.style.cssText += 'background:#fff;color:#5b1717;';
     var safeBtn = actions.childNodes[1];

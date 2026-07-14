@@ -49,7 +49,7 @@ incremental **extraction** of cross-cutting utilities out of `app.js`:
 - **`src/core/safe-storage.js`** — `window.SutraSafeStorage`: defensive wrapper
   around `localStorage`/`sessionStorage` (quota/security/serialize handling,
   durable degraded banner). The approved channel for non-canonical storage.
-- **`src/core/error-reporter.js`** — `window.reportError(error, context,
+- **`src/core/error-reporter.js`** — `window.SutraReportError(error, context,
   severity)` plus global `error` / `unhandledrejection` nets and an exportable,
   in-memory diagnostics ring buffer (`window.SutraDiagnostics`). One funnel for
   "something went wrong" instead of bare `catch (e) {}`. Never blocks the user;
@@ -183,6 +183,9 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
   to `noteflow_attachments_db`; homework mirrors to localStorage.
 - **One hydrate path** merges stored data over defaults and normalizes it on
   load; **one debounced save path** (with a lifecycle flush) writes it back.
+- `src/persistence/workspace-db.js` deliberately reuses one IndexedDB connection,
+  closes it on `versionchange`, rejects blocked upgrades, and exposes an explicit
+  close/reopen seam so future schema upgrades cannot leak connections or hang.
 - **One persistence-health pipeline** wraps core saves, localStorage mirrors,
   IndexedDB transactions, attachment cache warming, imports, backups, and
   emergency exports. It records the last confirmed save, classifies quota /
@@ -221,7 +224,9 @@ For the broader privacy stance, see
 - `index.html`, `HomePage.html`, and `Sutra.html` ship CSP meta tags with
   explicit `script-src`, `connect-src`, `frame-src`, `form-action`, `img-src`,
   `media-src`, `worker-src`, and `object-src 'none'` coverage.
-- The local static server used by Playwright adds the same CSP plus
+- `scripts/lib/csp-policy.mjs` is the canonical host-document policy. Run
+  `npm run csp:generate` after changing it; CI rejects drift in HTML, Vercel,
+  or the local server. The local static server used by Playwright adds the same CSP plus
   `frame-ancestors 'none'`. Production static hosts must set that directive as
   an HTTP response header because browsers ignore it in CSP meta tags.
 - Fresh startup, manual encrypted `.sutra` backup, and JSON backup should make
@@ -366,7 +371,7 @@ breakage; the items marked **(silent)** are prose/strings no check guards.
 
 | Move a… | Also update |
 |---|---|
-| `src/**` runtime JS | `Sutra.html` `<script src>` (+ `?v=`) [link-check]; `SCAN_FILES` in `scripts/sutra-guardrails-check.mjs` then `npm run check:guardrails:update`; `scripts/smoke-check.mjs` content asserts; `scripts/sutra-academic-engines-check.mjs` `require()` paths (academic); `scripts/sutra-{modal-a11y,network,compat,persistence-health}-check.mjs` reads; doc prose **(silent)** |
+| `src/**` runtime JS | `Sutra.html` `<script src>` (+ `?v=`) [link-check]; automatic first-party discovery in `scripts/sutra-guardrails-check.mjs` then deliberate `npm run check:guardrails:update`; `scripts/smoke-check.mjs` content asserts; `scripts/sutra-academic-engines-check.mjs` `require()` paths (academic); `scripts/sutra-{modal-a11y,network,compat,persistence-health}-check.mjs` reads; doc prose **(silent)** |
 | `styles/**.css` | `Sutra.html` `<link href>` (+ `?v=`, **same position**) [link-check]; `scripts/{smoke,responsive,modal-a11y,app-shell}-check.mjs` + `sutra-deploy-artifact-check.mjs` path strings; doc prose **(silent)** |
 | `docs/**` | inter-doc relative links [link-check]; root `README/TUTORIAL/SUTRA_GUIDE` links [link-check]; check scripts that `read('docs/…')` (`smoke`, `csp`, `network`, `guardrails`, `round-trip`); leave `archive/` historical paths **(silent, intentional)** |
 | `scripts/**` | `package.json` (`check:*` + `check:all`) [link-check]; `__dirname`-derived repo root in the script; cross-imports; `playwright*.config.mjs`; ~50 doc run-instructions **(silent)** — this is why scripts stay flat (see §15) |

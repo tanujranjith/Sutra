@@ -6,7 +6,7 @@
  *
  *   1. SELF-CHECKS ("more tests") — a small battery of runtime health checks that
  *      run shortly after boot (and on demand). Each failed check is funnelled
- *      through window.reportError so it lands in diagnostics like any other error.
+ *      through window.SutraReportError so it lands in diagnostics like any other error.
  *   2. ERROR LISTENER — subscribes to the existing error funnel
  *      (`sutra:error-reported`, from error-reporter.js) and to feature
  *      degradation (`sutra:feature-degraded`, from feature-guard.js). When a real
@@ -266,8 +266,8 @@
       results.push({ name: check.name, label: check.label, ok: ok });
       if (!ok && !opts.silent) {
         try {
-          if (typeof window.reportError === 'function') {
-            window.reportError(
+          if (typeof window.SutraReportError === 'function') {
+            window.SutraReportError(
               new Error('Self-check failed: ' + check.label),
               { where: 'self-check', feature: check.name },
               'error'

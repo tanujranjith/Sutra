@@ -109,13 +109,11 @@
     var quarantine = Array.isArray(source.quarantine) ? clone(source.quarantine, []) : [];
     var courses = [];
     var courseById = Object.create(null);
-    var courseByIdentity = Object.create(null);
     var courseAliases = Object.create(null);
     (Array.isArray(source.courses) ? source.courses : []).slice(0, MAX_COURSES).forEach(function (raw, index) {
       var course = normalizeCourse(raw, index, now);
       if (!course) { quarantine.push({ entity: 'course', index: index, reason: 'invalid' }); return; }
-      var identity = course.type + '|' + course.name.toLowerCase();
-      var existing = courseById[course.id] || courseByIdentity[identity];
+      var existing = courseById[course.id];
       if (existing) {
         var existingId = existing.id;
         courseAliases[course.id] = existingId;
@@ -126,22 +124,25 @@
       }
       courses.push(course);
       courseById[course.id] = course;
-      courseByIdentity[identity] = course;
     });
     var courseIds = Object.create(null);
     var courseNames = Object.create(null);
-    courses.forEach(function (course) { courseIds[course.id] = true; courseNames[course.name.toLowerCase()] = course.id; });
+    courses.forEach(function (course) {
+      courseIds[course.id] = true;
+      var nameKey = course.name.toLowerCase();
+      // A name-only relationship is safe only when it is unambiguous. Two
+      // distinct courses may legitimately share a display name.
+      courseNames[nameKey] = courseNames[nameKey] ? '' : course.id;
+    });
 
     var tasks = [];
     var taskById = Object.create(null);
-    var taskByIdentity = Object.create(null);
     (Array.isArray(source.tasks) ? source.tasks : []).slice(0, MAX_TASKS).forEach(function (raw, index) {
       var candidate = raw && typeof raw === 'object' ? Object.assign({}, raw) : raw;
       if (candidate && courseAliases[candidate.courseId]) candidate.courseId = courseAliases[candidate.courseId];
       var task = normalizeTask(candidate, index, courseIds, courseNames, now);
       if (!task) { quarantine.push({ entity: 'task', index: index, reason: 'invalid' }); return; }
-      var identity = task.title.toLowerCase() + '|' + task.courseId + '|' + task.dueDate + '|' + task.dueTime;
-      var existing = taskById[task.id] || taskByIdentity[identity];
+      var existing = taskById[task.id];
       if (existing) {
         var existingTaskId = existing.id;
         Object.assign(existing, newest(existing, task));
@@ -150,7 +151,6 @@
       }
       tasks.push(task);
       taskById[task.id] = task;
-      taskByIdentity[identity] = task;
     });
 
     return Object.assign({}, source, {
@@ -190,6 +190,7 @@
     var state = normalizeWorkspace(initial || {});
     var adapter = null;
     var listeners = [];
+    var durableTail = Promise.resolve();
     function emit(meta) { listeners.slice().forEach(function (listener) { try { listener(getSnapshot(), meta || {}); } catch (_) {} }); }
     function getSnapshot() { return clone(state, normalizeWorkspace({})); }
     function commit(next, meta) {
@@ -209,6 +210,37 @@
       emit(meta);
       return getSnapshot();
     }
+    function commitDurably(buildNext, meta, outcome) {
+      var operation = durableTail.then(async function () {
+        var previous = state;
+        var draft = getSnapshot();
+        var next = typeof buildNext === 'function' ? buildNext(draft) : draft;
+        state = normalizeWorkspace(next === undefined ? draft : next);
+        state.revision = previous.revision + 1;
+        state.updatedAt = new Date().toISOString();
+        state.lastMutation = {
+          id: text(meta && meta.id, 160) || ('mutation-' + stableHash(state.updatedAt + '|' + state.revision)),
+          reason: text(meta && meta.reason, 160) || 'update',
+          at: state.updatedAt
+        };
+        try {
+          if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
+          if (adapter && typeof adapter.persist === 'function') {
+            await Promise.resolve(adapter.persist(state.lastMutation.reason));
+          }
+        } catch (error) {
+          state = previous;
+          try { if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot()); } catch (_) {}
+          throw error;
+        }
+        emit(meta);
+        return { result: outcome ? outcome.value : undefined, workspace: getSnapshot() };
+      });
+      // A failed operation must not poison the queue; the next mutation starts
+      // from the rolled-back canonical state.
+      durableTail = operation.then(function () {}, function () {});
+      return operation;
+    }
     return {
       configure: function (nextAdapter) {
         adapter = nextAdapter || null;
@@ -222,6 +254,11 @@
       },
       getSnapshot: getSnapshot,
       replace: function (next, meta) { return commit(Object.assign({}, state, next || {}), meta || {}); },
+      replaceDurably: function (next, meta) {
+        var replacement = clone(next || {}, {});
+        return commitDurably(function (draft) { return Object.assign({}, draft, replacement); }, meta || {})
+          .then(function (receipt) { return receipt.workspace; });
+      },
       transact: function (mutator, meta) {
         if (typeof mutator !== 'function') throw new TypeError('Homework transaction requires a mutator.');
         var draft = getSnapshot();
@@ -229,6 +266,15 @@
         var snapshot = commit(draft, meta || {});
         return { result: result, workspace: snapshot };
       },
+      transactDurably: function (mutator, meta) {
+        if (typeof mutator !== 'function') return Promise.reject(new TypeError('Homework transaction requires a mutator.'));
+        var outcome = {};
+        return commitDurably(function (draft) {
+          outcome.value = mutator(draft);
+          return draft;
+        }, meta || {}, outcome);
+      },
+      whenPersisted: function () { return durableTail; },
       subscribe: function (listener) {
         if (typeof listener !== 'function') return function () {};
         listeners.push(listener);

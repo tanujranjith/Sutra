@@ -70,13 +70,13 @@ We use the thread metaphor sparingly. Inside the app, labels stay literal — *T
 - **Local-first.** Your workspace lives in browser storage on the device. No login. No telemetry. No required server.
 - **One surface, many modes.** Sutra Modes promote the views you need now without deleting the others.
 - **Calm by default.** Glass / neumorphic styling, configurable density, and a per-page theme system. Motion and contrast are tunable.
-- **Bring your own AI key.** The Sutra Assistant is optional and uses a key you supply. Keys stay on this device for the session only and are never exported.
+- **AI stays optional.** The local Assistant works without a key. Remote model features use a provider key you supply; session-only storage is the default, with optional user-secret encrypted storage on this device. Credentials are never exported.
 - **Portable.** A single password-encrypted `.sutra` file is a complete backup of your workspace.
 
 ## Quick Start
 
 1. Open **`Sutra.html`** directly (double-click is fine), or open the landing page **`HomePage.html`** and click **Start your session**. (`index.html` simply redirects to `HomePage.html`.)
-2. On first launch, the **Sutra Setup** wizard offers to add your classes, AP subjects, college focus, and a Sutra Mode. Skip it if you prefer a blank slate.
+2. On first launch, the **Sutra Setup** wizard walks you through Welcome, Classes, Setup, Mode, Protect, and Finish. Skip it if you prefer a blank slate.
 3. Open **Today** to see the **Daily Thread** and one **Next Step**.
 4. Press **Ctrl/⌘+K** to open the **Command Palette** and try Quick Capture, *Create Weekly Review note*, or *Export backup*.
 5. Open **Settings → Data** and save a password-encrypted **`.sutra`** backup as soon as your workspace feels real.
@@ -248,7 +248,7 @@ A compact **Focus Timer** in the sidebar (quick presets, custom durations, ringt
 
 ## Sutra Assistant & Sutra Intelligence
 
-**Sutra Assistant** is the optional contextual chat panel — off in a fresh Student Setup unless you enable the **Assistant Pack**. When enabled, it can answer questions about your workspace and **propose local changes** (tasks, timeline blocks, notes, review cards, and more) that you approve one card at a time. It uses **your own API key**.
+**Sutra Assistant** is available locally in a fresh workspace. Local Help, note retrieval, navigation, and deterministic workspace answers work without an API key; remote model calls remain opt-in and use a provider you choose. It can answer questions about your workspace with visible quoted note sources and **propose local changes** (tasks, timeline blocks, anchored note diffs, notes, review cards, and more) that you approve before they are applied.
 
 **Sutra Intelligence** is the **local signal layer** behind it. It reads *only* your workspace — overdue work, workload, schedule conflicts, weak areas, review backlog, and next steps — to ground the assistant's answers. **It does not call any server itself.**
 
@@ -272,7 +272,7 @@ AI requests go **directly from your browser to the provider you choose** — Sut
 - Perplexity (Sonar)
 - Custom OpenAI-Compatible Endpoint (a "Local endpoint")
 
-You bring your own API key and the exact **Model ID**. Keys live in **sessionStorage only** (this browser session), are never exported, and are never included in Google Drive sync snapshots; when you send an Assistant request, the key is sent only to the provider you selected for that request.
+You bring your own API key and the exact **Model ID**. Keys use **sessionStorage only** and clear with the browser session. They are never exported or included in sync snapshots; when you send a request, the key goes only to the selected provider.
 
 DeepSeek, xAI, and Perplexity use Sutra's implemented OpenAI-compatible request
 path. They are text-first: native image input is enabled only when the local
@@ -283,7 +283,7 @@ them.
 ### Controls
 
 - **Workspace Access** — *Current Screen Only* / *Current Area* / *Full Workspace Context*, plus selected-text awareness. Each certified action also declares the minimum access it needs.
-- **Single Request** vs **Conversation Memory** — whether the assistant remembers the thread (this is short-term, session-only).
+- **Single Request** vs **Conversation Memory** — whether prior visible turns are sent with the next request. Visible chats themselves can be saved locally; this setting controls provider context, not persistence.
 - **Suggested Changes** — proposals render as **Apply / Decline** cards (with *Apply all* for multi-action replies); **Confirm Before Applying Changes** keeps approval in your hands. Replies also offer **Insert into Note** and **Suggested Prompts**.
 - **Assistant Activity** — every applied action is logged locally with **undo**.
 
@@ -416,7 +416,7 @@ Sutra is keyboard-first. The most important shortcut is the **Command Palette** 
 
 Sutra ships layered help:
 
-1. **Sutra Setup** — the first-launch wizard that adds classes, AP subjects, and college focus, picks a Sutra Mode, and offers an immediate `.sutra` backup. Restart it anytime from `Settings → Advanced → Restart Sutra Setup`.
+1. **Sutra Setup** — the first-launch wizard that follows the student daily loop: Welcome (intent), Classes (add or import), Setup (paste work or starter packs), Mode (student / AP / writer), Protect (backup), and Finish (land on Today). Restart it anytime from `Settings → Advanced → Restart Sutra Setup`.
 2. **Starter Packs** — local, preview-then-apply workspace seeds (notes, courses, review decks, timeline blocks, tasks) for goals like AP season, college apps, SAT/ACT, robotics, senior year, research, freelancing, or a personal life system. Apply all or selected parts, with one-tap undo. Open from `Settings → Integrations → Starter Packs` or the All Due empty state. See [Starter Packs](docs/features/STARTER_PACKS.md).
 3. **Help & Docs page** — an auto-generated, non-removable page at the top of the page tree, with its own table of contents.
 4. **Interactive tutorial** — a guided overlay tour from Settings → Advanced.
@@ -428,7 +428,7 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 - Storage is **local-first** on this device: IndexedDB holds the workspace; localStorage holds settings, health state, and a few caches.
 - There is **no Sutra-operated server**. Fresh startup, manual encrypted `.sutra` backup, and JSON backup are designed to make **zero third-party requests**.
 - Optional outbound calls happen only when you trigger them: Google Drive OAuth/sync, Sutra Assistant provider requests, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, configurable localhost/127.0.0.1 AI endpoints, and secondary document import/export libraries when a browser-native fallback is not enough.
-- **API keys never leave sessionStorage** and are never exported.
+- **API keys are session-only.** They are never persisted, exported, or synced.
 - New `.sutra` exports are password-encrypted. JSON exports and document exports are not encrypted. Locked-page PINs protect a page within the browser UI (hashed credentials travel in backups), which is not full-disk encryption.
 - Clearing browser storage without a backup will lose your local data.
 

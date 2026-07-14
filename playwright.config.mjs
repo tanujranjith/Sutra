@@ -8,7 +8,8 @@ const responsiveTestMatch = [
   // compatibility matrix, not only a desktop test that resizes itself.
   /.*mobile-nav\.spec\.mjs$/,
   /.*quick-capture-student-flow\.spec\.mjs$/,
-  /.*today-redesign\.spec\.mjs$/
+  /.*today-redesign\.spec\.mjs$/,
+  /.*onboarding-redesign\.spec\.mjs$/
 ];
 
 export default defineConfig({

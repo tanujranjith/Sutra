@@ -23,6 +23,10 @@
 
     var ENTRY_STATUSES = ['graded', 'missing', 'pending', 'excused'];
     var COURSE_LEVELS = ['regular', 'honors', 'ap'];
+    // A single course can legitimately carry more than three credits in some
+    // block, vocational, dual-enrollment, and international programs. Eight is
+    // a generous per-course ceiling that still rejects malformed huge weights.
+    var MAX_COURSE_CREDITS = 8;
 
     var DEFAULT_LETTER_SCALE = [
         ['A+', 97], ['A', 93], ['A-', 90],
@@ -115,7 +119,7 @@
             entries: entries,
             targetPercent: Number.isFinite(target) ? Math.max(0, Math.min(110, target)) : null,
             gpa: {
-                credits: Number.isFinite(credits) && credits > 0 ? Math.min(3, credits) : 1,
+                credits: Number.isFinite(credits) && credits > 0 ? Math.min(MAX_COURSE_CREDITS, credits) : 1,
                 level: COURSE_LEVELS.indexOf(String(gpaMeta.level)) !== -1 ? String(gpaMeta.level) : 'regular',
                 includeInGpa: gpaMeta.includeInGpa !== false
             }
@@ -337,6 +341,100 @@
     }
 
     /**
+     * Grade Risk Radar scenarios. Upcoming assessments are pending entries or
+     * explicit rows shaped as { id, title, categoryId, maxScore }. Every output
+     * carries assumptions so incomplete gradebook data is never presented as a
+     * precise prediction.
+     */
+    function projectGradeScenarios(courseData, scenario, options) {
+        var data = normalizeCourseGrades(courseData);
+        var settings = options || {};
+        var input = scenario || {};
+        var current = computeCourseGrade(data, settings);
+        var upcoming = Array.isArray(input.upcomingAssessments)
+            ? input.upcomingAssessments.slice()
+            : data.entries.filter(function (entry) { return entry.status === 'pending'; });
+        upcoming = upcoming.map(function (entry, index) {
+            return {
+                id: String(entry.id || ('upcoming-' + index)),
+                title: String(entry.title || 'Upcoming assessment'),
+                categoryId: String(entry.categoryId || ''),
+                maxScore: Number(entry.maxScore) > 0 ? Number(entry.maxScore) : 100,
+                date: String(entry.date || '')
+            };
+        });
+
+        var assumptions = [];
+        var categoryWeight = data.categories.reduce(function (sum, category) { return sum + Number(category.weight || 0); }, 0);
+        if (data.categories.length && Math.abs(categoryWeight - 100) > 0.01) assumptions.push('Category weights total ' + round1(categoryWeight) + '%, so populated categories are reweighted by the current calculator.');
+        if (data.targetPercent === null) assumptions.push('No target grade is set; risk uses absolute letter-grade thresholds.');
+        if (current.percent === null) assumptions.push('No countable scores exist; the expected scenario uses the selected fallback score.');
+        if (!upcoming.length) assumptions.push('No pending assessments with point values are entered; projected scenarios equal the current grade.');
+        if (data.categories.length && upcoming.some(function (entry) { return !entry.categoryId; })) assumptions.push('At least one upcoming assessment has no grading category and may have no effect in weighted mode.');
+
+        var expectedPercent = Number(input.expectedPercent);
+        if (!Number.isFinite(expectedPercent)) expectedPercent = current.percent === null ? 75 : current.percent;
+        expectedPercent = Math.max(0, Math.min(100, expectedPercent));
+
+        function evaluate(percent) {
+            var additions = upcoming.map(function (entry) {
+                return {
+                    id: '__scenario__' + entry.id,
+                    categoryId: entry.categoryId,
+                    title: entry.title,
+                    score: entry.maxScore * percent / 100,
+                    maxScore: entry.maxScore,
+                    status: 'graded',
+                    date: entry.date,
+                    homeworkTaskId: ''
+                };
+            });
+            return computeCourseGrade({ categories: data.categories, entries: data.entries.concat(additions) }, settings);
+        }
+
+        var worst = evaluate(0);
+        var expected = evaluate(expectedPercent);
+        var best = evaluate(100);
+        var leverage = upcoming.map(function (entry) {
+            var zero = whatIfScore(data, { categoryId: entry.categoryId, score: 0, maxScore: entry.maxScore }, settings);
+            var full = whatIfScore(data, { categoryId: entry.categoryId, score: entry.maxScore, maxScore: entry.maxScore }, settings);
+            return {
+                id: entry.id,
+                title: entry.title,
+                categoryId: entry.categoryId,
+                maxScore: entry.maxScore,
+                date: entry.date,
+                swing: zero.percent === null || full.percent === null ? null : round2(full.percent - zero.percent),
+                projectedAtZero: zero.percent,
+                projectedAtFull: full.percent
+            };
+        }).sort(function (a, b) { return Number(b.swing || 0) - Number(a.swing || 0); });
+
+        var targetRequirement = null;
+        if (data.targetPercent !== null && leverage.length) {
+            targetRequirement = Object.assign({ assessmentId: leverage[0].id, title: leverage[0].title }, scoreNeededForTarget(data, {
+                categoryId: leverage[0].categoryId,
+                maxScore: leverage[0].maxScore,
+                targetPercent: data.targetPercent
+            }, settings));
+        }
+        return {
+            current: current,
+            risk: computeGradeRisk(data, settings),
+            scenarios: {
+                worst: { assumedScorePercent: 0, grade: worst },
+                expected: { assumedScorePercent: round1(expectedPercent), grade: expected },
+                best: { assumedScorePercent: 100, grade: best }
+            },
+            missingWorkImpact: rankImpact(data, settings),
+            upcomingLeverage: leverage,
+            targetRequirement: targetRequirement,
+            assumptions: assumptions,
+            confidence: assumptions.length === 0 ? 'high' : (assumptions.length <= 2 ? 'medium' : 'low')
+        };
+    }
+
+    /**
      * GPA across courses. items: [{ percent, credits, level, includeInGpa }].
      * Returns { unweighted, weighted, totalCredits, courseCount }.
      */
@@ -351,7 +449,9 @@
             var letter = letterFromPercent(item.percent);
             var points = GPA_POINTS[letter];
             if (points === undefined) return;
-            var credits = Number(item.credits) > 0 ? Number(item.credits) : 1;
+            var rawCredits = Number(item.credits);
+            var credits = Number.isFinite(rawCredits) && rawCredits > 0
+                ? Math.min(MAX_COURSE_CREDITS, rawCredits) : 1;
             var boost = item.level === 'ap' ? s.apBoost : (item.level === 'honors' ? s.honorsBoost : 0);
             totalCredits += credits;
             unweightedSum += points * credits;
@@ -430,6 +530,7 @@
         scoreNeededForTarget: scoreNeededForTarget,
         whatIfScore: whatIfScore,
         rankImpact: rankImpact,
+        projectGradeScenarios: projectGradeScenarios,
         computeGradeRisk: computeGradeRisk,
         computeGpa: computeGpa,
         letterFromPercent: letterFromPercent
@@ -541,7 +642,20 @@
         }
 
         var risk = computeGradeRisk(data, planner.settings);
+        var radar = projectGradeScenarios(data, null, planner.settings);
         var riskHtml = '<span class="gp-risk-badge gp-risk-' + risk.status + '" title="' + esc(risk.reason) + '">' + esc(risk.label) + '</span>';
+        var radarScenarioHtml = ['worst', 'expected', 'best'].map(function (name) {
+            var row = radar.scenarios[name];
+            var label = name.charAt(0).toUpperCase() + name.slice(1);
+            return '<div class="gp-radar-scenario gp-radar-' + name + '"><span>' + label + '</span><strong>'
+                + (row.grade.percent === null ? '—' : row.grade.percent.toFixed(1) + '%')
+                + '</strong><small>assumes ' + row.assumedScorePercent + '% on pending work</small></div>';
+        }).join('');
+        var radarAssumptionsHtml = radar.assumptions.length
+            ? '<details class="gp-radar-assumptions"><summary>Assumptions (' + radar.assumptions.length + ')</summary><ul>'
+                + radar.assumptions.map(function (assumption) { return '<li>' + esc(assumption) + '</li>'; }).join('') + '</ul></details>'
+            : '<div class="gp-radar-confidence">High-confidence projection from complete entered data.</div>';
+        var leverageTop = radar.upcomingLeverage[0];
 
         // Effort-vs-estimate signal: only when this COURSE has enough logged
         // times to calibrate (tier 'course'), and only when the ratio is
@@ -616,6 +730,13 @@
             + '<input type="number" min="0" max="110" step="0.5" data-gp-field="target" value="' + (data.targetPercent === null ? '' : esc(data.targetPercent)) + '" placeholder="93"></label>'
             + '</div>'
 
+            + '<div class="gp-risk-radar" aria-label="Grade Risk Radar">'
+            + '<div class="gp-risk-radar-head"><strong>Grade Risk Radar</strong><span>Projection confidence: ' + esc(radar.confidence) + '</span></div>'
+            + '<div class="gp-radar-scenarios">' + radarScenarioHtml + '</div>'
+            + (leverageTop ? '<p class="gp-radar-leverage"><strong>Highest leverage:</strong> ' + esc(leverageTop.title) + (leverageTop.swing === null ? '' : ' could swing the course by ' + leverageTop.swing + ' points') + '.</p>' : '')
+            + radarAssumptionsHtml
+            + '</div>'
+
             + '<h4 class="cw-subhead">Weighted categories <span class="gp-head-hint">(weight % · drop lowest)</span></h4>'
             + '<div class="gp-cat-grid-head"><span>Category</span><span>Weight</span><span>Drops</span><span>Current</span><span></span></div>'
             + (categoryRows || '<div class="gp-empty-line">No categories — scores are pooled as total points.</div>')
@@ -642,7 +763,7 @@
 
             + '<h4 class="cw-subhead">GPA</h4>'
             + '<div class="gp-gpa-row">'
-            + '<label class="gp-scn-field"><span>Credits</span><input type="number" min="0.5" max="3" step="0.5" data-gp-field="gpa-credits" value="' + esc(data.gpa.credits) + '"></label>'
+            + '<label class="gp-scn-field"><span>Credits</span><input type="number" min="0.5" max="8" step="0.5" data-gp-field="gpa-credits" value="' + esc(data.gpa.credits) + '"></label>'
             + '<label class="gp-scn-field"><span>Level</span><select data-gp-field="gpa-level">'
             + COURSE_LEVELS.map(function (l) { return '<option value="' + l + '"' + (l === data.gpa.level ? ' selected' : '') + '>' + (l === 'ap' ? 'AP / IB' : l.charAt(0).toUpperCase() + l.slice(1)) + '</option>'; }).join('')
             + '</select></label>'
@@ -854,6 +975,7 @@
         renderGradesTabHtml: renderGradesTabHtml,
         computeCourseGrade: computeCourseGrade,
         computeGradeRisk: computeGradeRisk,
+        projectGradeScenarios: projectGradeScenarios,
         computeGpa: computeGpa,
         // Cumulative course grade after each dated score entry — a grade trend.
         computeGradeTrend: function (courseId) {

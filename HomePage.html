@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.supabase.co https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
   <title>Sutra | Student OS for School, Projects, and Life</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -11,6 +11,8 @@
   <link rel="apple-touch-icon" sizes="180x180" href="assets/brand/sutra/generated/sutra-icon-180.png">
   <meta name="application-name" content="Sutra">
   <meta name="apple-mobile-web-app-title" content="Sutra">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="author" content="Tanuj Ranjith">
   <meta name="description" content="Sutra is a local-first student OS — a private student workspace that brings school, projects, tasks, notes, and planning into one place, with an optional AI assistant. Your workspace stays in your browser by default.">
   <meta name="keywords" content="Sutra, student OS, student workspace, local-first, notes, assignments, planning, school, projects, tasks, student productivity, Tanuj Ranjith">
@@ -3610,7 +3612,7 @@
     const phraseWrapper = document.getElementById('rotating-phrase-wrapper');
     const phraseElement = document.createElement('span');
     phraseElement.className = 'phrase';
-    phraseWrapper.innerHTML = '';
+    phraseWrapper.replaceChildren();
     phraseWrapper.appendChild(phraseElement);
 
     let currentPhraseIndex = 0;

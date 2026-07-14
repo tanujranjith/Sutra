@@ -12,9 +12,11 @@ const original = JSON.stringify(fixture);
 const result = migrations.migrateWorkspace(fixture, { targetVersion: migrations.CURRENT_VERSION, now: '2026-07-09T12:00:00.000Z' });
 const failures = [];
 
+const CURRENT = migrations.CURRENT_VERSION;
+const expectedApplied = Array.from({ length: CURRENT - 1 }, (_, i) => `v${i + 1}->v${i + 2}`).join(',');
 if (JSON.stringify(fixture) !== original) failures.push('migration mutated the source fixture');
-if (result.workspace.version !== 4) failures.push('v1 fixture did not reach current schema version 4');
-if (result.applied.join(',') !== 'v1->v2,v2->v3,v3->v4') failures.push('sequential migrations were not recorded');
+if (result.workspace.version !== CURRENT) failures.push(`v1 fixture did not reach current schema version ${CURRENT}`);
+if (result.applied.join(',') !== expectedApplied) failures.push(`sequential migrations were not recorded (expected ${expectedApplied}, got ${result.applied.join(',')})`);
 if (!result.workspace.streaks || result.workspace.streaks.taskStreaks['legacy-task-1'] !== 3) failures.push('legacy streak state was not migrated');
 if (!result.workspace.pluginOwnedFutureField || result.workspace.pluginOwnedFutureField.preserve !== true) failures.push('unknown fields were not preserved');
 if (!result.workspace.pages || result.workspace.pages[0].id !== 'legacy-page-1') failures.push('workspace content was not preserved');
@@ -31,4 +33,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Migration registry check passed (v1 -> v4 sequentially, validation, idempotence, future-version preservation).');
+console.log(`Migration registry check passed (v1 -> v${CURRENT} sequentially, validation, idempotence, future-version preservation).`);

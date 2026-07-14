@@ -141,6 +141,17 @@ const gpa = GP.computeGpa([
 ok(near(gpa.unweighted, 3.5), 'unweighted GPA averages letter points', gpa.unweighted);
 ok(near(gpa.weighted, 4.0), 'weighted GPA applies the AP boost', gpa.weighted);
 
+// Multi-credit courses must retain their real weighting. A 5-credit A paired
+// with a 1-credit C produces (5*4 + 1*2) / 6, not an artificial 3-credit cap.
+const multiCredit = GP.computeGpa([
+  { percent: 95, credits: 5, level: 'regular', includeInGpa: true },
+  { percent: 75, credits: 1, level: 'regular', includeInGpa: true }
+], GP.getDefaultGradePlanner().settings);
+ok(near(multiCredit.unweighted, 3.67) && multiCredit.totalCredits === 6,
+  '5-credit courses retain their real GPA weight', multiCredit);
+ok(GP.normalizeCourseGrades({ gpa: { credits: 5 } }).gpa.credits === 5,
+  'course normalization preserves 5-credit courses');
+
 // Grade risk classification (deterministic enum safe/watch/risk/danger/unknown).
 const riskSafe = GP.computeGradeRisk(GP.normalizeCourseGrades({ targetPercent: 90, categories: [], entries: [{ id: 'e', categoryId: '', title: 'A', score: 95, maxScore: 100, status: 'graded' }] }));
 ok(riskSafe.status === 'safe', 'a grade above target is safe', riskSafe);
@@ -156,6 +167,35 @@ const riskMissingDrag = GP.computeGradeRisk(GP.normalizeCourseGrades({ targetPer
   { id: 'm2', categoryId: '', title: 'M2', score: 0, maxScore: 100, status: 'missing' }
 ] }));
 ok(riskMissingDrag.missingCount === 2 && riskMissingDrag.status !== 'safe', 'missing work pulls an otherwise-safe grade down a notch', riskMissingDrag);
+
+const radar = GP.projectGradeScenarios(GP.normalizeCourseGrades({
+  targetPercent: 90,
+  categories: [{ id: 'tests', name: 'Tests', weight: 100 }],
+  entries: [
+    { id: 'past', categoryId: 'tests', title: 'Midterm', score: 80, maxScore: 100, status: 'graded' },
+    { id: 'final', categoryId: 'tests', title: 'Final', score: 0, maxScore: 100, status: 'pending' }
+  ]
+}), { expectedPercent: 85 });
+ok(radar.scenarios.worst.grade.percent === 40 && radar.scenarios.best.grade.percent === 90, 'risk radar computes best/worst pending-work scenarios', radar.scenarios);
+ok(radar.scenarios.expected.grade.percent === 82.5, 'risk radar computes the labeled expected scenario', radar.scenarios.expected);
+ok(radar.upcomingLeverage[0].title === 'Final' && radar.upcomingLeverage[0].swing === 50, 'risk radar ranks upcoming assessment leverage', radar.upcomingLeverage);
+ok(radar.targetRequirement && near(radar.targetRequirement.neededPercent, 100, 0.2), 'risk radar solves the target requirement', radar.targetRequirement);
+const radarAssumptions = GP.projectGradeScenarios(GP.normalizeCourseGrades({ categories: [{ id: 'x', name: 'Only', weight: 70 }], entries: [] }));
+ok(radarAssumptions.confidence === 'low' && radarAssumptions.assumptions.length >= 3, 'incomplete grade data is explicitly assumption-labeled', radarAssumptions);
+
+console.log('\nLearning Engine — calibration, corrections, and exam readiness');
+const LE = require('../src/domain/learning-engine.js');
+const prediction = LE.startConfidenceCheck({ masteryRecords: [], confidenceObservations: [] }, { id: 'pred-1', key: 'bio:cells', confidence: 0.9 }, { now: '2026-07-10T09:00:00Z' });
+const revealed = LE.resolveConfidenceCheck(prediction.workspace, 'pred-1', { correct: false }, { now: '2026-07-10T09:01:00Z' });
+const calibration = LE.getCalibration(revealed.workspace);
+ok(calibration.samples === 1 && calibration.tendency === 'overconfident' && calibration.brierScore === 0.81, 'confidence is captured before reveal and calibration is scored', calibration);
+const correction = LE.createCorrectionFromMistake({ reviewWorkspace: { decks: [], items: [], sessions: [], settings: {} }, tasks: [] }, { id: 'mistake-1', courseName: 'Biology', question: 'Cell energy molecule?', correctAnswer: 'ATP' }, { now: '2026-07-10T09:00:00Z' });
+ok(correction.card.sourceCitation.id === 'mistake-1' && correction.workspace.tasks.length === 1, 'mistake creates a cited correction card plus follow-up practice', correction.receipt);
+const learningWorkspace = { masteryRecords: [{ key: 'bio:cells', score: .5, attempts: 2, lastObservedAt: '2026-07-09T09:00:00Z' }] };
+const examReadiness = LE.computeReadiness(learningWorkspace, { id: 'bio', courseId: 'bio', examDate: '2026-07-12T09:00:00Z', practiceTests: [{ percent: 70, completedAt: '2026-07-09T09:00:00Z' }], mistakes: [{ id: 'm1', unresolved: true }] }, { now: '2026-07-10T09:00:00Z' });
+ok(examReadiness.daysUntil === 2 && examReadiness.components.mastery === 50, 'readiness exposes weighted components and days remaining', examReadiness);
+const final72 = LE.buildFinal72Plan(learningWorkspace, { id: 'bio', courseId: 'bio', examDate: '2026-07-12T09:00:00Z', mistakes: [{ id: 'm1', title: 'Membranes', resolved: false }] }, { now: '2026-07-10T09:00:00Z', protectedSleepHours: 8 });
+ok(final72.eligible && final72.reviewRequired && final72.protectedSleepHours === 8, 'final-72-hours plan is reviewed and sleep-protected', final72);
 
 // ---------------------------------------------------------------------------
 console.log('\nSemester Setup — local extraction');

@@ -157,12 +157,12 @@
     };
 
     // Categories the local-extraction layer can convert to inert text.
-    var LOCAL_EXTRACTION_CATEGORIES = ['text', 'code', 'svg', 'document', 'presentation'];
+    var LOCAL_EXTRACTION_CATEGORIES = ['text', 'code', 'svg', 'document', 'presentation', 'spreadsheet'];
     // Of those, the zip-based Office formats that need JSZip:
-    var ZIP_EXTRACTION_EXTENSIONS = ['docx', 'pptx'];
+    var ZIP_EXTRACTION_EXTENSIONS = ['docx', 'pptx', 'xlsx'];
     // Doc-like formats we deliberately do NOT extract (unreliable without a
     // real parser): binary .doc/.ppt/.xls, RTF, OpenDocument, xlsx sheets.
-    var EXTRACTION_UNSUPPORTED_EXTENSIONS = ['doc', 'ppt', 'xls', 'xlsx', 'rtf', 'odt', 'odp', 'ods'];
+    var EXTRACTION_UNSUPPORTED_EXTENSIONS = ['doc', 'ppt', 'xls', 'rtf', 'odt', 'odp', 'ods'];
 
     function providerLimits(provider) {
         return PROVIDER_LIMITS[provider] || PROVIDER_LIMITS.local;
@@ -217,7 +217,7 @@
                 video: false
             },
             structuredOutput: !!m,           // prompt-enforced JSON + app-side validation
-            streaming: false,                // adapters are non-streaming today
+            streaming: !!(m && (type === 'openai_compatible' || type === 'anthropic' || type === 'gemini')),
             toolUse: false,
             longContext: !!(m && LONG_CONTEXT_PATTERN.test(m)),
             maxContextTokens: m && LONG_CONTEXT_PATTERN.test(m) ? 200000 : 16000,
@@ -237,6 +237,8 @@
         'native-pdf': 'Sent as PDF',
         'native-image': 'Analyzed as image',
         'local-extraction': 'Text extracted locally',
+        'local-ocr': 'OCR performed locally',
+        'local-transcription': 'Transcribed locally',
         'unsupported-model': 'Unsupported by selected model',
         'too-large': 'Exceeds selected model limit',
         'blocked-archive': 'Archive blocked for safety',
@@ -245,6 +247,32 @@
         'unsupported-format': 'Format not supported',
         'extraction-failed': 'Could not read file content'
     };
+
+    // Optional local tools register here at runtime. Sutra ships no hidden
+    // downloader or background model: a processor must be explicitly provided
+    // by a local integration and returns bounded inert text.
+    var LOCAL_PROCESSORS = Object.create(null);
+    function registerLocalProcessor(category, processor, metadata) {
+        var key = String(category || '').toLowerCase();
+        if (['image', 'audio', 'video'].indexOf(key) < 0) throw new Error('Local processors support image, audio, or video categories.');
+        if (typeof processor !== 'function') throw new TypeError('Local processor must be a function.');
+        LOCAL_PROCESSORS[key] = { run: processor, metadata: Object.assign({ label: key === 'image' ? 'Local OCR' : 'Local transcription' }, metadata || {}) };
+        return true;
+    }
+    function unregisterLocalProcessor(category) { delete LOCAL_PROCESSORS[String(category || '').toLowerCase()]; }
+    function hasLocalProcessor(category) { return !!LOCAL_PROCESSORS[String(category || '').toLowerCase()]; }
+    function listLocalProcessors() {
+        return Object.keys(LOCAL_PROCESSORS).sort().map(function (category) { return { category: category, metadata: Object.assign({}, LOCAL_PROCESSORS[category].metadata) }; });
+    }
+    async function runLocalProcessor(category, file, options) {
+        var entry = LOCAL_PROCESSORS[String(category || '').toLowerCase()];
+        if (!entry) throw new Error('No local processor is configured for this file type.');
+        var result = await entry.run(file, Object.assign({}, options || {}));
+        var output = result && typeof result === 'object' ? result.text : result;
+        output = String(output || '').slice(0, LOCAL_EXTRACTION_LIMITS.maxOutputChars);
+        if (!output.trim()) throw new Error('The local processor returned no readable text.');
+        return { text: output, metadata: result && typeof result === 'object' ? Object.assign({}, result.metadata || {}) : {} };
+    }
 
     /**
      * Decide how ONE file would be processed for the given provider/model.
@@ -288,6 +316,7 @@
         }
         if (cls.category === 'image') {
             if (caps.nativeAttachmentSupport.images) return out('native-image', true, false, 'The selected model analyzes the image directly.');
+            if (hasLocalProcessor('image')) return out('local-ocr', true, false, 'Text is extracted from the image by your configured on-device OCR tool; only the extracted text is sent.');
             return out('unsupported-model', false, false, 'The selected model is text-only. Switch to a vision-capable model to attach images.');
         }
         if (cls.category === 'text' || cls.category === 'code' || cls.category === 'svg') {
@@ -308,10 +337,17 @@
             return out('unsupported-format', false, false, 'No safe on-device extractor exists for .' + cls.ext + ' yet. Export it as PDF (best), .docx/.pptx, or plain text and attach that.');
         }
         if (cls.category === 'spreadsheet') {
+            if (cls.ext === 'xlsx') {
+                if (size > LOCAL_EXTRACTION_LIMITS.maxSourceBytes) {
+                    return out('too-large', false, false, 'Too large for local text extraction.');
+                }
+                return out('local-extraction', true, false, 'Cell text is extracted from the XLSX on this device; only tabular text is sent. Formulas, charts, macros, and formatting are not included.');
+            }
             return out('unsupported-format', false, false, 'Spreadsheets are not supported natively here. Export the sheet as CSV and attach that instead.');
         }
         if (cls.category === 'audio' || cls.category === 'video') {
-            return out('unsupported-format', false, false, 'No Sutra Intelligence model connection supports ' + cls.category + ' input yet.');
+            if (hasLocalProcessor(cls.category)) return out('local-transcription', true, false, 'Your configured on-device tool transcribes this ' + cls.category + '; only bounded transcript text is sent.');
+            return out('unsupported-format', false, false, 'No local ' + cls.category + ' transcription tool is configured. Transcribe it locally and attach TXT/VTT, or install a compatible local processor.');
         }
         return out('unsupported-format', false, false, 'Unrecognized file type. Attach PDFs, images, or text-based files.');
     }
@@ -494,8 +530,28 @@
         return [];
     }
 
-    window.SutraModelCapabilities = {
+    // ------------------------------------------------------------------
+    // Capability verification registry (Part 10 honesty layer).
+    // Each record dates when a provider/model capability claim in this file was
+    // last confirmed, so a static check can flag records that have gone stale and
+    // a new provider cannot ship an undated claim. `verifiedOn` is ISO YYYY-MM-DD.
+    // Sources are the provider docs where cited, otherwise the in-repo adapter
+    // pattern that implements the claim (Sutra only claims what the adapter does).
+    // ------------------------------------------------------------------
+    var CAPABILITY_VERIFICATION = [
+        { id: 'groq-reasoning-effort', provider: 'groq', capability: 'reasoning_effort', verifiedOn: '2026-06-01', source: 'console.groq.com/docs/reasoning', note: 'reasoning_effort only on gpt-oss models' },
+        { id: 'anthropic-extended-thinking', provider: 'anthropic', capability: 'extended_thinking', verifiedOn: '2026-06-01', source: 'platform.claude.com extended-thinking docs', note: 'adaptive on 4.6+/5.x; manual budget_tokens on 3.7 & 4.0-4.5' },
+        { id: 'openai-reasoning-effort', provider: 'openai', capability: 'reasoning_effort', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENAI_EFFORT_PATTERN', note: 'o1/o3/o4 + gpt-5; o1-mini/preview excluded; gpt-5 adds minimal' },
+        { id: 'openrouter-reasoning', provider: 'openrouter', capability: 'reasoning', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENROUTER_REASONING_PATTERN', note: 'unified reasoning control across most reasoning families' },
+        { id: 'gemini-thinking-budget', provider: 'gemini', capability: 'thinking_budget', verifiedOn: '2026-06-01', source: 'in-repo pattern GEMINI_THINKING_PATTERN', note: 'gemini-2.5 family + flash-thinking' },
+        { id: 'attachment-native-image', provider: 'multi', capability: 'native_image_input', verifiedOn: '2026-06-01', source: 'in-repo adapter buildProviderRequestPayload', note: 'anthropic/gemini/openai + recognized OpenAI-compatible only' },
+        { id: 'attachment-native-pdf', provider: 'multi', capability: 'native_pdf_input', verifiedOn: '2026-06-01', source: 'in-repo adapter buildProviderRequestPayload', note: 'anthropic/gemini document blocks; others fall back to local extraction' },
+        { id: 'provider-streaming', provider: 'multi', capability: 'streaming', verifiedOn: '2026-07-14', source: 'in-repo consumeIntelligenceStream adapter', note: 'OpenAI-compatible, Anthropic, and Gemini adapters only' }
+    ];
+
+    var api = {
         VERSION: 1,
+        CAPABILITY_VERIFICATION: CAPABILITY_VERIFICATION,
         classifyFile: classifyFile,
         resolveModelCapabilities: resolveModelCapabilities,
         resolveReasoningCapability: resolveReasoningCapability,
@@ -503,7 +559,14 @@
         determineAttachmentProcessingPlan: determineAttachmentProcessingPlan,
         validateAttachmentSet: validateAttachmentSet,
         suggestCompatibleModels: suggestCompatibleModels,
+        registerLocalProcessor: registerLocalProcessor,
+        unregisterLocalProcessor: unregisterLocalProcessor,
+        hasLocalProcessor: hasLocalProcessor,
+        listLocalProcessors: listLocalProcessors,
+        runLocalProcessor: runLocalProcessor,
         LOCAL_EXTRACTION_LIMITS: LOCAL_EXTRACTION_LIMITS,
         PLAN_LABELS: PLAN_LABELS
     };
+    if (typeof module !== 'undefined' && module.exports) module.exports = api;
+    if (typeof window !== 'undefined') window.SutraModelCapabilities = api;
 })();

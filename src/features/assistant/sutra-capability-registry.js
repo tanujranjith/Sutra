@@ -57,6 +57,15 @@
         // Notes
         insert_text: { domain: 'notes', scope: 'currentView', reversible: true },
         replace_selection: { domain: 'notes', scope: 'currentView', reversible: true },
+        edit_note_patch: { domain: 'notes', scope: 'workspace', reversible: true },
+        rename_note_heading: { domain: 'notes', scope: 'workspace', reversible: true },
+        move_note_blocks: { domain: 'notes', scope: 'workspace', reversible: true },
+        deduplicate_note: { domain: 'notes', scope: 'workspace', reversible: true },
+        split_note: { domain: 'notes', scope: 'workspace', reversible: true },
+        merge_notes: { domain: 'notes', scope: 'workspace', reversible: true },
+        apply_note_tags: { domain: 'notes', scope: 'workspace', reversible: true },
+        create_note_backlink: { domain: 'notes', scope: 'workspace', reversible: true },
+        convert_selection_to_fields: { domain: 'notes', scope: 'currentView', reversible: true },
         create_page: { domain: 'notes', scope: 'none', reversible: true },
         append_note_text: { domain: 'notes', scope: 'currentView', reversible: true },
         create_note_from_response: { domain: 'notes', scope: 'currentView', reversible: true },
@@ -132,6 +141,7 @@
         // Assistant Memory
         create_memory: { domain: 'memory', scope: 'none', reversible: true },
         update_memory: { domain: 'memory', scope: 'none', reversible: true },
+        promote_memory_to_note: { domain: 'memory', scope: 'none', reversible: true },
         enable_memory: { domain: 'memory', scope: 'none', reversible: true },
         disable_memory: { domain: 'memory', scope: 'none', reversible: true },
         delete_memory: { domain: 'memory', scope: 'none', reversible: true, destructive: true },

@@ -1,7 +1,7 @@
 /*
  * feature-guard.js — feature-level runtime isolation for Sutra.
  *
- * Loaded after error-reporter.js (depends on window.reportError) and before
+ * Loaded after error-reporter.js (depends on window.SutraReportError) and before
  * app.js / feature modules. Wraps feature initialization and rendering so that
  * one broken feature cannot white-screen the whole app: the failure is
  * reported, the rest of boot continues, and a small, dismissible degraded-state
@@ -16,7 +16,7 @@
  * opts.fallback (undefined by default) on failure. Async fns whose promise
  * rejects are also caught and degrade the same way.
  *
- * Zero hard dependencies (degrades gracefully if reportError is missing).
+ * Zero hard dependencies (degrades gracefully if SutraReportError is missing).
  * Classic script, IIFE, attaches to window. Must never throw.
  */
 (function () {
@@ -27,8 +27,8 @@
 
   function report(error, context, severity) {
     try {
-      if (typeof window.reportError === 'function') {
-        window.reportError(error, context, severity);
+      if (typeof window.SutraReportError === 'function') {
+        window.SutraReportError(error, context, severity);
         return;
       }
     } catch (e) { /* fall through to console */ }
@@ -58,6 +58,9 @@
     try {
       window.dispatchEvent(new CustomEvent('sutra:feature-degraded', { detail: { feature: name, label: label } }));
     } catch (e) { /* noop */ }
+    try {
+      if (window.SutraRecoveryMode && typeof window.SutraRecoveryMode.noteOptionalFailure === 'function') window.SutraRecoveryMode.noteOptionalFailure(name, label + ' failed');
+    } catch (e) { /* recovery remains optional */ }
   }
 
   function nowSafe() {
@@ -97,6 +100,15 @@
       // textContent only — never interpolate names into innerHTML.
       text.textContent = '⚠ ' + info.label + ' is unavailable this session.';
       chip.appendChild(text);
+
+      if (window.SutraRecoveryMode && typeof window.SutraRecoveryMode.enter === 'function') {
+        var recover = document.createElement('button');
+        recover.type = 'button';
+        recover.textContent = 'Recovery mode';
+        recover.style.cssText = 'background:transparent;border:1px solid #b78a4a;border-radius:6px;color:#ffe9c7;cursor:pointer;padding:3px 6px;font-size:11px;';
+        recover.addEventListener('click', function () { window.SutraRecoveryMode.enter('feature:' + name); });
+        chip.appendChild(recover);
+      }
 
       var close = document.createElement('button');
       close.type = 'button';

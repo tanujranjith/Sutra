@@ -34,7 +34,9 @@ test('academic command center ranks overdue grade-risk work and renders course c
     yesterday.setDate(yesterday.getDate() - 1);
     const dueDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
     const tasks = [{ id: 'acc-overdue-1', courseId: course.id, title: 'Lab conclusion', text: 'Lab conclusion', done: false, dueDate, due: dueDate, priority: 'high', difficulty: 'hard' }];
-    window.SutraSafeStorage.set('hwTasks:v2', tasks, { importance: 'important', label: 'QA homework' });
+    // Append into the canonical store (createCourse already persisted the course
+    // there); a raw hwTasks:v2 write would be invisible to the command center.
+    window.SutraHomeworkStore.transact((draft) => { draft.tasks = (draft.tasks || []).concat(tasks); }, { reason: 'test-seed' });
     window.dispatchEvent(new CustomEvent('homework:updated'));
     window.setActiveView('courses');
     window.renderCourseHubView();
@@ -66,7 +68,7 @@ test('academic command center remains usable at a phone width and honors reduced
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dueDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-    window.SutraSafeStorage.set('hwTasks:v2', [{ id: 'mobile-acc-task', courseId: course.id, title: 'Biology review', done: false, dueDate, priority: 'high', difficulty: 'medium' }], { importance: 'important', label: 'QA homework' });
+    window.SutraHomeworkStore.transact((draft) => { draft.tasks = (draft.tasks || []).concat([{ id: 'mobile-acc-task', courseId: course.id, title: 'Biology review', done: false, dueDate, priority: 'high', difficulty: 'medium' }]); }, { reason: 'test-seed' });
     window.setActiveView('courses');
     window.renderCourseHubView();
   });

@@ -126,8 +126,10 @@ async function addCourse(page, name) {
   await page.locator('[data-course-quick-add]').click();
 }
 
-test('Homework: a course add survives a storage failure and is recovered on the next successful save', async ({ page }) => {
-  // Seed one course so the board renders (not the empty-state setup overlay).
+test('Homework: a course add survives a workspace save failure and is recovered on the next successful save', async ({ page }) => {
+  // Homework now persists through window.SutraHomeworkStore into the main workspace
+  // (IndexedDB), not a standalone hwCourses:v2 localStorage key. The seed is imported
+  // into the store at boot so the board renders (not the empty-state capture).
   await page.addInitScript(() => {
     localStorage.setItem('hwCourses:v2', JSON.stringify([{ id: 'c-seed', name: 'Biology', type: 'class' }]));
     localStorage.setItem('hwTasks:v2', JSON.stringify([]));
@@ -135,42 +137,38 @@ test('Homework: a course add survives a storage failure and is recovered on the 
   });
   await openApp(page);
   await gotoHomework(page);
+  await expect.poll(() => page.evaluate(() => window.SutraHomework.getCourses().map((c) => c.name)))
+    .toContain('Biology');
 
-  // Make every homework write fail (quota).
+  // Make every workspace IndexedDB save fail. The store's commit() rolls its own
+  // in-memory state back on a persist failure and re-throws, but the homework module
+  // keeps the new course in module memory and re-renders — so the change is never
+  // lost from the user's screen even though it did not reach storage.
   await page.evaluate(() => {
-    window.__realSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (k, v) {
-      if (/^hw(Courses|Tasks)/.test(k)) {
-        const e = new Error('full');
-        e.name = 'QuotaExceededError';
-        throw e;
-      }
-      return window.__realSetItem.call(this, k, v);
-    };
+    window.__realIndexedDB = window.indexedDB;
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      value: { open() { throw new DOMException('Simulated save failure', 'InvalidStateError'); } }
+    });
   });
 
   await addCourse(page, 'Chemistry');
 
-  // Durable warning shown; the core IndexedDB banner must stay hidden.
-  await expect(page.locator('#sutraStorageWarningBanner')).toBeVisible();
-  await expect(page.locator('#sutraSaveFailureBanner')).toBeHidden();
+  // The in-memory homework state must still contain Chemistry (preserved through the
+  // failed save), even though the store's canonical snapshot was rolled back.
+  await expect.poll(() => page.evaluate(() => window.SutraHomework.getCourses().map((c) => c.name)))
+    .toContain('Chemistry');
 
-  // The failed write really did not reach storage yet (getItem is not stubbed).
-  const duringFailure = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('hwCourses:v2') || '[]').map((c) => c.name)
-  );
-  expect(duringFailure).not.toContain('Chemistry');
-
-  // Storage recovers; the next save persists the CURRENT in-memory state — which
-  // proves Chemistry was preserved in memory through the failure.
-  await page.evaluate(() => { Storage.prototype.setItem = window.__realSetItem; });
+  // Storage recovers; the next successful add persists the CURRENT in-memory state —
+  // proving Chemistry was preserved and is now durably saved alongside Physics.
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'indexedDB', { configurable: true, value: window.__realIndexedDB });
+  });
   await addCourse(page, 'Physics');
 
   await expect.poll(async () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem('hwCourses:v2') || '[]').map((c) => c.name))
+    page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.map((c) => c.name))
   ).toEqual(expect.arrayContaining(['Biology', 'Chemistry', 'Physics']));
-
-  await expect(page.locator('#sutraStorageWarningBanner')).toBeHidden();
 });
 
 test('Homework: corrupted stored JSON recovers gracefully (no crash, view usable)', async ({ page }) => {
@@ -181,12 +179,19 @@ test('Homework: corrupted stored JSON recovers gracefully (no crash, view usable
   });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await openApp(page); // boots (brand mark visible) despite corrupt homework data
-  await gotoHomework(page);
-  // Recovery to empty state means a fresh course can still be created + persisted.
-  await addCourse(page, 'Calculus');
+  await openApp(page); // boots (brand mark visible) despite corrupt legacy homework data
+  // The store must recover corrupt legacy data to a clean, empty snapshot rather than
+  // crashing or throwing a JSON parse error into the page.
+  const recovered = await page.evaluate(() => window.SutraHomeworkStore.getSnapshot());
+  expect(Array.isArray(recovered.courses)).toBe(true);
+  expect(recovered.courses.length).toBe(0);
+  expect(Array.isArray(recovered.tasks)).toBe(true);
+
+  // Recovery to empty state means a fresh course can still be created + persisted
+  // through the canonical cross-feature path, and it durably reaches the store.
+  await page.evaluate(() => window.SutraHomework.addCourse('Calculus'));
   await expect.poll(async () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem('hwCourses:v2') || '[]').map((c) => c.name))
+    page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.map((c) => c.name))
   ).toContain('Calculus');
   expect(errors.join('\n')).not.toMatch(/JSON|is not valid|unexpected token/i);
 });

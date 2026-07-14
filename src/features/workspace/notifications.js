@@ -143,7 +143,7 @@
                 throw new Error('SutraSafeStorage is unavailable.');
             }
         } catch (e) {
-            if (typeof global.reportError === 'function') global.reportError(e, { where: 'notifications._saveState' }, 'warning');
+            if (typeof global.SutraReportError === 'function') global.SutraReportError(e, { where: 'notifications._saveState' }, 'warning');
         }
     }
 
@@ -520,6 +520,7 @@
                 + '<div class="notif-empty-icon"><i class="fas fa-bell" aria-hidden="true"></i></div>'
                 + '<div class="notif-empty-title">All clear</div>'
                 + '<div class="notif-empty-sub">No upcoming deadlines or alerts right now.</div>'
+                + '<button class="notif-empty-action" type="button" onclick="if(typeof setActiveView===\'function\') setActiveView(\'today\')">Open Today →</button>'
                 + '</div>';
         } else {
             var missed = toShow.filter(function (n) { return n.missedWhileAway && !n.read; });

@@ -59,6 +59,29 @@ test('a deck exports as a self-contained shareable HTML flashcard file', async (
   expect(html).toContain('function flip()');
 });
 
+test('shareable deck treats hostile prompts, answers, cloze text, and images as inert data', async ({ page }) => {
+  await openApp(page);
+  const html = await page.evaluate(() => window.SutraReviewTesting.buildShareableDeckHtml(
+    { name: '</title><script>window.__deckXss=1<\/script>Biology' },
+    [{
+      prompt: '{{</span><img src=x onerror="window.__deckXss=2">}} after </script>',
+      answer: '<svg onload="window.__deckXss=3">answer</svg>',
+      imageUrl: 'data:image/svg+xml,<svg onload="window.__deckXss=4"></svg>'
+    }]
+  ));
+  await page.setContent(html, { waitUntil: 'load' });
+  const result = await page.evaluate(() => ({
+    fired: window.__deckXss || 0,
+    title: document.querySelector('h1')?.textContent || '',
+    prompt: document.querySelector('.face')?.textContent || '',
+    images: document.querySelectorAll('img').length
+  }));
+  expect(result.fired).toBe(0);
+  expect(result.title).toContain('</title><script>window.__deckXss=1</script>Biology');
+  expect(result.prompt).toContain('[…] after </script>');
+  expect(result.images).toBe(0);
+});
+
 test('math blocks render from their LaTeX source', async ({ page }) => {
   await openApp(page);
   const rendered = await page.evaluate(async () => {

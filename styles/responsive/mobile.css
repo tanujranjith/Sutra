@@ -2185,3 +2185,12 @@
         grid-column: 1 / -1;
     }
 }
+
+/* ---- 37f. Assistant chat actions: always visible on touch devices
+        (no hover state to reveal them) ---- */
+@media (hover: none) and (pointer: coarse) {
+    .asst-chat-item .asst-chat-item-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}

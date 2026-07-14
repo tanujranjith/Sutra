@@ -22,7 +22,8 @@ window.SUTRA_CONFIG.googleDriveClientId = window.SUTRA_CONFIG.googleDriveClientI
 //
 // SETUP: after creating your Supabase project (see supabase/README.md), also add
 // your exact project origin (https://<ref>.supabase.co) to the `connect-src` CSP
-// in Sutra.html and scripts/serve-static.mjs, replacing the YOUR-PROJECT-REF
-// placeholder. CSP cannot read this file, so that step is manual.
+// in scripts/lib/csp-policy.mjs, then run `npm run csp:generate` to update the
+// HTML and hosting header outputs. CSP cannot read this runtime file, so an
+// exact self-hosted project origin still requires an explicit build change.
 window.SUTRA_CONFIG.supabaseUrl = window.SUTRA_CONFIG.supabaseUrl || '';
 window.SUTRA_CONFIG.supabaseAnonKey = window.SUTRA_CONFIG.supabaseAnonKey || '';
