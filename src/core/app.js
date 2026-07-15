@@ -2093,8 +2093,16 @@ function updateToolbarTimeWidget() {
                     const baselineMarginTop = parseFloat(window.getComputedStyle(flowRow).marginTop) || 0;
                     flowRect = flowRow.getBoundingClientRect();
                     const shortfall = Math.ceil((toolbarRect.bottom + flowGap) - flowRect.top);
+                    // Cap the correction. toolbarRect can be read mid-animation/mid-
+                    // transition (sidebar collapse, theme entrance transforms) and
+                    // briefly report a bogus, far-too-large bottom edge; unlike the
+                    // padding-top calc below, this margin is stamped on with
+                    // !important and nothing else bounds it, so an uncapped shortfall
+                    // here permanently shoves the chip row (and the title below it)
+                    // hundreds of pixels down the page.
+                    const maxShortfall = compactViewport ? 120 : 160;
                     if (shortfall > 0) {
-                        flowRow.style.setProperty('margin-top', `${baselineMarginTop + shortfall}px`, 'important');
+                        flowRow.style.setProperty('margin-top', `${baselineMarginTop + Math.min(shortfall, maxShortfall)}px`, 'important');
                         // Re-measure: the container-clearance calc below anchors off
                         // flowRect.bottom, which just moved.
                         flowRect = flowRow.getBoundingClientRect();
@@ -23376,8 +23384,10 @@ function populateProgressDashboard() {
                 (Array.isArray(aps.subjects) ? aps.subjects : []).forEach(subj => {
                     const due = normalizeDeadlineDate(subj && subj.examDate, subj && subj.examTime);
                     if (!due) return;
+                    const examCardId = `ap:${subj.id || subj.name}`;
+                    if (typeof _isExamTaken === 'function' && _isExamTaken(examCardId)) return;
                     out.push({
-                        id: `ap:${subj.id || subj.name}`,
+                        id: examCardId,
                         source: 'apexam',
                         sourceId: String(subj.id || ''),
                         title: `AP Exam: ${String(subj.name || 'Subject')}`,
@@ -52479,6 +52489,13 @@ function getActiveEditor() {
             const out = { role, content };
             if (['external_sourced_fact', 'workspace_fact', 'saved_memory_preference', 'deterministic_calculation', 'deterministic_inference', 'inference', 'recommendation', 'proposed_action', 'generative_suggestion'].includes(raw.claimType)) out.claimType = raw.claimType;
             if (Array.isArray(raw.memoryUsedIds) && raw.memoryUsedIds.length) out.memoryUsedIds = raw.memoryUsedIds.map(id => String(id).slice(0, 120)).slice(0, 20);
+            if (Array.isArray(raw.contextTags) && raw.contextTags.length) {
+                const tags = raw.contextTags.map(t => ({
+                    icon: String((t && t.icon) || 'fa-file-lines').slice(0, 60),
+                    label: String((t && t.label) || '').trim().slice(0, 120)
+                })).filter(t => t.label).slice(0, 10);
+                if (tags.length) out.contextTags = tags;
+            }
             if (raw.receipt && typeof raw.receipt === 'object') {
                 try {
                     out.receipt = window.SutraAssistantSafety && typeof window.SutraAssistantSafety.normalizeReceipt === 'function'
@@ -68338,6 +68355,10 @@ ${cspMeta}
                 if (receipt && window.SutraAssistantSafety && typeof window.SutraAssistantSafety.renderReceipt === 'function') {
                     bubble.appendChild(window.SutraAssistantSafety.renderReceipt(receipt));
                 }
+                // Progressive-disclosure per-response stats (this session only).
+                const statsChipId = (buildOpts && buildOpts.responseStatsId) || (index != null && Array.isArray(convo) && convo[index] ? convo[index].id : null);
+                const dockedStatsChip = buildIntelligenceStatsChipForId(statsChipId);
+                if (dockedStatsChip) bubble.appendChild(dockedStatsChip);
 
                 // actions: insert/copy/save/schedule — context-aware buttons.
                 // Hidden until streaming completes so they don't flash in mid-stream.
@@ -68597,6 +68618,109 @@ ${cspMeta}
         const INTELLIGENCE_DIAGNOSTICS_CAP = 60;
         const INTELLIGENCE_REQUEST_TIMEOUT_MS = 180000;
 
+        // Per-response stats for the progressive-disclosure "details" chip.
+        // Keyed by ephemeral message id → { latencyMs, usage, retryCount,
+        // streamStalled, partial, reasoningEffort }. Session-scoped and CAPPED;
+        // NEVER persisted to chatStore/appData and NEVER transmitted — the chip
+        // simply disappears for older turns after a reload, which is fine.
+        const intelligenceResponseStats = new Map();
+        const INTELLIGENCE_RESPONSE_STATS_CAP = 200;
+
+        // Derive the compact stat set from a performIntelligenceRequest result.
+        // reasoningEffort is a level string only (never prompt/document content).
+        function buildIntelligenceResponseStats(result, extra) {
+            if (!result || typeof result !== 'object') return null;
+            const usage = (result.usage && result.usage.available) ? result.usage : null;
+            const reasoningEffort = (result.reasoningPlan && result.reasoningPlan.apply && !result.reasoningPlan.disabled)
+                ? String(result.reasoningPlan.effort || '')
+                : ((extra && extra.reasoningEffort && extra.reasoningEffort !== 'auto') ? String(extra.reasoningEffort) : '');
+            const stats = {
+                latencyMs: Number(result.latencyMs || result.durationMs) || 0,
+                usage: usage,
+                retryCount: Number(result.retryCount) || 0,
+                streamStalled: result.streamStalled === true,
+                partial: result.partial === true,
+                reasoningEffort: reasoningEffort
+            };
+            const diag = window.SutraIntelligenceDiagnostics;
+            if (diag && typeof diag.hasReportableStats === 'function' && !diag.hasReportableStats(stats)) return null;
+            return stats;
+        }
+
+        // Mint an ephemeral message id and stash its stats. Returns the id so
+        // the caller can stamp it on the persisted message (ids are safe to
+        // persist; the stats themselves stay only in this Map).
+        function stashIntelligenceResponseStats(stats) {
+            if (!stats) return null;
+            // Session-unique id (generateId is random-based, not a reset counter),
+            // so a persisted id from a prior session can never collide with a
+            // freshly-minted one after reload and mis-attribute stats to an old
+            // message. The stats Map is fresh each load, so old ids simply miss.
+            const id = `resp_${generateId()}`;
+            intelligenceResponseStats.set(id, stats);
+            if (intelligenceResponseStats.size > INTELLIGENCE_RESPONSE_STATS_CAP) {
+                const oldest = intelligenceResponseStats.keys().next().value;
+                if (oldest !== undefined) intelligenceResponseStats.delete(oldest);
+            }
+            return id;
+        }
+
+        // Convenience: compute + stash in one step, returning the message id to
+        // stamp onto the persisted turn (or null if nothing worth showing).
+        function registerIntelligenceResponseStats(result, extra) {
+            return stashIntelligenceResponseStats(buildIntelligenceResponseStats(result, extra));
+        }
+
+        // Build the progressive-disclosure "Response details" chip as a native
+        // <details> element (keyboard-operable; announces expanded/collapsed).
+        // Every text write goes through SutraDOMSafety.setText — no innerHTML.
+        function buildIntelligenceStatsChip(stats) {
+            const diag = window.SutraIntelligenceDiagnostics;
+            const rows = (diag && typeof diag.describeResponseStats === 'function') ? diag.describeResponseStats(stats) : [];
+            if (!rows.length) return null;
+            const setText = (el, v) => {
+                if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setText === 'function') window.SutraDOMSafety.setText(el, String(v == null ? '' : v));
+                else el.textContent = String(v == null ? '' : v);
+            };
+            const details = document.createElement('details');
+            details.className = 'asst-response-stats';
+            const summary = document.createElement('summary');
+            summary.className = 'asst-response-stats-summary';
+            const sicon = document.createElement('i');
+            sicon.className = 'fas fa-gauge-high';
+            sicon.setAttribute('aria-hidden', 'true');
+            const slabel = document.createElement('span');
+            setText(slabel, 'Response details');
+            summary.appendChild(sicon);
+            summary.appendChild(slabel);
+            details.appendChild(summary);
+            const bodyEl = document.createElement('div');
+            bodyEl.className = 'asst-response-stats-body';
+            rows.forEach(r => {
+                const row = document.createElement('div');
+                row.className = 'asst-response-stat' + (r.key ? ' stat-' + r.key : '');
+                const k = document.createElement('span');
+                k.className = 'asst-response-stat-k';
+                setText(k, r.label);
+                const val = document.createElement('span');
+                val.className = 'asst-response-stat-v';
+                setText(val, r.value);
+                row.appendChild(k);
+                row.appendChild(val);
+                bodyEl.appendChild(row);
+            });
+            details.appendChild(bodyEl);
+            return details;
+        }
+
+        // Look up the ephemeral stats for a message/id and build its chip.
+        function buildIntelligenceStatsChipForId(id) {
+            if (!id) return null;
+            const stats = intelligenceResponseStats.get(id);
+            if (!stats) return null;
+            return buildIntelligenceStatsChip(stats);
+        }
+
         // ---- Prompt caching (session-scoped, in-memory only) ---------------
         // The system prompt is ~70% identical on every message (operating
         // rules + Actions Bank). Anthropic and Gemini both let a server cache
@@ -68664,6 +68788,23 @@ ${cspMeta}
             }
         }
 
+        // Sanitize a normalized usage object for the diagnostics buffer. Usage
+        // carries only token COUNTS (never prompt or document content), so it is
+        // safe for the in-memory buffer. rawProviderUsage is intentionally
+        // dropped here to keep the buffer minimal and provider-shape-agnostic.
+        function sanitizeDiagnosticUsage(usage) {
+            if (!usage || typeof usage !== 'object' || usage.available !== true) return null;
+            const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+            return {
+                available: true,
+                inputTokens: n(usage.inputTokens),
+                outputTokens: n(usage.outputTokens),
+                totalTokens: n(usage.totalTokens),
+                cacheReadTokens: n(usage.cacheReadTokens),
+                cacheWriteTokens: n(usage.cacheWriteTokens)
+            };
+        }
+
         function recordIntelligenceDiagnostic(entry) {
             try {
                 intelligenceDiagnostics.push({
@@ -68679,7 +68820,16 @@ ${cspMeta}
                     ok: entry.ok === true,
                     errorCategory: String(entry.errorCategory || ''),
                     cancelled: entry.cancelled === true,
-                    validation: String(entry.validation || '')
+                    validation: String(entry.validation || ''),
+                    // Ephemeral reliability + usage metrics (in-memory only; never
+                    // persisted, never transmitted). Missing usage stays absent so
+                    // aggregate totals never treat it as measured zero.
+                    usage: sanitizeDiagnosticUsage(entry.usage),
+                    retryCount: Number(entry.retryCount) || 0,
+                    streamStalled: entry.streamStalled === true,
+                    partial: entry.partial === true,
+                    reasoningEffort: entry.reasoningEffort ? String(entry.reasoningEffort).slice(0, 20) : '',
+                    effectiveTimeoutMs: Number(entry.effectiveTimeoutMs) || 0
                 });
                 if (intelligenceDiagnostics.length > INTELLIGENCE_DIAGNOSTICS_CAP) {
                     intelligenceDiagnostics.splice(0, intelligenceDiagnostics.length - INTELLIGENCE_DIAGNOSTICS_CAP);
@@ -68687,7 +68837,26 @@ ${cspMeta}
             } catch (err) { /* diagnostics must never break requests */ }
         }
 
+        // Context/token-limit phrases that a 4xx body may carry. Kept in sync
+        // with SutraIntelligenceDiagnostics.CONTEXT_LENGTH_PATTERNS; this inline
+        // copy is only the fallback when the diagnostics module failed to load.
+        function looksLikeContextLimit(message) {
+            const text = String(message || '').toLowerCase();
+            if (!text) return false;
+            return text.includes('context length') || text.includes('context window')
+                || text.includes('maximum context') || text.includes('max context')
+                || text.includes('too many tokens') || text.includes('reduce the length')
+                || text.includes('token limit') || text.includes('is too long')
+                || text.includes('exceeds the maximum') || text.includes('context_length_exceeded');
+        }
         function classifyIntelligenceHttpError(status, message) {
+            // The diagnostics module is the single source of truth; the inline
+            // switch below is an exact, self-contained fallback so a failed
+            // module load never degrades error handling.
+            const diag = (typeof window !== 'undefined') && window.SutraIntelligenceDiagnostics;
+            if (diag && typeof diag.classifyHttpError === 'function') {
+                return diag.classifyHttpError(status, message);
+            }
             if (status === 401) return 'invalid-key';
             if (status === 403) return 'expired-authentication';
             if (status === 404) return 'unavailable-model';
@@ -68695,7 +68864,7 @@ ${cspMeta}
             if (status === 413) return 'oversized-attachment';
             if (status >= 500 && /overload|capacity/i.test(String(message || ''))) return 'provider-overload';
             if (status >= 500) return 'provider-error';
-            if (status >= 400) return 'unsupported-endpoint';
+            if (status >= 400) return looksLikeContextLimit(message) ? 'context-length' : 'unsupported-endpoint';
             const text = String(message || '').toLowerCase();
             if (text.includes('abort')) return 'cancelled';
             if (text.includes('timeout') || text.includes('timed out')) return 'timeout';
@@ -68753,9 +68922,11 @@ ${cspMeta}
             // accepts a thinking control and how it's expressed on the wire. A
             // missing registry, an unsupported model, or 'auto' all leave the
             // payload unchanged (apply === false).
-            const reasoningPlan = (window.SutraModelCapabilities && typeof window.SutraModelCapabilities.resolveReasoningPlan === 'function')
+            // performIntelligenceRequest resolves the plan up front (to size the
+            // reasoning-aware timeout) and passes it in, so we don't re-resolve.
+            const reasoningPlan = opts.reasoningPlan || ((window.SutraModelCapabilities && typeof window.SutraModelCapabilities.resolveReasoningPlan === 'function')
                 ? window.SutraModelCapabilities.resolveReasoningPlan(opts.provider, opts.model, opts.reasoningEffort)
-                : { apply: false, capability: null };
+                : { apply: false, capability: null });
             const reasoningCap = reasoningPlan && reasoningPlan.capability;
             const reasoningActive = !!(reasoningPlan && reasoningPlan.apply && !reasoningPlan.disabled);
 
@@ -68913,7 +69084,9 @@ ${cspMeta}
                     }
                 }
             }
-            return { endpoint, headers, body };
+            // reasoningPlan is surfaced back so performIntelligenceRequest can
+            // record the effort and size the reasoning-aware timeout/receipt.
+            return { endpoint, headers, body, reasoningPlan };
         }
 
         /**
@@ -68924,58 +69097,103 @@ ${cspMeta}
          * exactly — downstream code (splitThinkBlocks, parseActions) needs no
          * streaming-awareness at all.
          */
-        async function consumeIntelligenceStream(bodyStream, providerType, onDelta) {
+        async function consumeIntelligenceStream(bodyStream, providerType, onDelta, streamOpts) {
+            streamOpts = streamOpts || {};
+            const Diag = (typeof window !== 'undefined') && window.SutraIntelligenceDiagnostics;
+            const idleTimeoutMs = Number(streamOpts.idleTimeoutMs)
+                || (Diag && Diag.STREAM_IDLE_TIMEOUT_MS) || 45000;
             const reader = bodyStream.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
             let answerText = '';
             let thoughtText = '';
             let readerDone = false;
+            let usageAccum = null;
+            let idleStalled = false;
+            let idleTimer = null;
+
+            const composeText = () => (thoughtText ? `<think>${thoughtText}</think>\n` : '') + answerText;
+            const finalizeUsage = () => (Diag && typeof Diag.finalizeStreamUsage === 'function')
+                ? Diag.finalizeStreamUsage(usageAccum, providerType)
+                : (usageAccum || (Diag ? Diag.unavailableUsage() : null));
+            const disarmIdle = () => { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } };
+            // Reset on every meaningful chunk. A stream that goes silent for
+            // idleTimeoutMs is cancelled and reported as stalled (partial text
+            // preserved) — distinct from an immediate connection failure.
+            const armIdle = () => {
+                disarmIdle();
+                idleTimer = setTimeout(() => {
+                    idleStalled = true;
+                    try { reader.cancel(); } catch (e) { /* reader already closing */ }
+                }, idleTimeoutMs);
+            };
+            const captureUsage = (evt) => {
+                if (!Diag || typeof Diag.extractStreamEventUsage !== 'function') return;
+                const u = Diag.extractStreamEventUsage(providerType, evt);
+                if (u) usageAccum = Diag.mergeUsage(usageAccum, u);
+            };
+
             try {
-            while (!readerDone) {
-                const { value, done } = await reader.read();
-                readerDone = done;
-                if (value) buffer += decoder.decode(value, { stream: true });
-                let lineEnd;
-                while ((lineEnd = buffer.indexOf('\n')) >= 0) {
-                    const line = buffer.slice(0, lineEnd).trim();
-                    buffer = buffer.slice(lineEnd + 1);
-                    if (!line.startsWith('data:')) continue;
-                    const payload = line.slice(5).trim();
-                    if (!payload || payload === '[DONE]') continue;
-                    let evt;
-                    try { evt = JSON.parse(payload); } catch (e) { continue; }
-                    if (providerType === 'openai_compatible') {
-                        const delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
-                        if (delta) {
-                            if (typeof delta.content === 'string' && delta.content) { answerText += delta.content; onDelta(answerText); }
-                            if (typeof delta.reasoning === 'string' && delta.reasoning) thoughtText += delta.reasoning;
+                armIdle();
+                while (!readerDone) {
+                    let value, done;
+                    try {
+                        const chunk = await reader.read();
+                        value = chunk.value;
+                        done = chunk.done;
+                    } catch (readErr) {
+                        // A cancel() from the idle watchdog surfaces here as a
+                        // rejection on some engines — treat it as a clean stop
+                        // rather than a hard failure.
+                        if (idleStalled) { done = true; value = undefined; }
+                        else throw readErr;
+                    }
+                    readerDone = done;
+                    if (done && idleStalled) break;
+                    if (value) { buffer += decoder.decode(value, { stream: true }); armIdle(); }
+                    let lineEnd;
+                    while ((lineEnd = buffer.indexOf('\n')) >= 0) {
+                        const line = buffer.slice(0, lineEnd).trim();
+                        buffer = buffer.slice(lineEnd + 1);
+                        if (!line.startsWith('data:')) continue;
+                        const payload = line.slice(5).trim();
+                        if (!payload || payload === '[DONE]') continue;
+                        let evt;
+                        try { evt = JSON.parse(payload); } catch (e) { continue; }
+                        captureUsage(evt);
+                        if (providerType === 'openai_compatible') {
+                            const delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
+                            if (delta) {
+                                if (typeof delta.content === 'string' && delta.content) { answerText += delta.content; onDelta(answerText); }
+                                if (typeof delta.reasoning === 'string' && delta.reasoning) thoughtText += delta.reasoning;
+                            }
+                        } else if (providerType === 'anthropic') {
+                            if (evt.type === 'content_block_delta' && evt.delta) {
+                                if (evt.delta.type === 'text_delta' && typeof evt.delta.text === 'string') { answerText += evt.delta.text; onDelta(answerText); }
+                                else if (evt.delta.type === 'thinking_delta' && typeof evt.delta.thinking === 'string') { thoughtText += evt.delta.thinking; }
+                            } else if (evt.type === 'error' && evt.error && evt.error.message) {
+                                throw new Error(evt.error.message);
+                            }
+                        } else if (providerType === 'gemini') {
+                            const candidate = evt.candidates && evt.candidates[0];
+                            const parts = (candidate && candidate.content && candidate.content.parts) || [];
+                            parts.forEach(part => {
+                                const t = part && typeof part.text === 'string' ? part.text : '';
+                                if (!t) return;
+                                if (part.thought === true || part.type === 'thought') thoughtText += t;
+                                else { answerText += t; onDelta(answerText); }
+                            });
                         }
-                    } else if (providerType === 'anthropic') {
-                        if (evt.type === 'content_block_delta' && evt.delta) {
-                            if (evt.delta.type === 'text_delta' && typeof evt.delta.text === 'string') { answerText += evt.delta.text; onDelta(answerText); }
-                            else if (evt.delta.type === 'thinking_delta' && typeof evt.delta.thinking === 'string') { thoughtText += evt.delta.thinking; }
-                        } else if (evt.type === 'error' && evt.error && evt.error.message) {
-                            throw new Error(evt.error.message);
-                        }
-                    } else if (providerType === 'gemini') {
-                        const candidate = evt.candidates && evt.candidates[0];
-                        const parts = (candidate && candidate.content && candidate.content.parts) || [];
-                        parts.forEach(part => {
-                            const t = part && typeof part.text === 'string' ? part.text : '';
-                            if (!t) return;
-                            if (part.thought === true || part.type === 'thought') thoughtText += t;
-                            else { answerText += t; onDelta(answerText); }
-                        });
                     }
                 }
-            }
             } catch (error) {
-                error.partialText = (thoughtText ? `<think>${thoughtText}</think>\n` : '') + answerText;
+                disarmIdle();
+                error.partialText = composeText();
+                error.partialUsage = finalizeUsage();
                 throw error;
             }
-            if (!answerText && !thoughtText) return '';
-            return (thoughtText ? `<think>${thoughtText}</think>\n` : '') + answerText;
+            disarmIdle();
+            return { text: (!answerText && !thoughtText) ? '' : composeText(), usage: finalizeUsage(), stalled: idleStalled };
         }
 
         /**
@@ -69007,11 +69225,63 @@ ${cspMeta}
                 attachmentBytes: attachments.reduce((sum, a) => sum + (Number(a.sizeBytes) || 0), 0),
                 processingPaths: attachments.map(a => a.processingPlan || 'unknown')
             };
+            // Resolve the reasoning plan once, up front, so it can both size the
+            // timeout and be passed to the payload builder (no double-resolution).
+            const Diag = (typeof window !== 'undefined') && window.SutraIntelligenceDiagnostics;
+            const reasoningPlan = (window.SutraModelCapabilities && typeof window.SutraModelCapabilities.resolveReasoningPlan === 'function')
+                ? window.SutraModelCapabilities.resolveReasoningPlan(opts.provider, opts.model, opts.reasoningEffort)
+                : { apply: false, capability: null };
+            const reasoningEffort = (reasoningPlan && reasoningPlan.apply && !reasoningPlan.disabled)
+                ? String(reasoningPlan.effort || opts.reasoningEffort || '')
+                : '';
+
+            // ONE authoritative deadline covers the initial request, backoff,
+            // retry, and stream consumption — retries never get a fresh budget.
+            // An explicit caller timeoutMs stays authoritative unless the caller
+            // opts into reasoning scaling; a normal 'auto' chat stays on the
+            // tight default because its reasoning plan is inactive.
+            const timeoutInfo = (Diag && typeof Diag.computeEffectiveTimeout === 'function')
+                ? Diag.computeEffectiveTimeout({
+                    callerTimeoutMs: (typeof opts.timeoutMs === 'number') ? opts.timeoutMs : undefined,
+                    allowScaling: opts.scaleTimeoutForReasoning === true,
+                    baseTimeoutMs: INTELLIGENCE_REQUEST_TIMEOUT_MS,
+                    reasoningPlan,
+                    longRunningOperation: opts.longRunningOperation === true
+                })
+                : { timeoutMs: opts.timeoutMs || INTELLIGENCE_REQUEST_TIMEOUT_MS, scaled: false };
+            const effectiveTimeoutMs = timeoutInfo.timeoutMs;
+            const deadline = startedAt + effectiveTimeoutMs;
+            const remainingMs = () => deadline - Date.now();
+
+            const maxRetries = Number.isInteger(opts.maxRetries)
+                ? Math.max(0, opts.maxRetries)
+                : ((Diag && typeof Diag.DEFAULT_MAX_RETRIES === 'number') ? Diag.DEFAULT_MAX_RETRIES : 1);
+            const minRetryBudgetMs = (Diag && Diag.MIN_RETRY_BUDGET_MS) || 4000;
+            const streamIdleTimeoutMs = (Diag && Diag.STREAM_IDLE_TIMEOUT_MS) || 45000;
+
             let requestTimedOut = false;
+            let retryCount = 0;
+            let emittedText = false; // becomes true once visible text has streamed — blocks retry
+            let usage = Diag ? Diag.unavailableUsage() : null;
+
+            // Wait `ms`, resolving early ('aborted') if the request is cancelled
+            // or times out during backoff. Never leaks the timer or listener.
+            const abortableSleep = (ms) => new Promise((resolve) => {
+                if (!(ms > 0)) return resolve('done');
+                if (controller.signal.aborted) return resolve('aborted');
+                let to = null;
+                const onAbort = () => { if (to) clearTimeout(to); resolve('aborted'); };
+                to = setTimeout(() => {
+                    try { controller.signal.removeEventListener('abort', onAbort); } catch (_) {}
+                    resolve('done');
+                }, ms);
+                controller.signal.addEventListener('abort', onAbort, { once: true });
+            });
+
             const timeoutHandle = setTimeout(() => {
                 requestTimedOut = true;
                 try { controller.abort(new DOMException('Request timed out', 'TimeoutError')); } catch (e) { try { controller.abort(); } catch (_) {} }
-            }, opts.timeoutMs || INTELLIGENCE_REQUEST_TIMEOUT_MS);
+            }, Math.max(0, effectiveTimeoutMs));
             try {
                 // Last-mile scope/privacy audit. It deliberately receives no API
                 // key or authorization headers and runs before fetch construction.
@@ -69039,7 +69309,7 @@ ${cspMeta}
                         return { ok: false, requestId, status: 0, text: '', errorCategory: 'privacy-audit', errorMessage: message, cancelled: false, dataSent: false, durationMs: Date.now() - startedAt };
                     }
                 }
-                const { endpoint, headers, body } = await buildProviderRequestPayload(opts);
+                const { endpoint, headers, body } = await buildProviderRequestPayload({ ...opts, reasoningPlan });
                 if (safety && typeof safety.auditRequest === 'function') {
                     // Gemini authenticates in the query string. Strip every query
                     // and fragment before scheme auditing so key material never
@@ -69072,74 +69342,149 @@ ${cspMeta}
                         fetchEndpoint = endpoint.replace(':generateContent', ':streamGenerateContent') + '&alt=sse';
                     } else {
                         body.stream = true;
-                    }
-                }
-                const resp = await fetch(fetchEndpoint, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(body),
-                    signal: controller.signal
-                });
-                let extracted = null;
-                if (wantStream && resp.ok && resp.body) {
-                    // Errors on a streamed request still arrive as SSE-shaped bodies
-                    // for these providers, so the same reader handles both; a genuine
-                    // network failure here throws into the outer catch below, same
-                    // as a failed non-streaming fetch would.
-                    extracted = await consumeIntelligenceStream(resp.body, providerType, (textSoFar) => {
-                        try { opts.onDelta(textSoFar); } catch (e) { /* non-critical */ }
-                    });
-                } else {
-                    let data;
-                    try {
-                        data = await resp.json();
-                    } catch (e) {
-                        const raw = await resp.text().catch(() => '');
-                        data = { __raw_text: raw, __parseError: true };
-                    }
-                    if (providerType === 'openai_compatible') extracted = extractOpenAiCompatibleMessage(data);
-                    else if (providerType === 'anthropic') extracted = extractAnthropicMessage(data);
-                    else if (providerType === 'gemini') extracted = extractGeminiMessage(data);
-                    if (!extracted && data && data.__raw_text) extracted = data.__raw_text;
-                    if (!extracted && data && data.error && data.error.message) extracted = data.error.message;
-                    if (!extracted && data) {
-                        // Don't stringify recognized provider response shapes — that produces raw JSON
-                        // in the chat bubble. Only stringify truly unknown/unexpected payloads.
-                        if (data.candidates || data.choices || data.content) {
-                            extracted = '';
-                        } else {
-                            try { extracted = JSON.stringify(data); } catch (e) { extracted = String(data); }
+                        // Only ask for a final usage chunk where the provider
+                        // supports stream_options.include_usage (centralized so we
+                        // never send it to an endpoint that would 400 on it).
+                        if (Diag && typeof Diag.supportsStreamUsageOption === 'function'
+                            && Diag.supportsStreamUsageOption(opts.provider, opts.providerConfig)) {
+                            body.stream_options = Object.assign({}, body.stream_options, { include_usage: true });
                         }
                     }
                 }
-                const durationMs = Date.now() - startedAt;
-                if (!resp.ok) {
-                    const category = classifyIntelligenceHttpError(resp.status, extracted);
-                    recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: category });
-                    return { ok: false, requestId, status: resp.status, text: extracted || '', errorCategory: category, errorMessage: extracted || `HTTP ${resp.status}`, cancelled: false, dataSent: true, durationMs };
+
+                // Result fields common to every return path (in-memory only).
+                const meta = () => ({ requestId, usage, retryCount, reasoningPlan, effectiveTimeoutMs, latencyMs: Date.now() - startedAt });
+                const diagMeta = () => ({ usage, retryCount, reasoningEffort, effectiveTimeoutMs });
+
+                // --- Bounded retry loop under the single deadline -------------
+                // Retry ONLY a transient pre-output failure (retryable status /
+                // rate-limit / overload), never after any visible text has begun,
+                // never past the deadline, and never after an abort.
+                // eslint-disable-next-line no-constant-condition
+                while (true) {
+                    let resp;
+                    try {
+                        resp = await fetch(fetchEndpoint, {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify(body),
+                            signal: controller.signal
+                        });
+                    } catch (fetchErr) {
+                        // A fetch that throws produced NO HTTP response, so we can't
+                        // know whether the provider already received and processed
+                        // the request. Retrying risks a duplicate (double-billed)
+                        // send, so we never auto-retry a bare network failure —
+                        // retries require an actual retryable HTTP response below
+                        // (500/502/503/504, rate-limit, overload). Abort/timeout and
+                        // every network failure go straight to the outer catch.
+                        throw fetchErr;
+                    }
+
+                    let extracted = null;
+                    let streamStalled = false;
+                    if (wantStream && resp.ok && resp.body) {
+                        // A hard mid-stream failure throws (partial preserved) into
+                        // the outer catch and is NOT retried; an idle stall returns
+                        // { stalled: true } with the partial text.
+                        const streamResult = await consumeIntelligenceStream(resp.body, providerType, (textSoFar) => {
+                            if (textSoFar) emittedText = true;
+                            try { opts.onDelta(textSoFar); } catch (e) { /* non-critical */ }
+                        }, { idleTimeoutMs: streamIdleTimeoutMs });
+                        extracted = streamResult.text;
+                        if (streamResult.usage) usage = streamResult.usage;
+                        streamStalled = streamResult.stalled === true;
+                    } else {
+                        let data;
+                        try {
+                            data = await resp.json();
+                        } catch (e) {
+                            const raw = await resp.text().catch(() => '');
+                            data = { __raw_text: raw, __parseError: true };
+                        }
+                        if (Diag && typeof Diag.extractUsage === 'function') {
+                            const u = Diag.extractUsage(providerType, data);
+                            if (u && u.available) usage = u;
+                        }
+                        if (providerType === 'openai_compatible') extracted = extractOpenAiCompatibleMessage(data);
+                        else if (providerType === 'anthropic') extracted = extractAnthropicMessage(data);
+                        else if (providerType === 'gemini') extracted = extractGeminiMessage(data);
+                        if (!extracted && data && data.__raw_text) extracted = data.__raw_text;
+                        if (!extracted && data && data.error && data.error.message) extracted = data.error.message;
+                        if (!extracted && data) {
+                            // Don't stringify recognized provider response shapes — that produces raw JSON
+                            // in the chat bubble. Only stringify truly unknown/unexpected payloads.
+                            if (data.candidates || data.choices || data.content) {
+                                extracted = '';
+                            } else {
+                                try { extracted = JSON.stringify(data); } catch (e) { extracted = String(data); }
+                            }
+                        }
+                    }
+                    const durationMs = Date.now() - startedAt;
+
+                    if (!resp.ok) {
+                        const category = classifyIntelligenceHttpError(resp.status, extracted);
+                        const retryable = Diag ? Diag.isRetryable({ status: resp.status, category }) : false;
+                        if (retryCount < maxRetries && retryable && !emittedText
+                            && !controller.signal.aborted && remainingMs() > minRetryBudgetMs) {
+                            retryCount += 1;
+                            const retryAfter = (resp.headers && typeof resp.headers.get === 'function') ? resp.headers.get('retry-after') : null;
+                            const backoff = Diag ? Diag.computeBackoffMs(retryAfter, Date.now()) : 1000;
+                            const waited = await abortableSleep(Math.min(backoff, Math.max(0, remainingMs() - minRetryBudgetMs)));
+                            if (waited === 'aborted') {
+                                const timedOut = requestTimedOut;
+                                const cat = timedOut ? 'timeout' : 'cancelled';
+                                recordIntelligenceDiagnostic({ ...diagBase, durationMs: Date.now() - startedAt, ok: false, errorCategory: cat, cancelled: !timedOut, ...diagMeta() });
+                                return { ok: false, status: 0, text: '', errorCategory: cat, errorMessage: timedOut ? 'Request timed out' : 'Request cancelled.', cancelled: !timedOut, dataSent: true, partial: false, streamStalled: false, durationMs: Date.now() - startedAt, ...meta() };
+                            }
+                            continue;
+                        }
+                        recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: category, partial: emittedText, ...diagMeta() });
+                        return { ok: false, status: resp.status, text: extracted || '', errorCategory: category, errorMessage: extracted || `HTTP ${resp.status}`, cancelled: false, dataSent: true, partial: emittedText, partialText: emittedText ? (extracted || '') : '', streamStalled: false, durationMs, ...meta() };
+                    }
+
+                    if (streamStalled) {
+                        // Idle stream: keep the partial answer, classify distinctly,
+                        // and never replay (partial output exists).
+                        const hasPartial = !!String(extracted || '').trim();
+                        recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: 'stream-stalled', streamStalled: true, partial: hasPartial, ...diagMeta() });
+                        return { ok: false, status: resp.status, text: extracted || '', errorCategory: 'stream-stalled', errorMessage: `The response stream went idle for ${Math.round(streamIdleTimeoutMs / 1000)}s and was stopped. Any partial answer was kept.`, cancelled: false, dataSent: true, partial: hasPartial, partialText: extracted || '', streamStalled: true, durationMs, ...meta() };
+                    }
+
+                    if (!String(extracted || '').trim()) {
+                        recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: 'empty-response', ...diagMeta() });
+                        return { ok: false, status: resp.status, text: '', errorCategory: 'empty-response', errorMessage: 'The provider returned an empty response.', cancelled: false, dataSent: true, partial: false, streamStalled: false, durationMs, ...meta() };
+                    }
+
+                    recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: true, ...diagMeta() });
+                    return { ok: true, status: resp.status, text: extracted || '', errorCategory: '', errorMessage: '', cancelled: false, dataSent: true, partial: false, streamStalled: false, durationMs, ...meta() };
                 }
-                if (!String(extracted || '').trim()) {
-                    recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: 'empty-response' });
-                    return { ok: false, requestId, status: resp.status, text: '', errorCategory: 'empty-response', errorMessage: 'The provider returned an empty response.', cancelled: false, dataSent: true, durationMs };
-                }
-                recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: true });
-                return { ok: true, requestId, status: resp.status, text: extracted || '', errorCategory: '', errorMessage: '', cancelled: false, dataSent: true, durationMs };
             } catch (err) {
                 const durationMs = Date.now() - startedAt;
                 const aborted = (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) || controller.signal.aborted;
                 const timedOut = requestTimedOut || (err && err.name === 'TimeoutError');
                 const category = timedOut ? 'timeout' : (aborted ? 'cancelled' : classifyIntelligenceHttpError(0, err && err.message));
-                recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: category, cancelled: aborted && !timedOut });
+                const partialText = String(err && err.partialText || '');
+                if (err && err.partialUsage && err.partialUsage.available) usage = err.partialUsage;
+                recordIntelligenceDiagnostic({ ...diagBase, durationMs, ok: false, errorCategory: category, cancelled: aborted && !timedOut, partial: !!partialText.trim(), usage, retryCount, reasoningEffort, effectiveTimeoutMs });
                 return {
                     ok: false,
                     requestId,
                     status: 0,
-                    text: String(err && err.partialText || ''),
-                    partial: !!String(err && err.partialText || '').trim(),
+                    text: partialText,
+                    partial: !!partialText.trim(),
+                    partialText,
+                    streamStalled: false,
                     errorCategory: category,
                     errorMessage: err && err.message ? err.message : 'Request failed',
                     cancelled: aborted && !timedOut,
-                    durationMs
+                    durationMs,
+                    usage,
+                    retryCount,
+                    reasoningPlan,
+                    effectiveTimeoutMs,
+                    latencyMs: durationMs
                 };
             } finally {
                 clearTimeout(timeoutHandle);
@@ -70507,7 +70852,14 @@ ${cspMeta}
                 },
                 cancelRequest: cancelIntelligenceRequest,
                 getActiveRequestCount: () => activeIntelligenceRequests.size,
-                getDiagnostics: () => intelligenceDiagnostics.slice()
+                getDiagnostics: () => intelligenceDiagnostics.slice(),
+                // Aggregate over the in-memory diagnostics buffer only (cap 60).
+                // Never persisted, never transmitted; unavailable usage is
+                // excluded from totals rather than counted as measured zero.
+                getDiagnosticsSummary: () => (window.SutraIntelligenceDiagnostics
+                    && typeof window.SutraIntelligenceDiagnostics.summarizeDiagnostics === 'function')
+                    ? window.SutraIntelligenceDiagnostics.summarizeDiagnostics(intelligenceDiagnostics)
+                    : null
             };
             // Structured-extraction bridge for feature modules (Semester Setup).
             // Routes through performIntelligenceRequest — the single AI core —
@@ -71979,8 +72331,11 @@ ${cspMeta}
                             if (result.errorCategory === 'invalid-key' || result.errorCategory === 'expired-authentication') msg += ' — check or reconnect the provider in Settings ▸ Integrations.';
                             else if (result.errorCategory === 'rate-limit') msg += ' — the provider is rate-limiting; wait a moment and retry.';
                             else if (result.errorCategory === 'unavailable-model') msg += ' — the selected model may be unavailable; pick another model.';
+                            else if (result.errorCategory === 'context-length') msg = 'The request is too large. Lower Workspace Access or remove an attachment, then try again.';
                         } else if (result.errorCategory === 'timeout') {
                             msg = 'The request timed out. The provider may be slow or unreachable — try again.';
+                        } else if (result.errorCategory === 'stream-stalled') {
+                            msg = 'The response stream went idle and was stopped. Any partial answer was kept — try again.';
                         } else {
                             msg = 'Request failed: ' + (result.errorMessage || 'unknown error');
                             if (String(result.errorMessage || '').toLowerCase().includes('failed to fetch')) {
@@ -72037,8 +72392,12 @@ ${cspMeta}
                     : null;
                 const _claimType = flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion';
                 const _memoryUsedIds = flowEnrichment && flowEnrichment.context && flowEnrichment.context.memoryUsedIds;
-                appendMessage('assistant', assistantText, null, null, { instant: wasLiveStreamed, sources: flowEnrichment && flowEnrichment.sources, grounding: _grounding, claimType: _claimType, memoryUsedIds: _memoryUsedIds, receipt: responseReceipt });
+                // Ephemeral per-response stats (latency/usage/retries/…). The id
+                // is safe to persist; the stats live only in the session Map.
+                const _statsId = registerIntelligenceResponseStats(result, { reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto') });
+                appendMessage('assistant', assistantText, null, null, { instant: wasLiveStreamed, sources: flowEnrichment && flowEnrichment.sources, grounding: _grounding, claimType: _claimType, memoryUsedIds: _memoryUsedIds, receipt: responseReceipt, responseStatsId: _statsId });
                 const _persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
+                if (_statsId) _persistMsg.id = _statsId;
                 if (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length) _persistMsg.sources = flowEnrichment.sources;
                 if (_grounding) _persistMsg.grounding = _grounding;
                 _persistMsg.claimType = _claimType;
@@ -72538,11 +72897,19 @@ ${cspMeta}
             wrap.className = 'asst-msg ' + (role === 'user' ? 'user' : 'assistant');
 
             const avatar = document.createElement('div');
-            avatar.className = 'asst-msg-avatar';
-            const avatarIcon = document.createElement('i');
-            avatarIcon.className = 'fas ' + (role === 'user' ? 'fa-user' : 'fa-feather-pointed');
-            avatarIcon.setAttribute('aria-hidden', 'true');
-            avatar.appendChild(avatarIcon);
+            avatar.className = 'asst-msg-avatar' + (role === 'user' ? '' : ' asst-msg-avatar-logo');
+            if (role === 'user') {
+                const avatarIcon = document.createElement('i');
+                avatarIcon.className = 'fas fa-user';
+                avatarIcon.setAttribute('aria-hidden', 'true');
+                avatar.appendChild(avatarIcon);
+            } else {
+                const avatarImg = document.createElement('img');
+                avatarImg.src = 'assets/brand/sutra/generated/sutra-assistant-icon-64.png';
+                avatarImg.alt = '';
+                avatarImg.setAttribute('aria-hidden', 'true');
+                avatar.appendChild(avatarImg);
+            }
 
             const col = document.createElement('div');
             col.className = 'asst-msg-wrap';
@@ -72557,6 +72924,22 @@ ${cspMeta}
 
             if (role === 'user') {
                 bubble.textContent = text;
+                if (Array.isArray(msgObj.contextTags) && msgObj.contextTags.length) {
+                    const tagRow = document.createElement('div');
+                    tagRow.className = 'asst-msg-context-tags';
+                    msgObj.contextTags.forEach(tag => {
+                        const t = document.createElement('span');
+                        t.className = 'asst-msg-context-tag';
+                        const ic = document.createElement('i');
+                        ic.className = 'fas ' + (tag.icon || 'fa-file-lines');
+                        ic.setAttribute('aria-hidden', 'true');
+                        const lbl = document.createElement('span');
+                        lbl.textContent = tag.label;
+                        t.append(ic, lbl);
+                        tagRow.appendChild(t);
+                    });
+                    col.appendChild(tagRow);
+                }
             } else {
                 const renderView = prepareAssistantMessageForRender(msgObj);
                 const clean = renderView.cleanContent || '';
@@ -72585,6 +72968,9 @@ ${cspMeta}
                     const receiptEl = window.SutraAssistantSafety.renderReceipt(msgObj.receipt, { document, resolveSource: resolveAssistantReceiptSource });
                     if (receiptEl) bubble.appendChild(receiptEl);
                 }
+                // Progressive-disclosure per-response stats (this session only).
+                const statsChip = buildIntelligenceStatsChipForId(msgObj.id);
+                if (statsChip) bubble.appendChild(statsChip);
             }
 
             col.appendChild(bubble);
@@ -73815,6 +74201,9 @@ ${cspMeta}
         }
 
         function asstFormatError(result) {
+            // A context/token-limit failure gets actionable guidance regardless of
+            // whether it arrived as a 4xx or a network-shaped error.
+            if (result.errorCategory === 'context-length') return 'The request is too large. Lower Workspace Access or remove an attachment, then try again.';
             if (result.status > 0) {
                 let msg = 'HTTP ' + result.status + ' - ' + (result.errorMessage || '(no details)');
                 if (result.errorCategory === 'invalid-key' || result.errorCategory === 'expired-authentication') msg += ' — check or reconnect the provider in Settings ▸ Integrations.';
@@ -73823,6 +74212,7 @@ ${cspMeta}
                 return msg;
             }
             if (result.errorCategory === 'timeout') return 'The request timed out. The provider may be slow or unreachable — try again.';
+            if (result.errorCategory === 'stream-stalled') return 'The response stream went idle and was stopped. Any partial answer was kept — try again.';
             let msg = 'Request failed: ' + (result.errorMessage || 'unknown error');
             if (String(result.errorMessage || '').toLowerCase().includes('failed to fetch')) {
                 msg += ' — usually a network issue, blocked API key, or provider CORS policy from browser context.';
@@ -73869,12 +74259,15 @@ ${cspMeta}
             // Build context-augmented send text (context block is prepended only for the AI request)
             const contextBlock = asstBuildContextBlock();
             const sendText = contextBlock ? contextBlock + text : text;
+            // Snapshot the chips for display in the sent bubble — asstClearContext()
+            // below wipes asstPendingContext, so this must be captured first.
+            const contextTags = asstPendingContext.map(c => ({ icon: c.icon, label: c.label }));
             asstClearContext(); // clear chips immediately for responsiveness
 
             // Optimistically show the user's turn (ephemeral until gates pass).
             if (asstCache.shell) asstCache.shell.classList.add('has-msgs');
             if (asstCache.msgs) {
-                asstCache.msgs.appendChild(asstBuildMessage({ role: 'user', content: text }, { index: -1 }));
+                asstCache.msgs.appendChild(asstBuildMessage({ role: 'user', content: text, contextTags }, { index: -1 }));
                 asstScrollToBottom();
             }
 
@@ -73886,7 +74279,7 @@ ${cspMeta}
                         // Local Help / Memory manager render their own interactive
                         // panel into the message stream — don't append a text reply.
                         if (cmd.silent) return;
-                        convo.push({ role: 'user', content: text });
+                        convo.push({ role: 'user', content: text, contextTags: contextTags.length ? contextTags : undefined });
                         const localEnrichment = {
                             context: { depth: 'local', accessReport: { areasRead: cmd.areasRead || [] }, memoryUsedIds: cmd.memoryUsedIds || [] },
                             sources: cmd.sources || [], requestMessages: [{ role: 'user', content: text }], attachments: []
@@ -73904,7 +74297,7 @@ ${cspMeta}
                 }
             } catch (e) { /* fall through to model */ }
 
-            await asstSendCore(text, sendText, { pushUser: true });
+            await asstSendCore(text, sendText, { pushUser: true, contextTags });
         }
 
         // Shared send pipeline. `displayText` is what the user sees/persists,
@@ -73977,7 +74370,7 @@ ${cspMeta}
 
             // Gates passed — persist the user turn (just what user typed), then re-render.
             if (opts.pushUser) {
-                convo.push({ role: 'user', content: displayText });
+                convo.push({ role: 'user', content: displayText, contextTags: (opts.contextTags && opts.contextTags.length) ? opts.contextTags : undefined });
                 saveConvo();
                 asstRenderAll();
             }
@@ -74072,6 +74465,9 @@ ${cspMeta}
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
                 const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
                 const persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
+                // Ephemeral per-response stats (session Map keyed by this id).
+                const _respStatsId = registerIntelligenceResponseStats(result, { reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto') });
+                if (_respStatsId) persistMsg.id = _respStatsId;
                 if (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length) persistMsg.sources = flowEnrichment.sources;
                 if (flowEnrichment && flowEnrichment.retrieval) persistMsg.grounding = { evidenceStatus: flowEnrichment.retrieval.evidenceStatus, query: flowEnrichment.retrieval.query, scope: flowEnrichment.retrieval.scope };
                 persistMsg.claimType = flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion';

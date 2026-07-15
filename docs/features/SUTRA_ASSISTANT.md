@@ -615,3 +615,125 @@ OpenRouter, DeepSeek, xAI, Perplexity, and a Local endpoint. Its presence-only
 `hasKey` / `hasAnyKey` booleans and `openKeySettings(provider)` feed the
 empty-state "Connect an AI provider" card and the Assistant guide. Raw keys
 never pass through it.
+
+---
+
+## 15. Intelligence reliability + diagnostics (`SutraIntelligenceDiagnostics`)
+
+Every remote provider request runs through the single core
+`performIntelligenceRequest` in `src/core/app.js`. Its deterministic
+reliability + observability logic lives in one pure, dual-mode module,
+`src/features/assistant/intelligence-diagnostics.js`
+(`window.SutraIntelligenceDiagnostics`), so it is unit-testable with no browser
+and cannot drift from the docs or tests. `app.js` delegates to it and keeps an
+exact inline fallback for the case where the module failed to load.
+
+### Error classification
+
+`classifyHttpError(status, message)` returns a fixed category. A 4xx whose body
+names a context/token limit (`context length`, `maximum context`, `too many
+tokens`, `reduce the length`, `context_length_exceeded`, …) is classified
+`context-length` (with the guidance *"The request is too large. Lower Workspace
+Access or remove an attachment."*) instead of the generic `unsupported-endpoint`
+— but an unrelated 400 stays `unsupported-endpoint` (matching is deliberately
+not broad). `context-length` and `stream-stalled` are first-class members of
+`ERROR_CATEGORIES` and never fall through to `unknown`.
+
+### Usage normalization (missing ≠ zero)
+
+`extractUsage(providerType, data)` normalizes provider usage to
+`{ available, inputTokens, outputTokens, totalTokens, cacheReadTokens,
+cacheWriteTokens, rawProviderUsage }`. Absent usage is `available: false` with
+`null` fields — **never a measured zero**. All access is defensive; a malformed
+usage block returns unavailable and never breaks the response. Per-provider
+sources:
+
+| Provider | input | output | total | cache read | cache write |
+| --- | --- | --- | --- | --- | --- |
+| OpenAI-compatible | `usage.prompt_tokens` | `usage.completion_tokens` | `usage.total_tokens` | `usage.prompt_tokens_details.cached_tokens` (where exposed) | — |
+| Anthropic | `usage.input_tokens` | `usage.output_tokens` | input+output+cache | `usage.cache_read_input_tokens` | `usage.cache_creation_input_tokens` |
+| Gemini | `usageMetadata.promptTokenCount` | `usageMetadata.candidatesTokenCount` | `usageMetadata.totalTokenCount` | `usageMetadata.cachedContentTokenCount` | — |
+
+Streaming captures usage event-by-event (`extractStreamEventUsage` +
+`mergeUsage` + `finalizeStreamUsage`): Anthropic's `message_start` (input/cache)
+and `message_delta` (output) are merged and the total is recomputed from
+components. `stream_options: { include_usage: true }` is sent only to providers
+where it is supported (`supportsStreamUsageOption` — OpenAI, OpenRouter, Groq,
+DeepSeek, xAI, Perplexity; **never** arbitrary local endpoints).
+
+### Cache visibility
+
+Existing provider caching (Anthropic `cache_control`, Gemini `cachedContents`)
+is **surfaced, not changed**. A cache-hit row appears only when
+`cacheReadTokens > 0`. No new cache directives are added.
+
+### Retry + one authoritative deadline
+
+The fetch/classify step runs in a bounded retry loop (default **1** retry,
+`opts.maxRetries` overrides). A single deadline `startedAt + effectiveTimeoutMs`
+covers the initial request, backoff, retry, and stream consumption — retries do
+**not** get a fresh budget. A retry happens only when: no visible text has
+streamed yet, the failure is retryable (`isRetryable` → transient
+`500/502/503/504`, or `rate-limit` / `provider-overload`; a generic
+`provider-error` without a qualifying status is **not** retried), enough
+deadline remains, and the request was not aborted. `Retry-After` is honored
+(delta-seconds **and** HTTP-date, capped) via `parseRetryAfter`; otherwise a
+jittered 800–1500 ms backoff. Backoff is abortable — cancelling during a wait
+ends cleanly. `retryCount` rides the result and diagnostics.
+
+### Stream idle watchdog + partial preservation
+
+`consumeIntelligenceStream` resets a per-chunk idle timer; **45 s** of silence
+cancels the reader and returns `{ stalled: true }` with the partial text, which
+`performIntelligenceRequest` classifies `stream-stalled` (distinct from
+`timeout`). A hard mid-stream failure preserves `partialText` and is **never
+replayed**. Timers/readers/controllers are cleaned up on every exit path.
+
+### Reasoning-aware timeout
+
+`computeEffectiveTimeout` scales the baseline up for an active reasoning plan
+(effort multiplier + budget-token add-on + long-running-op bump), clamped to a
+hard ceiling. A normal `auto` chat has no active plan and stays on the tight
+default. An **explicit caller `timeoutMs` is authoritative and is not scaled**
+unless the caller passes `scaleTimeoutForReasoning: true`.
+
+### Final constants (single source of truth — the module)
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `DEFAULT_REQUEST_TIMEOUT_MS` | 180000 | Baseline chat timeout (3 min) |
+| `DEFAULT_MAX_RETRIES` | 1 | Bounded automatic retries |
+| `RETRY_JITTER_MIN_MS` / `MAX_MS` | 800 / 1500 | Fallback backoff window |
+| `RETRY_AFTER_MAX_MS` | 60000 | Cap on a provider-declared backoff |
+| `MIN_RETRY_BUDGET_MS` | 4000 | Don't retry with less deadline left than this |
+| `STREAM_IDLE_TIMEOUT_MS` | 45000 | Idle silence → `stream-stalled` |
+| `TIMEOUT_CEILING_MS` | 330000 | Hard ceiling even with reasoning scaling (5.5 min) |
+| effort multipliers | minimal/low 1, medium 1.5, high 2, xhigh 2.5, max 3 | Reasoning timeout scaling |
+| Retry-eligible statuses | 500, 502, 503, 504 | Plus `rate-limit` / `provider-overload` |
+| `include_usage` providers | openai, openrouter, groq, deepseek, xai, perplexity | Never arbitrary local |
+
+### Result object + diagnostics (in-memory only)
+
+`performIntelligenceRequest` **adds** fields without removing any existing ones:
+`usage`, `retryCount`, `partial`, `partialText`, `streamStalled`,
+`reasoningPlan`, `effectiveTimeoutMs`, `latencyMs`. The in-memory diagnostics
+ring buffer (`intelligenceDiagnostics`, **cap 60**) records token *counts* and
+timing only — never prompts, document text, or keys — and is **never persisted
+or transmitted**. `window.SutraIntelligence.getDiagnosticsSummary()` aggregates
+that buffer (average latency over measured requests, session token totals with
+unavailable usage excluded, retry / stalled / partial / cache-hit counts).
+
+Per-response stats surface as a **progressive-disclosure "Response details"
+chip** (a native `<details>`, keyboard-operable, announcing expand/collapse)
+beneath the provenance receipt, rendered via `SutraDOMSafety` (no `innerHTML`).
+The stats live in a session-scoped `Map` keyed by an ephemeral message id and
+are dropped on reload — they are **not** added to `chatStore`/`appData` or the
+persistence inventory.
+
+**Provider-specific usage limitations:** cache-read tokens depend on the
+provider actually returning them (OpenAI exposes `cached_tokens` only where the
+prompt was cache-eligible; Gemini reports `cachedContentTokenCount` only when a
+`cachedContents` resource was used; Anthropic reports cache tokens only when a
+`cache_control` breakpoint hit). Streamed OpenAI-compatible usage requires
+`include_usage` support; where a provider omits usage entirely, the chip shows
+latency alone.

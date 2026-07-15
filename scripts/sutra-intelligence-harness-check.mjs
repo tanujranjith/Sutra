@@ -38,6 +38,7 @@ const LH = require('../src/features/assistant/sutra-local-help.js');
 const CAP = require('../src/features/assistant/sutra-capability-registry.js');
 const MC = require('../src/features/assistant/model-capabilities.js');
 const SAFE = require('../src/features/assistant/assistant-safety.js');
+const IDIAG = require('../src/features/assistant/intelligence-diagnostics.js');
 
 // ============================================================
 section('Product Knowledge Registry');
@@ -553,6 +554,212 @@ section('Assistant safety, provenance, tutoring, and study-quality contracts');
     ok(!quality.ok && quality.duplicates.length > 0, 'study validator detects duplicate and near-duplicate questions');
     ok(quality.possibleAnswerLeakage.length > 0 && quality.missingExplanations.length > 0, 'study validator detects answer leakage and missing explanations');
     ok(quality.underrepresentedTopics.includes('cell respiration'), 'study validator reports missing requested topic coverage');
+}
+
+// ============================================================
+section('Intelligence Diagnostics — error classification');
+// ============================================================
+{
+    // context-length is a first-class category, never `unknown`, and only for
+    // 4xx bodies that actually name a token/context limit.
+    ok(IDIAG.classifyHttpError(400, 'This model\'s maximum context length is 8192 tokens') === 'context-length', 'context length phrase → context-length');
+    ok(IDIAG.classifyHttpError(400, 'Please reduce the length of the messages') === 'context-length', '"reduce the length" → context-length');
+    ok(IDIAG.classifyHttpError(400, 'too many tokens for this request') === 'context-length', '"too many tokens" → context-length');
+    ok(IDIAG.classifyHttpError(400, 'context_length_exceeded') === 'context-length', 'OpenAI code phrase → context-length');
+    ok(IDIAG.classifyHttpError(422, 'input is too long for the model') === 'context-length', 'non-400 4xx context body → context-length');
+    // An unrelated 400 must NOT become a context failure.
+    ok(IDIAG.classifyHttpError(400, 'invalid parameter: temperature') === 'unsupported-endpoint', 'unrelated 400 stays unsupported-endpoint (matching not too broad)');
+    ok(IDIAG.classifyHttpError(400, '') === 'unsupported-endpoint', 'empty 400 body stays unsupported-endpoint');
+    // The rest of the switch is preserved exactly.
+    ok(IDIAG.classifyHttpError(401, '') === 'invalid-key', '401 → invalid-key');
+    ok(IDIAG.classifyHttpError(403, '') === 'expired-authentication', '403 → expired-authentication');
+    ok(IDIAG.classifyHttpError(404, '') === 'unavailable-model', '404 → unavailable-model');
+    ok(IDIAG.classifyHttpError(429, '') === 'rate-limit', '429 → rate-limit');
+    ok(IDIAG.classifyHttpError(413, '') === 'oversized-attachment', '413 → oversized-attachment');
+    ok(IDIAG.classifyHttpError(503, 'server overloaded') === 'provider-overload', '5xx overload → provider-overload');
+    ok(IDIAG.classifyHttpError(500, 'internal error') === 'provider-error', '5xx → provider-error');
+    ok(IDIAG.classifyHttpError(0, 'Failed to fetch') === 'network-failure', 'network exception → network-failure');
+    ok(IDIAG.classifyHttpError(0, 'The user aborted a request') === 'cancelled', 'abort exception → cancelled');
+    ok(IDIAG.classifyHttpError(0, 'unrecognized situation') === 'unknown', 'unrecognized exception → unknown');
+    // context-length is registered as a known category (never falls through).
+    ok(IDIAG.isKnownErrorCategory('context-length'), 'context-length is a known category');
+    ok(IDIAG.ERROR_CATEGORIES.includes('context-length') && IDIAG.ERROR_CATEGORIES.includes('stream-stalled'), 'category catalog lists context-length and stream-stalled');
+    ok(/too large/i.test(IDIAG.guidanceForCategory('context-length')), 'context-length carries actionable user guidance');
+    // The safety layer's recovery map covers the two new categories (not the fallback).
+    ok(/too large/i.test(SAFE.classifyError({ errorCategory: 'context-length' }).next), 'classifyError recovery for context-length is specific (not the generic fallback)');
+    ok(/idle|stopped|partial/i.test(SAFE.classifyError({ errorCategory: 'stream-stalled' }).next), 'classifyError recovery for stream-stalled is specific');
+}
+
+// ============================================================
+section('Intelligence Diagnostics — usage normalization');
+// ============================================================
+{
+    const oa = IDIAG.extractUsage('openai_compatible', { usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } });
+    ok(oa.available && oa.inputTokens === 10 && oa.outputTokens === 20 && oa.totalTokens === 30, 'OpenAI usage normalized');
+    const oaCache = IDIAG.extractUsage('openai_compatible', { usage: { prompt_tokens: 100, completion_tokens: 5, total_tokens: 105, prompt_tokens_details: { cached_tokens: 60 } } });
+    ok(oaCache.cacheReadTokens === 60, 'OpenAI cached prompt tokens captured where exposed');
+
+    const an = IDIAG.extractUsage('anthropic', { usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 80, cache_creation_input_tokens: 20 } });
+    ok(an.available && an.inputTokens === 100 && an.outputTokens === 50, 'Anthropic input/output normalized');
+    ok(an.cacheReadTokens === 80 && an.cacheWriteTokens === 20, 'Anthropic cache read/creation captured');
+    ok(an.totalTokens === 250, 'Anthropic total includes input+output+cache');
+
+    const ge = IDIAG.extractUsage('gemini', { usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 7, totalTokenCount: 12, cachedContentTokenCount: 3 } });
+    ok(ge.available && ge.inputTokens === 5 && ge.outputTokens === 7 && ge.totalTokens === 12, 'Gemini usageMetadata normalized');
+    ok(ge.cacheReadTokens === 3, 'Gemini cached content tokens captured');
+
+    // Missing usage is UNAVAILABLE, never a measured zero.
+    const miss = IDIAG.extractUsage('openai_compatible', { choices: [] });
+    ok(miss.available === false && miss.inputTokens === null && miss.totalTokens === null, 'missing usage → available:false with null fields (not zero)');
+    const missAnthropic = IDIAG.extractUsage('anthropic', {});
+    ok(missAnthropic.available === false, 'absent Anthropic usage → unavailable');
+
+    // Malformed usage must not throw and must be unavailable.
+    ok(IDIAG.extractUsage('anthropic', { usage: 'nope' }).available === false, 'malformed Anthropic usage → unavailable (no throw)');
+    ok(IDIAG.extractUsage('openai_compatible', null).available === false, 'null data → unavailable (no throw)');
+    ok(IDIAG.extractUsage('gemini', { usageMetadata: 42 }).available === false, 'malformed Gemini usage → unavailable');
+
+    // Streaming usage: Anthropic delivers input on message_start, output on message_delta.
+    let acc = null;
+    acc = IDIAG.mergeUsage(acc, IDIAG.extractStreamEventUsage('anthropic', { type: 'message_start', message: { usage: { input_tokens: 200, cache_read_input_tokens: 40 } } }));
+    acc = IDIAG.mergeUsage(acc, IDIAG.extractStreamEventUsage('anthropic', { type: 'message_delta', usage: { output_tokens: 30 } }));
+    const fin = IDIAG.finalizeStreamUsage(acc, 'anthropic');
+    ok(fin.inputTokens === 200 && fin.outputTokens === 30 && fin.cacheReadTokens === 40, 'streamed Anthropic usage merges split input/output events');
+    ok(fin.totalTokens === 270, 'finalized stream total recomputed from components (not a partial per-event total)');
+    // Streaming OpenAI usage arrives on a final chunk; non-usage chunks yield null.
+    ok(IDIAG.extractStreamEventUsage('openai_compatible', { choices: [{ delta: { content: 'hi' } }] }) === null, 'OpenAI content chunk carries no usage');
+    ok(IDIAG.extractStreamEventUsage('openai_compatible', { usage: { prompt_tokens: 1, completion_tokens: 2 } }) !== null, 'OpenAI final usage chunk captured');
+    // Gemini: only the chunk with usageMetadata contributes.
+    ok(IDIAG.extractStreamEventUsage('gemini', { candidates: [] }) === null, 'Gemini chunk without usageMetadata → null');
+
+    // stream_options.include_usage support is gated to known cloud providers.
+    ok(IDIAG.supportsStreamUsageOption('openai', { type: 'openai_compatible' }) === true, 'include_usage supported for OpenAI');
+    ok(IDIAG.supportsStreamUsageOption('groq', { type: 'openai_compatible' }) === true, 'include_usage supported for Groq');
+    ok(IDIAG.supportsStreamUsageOption('local', { type: 'openai_compatible', isLocal: true }) === false, 'include_usage NOT sent to arbitrary local endpoints');
+    ok(IDIAG.supportsStreamUsageOption('anthropic', { type: 'anthropic' }) === false, 'include_usage not applied to non-openai shapes');
+}
+
+// ============================================================
+section('Intelligence Diagnostics — retry, deadline, and backoff');
+// ============================================================
+{
+    // Retryable = transient 5xx OR rate-limit/overload category.
+    ok(IDIAG.isRetryable({ status: 500, category: 'provider-error' }) === true, '500 is retryable');
+    ok(IDIAG.isRetryable({ status: 502, category: 'provider-error' }) === true, '502 is retryable');
+    ok(IDIAG.isRetryable({ status: 503, category: 'provider-overload' }) === true, '503 is retryable');
+    ok(IDIAG.isRetryable({ status: 504, category: 'provider-error' }) === true, '504 is retryable');
+    ok(IDIAG.isRetryable({ status: 429, category: 'rate-limit' }) === true, '429 rate-limit is retryable');
+    // A generic provider-error WITHOUT a qualifying status is NOT retried.
+    ok(IDIAG.isRetryable({ status: 0, category: 'provider-error' }) === false, 'generic provider-error (no status) is NOT retried');
+    ok(IDIAG.isRetryable({ status: 400, category: 'context-length' }) === false, 'context-length is not retried');
+    ok(IDIAG.isRetryable({ status: 401, category: 'invalid-key' }) === false, 'auth failure is not retried');
+
+    // Retry-After: seconds.
+    ok(IDIAG.parseRetryAfter('5') === 5000, 'Retry-After seconds parsed');
+    ok(IDIAG.parseRetryAfter('0') === 0, 'Retry-After 0 seconds parsed');
+    ok(IDIAG.parseRetryAfter('120') === IDIAG.RETRY_AFTER_MAX_MS, 'Retry-After seconds capped at RETRY_AFTER_MAX_MS');
+    // Retry-After: HTTP-date (relative to a supplied reference time).
+    const nowMs = Date.parse('2026-01-01T00:00:00Z');
+    ok(IDIAG.parseRetryAfter('Thu, 01 Jan 2026 00:00:10 GMT', nowMs) === 10000, 'Retry-After HTTP-date parsed (10s ahead)');
+    ok(IDIAG.parseRetryAfter('Wed, 31 Dec 2025 23:59:50 GMT', nowMs) === 0, 'past HTTP-date → 0 (retry immediately)');
+    ok(IDIAG.parseRetryAfter('not-a-date') === null, 'garbage Retry-After → null');
+    ok(IDIAG.parseRetryAfter(null) === null, 'absent Retry-After → null');
+    // Backoff falls back to a jittered window when no header is present.
+    const b = IDIAG.computeBackoffMs(null, nowMs, 0.5);
+    ok(b >= IDIAG.RETRY_JITTER_MIN_MS && b <= IDIAG.RETRY_JITTER_MAX_MS, 'fallback backoff sits inside the jitter window', b);
+    ok(IDIAG.computeBackoffMs('3', nowMs) === 3000, 'backoff honors Retry-After over jitter');
+    ok(IDIAG.DEFAULT_MAX_RETRIES === 1, 'default max retries is 1 (bounded)');
+}
+
+// ============================================================
+section('Intelligence Diagnostics — reasoning-aware timeout scaling');
+// ============================================================
+{
+    // A normal auto chat (no active plan) stays on the tight baseline.
+    const base = IDIAG.computeEffectiveTimeout({});
+    ok(base.timeoutMs === IDIAG.DEFAULT_REQUEST_TIMEOUT_MS && base.scaled === false, 'normal chat stays on the baseline timeout');
+    // High reasoning effort scales up, clamped to the ceiling.
+    const high = IDIAG.computeEffectiveTimeout({ reasoningPlan: { apply: true, effort: 'high' } });
+    ok(high.timeoutMs === IDIAG.TIMEOUT_CEILING_MS, 'high effort scales up and clamps to the ceiling', high.timeoutMs);
+    ok(high.scaled === true, 'scaled flag set when reasoning lifts the timeout');
+    const medium = IDIAG.computeEffectiveTimeout({ reasoningPlan: { apply: true, effort: 'medium' } });
+    ok(medium.timeoutMs === Math.round(IDIAG.DEFAULT_REQUEST_TIMEOUT_MS * 1.5), 'medium effort applies a 1.5x multiplier');
+    // A disabled/inactive plan does NOT scale.
+    ok(IDIAG.computeEffectiveTimeout({ reasoningPlan: { apply: true, disabled: true, effort: 'high' } }).scaled === false, 'a disabled reasoning plan does not scale');
+    // Explicit caller timeout is authoritative and NOT scaled by default.
+    const explicit = IDIAG.computeEffectiveTimeout({ callerTimeoutMs: 5000, reasoningPlan: { apply: true, effort: 'high' } });
+    ok(explicit.timeoutMs === 5000 && explicit.scaled === false, 'explicit caller timeout stays authoritative (not scaled)');
+    // …unless the caller opts in.
+    const optIn = IDIAG.computeEffectiveTimeout({ callerTimeoutMs: 10000, allowScaling: true, reasoningPlan: { apply: true, effort: 'medium' } });
+    ok(optIn.timeoutMs === 15000, 'caller can opt into reasoning-based scaling');
+    // Budget tokens add bounded time; the ceiling is never exceeded.
+    const budget = IDIAG.computeEffectiveTimeout({ reasoningPlan: { apply: true, effort: 'low', budgetTokens: 60000 } });
+    ok(budget.timeoutMs <= IDIAG.TIMEOUT_CEILING_MS, 'budget scaling never exceeds the ceiling');
+    ok(IDIAG.TIMEOUT_CEILING_MS >= 300000 && IDIAG.TIMEOUT_CEILING_MS <= 360000, 'ceiling sits in the documented 300–360s band', IDIAG.TIMEOUT_CEILING_MS);
+}
+
+// ============================================================
+section('Intelligence Diagnostics — per-response + aggregate surfaces');
+// ============================================================
+{
+    // Cache-hit shown ONLY when cacheReadTokens > 0.
+    const withCache = IDIAG.describeResponseStats({ latencyMs: 1200, usage: { available: true, inputTokens: 10, outputTokens: 20, totalTokens: 30, cacheReadTokens: 8 } });
+    ok(withCache.some(r => r.key === 'cache'), 'cache hit shown when cacheReadTokens > 0');
+    const noCache = IDIAG.describeResponseStats({ latencyMs: 1200, usage: { available: true, inputTokens: 10, outputTokens: 20, totalTokens: 30, cacheReadTokens: 0 } });
+    ok(!noCache.some(r => r.key === 'cache'), 'no cache row when cacheReadTokens is 0');
+    // Missing usage never yields zero-token rows.
+    const noUsage = IDIAG.describeResponseStats({ latencyMs: 900, usage: { available: false } });
+    ok(noUsage.length === 1 && noUsage[0].key === 'latency', 'unavailable usage shows latency alone (no zero tokens)');
+    ok(IDIAG.humanizeLatency(0) === null && IDIAG.humanizeLatency(1200) === '1.2 s' && IDIAG.humanizeLatency(500) === '500 ms', 'latency humanization');
+    // Retry / stalled / partial only when present.
+    const flags = IDIAG.describeResponseStats({ latencyMs: 100, retryCount: 2, streamStalled: true, partial: true, usage: { available: false } });
+    ok(flags.some(r => r.key === 'retries') && flags.some(r => r.key === 'stalled') && flags.some(r => r.key === 'partial'), 'retry/stalled/partial surfaced when present');
+    ok(IDIAG.hasReportableStats({ latencyMs: 0, usage: { available: false } }) === false, 'a stat set with nothing to show is not reportable');
+
+    // Aggregate: unavailable usage excluded from totals; latency averaged over
+    // measured requests only; retries/stalls/partials/cache-hits counted.
+    const agg = IDIAG.summarizeDiagnostics([
+        { ok: true, durationMs: 1000, usage: { available: true, inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        { ok: true, durationMs: 3000, usage: { available: false } },
+        { ok: false, durationMs: 0, retryCount: 1, streamStalled: true, partial: true, usage: { available: true, inputTokens: 5, outputTokens: 5, totalTokens: 10, cacheReadTokens: 4 } }
+    ]);
+    ok(agg.avgLatencyMs === 2000, 'avg latency over measured requests only (0ms excluded)', agg.avgLatencyMs);
+    ok(agg.tokens.available && agg.tokens.total === 40, 'aggregate token total excludes unavailable usage', JSON.stringify(agg.tokens));
+    ok(agg.retries === 1 && agg.stalledStreams === 1 && agg.partialStreams === 1 && agg.cacheHits === 1, 'aggregate counts retries/stalls/partials/cache-hits');
+    ok(agg.requests === 3 && agg.ok === 2 && agg.errors === 1, 'aggregate request/ok/error counts');
+    const emptyAgg = IDIAG.summarizeDiagnostics([]);
+    ok(emptyAgg.avgLatencyMs === null && emptyAgg.tokens.available === false, 'empty buffer → null latency, unavailable tokens');
+}
+
+// ============================================================
+section('Intelligence Diagnostics — app.js integration (static)');
+// ============================================================
+{
+    const app = read('src/core/app.js');
+    // The core delegates to the module (single source of truth) with a fallback.
+    ok(/window\.SutraIntelligenceDiagnostics/.test(app), 'app.js references the diagnostics module');
+    ok(/diag && typeof diag\.classifyHttpError === 'function'/.test(app), 'classifyIntelligenceHttpError delegates to the module');
+    ok(/computeEffectiveTimeout/.test(app) && /const deadline = startedAt \+ effectiveTimeoutMs/.test(app), 'one authoritative deadline = startedAt + effectiveTimeoutMs');
+    ok(/emittedText = true/.test(app) && /!emittedText/.test(app), 'retry is blocked once visible text has streamed (no replay after partial)');
+    ok(/errorCategory: 'stream-stalled'/.test(app), 'stalled stream is classified as stream-stalled');
+    ok(/supportsStreamUsageOption/.test(app) && /include_usage: true/.test(app), 'stream_options.include_usage gated by provider support');
+    ok(/abortableSleep/.test(app), 'backoff wait is abortable (cancel during retry)');
+    ok(/getDiagnosticsSummary/.test(app), 'aggregate diagnostics summary exposed via window.SutraIntelligence');
+    // The user-facing error builders give context-length its actionable guidance.
+    ok((app.match(/errorCategory === 'context-length'/g) || []).length >= 2, 'both user-facing error builders handle context-length');
+    ok(/The request is too large\. Lower Workspace Access/.test(app), 'context-length shows the actionable "too large" guidance to the user');
+    ok(/errorCategory === 'stream-stalled'/.test(app), 'user-facing error builder handles stream-stalled');
+    ok(/buildIntelligenceStatsChip/.test(app) && /SutraDOMSafety/.test(app), 'per-response stats chip renders via SutraDOMSafety');
+    // Ephemeral, non-persisted stats: the buffer stays at cap 60 and stats live
+    // in a session Map, never the sanitized chat message.
+    ok(/INTELLIGENCE_DIAGNOSTICS_CAP = 60/.test(app), 'diagnostics buffer cap remains 60');
+    ok(/intelligenceResponseStats = new Map\(\)/.test(app), 'per-response stats kept in an ephemeral session Map');
+    ok(/const id = `resp_\$\{generateId\(\)\}`/.test(app), 'per-response stats id is session-unique (generateId, not a reset counter that collides across reloads)');
+    ok(!/intelligenceResponseStatsSeq/.test(app), 'the reset-counter stats id (cross-session collision source) is removed');
+    ok(!/netCategory === 'network-failure'/.test(app), 'a bare network fetch failure is NOT auto-retried (no HTTP response → double-send/double-bill risk)');
+    const inv = JSON.parse(read('docs/architecture/persistence-inventory.json'));
+    const invStr = JSON.stringify(inv);
+    ok(!/intelligenceResponseStats|intelligenceDiagnostics/.test(invStr), 'ephemeral diagnostics are NOT added to the persistence inventory');
 }
 
 // ============================================================

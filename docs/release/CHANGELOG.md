@@ -2,6 +2,53 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-07 - Sutra Intelligence reliability + diagnostics hardening
+
+Hardened the single remote-request core (`performIntelligenceRequest`) for
+reliability and honest observability, with a narrow blast radius and no change
+to existing caller contracts (fields were added, never removed or renamed).
+Core workflows remain fully functional with no AI, no key, no account, and no
+network.
+
+- **New pure module** `src/features/assistant/intelligence-diagnostics.js`
+  (`window.SutraIntelligenceDiagnostics`) — the single source of truth for HTTP
+  error classification, usage normalization, retry/deadline policy,
+  `Retry-After` parsing, reasoning-aware timeout scaling, and diagnostics
+  summaries. Dual-mode (browser + CommonJS), no DOM, no network. Registered in
+  `feature-manifest.js`, the generated asset manifest, and the guardrail
+  baseline. `app.js` delegates to it and keeps an exact inline fallback.
+- **Error classification** — a context/token-limit 4xx is now classified
+  `context-length` (with actionable guidance) instead of `unsupported-endpoint`;
+  unrelated 400s are unaffected. `context-length` and `stream-stalled` are
+  first-class categories that never fall through to `unknown`.
+- **Usage normalization** (`extractUsage`) for OpenAI-compatible, Anthropic, and
+  Gemini — missing usage is `available:false` (never a measured zero); malformed
+  usage never breaks a response. Streaming captures usage event-by-event and is
+  gated to providers that support `stream_options.include_usage`.
+- **Cache visibility** — existing provider caching is surfaced (cache-hit shown
+  only when `cacheReadTokens > 0`); no new cache directives were added.
+- **Bounded retries under one authoritative deadline** — default 1 retry, only
+  for transient pre-output failures (`500/502/503/504`, rate-limit, overload);
+  a generic `provider-error` is not retried on category alone. The deadline
+  (`startedAt + effectiveTimeoutMs`) spans backoff + retry + streaming; backoff
+  is abortable and honors `Retry-After` (seconds and HTTP-date).
+- **Stream idle watchdog** — 45 s of silence → `stream-stalled` with the partial
+  text preserved (distinct from `timeout`); partial streams are never replayed.
+- **Reasoning-aware timeout** — scales the baseline up for an active reasoning
+  plan, clamped to a 330 s ceiling; a normal chat stays on the 180 s default and
+  an explicit caller timeout stays authoritative unless it opts into scaling.
+- **Progressive-disclosure "Response details" chip** beneath the provenance
+  receipt (native `<details>`, keyboard-operable, rendered via `SutraDOMSafety`)
+  and an aggregate `window.SutraIntelligence.getDiagnosticsSummary()` over the
+  in-memory buffer (cap 60). Metrics are ephemeral — never persisted or
+  transmitted, never added to the persistence inventory.
+- **Tests** — `tests/unit/intelligence-diagnostics.test.mjs` (deterministic
+  module unit tests), an expanded `scripts/sutra-intelligence-harness-check.mjs`
+  (classification, usage, retry, timeout scaling, aggregation, static app.js
+  integration), and `tests/e2e/intelligence-diagnostics.spec.mjs` (stats chip
+  render/expand, no misleading zero tokens, aggregate summary, and an
+  end-to-end retryable-503→200 retry through the real `sendChat()`).
+
 ## 2026-07 - Onboarding redesign & simplified navigation
 
 Onboarding now follows the student daily loop: capture schoolwork → see what is

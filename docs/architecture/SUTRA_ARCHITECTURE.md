@@ -88,6 +88,13 @@ Self-contained feature areas live in **`src/features/*.js`**:
   Suggested Actions / Apply-Decline change cards / Assistant Activity.
 - `flow-intelligence.js` — **Sutra Intelligence**, the **local** signal layer
   (`deriveStudentContext`) that reads only your workspace; calls no server.
+- `intelligence-diagnostics.js` — pure, dual-mode reliability + observability
+  core (`window.SutraIntelligenceDiagnostics`) for the remote request path:
+  HTTP error classification (incl. `context-length`), provider usage
+  normalization, streaming-usage capture, retry/deadline policy, `Retry-After`
+  parsing, reasoning-aware timeout scaling, and per-response/aggregate
+  diagnostics. No DOM, no network. See
+  [`SUTRA_ASSISTANT.md` §15](../features/SUTRA_ASSISTANT.md).
 - `homework.js` — the Homework module (its own localStorage source of truth,
   mirrored into `appData`).
 - `ap-study.js` — AP Study.

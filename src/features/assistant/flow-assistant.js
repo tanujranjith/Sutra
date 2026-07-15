@@ -733,9 +733,15 @@
             if (customTab) ctx.customTab = customTab;
         }
 
-        // currentView and workspace both include the current note when in Notes.
+        // The open note travels with the user across tabs: currentPageId (what
+        // getActiveNoteSummary reads) is the note loaded in the editor and
+        // highlighted in the sidebar, not a "last opened" history pointer — so
+        // surfacing it outside the Notes view isn't a staleness risk. Canvas
+        // context and live text selection stay scoped to Notes since they only
+        // make sense while that surface is actually visible.
+        const openNote = getActiveNoteSummary();
+        if (openNote) ctx.activeNote = openNote;
         if (view === 'notes') {
-            ctx.activeNote = getActiveNoteSummary();
             const canvasContext = getCanvasContextSummary();
             if (canvasContext) ctx.canvas = canvasContext;
             if (selection) ctx.selection = truncate(selection, 1500);

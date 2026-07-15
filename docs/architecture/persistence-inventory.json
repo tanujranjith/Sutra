@@ -91,6 +91,7 @@
     "transient chat history",
     "in-session unlocked-page state",
     "regenerable caches",
-    "ephemeral scroll positions"
+    "ephemeral scroll positions",
+    "in-memory Intelligence token/latency diagnostics (buffer cap 60) and per-response stats — never persisted or transmitted"
   ]
 }
