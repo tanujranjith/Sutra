@@ -6850,8 +6850,97 @@ function populateProgressDashboard() {
                 });
         }
 
+        // A cache-first service worker can serve a stale migrations.js while a
+        // freshly-stamped app.js expects a newer schema (APP_SCHEMA_VERSION).
+        // That skew is a stale ASSET, not corrupted data or a failed IndexedDB
+        // write, so it must never surface as the "could not confirm your last
+        // save" data-safety banner. We detect it by comparing the loaded
+        // migration registry's reach against the app shell's target version.
+        function isStaleMigrationAssetSkew() {
+            try {
+                const reachable = Number(window.SutraMigrations && window.SutraMigrations.CURRENT_VERSION);
+                return Number.isFinite(reachable) && reachable > 0 && reachable < APP_SCHEMA_VERSION;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // A stale-migrations skew records (or restores from a prior session) a
+        // "migration-backup"/"migration" persistence failure that keeps the
+        // data-safety banner up across reloads. That failure never represented
+        // lost data — nothing was being written — so once the workspace loads
+        // and migrates cleanly, or once we have positively identified the skew,
+        // clear it. Genuine save failures (other phases) stay untouched.
+        function clearResolvedMigrationFailure() {
+            try {
+                const failure = sutraPersistenceState && sutraPersistenceState.lastFailure;
+                const phase = failure && String(failure.phase || '');
+                if (!failure || (phase !== 'migration-backup' && phase !== 'migration')) return;
+                sutraPersistenceState = normalizePersistenceState({
+                    ...sutraPersistenceState,
+                    lastFailure: null,
+                    lastFailureAt: null,
+                    retryCount: 0
+                });
+                persistSutraPersistenceState();
+                try { updateSutraPersistenceHealthUi(); } catch (uiError) { /* non-critical */ }
+            } catch (error) { /* clearing is best-effort */ }
+        }
+
+        // Present a calm, honest recovery prompt for a stale-asset skew: the
+        // work is safe, a reload fetches the matching build. We also nudge the
+        // service worker to pull the new version in the background so the reload
+        // resolves cleanly.
+        function presentStaleAssetReloadPrompt(detail) {
+            try {
+                if (typeof window.SutraReportError === 'function') {
+                    window.SutraReportError('Outdated workspace migration asset loaded from cache', {
+                        where: 'initAppData',
+                        phase: 'stale-migration-asset',
+                        reachableVersion: detail && detail.reachable,
+                        appSchemaVersion: detail && detail.target
+                    }, 'info');
+                }
+            } catch (error) { /* diagnostics are best-effort */ }
+            try {
+                if (typeof navigator !== 'undefined' && navigator.serviceWorker
+                    && typeof navigator.serviceWorker.getRegistration === 'function') {
+                    navigator.serviceWorker.getRegistration().then(function (registration) {
+                        if (registration && typeof registration.update === 'function') {
+                            try { registration.update(); } catch (updateError) { /* best-effort */ }
+                        }
+                    }).catch(function () { /* best-effort */ });
+                }
+            } catch (error) { /* best-effort */ }
+            if (typeof document === 'undefined' || !document.body) return;
+            if (document.getElementById('sutraStaleAssetBanner')) return;
+            const banner = document.createElement('div');
+            banner.id = 'sutraStaleAssetBanner';
+            banner.className = 'sutra-update-banner';
+            banner.setAttribute('role', 'alert');
+            banner.setAttribute('aria-live', 'assertive');
+            const message = document.createElement('span');
+            message.className = 'sutra-update-message';
+            message.textContent = 'Sutra loaded an outdated component from your browser cache. Your work is safe — reload to finish updating and re-enable saving.';
+            const reload = document.createElement('button');
+            reload.id = 'sutraStaleAssetReloadBtn';
+            reload.type = 'button';
+            reload.className = 'sutra-update-primary';
+            reload.textContent = 'Reload to update';
+            reload.addEventListener('click', function () {
+                reload.disabled = true;
+                reload.textContent = 'Reloading…';
+                try { window.location.reload(); } catch (error) {
+                    try { window.location.href = window.location.href; } catch (hrefError) { /* best-effort */ }
+                }
+            });
+            banner.appendChild(message);
+            banner.appendChild(reload);
+            document.body.appendChild(banner);
+        }
+
         function mergeAppDataDefaults(stored) {
-            if (typeof window !== 'undefined' && window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function') {
+            if (!isStaleMigrationAssetSkew() && typeof window !== 'undefined' && window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function') {
                 try {
                     const migration = window.SutraMigrations.migrateWorkspace(stored, { targetVersion: APP_SCHEMA_VERSION });
                     stored = migration.workspace;
@@ -7176,7 +7265,23 @@ function populateProgressDashboard() {
                 console.warn('Unable to read IndexedDB workspace; starting from an in-memory safety state.', error);
                 recordPersistenceFailure(error, { reason: 'startup-read', phase: 'startup-read', kind: 'indexeddb' });
             }
-            if (stored) {
+            if (stored && isStaleMigrationAssetSkew()) {
+                // The service worker served a cached migrations.js older than
+                // this app shell, so we cannot migrate the stored workspace up
+                // to APP_SCHEMA_VERSION. This is a stale ASSET, not lost or
+                // corrupted data. Hold writes so we never persist a workspace we
+                // cannot correctly migrate, clear the misleading failure banner,
+                // hydrate a read-only view of the existing data, and route the
+                // user to a reload that fetches the matching migration code.
+                persistenceWritesBlocked = true;
+                persistenceWriteBlockReason = 'Sutra loaded an outdated component from your browser cache and cannot save until you reload to finish updating. Your existing work is safe on disk.';
+                clearResolvedMigrationFailure();
+                appData = mergeAppDataDefaults(stored);
+                presentStaleAssetReloadPrompt({
+                    reachable: Number(window.SutraMigrations && window.SutraMigrations.CURRENT_VERSION) || 0,
+                    target: APP_SCHEMA_VERSION
+                });
+            } else if (stored) {
                 try {
                     if (window.SutraMigrations && window.SutraMigrations.requiresBackup
                         && window.SutraMigrations.requiresBackup(stored, APP_SCHEMA_VERSION)) {
@@ -7187,6 +7292,10 @@ function populateProgressDashboard() {
                     throw new Error(`Workspace migration paused because its recovery backup failed: ${error.message || error}`);
                 }
                 appData = mergeAppDataDefaults(stored);
+                // The workspace migrated cleanly, so any migration/backup failure
+                // carried over from a prior stale-asset session is provably
+                // resolved and never meant lost data — clear it.
+                clearResolvedMigrationFailure();
             } else if (readFailed) {
                 appData = getDefaultAppData();
             } else {

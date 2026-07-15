@@ -650,7 +650,7 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260714-intel1', 'app.js cache-busted so the latest Intelligence hardening ships');
+mustContain('Sutra.html', 'src/core/app.js?v=20260715-migfix1', 'app.js cache-busted so the stale-migration-skew fix ships');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------
