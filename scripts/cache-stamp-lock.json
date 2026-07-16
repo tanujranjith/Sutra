@@ -1,0 +1,434 @@
+{
+  "assets/vendor/editor/sutra-editor.min.js": {
+    "stamp": "3.27.3-b5",
+    "hash": "3172f78f3f59a865"
+  },
+  "assets/vendor/jszip/jszip.min.js": {
+    "stamp": "3.10.1",
+    "hash": "acc7e41455a80765"
+  },
+  "src/boot/startup-intro.js": {
+    "stamp": "20260614-storage1",
+    "hash": "c5eef02954e85a75"
+  },
+  "src/boot/sw-register.js": {
+    "stamp": "20260709-safeupdate1",
+    "hash": "447f7d017b57fed7"
+  },
+  "src/compat/legacy-homework.js": {
+    "stamp": "20260709-compat1",
+    "hash": "bdaba42ae73dc103"
+  },
+  "src/components/icons/icon-paths.js": {
+    "stamp": "20260709-icons-comments",
+    "hash": "aa1b11877e044baa"
+  },
+  "src/components/icons/index.js": {
+    "stamp": "20260709-icons-comments",
+    "hash": "727e24137be57f62"
+  },
+  "src/config/feature-manifest.js": {
+    "stamp": "20260714-intel1",
+    "hash": "c38a5698696e1a10"
+  },
+  "src/config/sutra-runtime-config.js": {
+    "stamp": "20260606-drive-sync",
+    "hash": "56ef2d08e2928f2f"
+  },
+  "src/core/app.js": {
+    "stamp": "20260715-migfix1",
+    "hash": "2d291ff09b9a2d77"
+  },
+  "src/core/dom-safety.js": {
+    "stamp": "20260613-harden1",
+    "hash": "3298453c79e87b74"
+  },
+  "src/core/error-reporter.js": {
+    "stamp": "20260613-harden1",
+    "hash": "6756bb3890cf398f"
+  },
+  "src/core/feature-guard.js": {
+    "stamp": "20260613-harden1",
+    "hash": "f1f7244179aab33f"
+  },
+  "src/core/issue-prompt.js": {
+    "stamp": "20260617-issue1",
+    "hash": "0cd88826ae6aeb3c"
+  },
+  "src/core/migrations.js": {
+    "stamp": "20260715-migfix1",
+    "hash": "a40db7c114b34f18"
+  },
+  "src/core/recovery-mode.js": {
+    "stamp": "20260710-recovery1",
+    "hash": "64ecef3c1df3b9bb"
+  },
+  "src/core/safe-storage.js": {
+    "stamp": "20260614-safestorage2",
+    "hash": "34556302c63d8e96"
+  },
+  "src/core/startup-health.js": {
+    "stamp": "20260620-health1",
+    "hash": "1b1b901c434b66b3"
+  },
+  "src/core/student-date-parser.js": {
+    "stamp": "20260709-studentdate1",
+    "hash": "1390f0e0cb95697c"
+  },
+  "src/core/time-utils.js": {
+    "stamp": "20260712-timeu1",
+    "hash": "0b7582713b3b44e3"
+  },
+  "src/data/daily-lock-in-quotes.js": {
+    "stamp": "20260605-quotes1",
+    "hash": "90b89bd8b0f869f9"
+  },
+  "src/domain/assistant-permissions.js": {
+    "stamp": "20260710-assistant-permissions1",
+    "hash": "f7664650c6f3ea93"
+  },
+  "src/domain/homework-store.js": {
+    "stamp": "20260709-homework-store1",
+    "hash": "757c3d86b785a544"
+  },
+  "src/domain/import-engine.js": {
+    "stamp": "20260710-import1",
+    "hash": "ca4ec795935860f5"
+  },
+  "src/domain/learning-engine.js": {
+    "stamp": "20260710-learning1",
+    "hash": "9652c9d92c4cc7ac"
+  },
+  "src/domain/mastery.js": {
+    "stamp": "20260710-mastery1",
+    "hash": "a6534ead38907555"
+  },
+  "src/domain/notes-knowledge-core.js": {
+    "stamp": "20260711-knowledge1",
+    "hash": "e624280545a6071a"
+  },
+  "src/domain/planner.js": {
+    "stamp": "20260710-planner1",
+    "hash": "d164c6f2cac51a8c"
+  },
+  "src/domain/student-engine.js": {
+    "stamp": "20260710-student-engine1",
+    "hash": "b3906892b42c7000"
+  },
+  "src/domain/student-life.js": {
+    "stamp": "20260710-student-life1",
+    "hash": "10276452f1173261"
+  },
+  "src/features/academic/academic-command-center.js": {
+    "stamp": "20260614-acc1",
+    "hash": "3ca5d5895240861e"
+  },
+  "src/features/academic/assignment-studio.js": {
+    "stamp": "20260707-batch1",
+    "hash": "2a6c35fd4ecbbd78"
+  },
+  "src/features/academic/command-center.js": {
+    "stamp": "20260613-cc1",
+    "hash": "2fea022c24378c8e"
+  },
+  "src/features/academic/grade-planner.js": {
+    "stamp": "20260707-batch3",
+    "hash": "13c00b91d222347c"
+  },
+  "src/features/academic/planning-engine.js": {
+    "stamp": "20260616-plan1",
+    "hash": "c0069d1ff403727b"
+  },
+  "src/features/academic/school-schedule.js": {
+    "stamp": "20260610-academic1",
+    "hash": "108b113147fcf5a6"
+  },
+  "src/features/academic/semester-setup.js": {
+    "stamp": "20260630-assist-hw1",
+    "hash": "7f4d5722c1d7fd2b"
+  },
+  "src/features/assistant/action-system.js": {
+    "stamp": "20260714-assistant-trust1",
+    "hash": "9900f0ad49a81f0b"
+  },
+  "src/features/assistant/assistant-core.js": {
+    "stamp": "20260714-assistant-trust1",
+    "hash": "e20b9640cd6248b1"
+  },
+  "src/features/assistant/assistant-safety.js": {
+    "stamp": "20260714-intel1",
+    "hash": "5fadb5f3b117fbf2"
+  },
+  "src/features/assistant/flow-assistant.js": {
+    "stamp": "20260714-assistant-trust3",
+    "hash": "27258313c635d23e"
+  },
+  "src/features/assistant/flow-intelligence.js": {
+    "stamp": "20260614-storage1",
+    "hash": "cd3412ef19cf9cb0"
+  },
+  "src/features/assistant/intelligence-diagnostics.js": {
+    "stamp": "20260714-intel1",
+    "hash": "1d0489289b3b61aa"
+  },
+  "src/features/assistant/model-capabilities.js": {
+    "stamp": "20260714-assistant-trust1",
+    "hash": "d1f47d7483b004c9"
+  },
+  "src/features/assistant/note-patch-system.js": {
+    "stamp": "20260711-note-patch1",
+    "hash": "7f739452d174ca04"
+  },
+  "src/features/assistant/sutra-assistant-memory.js": {
+    "stamp": "20260713-assist-features1",
+    "hash": "684306eb6cd61ed8"
+  },
+  "src/features/assistant/sutra-capability-registry.js": {
+    "stamp": "20260711-notes2",
+    "hash": "70e198a07dc0eea2"
+  },
+  "src/features/assistant/sutra-local-help.js": {
+    "stamp": "20260714-assistant-trust1",
+    "hash": "fa165252a929f97d"
+  },
+  "src/features/assistant/sutra-product-knowledge.js": {
+    "stamp": "20260714-assistant-trust1",
+    "hash": "1c85baef910dc3c7"
+  },
+  "src/features/customization/customization.js": {
+    "stamp": "20260602-sutra1",
+    "hash": "d97dd9a8fb4420d8"
+  },
+  "src/features/customization/plugin-system.js": {
+    "stamp": "20260601-plugins",
+    "hash": "16d76c3e5d3d41a8"
+  },
+  "src/features/feature-registry.js": {
+    "stamp": "20260709-features1",
+    "hash": "3b1743d4329b2d0a"
+  },
+  "src/features/notes/editor-v2.js": {
+    "stamp": "20260708-editorv2-p6",
+    "hash": "9c724d738b72b011"
+  },
+  "src/features/study/ap-study.js": {
+    "stamp": "20260707-batch1",
+    "hash": "8e602082b3a0e4a0"
+  },
+  "src/features/study/code-highlight.js": {
+    "stamp": "20260620-hl1",
+    "hash": "72a0e167b23d5a87"
+  },
+  "src/features/study/homework.js": {
+    "stamp": "20260701-loops2",
+    "hash": "31ebc61615d77c80"
+  },
+  "src/features/study/math-render.js": {
+    "stamp": "20260620-math1",
+    "hash": "9683cdb464e6b16c"
+  },
+  "src/features/study/review.js": {
+    "stamp": "20260528-flow-upgrade",
+    "hash": "9a2b793e8e7e5f83"
+  },
+  "src/features/workspace/activation-metrics.js": {
+    "stamp": "20260702-activation1",
+    "hash": "987666d734d79136"
+  },
+  "src/features/workspace/backup-confidence.js": {
+    "stamp": "20260712-bc1",
+    "hash": "0f1060b20127996f"
+  },
+  "src/features/workspace/business-workspace.js": {
+    "stamp": "20260705-clb3",
+    "hash": "7acf80c83e9e8e48"
+  },
+  "src/features/workspace/custom-tabs.js": {
+    "stamp": "20260707-batch1",
+    "hash": "645b0b1ad84e250d"
+  },
+  "src/features/workspace/daily-lock-in-quote.js": {
+    "stamp": "20260605-quotes1",
+    "hash": "84d99582bc6bf534"
+  },
+  "src/features/workspace/handwriting.js": {
+    "stamp": "20260601-handwriting",
+    "hash": "b2a6953df38f74cb"
+  },
+  "src/features/workspace/mobile-nav.js": {
+    "stamp": "20260620-mobilenav1",
+    "hash": "f7d10bfb05caa40e"
+  },
+  "src/features/workspace/notifications.js": {
+    "stamp": "20260707-batch1",
+    "hash": "3753b07e1eb04f0a"
+  },
+  "src/features/workspace/share-target.js": {
+    "stamp": "20260712-share1",
+    "hash": "76654a6d7b2c8d91"
+  },
+  "src/features/workspace/smart-reschedule.js": {
+    "stamp": "20260712-resched1",
+    "hash": "24d519cce187763e"
+  },
+  "src/features/workspace/starter-packs.data.js": {
+    "stamp": "20260619-packs1",
+    "hash": "4f806de479b221c8"
+  },
+  "src/features/workspace/timeline-drag.js": {
+    "stamp": "20260712-drag1",
+    "hash": "63671881e8e02e8b"
+  },
+  "src/features/workspace/today-command-center.js": {
+    "stamp": "20260703-today1",
+    "hash": "5f0de72ad9bc7424"
+  },
+  "src/persistence/storage-hygiene.js": {
+    "stamp": "20260710-hygiene1",
+    "hash": "dc3d5bce423b7532"
+  },
+  "src/persistence/workspace-coordinator.js": {
+    "stamp": "20260710-coordinator1",
+    "hash": "d6fd15f6450e378b"
+  },
+  "src/persistence/workspace-db.js": {
+    "stamp": "20260714-idb-factory1",
+    "hash": "8e6f74eae6e2666d"
+  },
+  "src/state/workspace-normalizers.js": {
+    "stamp": "20260616-state1",
+    "hash": "e63fece82e587d1b"
+  },
+  "src/ui/select-enhancer.js": {
+    "stamp": "20260708-toolbar-compact",
+    "hash": "35abae7df9676466"
+  },
+  "src/ui/student-loop-actions.js": {
+    "stamp": "20260709-studentloop1",
+    "hash": "af2e685d3219f9cf"
+  },
+  "styles/base/contracts.css": {
+    "stamp": "20260710-contracts1",
+    "hash": "2dfba8d055a231df"
+  },
+  "styles/base/microinteractions.css": {
+    "stamp": "20260424-opaque-modals",
+    "hash": "b4f058b0e2f2b2a0"
+  },
+  "styles/base/styles.css": {
+    "stamp": "20260712-glass-fix",
+    "hash": "f29b8712b98727d3"
+  },
+  "styles/base/tokens.css": {
+    "stamp": "20260710-tokens1",
+    "hash": "aaa679deb92363f5"
+  },
+  "styles/features/academic-command-center.css": {
+    "stamp": "20260614-acc1",
+    "hash": "268c1d44142856fa"
+  },
+  "styles/features/academic-planning.css": {
+    "stamp": "20260707-batch2",
+    "hash": "471e4b2f094dc3c4"
+  },
+  "styles/features/command-center.css": {
+    "stamp": "20260705-clb2",
+    "hash": "47cef56579d25652"
+  },
+  "styles/features/customization.css": {
+    "stamp": "20260601-handwriting-mods",
+    "hash": "63cb31711a6f0730"
+  },
+  "styles/features/homework-redesign.css": {
+    "stamp": "20260701-loops1",
+    "hash": "b17713a34c1059c8"
+  },
+  "styles/features/issue-prompt.css": {
+    "stamp": "20260617-issue1",
+    "hash": "3e852556c6ccee3b"
+  },
+  "styles/features/notes-editor-v2.css": {
+    "stamp": "20260708-editorv2-p5",
+    "hash": "6ef91d3e2f0ebd3c"
+  },
+  "styles/features/notes-toolbar.css": {
+    "stamp": "20260709-toolbar-fields",
+    "hash": "f4cae96a29fa89ae"
+  },
+  "styles/features/notifications.css": {
+    "stamp": "20260605-notif1",
+    "hash": "a7baebe7a7bfbe96"
+  },
+  "styles/features/sutra-assistant-help.css": {
+    "stamp": "20260711-notes2",
+    "hash": "73fe9e407af4ca49"
+  },
+  "styles/features/sutra-cloud.css": {
+    "stamp": "20260618-cloud1",
+    "hash": "271e73da49875a10"
+  },
+  "styles/features/sutra-intelligence.css": {
+    "stamp": "20260610-intel1",
+    "hash": "7ff9f8c5515f34db"
+  },
+  "styles/legacy/app-shell-base.css": {
+    "stamp": "20260616-cssextract1",
+    "hash": "0b5eec06d17d257f"
+  },
+  "styles/legacy/mobile-global.css": {
+    "stamp": "20260616-cssextract1",
+    "hash": "b72df7aa889c3e1f"
+  },
+  "styles/legacy/refinement.css": {
+    "stamp": "20260616-cssextract1",
+    "hash": "ba0708986de8b924"
+  },
+  "styles/legacy/responsive-hardening.css": {
+    "stamp": "20260616-cssextract1",
+    "hash": "ed47240026eee70a"
+  },
+  "styles/legacy/ui-refresh.css": {
+    "stamp": "20260616-cssextract1",
+    "hash": "3362df57c186d78d"
+  },
+  "styles/legacy/workspace-overrides.css": {
+    "stamp": "20260703-voice1",
+    "hash": "72db4a7b44adaac1"
+  },
+  "styles/responsive/mobile.css": {
+    "stamp": "20260707-mobileopt2",
+    "hash": "343fb49cf7b3a9a9"
+  },
+  "styles/themes/glass.css": {
+    "stamp": "20260712-glass-fix",
+    "hash": "125b698224d06332"
+  },
+  "styles/themes/macos26-redesign.css": {
+    "stamp": "20260712-glass-fix",
+    "hash": "140d902be25888a7"
+  },
+  "styles/themes/sutra-pro.css": {
+    "stamp": "20260709-comments",
+    "hash": "7fa4e3620410974c"
+  },
+  "styles/views/assistant-view.css": {
+    "stamp": "20260714-intel1",
+    "hash": "c11877700b2f3f4e"
+  },
+  "styles/views/custom-tabs.css": {
+    "stamp": "20260706-ctabs3",
+    "hash": "af0b8bb807caf0f3"
+  },
+  "styles/views/focus-session.css": {
+    "stamp": "20260614-extract1",
+    "hash": "9b655e76e054d1f7"
+  },
+  "styles/views/settings-redesign.css": {
+    "stamp": "20260625-cc-segmented-rows",
+    "hash": "47cf3a0e07e551e2"
+  },
+  "styles/views/today-redesign.css": {
+    "stamp": "20260703-today2",
+    "hash": "e70be88e57f3c89a"
+  }
+}
