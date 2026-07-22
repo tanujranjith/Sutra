@@ -79,7 +79,7 @@
     <script src="src/sync/sync-store.js?v=20260718-account-isolation1"></script>
     <script src="src/sync/sync-transport.js?v=20260718-account-isolation1"></script>
     <script src="src/sync/sync-engine.js?v=20260717-conflict4"></script>
-    <script src="src/config/feature-manifest.js?v=20260716-syncwipe1"></script>
+    <script src="src/config/feature-manifest.js?v=20260722-slides1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -6476,6 +6476,10 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                                 Canvas
                             </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_slides" data-type="slides" onclick="SutraSlides.createFromNewPageDialog()" aria-pressed="false">
+                                <i class="fas fa-chalkboard" aria-hidden="true"></i>
+                                Slides
+                            </button>
                         </div>
 
                         <div class="new-page-name-field">
@@ -6608,6 +6612,7 @@
                         <select id="newPageType" aria-hidden="true" style="display:none">
                             <option value="note">Standard note</option>
                             <option value="canvas">Canvas</option>
+                            <option value="slides">Slides</option>
                         </select>
 
                     </aside>
@@ -7474,7 +7479,8 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
-<script src="src/core/app.js?v=20260721-runtime-failsafe2"></script>
+<script src="src/core/app.js?v=20260722-slides1"></script>
+    <script src="src/features/workspace/slides.js?v=20260722-slides5"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
@@ -7882,6 +7888,7 @@
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260721-menuopaque1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260708-editorv2-p5">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20260722-slides5">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

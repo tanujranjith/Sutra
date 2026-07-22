@@ -28,15 +28,15 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260716-syncwipe1",
-    "hash": "6748967142ae5277"
+    "stamp": "20260722-slides1",
+    "hash": "4a01f86267157440"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260721-runtime-failsafe2",
+    "stamp": "20260722-slides1",
     "hash": "913e3870559fd91b"
   },
   "src/core/dom-safety.js": {
@@ -160,8 +160,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260715-sync2",
-    "hash": "8f184d33c8801424"
+    "stamp": "20260722-slides1",
+    "hash": "998487642f36c566"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
@@ -266,6 +266,10 @@
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",
     "hash": "76654a6d7b2c8d91"
+  },
+  "src/features/workspace/slides.js": {
+    "stamp": "20260722-slides5",
+    "hash": "6f84779b35375230"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -402,6 +406,10 @@
   "styles/features/notifications.css": {
     "stamp": "20260605-notif1",
     "hash": "a7baebe7a7bfbe96"
+  },
+  "styles/features/slides.css": {
+    "stamp": "20260722-slides5",
+    "hash": "5062f9ffebde6102"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260711-notes2",

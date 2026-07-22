@@ -103,7 +103,12 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
       isTemporary: false, temporaryCreatedAt: null, temporaryExpiresAt: null,
       isLocked: false, lockHash: null, lockSalt: null, lockedAt: null,
-      lockAutoLock: 'navigation', canvas: null, isSystemPage: false,
+      lockAutoLock: 'navigation', canvas: null,
+      slides: { version: 1, theme: 'sutra', size: 'widescreen', slides: [{
+        id: 'slide-parity', layout: 'title', title: 'Parity Slides', speakerNotes: 'Slide note sentinel.',
+        elements: [{ id: 'slide-text-parity', type: 'text', x: 10, y: 10, width: 70, height: 12, text: 'Unique slide evidence.' }]
+      }] },
+      isSystemPage: false,
       builtInId: '', systemRole: '', pageMode: { enabled: false },
       documentBackground: { enabled: false }, formatting: {},
       documentLayout: {}, comments: [], suggestions: [], footnotes: [],

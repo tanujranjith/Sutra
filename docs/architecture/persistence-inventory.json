@@ -135,7 +135,7 @@
   },
   "nestedPersistentContracts": {
     "inheritanceRule": "Every durable descendant of a synchronized record, ordered collection, or atomic section inherits that parent decision. Normalizers must preserve documented fields and forward-compatible extra fields unless a migration intentionally changes them.",
-    "pages[]": ["id", "title", "type", "content", "blocks", "icon", "collapsed", "theme", "createdAt", "updatedAt", "isTemporary", "temporaryCreatedAt", "temporaryExpiresAt", "isLocked", "lockHash", "lockSalt", "lockedAt", "lockAutoLock", "spaceId", "canvas", "isSystemPage", "builtInId", "systemRole", "pageMode", "documentBackground", "formatting", "documentLayout", "comments", "suggestions", "footnotes", "citations", "tags", "versions"],
+    "pages[]": ["id", "title", "type", "content", "blocks", "icon", "collapsed", "theme", "createdAt", "updatedAt", "isTemporary", "temporaryCreatedAt", "temporaryExpiresAt", "isLocked", "lockHash", "lockSalt", "lockedAt", "lockAutoLock", "spaceId", "canvas", "slides", "isSystemPage", "builtInId", "systemRole", "pageMode", "documentBackground", "formatting", "documentLayout", "comments", "suggestions", "footnotes", "citations", "tags", "versions"],
     "tasks[]": ["id", "title", "notes", "priority", "difficulty", "status", "completed", "isActive", "scheduleType", "weeklyDays", "estimate", "category", "subtasks", "dependencies", "dueDate", "dueTime", "reminder", "recurrence", "noteId", "courseId", "createdAt", "updatedAt"],
     "assistantChatHistory": ["version", "currentChatId", "conversations", "legacyMigrationComplete"],
     "assistantChatHistory.conversations[]": ["id", "title", "messages", "createdAt", "updatedAt", "providerLabel", "modelLabel", "archived", "pinned", "scope", "restoredFromBackup"],

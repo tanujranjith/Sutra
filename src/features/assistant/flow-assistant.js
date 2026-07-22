@@ -308,6 +308,27 @@
                     objectCount: page.canvas && Array.isArray(page.canvas.objects) ? page.canvas.objects.length : 0
                 };
             }
+            if (page.slides && Array.isArray(page.slides.slides)) {
+                const deck = window.SutraSlides && typeof window.SutraSlides.getContext === 'function'
+                    ? window.SutraSlides.getContext()
+                    : null;
+                const slideText = deck && Array.isArray(deck.slides)
+                    ? deck.slides.map(slide => [slide.title, slide.speakerNotes].concat((slide.elements || []).map(element => element.text || element.alt || '')).join(' ')).join(' ')
+                    : '';
+                return {
+                    id: page.id,
+                    title: page.title || 'Untitled presentation',
+                    type: 'slides',
+                    slideCount: deck ? deck.slideCount : page.slides.slides.length,
+                    excerpt: truncate(slideText, 800),
+                    wordCount: slideText ? slideText.trim().split(/\s+/).length : 0,
+                    classLinkId: page.classLinkId || '',
+                    apSubjectId: page.apSubjectId || '',
+                    templateType: page.templateType || '',
+                    dueDate: page.dueDate || '',
+                    examDate: page.examDate || ''
+                };
+            }
             const latestVersion = Array.isArray(page.versions) && page.versions.length ? page.versions[page.versions.length - 1] : null;
             const tmp = document.createElement('div');
             setUserHtml(tmp, String(page.content || page.body || ''));
@@ -339,6 +360,15 @@
             if (api) return api.getContext();
             const note = getActiveNoteSummary();
             return note && note.type === 'canvas' ? note : null;
+        } catch (e) { return null; }
+    }
+
+    function getSlidesContextSummary() {
+        try {
+            const note = getActiveNoteSummary();
+            if (!note || note.locked || note.type !== 'slides') return null;
+            const api = window.SutraSlides && typeof window.SutraSlides.getContext === 'function' ? window.SutraSlides : null;
+            return api ? api.getContext() : null;
         } catch (e) { return null; }
     }
 
@@ -749,6 +779,8 @@
         if (view === 'notes') {
             const canvasContext = getCanvasContextSummary();
             if (canvasContext) ctx.canvas = canvasContext;
+            const slidesContext = getSlidesContextSummary();
+            if (slidesContext) ctx.slides = slidesContext;
             if (selection) ctx.selection = truncate(selection, 1500);
         }
 

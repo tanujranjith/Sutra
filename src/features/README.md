@@ -14,7 +14,7 @@ globals have legacy aliases that point at the same object (e.g. `sutraAssistant`
 | `academic/` | `school-schedule.js`, `grade-planner.js`, `assignment-studio.js`, `semester-setup.js`, `planning-engine.js`, `academic-command-center.js`, `command-center.js` | The academic-planning engines: rotating schedule, grade/GPA forecasting, Assignment Studio, Semester Setup importer, planning engine, and the command-center ranking surfaces. Several of these are `require()`-loaded for execution by `scripts/sutra-academic-engines-check.mjs`. |
 | `study/` | `ap-study.js`, `review.js`, `homework.js` | AP Study, spaced-repetition Review, and the Homework module (own localStorage source of truth mirrored into `appData`). |
 | `customization/` | `customization.js`, `plugin-system.js` | The theme/CSS-override engine and the sandboxed local plugin loader. |
-| `workspace/` | `business-workspace.js`, `handwriting.js`, `notifications.js`, `daily-lock-in-quote.js`, `starter-packs.data.js` | Projects & Work, handwriting/drawing, the notification center, the daily quote, and the **Starter Packs** local seed data (`window.SUTRA_STARTER_PACKS`; the preview/apply/undo controller lives in `src/core/app.js`). |
+| `workspace/` | `business-workspace.js`, `handwriting.js`, `notifications.js`, `daily-lock-in-quote.js`, `slides.js`, `starter-packs.data.js` | Projects & Work, handwriting/drawing, the notification center, the local Slides editor (`window.SutraSlides`), the daily quote, and the **Starter Packs** local seed data (`window.SUTRA_STARTER_PACKS`; the preview/apply/undo controller lives in `src/core/app.js`). |
 
 ## When adding a feature
 
