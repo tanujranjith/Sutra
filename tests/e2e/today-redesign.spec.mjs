@@ -208,11 +208,16 @@ test('radar consolidates linked Homework deadline, due marker, and focus block',
 
     // The one Homework item is deliberately represented in each connected
     // store, matching the records that previously produced three Radar chips.
-    localStorage.setItem('hwTasks:v2', JSON.stringify([{
-      id: homeworkId, courseId: 'qa-robotics', title: 'Finish the C++ code',
-      dueDate, dueTime: '', done: false, priority: 'high', difficulty: 'medium'
-    }]));
-    localStorage.setItem('hwCourses:v2', JSON.stringify([{ id: 'qa-robotics', name: 'Robotics' }]));
+    const homeworkStore = window.SutraHomeworkStore;
+    const homeworkSnapshot = homeworkStore.getSnapshot();
+    homeworkStore.replace({
+      ...homeworkSnapshot,
+      courses: [{ id: 'qa-robotics', name: 'Robotics' }],
+      tasks: [{
+        id: homeworkId, courseId: 'qa-robotics', title: 'Finish the C++ code',
+        dueDate, dueTime: '', done: false, priority: 'high', difficulty: 'medium'
+      }]
+    }, { reason: 'today-radar-regression' });
     fa.tasks.splice(0, fa.tasks.length, {
       id: mirrorTaskId, title: 'Finish the C++ code', dueDate, dueTime: '',
       completed: false, isActive: true, scheduleType: 'once', origin: 'homework',

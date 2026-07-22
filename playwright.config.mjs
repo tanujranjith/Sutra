@@ -13,6 +13,8 @@ const responsiveTestMatch = [
   /.*onboarding-redesign\.spec\.mjs$/
 ];
 
+const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);
+
 export default defineConfig({
   testDir: './tests/e2e',
   outputDir: '.tmp/playwright-results',
@@ -27,13 +29,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: `http://127.0.0.1:${playwrightPort}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure'
   },
   webServer: {
-    command: 'node scripts/serve-static.mjs 5173',
-    url: 'http://127.0.0.1:5173',
+    command: `node scripts/serve-static.mjs ${playwrightPort}`,
+    url: `http://127.0.0.1:${playwrightPort}`,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000
   },

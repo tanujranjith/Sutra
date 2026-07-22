@@ -34,6 +34,19 @@ try {
     /parser rejected/
   );
   expectRejected(
+    'cross-section-splice',
+    (text) => text.replace(
+      "if (page.theme && page.theme !== 'default') {",
+      "if (page.theme && page.theme !== 'default') {\n             \"g readable from script. Opt-in only"
+    ),
+    /parser rejected/
+  );
+  expectRejected(
+    'truncation',
+    (text) => text.slice(0, Math.floor(text.length * 0.7)),
+    /parser rejected|unexpectedly small|unexpectedly short/
+  );
+  expectRejected(
     'missing-persistence',
     (text) => text.replace('function serializeWorkspace(', 'function serializeWorkspaceRemoved('),
     /workspace serializer is missing/

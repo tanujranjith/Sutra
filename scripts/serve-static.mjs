@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { buildCsp } from './lib/csp-policy.mjs';
-import { assertCoreRuntimeIntegrity } from './lib/core-runtime-integrity.mjs';
+import { assertCoreRuntimeIntegrity, checkCoreRuntimeSource } from './lib/core-runtime-integrity.mjs';
 
 const root = resolve(process.env.SUTRA_SERVE_ROOT || process.cwd());
 const port = Number(process.env.PORT || process.argv[2] || 5173);
@@ -15,6 +15,52 @@ try {
   console.error('Static server not started — repair the core runtime before serving Sutra.');
   process.exit(1);
 }
+
+const coreRuntimePath = join(root, 'src/core/app.js');
+let lastVerifiedRuntime = {
+  source: readFileSync(coreRuntimePath, 'utf8'),
+  fingerprint: null,
+  rejectedFingerprint: null
+};
+
+function getRuntimeFingerprint() {
+  const info = statSync(coreRuntimePath);
+  return `${info.size}:${info.mtimeMs}`;
+}
+
+function refreshVerifiedRuntime() {
+  let fingerprint;
+  try {
+    fingerprint = getRuntimeFingerprint();
+  } catch (error) {
+    console.error(`Core runtime guard: could not stat app.js; serving the last verified runtime. ${error.message}`);
+    return false;
+  }
+  if (fingerprint === lastVerifiedRuntime.fingerprint) return true;
+
+  try {
+    const candidate = readFileSync(coreRuntimePath, 'utf8');
+    const result = checkCoreRuntimeSource(candidate, { appPath: coreRuntimePath, bytes: Buffer.byteLength(candidate, 'utf8') });
+    if (!result.ok) {
+      if (fingerprint !== lastVerifiedRuntime.rejectedFingerprint) {
+        console.error(`Core runtime guard rejected changed app.js; serving the last verified runtime.\n- ${result.failures.join('\n- ')}`);
+        lastVerifiedRuntime.rejectedFingerprint = fingerprint;
+      }
+      return false;
+    }
+    lastVerifiedRuntime = { source: candidate, fingerprint, rejectedFingerprint: null };
+    console.log('Core runtime guard accepted a newly validated app.js.');
+    return true;
+  } catch (error) {
+    if (fingerprint !== lastVerifiedRuntime.rejectedFingerprint) {
+      console.error(`Core runtime guard could not validate changed app.js; serving the last verified runtime. ${error.message}`);
+      lastVerifiedRuntime.rejectedFingerprint = fingerprint;
+    }
+    return false;
+  }
+}
+
+lastVerifiedRuntime.fingerprint = getRuntimeFingerprint();
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -47,11 +93,19 @@ const server = createServer((req, res) => {
     return;
   }
   const type = types[extname(filePath).toLowerCase()] || 'application/octet-stream';
-  res.writeHead(200, {
+  const headers = {
     'Content-Type': type,
     'Cache-Control': 'no-store',
     'Content-Security-Policy': buildCsp({ includeFrameAncestors: true })
-  });
+  };
+  if (filePath === coreRuntimePath) {
+    const accepted = refreshVerifiedRuntime();
+    headers['X-Sutra-Core-Runtime'] = accepted ? 'verified' : 'fallback-last-verified';
+    res.writeHead(200, headers);
+    res.end(lastVerifiedRuntime.source);
+    return;
+  }
+  res.writeHead(200, headers);
   // Stream the file, but never let an aborted request (the browser cancels
   // in-flight resource loads constantly during rapid navigation in the e2e
   // suite) throw an UNHANDLED stream error that would crash the whole server

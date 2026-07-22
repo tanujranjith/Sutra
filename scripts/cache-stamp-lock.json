@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260721-runtime-recovery3",
-    "hash": "9f279c6b739bab79"
+    "stamp": "20260721-runtime-failsafe2",
+    "hash": "913e3870559fd91b"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -284,8 +284,8 @@
     "hash": "f863f5a76f6e5836"
   },
   "src/features/workspace/today-command-center.js": {
-    "stamp": "20260703-today1",
-    "hash": "5f0de72ad9bc7424"
+    "stamp": "20260721-radar-consolidation1",
+    "hash": "9000432533f4d577"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260716-syncwipe1",

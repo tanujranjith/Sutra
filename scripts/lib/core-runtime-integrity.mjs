@@ -43,27 +43,41 @@ const REQUIRED_ORDER = [
 
 export function checkCoreRuntime(options = {}) {
   const appPath = resolve(options.appPath || 'src/core/app.js');
+  let source;
+  try {
+    source = readFileSync(appPath, 'utf8');
+  } catch (error) {
+    return {
+      ok: false,
+      appPath,
+      bytes: 0,
+      lines: 0,
+      failures: [`cannot read ${appPath}: ${error.message}`],
+      passes: []
+    };
+  }
+
+  return checkCoreRuntimeSource(source, {
+    appPath,
+    bytes: statSync(appPath).size,
+    readLabel: `read ${appPath}`
+  });
+}
+
+export function checkCoreRuntimeSource(source, options = {}) {
+  const appPath = options.appPath || '<in-memory core runtime>';
   const failures = [];
   const passes = [];
-  let source = '';
-  let bytes = 0;
-  let lines = 0;
-
-  try {
-    bytes = statSync(appPath).size;
-    source = readFileSync(appPath, 'utf8');
-    lines = source.split(/\r?\n/).length;
-    passes.push(`read ${appPath}`);
-  } catch (error) {
-    failures.push(`cannot read ${appPath}: ${error.message}`);
-    return { ok: false, appPath, bytes, lines, failures, passes };
-  }
+  const text = String(source || '');
+  const bytes = Number.isFinite(options.bytes) ? options.bytes : Buffer.byteLength(text, 'utf8');
+  const lines = text.split(/\r?\n/).length;
+  if (options.readLabel) passes.push(options.readLabel);
 
   try {
     // Sutra's core is a classic browser script. vm.Script invokes Node's
     // JavaScript parser without executing the source or requiring a child
     // process, so this also works in restricted CI and coding sandboxes.
-    new Script(source, { filename: appPath });
+    new Script(text, { filename: appPath });
     passes.push('JavaScript parser accepted the core runtime');
   } catch (error) {
     failures.push(`JavaScript parser rejected the core runtime:\n${error.stack || error.message}`);
@@ -76,13 +90,13 @@ export function checkCoreRuntime(options = {}) {
   else failures.push(`runtime is unexpectedly short (${lines} lines; expected at least ${MIN_APP_LINES})`);
 
   for (const [label, fragment] of REQUIRED_FRAGMENTS) {
-    if (source.includes(fragment)) passes.push(label);
+    if (text.includes(fragment)) passes.push(label);
     else failures.push(`${label} is missing: ${fragment}`);
   }
 
   let previousIndex = -1;
   for (const fragment of REQUIRED_ORDER) {
-    const index = source.indexOf(fragment);
+    const index = text.indexOf(fragment);
     if (index === -1) continue;
     if (index <= previousIndex) {
       failures.push(`critical runtime section is out of order: ${fragment}`);

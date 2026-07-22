@@ -480,7 +480,8 @@ Unless a task specifically changes the project direction, do not:
 4. Identify persistence, migration, export/import, CSP, accessibility, and responsive implications.
 5. Check recent commits when working in an area that has changed recently.
 6. Define a bounded implementation plan and the validation required.
-7. Before changing `src/core/app.js` in a dirty worktree, preserve a byte-for-byte recovery copy under ignored `.tmp/recovery/`. Run `npm run check:runtime` before serving the app, updating cache stamps, building `.deploy`, or reporting the change complete. Visual inspection and a cache-stamp bump are never substitutes for this gate.
+7. Treat the primary worktree as user-facing and verified. Start every `src/core/app.js` task with `npm run core:worktree -- <task-name>` from a clean `main` worktree; edit only inside the resulting `codex/*` worktree.
+8. Before changing `src/core/app.js`, preserve a byte-for-byte recovery copy under ignored `.tmp/recovery/`. A failed `npm run check:runtime` is terminal: stop, preserve the candidate, restore or repair it, and never report the feature as implemented. Visual inspection and a cache-stamp bump are never substitutes for this gate.
 
 Do not implement from a prompt alone without first reconciling it with the repository.
 
@@ -497,6 +498,7 @@ Do not implement from a prompt alone without first reconciling it with the repos
 - Add or update automated tests for regressions and critical paths.
 - Avoid drive-by rewrites unrelated to the task unless a nearby defect blocks correctness or safety.
 - Do not edit generated files manually. Run the generator that owns them.
+- Commit core changes only after the staged-runtime hook passes. Integrate a clean candidate with `npm run core:integrate -- codex/<task-name>` from the clean primary worktree; do not directly edit or merge into the primary runtime.
 
 ## Required validation
 
