@@ -89,7 +89,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    z-index: 4000;
+    z-index: var(--z-modal, 14000);
     /* Hidden state */
     opacity: 0;
     transform: translateY(-8px) scale(0.98);
@@ -107,6 +107,11 @@
 
 /* Mobile: bottom sheet */
 @media (max-width: 600px) {
+    body.notif-panel-open {
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
     #notifPanel {
         top: auto;
         bottom: 0;
@@ -115,10 +120,71 @@
         width: 100%;
         max-height: 80dvh;
         border-radius: var(--radius-lg, 22px) var(--radius-lg, 22px) 0 0;
+        box-shadow: 0 -18px 54px rgba(0, 0, 0, 0.28);
         transform: translateY(100%);
     }
     #notifPanel.notif-panel--open {
         transform: translateY(0);
+    }
+
+    .notif-panel-header {
+        min-height: 64px;
+        padding: 10px 10px 8px 18px;
+    }
+
+    .notif-panel-title {
+        font-family: var(--font-body, "DM Sans", "Segoe UI", system-ui, sans-serif);
+        font-size: 1.02rem;
+        font-weight: 760;
+    }
+
+    .notif-panel-mark-all,
+    .notif-panel-close,
+    .notif-filter-btn,
+    .notif-footer-link {
+        min-height: 44px;
+    }
+
+    .notif-panel-close {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+    }
+
+    .notif-filter-row {
+        min-height: 56px;
+        padding: 6px 16px;
+    }
+
+    .notif-filter-btn {
+        padding: 8px 12px;
+    }
+
+    .notif-list {
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .notif-row {
+        min-height: 68px;
+        padding: 12px 14px;
+    }
+
+    .notif-row-actions {
+        gap: 0;
+        margin: -6px -8px -6px 0;
+    }
+
+    .notif-action-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+    }
+
+    .notif-panel-footer {
+        min-height: calc(56px + env(safe-area-inset-bottom, 0px));
+        padding: 6px 18px max(6px, env(safe-area-inset-bottom, 0px));
+        background: var(--bg-elevated, #fff);
     }
 }
 
@@ -564,7 +630,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.38);
-    z-index: 3999;
+    z-index: var(--z-overlay, 9000);
     opacity: 0;
     pointer-events: none;
     transition: opacity 200ms ease;

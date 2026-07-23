@@ -260,8 +260,8 @@
     "hash": "0e022655d0ad4fa5"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260716-syncparity1",
-    "hash": "987099eb44431555"
+    "stamp": "20260723-mobilemodal1",
+    "hash": "e1a13384b9c3c90d"
   },
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",
@@ -404,8 +404,8 @@
     "hash": "f4cae96a29fa89ae"
   },
   "styles/features/notifications.css": {
-    "stamp": "20260605-notif1",
-    "hash": "a7baebe7a7bfbe96"
+    "stamp": "20260723-mobilemodal2",
+    "hash": "9ab16713e512d32f"
   },
   "styles/features/slides.css": {
     "stamp": "20260722-slides6",

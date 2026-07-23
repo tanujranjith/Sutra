@@ -360,6 +360,42 @@ test('mobile Today is a focused command surface with bounded chrome and live act
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: '.tmp/mobile-today-implementation-390x844.png', fullPage: false });
-  await shell.locator('.today-mobile-notifications').click();
-  await expect(page.locator('#notifPanel')).toHaveAttribute('aria-hidden', 'false');
+  const notificationTrigger = shell.locator('.today-mobile-notifications');
+  await notificationTrigger.click();
+  const notificationPanel = page.locator('#notifPanel');
+  await expect(notificationPanel).toHaveAttribute('aria-hidden', 'false');
+  await expect(page.locator('body')).toHaveClass(/notif-panel-open/);
+
+  const notificationGeometry = await page.evaluate(() => {
+    const panel = document.getElementById('notifPanel');
+    const overlay = document.getElementById('notifOverlay');
+    const nav = document.getElementById('sutraBottomNav');
+    const footer = panel && panel.querySelector('.notif-panel-footer');
+    const panelBox = panel && panel.getBoundingClientRect();
+    const footerBox = footer && footer.getBoundingClientRect();
+    return {
+      panelBottom: panelBox && panelBox.bottom,
+      panelTop: panelBox && panelBox.top,
+      footerBottom: footerBox && footerBox.bottom,
+      viewportHeight: window.innerHeight,
+      panelZ: panel ? Number.parseInt(getComputedStyle(panel).zIndex, 10) : 0,
+      overlayZ: overlay ? Number.parseInt(getComputedStyle(overlay).zIndex, 10) : 0,
+      navZ: nav ? Number.parseInt(getComputedStyle(nav).zIndex, 10) : 0,
+      bodyOverflow: getComputedStyle(document.body).overflow,
+      horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth
+    };
+  });
+  expect(notificationGeometry.panelBottom).toBeLessThanOrEqual(notificationGeometry.viewportHeight + 1);
+  expect(notificationGeometry.footerBottom).toBeLessThanOrEqual(notificationGeometry.viewportHeight + 1);
+  expect(notificationGeometry.panelTop).toBeGreaterThanOrEqual(0);
+  expect(notificationGeometry.panelZ).toBeGreaterThan(notificationGeometry.navZ);
+  expect(notificationGeometry.overlayZ).toBeGreaterThan(notificationGeometry.navZ);
+  expect(notificationGeometry.bodyOverflow).toBe('hidden');
+  expect(notificationGeometry.horizontalOverflow).toBe(false);
+
+  await page.screenshot({ path: '.tmp/mobile-notification-sheet-fixed-390x844.png', fullPage: false });
+  await page.keyboard.press('Escape');
+  await expect(notificationPanel).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('body')).not.toHaveClass(/notif-panel-open/);
+  await expect(notificationTrigger).toBeFocused();
 });

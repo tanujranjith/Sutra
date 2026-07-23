@@ -91,6 +91,7 @@
 
     var _notifications = [];    // current derived list
     var _panelOpen = false;
+    var _panelReturnFocus = null;
     var _filterMode = 'all';    // 'all' | 'unread'
     var _initialized = false;
     var _checkInterval = null;
@@ -614,11 +615,16 @@
         var bell = document.getElementById('notifBellBtn');
         if (!panel) return;
 
+        if (!_panelOpen) {
+            var active = document.activeElement;
+            _panelReturnFocus = active && active !== document.body ? active : bell;
+        }
         _panelOpen = true;
         _renderPanel();
         panel.classList.add('notif-panel--open');
         panel.removeAttribute('hidden');
         panel.setAttribute('aria-hidden', 'false');
+        if (document.body) document.body.classList.add('notif-panel-open');
         if (overlay) {
             overlay.classList.add('notif-overlay--visible');
         }
@@ -640,12 +646,22 @@
         _panelOpen = false;
         panel.classList.remove('notif-panel--open');
         panel.setAttribute('aria-hidden', 'true');
+        if (document.body) document.body.classList.remove('notif-panel-open');
         if (overlay) overlay.classList.remove('notif-overlay--visible');
         if (bell) {
             bell.setAttribute('aria-expanded', 'false');
-            // Return focus to bell
-            setTimeout(function () { try { bell.focus(); } catch (e) {} }, 60);
         }
+        // The mobile Today bell proxies the canonical notification control.
+        // Restore focus to the actual trigger instead of the hidden desktop bell.
+        var returnTarget = _panelReturnFocus && document.contains(_panelReturnFocus)
+            ? _panelReturnFocus
+            : bell;
+        _panelReturnFocus = null;
+        setTimeout(function () {
+            if (returnTarget && typeof returnTarget.focus === 'function') {
+                try { returnTarget.focus(); } catch (e) {}
+            }
+        }, 60);
     }
 
     function togglePanel() {
@@ -1154,6 +1170,26 @@
             // Keyboard handler
             panel.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape') { e.preventDefault(); closePanel(); }
+                if (e.key !== 'Tab') return;
+                var focusable = Array.prototype.slice.call(panel.querySelectorAll(
+                    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                )).filter(function (node) {
+                    return !node.hidden && node.offsetParent !== null;
+                });
+                if (!focusable.length) {
+                    e.preventDefault();
+                    panel.focus();
+                    return;
+                }
+                var first = focusable[0];
+                var last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
             });
         }
 
