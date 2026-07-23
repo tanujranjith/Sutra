@@ -2038,6 +2038,22 @@
    ========================================================================== */
 .sutra-bottom-nav { display: none; }
 @media (max-width: 640px) {
+    /* Phones use one canonical navigation surface. The bottom bar is derived
+       from the real desktop tabs and its More sheet owns the remaining top-bar
+       actions, so keeping the desktop tab strip visible only duplicates state. */
+    .top-nav {
+        display: none !important;
+    }
+    body:not(.sidebar-open) #sidebarToggle {
+        display: none !important;
+    }
+    .main-content {
+        padding-top: 0 !important;
+    }
+    .toolbar-wrapper {
+        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+    }
+
     .sutra-bottom-nav {
         display: flex;
         position: fixed;
@@ -2046,59 +2062,76 @@
         bottom: 0;
         z-index: var(--z-nav, 2400);
         gap: 2px;
-        /* Right gap reserves room for the floating assistant button. */
-        padding: 6px 70px 6px 4px;
-        padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-        background: var(--surface, var(--bg-primary, #ffffff));
-        border-top: 1px solid var(--border-color, rgba(127, 127, 127, 0.2));
-        box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+        min-height: 74px;
+        padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px));
+        background: color-mix(in srgb, var(--bg-primary, #ffffff) 96%, transparent);
+        border-top: 1px solid color-mix(in srgb, var(--surface-border, rgba(127, 127, 127, 0.2)) 72%, transparent);
+        box-shadow: 0 -8px 24px color-mix(in srgb, #2b261f 7%, transparent);
+        -webkit-backdrop-filter: blur(18px);
+        backdrop-filter: blur(18px);
     }
-    .sutra-bn-item {
-        flex: 1 1 0;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 2px;
-        background: none;
-        border: 0;
-        padding: 5px 2px;
-        cursor: pointer;
-        color: var(--text-muted, #8a8f98);
-        font-size: 0.62rem;
-        line-height: 1.1;
-        border-radius: 10px;
-        min-height: 44px;
-    }
-    .sutra-bn-item i { font-size: 1.05rem; }
-    .sutra-bn-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sutra-bn-item.active { color: var(--accent, #6fa7ff); }
-    .sutra-bn-item:active { background: rgba(127, 127, 127, 0.12); }
+    .sutra-bn-item,
     .sutra-bn-capture {
         flex: 1 1 0;
         min-width: 0;
-        min-height: 44px;
+        height: 56px;
+        min-height: 56px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 2px;
-        margin: -14px 1px 0;
-        padding: 5px 2px;
-        border: 1px solid rgba(111, 167, 255, 0.65);
-        border-radius: 14px;
-        background: var(--accent, #6fa7ff);
-        color: var(--button-text, #fff);
-        box-shadow: 0 5px 14px rgba(70, 120, 220, 0.28);
+        margin: 0;
+        border: 0;
+        padding: 4px 2px;
+        border-radius: 12px;
+        background: transparent;
+        box-shadow: none;
         cursor: pointer;
-        font-size: 0.62rem;
+        color: var(--text-muted, #8a8f98);
+        font-size: 0.66rem;
         line-height: 1.1;
+        position: relative;
     }
-    .sutra-bn-capture i { font-size: 1.05rem; }
+    .sutra-bn-item i { font-size: 1.05rem; }
+    .sutra-bn-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sutra-bn-item.active { color: var(--accent-strong, var(--accent, #6fa7ff)); }
+    .sutra-bn-item:active { background: rgba(127, 127, 127, 0.12); }
+    .sutra-bn-capture {
+        color: var(--text-primary, #25231f);
+    }
+    .sutra-bn-capture i {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        margin-top: -8px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--accent-strong, var(--accent, #9d7643)) 38%, transparent);
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--accent, #d8c4a1) 78%, var(--bg-elevated, #fff));
+        font-size: 0.95rem;
+    }
+    .sutra-bn-capture span { margin-top: -1px; }
     .sutra-bn-capture:active { transform: translateY(1px); }
+    .sutra-mobile-nav-badge {
+        position: absolute;
+        top: 2px;
+        right: max(4px, 16%);
+        min-width: 17px;
+        height: 17px;
+        display: inline-grid;
+        place-items: center;
+        padding: 0 4px;
+        border: 2px solid var(--bg-primary, #fff);
+        border-radius: 999px;
+        background: var(--danger, #d94b4b);
+        color: #fff;
+        font: 700 0.62rem/1 system-ui, sans-serif;
+        overflow: visible;
+    }
+    .sutra-mobile-nav-badge[hidden] { display: none !important; }
     /* Keep content clear of the fixed bar. */
-    body { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+    body { padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* =========================================================================
@@ -2146,7 +2179,11 @@
 @media (max-width: 640px) {
     #storageOptions,
     .storage-options {
-        bottom: calc(env(safe-area-inset-bottom, 0px) + 66px) !important;
+        bottom: calc(
+            env(safe-area-inset-bottom, 0px)
+            + var(--sutra-mobile-nav-height, 4.75rem)
+            + var(--sutra-space-2, 0.5rem)
+        ) !important;
     }
     .chatbot-btn {
         bottom: calc(env(safe-area-inset-bottom, 0px) + 138px) !important;
@@ -2243,7 +2280,7 @@
         width: min(100%, 520px);
         max-height: min(82dvh, 720px);
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
         overflow: hidden;
         border: 1px solid var(--surface-border, var(--border));
         border-radius: 22px 22px 0 0;
@@ -2285,6 +2322,49 @@
         color: inherit;
         font: 500 1.6rem/1 system-ui, sans-serif;
     }
+    .sutra-mobile-more-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 12px 12px 4px;
+    }
+    .sutra-mobile-more-action {
+        position: relative;
+        min-width: 0;
+        min-height: 64px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 6px;
+        border: 1px solid color-mix(in srgb, var(--accent, #d8c4a1) 28%, var(--surface-border, var(--border)));
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--accent, #d8c4a1) 8%, var(--surface-bg, var(--bg-secondary)));
+        color: var(--text-primary);
+        font: inherit;
+        font-size: 0.76rem;
+        text-align: center;
+    }
+    .sutra-mobile-more-action i {
+        color: var(--accent-strong, var(--accent));
+        font-size: 1rem;
+    }
+    .sutra-mobile-action-badge {
+        position: absolute;
+        top: 5px;
+        right: 8px;
+        min-width: 18px;
+        height: 18px;
+        display: inline-grid;
+        place-items: center;
+        padding: 0 4px;
+        border-radius: 999px;
+        background: var(--danger, #d94b4b);
+        color: #fff;
+        font: 700 0.62rem/1 system-ui, sans-serif;
+    }
+    .sutra-mobile-action-badge[hidden] { display: none !important; }
     .sutra-mobile-more-list {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2327,6 +2407,7 @@
 }
 
 @media (max-width: 359px) {
+    .sutra-mobile-more-actions,
     .sutra-mobile-more-list {
         grid-template-columns: 1fr;
     }

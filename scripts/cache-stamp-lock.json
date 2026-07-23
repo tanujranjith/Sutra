@@ -256,8 +256,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260721-mobile1",
-    "hash": "0e022655d0ad4fa5"
+    "stamp": "20260723-unified1",
+    "hash": "ee57634f12e23404"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260723-mobilemodal1",
@@ -448,8 +448,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260723-layercontract1",
-    "hash": "0057f5d98a2d1f54"
+    "stamp": "20260723-unified1",
+    "hash": "d6a6c668c847f9a8"
   },
   "styles/themes/glass.css": {
     "stamp": "20260712-glass-fix",

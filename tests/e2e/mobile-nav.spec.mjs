@@ -22,6 +22,8 @@ test('bottom nav is visible on a phone viewport and has items', async ({ page })
   await expect(nav).toBeVisible();
   const count = await nav.locator('.sutra-bn-item').count();
   expect(count).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('.top-nav')).toBeHidden();
+  await expect(page.locator('#sidebarToggle')).toBeHidden();
 });
 
 test('tapping a bottom-nav item switches the active view', async ({ page }) => {
@@ -61,7 +63,13 @@ test('More opens a focus-trapped all-sections sheet and reaches advanced views',
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('dialog', { name: 'All sections' })).toBeVisible();
   await expect(page.locator('body')).toHaveClass(/mobile-more-open/);
+  await expect(sheet.locator('[data-mobile-more-action="pages"]')).toBeVisible();
+  await expect(sheet.locator('[data-mobile-more-action="new-dashboard"]')).toBeVisible();
+  await expect(sheet.locator('[data-mobile-more-action="notifications"]')).toBeVisible();
   await expect(sheet.locator('[data-mobile-more-view]')).toHaveCount(await page.locator('.view-tab[data-view]:not([hidden])').evaluateAll((nodes) => new Set(nodes.map((node) => node.dataset.view)).size));
+  if (process.env.SUTRA_CAPTURE_QA === '1') {
+    await page.screenshot({ path: '.tmp/mobile-unified-navigation-more.png', fullPage: false });
+  }
 
   await page.evaluate(() => history.back());
   await expect(sheet).toBeHidden();
@@ -75,24 +83,86 @@ test('More opens a focus-trapped all-sections sheet and reaches advanced views',
   await expect(sheet).toBeHidden();
 });
 
-test('phone sidebar behaves as a modal drawer and Escape restores focus', async ({ page }) => {
+test('save bar clears the unified bottom navigation on workspace views', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.locator('#sutraBottomNav [data-bn-view="homework"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('homework');
+  const homeworkSetup = page.locator('#hwSetupOverlay');
+  if (await homeworkSetup.isVisible()) {
+    await homeworkSetup.getByRole('button', { name: 'Cancel for now' }).click();
+    await expect(homeworkSetup).toBeHidden();
+  }
+  await expect(page.locator('#storageOptions')).toBeVisible();
+
+  const geometry = await page.evaluate(() => {
+    const storage = document.getElementById('storageOptions').getBoundingClientRect();
+    const nav = document.getElementById('sutraBottomNav').getBoundingClientRect();
+    const visibleButtons = Array.from(document.querySelectorAll('#sutraBottomNav button'))
+      .filter((button) => getComputedStyle(button).display !== 'none')
+      .map((button) => button.getBoundingClientRect());
+    const navigationTop = Math.min(nav.top, ...visibleButtons.map((rect) => rect.top));
+    return {
+      storageBottom: storage.bottom,
+      navigationTop,
+      gap: navigationTop - storage.bottom
+    };
+  });
+
+  expect(geometry.gap).toBeGreaterThanOrEqual(8);
+  if (process.env.SUTRA_CAPTURE_QA === '1') {
+    await page.screenshot({ path: '.tmp/mobile-unified-navigation-homework.png', fullPage: false });
+  }
+});
+
+test('phone sidebar opens from the unified More sheet and Escape restores focus', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await page.locator('#sutraBottomNav [data-bn-view="notes"]').click();
   await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('notes');
   const sidebar = page.locator('#sidebar');
   const toggle = page.locator('#sidebarToggle');
-  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) await toggle.click();
+  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) {
+    await page.evaluate(() => document.getElementById('sidebarToggle').click());
+  }
 
-  await toggle.click();
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  await more.click();
+  await page.locator('[data-mobile-more-action="pages"]').click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toBeVisible();
   await expect(sidebar).toHaveAttribute('role', 'dialog');
   await expect(sidebar).toHaveAttribute('aria-modal', 'true');
   await expect(page.locator('body')).toHaveClass(/sidebar-open/);
   await page.keyboard.press('Escape');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('body')).not.toHaveClass(/sidebar-open/);
-  await expect(toggle).toBeFocused();
+  await expect(more).toBeFocused();
+});
+
+test('unified More actions open Notifications and the custom dashboard prompt', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  await page.evaluate(() => {
+    const badge = document.querySelector('#notifBellBtn .notif-bell-badge');
+    badge.setAttribute('data-count', '3');
+    badge.textContent = '3';
+  });
+  await expect(more.locator('.sutra-mobile-nav-badge')).toHaveText('3');
+  await expect(more).toHaveAttribute('aria-label', 'More, 3 unread notifications');
+
+  await more.click();
+  await page.locator('[data-mobile-more-action="notifications"]').click();
+  await expect(page.locator('#notifPanel')).toBeVisible();
+  await page.locator('#notifCloseBtn').click();
+  await expect(page.locator('#notifPanel')).toHaveAttribute('aria-hidden', 'true');
+  await expect(more).toBeFocused();
+
+  await more.click();
+  await page.locator('[data-mobile-more-action="new-dashboard"]').click();
+  await expect(page.locator('#customPromptModal')).toHaveClass(/active/);
+  await expect(page.locator('#customPromptTitle')).toHaveText('New tab');
 });
 
 test('bottom nav is hidden on a desktop viewport', async ({ page }) => {

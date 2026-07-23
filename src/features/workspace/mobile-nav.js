@@ -27,10 +27,13 @@
   var navEl = null;
   var moreOverlay = null;
   var morePanel = null;
+  var moreActions = null;
   var moreList = null;
   var moreLastFocus = null;
   var moreHistoryActive = false;
   var moreCloseTimer = null;
+  var notificationBadgeObserver = null;
+  var sidebarReturnFocus = null;
 
   function reducedMotion() {
     try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -79,6 +82,53 @@
     if (tab) { vibrate(); tab.click(); }
   }
 
+  function unreadNotificationCount() {
+    var badge = document.querySelector('#notifBellBtn .notif-bell-badge');
+    return Math.max(0, Number(badge && badge.getAttribute('data-count')) || 0);
+  }
+
+  function syncNotificationBadges() {
+    var unread = unreadNotificationCount();
+    var label = unread > 99 ? '99+' : String(unread || '');
+    var navMore = navEl && navEl.querySelector('[data-bn-view="__more"]');
+    var navBadge = navMore && navMore.querySelector('.sutra-mobile-nav-badge');
+    if (navBadge) {
+      navBadge.textContent = label;
+      navBadge.hidden = unread === 0;
+    }
+    if (navMore) {
+      navMore.setAttribute('aria-label', unread
+        ? 'More, ' + unread + ' unread notification' + (unread === 1 ? '' : 's')
+        : 'More');
+    }
+    var action = moreActions && moreActions.querySelector('[data-mobile-more-action="notifications"]');
+    var actionBadge = action && action.querySelector('.sutra-mobile-action-badge');
+    if (actionBadge) {
+      actionBadge.textContent = label;
+      actionBadge.hidden = unread === 0;
+    }
+    if (action) {
+      action.setAttribute('aria-label', unread
+        ? 'Notifications, ' + unread + ' unread'
+        : 'Notifications');
+    }
+  }
+
+  function observeNotificationBadge() {
+    if (notificationBadgeObserver) return;
+    var badge = document.querySelector('#notifBellBtn .notif-bell-badge');
+    if (!badge || typeof MutationObserver !== 'function') return;
+    notificationBadgeObserver = new MutationObserver(syncNotificationBadges);
+    notificationBadgeObserver.observe(badge, {
+      attributes: true,
+      attributeFilter: ['data-count'],
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+    syncNotificationBadges();
+  }
+
   function focusableWithin(root) {
     if (!root) return [];
     return Array.prototype.slice.call(root.querySelectorAll(
@@ -106,6 +156,64 @@
       button.appendChild(label);
       moreList.appendChild(button);
     });
+  }
+
+  function utilityButton(action, iconName, labelText) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sutra-mobile-more-action';
+    button.setAttribute('data-mobile-more-action', action);
+    var icon = document.createElement('i');
+    icon.className = 'fas ' + iconName;
+    icon.setAttribute('aria-hidden', 'true');
+    var label = document.createElement('span');
+    label.textContent = labelText;
+    button.appendChild(icon);
+    button.appendChild(label);
+    if (action === 'notifications') {
+      var badge = document.createElement('span');
+      badge.className = 'sutra-mobile-action-badge';
+      badge.hidden = true;
+      badge.setAttribute('aria-hidden', 'true');
+      button.appendChild(badge);
+    }
+    return button;
+  }
+
+  function renderMoreActions() {
+    if (!moreActions) return;
+    moreActions.replaceChildren();
+    moreActions.appendChild(utilityButton('pages', 'fa-bars', 'Pages'));
+    if (document.getElementById('customTabAddBtn')) {
+      moreActions.appendChild(utilityButton('new-dashboard', 'fa-plus', 'New dashboard'));
+    }
+    moreActions.appendChild(utilityButton('notifications', 'fa-bell', 'Notifications'));
+    syncNotificationBadges();
+  }
+
+  function runMoreAction(action) {
+    var moreTrigger = navEl && navEl.querySelector('[data-bn-view="__more"]');
+    closeMore({ restoreFocus: false });
+    window.setTimeout(function () {
+      if (moreTrigger && typeof moreTrigger.focus === 'function') moreTrigger.focus();
+      if (action === 'pages') {
+        var sidebarToggle = document.getElementById('sidebarToggle');
+        if (sidebarToggle) {
+          sidebarReturnFocus = moreTrigger;
+          sidebarToggle.click();
+        }
+      } else if (action === 'new-dashboard') {
+        var addButton = document.getElementById('customTabAddBtn');
+        if (addButton) addButton.click();
+      } else if (action === 'notifications') {
+        if (window.SutraNotifications && typeof window.SutraNotifications.openPanel === 'function') {
+          window.SutraNotifications.openPanel();
+        } else {
+          var bell = document.getElementById('notifBellBtn');
+          if (bell) bell.click();
+        }
+      }
+    }, reducedMotion() ? 0 : 210);
   }
 
   function finishCloseMore(options) {
@@ -144,6 +252,7 @@
     if (!moreOverlay || !isMobile()) return;
     if (moreCloseTimer) { window.clearTimeout(moreCloseTimer); moreCloseTimer = null; }
     moreLastFocus = trigger || document.activeElement;
+    renderMoreActions();
     renderMoreList();
     moreOverlay.hidden = false;
     moreOverlay.setAttribute('aria-hidden', 'false');
@@ -192,7 +301,12 @@
     moreList.className = 'sutra-mobile-more-list';
     moreList.setAttribute('role', 'navigation');
     moreList.setAttribute('aria-label', 'All Sutra sections');
+    moreActions = document.createElement('div');
+    moreActions.className = 'sutra-mobile-more-actions';
+    moreActions.setAttribute('role', 'group');
+    moreActions.setAttribute('aria-label', 'Workspace actions');
     morePanel.appendChild(header);
+    morePanel.appendChild(moreActions);
     morePanel.appendChild(moreList);
     moreOverlay.appendChild(morePanel);
     document.body.appendChild(moreOverlay);
@@ -206,6 +320,12 @@
       if (!button) return;
       clickTabForView(button.getAttribute('data-mobile-more-view'));
       closeMore({ restoreFocus: false });
+    });
+    moreActions.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-mobile-more-action]');
+      if (!button) return;
+      vibrate();
+      runMoreAction(button.getAttribute('data-mobile-more-action'));
     });
     morePanel.addEventListener('keydown', function (event) {
       if (event.key === 'Escape') {
@@ -258,6 +378,7 @@
     });
     buildMoreSheet();
     render();
+    observeNotificationBadge();
     window.addEventListener('noteflow:view-changed', render);
   }
 
@@ -315,9 +436,18 @@
       ms.textContent = 'More';
       more.appendChild(mi);
       more.appendChild(ms);
+      var badge = document.createElement('span');
+      badge.className = 'sutra-mobile-nav-badge';
+      badge.hidden = true;
+      badge.setAttribute('aria-hidden', 'true');
+      more.appendChild(badge);
       navEl.appendChild(more);
     }
-    if (moreOverlay && !moreOverlay.hidden) renderMoreList();
+    syncNotificationBadges();
+    if (moreOverlay && !moreOverlay.hidden) {
+      renderMoreActions();
+      renderMoreList();
+    }
   }
 
   function setupSidebarDrawer() {
@@ -350,14 +480,28 @@
           if (items.length) items[0].focus();
         });
       } else if (!nowOpen && wasOpen && restoreFocus) {
-        window.requestAnimationFrame(function () { toggle.focus(); });
+        var focusTarget = sidebarReturnFocus || toggle;
+        window.requestAnimationFrame(function () {
+          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+        });
       }
-      if (!nowOpen) restoreFocus = false;
+      if (!nowOpen) {
+        restoreFocus = false;
+        sidebarReturnFocus = null;
+      }
       wasOpen = nowOpen;
     }
 
-    toggle.addEventListener('pointerdown', function () { if (open()) restoreFocus = true; }, true);
-    if (overlay) overlay.addEventListener('pointerdown', function () { restoreFocus = true; }, true);
+    toggle.addEventListener('pointerdown', function () {
+      if (open()) {
+        restoreFocus = true;
+        if (!sidebarReturnFocus) sidebarReturnFocus = toggle;
+      }
+    }, true);
+    if (overlay) overlay.addEventListener('pointerdown', function () {
+      restoreFocus = true;
+      if (!sidebarReturnFocus) sidebarReturnFocus = navEl && navEl.querySelector('[data-bn-view="__more"]');
+    }, true);
     document.addEventListener('keydown', function (event) {
       if (!open()) return;
       if (event.key === 'Escape') {
