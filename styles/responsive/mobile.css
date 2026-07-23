@@ -1441,8 +1441,8 @@
     }
     .command-palette-modal .modal-content,
     .quick-capture-modal .modal-content,
-    .command-palette-modal > div,
-    .quick-capture-modal > div {
+    .command-palette-modal > .command-palette-card,
+    .quick-capture-modal > .quick-capture-card {
         width: 100% !important;
         max-width: 100% !important;
         margin-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
@@ -2044,7 +2044,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        z-index: 4000;
+        z-index: var(--z-nav, 2400);
         gap: 2px;
         /* Right gap reserves room for the floating assistant button. */
         padding: 6px 70px 6px 4px;
@@ -2139,7 +2139,7 @@
 
 /* ---- 37b. Bottom chrome stacking (phones with the bottom tab bar).
         styles.css pins #storageOptions at bottom:10px, but the bottom nav
-        (~58px, z-index 4000) sits on top of it. Lift the bar clear of the
+       (~58px, --z-nav) sits on top of it. Lift the bar clear of the
         nav and move the toast above both. app.js syncResponsiveViewport()
         measures the real bar/nav rects for the FAB stack; the values here
         are the pre-JS fallback. ---- */
@@ -2219,7 +2219,7 @@
     .sutra-mobile-more-overlay {
         position: fixed;
         inset: 0;
-        z-index: 6100;
+        z-index: var(--z-overlay, 9000);
         display: flex;
         align-items: flex-end;
         justify-content: center;

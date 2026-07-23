@@ -12,7 +12,41 @@
   opacity: 0.58;
 }
 
+/*
+ * Blocking surfaces share one layer contract. Keep this list aligned with
+ * SutraModalManager in src/core/app.js: bespoke dialogs previously carried
+ * unrelated z-index values, which allowed fixed mobile chrome to cover their
+ * controls. The emoji picker is a sibling of its backdrop, so both participate.
+ */
 .modal,
+.version-history-modal,
+.command-palette-modal,
+.quick-capture-modal,
+.deadline-radar-modal,
+.google-feedback-modal,
+.doc-stats-modal,
+.acad-modal-overlay,
+.emoji-modal-overlay,
+.emoji-picker,
+.hw-paste-modal,
+.class-dashboard-drawer,
+.atelier-onboarding,
+.onboarding-overlay,
+.cw-modal-overlay,
+.th2-modal-overlay,
+.doc-bg-modal,
+#atelierDialogBackdrop,
+#studentOnboardingOverlay,
+#homeworkPasteImportModal,
+#globalSearchPanel,
+#businessEntityModal,
+#googleFeedbackModal,
+#docStatsModal,
+#todayAcademicDeadlineModal,
+#pageLinkModal,
+#reviewModalRoot,
+#hwCourseQuickModal,
+.sutra-academic-modal,
 [data-sutra-layer="modal"] { z-index: var(--z-modal); }
 .toast,
 [data-sutra-layer="toast"] { z-index: var(--z-toast); }
