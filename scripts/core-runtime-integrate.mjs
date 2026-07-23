@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 const repoRoot = resolve('.');
 const candidateBranch = String(process.argv[2] || '').trim();
 const primaryBranch = process.env.SUTRA_PRIMARY_BRANCH || 'main';
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const isWindows = process.platform === 'win32';
+const npmCli = process.env.npm_execpath || resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const npxCli = resolve(dirname(npmCli), 'npx-cli.js');
+const npmCommand = isWindows ? process.execPath : 'npm';
+const npxCommand = isWindows ? process.execPath : 'npx';
+const npmPrefix = isWindows ? [npmCli] : [];
+const npxPrefix = isWindows ? [npxCli] : [];
 
 function git(args, options = {}) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options }).trim();
@@ -54,13 +59,13 @@ try {
   if (git(['-C', candidatePath, 'status', '--porcelain'])) throw new Error('candidate worktree is dirty; commit its verified changes first');
 
   console.log(`Validating isolated candidate ${candidateBranch} at ${candidatePath}`);
-  run(npmCommand, ['run', 'check:runtime'], candidatePath);
-  run(npmCommand, ['run', 'check:all'], candidatePath);
-  run(npmCommand, ['run', 'test:unit'], candidatePath);
+  run(npmCommand, [...npmPrefix, 'run', 'check:runtime'], candidatePath);
+  run(npmCommand, [...npmPrefix, 'run', 'check:all'], candidatePath);
+  run(npmCommand, [...npmPrefix, 'run', 'test:unit'], candidatePath);
   const browserPort = await reservePort();
   run(
     npxCommand,
-    ['playwright', 'test', '--project=chromium', '--workers=1', 'tests/e2e/startup-health.spec.mjs', 'tests/e2e/today-redesign.spec.mjs'],
+    [...npxPrefix, 'playwright', 'test', '--project=chromium', '--workers=1', 'tests/e2e/startup-health.spec.mjs', 'tests/e2e/today-redesign.spec.mjs'],
     candidatePath,
     { ...process.env, PLAYWRIGHT_PORT: String(browserPort), CI: '1' }
   );
