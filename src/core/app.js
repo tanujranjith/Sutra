@@ -54511,7 +54511,11 @@ function getActiveEditor() {
             if (!uid) throw new Error('Sign in to Sutra Cloud first.');
             const stamp = new Date().toISOString().replace(/[:.]/g, '-');
             const safeLabel = String(label || 'workspace').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 40) || 'workspace';
-            return `${uid}/${stamp}-${safeLabel}.sutra`;
+            // Bind the object path to this specific upload attempt. A timestamp
+            // plus label alone can collide when concurrent attempts start in
+            // the same millisecond, which would make rollback unsafe.
+            const attemptId = randomSutraId('backup').replace(/^backup_/, '');
+            return `${uid}/${stamp}-${safeLabel}-${attemptId}.sutra`;
         }
 
         function formatSutraCloudSize(bytes) {
@@ -54832,15 +54836,51 @@ function getActiveEditor() {
                     const path = buildSutraCloudBackupPath(meta.label);
                     const upResp = await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'true' },
+                        headers: { 'Content-Type': 'application/octet-stream', 'x-upsert': 'false' },
                         body: blob
                     });
                     if (!upResp.ok) { const j = await upResp.json().catch(() => null); throw new Error((j && (j.message || j.error)) || `Upload failed (${upResp.status}).`); }
-                    await sutraCloudJson('/rest/v1/backup_index', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-                        body: JSON.stringify({ path, label: meta.label, size_bytes: meta.size, device_id: meta.deviceId })
-                    });
+                    try {
+                        await sutraCloudJson('/rest/v1/backup_index', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+                            body: JSON.stringify({ path, label: meta.label, size_bytes: meta.size, device_id: meta.deviceId })
+                        });
+                    } catch (indexError) {
+                        // The object and its index row form one user-visible
+                        // backup. Delete only this attempt-bound path. A 404 is
+                        // an idempotent success because the object is gone.
+                        let cleanupOutcome = 'failed';
+                        let cleanupStatus = null;
+                        let cleanupError = null;
+                        try {
+                            const cleanup = await sutraCloudFetch(`/storage/v1/object/${SUTRA_CLOUD_BUCKET}/${encodeSutraCloudPath(path)}`, {
+                                method: 'DELETE'
+                            });
+                            cleanupStatus = Number(cleanup.status || 0) || null;
+                            if (cleanup.ok) cleanupOutcome = 'removed';
+                            else if (cleanup.status === 404) cleanupOutcome = 'already-absent';
+                            else cleanupError = new Error(`Rollback DELETE failed (${cleanup.status || 'unknown status'}).`);
+                        } catch (error) {
+                            cleanupError = new Error('Rollback DELETE request failed.');
+                        }
+                        const cleanupComplete = cleanupOutcome !== 'failed';
+                        const detail = cleanupOutcome === 'removed'
+                            ? ' The newly uploaded encrypted object was removed automatically.'
+                            : cleanupOutcome === 'already-absent'
+                                ? ' The newly uploaded encrypted object was already absent.'
+                                : ' Automatic cleanup of the newly uploaded encrypted object also failed.';
+                        const transactionalError = new Error(`Backup metadata could not be saved.${detail}`, { cause: indexError });
+                        transactionalError.name = cleanupComplete ? 'CloudBackupRolledBackError' : 'CloudBackupPartialFailureError';
+                        transactionalError.rollback = {
+                            attempted: true,
+                            completed: cleanupComplete,
+                            outcome: cleanupOutcome,
+                            status: cleanupStatus
+                        };
+                        if (cleanupError) transactionalError.rollbackError = cleanupError;
+                        throw transactionalError;
+                    }
                     return { id: path };
                 },
                 async listBackups() {

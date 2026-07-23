@@ -40,6 +40,10 @@ Full provider matrix, setup, security model, and troubleshooting live in:
 - Cloud passwords / derived keys stay **in memory** (session) only.
 - Secrets, API keys, OAuth tokens, backup passwords, and conversation history are
   **never** included in an export.
+- Supabase object upload and metadata indexing are treated as one result. A
+  failed index write rolls back only that attempt's uniquely named object; if
+  cleanup also fails, the backup remains failed and the cleanup problem is
+  retained only as secondary, non-sensitive diagnostic context.
 - `getSetupStatus()` is pure (no network), so a fresh boot makes **zero**
   requests — Sutra stays local-first.
 

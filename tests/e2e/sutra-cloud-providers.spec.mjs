@@ -34,7 +34,21 @@ function configureSupabase(page) {
 }
 
 async function installSupabaseMock(page) {
-  const state = { objects: new Map(), index: [], uploads: [], nextId: 1, nextVer: 1, settingsHits: 0, failNextIndex: false };
+  const state = {
+    objects: new Map(),
+    index: [],
+    uploads: [],
+    uploadAttempts: [],
+    indexAttempts: [],
+    deletes: [],
+    nextId: 1,
+    nextVer: 1,
+    settingsHits: 0,
+    failNextUpload: false,
+    failNextIndex: false,
+    deleteFailureStatus: 0,
+    deleteNotFound: false
+  };
   await page.route(`${SUPA_URL}/**`, async route => {
     const req = route.request(); const url = new URL(req.url()); const method = req.method(); const path = url.pathname;
     const json = (s, b) => route.fulfill({ status: s, contentType: 'application/json', body: JSON.stringify(b) });
@@ -50,14 +64,32 @@ async function installSupabaseMock(page) {
     }
     if (path.startsWith('/storage/v1/object/backups/') && method === 'POST') {
       const key = decodeURIComponent(path.replace('/storage/v1/object/backups/', ''));
+      state.uploadAttempts.push({ key, upsert: req.headers()['x-upsert'] || '' });
+      if (state.failNextUpload) {
+        state.failNextUpload = false;
+        return json(503, { message: 'storage unavailable' });
+      }
       const bytes = req.postDataBuffer() || Buffer.alloc(0);
-      state.objects.set(key, bytes); state.uploads.push({ key, bytes });
+      state.objects.set(key, bytes); state.uploads.push({ key, bytes, upsert: req.headers()['x-upsert'] || '' });
       return json(200, { Key: `backups/${key}` });
     }
-    if (path.startsWith('/storage/v1/object/backups/') && method === 'DELETE') { state.objects.delete(decodeURIComponent(path.replace('/storage/v1/object/backups/', ''))); return json(200, {}); }
+    if (path.startsWith('/storage/v1/object/backups/') && method === 'DELETE') {
+      const key = decodeURIComponent(path.replace('/storage/v1/object/backups/', ''));
+      state.deletes.push({ bucket: 'backups', key });
+      if (state.deleteFailureStatus) return json(state.deleteFailureStatus, { message: 'cleanup unavailable' });
+      if (state.deleteNotFound) {
+        state.deleteNotFound = false;
+        state.objects.delete(key);
+        return json(404, { message: 'not found' });
+      }
+      state.objects.delete(key);
+      return json(200, {});
+    }
     if (path === '/rest/v1/backup_index' && method === 'POST') {
+      const b = JSON.parse(req.postData() || '{}');
+      state.indexAttempts.push(b);
       if (state.failNextIndex) { state.failNextIndex = false; return json(500, { message: 'index unavailable' }); }
-      const b = JSON.parse(req.postData() || '{}'); state.index.push({ id: `i${state.nextId++}`, path: b.path, label: b.label || 'Backup', size_bytes: b.size_bytes || 0, device_id: b.device_id || '', created_at: new Date(Date.UTC(2026, 5, 18, 12, state.nextVer++, 0)).toISOString() }); return route.fulfill({ status: 201, body: '' });
+      state.index.push({ id: `i${state.nextId++}`, path: b.path, label: b.label || 'Backup', size_bytes: b.size_bytes || 0, device_id: b.device_id || '', created_at: new Date(Date.UTC(2026, 5, 18, 12, state.nextVer++, 0)).toISOString() }); return route.fulfill({ status: 201, body: '' });
     }
     if (path === '/rest/v1/backup_index' && method === 'GET') return json(200, [...state.index].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)));
     if (path === '/rest/v1/backup_index' && method === 'DELETE') { const id = (url.searchParams.get('id') || '').replace('eq.', ''); state.index = state.index.filter(r => r.id !== id); return route.fulfill({ status: 204, body: '' }); }
@@ -200,6 +232,14 @@ test('Supabase provider: backup uploads encrypted bytes only (no plaintext)', as
   expect(txt).not.toContain('sk-secret-UP');
   const ls = await page.evaluate(() => JSON.stringify({ ...localStorage }));
   expect(ls).not.toContain(PASS);
+  expect(supa.uploads[0].upsert).toBe('false');
+  expect(supa.indexAttempts).toHaveLength(1);
+  expect(supa.index).toHaveLength(1);
+  expect(supa.deletes).toHaveLength(0);
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
+    lastError: ''
+  });
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta().lastBackupAt)).toBeTruthy();
 });
 
 test('Supabase session credentials are tab-session only and legacy durable tokens are removed', async ({ page }) => {
@@ -217,20 +257,191 @@ test('Supabase session credentials are tab-session only and legacy durable token
   expect(await page.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
 });
 
-test('Supabase upload rolls back ciphertext when metadata indexing fails', async ({ page }) => {
+test('Supabase upload failure skips metadata, rollback, and success state', async ({ page }) => {
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'UPLOAD-FAIL');
+  await useSupabaseSignedIn(page);
+  supa.failNextUpload = true;
+  const outcome = await page.evaluate(() => window.SutraCloudSync.backupNow({ passphrase: 'correct horse battery staple' })
+    .then(() => ({ ok: true }))
+    .catch(error => ({ ok: false, name: error.name, message: error.message })));
+
+  expect(outcome).toMatchObject({ ok: false, name: 'Error' });
+  expect(outcome.message).toMatch(/storage unavailable/i);
+  expect(supa.uploadAttempts).toHaveLength(1);
+  expect(supa.uploads).toHaveLength(0);
+  expect(supa.indexAttempts).toHaveLength(0);
+  expect(supa.deletes).toHaveLength(0);
+  expect(supa.objects.size).toBe(0);
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
+    lastBackupAt: '',
+    lastError: 'storage unavailable'
+  });
+});
+
+test('Supabase upload rolls back the exact ciphertext object when metadata indexing fails', async ({ page }) => {
   const supa = await openApp(page);
   await seedWorkspace(page, 'ROLLBACK');
   await useSupabaseSignedIn(page);
   supa.failNextIndex = true;
   const result = page.evaluate(() => window.SutraCloudSync.backupNow({ passphrase: 'correct horse battery staple' })
     .then(() => ({ ok: true }))
-    .catch(error => ({ ok: false, name: error.name, message: error.message })));
+    .catch(error => ({
+      ok: false,
+      name: error.name,
+      message: error.message,
+      causeName: error.cause && error.cause.name,
+      causeMessage: error.cause && error.cause.message,
+      rollback: error.rollback,
+      hasPathProperty: Object.prototype.hasOwnProperty.call(error, 'path')
+    })));
   const outcome = await result;
   expect(outcome.ok).toBe(false);
   expect(outcome.name).toBe('CloudBackupRolledBackError');
   expect(outcome.message).toMatch(/removed automatically/i);
+  expect(outcome.causeName).toBe('Error');
+  expect(outcome.causeMessage).toBe('index unavailable');
+  expect(outcome.rollback).toEqual({ attempted: true, completed: true, outcome: 'removed', status: 200 });
+  expect(outcome.hasPathProperty).toBe(false);
+  expect(supa.uploads).toHaveLength(1);
+  expect(supa.indexAttempts).toHaveLength(1);
+  expect(supa.deletes).toEqual([{ bucket: 'backups', key: supa.uploads[0].key }]);
   expect(supa.objects.size).toBe(0);
   expect(supa.index).toHaveLength(0);
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
+    lastBackupAt: '',
+    lastError: outcome.message
+  });
+});
+
+test('Supabase rollback keeps metadata failure primary when cleanup also fails', async ({ page }) => {
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'PRIVATE-ROLLBACK-MARKER');
+  await useSupabaseSignedIn(page);
+  await page.evaluate(() => {
+    window.__sutraRollbackReports = [];
+    window.SutraReportError = (error, context, severity) => {
+      window.__sutraRollbackReports.push({
+        name: error && error.name,
+        message: error && error.message,
+        causeMessage: error && error.cause && error.cause.message,
+        rollback: error && error.rollback,
+        rollbackError: error && error.rollbackError && error.rollbackError.message,
+        ownKeys: error ? Object.getOwnPropertyNames(error) : [],
+        context,
+        severity
+      });
+    };
+  });
+  supa.failNextIndex = true;
+  supa.deleteFailureStatus = 503;
+  const outcome = await page.evaluate(() => window.SutraCloudSync.backupNow({
+    passphrase: 'correct horse battery staple',
+    label: 'private-filename-marker'
+  }).then(() => ({ ok: true })).catch(error => ({
+    ok: false,
+    name: error.name,
+    message: error.message,
+    causeMessage: error.cause && error.cause.message,
+    rollback: error.rollback,
+    rollbackError: error.rollbackError && error.rollbackError.message
+  })));
+
+  expect(outcome).toEqual({
+    ok: false,
+    name: 'CloudBackupPartialFailureError',
+    message: 'Backup metadata could not be saved. Automatic cleanup of the newly uploaded encrypted object also failed.',
+    causeMessage: 'index unavailable',
+    rollback: { attempted: true, completed: false, outcome: 'failed', status: 503 },
+    rollbackError: 'Rollback DELETE failed (503).'
+  });
+  expect(supa.deletes).toEqual([{ bucket: 'backups', key: supa.uploads[0].key }]);
+  expect(supa.objects.has(supa.uploads[0].key)).toBe(true);
+  expect(supa.index).toHaveLength(0);
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta())).toMatchObject({
+    lastBackupAt: '',
+    lastError: outcome.message
+  });
+
+  const report = await page.evaluate(() => window.__sutraRollbackReports[0]);
+  expect(report).toMatchObject({
+    name: 'CloudBackupPartialFailureError',
+    causeMessage: 'index unavailable',
+    rollback: { attempted: true, completed: false, outcome: 'failed', status: 503 },
+    rollbackError: 'Rollback DELETE failed (503).',
+    context: { where: 'sutraCloud:backupNow', provider: 'supabase', auto: false },
+    severity: 'warning'
+  });
+  expect(report.ownKeys).not.toContain('path');
+  const diagnosticText = JSON.stringify(report);
+  for (const secret of [PASS, 'PRIVATE-ROLLBACK-MARKER', 'private-filename-marker', 'test-anon-key', 'a1', 'r1']) {
+    expect(diagnosticText).not.toContain(secret);
+  }
+  expect(diagnosticText).not.toMatch(/SUTRAENC/);
+  expect(outcome.message).not.toMatch(/removed automatically/i);
+});
+
+test('Supabase rollback treats an already-missing object as idempotent completion', async ({ page }) => {
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'ALREADY-ABSENT');
+  await useSupabaseSignedIn(page);
+  supa.failNextIndex = true;
+  supa.deleteNotFound = true;
+  const outcome = await page.evaluate(() => window.SutraCloudSync.backupNow({ passphrase: 'correct horse battery staple' })
+    .then(() => ({ ok: true }))
+    .catch(error => ({
+      ok: false,
+      name: error.name,
+      message: error.message,
+      causeMessage: error.cause && error.cause.message,
+      rollback: error.rollback
+    })));
+
+  expect(outcome).toEqual({
+    ok: false,
+    name: 'CloudBackupRolledBackError',
+    message: 'Backup metadata could not be saved. The newly uploaded encrypted object was already absent.',
+    causeMessage: 'index unavailable',
+    rollback: { attempted: true, completed: true, outcome: 'already-absent', status: 404 }
+  });
+  expect(supa.deletes).toEqual([{ bucket: 'backups', key: supa.uploads[0].key }]);
+  expect(supa.objects.size).toBe(0);
+  expect(supa.index).toHaveLength(0);
+  expect(outcome.message).not.toMatch(/removed automatically/i);
+});
+
+test('Supabase rollback cannot delete an earlier indexed backup or collide with a later attempt', async ({ page }) => {
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'ATTEMPT-IDENTITY');
+  await useSupabaseSignedIn(page);
+
+  await page.evaluate(() => window.SutraCloudSync.backupNow({
+    passphrase: 'correct horse battery staple',
+    label: 'same-label'
+  }));
+  const validKey = supa.uploads[0].key;
+  const validIndex = { ...supa.index[0] };
+  const successfulTimestamp = await page.evaluate(() => window.SutraCloudSync.getMeta().lastBackupAt);
+
+  supa.failNextIndex = true;
+  const second = await page.evaluate(() => window.SutraCloudSync.backupNow({
+    passphrase: 'correct horse battery staple',
+    label: 'same-label'
+  }).then(() => ({ ok: true })).catch(error => ({
+    ok: false,
+    name: error.name,
+    causeMessage: error.cause && error.cause.message
+  })));
+
+  expect(second).toEqual({ ok: false, name: 'CloudBackupRolledBackError', causeMessage: 'index unavailable' });
+  expect(supa.uploads).toHaveLength(2);
+  expect(supa.uploads[1].key).not.toBe(validKey);
+  expect(supa.deletes).toEqual([{ bucket: 'backups', key: supa.uploads[1].key }]);
+  expect(supa.objects.has(validKey)).toBe(true);
+  expect(supa.objects.has(supa.uploads[1].key)).toBe(false);
+  expect(supa.index).toEqual([validIndex]);
+  expect(supa.index[0].path).toBe(validKey);
+  expect(await page.evaluate(() => window.SutraCloudSync.getMeta().lastBackupAt)).toBe(successfulTimestamp);
 });
 
 test('Supabase provider: restore reproduces workspace; wrong passphrase is safe', async ({ page }) => {

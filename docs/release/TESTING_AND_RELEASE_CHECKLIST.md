@@ -228,6 +228,14 @@ Before real-project revocation QA, apply
 `supabase/migrations/20260716_device_revoke_wipe.sql`; never infer wipe behavior
 from a generic 401/403 or from the mock alone.
 
+`tests/e2e/sutra-cloud-providers.spec.mjs` is the separate point-in-time backup
+provider gate. Its Supabase mock must cover successful object + index creation,
+upload failure without index/DELETE, index failure with exact-path rollback,
+rollback failure as secondary diagnostic context, idempotent object-not-found,
+attempt-path isolation, existing-backup preservation, and ciphertext/diagnostic
+secret exclusion. This gate tests Supabase backup behavior, not incremental
+Sutra Sync.
+
 **Recorded manual real result (2026-07-18):** after applying that migration, the
 project operator revoked Device B from Device A on the configured Supabase
 project. Device B wiped only after reconnecting, reload did not resurrect its

@@ -295,9 +295,15 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
 - **Each backup is a standard encrypted `.sutra` envelope**, produced by the same
   `createEncryptedSutraBackupBlob` pipeline as manual export (PBKDF2 600k +
   AES-GCM-256, fresh salt + IV per backup), uploaded to a **private** Storage
-  bucket at `backups/<auth.uid()>/<timestamp>-<label>.sutra`. The server stores
-  **only ciphertext** plus a tiny `backup_index` row (path, label, size, device,
-  time) — never plaintext, never the passphrase.
+  bucket at
+  `backups/<auth.uid()>/<timestamp>-<label>-<random-attempt-id>.sutra`. The
+  server stores **only ciphertext** plus a tiny `backup_index` row (path, label,
+  size, device, time) — never plaintext, never the passphrase. Object creation
+  never overwrites an existing path. If index creation fails after upload,
+  Sutra best-effort deletes exactly that attempt's object. A 404 means cleanup
+  is already complete; any other cleanup failure is secondary diagnostic
+  context while the original backup failure remains visible and no success
+  timestamp is written.
 - **Supabase-specific isolation:** Row Level Security isolates every user to
   their own `<uid>/` folder and index rows (see
   [`supabase/schema.sql`](../../supabase/schema.sql)). Other adapters rely on

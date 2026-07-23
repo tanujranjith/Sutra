@@ -185,6 +185,10 @@ The `.sutra` file is the canonical portable full-workspace backup.
 - Secrets and provider credentials must be stripped from every export path.
 - Restore conflicts must be shown rather than silently using last-write-wins behavior.
 - Backup providers receive ciphertext only.
+- A Supabase backup's Storage object and `backup_index` row are one logical
+  result. If indexing fails after a confirmed upload, best-effort rollback must
+  target only that attempt's unique object path. The metadata failure remains
+  primary; rollback failure is secondary and must never be reported as success.
 - Google Drive remains encrypted whole-snapshot sync, separate from incremental
   Sutra Sync. Drive cycles must be single-flight, and a clean remote pull must
   bind its restore decision to the local mutation revision: if a confirmed save

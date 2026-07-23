@@ -1,23 +1,21 @@
 # Cloud sync current-state audit — 2026-07-22
 
+> Supabase backup-provider rollback repair verified 2026-07-23.
+
 ## Release decision
 
-**Blocked for release acceptance.** The current Sutra Sync implementation and
-its deployment surface pass the complete unattended repository gate. One
-separate Supabase *backup-provider* regression remains: if encrypted object
-upload succeeds but `backup_index` creation fails, the current recovered
-`src/core/app.js` does not issue the compensating object DELETE or throw the
-typed `CloudBackupRolledBackError`. The historical implementation contains that
-repair, and `tests/e2e/sutra-cloud-providers.spec.mjs` detects its loss.
+**The unattended release blocker is resolved.** Sutra Sync and its deployment
+surface still pass the complete unattended gate, and the separate Supabase
+*backup-provider* regression now has attempt-bound compensating rollback plus
+focused browser coverage. Live Supabase/UI acceptance remains operator-pending;
+that manual boundary does not weaken the verified mocked transaction behavior.
 
-This audit did not restore that block because `AGENTS.md` requires every
-`src/core/app.js` change to be made and committed in an isolated clean-main
-candidate before integration, while this task explicitly prohibited commits
-and the primary worktree already contained unrelated edits. Bypassing either
-constraint would weaken the repository's core-runtime safety process.
-
-No GUI/manual-authentication test, live Supabase request, migration execution,
-commit, push, PR, deployment, reset, clean, stash, or discard was performed.
+The repair followed the mandatory `src/core/app.js` workflow: the dirty primary
+state was preserved in a local checkpoint, a clean `codex/*` candidate worktree
+was created, a byte-identical ignored recovery copy was verified, and the core
+runtime gate passed before broader validation. No GUI/manual-authentication
+test, live Supabase request, migration execution, push, PR, deployment, reset,
+clean, stash, or discard was performed.
 
 ## 1. Current architecture and ownership
 
@@ -86,10 +84,15 @@ fixture was still forcing v6 and was corrected to exercise the current schema.
    the revoke runtime, all eight sync scripts, Assistant, Slides, generated
    manifests and Slides CSS; rejects SQL, source maps and fixtures; and verifies
    the intended public Supabase URL/key while rejecting secret-shaped config.
-7. **Supabase backup object/index rollback overwritten — open blocker.** The
-   provider test fails because current `app.js` lost the compensating DELETE
-   block that existed in repository history. This is backup-provider
-   transactional integrity, not incremental Sutra Sync behavior.
+7. **Supabase backup object/index rollback overwritten — fixed.** Repository
+   history at `2fa88ba` contained the compensating DELETE. The later corrupted
+   runtime checkpoint removed that block, and runtime recovery restored an
+   older provider body without it. The current adapter again deletes the exact
+   newly uploaded object if `backup_index` insertion fails, treats 404 as
+   already-clean, keeps index failure primary when DELETE also fails, creates no
+   success state on failure, and uses a random attempt suffix plus no-overwrite
+   upload so concurrent/retried attempts cannot target each other. This remains
+   backup-provider integrity, not incremental Sutra Sync behavior.
 
 ## 4. Current portable-data parity matrix
 
@@ -190,10 +193,20 @@ No remote migration was executed in this audit.
   zero mismatches; forbidden SQL/map/spec/fixture count was zero.
 - `npm run verify`: passed in **565.7 s**, including all static checks, 324 unit
   tests, artifact build/check, **59/59** smoke/backup E2E, and **14/14** sync E2E.
-- Additional provider/Canvas/Drive batch: **37/39 passed** initially. Canvas was
-  a stale-test expectation and subsequently passed 2/2. The remaining failure is
-  the Supabase backup rollback blocker described above; it is not part of
-  `npm run verify`.
+- The original focused rollback regression reproduced the defect before repair:
+  expected `CloudBackupRolledBackError`, received generic `Error`.
+- Post-repair focused rollback: **1/1 passed**; focused Supabase backup matrix:
+  **6/6 passed**.
+- Full provider suite: **24/24 passed**, including Supabase
+  upload/list/restore/delete/retention plus unchanged Google Drive, OneDrive,
+  Dropbox, WebDAV, Custom HTTP, and Box behavior.
+- Independent encrypted-backup, Google Drive snapshot, and persistence batch:
+  **26/26 passed**.
+- Post-repair `npm run check:all`: passed; `npm run test:unit`: **324/324
+  passed**; `npm run build:deploy` and `npm run check:deploy`: passed.
+- Post-repair `npm run verify`: passed in **726.3 s**, including all static
+  checks, **324/324** unit tests, artifact build/check, **59/59** smoke/backup
+  E2E, and **14/14** incremental Sync E2E.
 
 An earlier sync command was killed by a 120-second command-runner limit and is
 not counted. A subsequent pre-fix full run was 13/14 because of the conflict
@@ -202,13 +215,16 @@ passed three repetitions, and the final full/integrated runs passed.
 
 ## 8. Deployment artifact findings
 
-The staged artifact matches source for the shell, service worker, generated
-manifests, core app, revoke runtime, all eight sync modules, Assistant runtime,
-Slides runtime and CSS. Script ordering remains protocol → crypto → projection
-→ diff → merge → store → transport → engine before the core bridge. Generated
-cache stamps are current (`slides.js` is `20260722-slides7`). No tests, fixtures,
-SQL, source maps, package metadata, internal docs, or elevated credentials are
-staged. Only the intended public Supabase URL and publishable key are present.
+The staged artifact contains **200 files / 17.08 MB** and matches source for the
+shell, service worker, generated manifests, repaired core app, revoke runtime,
+all eight sync modules, Assistant runtime, Slides runtime and CSS. Direct
+SHA-256 comparisons for `src/core/app.js`, `Sutra.html`, `sw.js`, and both
+generated asset manifests matched. Script ordering remains protocol → crypto →
+projection → diff → merge → store → transport → engine before the core bridge.
+The core cache identity is `20260723-supabaseRollback1`; artifact source contains
+the typed rollback paths and non-upsert upload. No tests, fixtures, SQL, source
+maps, package metadata, internal docs, or elevated credentials are staged. Only
+the intended public Supabase URL and publishable key are present.
 
 ## 9. Manual acceptance checklist
 
@@ -248,6 +264,7 @@ evidence record.
 | 28 | Publish the exact checked artifact to GitHub Pages/PWA only after blocker resolution; repeat startup/sync/backup smoke. | Hosted headers/CSP and relative paths work; no rebuild drift. | Deployment digest, URL, headers, test date. | Different artifact, weakened headers/CSP, or hosted-only failure. |
 | 29 | On iPhone Safari, Android Chrome and a tablet, test portrait/landscape sync status, Notes/Canvas/Slides, backup picker, modals and reduced motion. | 44px targets, no document overflow, contained calendar scrolling, accessible sheets. | Device/OS/browser versions and screenshots. | Data-loss path, inaccessible control, trapped focus, overflow blocking primary action. |
 | 30 | Repeat core flows in current Chromium, Firefox, WebKit/Safari and Edge. | Persistence, crypto, IndexedDB, service worker and import/export behave consistently. | Browser versions and per-flow result. | Any data corruption, crypto/import incompatibility, or unsupported critical flow. |
+| 31 | In a disposable Supabase setup, keep Storage requests allowed but block only `POST /rest/v1/backup_index`; run **Back Up Now**, then unblock and retry. | First attempt fails visibly, its Storage POST and DELETE use the identical new path, no new object/row or success timestamp remains, and prior backups survive. Retry uses a different path, creates object + row, performs no DELETE, and records success. | Redacted methods/statuses and path equality/difference only; never retain tokens, passphrase, ciphertext, labels, or workspace content. | Missing/wrong DELETE, false success, orphan, prior-backup deletion, reused path, or DELETE on successful retry. |
 
 ## 10. Files changed by this audit
 
@@ -260,8 +277,11 @@ additive. `src/core/app.js` was inspected but not modified.
 
 ## 11. Remaining limitations
 
-- Resolve the Supabase backup rollback blocker through the mandatory clean
-  core-runtime candidate workflow, then rerun the provider suite and `verify`.
+- Manually verify the repaired transaction against a disposable real Supabase
+  project by blocking only `POST /rest/v1/backup_index`, confirming the matching
+  Storage DELETE and absence of a new object/row, then retrying successfully
+  with no DELETE. This requires operator-controlled authentication and is not
+  claimed by the mocked browser suite.
 - Live Supabase, Account A/B, Storage, OTP/vault, deployed artifact, mobile and
   cross-browser evidence remains operator-pending; older manual evidence is
   historical, not proof of this build.

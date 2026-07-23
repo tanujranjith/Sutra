@@ -67,6 +67,12 @@ Supabase was Sutra Cloud's original backend; it is **now one advanced provider**
 not a central identity. It stores each backup as a `.sutra` envelope in a private
 Storage bucket (`backups/<uid>/…`) with **Row Level Security** isolating users,
 plus a small `backup_index` row (no workspace content). Email one-time-code auth.
+- Each upload gets a collision-resistant attempt suffix and is created without
+  overwriting an existing object. The Storage object and `backup_index` row are
+  one user-visible backup: if index creation fails after upload, Sutra deletes
+  exactly that new object. A missing object during rollback is already-safe;
+  if rollback itself fails, the original metadata failure stays primary and
+  Sutra reports a secondary cleanup warning rather than claiming success.
 - **Never paste a `service_role` / secret key** — Sutra rejects keys that look
   like service-role keys; use the public **anon** key.
 - The canonical CSP explicitly allows `https://*.supabase.co`, so official and

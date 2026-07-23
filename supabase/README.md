@@ -245,9 +245,16 @@ in the panel rather than failing silently.
   plus a keep-alive. (For BYO, this is the advanced user's own concern.)
 
 ## What gets stored (either backend)
-- `storage://backups/<your-uid>/<timestamp>-<label>.sutra` — the encrypted blob.
+- `storage://backups/<your-uid>/<timestamp>-<label>-<random-attempt-id>.sutra`
+  — the encrypted blob. New attempts do not overwrite existing paths.
 - `public.backup_index` — one row per backup: path, label, size, device id, time.
   No workspace content. Retention keeps the **last 10** per user.
+- Storage upload and index insertion are one user-visible result. If insertion
+  fails after upload, the browser issues a compensating DELETE for that exact
+  attempt path. A missing object is treated as already cleaned up. If DELETE
+  also fails, the metadata error remains primary and the cleanup failure is
+  reported as a secondary non-sensitive warning; the backup is never marked
+  successful.
 - `public.sync_ops`, `sync_devices`, `sync_vault_keys`, `sync_snapshots`, and
   `sync_asset_index` — incremental sync routing state and encrypted envelopes.
 - `storage://sync-assets/<your-uid>/<sha256>` — encrypted asset envelopes under
