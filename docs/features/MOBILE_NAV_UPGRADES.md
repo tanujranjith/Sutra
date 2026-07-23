@@ -11,8 +11,10 @@ A fixed bottom navigation bar appears on phones, built from the enabled top
 `.view-tab` buttons (so it always reflects the active Sutra Mode). Up to 5 items;
 if more views are enabled, the last slot becomes **More**, which opens the
 existing mobile view dropdown. Tapping an item switches the view (and the active
-item tracks the current view via the `noteflow:view-changed` event). A right-side
-gap reserves space for the floating assistant button so they don't overlap.
+item tracks the current view via the `noteflow:view-changed` event). The central
+Capture action uses the same canonical Quick Capture flow. On the dedicated mobile
+Today shell, the bar becomes an even five-slot dock and the advanced Assistant
+launcher moves out of the reading path; Assistant remains available from **More**.
 
 ## Swipe between views
 

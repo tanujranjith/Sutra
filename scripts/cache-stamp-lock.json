@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260723-supabaseRollback1",
-    "hash": "fdfb0cfcea604eea"
+    "stamp": "20260723-mobiletoday6",
+    "hash": "ddd995809a45f7df"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -484,7 +484,7 @@
     "hash": "38cecfb56b1d6e1b"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260721-priorityGrid2",
-    "hash": "c4399fbfb6189894"
+    "stamp": "20260723-mobiletoday4",
+    "hash": "f28df8e3bb5cc6d0"
   }
 }

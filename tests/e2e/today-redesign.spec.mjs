@@ -295,3 +295,71 @@ test('Next Up card, footer counts, and empty states use live data', async ({ pag
   await page.click('[data-nextup-count="overdue"]');
   await expect(page.locator('#overdueRecoveryModal')).toHaveClass(/active/);
 });
+
+test('mobile Today is a focused command surface with bounded chrome and live actions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+
+  await page.evaluate(async () => {
+    const fa = window.flowAtelier;
+    const d = new Date();
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    fa.tasks.splice(0, fa.tasks.length, {
+      id: 'qa-mobile-next',
+      title: 'Chemistry lab report',
+      dueDate: key,
+      dueTime: '18:00',
+      priority: 'high',
+      completed: false,
+      isActive: true,
+      scheduleType: 'once'
+    });
+    fa.timeBlocks.splice(0, fa.timeBlocks.length,
+      { id: 'qa-mobile-calc', name: 'Calculus review', date: key, start: '11:30', end: '12:00', category: 'study' },
+      { id: 'qa-mobile-chem', name: 'Chemistry lab report', date: key, start: '15:00', end: '15:45', category: 'study' },
+      { id: 'qa-mobile-read', name: 'Read The Great Gatsby', date: key, start: '19:00', end: '19:30', category: 'reading' },
+      { id: 'qa-mobile-later', name: 'Fourth item stays off the first screen', date: key, start: '20:00', end: '20:30', category: 'study' }
+    );
+    if (fa.apStudyWorkspace && Array.isArray(fa.apStudyWorkspace.subjects)) fa.apStudyWorkspace.subjects.splice(0);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    fa.renderTaskViews();
+  });
+
+  await expect(page.locator('body')).toHaveClass(/mobile-today-mode/);
+  const shell = page.locator('#todayMobileShell');
+  await expect(shell).toBeVisible();
+  await expect(page.locator('.top-nav')).toBeHidden();
+  await expect(page.locator('#storageOptions')).toBeHidden();
+  await expect(page.locator('#view-today .today-cc-layout')).toBeHidden();
+
+  await expect(shell.locator('.today-mobile-appbar')).toBeVisible();
+  await expect(shell.locator('.today-mobile-greeting h1')).toContainText(/Good (morning|afternoon|evening)/);
+  await expect(shell.locator('.today-mobile-next .mobile-card-title')).toHaveText('Chemistry lab report');
+  await expect(shell.locator('.today-mobile-focus-cta')).toContainText(/Start \d+-min focus/);
+  await expect(shell.locator('.today-mobile-open-link')).toBeVisible();
+  await expect(shell.locator('.today-mobile-agenda-row')).toHaveCount(3);
+  await expect(shell.locator('.today-mobile-review-row')).toBeVisible();
+  await expect(shell.locator('.today-mobile-trust')).toBeVisible();
+
+  const geometry = await page.evaluate(() => {
+    const nav = document.getElementById('sutraBottomNav');
+    const capture = nav && nav.querySelector('.sutra-bn-capture');
+    const navBox = nav && nav.getBoundingClientRect();
+    const captureBox = capture && capture.getBoundingClientRect();
+    return {
+      horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+      navBottom: navBox && navBox.bottom,
+      navHeight: navBox && navBox.height,
+      captureHeight: captureBox && captureBox.height
+    };
+  });
+  expect(geometry.horizontalOverflow).toBe(false);
+  expect(geometry.navBottom).toBeLessThanOrEqual(845);
+  expect(geometry.navHeight).toBeLessThanOrEqual(90);
+  expect(geometry.captureHeight).toBeLessThanOrEqual(60);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: '.tmp/mobile-today-implementation-390x844.png', fullPage: false });
+  await shell.locator('.today-mobile-notifications').click();
+  await expect(page.locator('#notifPanel')).toHaveAttribute('aria-hidden', 'false');
+});

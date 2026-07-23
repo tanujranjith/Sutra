@@ -78,6 +78,8 @@ test('More opens a focus-trapped all-sections sheet and reaches advanced views',
 test('phone sidebar behaves as a modal drawer and Escape restores focus', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
+  await page.locator('#sutraBottomNav [data-bn-view="notes"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('notes');
   const sidebar = page.locator('#sidebar');
   const toggle = page.locator('#sidebarToggle');
   if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) await toggle.click();

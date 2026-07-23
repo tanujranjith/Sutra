@@ -59,11 +59,15 @@ including those behind the "More" overflow, stay reachable.
 
 ### Today / Focused Today
 
-Today reflows from its multi-panel dashboard into a single column. A dedicated
-**mobile essentials shell** (`#todayMobileShell`) surfaces the most important items
-first on phones. Task cards stack; the hero header actions (Task, Capture, ⌘K, All
-tasks, More) remain reachable, wrapping as needed. Focused Today keeps the same
-single-column priority on small screens.
+Today uses a dedicated **mobile essentials shell** (`#todayMobileShell`) rather than
+compressing the desktop dashboard. The phone hierarchy is: compact Sutra header and
+notifications, greeting/date, one canonical Next Up action, up to three chronological
+Today rows, Review, and local save/backup confidence. The desktop hero, card grid,
+top tab strip, floating utility buttons, and storage taskbar are hidden while this
+shell is active; their destinations remain reachable through the bottom navigation,
+the notification button, and the save-confidence link. Quick Capture stays in the
+fixed bottom navigation. Focused Today keeps the same single-column priority on
+small screens.
 
 ### Timeline
 
@@ -258,8 +262,8 @@ Run through the following at each width — **1440, 1280, 1024, 900, 768, 640, 4
 - [ ] **No horizontal page scroll** at any width.
 - [ ] **Navigation** collapses to the mobile view menu ≤768px; every destination
       (including "More" overflow) is reachable.
-- [ ] **Today** shows the mobile essentials shell and stacks panels/cards cleanly;
-      hero actions wrap, none cut off.
+- [ ] **Today** shows the mobile essentials shell with one Next Up action, a bounded
+      agenda, Review, and save confidence; desktop dashboard chrome is not duplicated.
 - [ ] **Timeline** is single-column and legible; entries tappable.
 - [ ] **Notes editor** is full-width-of-note; toolbar scrolls horizontally; no text,
       table, image, or drawing overflows the page.

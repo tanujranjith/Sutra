@@ -24262,13 +24262,14 @@ function populateProgressDashboard() {
                 shell.innerHTML = '';
                 return;
             }
+
+            const now = new Date();
             const todayK = today();
             const visibleTasks = Array.isArray(tasks) ? tasks : [];
             const completedIds = (dayStates[todayK] && dayStates[todayK].completedTaskIds) || [];
-            const dueToday = visibleTasks.filter(t => t && !completedIds.includes(t.id) && (typeof isTaskDueOn === 'function' ? isTaskDueOn(t, todayK) : false)).slice(0, 6);
-            const habitTotal = Array.isArray(habits) ? habits.filter(h => h && h.isActive !== false).length : 0;
-            const habitDayState = (typeof getHabitDayState === 'function') ? getHabitDayState(todayK) : (habitDayStates && habitDayStates[todayK]) || {};
-            const habitDone = Array.isArray(habitDayState && habitDayState.completedHabitIds) ? habitDayState.completedHabitIds.length : 0;
+            const dueToday = visibleTasks
+                .filter(task => task && !completedIds.includes(task.id) && (typeof isTaskDueOn === 'function' ? isTaskDueOn(task, todayK) : false))
+                .slice(0, 6);
             let reviewDue = 0;
             try {
                 if (typeof window.getReviewTodayStats === 'function') {
@@ -24276,85 +24277,160 @@ function populateProgressDashboard() {
                     reviewDue = stats && stats.due ? stats.due : 0;
                 }
             } catch (err) { /* non-critical */ }
-            const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-            const focusTplCount = Array.isArray(focusTemplates) ? focusTemplates.length : 0;
-            const focusTpl = focusTplCount ? focusTemplates[0] : null;
-            const buildList = (rows, emptyLabel) => rows.length
-                ? rows.map(r => `<div class="today-mobile-list-row"><span>${escapeCommandHtml(r.title || 'Item')}</span><span>${escapeCommandHtml(r.meta || '')}</span></div>`).join('')
-                : `<div class="today-mobile-list-row"><span>${escapeCommandHtml(emptyLabel)}</span><span></span></div>`;
 
-            // "Right Now" hero — the single next move with time-until-due + one-tap start
-            // (mirrors the desktop Do-Now). Computed from the full workspace deadlines.
+            const dateLabel = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+            const greeting = now.getHours() < 12 ? 'Good morning' : (now.getHours() < 17 ? 'Good afternoon' : 'Good evening');
+
+            // Reuse the desktop command center's deterministic ranking and canonical
+            // deadline records. Mobile changes presentation, not the source of truth.
             let deadlines = [];
             try { deadlines = collectWorkspaceDeadlines() || []; } catch (err) { deadlines = []; }
-            let rnItem = null, rnReason = '';
+            let rnItem = null;
+            let rnReason = '';
             try {
                 const nba = pickNextBestAction(groupDeadlinesByTimeframe(deadlines));
-                if (nba && nba.item) { rnItem = nba.item; rnReason = nba.reason || ''; }
+                if (nba && nba.item) {
+                    rnItem = nba.item;
+                    rnReason = nba.reason || '';
+                }
             } catch (err) { /* non-critical */ }
-            const overdueCount = deadlines.filter(i => i && i.overdue).length;
+
+            // Use the shared chronological agenda and cap it to preserve a clear
+            // first viewport. Due tasks are a fallback when no timed blocks exist.
+            let agenda = [];
+            try {
+                if (window.SutraTodayCenter && typeof window.SutraTodayCenter.getTodayAgenda === 'function') {
+                    agenda = window.SutraTodayCenter.getTodayAgenda({
+                        blocks: Array.isArray(timeBlocks) ? timeBlocks : [],
+                        items: deadlines
+                    }, now);
+                }
+            } catch (err) { agenda = []; }
+            if (agenda.length) {
+                const seenAgendaTitles = new Set();
+                agenda = agenda.filter(entry => {
+                    const key = String(entry && entry.title || '').trim().toLowerCase();
+                    if (!key || seenAgendaTitles.has(key)) return false;
+                    seenAgendaTitles.add(key);
+                    return true;
+                });
+            }
+            if (!agenda.length) {
+                agenda = dueToday.map(task => ({
+                    kind: 'task',
+                    title: task.title || 'Task',
+                    timeLabel: 'Today',
+                    category: task.priority || '',
+                    ref: task
+                }));
+            }
+            agenda = agenda.slice(0, 3);
+
+            const agendaHtml = agenda.length
+                ? agenda.map(entry => {
+                    const ref = entry && entry.ref ? entry.ref : {};
+                    const category = String(entry.category || entry.kind || '').replace(/[_-]+/g, ' ').trim();
+                    const actionId = String(ref.id || '');
+                    const meta = entry.kind === 'deadline'
+                        ? 'Due'
+                        : (category ? category.charAt(0).toUpperCase() + category.slice(1) : 'Scheduled');
+                    return `
+                        <button type="button" class="today-mobile-agenda-row" data-mobile-action="agenda-open" data-agenda-kind="${escapeCommandHtml(entry.kind || '')}" data-agenda-id="${escapeCommandHtml(actionId)}">
+                            <span class="today-mobile-agenda-time">${escapeCommandHtml(entry.timeLabel || 'Today')}</span>
+                            <span class="today-mobile-agenda-dot" aria-hidden="true"></span>
+                            <span class="today-mobile-agenda-title">${escapeCommandHtml(entry.title || 'Scheduled item')}</span>
+                            <span class="today-mobile-agenda-meta">${escapeCommandHtml(meta)}</span>
+                            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                        </button>`;
+                }).join('')
+                : `<div class="today-mobile-agenda-empty">
+                        <span>Your schedule is open.</span>
+                        <button type="button" data-mobile-action="shape-day">Shape my day</button>
+                    </div>`;
+
+            const health = (appSettings && appSettings.dataHealth) || {};
+            const persistence = (typeof sutraPersistenceState === 'object' && sutraPersistenceState) ? sutraPersistenceState : {};
+            const saveFailed = !!persistence.lastFailure;
+            const savedAt = persistence.lastConfirmedSaveAt || health.lastConfirmedSaveAt || '';
+            const backupAt = health.lastAtelierExportAt || '';
+            const saveLabel = saveFailed ? 'Save needs attention' : (savedAt ? 'Saved locally' : 'Waiting for first save');
+            const backupLabel = backupAt ? `Backup ${formatSutraHealthDate(backupAt)}` : 'No recent backup';
+            const trustIcon = saveFailed ? 'fa-triangle-exclamation' : (savedAt ? 'fa-circle-check' : 'fa-clock');
+            const notificationBadge = document.querySelector('#notifBellBtn .notif-bell-badge');
+            const unreadCount = Math.max(0, Number(notificationBadge && notificationBadge.dataset ? notificationBadge.dataset.count : 0) || 0);
+            const focusMinutes = Array.isArray(focusTemplates) && focusTemplates[0]
+                ? Math.max(1, Number(focusTemplates[0].durationMinutes) || 25)
+                : 25;
+
             const rightNowHtml = rnItem
-                ? `<article class="today-mobile-card today-mobile-rightnow">
-                        <div class="mobile-card-eyebrow">Right now${rnReason ? ' · ' + escapeCommandHtml(rnReason) : ''}</div>
-                        <div class="mobile-card-title">${escapeCommandHtml(rnItem.title)}</div>
-                        <div class="mobile-card-sub">${escapeCommandHtml(relativeDueLabel(rnItem.due))}${rnItem.subtitle ? ' · ' + escapeCommandHtml(rnItem.subtitle) : ''} · ${dueToday.length} due · ${reviewDue} cards</div>
-                        <div class="today-mobile-quick-row">
-                            <button type="button" class="neumo-btn active" data-mobile-action="rightnow-start" data-rn-id="${escapeCommandHtml(rnItem.sourceId || '')}" data-rn-source="${escapeCommandHtml(rnItem.source || '')}" data-rn-title="${escapeCommandHtml(rnItem.title)}">Start now</button>
-                            <button type="button" class="neumo-btn" data-mobile-action="rightnow-open" data-rn-itemid="${escapeCommandHtml(rnItem.id)}">Open</button>
-                            ${overdueCount > 0 ? `<button type="button" class="neumo-btn is-recover" data-mobile-action="recover">Recover ${overdueCount}</button>` : ''}
-                        </div>
-                    </article>`
-                : `<article class="today-mobile-card today-mobile-rightnow">
-                        <div class="mobile-card-eyebrow">Right now · ${escapeCommandHtml(dateLabel)}</div>
-                        <div class="mobile-card-title">You're clear</div>
-                        <div class="mobile-card-sub">Nothing due · ${reviewDue} card${reviewDue === 1 ? '' : 's'} to review</div>
-                        ${overdueCount > 0 ? `<div class="today-mobile-quick-row"><button type="button" class="neumo-btn is-recover" data-mobile-action="recover">Recover ${overdueCount} overdue</button></div>` : ''}
-                    </article>`;
+                ? (() => {
+                    const dueLabel = relativeDueLabel(rnItem.due);
+                    const meta = [dueLabel, rnItem.subtitle].filter(Boolean).join(' · ');
+                    const conciseReason = String(rnReason || '').split(/[,.]/)[0].trim();
+                    const nudge = rnItem.overdue ? 'Needs attention now' : (conciseReason || 'Best next step');
+                    return `<section class="today-mobile-next" aria-labelledby="todayMobileNextTitle">
+                                <div class="mobile-card-eyebrow">Next up</div>
+                                <h2 class="mobile-card-title" id="todayMobileNextTitle">${escapeCommandHtml(rnItem.title)}</h2>
+                                ${meta ? `<div class="mobile-card-sub">${escapeCommandHtml(meta)}</div>` : ''}
+                                <div class="today-mobile-nudge"><i class="far fa-clock" aria-hidden="true"></i><span>${escapeCommandHtml(nudge)}</span></div>
+                                <button type="button" class="today-mobile-focus-cta" data-mobile-action="rightnow-start" data-rn-id="${escapeCommandHtml(rnItem.sourceId || '')}" data-rn-source="${escapeCommandHtml(rnItem.source || '')}" data-rn-title="${escapeCommandHtml(rnItem.title)}">
+                                    <i class="fas fa-play" aria-hidden="true"></i>
+                                    <span>Start ${focusMinutes}-min focus</span>
+                                </button>
+                                <button type="button" class="today-mobile-open-link" data-mobile-action="rightnow-open" data-rn-itemid="${escapeCommandHtml(rnItem.id)}">Open details</button>
+                            </section>`;
+                })()
+                : `<section class="today-mobile-next today-mobile-next-clear" aria-labelledby="todayMobileNextTitle">
+                        <div class="mobile-card-eyebrow">Next up</div>
+                        <h2 class="mobile-card-title" id="todayMobileNextTitle">Nothing urgent — you're clear</h2>
+                        <div class="mobile-card-sub">${dueToday.length} due today · ${reviewDue} card${reviewDue === 1 ? '' : 's'} to review</div>
+                        <button type="button" class="today-mobile-focus-cta" data-mobile-action="capture">
+                            <i class="fas fa-bolt" aria-hidden="true"></i>
+                            <span>Capture something</span>
+                        </button>
+                    </section>`;
 
             shell.innerHTML = `
+                <header class="today-mobile-appbar">
+                    <div class="today-mobile-brand">
+                        <img src="assets/brand/sutra/generated/sutra-mark-transparent.png" alt="" width="32" height="32">
+                        <span>Today</span>
+                    </div>
+                    <button type="button" class="today-mobile-notifications" data-mobile-action="notifications" aria-label="Open notifications">
+                        <i class="far fa-bell" aria-hidden="true"></i>
+                        ${unreadCount ? `<span aria-hidden="true">${unreadCount > 99 ? '99+' : unreadCount}</span>` : ''}
+                    </button>
+                </header>
+
+                <section class="today-mobile-greeting" aria-labelledby="todayMobileGreeting">
+                    <h1 id="todayMobileGreeting">${escapeCommandHtml(greeting)}</h1>
+                    <p>${escapeCommandHtml(dateLabel)}</p>
+                </section>
+
                 ${rightNowHtml}
 
-                <article class="today-mobile-card" data-mobile-card="quick">
-                    <div class="mobile-card-eyebrow">Quick actions</div>
-                    <div class="today-mobile-quick-row">
-                        <button type="button" class="neumo-btn" data-mobile-action="add-task">+ Task</button>
-                        <button type="button" class="neumo-btn" data-mobile-action="add-note">+ Note</button>
-                        <button type="button" class="neumo-btn" data-mobile-action="start-focus">Focus</button>
-                        <button type="button" class="neumo-btn" data-mobile-action="open-review">Review</button>
+                <section class="today-mobile-agenda" aria-labelledby="todayMobileAgendaTitle">
+                    <div class="today-mobile-section-heading">
+                        <h2 id="todayMobileAgendaTitle">Today</h2>
+                        <button type="button" data-mobile-action="open-timeline">Timeline</button>
                     </div>
-                </article>
+                    <div class="today-mobile-agenda-list">${agendaHtml}</div>
+                </section>
 
-                <article class="today-mobile-card">
-                    <div class="mobile-card-eyebrow">Due today</div>
-                    <div class="today-mobile-list">${buildList(dueToday.map(t => ({ title: t.title || 'Task', meta: t.dueDate || '' })), 'Nothing on the list')}</div>
-                </article>
+                <button type="button" class="today-mobile-review-row" data-mobile-action="open-review">
+                    <span class="today-mobile-review-icon"><i class="fas fa-layer-group" aria-hidden="true"></i></span>
+                    <span><strong>Review</strong><small>${reviewDue} card${reviewDue === 1 ? '' : 's'} ready</small></span>
+                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                </button>
 
-                ${reviewDue ? `
-                <article class="today-mobile-card">
-                    <div class="mobile-card-eyebrow">Review</div>
-                    <div class="mobile-card-title">${reviewDue} card${reviewDue === 1 ? '' : 's'} due</div>
-                    <div class="today-mobile-quick-row">
-                        <button type="button" class="neumo-btn active" data-mobile-action="start-review">Start review</button>
-                        <button type="button" class="neumo-btn" data-mobile-action="open-review">Browse</button>
-                    </div>
-                </article>` : ''}
-
-                ${focusTpl ? `
-                <article class="today-mobile-card">
-                    <div class="mobile-card-eyebrow">Focus</div>
-                    <div class="mobile-card-title">${escapeCommandHtml(focusTpl.name)} · ${focusTpl.durationMinutes}m</div>
-                    <button type="button" class="neumo-btn active" data-mobile-action="start-focus" data-template-id="${escapeCommandHtml(focusTpl.id)}">Start ${escapeCommandHtml(focusTpl.name)}</button>
-                </article>` : ''}
-
-                <article class="today-mobile-card">
-                    <div class="mobile-card-eyebrow">Quick capture</div>
-                    <form class="today-mobile-tiny-capture" data-mobile-capture-form>
-                        <input type="text" placeholder="Type a task or note…" data-mobile-capture-input />
-                        <button type="submit" class="neumo-btn active">Add</button>
-                    </form>
-                </article>
+                <button type="button" class="today-mobile-trust${saveFailed ? ' is-alert' : ''}" data-mobile-action="open-health">
+                    <i class="fas ${trustIcon}" aria-hidden="true"></i>
+                    <span><strong>${escapeCommandHtml(saveLabel)}</strong><small>${escapeCommandHtml(backupLabel)}</small></span>
+                    <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                </button>
             `;
-            // Bind once.
+
+            // Event delegation keeps actions live across every re-render.
             if (shell.dataset.bound === 'true') return;
             shell.dataset.bound = 'true';
             shell.addEventListener('click', event => {
@@ -24364,16 +24440,11 @@ function populateProgressDashboard() {
                 if (!btn) return;
                 const action = btn.getAttribute('data-mobile-action');
                 try {
-                    if (action === 'add-task' && typeof openTaskModal === 'function') openTaskModal();
-                    else if (action === 'add-note' && typeof createNewPage === 'function') createNewPage();
-                    else if (action === 'start-focus') {
-                        const tplId = btn.getAttribute('data-template-id');
-                        if (tplId && typeof window !== 'undefined' && typeof window.applyFocusTemplate === 'function') {
-                            window.applyFocusTemplate(tplId);
-                        } else if (typeof startTimer === 'function') startTimer();
-                    } else if (action === 'open-review' && typeof setActiveView === 'function') setActiveView('review');
-                    else if (action === 'start-review' && typeof window.startReviewSessionFromShortcut === 'function') window.startReviewSessionFromShortcut();
-                    else if (action === 'rightnow-start') {
+                    if (action === 'capture' && typeof openQuickCaptureModal === 'function') {
+                        openQuickCaptureModal('');
+                    } else if (action === 'open-review' && typeof setActiveView === 'function') {
+                        setActiveView('review');
+                    } else if (action === 'rightnow-start') {
                         const sid = btn.getAttribute('data-rn-id');
                         const src = btn.getAttribute('data-rn-source');
                         if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid);
@@ -24381,29 +24452,43 @@ function populateProgressDashboard() {
                     } else if (action === 'rightnow-open') {
                         const id = btn.getAttribute('data-rn-itemid');
                         const all = (typeof collectWorkspaceDeadlines === 'function') ? collectWorkspaceDeadlines() : [];
-                        const t = Array.isArray(all) ? all.find(i => i.id === id) : null;
-                        if (t) openDeadlineSource(t);
-                    } else if (action === 'recover') {
-                        if (typeof openOverdueRecovery === 'function') openOverdueRecovery();
+                        const item = Array.isArray(all) ? all.find(row => String(row && row.id || '') === id) : null;
+                        if (item) openDeadlineSource(item);
+                    } else if (action === 'notifications') {
+                        event.stopPropagation();
+                        if (window.SutraNotifications && typeof window.SutraNotifications.openPanel === 'function') {
+                            window.SutraNotifications.openPanel();
+                        } else {
+                            const bell = document.getElementById('notifBellBtn');
+                            if (bell) bell.click();
+                        }
+                    } else if (action === 'agenda-open') {
+                        const kind = btn.getAttribute('data-agenda-kind');
+                        const id = btn.getAttribute('data-agenda-id');
+                        if (kind === 'deadline' && id) {
+                            const all = (typeof collectWorkspaceDeadlines === 'function') ? collectWorkspaceDeadlines() : [];
+                            const item = Array.isArray(all) ? all.find(row => String(row && row.id || '') === id) : null;
+                            if (item) openDeadlineSource(item);
+                        } else if (kind === 'task' && id && typeof openTaskModal === 'function') {
+                            openTaskModal(id);
+                        } else if (typeof setActiveView === 'function') {
+                            setActiveView('timeline');
+                        }
+                    } else if (action === 'shape-day') {
+                        const button = document.getElementById('planMyDayBtn');
+                        if (button) button.click();
+                    } else if (action === 'open-timeline' && typeof setActiveView === 'function') {
+                        setActiveView('timeline');
+                    } else if (action === 'open-health' && typeof setActiveView === 'function') {
+                        setActiveView('settings');
                     }
                 } catch (err) { /* non-critical */ }
             });
-            shell.addEventListener('submit', event => {
-                const form = event.target;
-                if (!form || !form.matches('[data-mobile-capture-form]')) return;
-                event.preventDefault();
-                const input = form.querySelector('[data-mobile-capture-input]');
-                const value = input ? String(input.value || '').trim() : '';
-                if (!value) return;
-                try {
-                    if (typeof openQuickCaptureModal === 'function') {
-                        openQuickCaptureModal(value);
-                    } else if (typeof addTaskFromText === 'function') {
-                        addTaskFromText(value);
-                    }
-                    if (input) input.value = '';
-                } catch (err) { /* non-critical */ }
-            });
+            try {
+                window.addEventListener('sutra:persistence-health-changed', () => {
+                    if (typeof activeView === 'undefined' || activeView === 'today') renderTodayMobileShell();
+                });
+            } catch (err) { /* non-critical */ }
         }
 
         // Short "due in 3h" / "2d overdue" label for a Date. Used by the mobile
@@ -31358,6 +31443,7 @@ function buildOnboardingPlanPreview() {
 
             document.body.dataset.view = resolvedView;
             document.body.classList.toggle('settings-anchored-mode', resolvedView === 'settings');
+            try { applyMobileTodayModeClass(); } catch (e) { /* non-critical */ }
             try {
                 window.dispatchEvent(new CustomEvent('noteflow:view-changed', { detail: { view: resolvedView } }));
             } catch (e) { /* non-critical */ }
