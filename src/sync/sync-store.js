@@ -164,6 +164,51 @@
     function setMeta(key, value) { return putValue('meta', key, value); }
     function deleteMeta(key) { return deleteValue('meta', key); }
 
+    // Device identity is shared by every tab in one browser profile. Creating
+    // it with a separate get + put lets two fresh tabs persist different ids,
+    // after which the backend correctly rejects the second id for the same
+    // authenticated session. Keep the read and conditional write in one
+    // IndexedDB readwrite transaction so exactly one value wins.
+    async function getOrCreateMeta(key, createValue) {
+      var db = await open();
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('meta', 'readwrite');
+        var store = tx.objectStore('meta');
+        var resolvedValue = null;
+        var settled = false;
+        var request = store.get(storageKey(key));
+        function fail(error) {
+          if (settled) return;
+          settled = true;
+          reject(error);
+        }
+        request.onsuccess = function () {
+          if (request.result !== undefined && request.result !== null) {
+            resolvedValue = request.result;
+            return;
+          }
+          try {
+            resolvedValue = typeof createValue === 'function' ? createValue() : createValue;
+            if (resolvedValue === undefined || resolvedValue === null) {
+              throw new Error('Sync metadata factory returned no value.');
+            }
+            store.put(resolvedValue, storageKey(key));
+          } catch (error) {
+            try { tx.abort(); } catch (abortError) {}
+            fail(error);
+          }
+        };
+        request.onerror = function () { fail(request.error || new Error('Sync metadata read failed')); };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve(resolvedValue);
+        };
+        tx.onerror = function () { fail(tx.error || new Error('Sync metadata transaction failed')); };
+        tx.onabort = function () { fail(tx.error || new Error('Sync metadata transaction aborted')); };
+      });
+    }
+
     // Cross-tab fallback lease used only when Web Locks is unavailable.
     // The read+conditional-write happens in one IndexedDB readwrite
     // transaction, so two tabs cannot both acquire the same live lease.
@@ -347,6 +392,7 @@
       getMeta: getMeta,
       setMeta: setMeta,
       deleteMeta: deleteMeta,
+      getOrCreateMeta: getOrCreateMeta,
       acquireLease: acquireLease,
       releaseLease: releaseLease,
       getBaseline: getBaseline,

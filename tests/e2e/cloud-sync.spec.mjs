@@ -98,6 +98,118 @@ async function syncNow(page) {
   });
 }
 
+test('device-session mismatch fails closed, leaves no generated key, and safely requires reauthentication', async ({ browser }) => {
+  const server = createSyncMockServer();
+  const device = await openAuthedDevice(browser, server, 'mismatch-device');
+  device.net.rpcOverride = ({ rpcName }) => rpcName === 'sync_get_vault_key'
+    ? { status: 200, body: { ok: false, code: 'device-session-mismatch' } }
+    : null;
+
+  const result = await device.page.evaluate(async ({ endpoint, passphrase }) => {
+    let caught = null;
+    try {
+      await window.SutraSync.enable({ passphrase, endpoint });
+    } catch (error) {
+      caught = { message: String(error && error.message || error), code: error && error.code };
+    }
+    const sensitiveMetaKeys = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('sutra_sync_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('meta', 'readonly');
+        const keys = tx.objectStore('meta').getAllKeys();
+        keys.onerror = () => reject(keys.error);
+        keys.onsuccess = () => resolve(keys.result.filter(key => /:(wrappedVaultKey|supabaseRefreshToken)$/.test(String(key)) || /^(wrappedVaultKey|supabaseRefreshToken)$/.test(String(key))));
+      };
+    });
+    return {
+      caught,
+      signedIn: window.SutraCloudSync.isSignedIn(),
+      enabled: window.SutraSync.status().enabled,
+      sensitiveMetaKeys
+    };
+  }, { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE });
+
+  expect(result.caught.code).toBe('auth-expired');
+  expect(result.caught.message).toContain('safely signed this browser out');
+  expect(result.signedIn).toBe(false);
+  expect(result.enabled).toBe(false);
+  expect(result.sensitiveMetaKeys).toEqual([]);
+  expect(device.net.logoutCalls).toBe(1);
+  expect(device.net.seenAuthHeaders.map(call => call.rpc)).toEqual(['sync_get_vault_key']);
+  await device.context.close();
+});
+
+test('vault creation rejection never persists an unconfirmed local key', async ({ browser }) => {
+  const server = createSyncMockServer();
+  const device = await openAuthedDevice(browser, server, 'create-rejected-device');
+  device.net.rpcOverride = ({ rpcName }) => rpcName === 'sync_put_vault_key'
+    ? { status: 200, body: { ok: false, code: 'device-session-mismatch' } }
+    : null;
+
+  const result = await device.page.evaluate(async ({ endpoint, passphrase }) => {
+    let caught = null;
+    try {
+      await window.SutraSync.enable({ passphrase, endpoint });
+    } catch (error) {
+      caught = { message: String(error && error.message || error), code: error && error.code };
+    }
+    const metaKeys = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('sutra_sync_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('meta', 'readonly');
+        const keys = tx.objectStore('meta').getAllKeys();
+        keys.onerror = () => reject(keys.error);
+        keys.onsuccess = () => resolve(keys.result.map(String));
+      };
+    });
+    return { caught, signedIn: window.SutraCloudSync.isSignedIn(), metaKeys };
+  }, { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE });
+
+  expect(result.caught.code).toBe('auth-expired');
+  expect(result.signedIn).toBe(false);
+  expect(result.metaKeys.some(key => key.endsWith(':wrappedVaultKey') || key === 'wrappedVaultKey')).toBe(false);
+  expect(result.metaKeys.some(key => key.endsWith(':supabaseRefreshToken') || key === 'supabaseRefreshToken')).toBe(false);
+  expect(device.net.seenAuthHeaders.map(call => call.rpc)).toEqual(['sync_get_vault_key', 'sync_put_vault_key']);
+  expect(device.net.logoutCalls).toBe(1);
+  await device.context.close();
+});
+
+test('two fresh tabs atomically choose one shared device identity', async ({ browser }) => {
+  const server = createSyncMockServer();
+  const device = await openDevice(browser, server, 'identity-tab-a');
+  const secondPage = await device.context.newPage();
+  await secondPage.goto('/Sutra.html');
+  await secondPage.waitForSelector('#fileInput', { state: 'attached' });
+  await completeOnboarding(secondPage);
+
+  for (const page of [device.page, secondPage]) {
+    await page.evaluate(() => {
+      window.SutraSync._setTransportFactory(({ deviceId }) => {
+        window.__capturedSyncDeviceId = deviceId;
+        return {
+          getVaultKey: async () => ({ ok: false, code: 'intentional-stop' })
+        };
+      });
+    });
+  }
+
+  await Promise.all([
+    device.page.evaluate(({ endpoint, passphrase }) => window.SutraSync.enable({ endpoint, passphrase }).catch(() => null), { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE }),
+    secondPage.evaluate(({ endpoint, passphrase }) => window.SutraSync.enable({ endpoint, passphrase }).catch(() => null), { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE })
+  ]);
+  const ids = await Promise.all([
+    device.page.evaluate(() => window.__capturedSyncDeviceId),
+    secondPage.evaluate(() => window.__capturedSyncDeviceId)
+  ]);
+  expect(ids[0]).toBeTruthy();
+  expect(ids[1]).toBe(ids[0]);
+  await device.context.close();
+});
+
 async function editPage(page, pageId, newBody) {
   await page.evaluate(async ({ pageId, newBody }) => {
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });

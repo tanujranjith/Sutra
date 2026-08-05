@@ -167,6 +167,24 @@ test('meta, baseline, tombstones, and conflicts persist and reload', async () =>
   assert.deepEqual(await reopened.getBaseline(), baseline);
 });
 
+test('getOrCreateMeta preserves the first durable device identity', async () => {
+  const fake = makeFakeIndexedDb();
+  const store = create({ indexedDB: fake.factory, scope: 'account:a' });
+  let factoryCalls = 0;
+  const first = await store.getOrCreateMeta('deviceId', () => {
+    factoryCalls += 1;
+    return 'device-first';
+  });
+  const second = await store.getOrCreateMeta('deviceId', () => {
+    factoryCalls += 1;
+    return 'device-second';
+  });
+  assert.equal(first, 'device-first');
+  assert.equal(second, 'device-first');
+  assert.equal(factoryCalls, 1);
+  assert.equal(await store.getMeta('deviceId'), 'device-first');
+});
+
 test('outbox replace keeps one op per record key and returns sorted ops', async () => {
   const fake = makeFakeIndexedDb();
   const store = create({ indexedDB: fake.factory });

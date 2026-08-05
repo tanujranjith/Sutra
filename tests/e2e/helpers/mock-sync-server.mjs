@@ -27,6 +27,7 @@ export function createSyncMockServer(options) {
  */
 export async function routeSyncServer(context, server, net = { down: false }) {
   const seenAuthHeaders = [];
+  net.logoutCalls = Number(net.logoutCalls) || 0;
   await context.route(`${SYNC_MOCK_ORIGIN}/**`, async (route) => {
     if (net.down) {
       return route.abort('internetdisconnected');
@@ -55,7 +56,10 @@ export async function routeSyncServer(context, server, net = { down: false }) {
       });
     }
     if (url.pathname === '/auth/v1/settings') return json(200, {});
-    if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204, body: '' });
+    if (url.pathname === '/auth/v1/logout') {
+      net.logoutCalls += 1;
+      return route.fulfill({ status: 204, body: '' });
+    }
 
     if (request.method() !== 'POST' || !url.pathname.startsWith('/rest/v1/rpc/')) {
       return json(404, { ok: false, code: 'not-found' });
@@ -68,6 +72,10 @@ export async function routeSyncServer(context, server, net = { down: false }) {
     const rpcName = url.pathname.replace('/rest/v1/rpc/', '');
     let body = {};
     try { body = JSON.parse(request.postData() || '{}'); } catch (error) { body = {}; }
+    if (typeof net.rpcOverride === 'function') {
+      const overridden = net.rpcOverride({ rpcName, body });
+      if (overridden) return json(Number(overridden.status) || 200, overridden.body || overridden);
+    }
     const { status, body: result } = server.handleRpc(rpcName, body);
     return json(status, result);
   });

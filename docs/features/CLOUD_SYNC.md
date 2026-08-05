@@ -165,6 +165,13 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   was changed locally.
 - **"Sign in again"** — the account session expired; this never deletes local
   data. Sign in again when ready.
+- **"Safely signed this browser out"** — the Supabase session was still bound
+  to an older local device identity, usually after browser storage was cleared
+  or two fresh tabs raced during initial setup. Sutra ends that stale session,
+  clears its persisted refresh token, and leaves the local workspace and Sync
+  state intact. Sign in again, then turn on or unlock Sync with the same
+  passphrase. Sutra does not generate or save a replacement vault key from this
+  error.
 - **Revoked device** — cloud access is already blocked. If the owner selected
   Revoke & wipe, local deletion occurs only after Sutra receives the dedicated,
   identity-bound status response; ambiguous failures remain locked, not erased.

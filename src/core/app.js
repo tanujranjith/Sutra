@@ -43642,6 +43642,7 @@ function buildOnboardingPlanPreview() {
 <h3>Good to know</h3>
 <ul>
   <li>Sync failures never block local saving — Sutra stays fully usable offline.</li>
+  <li>If Sutra finds a stale device-session binding, it safely signs this browser out without deleting the workspace or generating a replacement vault key. Sign in to Sutra Cloud again, then turn on or unlock Sync with the same passphrase.</li>
   <li>Portable workspace content includes durable Assistant conversations, private vault documents, page version history, compatibility recovery data, and required encrypted attachments. Browser UI state, credentials, passphrases, keys, and sync queues stay device-local.</li>
   <li>Keep the workspace open in <strong>one tab per device</strong>; a stale tab pauses its syncing and asks you to reload (same as regular multi-tab editing).</li>
   <li>Technical details: <code>docs/features/CLOUD_SYNC.md</code> in the repo docs.</li>
@@ -54584,6 +54585,13 @@ function getActiveEditor() {
             try {
                 if (window.SutraSync && typeof window.SutraSync.pause === 'function') window.SutraSync.pause();
             } catch (error) { console.warn('Could not pause Sutra Sync during cloud sign-out', error); }
+            try {
+                if (sutraSyncRuntime.store && typeof sutraSyncRuntime.store.deleteMeta === 'function') {
+                    await sutraSyncRuntime.store.deleteMeta('supabaseRefreshToken');
+                }
+            } catch (error) {
+                console.warn('Could not clear the persisted Sutra Sync refresh token during sign-out', error);
+            }
             clearSutraCloudSession();
             updateSutraCloudUi();
         }
@@ -60149,12 +60157,41 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function ensureSutraSyncDeviceId(store) {
+            if (store && typeof store.getOrCreateMeta === 'function') {
+                return store.getOrCreateMeta('deviceId', generateSutraSyncDeviceId);
+            }
             let deviceId = await store.getMeta('deviceId');
             if (!deviceId) {
                 deviceId = generateSutraSyncDeviceId();
                 await store.setMeta('deviceId', deviceId);
             }
             return deviceId;
+        }
+
+        function createSutraSyncRemoteError(result, action) {
+            const code = String(result && result.code || 'transport');
+            const messages = {
+                'device-session-mismatch': 'This sign-in session is linked to an older Sutra device identity.',
+                'revoked': 'This Sutra device has been revoked.',
+                'unauthorized': 'Sutra Sync needs you to sign in again.',
+                'auth-expired': 'Sutra Sync needs you to sign in again.',
+                'schema-mismatch': 'This Sync backend needs the current Sutra schema.'
+            };
+            const error = new Error(messages[code] || ('Could not ' + action + ' (' + code + ').'));
+            error.code = code;
+            return error;
+        }
+
+        async function recoverSutraSyncDeviceSession(error) {
+            if (!error || error.code !== 'device-session-mismatch') throw error;
+            // A Supabase auth session is intentionally bound to one device id.
+            // If local browser state lost/raced that id, end only the cloud
+            // session so the next OTP creates a fresh binding. Local workspace,
+            // outbox, baseline, wrapped key, and backups are preserved.
+            await sutraCloudSignOut();
+            const recoveryError = new Error('Sutra found an expired device-session binding and safely signed this browser out. Your local workspace is unchanged. Sign in to Sutra Cloud again, then turn on or unlock Sync.');
+            recoveryError.code = 'auth-expired';
+            throw recoveryError;
         }
 
         // The vault master key is shared across devices: the wrapped blob
@@ -60166,8 +60203,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             let remoteWrapped;               // undefined = unknown (fetch failed)
             try {
                 const remote = await transport.getVaultKey();
+                if (remote && remote.ok === false) {
+                    throw createSutraSyncRemoteError(remote, 'verify the server vault key');
+                }
                 remoteWrapped = remote && remote.wrapped ? remote.wrapped : null;
             } catch (error) {
+                // Explicit server/auth responses are known state, not a missing
+                // vault. Propagate them so setup cannot generate a second key.
+                if (error && error.code) throw error;
                 remoteWrapped = undefined;
             }
 
@@ -60191,7 +60234,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 // RPC refuses to overwrite a key that appeared concurrently.
                 if (remoteWrapped === null) {
                     const restored = await transport.putVaultKey({ wrapped: localWrapped });
-                    if (!restored || restored.ok === false) throw new Error('Could not restore the server vault key (' + String(restored && restored.code || 'transport') + ').');
+                    if (!restored || restored.ok === false) throw createSutraSyncRemoteError(restored, 'restore the server vault key');
                 }
                 return vaultKey;
             }
@@ -60212,11 +60255,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             const keyBytes = cryptoApi.generateVaultKeyBytes();
             const wrapped = await cryptoApi.wrapVaultKey(keyBytes, passphrase);
-            await store.setMeta('wrappedVaultKey', wrapped);
             const created = await transport.putVaultKey({ wrapped });
             if (!created || created.ok === false) {
-                throw new Error('Could not create the server vault key (' + String(created && created.code || 'transport') + '). Sync was not enabled.');
+                throw createSutraSyncRemoteError(created, 'create the server vault key');
             }
+            // Persist only after the server confirms creation. A rejected RPC,
+            // dropped request, or session mismatch must never leave a local key
+            // that looks authoritative on the next attempt.
+            await store.setMeta('wrappedVaultKey', wrapped);
             return cryptoApi.importVaultKey(keyBytes);
         }
 
@@ -60334,7 +60380,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const transport = createSutraSyncTransport(endpoint, deviceId);
             // Wrong passphrase against an existing vault throws HERE, before
             // any preference or engine state changes.
-            const vaultKey = await resolveSutraSyncVaultKey(store, transport, passphrase, { allowCreate: true });
+            let vaultKey;
+            try {
+                vaultKey = await resolveSutraSyncVaultKey(store, transport, passphrase, { allowCreate: true });
+            } catch (error) {
+                await recoverSutraSyncDeviceSession(error);
+            }
 
             // Pre-sync recovery point: the first merge can rewrite large parts
             // of this workspace. A real encrypted .sutra file is downloaded
@@ -60366,7 +60417,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const transport = createSutraSyncTransport(getSutraSyncEndpoint(), deviceId);
             // Uses the local wrapped key when present, otherwise fetches the
             // vault's wrapped key from the server (new-device unlock).
-            const vaultKey = await resolveSutraSyncVaultKey(store, transport, String(passphrase || ''));
+            let vaultKey;
+            try {
+                vaultKey = await resolveSutraSyncVaultKey(store, transport, String(passphrase || ''));
+            } catch (error) {
+                await recoverSutraSyncDeviceSession(error);
+            }
             if (!sutraSyncRuntime.engine) await buildSutraSyncEngine(vaultKey, { store, deviceId, transport });
             else sutraSyncRuntime.engine.setVaultKey(vaultKey);
             const outcome = await sutraSyncRuntime.engine.syncNow();

@@ -310,6 +310,14 @@ quiescence after convergence.
 
 ## 7. Transport contract
 
+Device registration and vault discovery are ordered safety boundaries. Tabs in
+one browser profile atomically create/read one durable device ID. A structured
+RPC failure is never normalized to a missing vault row. In particular,
+`device-session-mismatch` ends the stale Supabase session and requires a fresh
+sign-in without deleting the workspace, outbox, baseline, conflicts, or wrapped
+vault key. A newly generated wrapped key becomes local authority only after the
+create-only server RPC confirms it; failed creation leaves no local key behind.
+
 ```
 pull({ cursor })        -> { ops: [envelope...], cursor }   // ops after cursor, ordered
 push({ ops, cursor })   -> { ok: true, cursor }             // atomic append

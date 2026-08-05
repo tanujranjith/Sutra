@@ -271,6 +271,12 @@ Invariants any change must preserve:
   change fails closed before pull/push/unlock so queues, device IDs, baselines,
   wrapped keys, refresh tokens, assets, and conflict records cannot cross
   accounts. Preserve the local workspace rather than combining cloud accounts.
+  Device identity creation must be one atomic IndexedDB transaction across tabs.
+  An explicit RPC failure (especially `device-session-mismatch`) is known server
+  state, never evidence that the server vault key is absent: do not generate or
+  persist a replacement key. A mismatch recovery ends the stale Supabase auth
+  session and removes its persisted refresh token while preserving the local
+  workspace, device-scoped Sync state, and existing wrapped key for reauthentication.
   The reviewed/static guarantees do not substitute for the operator-run
   Account A/B REST/RPC/Storage/payload checklist in
   `docs/release/SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md`.
