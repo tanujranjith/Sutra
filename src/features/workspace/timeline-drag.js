@@ -11,6 +11,7 @@
     var dragData = null;
     var dragGhost = null;
     var undoStack = [];
+    var pushUndoStack = [];
     var observer = null;
 
     function clone(value) {
@@ -318,6 +319,322 @@
         }
     }
 
+    var MAX_PUSH_MINUTES = 7 * 24 * 60;
+
+    function dateTimeStamp(dateValue, timeValue) {
+        var rawDate = text(dateValue).slice(0, 10);
+        var minuteValue = hhmmToMinutes(timeValue);
+        if (!validDate(rawDate) || minuteValue === null) return null;
+        var parts = rawDate.split('-').map(Number);
+        return Date.UTC(parts[0], parts[1] - 1, parts[2], Math.floor(minuteValue / 60), minuteValue % 60);
+    }
+
+    function stampParts(stamp) {
+        var date = new Date(stamp);
+        return {
+            date: date.getUTCFullYear() + '-' + String(date.getUTCMonth() + 1).padStart(2, '0') + '-' + String(date.getUTCDate()).padStart(2, '0'),
+            time: String(date.getUTCHours()).padStart(2, '0') + ':' + String(date.getUTCMinutes()).padStart(2, '0')
+        };
+    }
+
+    function shiftDateKey(value, dayDelta) {
+        var stamp = dateTimeStamp(value, '00:00');
+        return stamp === null ? text(value) : stampParts(stamp + (dayDelta * 86400000)).date;
+    }
+
+    function rotateWeekday(value, dayDelta) {
+        var day = Number(value);
+        if (!Number.isInteger(day) || day < 0 || day > 6) return null;
+        return ((day + dayDelta) % 7 + 7) % 7;
+    }
+
+    function normalizePushRequest(options) {
+        var input = options || {};
+        var amount = Number(input.amount);
+        var unit = text(input.unit || 'minutes').toLowerCase();
+        var direction = text(input.direction || 'forward').toLowerCase();
+        var multiplier = unit === 'hours' ? 60 : 1;
+        var minutes = Math.round(amount * multiplier);
+        if (!Number.isFinite(amount) || amount <= 0 || minutes <= 0 || minutes > MAX_PUSH_MINUTES || ['minutes', 'hours'].indexOf(unit) < 0 || ['forward', 'backward'].indexOf(direction) < 0) {
+            return { ok: false, code: 'invalid_amount', deltaMinutes: 0 };
+        }
+        return { ok: true, code: 'ready', amount: amount, unit: unit, direction: direction, deltaMinutes: direction === 'backward' ? -minutes : minutes };
+    }
+
+    function shiftBlockForPush(block, deltaMinutes, now) {
+        var start = hhmmToMinutes(block && block.start);
+        var end = hhmmToMinutes(block && block.end);
+        if (start === null || end === null || end <= start) {
+            return { ok: false, code: 'invalid_time', block: block };
+        }
+        var rawDate = text(block && block.date).slice(0, 10);
+        var hasDate = validDate(rawDate);
+        var nextDate = rawDate;
+        var nextStart;
+        var nextEnd;
+        var dayDelta = 0;
+
+        if (hasDate) {
+            var startStamp = dateTimeStamp(rawDate, block.start);
+            var endStamp = dateTimeStamp(rawDate, block.end);
+            var shiftedStart = stampParts(startStamp + (deltaMinutes * 60000));
+            var shiftedEnd = stampParts(endStamp + (deltaMinutes * 60000));
+            if (shiftedStart.date !== shiftedEnd.date) {
+                return { ok: false, code: 'crosses_midnight', block: block };
+            }
+            nextDate = shiftedStart.date;
+            nextStart = shiftedStart.time;
+            nextEnd = shiftedEnd.time;
+            dayDelta = Math.round((dateTimeStamp(nextDate, '00:00') - dateTimeStamp(rawDate, '00:00')) / 86400000);
+        } else {
+            var shiftedStartMinutes = start + deltaMinutes;
+            var shiftedEndMinutes = end + deltaMinutes;
+            var startDay = Math.floor(shiftedStartMinutes / 1440);
+            var endDay = Math.floor(shiftedEndMinutes / 1440);
+            if (startDay !== endDay) return { ok: false, code: 'crosses_midnight', block: block };
+            if (startDay !== 0) return { ok: false, code: 'missing_date', block: block };
+            nextStart = minutesToHHMM(((shiftedStartMinutes % 1440) + 1440) % 1440);
+            nextEnd = minutesToHHMM(((shiftedEndMinutes % 1440) + 1440) % 1440);
+        }
+
+        var shifted = Object.assign({}, block, {
+            start: nextStart,
+            end: nextEnd,
+            updatedAt: now
+        });
+        if (hasDate) shifted.date = nextDate;
+
+        var recurrenceUntilDate = text(shifted.recurrenceUntil).slice(0, 10);
+        if (dayDelta && validDate(recurrenceUntilDate)) {
+            shifted.recurrenceUntil = shiftDateKey(recurrenceUntilDate, dayDelta);
+        }
+        var recurrence = text(shifted.recurrence || 'none').toLowerCase();
+        if (dayDelta && recurrence === 'weekdays') {
+            shifted.recurrence = 'weekly';
+            shifted.weeklyDays = [1, 2, 3, 4, 5].map(function (day) { return rotateWeekday(day, dayDelta); });
+        } else if (dayDelta && Array.isArray(shifted.weeklyDays)) {
+            shifted.weeklyDays = shifted.weeklyDays.map(function (day) { return rotateWeekday(day, dayDelta); }).filter(function (day) { return day !== null; });
+        }
+        return { ok: true, code: 'ready', block: shifted, dayDelta: dayDelta };
+    }
+
+    function previewPushTime(options, candidates) {
+        var request = normalizePushRequest(options);
+        if (!request.ok) return Object.assign(request, { affectedCount: 0, blocked: [], changes: [] });
+        var source = clone(Array.isArray(candidates) ? candidates : blocks());
+        if (!source.length) return Object.assign(request, { ok: false, code: 'empty', affectedCount: 0, blocked: [], changes: [] });
+        var now = Number(options && options.now) || Date.now();
+        var blocked = [];
+        var changes = [];
+        var shiftedBlocks = source.map(function (block) {
+            var result = shiftBlockForPush(block, request.deltaMinutes, now);
+            if (!result.ok) {
+                blocked.push({ id: text(block && block.id), name: text(block && (block.name || block.title) || 'Untitled block'), code: result.code });
+                return block;
+            }
+            changes.push({
+                id: text(block && block.id),
+                name: text(block && (block.name || block.title) || 'Untitled block'),
+                before: { date: text(block && block.date).slice(0, 10), start: text(block && block.start), end: text(block && block.end) },
+                after: { date: text(result.block.date).slice(0, 10), start: text(result.block.start), end: text(result.block.end) }
+            });
+            return result.block;
+        });
+        if (blocked.length) {
+            return Object.assign(request, { ok: false, code: 'blocked', affectedCount: changes.length, blocked: blocked, changes: changes, blocks: source });
+        }
+        return Object.assign(request, { ok: true, code: 'ready', affectedCount: changes.length, blocked: [], changes: changes, blocks: shiftedBlocks });
+    }
+
+    function updatePushUndoButton() {
+        if (typeof document === 'undefined') return;
+        var button = document.getElementById('timelineUndoPushTimeBtn');
+        if (!button) return;
+        button.hidden = pushUndoStack.length === 0;
+        button.disabled = pushUndoStack.length === 0;
+    }
+
+    async function pushTime(options) {
+        var before = clone(blocks());
+        var preview = previewPushTime(options, before);
+        if (!preview.ok) return preview;
+        replaceBlocks(preview.blocks);
+        try {
+            await persist('timeline-push-time');
+            pushUndoStack.push({ before: before, after: clone(preview.blocks), affectedCount: preview.affectedCount, deltaMinutes: preview.deltaMinutes });
+            if (pushUndoStack.length > 10) pushUndoStack.shift();
+            updatePushUndoButton();
+            refreshAffectedViews();
+            announce('Pushed ' + preview.affectedCount + ' Timeline block' + (preview.affectedCount === 1 ? '' : 's') + '.');
+            return Object.assign({}, preview, { ok: true, code: 'saved' });
+        } catch (error) {
+            replaceBlocks(before);
+            refreshAffectedViews();
+            report(error, 'timeline-push-time.apply');
+            return Object.assign({}, preview, { ok: false, code: 'persistence_failed', error: error });
+        }
+    }
+
+    async function undoLastPushTime() {
+        var receipt = pushUndoStack.pop();
+        if (!receipt) return { ok: false, code: 'nothing_to_undo' };
+        var current = clone(blocks());
+        if (JSON.stringify(current) !== JSON.stringify(receipt.after)) {
+            pushUndoStack.push(receipt);
+            updatePushUndoButton();
+            return { ok: false, code: 'calendar_changed' };
+        }
+        replaceBlocks(receipt.before);
+        try {
+            await persist('timeline-push-time-undo');
+            updatePushUndoButton();
+            refreshAffectedViews();
+            announce('Undid the last Push time change.');
+            return { ok: true, code: 'undone', affectedCount: receipt.affectedCount };
+        } catch (error) {
+            replaceBlocks(current);
+            pushUndoStack.push(receipt);
+            updatePushUndoButton();
+            refreshAffectedViews();
+            return { ok: false, code: 'undo_persistence_failed', error: error };
+        }
+    }
+
+    function formatPushAmount(preview) {
+        var value = preview.amount;
+        var unit = preview.unit === 'hours' ? 'hour' : 'minute';
+        return value + ' ' + unit + (value === 1 ? '' : 's');
+    }
+
+    function formatPushMoment(value) {
+        var clock = text(value && value.start);
+        try {
+            if (global.SutraTimeUtils && typeof global.SutraTimeUtils.formatClockTime === 'function') clock = global.SutraTimeUtils.formatClockTime(clock);
+        } catch (_) {}
+        return [text(value && value.date), clock].filter(Boolean).join(' at ');
+    }
+
+    function closeTimelineMoreMenu() {
+        if (typeof document === 'undefined') return;
+        var menu = document.getElementById('timelineMoreMenu');
+        var trigger = document.getElementById('timelineMoreBtn');
+        if (menu) menu.hidden = true;
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPushTimeDialog() {
+        if (typeof document === 'undefined') return null;
+        var existing = document.getElementById('sutraPushTimeOverlay');
+        if (existing) existing.remove();
+        closeTimelineMoreMenu();
+        var previousFocus = document.activeElement;
+        var overlay = document.createElement('div');
+        overlay.id = 'sutraPushTimeOverlay';
+        overlay.className = 'sutra-modal-overlay sutra-timeline-schedule-overlay sutra-push-time-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'sutraPushTimeTitle');
+        var form = document.createElement('form');
+        form.className = 'sutra-modal-card sutra-timeline-schedule-card sutra-push-time-card';
+        var title = document.createElement('h3'); title.id = 'sutraPushTimeTitle'; title.textContent = 'Push time';
+        var description = document.createElement('p'); description.className = 'sutra-push-time-description'; description.textContent = 'Move every Timeline block forward or backward by the same amount. Durations, links, colors, and notes stay unchanged.';
+        var fields = document.createElement('div'); fields.className = 'sutra-push-time-fields';
+        var directionLabel = document.createElement('label'); directionLabel.textContent = 'Direction';
+        var direction = document.createElement('select'); direction.id = 'pushTimeDirection'; direction.className = 'neumo-input';
+        [['forward', 'Forward'], ['backward', 'Backward']].forEach(function (row) { var option = document.createElement('option'); option.value = row[0]; option.textContent = row[1]; direction.appendChild(option); }); directionLabel.appendChild(direction);
+        var amountLabel = document.createElement('label'); amountLabel.textContent = 'Amount';
+        var amount = document.createElement('input'); amount.id = 'pushTimeAmount'; amount.type = 'number'; amount.min = '1'; amount.max = '168'; amount.step = '1'; amount.value = '30'; amount.required = true; amountLabel.appendChild(amount);
+        var unitLabel = document.createElement('label'); unitLabel.textContent = 'Unit';
+        var unit = document.createElement('select'); unit.id = 'pushTimeUnit'; unit.className = 'neumo-input';
+        [['minutes', 'Minutes'], ['hours', 'Hours']].forEach(function (row) { var option = document.createElement('option'); option.value = row[0]; option.textContent = row[1]; unit.appendChild(option); }); unitLabel.appendChild(unit);
+        fields.appendChild(directionLabel); fields.appendChild(amountLabel); fields.appendChild(unitLabel);
+        var summary = document.createElement('p'); summary.id = 'pushTimeSummary'; summary.className = 'sutra-push-time-summary'; summary.setAttribute('aria-live', 'polite');
+        var examples = document.createElement('ul'); examples.className = 'sutra-push-time-examples';
+        var warning = document.createElement('p'); warning.className = 'sutra-push-time-warning'; warning.hidden = true;
+        var actions = document.createElement('div'); actions.className = 'sutra-push-time-actions';
+        var cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn btn-secondary'; cancel.textContent = 'Cancel';
+        var apply = document.createElement('button'); apply.type = 'submit'; apply.className = 'btn btn-primary'; apply.id = 'applyPushTimeBtn'; apply.textContent = 'Push all blocks';
+        actions.appendChild(cancel); actions.appendChild(apply);
+
+        function close() {
+            overlay.remove();
+            if (previousFocus && typeof previousFocus.focus === 'function' && document.contains(previousFocus)) previousFocus.focus();
+        }
+        function refreshPreview() {
+            amount.max = unit.value === 'hours' ? '168' : String(MAX_PUSH_MINUTES);
+            var preview = previewPushTime({ direction: direction.value, amount: amount.value, unit: unit.value });
+            examples.replaceChildren(); warning.hidden = true; warning.textContent = '';
+            if (preview.code === 'empty') {
+                summary.textContent = 'There are no Timeline blocks to move.';
+            } else if (preview.code === 'invalid_amount') {
+                summary.textContent = 'Enter an amount between 1 minute and 168 hours.';
+            } else if (preview.code === 'blocked') {
+                summary.textContent = 'Nothing will move until every block can be shifted safely.';
+                var names = preview.blocked.slice(0, 3).map(function (item) { return item.name; });
+                warning.hidden = false;
+                warning.textContent = preview.blocked.length + ' block' + (preview.blocked.length === 1 ? '' : 's') + ' would cross midnight or has an invalid/missing date: ' + names.join(', ') + (preview.blocked.length > names.length ? ', and more.' : '.');
+            } else {
+                summary.textContent = preview.affectedCount + ' block' + (preview.affectedCount === 1 ? '' : 's') + ' will move ' + preview.direction + ' by ' + formatPushAmount(preview) + '.';
+                preview.changes.slice(0, 3).forEach(function (change) {
+                    var item = document.createElement('li');
+                    item.textContent = change.name + ': ' + formatPushMoment(change.before) + ' -> ' + formatPushMoment(change.after);
+                    examples.appendChild(item);
+                });
+            }
+            apply.disabled = !preview.ok;
+            return preview;
+        }
+        [direction, amount, unit].forEach(function (control) { control.addEventListener('input', refreshPreview); control.addEventListener('change', refreshPreview); });
+        cancel.addEventListener('click', close);
+        overlay.addEventListener('click', function (event) { if (event.target === overlay) close(); });
+        overlay.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+            if (event.key !== 'Tab') return;
+            var focusable = Array.from(form.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'));
+            if (!focusable.length) return;
+            var first = focusable[0]; var last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        });
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            var preview = refreshPreview();
+            if (!preview.ok) return;
+            apply.disabled = true;
+            var result = await pushTime({ direction: direction.value, amount: amount.value, unit: unit.value });
+            if (result.ok) {
+                toast('Pushed ' + result.affectedCount + ' Timeline block' + (result.affectedCount === 1 ? '' : 's') + ' ' + result.direction + '. Undo is available in the Timeline menu.');
+                close();
+            } else {
+                summary.textContent = result.code === 'persistence_failed' ? 'Push time could not be saved. Your calendar was restored.' : 'Push time could not be applied.';
+                apply.disabled = false;
+            }
+        });
+        form.appendChild(title); form.appendChild(description); form.appendChild(fields); form.appendChild(summary); form.appendChild(examples); form.appendChild(warning); form.appendChild(actions);
+        overlay.appendChild(form); document.body.appendChild(overlay); refreshPreview(); amount.focus(); amount.select();
+        return overlay;
+    }
+
+    function bindPushTimeControls() {
+        if (typeof document === 'undefined') return;
+        var pushButton = document.getElementById('timelinePushTimeBtn');
+        if (pushButton && pushButton.dataset.bound !== 'true') {
+            pushButton.dataset.bound = 'true';
+            pushButton.addEventListener('click', function () { openPushTimeDialog(); });
+        }
+        var undoButton = document.getElementById('timelineUndoPushTimeBtn');
+        if (undoButton && undoButton.dataset.bound !== 'true') {
+            undoButton.dataset.bound = 'true';
+            undoButton.addEventListener('click', async function () {
+                closeTimelineMoreMenu(); undoButton.disabled = true;
+                var result = await undoLastPushTime();
+                toast(result.ok ? 'Undid the last Push time change.' : (result.code === 'calendar_changed' ? 'Undo was not applied because the calendar changed after Push time.' : 'The last Push time change could not be undone.'));
+                updatePushUndoButton();
+            });
+        }
+        updatePushUndoButton();
+    }
+
     function itemFromElement(element) {
         return enrichCanonicalSource({
             title: element.getAttribute('data-drag-title') || element.textContent.trim().slice(0, 120),
@@ -502,7 +819,7 @@
         });
     }
     function init() {
-        ensureLiveRegion(); enhanceSchedulingSources(document);
+        ensureLiveRegion(); enhanceSchedulingSources(document); bindPushTimeControls();
         document.addEventListener('dragstart', handleDragStart);
         document.addEventListener('dragend', handleDragEnd);
         document.addEventListener('dragover', function (event) {
@@ -535,6 +852,10 @@
         createBlockFromDrop: function (date, startMin, duration, title, source) { return scheduleItemAt({ title: title, source: source }, { date: date, startMin: startMin, durationMinutes: duration }); },
         rescheduleBlock: rescheduleBlock,
         undoLastSchedule: undoLastSchedule,
+        previewPushTime: previewPushTime,
+        pushTime: pushTime,
+        undoLastPushTime: undoLastPushTime,
+        openPushTimeDialog: openPushTimeDialog,
         openScheduleDialog: openScheduleDialog,
         findConflicts: findConflicts,
         findDropTimeFromY: findDropTimeFromY,

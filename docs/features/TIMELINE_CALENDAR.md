@@ -36,6 +36,21 @@ Creation, edit, delete, conflict detection, undo, linked Homework/Task source
 identity, persistence rollback, and `sutra:schedule-changed` remain owned by
 the existing Timeline adapter and app runtime.
 
+## Push time
+
+**More > Push time** moves every canonical Timeline block forward or backward
+by one shared minute or hour offset. The dialog previews the affected count and
+sample before/after times before applying the change. The operation preserves
+block duration, source links, colors, notes, and unknown compatibility fields,
+then flushes the complete change through canonical workspace persistence.
+
+Push time is all-or-nothing: if any block has invalid timing, lacks a date when
+a day change is required, or would span midnight, no blocks move. Whole blocks
+may move to an adjacent date, including the corresponding recurrence weekday.
+The latest successful Push time operation can be undone from the Timeline More
+menu during the current browser session; the undo is persisted atomically too.
+The maximum shift is seven days.
+
 ## Data and privacy
 
 This is a rendering and interaction change only. No schema, migration,

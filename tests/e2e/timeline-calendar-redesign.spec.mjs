@@ -10,6 +10,10 @@ async function openTimeline(page) {
   } catch (error) {
     throw new Error(`Sutra bridge did not initialize: ${pageErrors.join(' | ') || error.message}`);
   }
+  // The bridge and calendar renderer install before IndexedDB hydration.
+  // This core binding is set by initApp only after the canonical workspace has
+  // loaded, so injected test blocks cannot be replaced by a late hydrate.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await page.evaluate(() => {
     const overlay = document.getElementById('studentOnboardingOverlay');
     if (overlay) { overlay.hidden = true; overlay.classList.remove('active'); overlay.style.display = 'none'; }
@@ -27,7 +31,7 @@ async function openTimeline(page) {
     );
     window.flowAtelier.renderTimeline();
   });
-  await page.waitForSelector('#timelineLegacyCalendar .sutra-calendar-time-view');
+  await page.waitForSelector('#timelineLegacyCalendar .sutra-calendar-time-view', { state: 'attached' });
 }
 
 test('calendar renderer provides Month, Week, and Day grids without replacing Timeline data', async ({ page }) => {
@@ -113,4 +117,63 @@ test('an open canvas cannot remain visible beneath Timeline after navigation', a
   await expect(page.locator('#view-timeline')).toBeVisible();
   await expect(page.locator('#view-notes')).toBeHidden();
   await expect(page.locator('#view-notes')).toHaveCSS('display', 'none');
+});
+
+test('Push time shifts every calendar block and survives reload', async ({ page }) => {
+  await openTimeline(page);
+  await page.locator('#timelineMoreBtn').click();
+  await page.locator('#timelinePushTimeBtn').click();
+
+  await expect(page.locator('#sutraPushTimeOverlay')).toBeVisible();
+  await expect(page.locator('#pushTimeSummary')).toHaveText('6 blocks will move forward by 30 minutes.');
+  await expect(page.locator('.sutra-push-time-examples li')).toHaveCount(3);
+  await page.locator('#applyPushTimeBtn').click();
+  await expect(page.locator('#sutraPushTimeOverlay')).toHaveCount(0);
+
+  const shifted = await page.evaluate(() => window.flowAtelier.timeBlocks
+    .filter(block => block.id === 'cal-a' || block.id === 'cal-f')
+    .map(block => ({ id: block.id, start: block.start, end: block.end })));
+  expect(shifted).toEqual([
+    { id: 'cal-a', start: '09:30', end: '10:30' },
+    { id: 'cal-f', start: '14:30', end: '15:00' }
+  ]);
+  const storedBeforeReload = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('noteflow_atelier_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction('workspace', 'readonly');
+      const get = tx.objectStore('workspace').get('root');
+      get.onerror = () => reject(get.error);
+      get.onsuccess = () => resolve((get.result && get.result.timeBlocks || [])
+        .filter(block => block.id === 'cal-a' || block.id === 'cal-f')
+        .map(block => ({ id: block.id, start: block.start, end: block.end })));
+      tx.oncomplete = () => db.close();
+    };
+  }));
+  expect(storedBeforeReload).toEqual(shifted);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+  const afterReload = await page.evaluate(() => new Promise((resolve, reject) => {
+    const live = window.flowAtelier.timeBlocks
+      .filter(block => block.id === 'cal-a' || block.id === 'cal-f')
+      .map(block => ({ id: block.id, start: block.start, end: block.end }));
+    const open = indexedDB.open('noteflow_atelier_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction('workspace', 'readonly');
+      const get = tx.objectStore('workspace').get('root');
+      get.onerror = () => reject(get.error);
+      get.onsuccess = () => resolve({
+        live,
+        stored: (get.result && get.result.timeBlocks || [])
+          .filter(block => block.id === 'cal-a' || block.id === 'cal-f')
+          .map(block => ({ id: block.id, start: block.start, end: block.end }))
+      });
+      tx.oncomplete = () => db.close();
+    };
+  }));
+  expect(afterReload).toEqual({ live: shifted, stored: shifted });
 });

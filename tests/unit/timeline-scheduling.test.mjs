@@ -137,3 +137,95 @@ test('undo restores the grouped prior schedule and persists it', async () => {
     assert.deepEqual(rows, []);
     assert.equal(flushes, 2);
 });
+
+test('Push time previews forward and backward shifts without losing block fields', () => {
+    const initial = [
+        { id: 'one', date: '2026-07-30', start: '11:30', end: '12:30', name: 'Cloud work', custom: { keep: true } },
+        { id: 'two', date: '2026-07-30', start: '12:30', end: '14:30', name: 'Study' }
+    ];
+    setup(initial);
+
+    const forward = api.previewPushTime({ direction: 'forward', amount: 90, unit: 'minutes', now: 77 }, initial);
+    assert.equal(forward.ok, true);
+    assert.equal(forward.affectedCount, 2);
+    assert.deepEqual(forward.blocks.map((block) => [block.start, block.end]), [['13:00', '14:00'], ['14:00', '16:00']]);
+    assert.deepEqual(forward.blocks[0].custom, { keep: true });
+    assert.equal(forward.blocks[0].updatedAt, 77);
+
+    const backward = api.previewPushTime({ direction: 'backward', amount: 1, unit: 'hours', now: 88 }, initial);
+    assert.equal(backward.ok, true);
+    assert.deepEqual(backward.blocks.map((block) => [block.start, block.end]), [['10:30', '11:30'], ['11:30', '13:30']]);
+});
+
+test('Push time moves dates and recurrence weekdays when a whole block crosses a day boundary', () => {
+    const initial = [{
+        id: 'late',
+        date: '2026-07-27',
+        start: '23:00',
+        end: '23:30',
+        name: 'Late review',
+        recurrence: 'weekdays',
+        recurrenceUntil: '2026-08-07'
+    }];
+    setup(initial);
+
+    const preview = api.previewPushTime({ direction: 'forward', amount: 2, unit: 'hours', now: 99 }, initial);
+    assert.equal(preview.ok, true);
+    assert.equal(preview.blocks[0].date, '2026-07-28');
+    assert.equal(preview.blocks[0].start, '01:00');
+    assert.equal(preview.blocks[0].end, '01:30');
+    assert.equal(preview.blocks[0].recurrence, 'weekly');
+    assert.deepEqual(preview.blocks[0].weeklyDays, [2, 3, 4, 5, 6]);
+    assert.equal(preview.blocks[0].recurrenceUntil, '2026-08-08');
+});
+
+test('Push time is all-or-nothing when any block would span midnight', async () => {
+    const initial = [
+        { id: 'safe', date: '2026-07-30', start: '10:00', end: '11:00', name: 'Safe' },
+        { id: 'overnight', date: '2026-07-30', start: '23:00', end: '23:45', name: 'Overnight' }
+    ];
+    const rows = setup(initial);
+    const preview = api.previewPushTime({ direction: 'forward', amount: 30, unit: 'minutes' }, initial);
+    assert.equal(preview.ok, false);
+    assert.equal(preview.code, 'blocked');
+    assert.deepEqual(preview.blocked.map((item) => item.id), ['overnight']);
+
+    const result = await api.pushTime({ direction: 'forward', amount: 30, unit: 'minutes' });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'blocked');
+    assert.deepEqual(rows, initial);
+});
+
+test('Push time persists atomically, supports undo, and rolls back a rejected save', async () => {
+    const initial = [{ id: 'keep', date: '2026-07-30', start: '09:00', end: '10:00', name: 'Keep', custom: 7 }];
+    const reasons = [];
+    const rows = setup(initial, async (reason) => { reasons.push(reason); });
+
+    const pushed = await api.pushTime({ direction: 'forward', amount: 45, unit: 'minutes' });
+    assert.equal(pushed.ok, true);
+    assert.equal(pushed.code, 'saved');
+    assert.equal(rows[0].start, '09:45');
+    assert.equal(rows[0].end, '10:45');
+    assert.equal(rows[0].custom, 7);
+
+    const undone = await api.undoLastPushTime();
+    assert.equal(undone.ok, true);
+    assert.deepEqual(rows, initial);
+    assert.deepEqual(reasons, ['timeline-push-time', 'timeline-push-time-undo']);
+
+    const rejectedRows = setup(initial, async () => { throw new Error('disk unavailable'); });
+    const rejected = await api.pushTime({ direction: 'backward', amount: 30, unit: 'minutes' });
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.code, 'persistence_failed');
+    assert.deepEqual(rejectedRows, initial);
+
+    const changedRows = setup(initial);
+    const shiftedAgain = await api.pushTime({ direction: 'forward', amount: 15, unit: 'minutes' });
+    assert.equal(shiftedAgain.ok, true);
+    changedRows[0].name = 'Edited after Push time';
+    const unsafeUndo = await api.undoLastPushTime();
+    assert.equal(unsafeUndo.ok, false);
+    assert.equal(unsafeUndo.code, 'calendar_changed');
+    assert.equal(changedRows[0].name, 'Edited after Push time');
+    assert.equal(changedRows[0].start, '09:15');
+});

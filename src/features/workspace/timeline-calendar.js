@@ -15,6 +15,7 @@
     function add(date, days) { var next = new Date(date.getFullYear(), date.getMonth(), date.getDate()); next.setDate(next.getDate() + days); return next; }
     function minutes(value) { var match = /^(\d{1,2}):(\d{2})$/.exec(text(value)); return match ? Number(match[1]) * 60 + Number(match[2]) : null; }
     function time(value) { var total = Math.max(0, Math.min(1439, Math.round(value))); return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0'); }
+    function displayTime(value) { var raw = text(value); var total = minutes(raw); if (total === null) return raw; var formatSelect = document.getElementById('timeFormatSelect'); if (formatSelect && formatSelect.value === '24') return time(total); var formatter = global.SutraTimeUtils && global.SutraTimeUtils.formatClockTime; return typeof formatter === 'function' ? formatter(time(total)) : raw; }
     function blocks() { return global.flowAtelier && Array.isArray(global.flowAtelier.timeBlocks) ? global.flowAtelier.timeBlocks : []; }
     function occur(block, date) {
         if (!block) return false;
@@ -51,9 +52,9 @@
         var button = el('button', 'sutra-calendar-event'); button.type = 'button';
         button.draggable = !(global.matchMedia && global.matchMedia('(hover: none) and (pointer: coarse)').matches);
         button.setAttribute('data-block-id', text(block.id)); button.setAttribute('data-block-name', text(block.name || 'Untitled'));
-        button.setAttribute('aria-label', text(block.name || 'Untitled') + ', ' + date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' + text(block.start) + ' to ' + text(block.end) + ', ' + source(block));
+        button.setAttribute('aria-label', text(block.name || 'Untitled') + ', ' + date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' + displayTime(block.start) + ' to ' + displayTime(block.end) + ', ' + source(block));
         button.style.setProperty('--sutra-calendar-event-color', color(block)); Object.keys(style || {}).forEach(function (name) { button.style[name] = style[name]; });
-        button.appendChild(el('span', 'sutra-calendar-event-time', text(block.start) + ' – ' + text(block.end)));
+        button.appendChild(el('span', 'sutra-calendar-event-time', displayTime(block.start) + ' - ' + displayTime(block.end)));
         button.appendChild(el('span', 'sutra-calendar-event-title', text(block.name || 'Untitled')));
         if (expanded) button.appendChild(el('span', 'sutra-calendar-event-source', source(block) + (block.courseId ? ' · ' + block.courseId : '')));
         button.addEventListener('click', function (event) { event.stopPropagation(); openBlock(block); }); return button;
@@ -73,7 +74,7 @@
                 var dayButton = el('button', 'sutra-calendar-day-number', String(date.getDate())); dayButton.type = 'button';
                 dayButton.setAttribute('aria-label', 'Open ' + cell.getAttribute('aria-label') + (daily.length ? ', ' + daily.length + ' scheduled item' + (daily.length === 1 ? '' : 's') : ', no scheduled items'));
                 dayButton.addEventListener('click', function (event) { event.stopPropagation(); openDay(); }); cell.appendChild(dayButton);
-                var eventList = el('div', 'sutra-calendar-month-events'); eventList.setAttribute('data-event-count', String(daily.length)); daily.slice(0, 3).forEach(function (block) { var item = el('button', 'sutra-calendar-month-event'); item.type = 'button'; item.style.setProperty('--sutra-calendar-event-color', color(block)); item.textContent = text(block.start) + ' ' + text(block.name || 'Untitled'); item.addEventListener('click', function (event) { event.stopPropagation(); openBlock(block); }); eventList.appendChild(item); });
+                var eventList = el('div', 'sutra-calendar-month-events'); eventList.setAttribute('data-event-count', String(daily.length)); daily.slice(0, 3).forEach(function (block) { var item = el('button', 'sutra-calendar-month-event'); item.type = 'button'; item.style.setProperty('--sutra-calendar-event-color', color(block)); item.textContent = displayTime(block.start) + ' ' + text(block.name || 'Untitled'); item.addEventListener('click', function (event) { event.stopPropagation(); openBlock(block); }); eventList.appendChild(item); });
                 if (daily.length > 3) { var more = el('button', 'sutra-calendar-more', '+' + (daily.length - 3) + ' more'); more.type = 'button'; more.addEventListener('click', function (event) { event.stopPropagation(); dayButton.click(); }); eventList.appendChild(more); }
                 cell.appendChild(eventList); cell.addEventListener('click', function () { if (global.matchMedia && global.matchMedia('(max-width: 480px)').matches) openDay(); else openBlock(null, dateKey); }); cell.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (global.matchMedia && global.matchMedia('(max-width: 480px)').matches) openDay(); else openBlock(null, dateKey); } }); days.appendChild(cell);
             }(add(start, i)));
