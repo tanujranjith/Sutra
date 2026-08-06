@@ -34,6 +34,7 @@
         hostEl: null,        // element the editor is mounted into
         mirrorEl: null,      // hidden legacy #editor kept in sync for save paths
         callbacks: {},       // { onUserEdit, onSelectionChange }
+        placeholder: '',     // retained when a page load rebuilds the editor
         applyingExternal: 0, // >0 while setContent runs (suppresses onUpdate)
         mirrorTimer: null,
         selectionTimer: null,
@@ -366,12 +367,15 @@
             onUserEdit: options.onUserEdit,
             onSelectionChange: options.onSelectionChange
         };
+        state.placeholder = options.placeholder || 'Start writing\u2026';
 
         var eng = engine();
         try {
             state.editor = eng.create(host, {
-                placeholder: options.placeholder || 'Start writing…',
-                content: '',
+                placeholder: state.placeholder,
+                content: Object.prototype.hasOwnProperty.call(options, 'content')
+                    ? normalizeLegacyHtml(options.content || '')
+                    : '',
                 extraExtensions: buildPreservedNodes(eng),
                 editorProps: {
                     transformPastedHTML: stripForeignPasteStyles,
@@ -431,6 +435,7 @@
         state.hostEl = null;
         state.mirrorEl = null;
         state.callbacks = {};
+        state.placeholder = '';
     }
 
     // Load storage-format HTML (already sanitized by app.js) into the editor.
@@ -446,6 +451,27 @@
         } finally {
             state.applyingExternal--;
         }
+    }
+
+    // Loading another note is a document boundary, not an editable transaction.
+    // Recreate TipTap with the incoming document as its initial state so its
+    // undo stack cannot reach content that belonged to the previously open note.
+    function loadDocument(html) {
+        if (!state.editor || !state.hostEl) return false;
+        var options = {
+            host: state.hostEl,
+            mirror: state.mirrorEl,
+            placeholder: state.placeholder || 'Start writing\u2026',
+            onUserEdit: state.callbacks.onUserEdit,
+            onSelectionChange: state.callbacks.onSelectionChange,
+            content: html || ''
+        };
+        if (!mount(options)) return false;
+        // Baseline the legacy mirror immediately for the canonical save path.
+        flushToMirror();
+        polishPreservedCards();
+        scheduleSelectionState();
+        return true;
     }
 
     // Serialize the current document back to legacy storage format.
@@ -1378,6 +1404,7 @@
         mount: mount,
         destroy: destroy,
         setContent: setContent,
+        loadDocument: loadDocument,
         getStorageHtml: getStorageHtml,
         flushToMirror: flushToMirror,
         insertHtml: insertHtml,

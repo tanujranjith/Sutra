@@ -91,6 +91,72 @@ test('ordinary autosave verifies and never shows the save-failure banner', async
   await expect(page.locator('#sutraSaveFailureBanner')).toBeHidden();
 });
 
+test('autosave reopens a connection that starts closing before its transaction', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const rows = new Map();
+    let openCalls = 0;
+    let closeFirstConnection = true;
+    const fakeFactory = {
+      open() {
+        openCalls += 1;
+        const openRequest = {};
+        let closing = false;
+        const db = {
+          objectStoreNames: { contains: () => true },
+          createObjectStore() {},
+          close() { closing = true; },
+          transaction() {
+            if (closing) throw new DOMException('The database connection is closing.', 'InvalidStateError');
+            const tx = { error: null };
+            tx.objectStore = () => ({
+              put(value, key) {
+                const request = {};
+                queueMicrotask(() => {
+                  rows.set(key, value);
+                  request.onsuccess?.();
+                  tx.oncomplete?.();
+                });
+                return request;
+              },
+              get(key) {
+                const request = {};
+                queueMicrotask(() => {
+                  request.result = rows.get(key);
+                  request.onsuccess?.();
+                  tx.oncomplete?.();
+                });
+                return request;
+              }
+            });
+            return tx;
+          }
+        };
+        queueMicrotask(() => {
+          openRequest.result = db;
+          openRequest.onsuccess?.();
+          if (closeFirstConnection) {
+            closeFirstConnection = false;
+            db.close();
+          }
+        });
+        return openRequest;
+      }
+    };
+    Object.defineProperty(window, 'indexedDB', { value: fakeFactory, configurable: true });
+    await window.saveWorkspaceLocally();
+    return {
+      openCalls,
+      stored: rows.has('root'),
+      lastFailure: window.SutraPersistenceHealth.getState().lastFailure
+    };
+  });
+  expect(result.openCalls).toBe(2);
+  expect(result.stored).toBe(true);
+  expect(result.lastFailure).toBeNull();
+  await expect(page.locator('#sutraSaveFailureBanner')).toBeHidden();
+});
+
 test('confirmed-save timestamp advances only after a verified save', async ({ page }) => {
   await openApp(page);
   const before = await page.evaluate(() => window.SutraPersistenceHealth.getState().lastConfirmedSaveAt);

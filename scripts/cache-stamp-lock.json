@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260722-assistantreceipt1",
-    "hash": "8df1a9c0c5736ade"
+    "stamp": "20260729-providerwiz1",
+    "hash": "89998de1b82ba9b4"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -37,7 +37,7 @@
   },
   "src/core/app.js": {
     "stamp": "20260805-device-session1",
-    "hash": "9e4520b1b4c94621"
+    "hash": "0cd0d03c7e05b3fb"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -118,6 +118,10 @@
   "src/domain/student-life.js": {
     "stamp": "20260710-student-life1",
     "hash": "10276452f1173261"
+  },
+  "src/domain/workspace-entity-registry.js": {
+    "stamp": "20260728-entity1",
+    "hash": "c197d4cd6e6a4eb2"
   },
   "src/features/academic/academic-command-center.js": {
     "stamp": "20260614-acc1",
@@ -208,8 +212,8 @@
     "hash": "3b1743d4329b2d0a"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260708-editorv2-p6",
-    "hash": "9c724d738b72b011"
+    "stamp": "20260730-undoIsolation1",
+    "hash": "81d352db228ff531"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -256,8 +260,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260723-unified1",
-    "hash": "ee57634f12e23404"
+    "stamp": "20260723-unified3",
+    "hash": "e4db535d37c8c451"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260723-mobilemodal1",
@@ -280,16 +284,20 @@
     "hash": "4f806de479b221c8"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260721-mobile1",
-    "hash": "015e1330a8e5f110"
+    "stamp": "20260730-timeFormat2",
+    "hash": "8c10a7b32aa8c962"
   },
   "src/features/workspace/timeline-drag.js": {
-    "stamp": "20260721-drag2",
-    "hash": "f863f5a76f6e5836"
+    "stamp": "20260730-pushTime1",
+    "hash": "62041ecaea7e198f"
   },
   "src/features/workspace/today-command-center.js": {
     "stamp": "20260721-radar-consolidation1",
     "hash": "9000432533f4d577"
+  },
+  "src/features/workspace/workspace-entity-adapters.js": {
+    "stamp": "20260728-entity1",
+    "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260716-syncwipe1",
@@ -304,8 +312,8 @@
     "hash": "d6fd15f6450e378b"
   },
   "src/persistence/workspace-db.js": {
-    "stamp": "20260714-idb-factory1",
-    "hash": "8e6f74eae6e2666d"
+    "stamp": "20260729-idb-close-retry1",
+    "hash": "e12f9ca33c6a7cf9"
   },
   "src/state/workspace-normalizers.js": {
     "stamp": "20260616-state1",
@@ -328,8 +336,8 @@
     "hash": "f3ade27f69644c7e"
   },
   "src/sync/sync-projection.js": {
-    "stamp": "20260716-syncparity1",
-    "hash": "3cbced14a04a5d32"
+    "stamp": "20260731-helpdocs1",
+    "hash": "ddf5cca4f2de781d"
   },
   "src/sync/sync-protocol.js": {
     "stamp": "20260716-syncparity1",
@@ -347,6 +355,10 @@
     "stamp": "20260708-toolbar-compact",
     "hash": "35abae7df9676466"
   },
+  "src/ui/sidebar-page-actions-menu.js": {
+    "stamp": "20260803-overflow1",
+    "hash": "ee757d8dfff9958a"
+  },
   "src/ui/student-loop-actions.js": {
     "stamp": "20260709-studentloop1",
     "hash": "af2e685d3219f9cf"
@@ -360,8 +372,8 @@
     "hash": "b4f058b0e2f2b2a0"
   },
   "styles/base/styles.css": {
-    "stamp": "20260721-themeButtons1",
-    "hash": "e0bb6d03e59f5381"
+    "stamp": "20260730-pushTime1",
+    "hash": "282ce84c3322002a"
   },
   "styles/base/tokens.css": {
     "stamp": "20260710-tokens1",
@@ -407,13 +419,17 @@
     "stamp": "20260723-mobilemodal2",
     "hash": "9ab16713e512d32f"
   },
+  "styles/features/sidebar-page-actions.css": {
+    "stamp": "20260803-overflow1",
+    "hash": "1282bcc43a7bc9b4"
+  },
   "styles/features/slides.css": {
     "stamp": "20260722-slides6",
     "hash": "346306a722e199ca"
   },
   "styles/features/sutra-assistant-help.css": {
-    "stamp": "20260711-notes2",
-    "hash": "73fe9e407af4ca49"
+    "stamp": "20260729-providerwiz1",
+    "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
     "stamp": "20260618-cloud1",
@@ -448,8 +464,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260723-unified1",
-    "hash": "d6a6c668c847f9a8"
+    "stamp": "20260723-unified2",
+    "hash": "71c6d8cb963fa901"
   },
   "styles/themes/glass.css": {
     "stamp": "20260712-glass-fix",

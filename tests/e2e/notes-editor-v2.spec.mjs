@@ -902,3 +902,48 @@ test('math atoms render live KaTeX while storage keeps the raw LaTeX', async ({ 
   expect(html).toContain('data-latex="x^2"');
   expect(html).not.toContain('class="katex"');
 });
+
+
+test('undo history is isolated when switching between notes', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'undo boundary alpha');
+
+  await page.click(PM_SELECTOR);
+  await page.keyboard.type('alpha-only note content');
+  const alphaId = await page.evaluate(() => {
+    window.SutraNotesEditorV2.flushToMirror();
+    window.savePage();
+    return window.flowAtelier.currentPageId;
+  });
+
+  await createBlankNote(page, 'undo boundary beta');
+  await page.click(PM_SELECTOR);
+  await page.keyboard.type('beta-only note content');
+  const betaId = await page.evaluate(() => {
+    window.SutraNotesEditorV2.flushToMirror();
+    window.savePage();
+    return window.flowAtelier.currentPageId;
+  });
+
+  await page.evaluate(({ firstId, secondId }) => {
+    window.loadPage(firstId);
+    window.loadPage(secondId);
+  }, { firstId: alphaId, secondId: betaId });
+  await page.waitForFunction(({ id, text }) => {
+    const pm = document.querySelector('#editorV2Host .ProseMirror');
+    return window.flowAtelier.currentPageId === id && pm && pm.textContent.includes(text);
+  }, { id: betaId, text: 'beta-only note content' });
+
+  await page.click(PM_SELECTOR);
+  await page.keyboard.press('Control+z');
+
+  const current = await page.evaluate(() => ({
+    pageId: window.flowAtelier.currentPageId,
+    text: document.querySelector('#editorV2Host .ProseMirror').textContent
+  }));
+  expect(current.pageId).toBe(betaId);
+  expect(current.text).toContain('beta-only note content');
+  expect(current.text).not.toContain('alpha-only note content');
+});

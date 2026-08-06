@@ -1882,6 +1882,13 @@
         .sidebar-spaces-row .spaces-switcher {
             flex: 1 1 0;
             min-width: 0;
+            /* This switcher lives inside the compact row. Its standalone
+               surface padding would otherwise consume the space reserved for
+               the expanding search field. */
+            padding: 0;
+            border: 0;
+            background: transparent;
+            z-index: auto;
             transition: flex 0.22s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
@@ -1914,6 +1921,15 @@
             background: var(--surface-bg);
         }
 
+        .sidebar-search:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2.5px rgba(var(--accent-rgb), 0.25);
+        }
+
+        .sidebar .sidebar-search:focus-within {
+            box-shadow: 0 0 0 2.5px rgba(var(--accent-rgb), 0.25) !important;
+        }
+
         /* The "continuous sidebar surface" rules later in this file force
            `.sidebar .sidebar-search` background/border transparent with
            !important. Re-assert the expanded search field's pill with higher
@@ -1923,9 +1939,16 @@
             border-color: var(--accent) !important;
         }
 
-        /* Shrink the space switcher when search is open */
+        /* Search is the only control in this row while it is open. This makes
+           the field use the full available width instead of competing with the
+           space selector for a narrow slice of the sidebar. */
         .sidebar-spaces-row:has(.sidebar-search.is-open) .spaces-switcher {
-            flex: 0 1 80px;
+            display: none;
+        }
+
+        .sidebar-spaces-row:has(.sidebar-search.is-open) .sidebar-search {
+            flex: 1 1 auto;
+            width: auto;
         }
 
         .sidebar-search-toggle {
@@ -1967,6 +1990,17 @@
         .sidebar-search.is-open .search-input {
             opacity: 1;
             pointer-events: auto;
+        }
+
+        /* The input is visually part of .sidebar-search, not a nested
+           field. Keep generic input-focus styling from producing a second,
+           cramped outline inside the expanded search shell. */
+        .sidebar-search .search-input,
+        .sidebar-search .search-input:focus {
+            border: 0 !important;
+            border-radius: 0;
+            background: transparent !important;
+            box-shadow: none !important;
         }
 
         .sidebar-search-feedback {
@@ -5712,8 +5746,9 @@
             width: 250px;
             padding: 12px;
             border-radius: 14px;
-            border: 1px solid rgba(24, 34, 58, 0.22);
-            background: #f5f8ff;
+            border: 1px solid var(--surface-border-strong);
+            background: var(--surface-bg-elevated, var(--surface-bg));
+            color: var(--text-primary);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.32);
             z-index: 4200;
             display: grid;
@@ -5724,12 +5759,6 @@
             backdrop-filter: none !important;
         }
 
-        [data-theme="dark"] .nf-color-popover,
-        body[data-theme-key] .nf-color-popover {
-            border-color: rgba(196, 214, 255, 0.24);
-            background: #1b2436;
-            color: #eef3ff;
-        }
 
         .nf-color-popover[hidden] {
             display: none !important;
@@ -5843,15 +5872,10 @@
             gap: 10px;
             border-radius: 10px;
             border: 1px solid var(--surface-border);
-            background: #eaf0ff;
+            background: var(--surface-bg-hover, var(--surface-bg));
             padding: 6px 9px;
         }
 
-        [data-theme="dark"] .nf-color-field,
-        body[data-theme-key] .nf-color-field {
-            border-color: rgba(196, 214, 255, 0.2);
-            background: #25304a;
-        }
 
         .nf-color-field > span {
             font-size: 10px;
@@ -26805,6 +26829,16 @@ body.focus-mode .sidebar::before {
     text-decoration: underline;
 }
 
+.view-timeline.timeline-redesign .timeline-push-time-menu-group {
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.view-timeline.timeline-redesign .timeline-push-time-menu-group .timeline-more-action {
+    min-height: 32px;
+    text-align: left;
+}
+
 /* Current block — compact footer instead of big card */
 .view-timeline.timeline-redesign .current-block-compact {
     margin-top: 16px;
@@ -34610,6 +34644,78 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
     min-height: 2.75rem;
 }
 
+.sutra-push-time-card {
+    width: min(34rem, 100%);
+    background: var(--bg-elevated, var(--bg-primary, #fff));
+}
+
+.sutra-push-time-description {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.sutra-push-time-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.sutra-push-time-fields label {
+    display: grid;
+    gap: 0.4rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.sutra-push-time-fields input,
+.sutra-push-time-fields select {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--field-bg, var(--surface-bg));
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.sutra-push-time-summary,
+.sutra-push-time-warning {
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: 0.65rem;
+    background: color-mix(in srgb, var(--bg-elevated, var(--bg-primary, #fff)) 92%, var(--accent) 8%);
+    color: var(--text-primary);
+}
+
+.sutra-push-time-warning {
+    border-color: color-mix(in srgb, var(--danger, #b42318) 42%, var(--border));
+    background: color-mix(in srgb, var(--bg-elevated, var(--bg-primary, #fff)) 92%, var(--danger, #b42318) 8%);
+}
+
+.sutra-push-time-examples {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.sutra-push-time-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.65rem;
+}
+
+@media (max-width: 520px) {
+    .sutra-push-time-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ── Smart Reschedule modal ──────────────────────────────────────────── */
 .sutra-reschedule-overlay {
     position: fixed;
@@ -34699,4 +34805,9 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
         width: 95% !important;
         max-height: 90vh;
     }
+}
+
+/* Today owns its natural content height; this prevents an empty flex region from becoming an extra scroll area after collapsed sections. */
+#view-today.today-redesign {
+    flex: 0 0 auto;
 }

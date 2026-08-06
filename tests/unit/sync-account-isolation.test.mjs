@@ -18,6 +18,17 @@ test('application bridge selects an account-scoped sync namespace and fails clos
   assert.match(appSource, /account-switch-blocked/);
 });
 
+test('account transitions preserve the local workspace and its generated system resources', () => {
+  const start = appSource.indexOf('function noteSutraSyncAuthenticatedAccount(');
+  const end = appSource.indexOf('function assertSutraSyncAccountIsSafe(', start);
+  assert.ok(start >= 0 && end > start, 'account transition boundary must be discoverable');
+  const transition = appSource.slice(start, end);
+  assert.match(transition, /Preserve the local-first workspace/);
+  assert.doesNotMatch(transition, /\bpages\s*=/, 'account switching must not replace local pages');
+  assert.doesNotMatch(transition, /importWorkspacePayload|applySyncMergedWorkspace/,
+    'account switching must fail closed before any remote workspace apply');
+});
+
 test('account routing hint and sync operational database are explicitly device-local exclusions', () => {
   const keys = inventory.localStorageClassifications;
   assert.equal(keys['sutra:syncAccountHint:v1'].category, 'deviceLocal');

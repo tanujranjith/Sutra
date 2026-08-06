@@ -145,8 +145,12 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
       pages: [{
         ...(base.pages[0] || {}),
         id: 'restore-qa-page',
+        type: 'note',
         title: restoredTitle,
         content: '<p>Restored JSON workspace</p>',
+        isSystemPage: false,
+        builtInId: '',
+        systemRole: '',
         createdAt: now,
         updatedAt: now
       }]

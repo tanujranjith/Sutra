@@ -67,6 +67,52 @@ test('Help & Docs stays first in the regular sidebar page list', async ({ page }
   expect(result.renderedPageIds[0]).toBe(result.helpId);
 });
 
+test('imports that omit generated Help restore one canonical page per space immediately and after reload', async ({ page }) => {
+  await openApp(page);
+  const beforeReload = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const extraSpace = hooks.createSpace('QA Imported Help Space');
+    const stripHelp = (payload) => ({
+      ...payload,
+      pages: (payload.pages || []).filter(item =>
+        item.id !== 'help_page' && item.systemRole !== 'help-docs' && item.builtInId !== 'help-docs')
+    });
+
+    window.deserializeWorkspace(stripHelp(window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false })));
+    // Repeat the same Help-less import to prove reconciliation is idempotent.
+    window.deserializeWorkspace(stripHelp(window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false })));
+    await window.saveWorkspaceLocally();
+
+    const snapshot = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return {
+      extraSpaceId: extraSpace.id,
+      spaces: snapshot.spaces.map(space => space.id),
+      helpBySpace: snapshot.pages
+        .filter(item => item.systemRole === 'help-docs' || item.builtInId === 'help-docs')
+        .reduce((counts, item) => {
+          const id = item.spaceId || 'default';
+          counts[id] = (counts[id] || 0) + 1;
+          return counts;
+        }, {})
+    };
+  });
+
+  for (const spaceId of beforeReload.spaces) {
+    expect(beforeReload.helpBySpace[spaceId], `missing or duplicate Help before reload in ${spaceId}`).toBe(1);
+  }
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.serializeWorkspace);
+  const afterReload = await page.evaluate(() => {
+    const snapshot = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return snapshot.pages.filter(item =>
+      item.systemRole === 'help-docs' || item.builtInId === 'help-docs');
+  });
+  expect(afterReload.filter(item => (item.spaceId || 'default') === 'default')).toHaveLength(1);
+  expect(afterReload.filter(item => item.spaceId === beforeReload.extraSpaceId)).toHaveLength(1);
+});
+
 test('imports and assistant-created notes route to the active space and round-trip', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(() => {

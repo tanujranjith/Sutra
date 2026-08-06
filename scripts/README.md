@@ -21,6 +21,7 @@ working directory is the project root.
 
 ### Release-gate checks (run by `npm run check:all`)
 `syntax-check` · `sutra-app-shell-check` · `sutra-migrations-check` ·
+`sutra-supabase-schema-check` ·
 `smoke-check` · `round-trip-check` · `version-history-check` ·
 `sutra-rebrand-check` · `sutra-compat-check` · `sutra-csp-check` ·
 `sutra-persistence-health-check` · `sutra-modal-a11y-check` ·

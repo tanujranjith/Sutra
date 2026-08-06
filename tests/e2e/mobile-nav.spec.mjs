@@ -41,6 +41,33 @@ test('tapping a bottom-nav item switches the active view', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe(targetView);
 });
 
+test('Notes keeps a contextual arrow that opens the complete notes sidebar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.locator('#sutraBottomNav [data-bn-view="notes"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('notes');
+
+  const sidebar = page.locator('#sidebar');
+  const toggle = page.locator('#sidebarToggle');
+  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) {
+    await page.evaluate(() => document.getElementById('sidebarToggle').click());
+  }
+
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-label', 'Open notes list');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(sidebar).toHaveAttribute('role', 'dialog');
+  await expect(sidebar.locator('#pagesList')).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/sidebar-open/);
+
+  await page.keyboard.press('Escape');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('body')).not.toHaveClass(/sidebar-open/);
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toBeFocused();
+});
+
 test('bottom nav active item tracks the current view', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
@@ -81,6 +108,37 @@ test('More opens a focus-trapped all-sections sheet and reaches advanced views',
   await sheet.locator('[data-mobile-more-view="settings"]').click();
   await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('settings');
   await expect(sheet).toBeHidden();
+});
+
+test('More clears its modal and history state when desktop navigation takes over', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  const sheet = page.locator('#sutraMobileMoreOverlay');
+
+  await more.click();
+  await expect(sheet).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/mobile-more-open/);
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect.poll(() => page.evaluate(() => {
+    const overlay = document.getElementById('sutraMobileMoreOverlay');
+    return {
+      hidden: overlay.hidden,
+      ariaHidden: overlay.getAttribute('aria-hidden'),
+      bodyOpen: document.body.classList.contains('mobile-more-open'),
+      historyOpen: !!(history.state && history.state.sutraMobileMore === true)
+    };
+  })).toEqual({
+    hidden: true,
+    ariaHidden: 'true',
+    bodyOpen: false,
+    historyOpen: false
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(sheet).toBeHidden();
+  await expect(page.locator('body')).not.toHaveClass(/mobile-more-open/);
 });
 
 test('save bar clears the unified bottom navigation on workspace views', async ({ page }) => {

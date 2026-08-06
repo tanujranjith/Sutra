@@ -28,6 +28,17 @@
     return protocolApi.atomicKey(field + '.__rest');
   }
 
+  function isExcludedCollectionRecord(collection, entry) {
+    var exclusions = protocolApi.CLASSIFICATION.excludedCollectionRecords || {};
+    var rule = exclusions[collection];
+    if (!rule || !entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    var entryId = String(entry.id || '');
+    var entryRole = String(entry.systemRole || entry.builtInId || '');
+    var excludedId = Array.isArray(rule.ids) && rule.ids.indexOf(entryId) !== -1;
+    var excludedRole = Array.isArray(rule.systemRoles) && rule.systemRoles.indexOf(entryRole) !== -1;
+    return (excludedId && entry.isSystemPage === true) || excludedRole;
+  }
+
   // Record field policies (hashVolatile / localOnly) — see sync-protocol.js.
   function policyForRecordKey(recordKey) {
     var policies = protocolApi.CLASSIFICATION.recordFieldPolicies || {};
@@ -69,15 +80,7 @@
     var list = Array.isArray(sourceArray) ? sourceArray : [];
     for (var i = 0; i < list.length; i += 1) {
       var entry = list[i];
-      var exclusions = protocolApi.CLASSIFICATION.excludedCollectionRecords || {};
-      var rule = exclusions[collection];
-      if (rule && entry && typeof entry === 'object') {
-        var entryId = String(entry.id || '');
-        var entryRole = String(entry.systemRole || entry.builtInId || '');
-        var excludedId = Array.isArray(rule.ids) && rule.ids.indexOf(entryId) !== -1;
-        var excludedRole = Array.isArray(rule.systemRoles) && rule.systemRoles.indexOf(entryRole) !== -1;
-        if ((excludedId && entry.isSystemPage === true) || excludedRole) continue;
-      }
+      if (isExcludedCollectionRecord(collection, entry)) continue;
       var id = usableId(entry);
       if (id === null) {
         if (entry !== undefined && entry !== null) orphans.push(clone(entry));
@@ -242,6 +245,35 @@
     return result;
   }
 
+  // Generated/system records are intentionally absent from Sync records, but
+  // absence in a remote projection is not a deletion instruction. Preserve
+  // this device's canonical copies across snapshot bootstrap, remote apply,
+  // stale delete ops/tombstones, and repeated cycles. A local system resource
+  // also wins a same-id collision so remote user content cannot replace it.
+  function reinjectExcludedCollectionRecords(collection, assembledArray, currentArray) {
+    var assembled = Array.isArray(assembledArray) ? assembledArray : [];
+    var current = Array.isArray(currentArray) ? currentArray : [];
+    var preserved = [];
+    var preservedIds = {};
+    var i;
+    for (i = 0; i < current.length; i += 1) {
+      var entry = current[i];
+      if (!isExcludedCollectionRecord(collection, entry)) continue;
+      var id = usableId(entry);
+      if (id === null || preservedIds[id]) continue;
+      preservedIds[id] = true;
+      preserved.push(clone(entry));
+    }
+    if (!preserved.length) return assembled;
+    var remote = [];
+    for (i = 0; i < assembled.length; i += 1) {
+      var remoteId = usableId(assembled[i]);
+      if (remoteId !== null && preservedIds[remoteId]) continue;
+      remote.push(assembled[i]);
+    }
+    return preserved.concat(remote);
+  }
+
   // Puts this device's localOnly record fields (currently Homework's local
   // revision bookkeeping) back after a remote apply.
   function reinjectLocalOnly(scopeKey, assembledArray, currentArray) {
@@ -279,6 +311,11 @@
     for (i = 0; i < classification.collections.length; i += 1) {
       var spec = classification.collections[i];
       var assembled = assembleCollection(records, spec.collection, records[restKey(spec.field)]);
+      assembled = reinjectExcludedCollectionRecords(
+        spec.collection,
+        assembled,
+        currentWorkspace ? currentWorkspace[spec.field] : null
+      );
       reinjectLocalOnly('c/' + spec.collection, assembled, currentWorkspace ? currentWorkspace[spec.field] : null);
       workspace[spec.field] = assembled;
     }

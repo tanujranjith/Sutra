@@ -382,6 +382,20 @@
     window.addEventListener('noteflow:view-changed', render);
   }
 
+  function setupBreakpointCleanup() {
+    if (!window.matchMedia) return;
+    var query = window.matchMedia('(max-width: 640px)');
+    function syncBreakpoint(event) {
+      if (event.matches || !moreOverlay || moreOverlay.hidden) return;
+      // The sheet is a phone-only modal. Clear its DOM, body-scroll, and
+      // history state when desktop navigation takes over so returning to a
+      // narrow viewport cannot resurrect a stale dialog.
+      closeMore();
+    }
+    if (typeof query.addEventListener === 'function') query.addEventListener('change', syncBreakpoint);
+    else if (typeof query.addListener === 'function') query.addListener(syncBreakpoint);
+  }
+
   function render() {
     if (!navEl) return;
     var tabs = mobileTabs();
@@ -462,8 +476,10 @@
     function open() { return isMobile() && !sidebar.classList.contains('collapsed'); }
     function sync() {
       var nowOpen = open();
+      var toggleLabel = nowOpen ? 'Close notes list' : 'Open notes list';
       toggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
-      toggle.setAttribute('aria-label', nowOpen ? 'Close notes navigation' : 'Open notes navigation');
+      toggle.setAttribute('aria-label', toggleLabel);
+      toggle.setAttribute('title', toggleLabel);
       if (isMobile()) {
         sidebar.setAttribute('aria-hidden', nowOpen ? 'false' : 'true');
         sidebar.setAttribute('aria-modal', nowOpen ? 'true' : 'false');
@@ -575,6 +591,7 @@
 
   function init() {
     build();
+    setupBreakpointCleanup();
     setupGestures();
     setupSidebarDrawer();
   }

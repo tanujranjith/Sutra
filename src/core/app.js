@@ -7469,6 +7469,11 @@ function populateProgressDashboard() {
                 })
                 : [];
             taskOrder = Array.isArray(appData.taskOrder) ? appData.taskOrder : tasks.map(task => task.id);
+            // Hydrate Timeline before any downstream bridge or migration can
+            // schedule a save. Leaving the live binding at its boot-time [] let
+            // persistAppData overwrite stored blocks during startup, before
+            // initTimeline's later loadTimeBlocks() call could restore them.
+            timeBlocks = Array.isArray(appData.timeBlocks) ? appData.timeBlocks : [];
 
             const defaultStreaks = getDefaultStreaks();
             const storedStreaks = appData.streaks || defaultStreaks;
@@ -21347,14 +21352,38 @@ function populateProgressDashboard() {
         }
 
         function deleteHabit(habitId) {
-            habits = habits.filter(habit => habit.id !== habitId);
+            const id = String(habitId || '').trim();
+            if (!id) return;
+
+            // Today and Life expose the same connected habit records. Remove the
+            // record and its per-day state from both mirrors before persistence;
+            // otherwise syncHabitTrackersAcrossViews can restore the deleted copy.
+            habits = (Array.isArray(habits) ? habits : [])
+                .filter(habit => String(habit && habit.id || '') !== id);
             Object.values(habitDayStates).forEach(state => {
                 if (state && Array.isArray(state.completedHabitIds)) {
-                    state.completedHabitIds = state.completedHabitIds.filter(id => id !== habitId);
+                    state.completedHabitIds = state.completedHabitIds.filter(entryId => String(entryId) !== id);
                 }
             });
+
+            if (lifeWorkspace && typeof lifeWorkspace === 'object') {
+                lifeWorkspace.habits = (Array.isArray(lifeWorkspace.habits) ? lifeWorkspace.habits : [])
+                    .filter(habit => String(habit && habit.id || '') !== id);
+                ['habitCompletions', 'habitExcused'].forEach(key => {
+                    const entries = lifeWorkspace[key];
+                    if (!entries || typeof entries !== 'object') return;
+                    Object.keys(entries).forEach(dayKey => {
+                        if (!Array.isArray(entries[dayKey])) return;
+                        const remaining = entries[dayKey].filter(entryId => String(entryId) !== id);
+                        if (remaining.length) entries[dayKey] = remaining;
+                        else delete entries[dayKey];
+                    });
+                });
+            }
+
             persistAppData();
             renderHabitTracker();
+            try { renderLifeWorkspace(); } catch (e) { /* Life view may not be mounted */ }
             try { populateProgressDashboard(); } catch (e) { /* non-critical */ }
             showToast('Habit deleted');
         }
@@ -24716,11 +24745,21 @@ function populateProgressDashboard() {
                 if (!target) return;
                 try {
                     let changed = false;
-                    if (target.source === 'homework' && window.SutraHomework && typeof window.SutraHomework.markDone === 'function') {
+                    const canonicalTask = (Array.isArray(tasks) ? tasks : []).find(task => task && (
+                        String(task.id) === String(target.sourceId)
+                        || (target.source === 'homework'
+                            && task.origin === 'homework'
+                            && String(task.homeworkSourceId) === String(target.sourceId))
+                    ));
+                    if (canonicalTask && typeof toggleComplete === 'function') {
+                        const dayState = getDayState(today());
+                        if (!dayState.completedTaskIds.includes(canonicalTask.id)) {
+                            toggleComplete(canonicalTask.id);
+                            changed = true;
+                        }
+                    } else if (target.source === 'homework' && window.SutraHomework && typeof window.SutraHomework.markDone === 'function') {
                         changed = window.SutraHomework.markDone(target.sourceId) === true;
-                    } else if (target.source === 'task') {
-                        const task = (Array.isArray(tasks) ? tasks : []).find(t => String(t && t.id) === String(target.sourceId));
-                        if (task && !task.completed && typeof toggleComplete === 'function') { toggleComplete(task.id); changed = true; }
+                        if (changed && typeof syncHomeworkTasksIntoTaskStore === 'function') syncHomeworkTasksIntoTaskStore();
                     }
                     if (changed) {
                         showToast('Marked done. Nice work.');
@@ -58968,6 +59007,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const _knownSpaceIds = new Set(spaces.map(s => s.id));
                 pages.forEach(p => { if (!_knownSpaceIds.has(p.spaceId)) p.spaceId = 'default'; });
             } catch (e) { /* non-critical */ }
+            // Help & Docs is a generated local system resource and is excluded
+            // from Sync records. Every import path (including silent remote
+            // apply/bootstrap) replaces `pages`, so restore one canonical Help
+            // page per imported space before rendering or persisting the model.
+            ensureHelpPagesForAllSpaces();
 
             if (importedHomeworkWorkspace) {
                 restoreHomeworkWorkspaceFromSnapshot(importedHomeworkWorkspace);
@@ -64435,7 +64479,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const storageHtml = sanitizeEditorHtml(page.content || '');
                 editor.contentEditable = 'false';
                 editor.innerHTML = storageHtml; // sutra-allow-html: sanitized canonical note content into the hidden v2 mirror
-                window.SutraNotesEditorV2.setContent(storageHtml);
+                if (typeof window.SutraNotesEditorV2.loadDocument === 'function') {
+                    window.SutraNotesEditorV2.loadDocument(storageHtml);
+                } else {
+                    window.SutraNotesEditorV2.setContent(storageHtml);
+                }
                 const v2Host = getNotesEditorV2Host();
                 if (v2Host) v2Host.dataset.pageId = String(page.id || '');
                 applyDocumentBackgroundForEditor(editor, page);
@@ -77657,7 +77705,7 @@ function renderLegacyTimelineDay(container, viewDate, sourceMode = timelineSourc
         el.style.zIndex = String(Math.max(1, 240 - Math.floor(startMins / 6)));
         el.innerHTML = `
             <div class="block-name">${escapeHtml(block.name || 'Untitled')}</div>
-            <div class="block-time">${escapeHtml(String(block.start || '--:--'))} -> ${escapeHtml(String(block.end || '--:--'))} | ${escapeHtml(sourceLabel)}</div>
+            <div class="block-time">${escapeHtml(formatTimelineBlockTime(block.start))} -> ${escapeHtml(formatTimelineBlockTime(block.end))} | ${escapeHtml(sourceLabel)}</div>
         `;
         el.addEventListener('click', () => openBlockModal(block));
         blocksEl.appendChild(el);
@@ -77722,6 +77770,13 @@ function formatTimelineAxisLabelForMinutes(totalMinutes) {
     const normalizedHour = hour % 12 || 12;
     if (minute === 0) return `${normalizedHour}${suffix}`;
     return `${normalizedHour}:${String(minute).padStart(2, '0')}${suffix}`;
+}
+
+function formatTimelineBlockTime(value) {
+    const minutesValue = parseTimeToMinutes(value);
+    return Number.isFinite(minutesValue)
+        ? formatTimelineAxisLabelForMinutes(minutesValue)
+        : String(value || '--:--');
 }
 
 function buildTimelineLaneAssignments(blocks) {
@@ -78709,7 +78764,8 @@ function closeBlockModal() {
     clearInlineFieldError(document.getElementById('blockReferenceInput'));
 }
 
-function saveBlockFromModal() {
+async function saveBlockFromModal() {
+    const blocksBeforeSave = Array.isArray(timeBlocks) ? timeBlocks.slice() : [];
     const name = document.getElementById('blockNameInput').value.trim() || 'Untitled Block';
     const startInput = document.getElementById('blockStartInput');
     const endInput = document.getElementById('blockEndInput');
@@ -78800,16 +78856,40 @@ function saveBlockFromModal() {
         return (ah * 60 + am) - (bh * 60 + bm);
     });
 
+    const wasEditing = !!editingBlockId;
     saveTimeBlocks();
+    try {
+        // A Timeline block is a visible, user-created schedule commitment. Do not
+        // claim success until its canonical workspace write is durable; a refresh
+        // immediately after Save must never discard it during the autosave debounce.
+        await flushAppSaveNow('timeline-block-save');
+    } catch (error) {
+        timeBlocks = blocksBeforeSave;
+        saveTimeBlocks();
+        console.error('Timeline block save failed', error);
+        showToast('Could not save this block. Your timeline is unchanged; you can retry.');
+        return;
+    }
     closeBlockModal();
     renderTimeline();
-    showToast(editingBlockId ? 'Block updated!' : 'Block created!');
+    showToast(wasEditing ? 'Block updated!' : 'Block created!');
 }
 
-function deleteBlock() {
+async function deleteBlock() {
     if (!editingBlockId) return;
-    timeBlocks = timeBlocks.filter(b => b.id !== editingBlockId);
+    const deletedId = editingBlockId;
+    const before = Array.isArray(timeBlocks) ? timeBlocks.slice() : [];
+    timeBlocks = before.filter(b => String(b && b.id) !== String(deletedId));
     saveTimeBlocks();
+    try {
+        await flushAppSaveNow('timeline-block-delete');
+    } catch (error) {
+        timeBlocks = before;
+        saveTimeBlocks();
+        console.error('Timeline block deletion failed', error);
+        showToast('Could not delete this block. Your timeline is unchanged.');
+        return;
+    }
     closeBlockModal();
     renderTimeline();
     showToast('Block deleted');

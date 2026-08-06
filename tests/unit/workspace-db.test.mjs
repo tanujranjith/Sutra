@@ -7,16 +7,18 @@ const { create } = require('../../src/persistence/workspace-db.js');
 
 function makeIndexedDb() {
   const rows = new Map();
-  const state = { openCalls: 0, closeCalls: 0, dbs: [] };
+  const state = { openCalls: 0, closeCalls: 0, closeAfterOpenSuccess: 0, dbs: [] };
   const factory = {
     open() {
       state.openCalls += 1;
       const request = {};
+      let closing = false;
       const db = {
         objectStoreNames: { contains: () => true },
         createObjectStore() {},
-        close() { state.closeCalls += 1; },
+        close() { closing = true; state.closeCalls += 1; },
         transaction(_name, mode) {
+          if (closing) throw new DOMException('The database connection is closing.', 'InvalidStateError');
           const tx = { error: null };
           tx.objectStore = () => ({
             get(key) {
@@ -46,6 +48,10 @@ function makeIndexedDb() {
       queueMicrotask(() => {
         request.result = db;
         request.onsuccess?.();
+        if (state.closeAfterOpenSuccess > 0) {
+          state.closeAfterOpenSuccess -= 1;
+          db.close();
+        }
       });
       return request;
     }
@@ -90,6 +96,28 @@ test('versionchange closes the stale connection and the next operation reopens',
   fake.state.dbs[0].onversionchange();
   assert.equal(fake.state.closeCalls, 1);
   await db.open();
+  assert.equal(fake.state.openCalls, 2);
+});
+
+test('a close-pending connection is reopened once before starting read or write transactions', async () => {
+  const fake = makeIndexedDb();
+  fake.state.closeAfterOpenSuccess = 1;
+  const db = create({ indexedDB: fake.factory, dbName: 'qa', storeName: 'workspace' });
+  await db.write('root', { title: 'recovered' });
+  fake.state.dbs[1].close();
+  assert.deepEqual(await db.read('root'), { title: 'recovered' });
+  assert.equal(fake.state.openCalls, 3);
+  assert.equal(fake.state.closeCalls, 2);
+});
+
+test('close-pending recovery is bounded to one retry', async () => {
+  const fake = makeIndexedDb();
+  fake.state.closeAfterOpenSuccess = 2;
+  const db = create({ indexedDB: fake.factory, dbName: 'qa', storeName: 'workspace' });
+  await assert.rejects(
+    db.write('root', { title: 'not-written' }),
+    error => error && error.name === 'InvalidStateError'
+  );
   assert.equal(fake.state.openCalls, 2);
 });
 

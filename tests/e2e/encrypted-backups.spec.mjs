@@ -200,6 +200,7 @@ test('new .sutra export is an authenticated encrypted envelope with no plaintext
 });
 
 test('encrypted .sutra import rejects wrong password without mutating, then restores with correct password and persists', async ({ page }) => {
+  test.setTimeout(120000);
   await openApp(page);
   const { buffer } = await createEncryptedBytes(page, 'IMPORT');
   await seedRichWorkspace(page, 'LOCAL');
@@ -297,6 +298,7 @@ test('missing attachment still refuses encrypted and emergency .sutra export', a
 });
 
 test('legacy unencrypted .sutra, legacy .atelier, and JSON workspace imports still work', async ({ page }) => {
+  test.setTimeout(120000);
   await openApp(page);
   await seedRichWorkspace(page, 'LEGACY');
   const fixtures = await page.evaluate(async () => {

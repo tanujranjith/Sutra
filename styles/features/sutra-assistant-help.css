@@ -472,7 +472,16 @@
 .assistant-provider-wizard {
   display: grid;
   gap: 0.85rem;
-  min-width: min(34rem, 78vw);
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.assistant-provider-wizard > label > .modal-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .assistant-provider-wizard > label {

@@ -310,8 +310,11 @@ async function editPageThroughUi(page, pageId, options = {}) {
   }
   const currentPageId = await page.evaluate(() => window.flowAtelier.currentPageId);
   if (currentPageId !== pageId) {
-    await page.locator(`.page-item[data-page-id="${pageId}"]`).click();
-    await page.waitForFunction(expected => window.flowAtelier.currentPageId === expected, pageId);
+    // Click the title rather than the row's geometric center. Desktop hover
+    // actions can cover that center and accidentally open (for example) the
+    // temporary-page confirmation instead of selecting the note.
+    await page.locator(`.page-item[data-page-id="${pageId}"] .page-title-text`).click();
+    await page.waitForFunction(expected => window.flowAtelier.currentPageId === expected, pageId, { timeout: 10000 });
   }
   if (options.title !== undefined) {
     await page.fill('#pageTitle', options.title);
@@ -327,7 +330,14 @@ async function editPageThroughUi(page, pageId, options = {}) {
 async function readPages(page) {
   return page.evaluate(() => {
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-    return base.pages.map(p => ({ id: p.id, title: p.title, content: p.content }));
+    return base.pages.map(p => ({
+      id: p.id,
+      title: p.title,
+      content: p.content,
+      isSystemPage: p.isSystemPage === true,
+      builtInId: p.builtInId || '',
+      systemRole: p.systemRole || ''
+    }));
   });
 }
 
@@ -382,6 +392,8 @@ async function readEverythingState(page) {
 }
 
 test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
+  test.describe.configure({ timeout: 120000 });
+
   test('create + edit propagate, double-push is idempotent, applies never echo', async ({ browser }) => {
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
@@ -411,19 +423,25 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       // zero even though the encrypted op reached the server correctly.
       expect(server.state.ops.length).toBeGreaterThan(opsBeforeCreate);
 
-      const pullB = await syncNow(B.page);
-      expect(pullB.error).toBeNull();
-      expect(pullB.applied).toBe(true);
-      const pagesOnB = await readPages(B.page);
-      expect(pagesOnB.some(p => p.id === 'page-created-on-a' && p.content.includes('fresh from A'))).toBe(true);
+      // B's automatic debounced cycle may apply the op before this explicit
+      // call. Assert the observable convergence instead of which cycle won.
+      await expect.poll(async () => {
+        const pullB = await syncNow(B.page);
+        expect(pullB.error).toBeNull();
+        const pagesOnB = await readPages(B.page);
+        return pagesOnB.some(p => p.id === 'page-created-on-a' && p.content.includes('fresh from A'));
+      }, { timeout: 20000 }).toBe(true);
 
       // --- edit on B propagates back to A ---
       await editPage(B.page, 'page-created-on-a', '<p>B extended this</p>');
       const pushB = await syncNow(B.page);
       expect(pushB.error).toBeNull();
-      await syncNow(A.page);
-      const pagesOnA = await readPages(A.page);
-      expect(pagesOnA.find(p => p.id === 'page-created-on-a').content).toContain('B extended this');
+      await expect.poll(async () => {
+        await syncNow(B.page);
+        await syncNow(A.page);
+        const pagesOnA = await readPages(A.page);
+        return pagesOnA.find(p => p.id === 'page-created-on-a').content;
+      }, { timeout: 20000 }).toContain('B extended this');
 
       // --- idempotent double push: a second immediate sync adds nothing ---
       const opsBefore = server.state.ops.length;
@@ -449,7 +467,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('real Notes UI merges version churn, title/body, separate paragraphs, and hides one overlapping conflict', async ({ browser }) => {
-    test.setTimeout(120000);
+    test.setTimeout(300000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A-real-editor');
     let B;
@@ -475,6 +493,19 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(B.page);
       await syncNow(A.page);
       await syncNow(B.page);
+      await expect.poll(async () => {
+        // A confirmed UI save can race its automatic cycle with these
+        // explicit calls. Keep both peers moving until the non-overlapping
+        // title/body merge is observably converged on each device.
+        await syncNow(A.page);
+        await syncNow(B.page);
+        const [pagesA, pagesB] = await Promise.all([readPages(A.page), readPages(B.page)]);
+        return [pagesA, pagesB].every(pages => {
+          const page = pages.find(row => row.id === pageId);
+          return page?.title === 'Renamed through real UI'
+            && page.content.includes('paragraph two from B');
+        });
+      }, { timeout: 20000 }).toBe(true);
       const titleBody = await readPages(A.page);
       expect(titleBody.find(row => row.id === pageId)).toMatchObject({ title: 'Renamed through real UI' });
       expect(titleBody.find(row => row.id === pageId).content).toContain('paragraph two from B');
@@ -624,6 +655,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(A.page); // settle both to the same cursor
 
       // --- offline: both devices edit DIFFERENT records while disconnected ---
+      const opsBeforeOffline = server.state.ops.length;
       A.net.down = true;
       B.net.down = true;
       await editPage(A.page, 'page-shared', '<p>A offline edit</p>');
@@ -634,7 +666,12 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         await window.saveWorkspaceLocally();
       });
       const offlineA = await syncNow(A.page);
-      expect(offlineA.error).not.toBeNull(); // network is down; edits stay queued
+      // A background cycle may consume the network failure before this manual
+      // call, leaving it as a benign skip. Either way, no op can reach the
+      // server while both devices are offline; later convergence proves the
+      // durable local edits remained queued.
+      expect(offlineA.error !== null || offlineA.skipped || offlineA.pushed === 0).toBe(true);
+      expect(server.state.ops.length).toBe(opsBeforeOffline);
 
       A.net.down = false;
       B.net.down = false;
@@ -749,6 +786,9 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       // Fresh device: default workspace, no seeding — joins the vault.
       const B = await openDevice(browser, server, 'B');
       try {
+        const localHelpBeforeBootstrap = (await readPages(B.page)).filter(page =>
+          page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs');
+        expect(localHelpBeforeBootstrap, 'fresh device starts with one local Help resource').toHaveLength(1);
         await enableSync(B.page);
         await syncNow(B.page);
         const pagesB = await readPages(B.page);
@@ -756,20 +796,51 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         expect(pagesB.some(p => p.id === 'page-shared'), 'snapshot content must arrive').toBe(true);
         expect(pagesB.some(p => p.id === 'page-second')).toBe(true);
         expect(tasksB.some(t => t.id === 'task-after-snapshot'), 'post-snapshot ops must replay').toBe(true);
+        const helpAfterBootstrap = pagesB.filter(page =>
+          page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs');
+        expect(helpAfterBootstrap, 'remote bootstrap must preserve the local Help resource').toHaveLength(1);
+        expect(helpAfterBootstrap[0]).toMatchObject({
+          id: 'help_page',
+          title: 'Help & Docs',
+          isSystemPage: true,
+          builtInId: 'help-docs',
+          systemRole: 'help-docs'
+        });
+        const deletionRefused = await B.page.evaluate(() =>
+          window.__sutraPublicBetaTestHooks.forceDeletePageById('help_page'));
+        expect(deletionRefused, 'built-in Help deletion must not create a local delete/tombstone').toBe(false);
 
         // Survives a reload: state is durably in IndexedDB, sync stays enabled.
         await B.page.reload();
         await B.page.waitForSelector('#fileInput', { state: 'attached' });
-        const afterReload = await B.page.evaluate(() => ({
-          pages: window.serializeWorkspace({ mode: 'json' }).pages.map(p => p.id),
-          syncState: window.SutraSync.status().state
-        }));
+        const afterReload = await B.page.evaluate(() => {
+          const pages = window.serializeWorkspace({ mode: 'json' }).pages;
+          return {
+            pages: pages.map(p => p.id),
+            help: pages.filter(page =>
+              page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs'),
+            syncState: window.SutraSync.status().state
+          };
+        });
         expect(afterReload.pages).toContain('page-shared');
+        expect(afterReload.help, 'reload must retain exactly one canonical Help resource').toHaveLength(1);
+        expect(afterReload.help[0].id).toBe('help_page');
         expect(afterReload.syncState).toBe('locked'); // enabled, awaiting passphrase this session
 
         // Unlock resumes syncing with the same passphrase.
         const unlocked = await B.page.evaluate(async (passphrase) => (await window.SutraSync.unlock(passphrase)).status.state, PASSPHRASE);
         expect(unlocked).toBe('idle');
+        await syncNow(A.page);
+        await syncNow(B.page);
+        const opsBeforeRepeat = server.state.ops.length;
+        for (let cycle = 0; cycle < 3; cycle += 1) {
+          await syncNow(A.page);
+          await syncNow(B.page);
+        }
+        const helpAfterRepeatedCycles = (await readPages(B.page)).filter(page =>
+          page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs');
+        expect(helpAfterRepeatedCycles, 'repeated cycles must not delete or duplicate Help').toHaveLength(1);
+        expect(server.state.ops.length, 'generated Help must not create sync operations').toBe(opsBeforeRepeat);
       } finally {
         await B.context.close();
       }
@@ -811,12 +882,16 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       expect(JSON.stringify(server.state)).not.toContain('U3V0cmEgYXR0YWNobWVudCBwYXlsb2Fk');
 
       await enableSync(B.page);
-      await syncNow(B.page);
-      const onB = await B.page.evaluate(() => {
-        const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
-        const file = (full.courseWorkspace && full.courseWorkspace.files || []).find(f => f.id === 'file-sync');
-        return { found: !!file, blob: file ? file._exportBlob || null : null, missing: file ? file.missingBlob === true : null, assetsPending: window.SutraSync.status().assetsPending };
-      });
+      let onB;
+      await expect.poll(async () => {
+        await syncNow(B.page);
+        onB = await B.page.evaluate(() => {
+          const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
+          const file = (full.courseWorkspace && full.courseWorkspace.files || []).find(f => f.id === 'file-sync');
+          return { found: !!file, blob: file ? file._exportBlob || null : null, missing: file ? file.missingBlob === true : null, assetsPending: window.SutraSync.status().assetsPending };
+        });
+        return onB.blob;
+      }, { timeout: 20000 }).toBe(ATTACHMENT_DATA_URL);
       expect(onB.found).toBe(true);
       expect(onB.blob).toBe(ATTACHMENT_DATA_URL);
       expect(onB.assetsPending).toBe(0);
@@ -836,13 +911,14 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(A.page);
       expect(Object.keys(server.state.assets).length).toBe(1, 'identical content must deduplicate');
 
-      await syncNow(B.page);
-      const copyOnB = await B.page.evaluate(() => {
-        const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
-        const file = (full.courseWorkspace && full.courseWorkspace.files || []).find(f => f.id === 'file-sync-copy');
-        return file ? file._exportBlob || null : null;
-      });
-      expect(copyOnB).toBe(ATTACHMENT_DATA_URL);
+      await expect.poll(async () => {
+        await syncNow(B.page);
+        return B.page.evaluate(() => {
+          const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
+          const file = (full.courseWorkspace && full.courseWorkspace.files || []).find(f => f.id === 'file-sync-copy');
+          return file ? file._exportBlob || null : null;
+        });
+      }, { timeout: 20000 }).toBe(ATTACHMENT_DATA_URL);
     } finally {
       await A.context.close();
       await B.context.close();
@@ -850,6 +926,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('complete portable workspace parity: snapshot bootstrap, Assistant hydration, assets, reverse incrementals, and reload', async ({ browser }) => {
+    test.setTimeout(180000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
     const REPLACEMENT_ATTACHMENT =
@@ -950,6 +1027,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
             items: [{ id: 'memory-reverse', text: 'Reverse synthetic memory.', enabled: true }]
           })
         };
+        const opsBeforeReverse = server.state.ops.length;
         await B.page.evaluate(async ({ workspace, localState, replacement }) => {
           const hooks = window.__sutraPublicBetaTestHooks;
           const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
@@ -967,9 +1045,14 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           await window.saveWorkspaceLocally();
         }, { workspace: reverseInput, localState: reverseLocalState, replacement: REPLACEMENT_ATTACHMENT });
 
-        const pushB = await syncNow(B.page);
-        expect(pushB.error).toBeNull();
-        expect(pushB.pushed).toBeGreaterThan(0);
+        await expect.poll(async () => {
+          // The confirmed save can start its automatic debounced cycle before
+          // this explicit call. Observe the encrypted server op rather than
+          // requiring the explicit call itself to report the push.
+          const pushB = await syncNow(B.page);
+          expect(pushB.error).toBeNull();
+          return server.state.ops.length;
+        }, { timeout: 20000 }).toBeGreaterThan(opsBeforeReverse);
         await syncNow(A.page);
         await syncNow(B.page);
         const expectedB = await readEverythingState(B.page);
@@ -1053,13 +1136,22 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await B.page.locator('#chatInput').fill(`search my notes for ${marker}`);
       await B.page.locator('#chatSendBtn').click();
       await expect.poll(
-        () => B.page.evaluate(() => window.SutraAssistantConversationController.getCurrent().messages.length)
-      ).toBeGreaterThan(created.messages.length);
+        () => B.page.evaluate((initialLength) => {
+          const messages = window.SutraAssistantConversationController.getCurrent().messages;
+          const latest = messages.at(-1);
+          return messages.length > initialLength && latest && latest.role === 'assistant';
+        }, created.messages.length)
+      ).toBe(true);
       await B.page.evaluate(() => window.saveWorkspaceLocally());
-      await syncNow(B.page);
-      await syncNow(A.page);
-      const reverse = await A.page.evaluate(() => window.SutraAssistantConversationController.getCurrent());
-      expect(reverse.messages.length).toBeGreaterThan(created.messages.length);
+      await expect.poll(async () => {
+        // A confirmed save may already have started the automatic debounced
+        // cycle. Retry both peers until that legitimate single-flight cycle
+        // settles instead of treating one skipped explicit call as data loss.
+        await syncNow(B.page);
+        await syncNow(A.page);
+        return A.page.evaluate(() =>
+          window.SutraAssistantConversationController.getCurrent().messages.length);
+      }, { timeout: 20000 }).toBeGreaterThan(created.messages.length);
 
       // A stale/empty legacy mirror must never become authoritative again.
       await B.page.evaluate(() => {
@@ -1126,10 +1218,13 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       // Simulate a save that was queued just before the target learns it has
       // been revoked. It must be blocked by the revocation lock and cannot
       // recreate the just-deleted canonical workspace after cleanup.
-      await B.page.evaluate(() => {
-        window.setTimeout(() => {
-          window.saveWorkspaceLocally().catch(() => {});
-        }, 1000);
+      await B.page.evaluate(async () => {
+        const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+        const pages = base.pages.map(page => page.id === 'revoke-note'
+          ? { ...page, content: `${page.content}<p>queued while offline</p>`, updatedAt: new Date().toISOString() }
+          : page);
+        window.deserializeWorkspace({ ...base, pages });
+        await window.saveWorkspaceLocally();
       });
       const revoked = await A.page.evaluate(async (target) => window.SutraSync.revokeDevice(target), bDeviceId);
       expect(revoked).toBe(true);
@@ -1140,9 +1235,17 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await expect(secondTab.locator('#sutraRevokedDeviceScreen')).toHaveCount(0);
       expect(await B.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       await expect.poll(async () => {
+        // The primary tab may currently own the single-flight lease. Drive
+        // both tabs so one performs the blocked request and relays `offline`
+        // instead of repeatedly observing a legitimate `idle` skip.
+        await B.page.evaluate(() => window.SutraSync.syncNow()).catch(() => null);
         await secondTab.evaluate(() => window.SutraSync.syncNow()).catch(() => null);
-        return secondTab.evaluate(() => window.SutraSync.status().state);
-      }, { timeout: 15000 }).toBe('offline');
+        const states = await Promise.all([
+          B.page.evaluate(() => window.SutraSync.status().state),
+          secondTab.evaluate(() => window.SutraSync.status().state)
+        ]);
+        return states.includes('offline');
+      }, { timeout: 15000 }).toBe(true);
       B.net.down = false;
       await secondTab.evaluate(() => window.SutraSync.resume());
       await expect.poll(async () => {

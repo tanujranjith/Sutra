@@ -2047,6 +2047,12 @@
     body:not(.sidebar-open) #sidebarToggle {
         display: none !important;
     }
+    /* Notes keeps its page-list drawer one tap away. The rest of the phone
+       workspace stays on the unified bottom navigation, while the Notes view
+       gets the familiar directional handle for its contextual page list. */
+    body[data-view="notes"]:not(.sidebar-open) #sidebarToggle {
+        display: flex !important;
+    }
     .main-content {
         padding-top: 0 !important;
     }

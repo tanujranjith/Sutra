@@ -214,3 +214,45 @@ test('generated Help page is reconstructed, not synchronized as user content', (
   assert.equal(records['c/pages/help_page'], undefined);
   assert.ok(!records['o/pages'].includes('help_page'));
 });
+
+test('remote absence, deletion, and same-id collision cannot remove or replace local Help', () => {
+  const localHelp = {
+    id: 'help_page', title: 'Help & Docs', isSystemPage: true,
+    builtInId: 'help-docs', systemRole: 'help-docs',
+    content: '<p>current generated local docs</p>'
+  };
+  const local = sampleWorkspace();
+  local.pages = [localHelp, ...local.pages.filter(page => page.id)];
+
+  // Simulate a stale/malicious remote record reusing the stable Help id.
+  // The local generated resource must win and remain unique.
+  const remoteWithCollision = sampleWorkspace();
+  remoteWithCollision.pages = [
+    { id: 'help_page', title: 'Remote replacement', content: '<p>not system help</p>' },
+    { id: 'remote-page', title: 'Remote note', content: '<p>remote</p>' }
+  ];
+  let applied = projectionApi.applyProjectionToWorkspace(
+    local,
+    projectionApi.buildProjection(remoteWithCollision)
+  );
+  let helpPages = applied.pages.filter(page =>
+    page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs');
+  assert.equal(helpPages.length, 1);
+  assert.deepEqual(helpPages[0], localHelp, 'remote content must not replace the local system resource');
+  assert.ok(applied.pages.some(page => page.id === 'remote-page'));
+
+  // A delete op/tombstone is represented at projection apply time by the
+  // record being absent. Repeated remote applies must preserve exactly one
+  // local Help resource and never create a synchronized Help record.
+  const afterRemoteDelete = projectionApi.buildProjection({ pages: [] });
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    applied = projectionApi.applyProjectionToWorkspace(applied, afterRemoteDelete);
+    helpPages = applied.pages.filter(page =>
+      page.id === 'help_page' || page.systemRole === 'help-docs' || page.builtInId === 'help-docs');
+    assert.equal(helpPages.length, 1, `cycle ${cycle + 1} duplicated or deleted Help`);
+    assert.deepEqual(helpPages[0], localHelp);
+  }
+  const reprojected = projectionApi.buildProjection(applied).records;
+  assert.equal(reprojected['c/pages/help_page'], undefined);
+  assert.ok(!reprojected['o/pages'].includes('help_page'));
+});

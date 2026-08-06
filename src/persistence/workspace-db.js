@@ -23,7 +23,17 @@
         liveDb = null;
         liveFactory = null;
       }
-      opening = null;
+      // A stale connection can fail after another caller has already begun
+      // opening its replacement. Only open() owns the in-flight promise; do not
+      // let that stale connection clear a newer open attempt.
+      if (!db) opening = null;
+    }
+
+    function isClosingConnectionError(error) {
+      // Per IndexedDB, IDBDatabase.transaction() throws InvalidStateError when
+      // the connection's close-pending flag is set. Opening a fresh connection
+      // is safe because no transaction (and therefore no write) started.
+      return !!error && error.name === 'InvalidStateError';
     }
 
     function open() {
@@ -70,16 +80,22 @@
       });
       return opening;
     }
-    async function read(key) {
+    async function read(key, retryCount) {
       var db = await open();
+      var tx;
+      var request;
+      var value = null;
+      try {
+        tx = db.transaction(storeName, 'readonly');
+        request = tx.objectStore(storeName).get(key);
+      } catch (error) {
+        if (!retryCount && isClosingConnectionError(error)) {
+          forget(db);
+          return read(key, 1);
+        }
+        throw error;
+      }
       return new Promise(function (resolve, reject) {
-        var tx;
-        var request;
-        var value = null;
-        try {
-          tx = db.transaction(storeName, 'readonly');
-          request = tx.objectStore(storeName).get(key);
-        } catch (error) { reject(error); return; }
         request.onsuccess = function () { value = request.result === undefined ? null : request.result; };
         request.onerror = function () { reject(request.error || tx.error || new Error('IndexedDB read request failed')); };
         tx.oncomplete = function () { resolve(value); };
@@ -87,11 +103,21 @@
         tx.onabort = function () { reject(tx.error || new Error('IndexedDB read transaction aborted')); };
       });
     }
-    async function write(key, value) {
+    async function write(key, value, retryCount) {
       var db = await open();
+      var tx;
+      var request;
+      try {
+        tx = db.transaction(storeName, 'readwrite');
+        request = tx.objectStore(storeName).put(value, key);
+      } catch (error) {
+        if (!retryCount && isClosingConnectionError(error)) {
+          forget(db);
+          return write(key, value, 1);
+        }
+        throw error;
+      }
       return new Promise(function (resolve, reject) {
-        var tx = db.transaction(storeName, 'readwrite');
-        var request = tx.objectStore(storeName).put(value, key);
         request.onerror = function () { reject(request.error || tx.error || new Error('IndexedDB write request failed')); };
         tx.oncomplete = function () { resolve(); };
         tx.onerror = function () { reject(tx.error || new Error('IndexedDB transaction failed')); };

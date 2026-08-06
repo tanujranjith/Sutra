@@ -58,13 +58,14 @@
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
     <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
+    <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
     <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
     <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
     <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
     <script src="src/domain/import-engine.js?v=20260710-import1"></script>
     <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
-    <script src="src/persistence/workspace-db.js?v=20260714-idb-factory1"></script>
+    <script src="src/persistence/workspace-db.js?v=20260729-idb-close-retry1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
     <script src="src/persistence/revocation-wipe.js?v=20260716-syncwipe1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
@@ -73,13 +74,13 @@
          Node tests. Load order: protocol first, engine last, all before app.js. -->
     <script src="src/sync/sync-protocol.js?v=20260716-syncparity1"></script>
     <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
-    <script src="src/sync/sync-projection.js?v=20260716-syncparity1"></script>
+    <script src="src/sync/sync-projection.js?v=20260731-helpdocs1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260717-conflict4"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260718-account-isolation1"></script>
     <script src="src/sync/sync-engine.js?v=20260717-conflict4"></script>
-    <script src="src/config/feature-manifest.js?v=20260722-assistantreceipt1"></script>
+    <script src="src/config/feature-manifest.js?v=20260729-providerwiz1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -106,7 +107,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260710-tokens1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260721-themeButtons1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260730-pushTime1">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
@@ -1133,6 +1134,10 @@
                                         <option value="evening">Evening</option>
                                         <option value="night">Night</option>
                                     </select>
+                                </div>
+                                <div class="timeline-more-group timeline-push-time-menu-group">
+                                    <button type="button" role="menuitem" id="timelinePushTimeBtn" class="timeline-more-action">Push time...</button>
+                                    <button type="button" role="menuitem" id="timelineUndoPushTimeBtn" class="timeline-more-action" hidden disabled>Undo last Push time</button>
                                 </div>
                                 <div class="timeline-more-footnote">
                                     <span id="timeModeBadge" class="mode-badge">Morning</span>
@@ -7477,8 +7482,12 @@
          Loads before app.js so the flag can mount at boot; app.js only touches it
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
-    <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
+    <script src="src/features/notes/editor-v2.js?v=20260730-undoIsolation1"></script>
 <script src="src/core/app.js?v=20260805-device-session1"></script>
+    <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
+         canonical handlers rendered by app.js. -->
+    <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
+    <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
     <script src="src/features/workspace/slides.js?v=20260722-slides7"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
@@ -7495,7 +7504,7 @@
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260723-unified1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260723-unified3"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260707-batch1"></script>
@@ -7504,8 +7513,8 @@
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
-    <script src="src/features/workspace/timeline-drag.js?v=20260721-drag2"></script>
-    <script src="src/features/workspace/timeline-calendar.js?v=20260721-mobile1"></script>
+    <script src="src/features/workspace/timeline-drag.js?v=20260730-pushTime1"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20260730-timeFormat2"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
@@ -7880,7 +7889,7 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260723-unified1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260723-unified2">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
@@ -7896,6 +7905,7 @@
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260723-mobiletoday4">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
+    <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

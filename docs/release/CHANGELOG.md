@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-07-30 - Supabase policy/ACL reconciliation
+
+- Added an additive migration reproducing the live four-policy `sync-assets`
+  hardening: only `<auth.uid()>/<64 lowercase hexadecimal SHA-256>` is accepted,
+  and the active registered non-revoked session predicate remains mandatory.
+- Removed `PUBLIC`, `anon`, and `authenticated` execution of the internal
+  `public.rls_auto_enable()` event-trigger helper while preserving database-owner
+  access and every required authenticated Sutra Sync RPC grant.
+- Added executable Storage-path matrices, migration/permission checks, canonical
+  client-path/account tests, broader ciphertext-boundary sentinels, and stricter
+  deployment-artifact parity/secret checks. Live Account A/B, OTP, mobile, and
+  deployed-PWA acceptance remains operator-run.
+
 ## 2026-07 - Sutra Sync: encrypted multi-device sync
 
 True incremental multi-device synchronization, built as a NEW layer separate
