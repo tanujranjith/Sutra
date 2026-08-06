@@ -382,9 +382,11 @@ outbox, wrapped vault key, refresh token, asset state, or conflict records. A
 non-secret local account hint is used only to select that namespace before a
 refresh-token renewal. It is deleted by revoke-and-wipe and never enters a
 workspace, export, or sync envelope. If an authenticated browser profile
-changes accounts, the bridge stops cloud sync before any pull/push/unlock and
-requires a separate profile; it preserves local data rather than merging two
-cloud identities. A legacy profile that pre-dates namespaces and already has
+changes accounts, the bridge clears the device's persisted enable flag, reports
+Sync as off and account-change-blocked, and stops before any pull, push, unlock,
+or enable attempt. It requires a separate profile and preserves local data
+rather than merging two cloud identities or rebinding the former account's
+operational namespace. A legacy profile that pre-dates namespaces and already has
 sync enabled is also quarantined at its first post-update sign-in because the
 old unscoped outbox has no trustworthy account binding. The user first creates
 an encrypted local backup, then bootstraps the correct account in a fresh

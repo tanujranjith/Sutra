@@ -4412,10 +4412,10 @@
                         </div>
                     </div>
                     <div class="cc-group cc-group-stacked" id="sutraFullSyncSection">
-                        <div class="cc-group-head"><span class="cc-group-title">Sutra Sync</span><span class="cc-tag cc-tag-info">Optional</span></div>
+                        <div class="cc-group-head"><span class="cc-group-title">Sutra Sync Beta</span><span class="cc-tag cc-tag-info">Optional · Off by default</span></div>
                         <p class="cc-foot-help">Keep this workspace synchronized across devices with end-to-end-encrypted incremental changes. Local saving continues if sync is offline. Sync is not a backup: keep encrypted <code>.sutra</code> recovery copies too.</p>
                         <div class="cc-stacked-actions">
-                            <button class="cc-btn cc-btn-ghost" type="button" onclick="openSutraSyncModal()">Open Sutra Sync</button>
+                            <button class="cc-btn cc-btn-ghost" type="button" onclick="openSutraSyncModal()">Open Sync settings</button>
                         </div>
                     </div>
                     <div class="cc-group cc-group-stacked" id="sutraDriveSyncSection">
@@ -6059,7 +6059,7 @@
         <div class="modal-content sutra-sync-modal" role="dialog" aria-modal="true" aria-labelledby="sutraSyncModalTitle" aria-describedby="sutraSyncStatusCard">
             <div class="modal-header">
                 <h3 class="modal-title" id="sutraSyncModalTitle">
-                    <i class="fas fa-rotate" aria-hidden="true"></i> Sutra Sync
+                    <i class="fas fa-rotate" aria-hidden="true"></i> Sutra Sync Beta
                 </h3>
                 <button class="close-btn" type="button" data-modal-close onclick="closeSutraSyncModal()" aria-label="Close Sutra Sync">&times;</button>
             </div>
@@ -6069,6 +6069,7 @@
                 <!-- Setup (sync disabled) -->
                 <section class="sutra-sync-section" id="sutraSyncSetup" hidden aria-labelledby="sutraSyncSetupTitle">
                     <h4 id="sutraSyncSetupTitle">Turn on encrypted sync</h4>
+                    <p class="sutra-sync-hint"><strong>Optional and currently off.</strong> Sutra will not upload this workspace unless you choose Turn on sync.</p>
                     <p class="sutra-sync-hint">
                         Sync keeps this workspace identical across your devices. Changes are
                         end-to-end encrypted with a passphrase only you know — the server
@@ -6079,6 +6080,12 @@
                         Before the first merge, Sutra downloads a complete encrypted
                         safety backup. Keep it somewhere safe; setup stops if a required
                         attachment is missing.
+                    </p>
+                    <p class="sutra-sync-warning">
+                        During the beta, keep a recent encrypted .sutra backup. A revoked
+                        offline device can process its wipe only after it reconnects, and
+                        support across every browser, installed PWA, and physical device
+                        is still being validated.
                     </p>
                     <p class="sutra-sync-hint" id="sutraSyncSignInHint" hidden>
                         Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in via Sutra Cloud</button> first, then come back here.
@@ -7483,7 +7490,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260730-undoIsolation1"></script>
-<script src="src/core/app.js?v=20260805-device-session1"></script>
+<script src="src/core/app.js?v=20260805-syncbeta2"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7500,7 +7507,7 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260605-quotes1"></script>
-    <script src="src/features/workspace/notifications.js?v=20260723-mobilemodal1"></script>
+    <script src="src/features/workspace/notifications.js?v=20260805-syncbeta1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>

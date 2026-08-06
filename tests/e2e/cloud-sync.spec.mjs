@@ -98,6 +98,127 @@ async function syncNow(page) {
   });
 }
 
+test.describe('Sutra Sync Beta opt-in boundaries', () => {
+  test.describe.configure({ timeout: 180_000 });
+
+  test('fresh workspaces discover the beta without enabling it, and dismissal is durable', async ({ browser }) => {
+    const server = createSyncMockServer();
+    const device = await openDevice(browser, server, 'beta-discovery');
+
+    await device.page.waitForFunction(() => window.SutraNotifications
+      && window.SutraNotifications.getNotifications().some(item => item.source === 'syncBeta'));
+    const initial = await device.page.evaluate(() => ({
+      status: window.SutraSync.status(),
+      notice: window.SutraNotifications.getNotifications().find(item => item.source === 'syncBeta')
+    }));
+    expect(initial.status.enabled).toBe(false);
+    expect(initial.notice).toMatchObject({
+      title: 'Sutra Sync Beta is available',
+      relativeTime: 'optional · currently off'
+    });
+    expect(device.net.seenAuthHeaders).toHaveLength(0);
+
+    await device.page.evaluate(() => window.SutraNotifications.openPanel());
+    const noticeRow = device.page.getByRole('article', { name: /Sutra Sync Beta is available/i });
+    await expect(noticeRow).toBeVisible();
+    await noticeRow.focus();
+    await device.page.keyboard.press('Enter');
+    await expect(device.page.getByRole('dialog', { name: /Sutra Sync Beta/i })).toBeVisible();
+    await expect(device.page.locator('#sutraSyncSetup')).toContainText('Optional and currently off');
+    await expect(device.page.locator('#sutraSyncSetup')).toContainText('recent encrypted .sutra backup');
+    expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
+    await device.page.locator('#sutraSyncModal [data-modal-close]').click();
+
+    // Use a second fresh profile to exercise the explicit Not now/dismiss path,
+    // since opening the first notice intentionally acknowledges it as read.
+    const dismissed = await openDevice(browser, server, 'beta-dismissal');
+    await dismissed.page.waitForFunction(() => window.SutraNotifications
+      && window.SutraNotifications.getNotifications().some(item => item.source === 'syncBeta'));
+    await dismissed.page.evaluate(() => window.SutraNotifications.openPanel());
+    await dismissed.page.getByRole('button', { name: /Dismiss Sutra Sync Beta is available/i }).click();
+    expect((await dismissed.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
+
+    await dismissed.page.reload();
+    await dismissed.page.waitForSelector('#fileInput', { state: 'attached' });
+    await completeOnboarding(dismissed.page);
+    await dismissed.page.waitForFunction(() => !!window.SutraNotifications && !!window.SutraSync);
+    await dismissed.page.waitForTimeout(300);
+    expect(await dismissed.page.evaluate(() => window.SutraNotifications
+      .getNotifications().some(item => item.source === 'syncBeta'))).toBe(false);
+    expect((await dismissed.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
+    await expect(dismissed.page.locator('#sutraSyncOpenBtn')).toBeAttached();
+
+    // A restore containing another device's opt-in cannot override this
+    // device's explicit local off state.
+    const afterImport = await dismissed.page.evaluate(() => {
+      const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+      payload.settings.preferences.sync = { enabled: true, endpoint: 'https://should-not-enable.invalid' };
+      window.deserializeWorkspace(payload);
+      return window.SutraSync.status();
+    });
+    expect(afterImport.enabled).toBe(false);
+
+    await device.context.close();
+    await dismissed.context.close();
+  });
+
+  test('sign-in stays off and switching accounts clears opt-in while quarantining prior state', async ({ browser }) => {
+    const server = createSyncMockServer();
+    const device = await openAuthedDevice(browser, server, 'account-opt-in');
+    expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
+    expect(device.net.seenAuthHeaders).toHaveLength(0);
+
+    await seedBaseline(device.page);
+    await enableSync(device.page);
+    expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(true);
+    const beforeSwitchRpcCount = device.net.seenAuthHeaders.length;
+    const pageTitle = await device.page.evaluate(() => window.serializeWorkspace().pages[0].title);
+
+    await device.page.evaluate(async () => {
+      await window.SutraCloudSync.signOut();
+      await window.SutraCloudSync.verifyCode('account-b@example.com', '123456');
+    });
+    const switched = await device.page.evaluate(async ({ endpoint, passphrase }) => {
+      let enableError = '';
+      try { await window.SutraSync.enable({ endpoint, passphrase }); }
+      catch (error) { enableError = String(error && error.message || error); }
+      return {
+        status: window.SutraSync.status(),
+        identity: window.SutraCloudSync.getActiveProvider().identity,
+        pageTitle: window.serializeWorkspace().pages[0].title,
+        enableError
+      };
+    }, { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE });
+    expect(switched.identity).toBe('account-b@example.com');
+    expect(switched.status.enabled).toBe(false);
+    expect(switched.status.state).toBe('account-switch-blocked');
+    expect(switched.enableError).toMatch(/changed to a different account/i);
+    expect(switched.pageTitle).toBe(pageTitle);
+    expect(device.net.seenAuthHeaders).toHaveLength(beforeSwitchRpcCount);
+    await device.context.close();
+  });
+
+  test('explicit enablement and disablement remain durable', async ({ browser }) => {
+    const server = createSyncMockServer();
+    const device = await openAuthedDevice(browser, server, 'durable-opt-in');
+    await seedBaseline(device.page);
+    await enableSync(device.page);
+    await device.page.reload();
+    await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await completeOnboarding(device.page);
+    await device.page.waitForFunction(() => !!window.SutraSync);
+    expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(true);
+
+    await device.page.evaluate(() => window.SutraSync.disable());
+    await device.page.reload();
+    await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await completeOnboarding(device.page);
+    await device.page.waitForFunction(() => !!window.SutraSync);
+    expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
+    await device.context.close();
+  });
+});
+
 test('device-session mismatch fails closed, leaves no generated key, and safely requires reauthentication', async ({ browser }) => {
   const server = createSyncMockServer();
   const device = await openAuthedDevice(browser, server, 'mismatch-device');

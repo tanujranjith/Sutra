@@ -59724,12 +59724,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // account's stored credential. Keep that state quarantined instead
             // of guessing and risking an A-to-B upload. Fresh users have sync
             // disabled, so they are not affected by this one-time guard.
-            const unboundExistingSync = !prior && isSutraSyncEnabled();
-            const switched = (!!prior && prior !== current) || unboundExistingSync;
-            if (switched) {
+            const enabledBeforeTransition = isSutraSyncEnabled();
+            const unboundExistingSync = !prior && enabledBeforeTransition;
+            const switchedAccount = !!prior && prior !== current;
+            if (switchedAccount || unboundExistingSync) {
                 // Preserve the local-first workspace and the former account's
-                // scoped operational state, but do not let this authenticated
-                // account pull, push, unlock, or bootstrap against it.
+                // scoped operational state. The newly authenticated account
+                // starts with Sync OFF and cannot pull, push, unlock, enable,
+                // or bootstrap in this profile.
                 if (sutraSyncRuntime.engine) {
                     try { sutraSyncRuntime.engine.stop(); } catch (error) {}
                 }
@@ -59739,6 +59741,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     try { sutraSyncRuntime.store.close(); } catch (error) {}
                 }
                 sutraSyncRuntime.store = null;
+                setWorkspacePreference('sync.enabled', false);
+                persistAppData();
                 sutraSyncRuntime.accountSwitchBlocked = {
                     from: prior || 'unbound-existing-sync-state',
                     to: current
@@ -59746,6 +59750,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 try {
                     dispatchSutraSyncEvent('sutra:sync-status', {
                         state: 'account-switch-blocked',
+                        enabled: false,
+                        reason: 'account-changed',
                         lastError: 'Sync is locked to prevent data from two cloud accounts being combined in one browser profile.'
                     });
                 } catch (error) {}
@@ -59757,7 +59763,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             } else {
                 sutraSyncRuntime.accountSwitchBlocked = null;
             }
-            if (!unboundExistingSync) persistSutraSyncAccountHint(current);
+            if (!unboundExistingSync && !switchedAccount) persistSutraSyncAccountHint(current);
         }
 
         function assertSutraSyncAccountIsSafe() {
@@ -60528,7 +60534,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (sutraSyncRuntime.accountSwitchBlocked) {
                 return {
                     state: 'account-switch-blocked',
-                    enabled: isSutraSyncEnabled(),
+                    enabled: false,
                     endpoint: getSutraSyncEndpoint(),
                     lastError: 'Cloud sync is locked because this browser profile changed accounts. Local data was not uploaded or replaced.'
                 };
@@ -61168,6 +61174,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         try {
             window.SutraSync = {
+                open: openSutraSyncModal,
                 enable: enableSutraSync,
                 unlock: unlockSutraSync,
                 disable: disableSutraSync,

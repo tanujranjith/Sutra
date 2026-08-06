@@ -6,11 +6,27 @@ requires explicit setup, and is a **separate system from backups** — encrypted
 `.sutra` exports, Sutra Cloud provider backups, and Google Drive snapshot sync
 all keep working unchanged.
 
-Open it from **Settings → Data & Backup → Sutra Sync** or the **Sync** button
-in the save bar. Before the first merge, Sutra downloads an encrypted
+Open **Sutra Sync Beta** from its one-time in-app availability notice,
+**Settings → Data & Backup**, or the **Sync** button in the save bar. The
+notice is informational and dismissible: opening Settings, signing in,
+restoring a workspace, or acknowledging the notice does not enable Sync or
+upload workspace data. Only **Turn on sync**, followed by the passphrase setup,
+opts this device in. The explicit enable or disable choice survives reloads,
+while an imported workspace can never force-enable Sync on this device.
+
+Before the first merge, Sutra downloads an encrypted
 `sutra-before-sync-*.sutra` safety backup; setup stops if required attachment
 bytes are missing. Normative technical spec:
 [`docs/architecture/SYNC_PROTOCOL.md`](../architecture/SYNC_PROTOCOL.md).
+
+## Beta safety boundary
+
+Sutra Sync remains a beta while browser, installed-PWA, mobile, account-change,
+offline, conflict, and revoke-and-wipe behavior continues to be validated on
+real devices. Keep a recent encrypted `.sutra` backup in a separate location.
+Revoked devices lose cloud access immediately, but an offline device can
+process a requested local wipe only after it reconnects. Sync is useful for
+replication, but it is not the only copy you should rely on for recovery.
 
 ## Three different guarantees
 
@@ -116,11 +132,13 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
   browser restarts; the vault still requires your passphrase each session.
   Its device-local queue, baseline, device ID, wrapped key, assets, conflicts,
   and refresh token are namespace-scoped to the authenticated account. If a
-  browser profile signs in as a different account, cloud sync stops with
-  **Account change needs a separate profile** rather than showing/pushing the
-  former account's operational state as the new account. The local-first
-  workspace is preserved; use another browser profile before syncing. This is
-  deliberately fail-closed, not an automatic cross-account migration. As a
+  browser profile signs in as a different account, the persisted enable flag
+  is cleared, the UI reports Sync as off and account-change-blocked, and cloud
+  sync stops before any pull, push, unlock, or enable attempt. Sutra shows
+  **Account change needs a separate profile** rather than exposing the former
+  account's operational state as the new account. The local-first workspace is
+  preserved; use another browser profile before syncing. This is deliberately
+  fail-closed, not an automatic cross-account migration. As a
   one-time upgrade boundary, a browser that already had sync enabled before
   account namespaces existed is quarantined on its first post-update sign-in:
   make an encrypted `.sutra` backup of its preserved local workspace, then use

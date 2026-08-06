@@ -42,10 +42,11 @@ export async function routeSyncServer(context, server, net = { down: false }) {
     if (url.pathname === '/auth/v1/otp' && request.method() === 'POST') return json(200, {});
     if (url.pathname === '/auth/v1/verify' && request.method() === 'POST') {
       const body = JSON.parse(request.postData() || '{}');
+      const accountB = /account-b/i.test(String(body.email || ''));
       return json(200, {
-        access_token: 'mock-access-token', token_type: 'bearer', expires_in: 3600,
-        refresh_token: 'mock-refresh-token',
-        user: { id: 'mock-user-1', email: body.email || 'student@example.com' }
+        access_token: accountB ? 'mock-access-token-b' : 'mock-access-token', token_type: 'bearer', expires_in: 3600,
+        refresh_token: accountB ? 'mock-refresh-token-b' : 'mock-refresh-token',
+        user: { id: accountB ? 'mock-user-2' : 'mock-user-1', email: body.email || 'student@example.com' }
       });
     }
     if (url.pathname === '/auth/v1/token' && request.method() === 'POST') {

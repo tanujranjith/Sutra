@@ -267,6 +267,7 @@
             review: 'fa-cards-blank',
             business: 'fa-briefcase',
             release: 'fa-sparkles',
+            syncBeta: 'fa-rotate',
             timedHabit: 'fa-stopwatch',
             milestone: 'fa-flag-checkered',
             schedule: 'fa-school'
@@ -306,6 +307,33 @@
             });
             return acc;
         }, []);
+    }
+
+    function _deriveSyncBetaNotifications(now, prefs) {
+        if (!prefs.categories.release) return [];
+        var api = global.SutraSync;
+        if (!api || typeof api.status !== 'function' || typeof api.open !== 'function') return [];
+        var status;
+        try { status = api.status(); } catch (e) { return []; }
+        if (status && status.enabled === true) return [];
+        var key = 'sync-beta:2026-08-opt-in';
+        if (_state.dismissed[key] || _state.read[key]) return [];
+        return [{
+            key: key,
+            sourceKey: key,
+            source: 'syncBeta',
+            title: 'Sutra Sync Beta is available',
+            subtitle: 'Optional end-to-end encrypted device sync. It is currently off and will not upload anything unless you enable it.',
+            due: new Date(now),
+            hoursUntil: 0,
+            relativeTime: 'optional · currently off',
+            priority: 'info',
+            icon: _sourceIcon('syncBeta'),
+            read: false,
+            overdue: false,
+            sourceId: '2026-08-opt-in',
+            sourceCourseId: ''
+        }];
     }
 
     function _deriveTimedHabitNotifications(now, prefs) {
@@ -483,6 +511,7 @@
             });
         });
 
+        out = out.concat(_deriveSyncBetaNotifications(now, prefs));
         out = out.concat(_deriveReleaseNotifications(now, prefs));
         out = out.concat(_deriveTimedHabitNotifications(now, prefs));
         out = out.concat(_deriveScheduleNotifications(now, prefs));
@@ -757,6 +786,12 @@
             if (source === 'release') {
                 if (global.SutraReleaseNotes && typeof global.SutraReleaseNotes.open === 'function') {
                     global.SutraReleaseNotes.open();
+                }
+                return;
+            }
+            if (source === 'syncBeta') {
+                if (global.SutraSync && typeof global.SutraSync.open === 'function') {
+                    global.SutraSync.open();
                 }
                 return;
             }
@@ -1169,6 +1204,12 @@
 
             // Keyboard handler
             panel.addEventListener('keydown', function (e) {
+                var keyboardRow = e.target.closest && e.target.closest('.notif-row');
+                if (keyboardRow && !e.target.closest('button') && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    keyboardRow.click();
+                    return;
+                }
                 if (e.key === 'Escape') { e.preventDefault(); closePanel(); }
                 if (e.key !== 'Tab') return;
                 var focusable = Array.prototype.slice.call(panel.querySelectorAll(
@@ -1635,6 +1676,7 @@
         // Listen for workspace state changes
         global.addEventListener('homework:updated', function () { setTimeout(refresh, 200); });
         global.addEventListener('sutra:school-schedule-updated', function () { setTimeout(refresh, 200); });
+        global.addEventListener('sutra:sync-status', function () { setTimeout(refresh, 0); });
 
         // Tab visibility
         document.addEventListener('visibilitychange', _onVisibilityChange);

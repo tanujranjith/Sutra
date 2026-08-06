@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-08 - Sutra Sync Beta opt-in readiness
+
+- Labeled Sutra Sync as an optional beta in Settings and setup, with an honest
+  safety notice covering encrypted `.sutra` backups, offline revocation limits,
+  and ongoing browser/PWA/device validation.
+- Added one dismissible, keyboard-operable in-app availability notice that opens
+  the existing Sync setup. The notice, Settings, sign-in, reload, and workspace
+  restore remain non-enabling; no Sync upload occurs without explicit setup.
+- Made the local enable/disable decision durable while continuing to exclude it
+  from portable workspace restore. A cloud-account change now visibly resets
+  Sync to off and retains the separate-profile quarantine before any pull, push,
+  unlock, enable, or prior-account operational-state access.
+- Added focused unit and Chromium coverage for fresh-device opt-in boundaries,
+  notice dismissal, import isolation, sign-in, account switching, reload
+  persistence, and explicit disablement.
+
 ## 2026-07-30 - Supabase policy/ACL reconciliation
 
 - Added an additive migration reproducing the live four-policy `sync-assets`
