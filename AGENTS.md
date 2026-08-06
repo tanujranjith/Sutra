@@ -189,6 +189,11 @@ The `.sutra` file is the canonical portable full-workspace backup.
   result. If indexing fails after a confirmed upload, best-effort rollback must
   target only that attempt's unique object path. The metadata failure remains
   primary; rollback failure is secondary and must never be reported as success.
+- Supabase RLS policies do not grant table privileges. `backup_index` must
+  explicitly deny `PUBLIC`/`anon`, grant authenticated clients only
+  `SELECT`/`INSERT`/`DELETE`, and retain ownership RLS; the browser adapter does
+  not require `UPDATE`. Keep the baseline schema and ordered reconciliation
+  migration aligned so a valid Storage upload can be indexed.
 - Google Drive remains encrypted whole-snapshot sync, separate from incremental
   Sutra Sync. Drive cycles must be single-flight, and a clean remote pull must
   bind its restore decision to the local mutation revision: if a confirmed save
@@ -277,6 +282,9 @@ Invariants any change must preserve:
   persist a replacement key. A mismatch recovery ends the stale Supabase auth
   session and removes its persisted refresh token while preserving the local
   workspace, device-scoped Sync state, and existing wrapped key for reauthentication.
+  The database event-trigger helper `public.rls_auto_enable()` is not a browser
+  RPC: `PUBLIC`, `anon`, and `authenticated` must not have `EXECUTE`; the
+  database owner/internal role retains the access needed by the event trigger.
   The reviewed/static guarantees do not substitute for the operator-run
   Account A/B REST/RPC/Storage/payload checklist in
   `docs/release/SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md`.
@@ -600,6 +608,7 @@ A task is complete only when:
 13. **Canvas pages visually leak note content through the V2 editor host.** When Notes Editor V2 is active (default-on), the visible note surface is `#editorV2Host`, not `#editor`. The `showCanvasEditorForPage`/`hideCanvasEditor` functions (and their `body.canvas-page-active` CSS backstop) must toggle BOTH the V2 host and the secondary split pane to prevent the previous note's content from displaying above the canvas. Never assume that hiding `#editor` alone is sufficient. The CSS rules at `styles/base/styles.css:33154` already handle `.toolbar-wrapper`, `.view-flow-row`, `.breadcrumbs`, and `.tags-container` but were missing `.editor-v2-host` and `#notesSecondaryPane` before the 2026-07-17 Canvas isolation fix.
 14. **Slides has its own author-level display rule.** Setting the DOM `hidden` property is not sufficient if `.slides-editor { display: flex; }` overrides the browser's user-agent `[hidden]` rule. Keep `.slides-editor[hidden] { display: none !important; }`, the inert/ARIA teardown in `setEditorVisible`, and the Slides-to-Notepad browser regression together.
 15. **Mobile navigation has one canonical route source.** The phone **All sections** sheet is derived from enabled `.top-tab` controls and activates their established handlers. Do not create a parallel route list, direct view mutation path, or mobile-only data source. Preserve its focus trap, focus restoration, Escape/browser-Back dismissal, scroll lock, and the Notes drawer regression coverage when changing the shell.
+16. **Help & Docs flags are identity, not presentation.** Browser fixtures that need an ordinary note must construct one explicitly or clear `isSystemPage`, `builtInId`, and `systemRole`; do not clone the first serialized page and change only its title/id because a fresh workspace's first page may be the generated Help resource and import will correctly canonicalize it back to Help & Docs.
 
 ---
 

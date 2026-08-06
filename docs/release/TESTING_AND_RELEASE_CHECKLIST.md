@@ -20,6 +20,7 @@ browser.
 | --- | --- |
 | `node scripts/smoke-check.mjs` | Structural integrity of the app: export/import wiring, encrypted `.sutra` envelope constants, iOS-safe file pickers, Drive `appDataFolder` scope/metadata guards, settings save/apply wiring, and key feature hooks. Runs text-level assertions; does not execute the app. |
 | `node scripts/round-trip-check.mjs` | Save/export/import/sync **field parity**. Validates exact field names and classifications across workspace defaults, the inventory, serializer/import, sync protocol/projection, nested durable contracts, secret exclusions, and every localStorage decision. It deliberately does not rely on field counts. |
+| `node scripts/sutra-supabase-schema-check.mjs` | Supabase migration order, the final four exact-path `sync-assets` policies, active-session predicates, non-destructive migration scope, `rls_auto_enable()` browser-role revocation, preserved owner access, and unchanged Sync/backup permissions. |
 | `node --test tests/unit/sync-parity.test.mjs` | Runs the canonical synthetic everything-workspace through actual projection/diff/merge/reconstruction, reports field-level diffs, validates Assistant durable contracts and inventory fixture coverage, and proves reverse incremental update/delete/reorder/empty behavior. |
 | `node scripts/version-history-check.mjs` | Notes **Version History** semantics. Extracts the pure version-history helpers and executes them: legacy snapshots normalize without clobbering, rich snapshots capture only the selected editable fields (never secrets), values are deep-cloned, duplicates suppressed / forced snapshots kept, history bounded to the cap, restore recovers state while leaving lock/identity untouched, throttle reads persisted timestamps, and nested history survives JSON round-trip. |
 | `node scripts/sutra-docbg-check.mjs` | **Document Backgrounds.** Executes `normalizeDocumentBackground()` to prove the blur (0-32px) and dim (0-80%) clamps and image validation behave, and statically confirms the render engine, **locked-page gating**, duplicate-copy, and export wiring are present - including that the background rides the existing recursive inline-asset extraction used for `.sutra` / `.atelier` / JSON export. |
@@ -37,6 +38,7 @@ console / page rather than via Node).
 ```sh
 node scripts/smoke-check.mjs
 node scripts/round-trip-check.mjs
+node scripts/sutra-supabase-schema-check.mjs
 node scripts/version-history-check.mjs
 node scripts/sutra-docbg-check.mjs
 node scripts/sutra-rebrand-check.mjs
@@ -276,11 +278,17 @@ human authentication.
 
 For the current manual Account A/B certification sequence, use
 [`SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md`](./SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md)
-after applying `supabase/migrations/20260718_sync_account_isolation.sql`. The
+after applying the ordered chain through
+`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`. The
 repository has static policy/RPC/transport checks, but only the operator can
 record real authenticated REST, RPC, Storage, and ciphertext-metadata denial
 evidence. Do not copy a browser token, passphrase, key, or payload body into
 the release record.
+
+The consolidated operator handoff for Account A/B, same-profile switching,
+plaintext inspection, attachments, revoke/wipe, backup rollback, full parity,
+and deployed/mobile/cross-browser acceptance is
+[`SUPABASE_MANUAL_ACCEPTANCE_2026-07-30.md`](./SUPABASE_MANUAL_ACCEPTANCE_2026-07-30.md).
 
 Static HTML CSP cannot safely express every deployment control. Hosts should also
 set a real hosting header with at least `frame-ancestors 'none'` because meta CSP

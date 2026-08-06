@@ -200,9 +200,11 @@ create policy "Sutra sync assets: read active own"
   on storage.objects for select to authenticated
   using (
     bucket_id = 'sync-assets'
-    and array_length(storage.foldername(name), 1) = 2
-    and (storage.foldername(name))[1] = auth.uid()::text
-    and (storage.foldername(name))[2] ~ '^[0-9a-f]{64}$'
+    and name ~ (
+      '^'
+      || auth.uid()::text
+      || '/[0-9a-f]{64}$'
+    )
     and public.sync_session_active()
   );
 drop policy if exists "Sutra sync assets: insert active own" on storage.objects;
@@ -210,9 +212,11 @@ create policy "Sutra sync assets: insert active own"
   on storage.objects for insert to authenticated
   with check (
     bucket_id = 'sync-assets'
-    and array_length(storage.foldername(name), 1) = 2
-    and (storage.foldername(name))[1] = auth.uid()::text
-    and (storage.foldername(name))[2] ~ '^[0-9a-f]{64}$'
+    and name ~ (
+      '^'
+      || auth.uid()::text
+      || '/[0-9a-f]{64}$'
+    )
     and public.sync_session_active()
   );
 drop policy if exists "Sutra sync assets: update active own" on storage.objects;
@@ -220,16 +224,20 @@ create policy "Sutra sync assets: update active own"
   on storage.objects for update to authenticated
   using (
     bucket_id = 'sync-assets'
-    and array_length(storage.foldername(name), 1) = 2
-    and (storage.foldername(name))[1] = auth.uid()::text
-    and (storage.foldername(name))[2] ~ '^[0-9a-f]{64}$'
+    and name ~ (
+      '^'
+      || auth.uid()::text
+      || '/[0-9a-f]{64}$'
+    )
     and public.sync_session_active()
   )
   with check (
     bucket_id = 'sync-assets'
-    and array_length(storage.foldername(name), 1) = 2
-    and (storage.foldername(name))[1] = auth.uid()::text
-    and (storage.foldername(name))[2] ~ '^[0-9a-f]{64}$'
+    and name ~ (
+      '^'
+      || auth.uid()::text
+      || '/[0-9a-f]{64}$'
+    )
     and public.sync_session_active()
   );
 drop policy if exists "Sutra sync assets: delete active own" on storage.objects;
@@ -237,9 +245,11 @@ create policy "Sutra sync assets: delete active own"
   on storage.objects for delete to authenticated
   using (
     bucket_id = 'sync-assets'
-    and array_length(storage.foldername(name), 1) = 2
-    and (storage.foldername(name))[1] = auth.uid()::text
-    and (storage.foldername(name))[2] ~ '^[0-9a-f]{64}$'
+    and name ~ (
+      '^'
+      || auth.uid()::text
+      || '/[0-9a-f]{64}$'
+    )
     and public.sync_session_active()
   );
 
@@ -770,3 +780,15 @@ grant execute on function public.sync_revoke_device(text, text) to authenticated
 grant execute on function public.sync_get_device_status(text) to authenticated;
 grant execute on function public.sync_acknowledge_device_wipe(text, timestamptz) to authenticated;
 grant execute on function public.sync_delete_vault(text) to authenticated;
+
+-- rls_auto_enable() is a database/event-trigger helper, never a browser RPC.
+-- Supabase projects may provide it outside this schema, so harden its ACL only
+-- when present. Revoking EXECUTE does not remove or disable its event trigger.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated;';
+    execute 'grant execute on function public.rls_auto_enable() to postgres;';
+  end if;
+end;
+$$;

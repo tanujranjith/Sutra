@@ -148,6 +148,72 @@ test('asset bytes round-trip and are bound to their content hash', async () => {
   await assert.rejects(() => syncCrypto.decryptAssetBytes(key, swapped), (e) => e.name === 'SyncVaultUnlockError');
 });
 
+test('remote envelopes expose bounded routing metadata but no synthetic workspace, conflict, filename, key, or passphrase plaintext', async () => {
+  const sentinels = {
+    noteTitle: 'REMOTE_BOUNDARY_NOTE_TITLE_730',
+    noteBody: 'REMOTE_BOUNDARY_NOTE_BODY_730',
+    folder: 'REMOTE_BOUNDARY_FOLDER_730',
+    task: 'REMOTE_BOUNDARY_TASK_730',
+    course: 'REMOTE_BOUNDARY_COURSE_730',
+    assistant: 'REMOTE_BOUNDARY_ASSISTANT_730',
+    canvas: 'REMOTE_BOUNDARY_CANVAS_730',
+    slides: 'REMOTE_BOUNDARY_SLIDES_730',
+    filename: 'REMOTE_BOUNDARY_PRIVATE_FILENAME_730.txt',
+    attachment: 'REMOTE_BOUNDARY_ATTACHMENT_BYTES_730',
+    conflict: 'REMOTE_BOUNDARY_CONFLICT_BRANCH_730',
+    passphrase: 'REMOTE_BOUNDARY_PASSPHRASE_730',
+    recovery: 'REMOTE_BOUNDARY_RECOVERY_KEY_730'
+  };
+  const keyBytes = syncCrypto.generateVaultKeyBytes();
+  const key = await syncCrypto.importVaultKey(keyBytes);
+  const payload = {
+    id: 'opaque-page-id',
+    title: sentinels.noteTitle,
+    content: sentinels.noteBody,
+    folderName: sentinels.folder,
+    task: sentinels.task,
+    course: sentinels.course,
+    assistantMessage: sentinels.assistant,
+    canvas: { text: sentinels.canvas },
+    slides: { text: sentinels.slides },
+    attachment: { originalName: sentinels.filename },
+    conflictAlternate: sentinels.conflict,
+    recoveryKey: sentinels.recovery
+  };
+  const operation = sampleOp({
+    recordKey: protocol.collectionKey('pages', 'opaque-page-id'),
+    payload,
+    hash: await protocol.hashValue(payload)
+  });
+  const opEnvelope = await syncCrypto.encryptOpEnvelope(key, operation);
+  const snapshotEnvelope = await syncCrypto.encryptSnapshotEnvelope(
+    key,
+    { records: { [operation.recordKey]: payload } },
+    { cursor: 7, schemaVersion: 5 }
+  );
+  const assetHash = await protocol.hashText(sentinels.attachment);
+  const assetEnvelope = await syncCrypto.encryptAssetBytes(
+    key,
+    new TextEncoder().encode(sentinels.attachment),
+    assetHash
+  );
+  const wrapped = await syncCrypto.wrapVaultKey(keyBytes, sentinels.passphrase, { iterations: 1000 });
+  const remoteWire = JSON.stringify({ opEnvelope, snapshotEnvelope, assetEnvelope, wrapped });
+
+  for (const [classification, sentinel] of Object.entries(sentinels)) {
+    assert.equal(remoteWire.includes(sentinel), false, `${classification} leaked into remote wire`);
+  }
+  assert.equal(remoteWire.includes(Buffer.from(keyBytes).toString('base64')), false, 'unwrapped vault key leaked');
+  assert.deepEqual(Object.keys(opEnvelope.meta).sort(), [
+    'deviceId', 'kind', 'lamport', 'opId', 'protocolVersion', 'recordKey', 'schemaVersion'
+  ]);
+  assert.deepEqual(Object.keys(snapshotEnvelope.meta).sort(), [
+    'cursor', 'protocolVersion', 'schemaVersion', 'type'
+  ]);
+  assert.deepEqual(Object.keys(assetEnvelope).sort(), ['alg', 'ct', 'hash', 'iv', 'v']);
+  assert.match(assetEnvelope.hash, /^[0-9a-f]{64}$/);
+});
+
 test('recovery kit text embeds and re-parses the wrapped blob', async () => {
   const wrapped = await syncCrypto.wrapVaultKey(syncCrypto.generateVaultKeyBytes(), 'pw', { iterations: 1000 });
   const text = syncCrypto.buildRecoveryKitText(wrapped, { createdAt: '2026-07-15', accountLabel: 'student@example.com' });

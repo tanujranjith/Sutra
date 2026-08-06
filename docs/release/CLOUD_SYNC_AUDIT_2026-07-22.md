@@ -149,7 +149,9 @@ projection.
 - SQL revokes direct table access, enables RLS, grants authenticated-only
   security-definer RPCs with a fixed search path, derives ownership from
   `auth.uid()`, binds active device auth sessions, and restricts Storage to
-  `<user-id>/<64-lowercase-hex-hash>`.
+  `<user-id>/<64-lowercase-hex-hash>`. The 2026-07-30 reconciliation also
+  revokes `rls_auto_enable()` execution from `PUBLIC`, `anon`, and
+  `authenticated`, retaining database-owner access without changing Sync RPCs.
 - Revoke/wipe accepts only the exact authenticated
   `sutra-device-status-v1`/`DEVICE_REVOKED` response bound to configured project,
   user, session and device. Generic 401, network failure, malformed response or
@@ -174,11 +176,14 @@ Manual SQL order:
   revoke/wipe and exact Storage-path definitions.
 - **Existing older sync project:** safely apply/re-run
   `supabase/migrations/20260716_device_revoke_wipe.sql`, then
-  `supabase/migrations/20260718_sync_account_isolation.sql`.
+  `supabase/migrations/20260718_sync_account_isolation.sql`, then
+  `supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`.
 - **Already-current project:** no schema reset. Confirm both contracts or safely
-  rerun the two additive migrations in that order. Never run a destructive reset.
+  rerun the three additive migrations in that order. Never run a destructive reset.
 
-No remote migration was executed in this audit.
+The final SQL was applied manually to production before the repository
+reconciliation. This unattended repository pass did not connect to Supabase or
+execute any remote migration.
 
 ## 7. Automated evidence
 

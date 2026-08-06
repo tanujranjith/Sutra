@@ -89,6 +89,9 @@ test('device registry: touch, list, revoke; revoked devices cannot pull or push'
   assert.equal(server.getVaultKey({ deviceId: 'dev-b' }).code, 'revoked');
   assert.equal(server.getSnapshot({ deviceId: 'dev-b' }).code, 'revoked');
   assert.equal(server.hasAsset({ hash: 'abc', deviceId: 'dev-b' }).code, 'revoked');
+  assert.equal(server.getAsset({ hash: 'abc', deviceId: 'dev-b' }).code, 'revoked');
+  assert.equal(server.putAsset({ hash: 'abc', envelope: { ct: 'cipher' }, deviceId: 'dev-b' }).code, 'revoked');
+  assert.equal(server.listAssets({ deviceId: 'dev-b' }).code, 'revoked');
   assert.equal(server.pull({ cursor: 0, deviceId: 'dev-a' }).ok, true);
 });
 
@@ -183,7 +186,9 @@ test('revoked-device wipe instruction is status-only, identity-bound, project-bo
     // never instructions to delete local user data.
     { ok: false, status: 401, code: 'auth-expired' },
     { ok: false, code: 'network-error' },
+    { ok: false, code: 'timeout' },
     { ok: false, code: 'DEVICE_REVOKED', contract: 'not-sutra-device-status-v1' },
+    { ok: true, code: 'DEVICE_REVOKED', contract: 'sutra-device-status-v1' },
     { ...status, deviceId: 'forged-device-id' },
     { ...status, code: 'revoked' },
     { ...status, userId: 'account-b' },
@@ -303,6 +308,21 @@ test('Supabase asset transport rejects crafted paths and plaintext-shaped bodies
     () => transport.putAsset({ hash: 'user-a/secret-name.txt', envelope: { plaintext: 'nope' } }),
     /SHA-256 content hash/
   );
+  for (const invalidHash of [
+    '',
+    'a'.repeat(63),
+    'a'.repeat(65),
+    'A'.repeat(64),
+    `${'a'.repeat(64)}.txt`,
+    `${'a'.repeat(64)}.sutra`,
+    `extra/${'a'.repeat(64)}`,
+    `${'a'.repeat(64)}/`,
+    `${'a'.repeat(64)}?download=1`,
+    `%2e%2e%2f${'a'.repeat(64)}`,
+    ` ${'a'.repeat(64)}`
+  ]) {
+    await assert.rejects(() => transport.getAsset({ hash: invalidHash }), /SHA-256 content hash/);
+  }
   const hash = 'b'.repeat(64);
   await assert.rejects(
     () => transport.putAsset({ hash, envelope: { v: 1, alg: 'A256GCM', iv: 'a'.repeat(16), ct: 'visible plaintext', hash } }),
@@ -310,6 +330,75 @@ test('Supabase asset transport rejects crafted paths and plaintext-shaped bodies
   );
   await assert.rejects(() => transport.getAsset({ hash: '../account-a/object' }), /SHA-256 content hash/);
   assert.deepEqual(calls, [], 'invalid asset inputs must not reach Storage');
+});
+
+test('Supabase asset upload, download, retry, and delete reconstruct one account-scoped canonical path', async () => {
+  const accountA = '11111111-1111-4111-8111-111111111111';
+  const accountB = '22222222-2222-4222-8222-222222222222';
+  const hash = 'c'.repeat(64);
+  const envelope = {
+    v: 1,
+    alg: 'A256GCM',
+    iv: 'a'.repeat(16),
+    ct: 'YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==',
+    hash
+  };
+  let currentUser = accountA;
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    if (url.endsWith('/rest/v1/rpc/sync_put_asset')) {
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    if (url.endsWith('/rest/v1/rpc/sync_list_assets')) {
+      return { ok: true, status: 200, json: async () => ({ ok: true, hashes: [hash] }) };
+    }
+    if (url.endsWith('/rest/v1/rpc/sync_delete_vault')) {
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    if (url.endsWith('/storage/v1/object/sync-assets')) {
+      return { ok: true, status: 200, json: async () => ({}) };
+    }
+    if (url.includes('/storage/v1/object/authenticated/sync-assets/')) {
+      return { ok: true, status: 200, json: async () => envelope };
+    }
+    if (url.includes('/storage/v1/object/sync-assets/')) {
+      return { ok: true, status: 200, json: async () => ({}) };
+    }
+    throw new Error(`unexpected ${init.method} ${url}`);
+  };
+  const transport = transportApi.createSupabaseTransport({
+    baseUrl: 'https://real-project.supabase.co',
+    anonKey: 'public-key',
+    deviceId: 'device-label-must-not-enter-path',
+    fetchImpl,
+    getAccessToken: () => 'access-token',
+    getUserId: () => currentUser
+  });
+
+  await transport.putAsset({ hash, envelope, size_bytes: 10, path: `${accountB}/${hash}`, filename: 'private.pdf' });
+  await transport.putAsset({ hash, envelope, size_bytes: 10, label: 'mutable label' });
+  await transport.getAsset({ hash, path: `${accountB}/${hash}` });
+  await transport.deleteVault();
+  currentUser = accountB;
+  await transport.getAsset({ hash });
+
+  const storageCalls = calls.filter(call => call.url.includes('/storage/v1/object/'));
+  const uploads = storageCalls.filter(call => call.init.method === 'POST');
+  assert.equal(uploads.length, 2);
+  assert.equal(uploads[0].url, `https://real-project.supabase.co/storage/v1/object/sync-assets/${accountA}/${hash}`);
+  assert.equal(uploads[1].url, uploads[0].url, 'retry must be idempotent by content hash');
+  assert.equal(uploads[0].init.headers['x-upsert'], 'true', 'duplicate hashes use the same upsert path');
+  const downloads = storageCalls.filter(call => call.init.method === 'GET');
+  assert.deepEqual(downloads.map(call => call.url), [
+    `https://real-project.supabase.co/storage/v1/object/authenticated/sync-assets/${accountA}/${hash}`,
+    `https://real-project.supabase.co/storage/v1/object/authenticated/sync-assets/${accountB}/${hash}`
+  ]);
+  const removal = storageCalls.find(call => call.init.method === 'DELETE');
+  assert.deepEqual(JSON.parse(removal.init.body), { prefixes: [`${accountA}/${hash}`] });
+  const storageWire = JSON.stringify(storageCalls);
+  assert.doesNotMatch(storageWire, /private\.pdf|mutable label|device-label-must-not-enter-path/);
+  assert.doesNotMatch(storageWire, new RegExp(`${accountA}/${accountB}|${accountB}/${accountA}`));
 });
 
 test('REST transport throws a typed error on non-JSON HTTP failure', async () => {

@@ -10,7 +10,13 @@ definitions. For an existing project created from an older sync schema, apply
 (or safely re-run) these additive migrations in order:
 
 3. [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql);
-4. [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql).
+4. [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql);
+5. [`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`](../../supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql).
+
+The July 30 migration reproduces the policy/ACL state applied manually to the
+production project: four anchored exact-path policies plus no browser-role
+`EXECUTE` on `public.rls_auto_enable()`. It does not change the authenticated
+Sutra Sync RPC grants.
 
 This is intentionally an operator-run checklist. Use two disposable accounts
 and synthetic markers only. Keep OTPs, browser bearer tokens, passphrases, and
@@ -85,7 +91,10 @@ With Account B's session, try the private `sync-assets` bucket against:
 - Account A's exact opaque path: `<A-user-id>/<64-char-hash>`;
 - Account A's prefix with a guessed hash;
 - B's prefix with an extra component, e.g. `<B-user-id>/<hash>/extra`;
-- B's prefix with a non-hash filename, e.g. `<B-user-id>/report.pdf`.
+- B's prefix with a non-hash filename, e.g. `<B-user-id>/report.pdf`;
+- 63- and 65-character hashes, uppercase/mixed-case/non-hex hashes;
+- leading/trailing slashes, filename extensions, query-like text, whitespace,
+  and percent-encoded traversal-like text.
 
 Test list, download, upload/overwrite, and delete as applicable. Expected:
 Account B cannot observe or alter any A object, and malformed/nested paths are

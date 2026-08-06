@@ -76,3 +76,9 @@ create policy "backup_index: insert own"
 create policy "backup_index: delete own"
   on public.backup_index for delete to authenticated
   using (user_id = auth.uid());
+
+-- RLS policies do not grant table privileges. Keep the metadata index
+-- unavailable to anonymous callers while granting the authenticated browser
+-- only the operations used by the Supabase backup adapter.
+revoke all on table public.backup_index from public, anon, authenticated;
+grant select, insert, delete on table public.backup_index to authenticated;

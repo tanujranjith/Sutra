@@ -10,6 +10,10 @@ const accountIsolationMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260718_sync_account_isolation.sql'),
   'utf8'
 );
+const productionHardeningMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260730_sync_storage_path_and_function_permissions.sql'),
+  'utf8'
+);
 const revokeWipeMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260716_device_revoke_wipe.sql'),
   'utf8'
@@ -24,6 +28,18 @@ const exposedFunctions = [
   'sync_get_device_status', 'sync_acknowledge_device_wipe',
   'sync_delete_vault'
 ];
+
+function applySyncAssetPolicyDdl(initial, source) {
+  const policies = new Set(initial);
+  const statements = source.matchAll(
+    /(drop policy if exists|create policy)\s+"(Sutra sync assets: [^"]+)"\s+on storage\.objects/gi
+  );
+  for (const [, verb, name] of statements) {
+    if (/^drop/i.test(verb)) policies.delete(name);
+    else policies.add(name);
+  }
+  return policies;
+}
 
 test('every sync table enables RLS, denies direct access, and revokes table grants', () => {
   for (const table of tables) {
@@ -63,16 +79,41 @@ test('device revocation binds the JWT session and protects the dedicated asset b
 });
 
 test('sync asset Storage policies enforce an exact authenticated opaque path and the additive migration preserves that hardening', () => {
+  const exactPath = /name\s*~\s*\(\s*'\^'\s*\|\|\s*auth\.uid\(\)::text\s*\|\|\s*'\/\[0-9a-f\]\{64\}\$'\s*\)/i;
   for (const policy of [
     'read active own', 'insert active own', 'update active own', 'delete active own'
   ]) {
-    const pattern = new RegExp(`Sutra sync assets: ${policy}[\\s\\S]*?bucket_id = 'sync-assets'[\\s\\S]*?array_length\\(storage\\.foldername\\(name\\), 1\\) = 2[\\s\\S]*?\\(storage\\.foldername\\(name\\)\\)\\[1\\] = auth\\.uid\\(\\)::text[\\s\\S]*?\\(storage\\.foldername\\(name\\)\\)\\[2\\] ~ '\\^\\[0-9a-f\\]\\{64\\}\\$'[\\s\\S]*?public\\.sync_session_active\\(\\)`,'i');
-    assert.match(sql, pattern, `canonical policy ${policy} must scope exact account/hash paths`);
-    assert.match(accountIsolationMigration, pattern, `migration must recreate hardened ${policy} policy`);
+    const policyBlock = new RegExp(`create policy "Sutra sync assets: ${policy}"[\\s\\S]*?(?=drop policy|-- -|$)`, 'i');
+    const canonical = sql.match(policyBlock)?.[0] || '';
+    const migration = productionHardeningMigration.match(policyBlock)?.[0] || '';
+    assert.match(canonical, /bucket_id = 'sync-assets'/i);
+    assert.match(canonical, exactPath, `canonical policy ${policy} must scope exact account/hash paths`);
+    assert.match(canonical, /public\.sync_session_active\(\)/i);
+    assert.match(migration, /bucket_id = 'sync-assets'/i);
+    assert.match(migration, exactPath, `production reconciliation must recreate hardened ${policy} policy`);
+    assert.match(migration, /public\.sync_session_active\(\)/i);
   }
-  assert.match(accountIsolationMigration, /drop policy if exists "Sutra sync assets: read active own"/i);
-  assert.doesNotMatch(accountIsolationMigration, /delete from public\.sync_|drop table|truncate\s+/i,
+  assert.match(productionHardeningMigration, /drop policy if exists "Sutra sync assets: read active own"/i);
+  assert.doesNotMatch(productionHardeningMigration, /delete\s+from\s+|drop\s+table|truncate\s+|drop\s+bucket/i,
     'the hardening migration must not destroy encrypted sync data');
+});
+
+test('rls_auto_enable is database-only while required authenticated sync RPC grants remain unchanged', () => {
+  for (const source of [sql, productionHardeningMigration]) {
+    assert.match(source, /to_regprocedure\('public\.rls_auto_enable\(\)'\)\s+is not null/i);
+    assert.match(source, /revoke execute on function public\.rls_auto_enable\(\)\s+from public, anon, authenticated;/i);
+    assert.match(source, /grant execute on function public\.rls_auto_enable\(\)\s+to postgres;/i);
+    assert.doesNotMatch(source, /grant execute on function public\.rls_auto_enable\(\)\s+to (?:public|anon|authenticated)/i);
+    assert.doesNotMatch(source, /drop\s+(?:event\s+trigger|function)\s+.*rls_auto_enable/i,
+      'ACL hardening must leave the event-trigger function installed');
+  }
+  assert.match(sql, /revoke all on function public\.sync_authorize_device\(text, boolean\) from public, anon, authenticated;/i);
+  assert.doesNotMatch(sql, /grant execute on function public\.sync_authorize_device/i);
+  for (const name of exposedFunctions) {
+    assert.match(sql, new RegExp(`grant execute on function public\\.${name}\\([^;]+to authenticated;`, 'i'));
+  }
+  assert.doesNotMatch(productionHardeningMigration, /(?:revoke|grant)[^;]*function public\.sync_/i,
+    'the production reconciliation must not change Sutra Sync RPC ACLs');
 });
 
 test('sensitive sync rows are written only from auth.uid and browser payloads contain no owner argument', () => {
@@ -100,9 +141,11 @@ test('schema is ordered after backup setup and exposes no elevated browser crede
 
 test('additive migration chain is ordered, non-destructive, and folded into the fresh schema', () => {
   assert.ok('20260716_device_revoke_wipe.sql' < '20260718_sync_account_isolation.sql');
+  assert.ok('20260718_sync_account_isolation.sql' < '20260730_sync_storage_path_and_function_permissions.sql');
   for (const [name, migration] of [
     ['device revoke/wipe', revokeWipeMigration],
-    ['account isolation', accountIsolationMigration]
+    ['account isolation', accountIsolationMigration],
+    ['production hardening reconciliation', productionHardeningMigration]
   ]) {
     assert.doesNotMatch(migration, /delete\s+from\s+public\.sync_|drop\s+table|truncate\s+/i,
       `${name} migration must preserve encrypted sync state`);
@@ -117,6 +160,25 @@ test('additive migration chain is ordered, non-destructive, and folded into the 
     assert.match(sql, pattern, 'fresh sync schema must include the additive revoke/wipe contract');
   }
   assert.match(accountIsolationMigration, /array_length\(storage\.foldername\(name\), 1\) = 2/i);
-  assert.match(sql, /array_length\(storage\.foldername\(name\), 1\) = 2/i,
-    'fresh sync schema must include the additive exact-path policy');
+  assert.match(productionHardeningMigration, /name\s*~\s*\(/i);
+  assert.match(sql, /name\s*~\s*\(/i,
+    'fresh sync schema must include the final production exact-path policy');
+  assert.match(productionHardeningMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(productionHardeningMigration, /\bcommit;\s*$/i);
+
+  const expectedPolicies = new Set([
+    'Sutra sync assets: read active own',
+    'Sutra sync assets: insert active own',
+    'Sutra sync assets: update active own',
+    'Sutra sync assets: delete active own'
+  ]);
+  const freshPolicies = applySyncAssetPolicyDdl(new Set(), sql);
+  assert.deepEqual(freshPolicies, expectedPolicies, 'fresh installation must end with exactly four policies');
+  const upgradedOnce = applySyncAssetPolicyDdl(
+    applySyncAssetPolicyDdl(new Set(), accountIsolationMigration),
+    productionHardeningMigration
+  );
+  assert.deepEqual(upgradedOnce, expectedPolicies, 'older installation must upgrade to exactly four policies');
+  const upgradedTwice = applySyncAssetPolicyDdl(upgradedOnce, productionHardeningMigration);
+  assert.deepEqual(upgradedTwice, expectedPolicies, 're-running the final migration must not duplicate policies');
 });

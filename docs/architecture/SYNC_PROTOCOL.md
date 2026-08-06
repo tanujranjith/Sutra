@@ -110,7 +110,11 @@ into an `a/<field>.__rest` record (`{ orphans: [...] }` for top-level arrays)
 so nothing is silently dropped.
 
 The generated Help & Docs page (`help_page` / `systemRole: "help-docs"`) is
-excluded at record level because every runtime reconstructs it. User-created
+excluded at record level because every runtime reconstructs it. Projection
+reassembly preserves the receiving device's local generated copy even when a
+remote snapshot omits it, contains a stale delete/tombstone, or reuses its
+stable id; the standard import/hydration path then reconciles exactly one
+canonical Help page per space. User-created
 pages—including their version history—travel. The exact top-level, nested,
 localStorage, asset, secret, compatibility, and ephemeral decisions are
 machine-readable in `persistence-inventory.json`; `round-trip-check.mjs`
@@ -348,8 +352,10 @@ deleteVault()
   table grants are revoked; browser access is through the checked RPCs. Sync
   assets use exactly `<auth.uid()>/<lowercase-sha256>`; Storage RLS rejects
   cross-account, nested, and filename-shaped paths even when a client crafts
-  one. See `supabase/sync-schema.sql` and the additive
-  `supabase/migrations/20260718_sync_account_isolation.sql`.
+  one. The database event-trigger helper `public.rls_auto_enable()` is not a
+  client RPC: `PUBLIC`, `anon`, and `authenticated` have no execute grant while
+  the database owner retains it. See `supabase/sync-schema.sql` and the additive
+  `supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`.
 
 ## 8. Client storage — `sutra_sync_db` (IndexedDB, separate from the workspace DB)
 

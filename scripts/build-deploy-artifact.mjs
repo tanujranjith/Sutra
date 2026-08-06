@@ -63,9 +63,9 @@ const FILES = [
 
 const DIRS = [
   { path: 'styles', filterExt: ['.css'] },
-  { path: 'src' }, // all runtime JS + generated data modules
+  { path: 'src', excludeReadmes: true }, // runtime JS + generated data modules, not contributor docs
   { path: 'assets/brand/sutra/generated' }, // icons, favicon, social preview
-  { path: 'assets/vendor' }, // locally vendored libraries (JSZip)
+  { path: 'assets/vendor', excludeReadmes: true }, // vendored runtime + licenses, not contributor docs
   { path: 'assets/screenshots' } // marketing screenshots used by HomePage.html
 ];
 
@@ -157,6 +157,9 @@ for (const dir of DIRS) {
         return false;
       }
       if (isDir) return true;
+      if (dir.excludeReadmes && /(?:^|[\\/])README\.md$/i.test(src)) {
+        return false;
+      }
       if (dir.filterExt && !dir.filterExt.some((ext) => src.toLowerCase().endsWith(ext))) {
         return false;
       }

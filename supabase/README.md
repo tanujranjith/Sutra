@@ -67,12 +67,15 @@ as the person deploying Sutra.
   do not recreate tables or erase vault rows. Paste
   [`migrations/20260716_device_revoke_wipe.sql`](./migrations/20260716_device_revoke_wipe.sql)
   into SQL Editor first, then paste
-  [`migrations/20260718_sync_account_isolation.sql`](./migrations/20260718_sync_account_isolation.sql).
-  Both are additive/idempotent and safe to rerun: existing encrypted ops,
-  snapshots, keys, assets, and devices are preserved. The latter recreates only
-  the four `sync-assets` Storage policies so each object must use exactly
-  `<auth.uid()>/<64-character-sha256>`; it creates no new table/bucket and
-  never deletes an object.
+  [`migrations/20260718_sync_account_isolation.sql`](./migrations/20260718_sync_account_isolation.sql),
+  then
+  [`migrations/20260730_sync_storage_path_and_function_permissions.sql`](./migrations/20260730_sync_storage_path_and_function_permissions.sql).
+  All three are additive/idempotent and safe to rerun: existing encrypted ops,
+  snapshots, keys, assets, and devices are preserved. The final migration
+  recreates only the four `sync-assets` Storage policies with the exact anchored
+  `^<auth.uid()>/[0-9a-f]{64}$` form and removes browser-role execution of
+  `public.rls_auto_enable()` while retaining `postgres`. It creates no
+  table/bucket, changes no Sync RPC grant, and never deletes an object.
 
 Expected sync tables: `sync_ops`, `sync_devices`, `sync_vault_keys`,
 `sync_snapshots`, `sync_asset_index`. Expected private Storage buckets after
@@ -101,7 +104,11 @@ order by routine_name;
 select routine_name, grantee, privilege_type
 from information_schema.routine_privileges
 where routine_schema = 'public'
-  and routine_name in ('sync_get_device_status','sync_acknowledge_device_wipe')
+  and routine_name in (
+    'sync_get_device_status',
+    'sync_acknowledge_device_wipe',
+    'rls_auto_enable'
+  )
 order by routine_name, grantee;
 
 select tablename, rowsecurity
@@ -122,9 +129,11 @@ where id in ('backups','sync-assets')
 order by id;
 ```
 
-Expected: three column rows; two `SECURITY DEFINER` routines; `EXECUTE` for
-`authenticated` only among browser roles (not `anon` or `PUBLIC`; the
-database owner may also appear); five sync tables with `rowsecurity = true`;
+Expected: three column rows; two `SECURITY DEFINER` revoke/wipe routines;
+authenticated-only `EXECUTE` for browser-facing `sync_*` routines;
+`rls_auto_enable()` has no `PUBLIC`, `anon`, or `authenticated` execute grant
+(`postgres`/the database owner may appear); five sync tables with
+`rowsecurity = true`;
 the existing deny-direct table policies plus four active-device `sync-assets`
 policies; and private `backups` / `sync-assets` buckets. No new bucket/table
 or policy is created by this migration. Rollback is normally unnecessary; do
@@ -132,10 +141,12 @@ not drop the columns while
 clients use Revoke & wipe. If an RPC replacement fails, rerun the same file—it
 uses `add column if not exists` and `create or replace function`.
 
-After `20260718_sync_account_isolation.sql`, each `sync-assets` policy should
-also contain all of the following: `array_length(storage.foldername(name), 1) =
-2`, first path component `auth.uid()::text`, second component matching
-`^[0-9a-f]{64}$`, and `public.sync_session_active()`. A missing condition is a
+After `20260730_sync_storage_path_and_function_permissions.sql`, each
+`sync-assets` policy should require `bucket_id = 'sync-assets'`, the anchored
+`name` regex `^<auth.uid()>/[0-9a-f]{64}$`, and
+`public.sync_session_active()`. Uppercase, wrong-length, filename-shaped,
+nested, leading/trailing-slash, cross-account, anonymous, unregistered,
+inactive, and revoked-session requests are rejected. A missing condition is a
 security failure: rerun that exact migration rather than weakening the policy.
 
 Before treating Account A/B isolation as live-certified, use the operator-only

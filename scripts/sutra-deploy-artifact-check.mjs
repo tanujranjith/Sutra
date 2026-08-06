@@ -181,7 +181,48 @@ for (const name of FORBIDDEN_TOP) {
   if (present.has(name)) fail(`dev-only content leaked into artifact: ${name}`);
 }
 
+// The release must ship the exact runtime bytes that were checked. These files
+// cover account scoping, asset path construction, conflict/crypto behavior,
+// revoke-and-wipe, backup rollback, Assistant, Canvas/page integration, Slides,
+// attachment sync, generated manifests, and the service worker.
+const CURRENT_RUNTIME_FILES = [
+  'src/core/app.js',
+  'src/persistence/revocation-wipe.js',
+  'src/sync/sync-protocol.js',
+  'src/sync/sync-crypto.js',
+  'src/sync/sync-projection.js',
+  'src/sync/sync-diff.js',
+  'src/sync/sync-merge.js',
+  'src/sync/sync-store.js',
+  'src/sync/sync-transport.js',
+  'src/sync/sync-engine.js',
+  'src/features/assistant/flow-assistant.js',
+  'src/features/workspace/slides.js',
+  'src/config/asset-manifest.generated.js',
+  'src/config/asset-manifest.generated.json',
+  'sw.js'
+];
+for (const relPath of CURRENT_RUNTIME_FILES) {
+  const sourcePath = join(repoRoot, relPath);
+  const artifactPath = join(outDir, relPath);
+  if (!existsSync(sourcePath) || !existsSync(artifactPath)) continue; // required-file checks report absence
+  if (!readFileSync(sourcePath).equals(readFileSync(artifactPath))) {
+    fail(`artifact runtime is stale or differs from source: ${relPath}`);
+  }
+}
+
 // Recursive scan for stray test/package files anywhere in the tree.
+const plaintextSentinels = [
+  'REMOTE_BOUNDARY_NOTE_TITLE_730',
+  'REMOTE_BOUNDARY_NOTE_BODY_730',
+  'REMOTE_BOUNDARY_PRIVATE_FILENAME_730.txt',
+  'REMOTE_BOUNDARY_ATTACHMENT_BYTES_730',
+  'REMOTE_BOUNDARY_PASSPHRASE_730',
+  'REMOTE_BOUNDARY_RECOVERY_KEY_730'
+];
+const realSupabaseProjects = new Set();
+const publishableKeys = new Set();
+const textExtension = /\.(?:css|html?|js|json|txt|webmanifest|xml)$/i;
 function walk(dir, rel = '') {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const abs = join(dir, entry.name);
@@ -198,13 +239,40 @@ function walk(dir, rel = '') {
       if (/\.(?:sql|map)$/i.test(entry.name)) {
         fail(`non-runtime SQL/source-map file leaked into artifact: ${relPath}`);
       }
+      if (/^README\.md$/i.test(entry.name)) {
+        fail(`development README leaked into artifact: ${relPath}`);
+      }
       if (/(?:^|[-_.])(?:fixture|fixtures)(?:[-_.]|$)/i.test(entry.name)) {
         fail(`test fixture leaked into artifact: ${relPath}`);
+      }
+      if (textExtension.test(entry.name)) {
+        const text = readFileSync(abs, 'utf8');
+        for (const sentinel of plaintextSentinels) {
+          if (text.includes(sentinel)) fail(`synthetic private plaintext leaked into artifact: ${relPath}`);
+        }
+        if (/sb_secret_[A-Za-z0-9._-]{16,}/i.test(text)) {
+          fail(`secret-shaped Supabase credential leaked into artifact: ${relPath}`);
+        }
+        for (const match of text.matchAll(/https:\/\/([a-z0-9]{20})\.supabase\.co/gi)) {
+          realSupabaseProjects.add(match[0].toLowerCase());
+        }
+        for (const match of text.matchAll(/sb_publishable_[A-Za-z0-9_-]{16,}/g)) {
+          publishableKeys.add(match[0]);
+        }
       }
     }
   }
 }
 walk(outDir);
+
+if (realSupabaseProjects.size !== 1
+  || !realSupabaseProjects.has('https://blfsmdyvdlhabltiicgx.supabase.co')) {
+  fail(`artifact contains an unexpected concrete Supabase project URL (${realSupabaseProjects.size} found)`);
+}
+if (publishableKeys.size !== 1
+  || !publishableKeys.has('sb_publishable_wC7rjhwQvGA_Li07vK_Skg_ovfMG_Z_')) {
+  fail(`artifact contains an unexpected Supabase publishable key (${publishableKeys.size} found)`);
+}
 
 // Public URL/publishable-key configuration is intended to ship. Secret-shaped
 // Supabase credentials are not.

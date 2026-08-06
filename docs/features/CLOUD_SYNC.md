@@ -51,6 +51,10 @@ passphrases, recovery/vault/derived keys, sync queues/cursors/baselines,
 in-flight/streaming Assistant state, and regenerable caches. The exhaustive
 machine-readable decision matrix is
 [`persistence-inventory.json`](../architecture/persistence-inventory.json).
+Because Help & Docs is a generated system resource, snapshot absence is never
+treated as deletion: Sutra preserves or deterministically restores exactly one
+canonical Help page per space after bootstrap, import, remote apply, migration,
+account transitions, and reload without creating Sync operations for it.
 
 ## Merge behavior
 
@@ -134,9 +138,12 @@ V1 syncs through the same Supabase project that powers Sutra Cloud backups
    [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql)
    to add revoke-and-wipe state/RPCs, then
    [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql)
-   to tighten `sync-assets` Storage paths. Both migrations preserve encrypted
-   vault data and are safe to rerun. The latter permits only the exact
-   authenticated `<user-id>/<64-character-content-hash>` asset path.
+   to tighten `sync-assets` Storage paths, then
+   [`supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql`](../../supabase/migrations/20260730_sync_storage_path_and_function_permissions.sql)
+   to reproduce the final production policy syntax and remove browser execution
+   of `rls_auto_enable()`. All migrations preserve encrypted vault data and are
+   safe to rerun. The final policy permits only the exact authenticated
+   `<user-id>/<64-character-lowercase-hex-content-hash>` asset path.
 2. Configure `supabaseUrl` + `supabaseAnonKey` in
    `src/config/sutra-runtime-config.js` (already done if Sutra Cloud works).
 3. Users sign in with the existing email-OTP flow, then enable sync with a
@@ -147,6 +154,10 @@ keyed by a server cursor, a wrapped vault key, one compaction snapshot, and
 content-addressed asset blobs in the private `sync-assets` bucket. Direct
 table access is denied; authenticated RPCs and Storage policies require both
 `auth.uid()` ownership and an active, non-revoked auth-session/device binding.
+`rls_auto_enable()` remains available to the database owner/event-trigger path,
+but it is not executable by `PUBLIC`, `anon`, or `authenticated`. Expected
+advisor notices for deliberately authenticated, fixed-search-path `sync_*`
+`SECURITY DEFINER` RPCs are not equivalent to an exposed internal helper.
 
 ## Multi-tab
 

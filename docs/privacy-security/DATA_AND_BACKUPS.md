@@ -352,7 +352,11 @@ The three guarantees are distinct and the Sync panel reports each one:
    append-only op log, RLS per user, wrapped vault key, compaction snapshot,
    content-addressed encrypted attachments in the private `sync-assets`
    bucket). Direct table access is denied; RPC/Storage access also requires an
-   active, non-revoked auth-session/device binding.
+   active, non-revoked auth-session/device binding. Storage object names are
+   exactly `<auth.uid()>/<64 lowercase hexadecimal SHA-256>`; original
+   filenames, labels, device ids, and extra path components are never used.
+   The internal `rls_auto_enable()` event-trigger helper is not executable by
+   browser roles.
 3. **Backed up** — `.sutra` exports / Sutra Cloud / Drive snapshots, unchanged.
 
 Privacy properties: a random vault master key encrypts every change (AES-GCM-
