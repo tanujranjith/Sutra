@@ -118,6 +118,11 @@ Self-contained feature areas live in **`src/features/*.js`**:
   `src/core/app.js` so it can reuse the in-closure create functions (notes,
   courses, decks, blocks, tasks, college rows) — the same reason Sutra Cloud
   providers and the Review Generator (`window.SutraReviewGenerator`) live there.
+- `domain/workspace-entity-registry.js` +
+  `features/workspace/workspace-entity-adapters.js` — the canonical, derived
+  `type:id` contract for records that can be found, opened, or acted on across
+  feature boundaries. It owns no data and persists no index; see
+  [`WORKSPACE_ENTITY_REGISTRY.md`](./WORKSPACE_ENTITY_REGISTRY.md).
 
 The **All Due** ranking engine (`computeDeadlineRank`), the **Review Generator**
 (`SutraReviewGenerator`), and the **Starter Packs** controller all live in
@@ -159,6 +164,7 @@ objects**, so code written against the old names keeps working:
 | `window.sutraAssistant` | `window.flowAssistant` | Sutra Assistant API |
 | `window.sutraIntelligence` | `window.flowIntelligence` | Local signal layer (`deriveStudentContext`) |
 | `window.getSutraAssistantContext` | `window.getFlowAssistantContext` | Current assistant context |
+| `window.SutraWorkspaceEntityRegistry` | — | Derived entity, deep-link, action, privacy, and invalidation registry |
 
 The persistence/export/import layer also publishes canonical wrappers on
 `window` (for serialize/deserialize, save/load locally, export `.sutra`/JSON,
