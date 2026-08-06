@@ -3,6 +3,25 @@
 
   const HARD_DIFFICULTY_WEIGHT = Object.freeze({ easy: 1, medium: 2, hard: 3 });
   const PRIORITY_WEIGHT = Object.freeze({ high: 1, medium: 2, low: 3 });
+  const COURSE_ICON_OPTIONS = Object.freeze([
+    { key: 'users', label: 'Group', className: 'fa-users' },
+    { key: 'robot', label: 'Robotics', className: 'fa-robot' },
+    { key: 'trophy', label: 'Competition', className: 'fa-trophy' },
+    { key: 'music', label: 'Music', className: 'fa-music' },
+    { key: 'dumbbell', label: 'Athletics', className: 'fa-dumbbell' },
+    { key: 'palette', label: 'Art', className: 'fa-palette' },
+    { key: 'microphone', label: 'Speaking', className: 'fa-microphone' },
+    { key: 'code', label: 'Coding', className: 'fa-code' },
+    { key: 'flask', label: 'Science', className: 'fa-flask' },
+    { key: 'book-open', label: 'Reading', className: 'fa-book-open' },
+    { key: 'seedling', label: 'Outdoors', className: 'fa-seedling' },
+    { key: 'graduation-cap', label: 'School', className: 'fa-graduation-cap' },
+    { key: 'briefcase', label: 'Work', className: 'fa-briefcase' },
+    { key: 'globe', label: 'Community', className: 'fa-globe' },
+    { key: 'award', label: 'Leadership', className: 'fa-award' },
+    { key: 'flag', label: 'Team', className: 'fa-flag' }
+  ]);
+  const COURSE_ICON_KEYS = new Set(COURSE_ICON_OPTIONS.map(option => option.key));
 
   const dateFormatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -14,6 +33,16 @@
   let tasks = [];
   let activeTaskMenuId = null;
   let courseQuickModalState = { type: 'class', onCreated: null };
+  const homeworkViewState = {
+    query: '',
+    tab: 'all',
+    course: 'all',
+    status: 'all',
+    priority: 'all',
+    completion: 'all',
+    due: 'all',
+    sort: 'due'
+  };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => root.querySelectorAll(selector);
@@ -57,6 +86,18 @@
     const el = document.createElement('div');
     el.textContent = String(value || '');
     return el.innerHTML;
+  }
+
+  function normalizeCourseIcon(rawValue) {
+    const source = String(rawValue || '').trim().toLowerCase();
+    const value = source === 'people-group' ? 'users' : source;
+    return COURSE_ICON_KEYS.has(value) ? value : '';
+  }
+
+  function getCourseIconOption(course) {
+    const key = normalizeCourseIcon(course && course.icon);
+    return COURSE_ICON_OPTIONS.find(option => option.key === key)
+      || COURSE_ICON_OPTIONS.find(option => option.key === (course && course.type === 'misc' ? 'users' : 'book-open'));
   }
 
   function formatDateKey(date) {
@@ -267,7 +308,8 @@
       while (courseIds.has(id)) id = uid();
 
       const type = rawCourse.type === 'misc' ? 'misc' : 'class';
-      normalizedCourses.push({ id, name, type });
+      const icon = normalizeCourseIcon(rawCourse.icon);
+      normalizedCourses.push(icon ? { id, name, type, icon } : { id, name, type });
       courseIds.add(id);
     });
 
@@ -394,7 +436,7 @@
     modal.id = 'hwCourseQuickModal';
     modal.className = 'hw-course-quick-modal';
     modal.hidden = true;
-    modal.innerHTML = `
+    setSafeHTML(modal, `
       <div class="hw-course-quick-card" role="dialog" aria-modal="true" aria-labelledby="hwCourseQuickTitle">
         <div class="hw-course-quick-head">
           <h3 id="hwCourseQuickTitle" class="hw-course-quick-title">Add Subject</h3>
@@ -406,7 +448,7 @@
           <button type="submit" class="neumo-btn btn-primary hw-course-quick-add" data-course-quick-add aria-label="Add">Add</button>
         </form>
       </div>
-    `;
+    `);
     document.body.appendChild(modal);
 
     const titleEl = $('#hwCourseQuickTitle', modal);
@@ -483,6 +525,96 @@
     }
     const input = $('[data-course-quick-input]', modal);
     if (input) setTimeout(() => input.focus(), 30);
+  }
+
+  function setCourseIcon(courseId, rawIcon) {
+    const course = courses.find(item => String(item.id) === String(courseId));
+    if (!course) return false;
+    const requested = String(rawIcon || '').trim().toLowerCase();
+    const icon = normalizeCourseIcon(requested);
+    if (requested && !icon) return false;
+    if (icon) course.icon = icon;
+    else delete course.icon;
+    save();
+    render();
+    return true;
+  }
+
+  function ensureCourseIconModal() {
+    let modal = $('#hwCourseIconModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'hwCourseIconModal';
+    modal.className = 'hw-course-quick-modal hw-course-icon-modal';
+    modal.hidden = true;
+    setSafeHTML(modal, `
+      <div class="hw-course-quick-card hw-course-icon-card" role="dialog" aria-modal="true" aria-labelledby="hwCourseIconTitle">
+        <div class="hw-course-quick-head">
+          <div>
+            <h3 id="hwCourseIconTitle" class="hw-course-quick-title">Choose an icon</h3>
+            <p class="hw-course-quick-copy" data-course-icon-copy></p>
+          </div>
+          <button type="button" class="hw-course-quick-close" data-course-icon-close data-modal-close aria-label="Close icon picker">&times;</button>
+        </div>
+        <div class="hw-course-icon-grid" role="radiogroup" aria-label="Course icons"></div>
+        <button type="button" class="neumo-btn hw-course-icon-reset" data-course-icon-choice="">Use default icon</button>
+      </div>
+    `);
+    document.body.appendChild(modal);
+
+    const closeModal = () => {
+      modal.hidden = true;
+      modal.classList.remove('is-visible');
+      if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+        try { window.SutraModalManager.sync(); } catch (_) {}
+      }
+    };
+
+    $('[data-course-icon-close]', modal)?.addEventListener('click', closeModal);
+    modal.addEventListener('click', event => {
+      if (event.target === modal) closeModal();
+    });
+    modal.addEventListener('click', event => {
+      const choice = event.target.closest('[data-course-icon-choice]');
+      if (!choice) return;
+      const courseId = modal.getAttribute('data-course-id') || '';
+      const icon = choice.getAttribute('data-course-icon-choice') || '';
+      closeModal();
+      if (!setCourseIcon(courseId, icon)) return;
+      showHomeworkToast(icon ? 'Icon updated.' : 'Default icon restored.');
+      setTimeout(() => {
+        const nextTrigger = document.querySelector(`[data-course-icon="${CSS.escape(String(courseId))}"]`);
+        if (nextTrigger) nextTrigger.focus();
+      }, 0);
+    });
+
+    modal._close = closeModal;
+    return modal;
+  }
+
+  function openCourseIconPicker(courseId, trigger) {
+    const course = courses.find(item => String(item.id) === String(courseId));
+    if (!course) return;
+    const modal = ensureCourseIconModal();
+    const selected = normalizeCourseIcon(course.icon);
+    const grid = $('.hw-course-icon-grid', modal);
+    const copy = $('[data-course-icon-copy]', modal);
+    modal.setAttribute('data-course-id', String(course.id));
+    if (copy) copy.textContent = `Pick an icon for ${course.name}.`;
+    if (grid) {
+      setSafeHTML(grid, COURSE_ICON_OPTIONS.map(option => `
+        <button type="button" class="hw-course-icon-choice${option.key === selected ? ' is-selected' : ''}" data-course-icon-choice="${escHtml(option.key)}" role="radio" aria-checked="${option.key === selected ? 'true' : 'false'}" aria-label="${escHtml(option.label)}" title="${escHtml(option.label)}">
+          <i class="fas ${escHtml(option.className)}" aria-hidden="true"></i>
+          <span>${escHtml(option.label)}</span>
+        </button>`).join(''));
+    }
+    if (trigger && typeof trigger.focus === 'function') modal.__sutraReturnFocus = trigger;
+    modal.hidden = false;
+    modal.classList.add('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
   }
 
   function startOfDay(date) {
@@ -1249,7 +1381,7 @@
       const color = getCourseColor(course.id);
       const visibleCards = [...open, ...done.slice(0, 10)];
       const tasksCellHtml = visibleCards.length
-        ? `<ul class="hw-card-list hw-table-tasklist">${visibleCards.map(renderTaskCard).join('')}${addMethod === 'inline' ? renderInlineComposer('') : ''}</ul>`
+        ? `<ul class="hw-card-list hw-table-tasklist">${visibleCards.map(renderTaskCard).join('')}</ul>${addMethod === 'inline' ? renderInlineComposer('') : ''}`
         : `<div class="hw-table-empty">No assignments yet.</div>${addMethod === 'inline' ? renderInlineComposer('') : ''}`;
       return `
         <div class="hw-table-row" data-course-row="${escHtml(course.id)}">
@@ -1309,6 +1441,299 @@
       : '';
 
     return splitHtml + orphanHtml;
+  }
+
+  // ---- assignment-management workspace ---------------------------------
+  // The redesigned view is a projection of the existing courses/tasks arrays.
+  // Search, tabs, filters, and sorting are deliberately ephemeral UI state:
+  // none of them are written to the canonical Homework store.
+
+  function getTaskDayOffset(task) {
+    const dueDate = normalizeDueDate(task && task.dueDate);
+    if (!dueDate) return null;
+    const due = startOfDay(new Date(`${dueDate}T12:00:00`));
+    if (Number.isNaN(due.getTime())) return null;
+    return Math.round((due.getTime() - startOfDay(new Date()).getTime()) / 86400000);
+  }
+
+  function getHomeworkStatus(task) {
+    if (task && task.done) return 'completed';
+    const explicit = String(task && task.status || '').trim().toLowerCase().replace(/\s+/g, '-');
+    if (explicit === 'in-progress' || explicit === 'active' || explicit === 'started') return 'in-progress';
+    const progress = studioPctOf(task);
+    return progress != null && progress > 0 ? 'in-progress' : 'not-started';
+  }
+
+  function homeworkStatusLabel(status) {
+    if (status === 'completed') return 'Completed';
+    if (status === 'in-progress') return 'In Progress';
+    return 'Not Started';
+  }
+
+  function getTaskDuePresentation(task) {
+    const dayOffset = getTaskDayOffset(task);
+    const time = normalizeDueTime(task && task.dueTime);
+    if (dayOffset == null) return { relation: 'undated', label: 'No due date', date: '', time: '', className: 'is-undated' };
+
+    let relation = 'upcoming';
+    let label = formatDueDateLabel(task.dueDate);
+    if (dayOffset < 0) { relation = 'overdue'; label = 'Overdue'; }
+    else if (dayOffset === 0) { relation = 'today'; label = 'Today'; }
+    else if (dayOffset === 1) { relation = 'tomorrow'; label = 'Tomorrow'; }
+    else if (dayOffset <= 7) { relation = 'week'; }
+
+    return {
+      relation,
+      label,
+      date: formatDueDateLabel(task.dueDate),
+      time: time ? formatDueTimeLabel(time) : '',
+      className: `is-${relation}`
+    };
+  }
+
+  function getCourseForTask(task) {
+    return courses.find(course => String(course.id) === String(task && task.courseId)) || null;
+  }
+
+  function taskMatchesHomeworkView(task) {
+    const course = getCourseForTask(task);
+    const status = getHomeworkStatus(task);
+    const priority = normalizePriority(task.priority);
+    const offset = getTaskDayOffset(task);
+    const query = homeworkViewState.query.trim().toLowerCase();
+
+    if (query) {
+      const haystack = [task.title, task.text, task.notes, course && course.name, course && course.type === 'misc' ? 'extracurricular activity' : 'class']
+        .map(value => String(value || '').toLowerCase())
+        .join(' ');
+      if (!haystack.includes(query)) return false;
+    }
+
+    if (homeworkViewState.tab === 'today' && (task.done || offset !== 0)) return false;
+    if (homeworkViewState.tab === 'week' && (task.done || offset == null || offset < 0 || offset > 7)) return false;
+    if (homeworkViewState.tab === 'completed' && !task.done) return false;
+
+    if (homeworkViewState.course !== 'all') {
+      if (homeworkViewState.course === 'track:class' && (!course || course.type !== 'class')) return false;
+      else if (homeworkViewState.course === 'track:misc' && (!course || course.type !== 'misc')) return false;
+      else if (homeworkViewState.course.startsWith('course:') && String(task.courseId || '') !== homeworkViewState.course.slice(7)) return false;
+    }
+
+    if (homeworkViewState.status !== 'all' && status !== homeworkViewState.status) return false;
+    if (homeworkViewState.priority !== 'all' && priority !== homeworkViewState.priority) return false;
+    if (homeworkViewState.completion === 'open' && task.done) return false;
+    if (homeworkViewState.completion === 'completed' && !task.done) return false;
+
+    if (homeworkViewState.due !== 'all') {
+      if (homeworkViewState.due === 'undated' && offset != null) return false;
+      if (homeworkViewState.due === 'overdue' && (task.done || offset == null || offset >= 0)) return false;
+      if (homeworkViewState.due === 'today' && (task.done || offset !== 0)) return false;
+      if (homeworkViewState.due === 'tomorrow' && (task.done || offset !== 1)) return false;
+      if (homeworkViewState.due === 'week' && (task.done || offset == null || offset < 0 || offset > 7)) return false;
+    }
+
+    return true;
+  }
+
+  function compareHomeworkWorkspaceTasks(a, b) {
+    if (homeworkViewState.sort === 'priority') {
+      const delta = (PRIORITY_WEIGHT[normalizePriority(a.priority)] || 99) - (PRIORITY_WEIGHT[normalizePriority(b.priority)] || 99);
+      if (delta) return delta;
+      return compareHomeworkTasks(a, b);
+    }
+    if (homeworkViewState.sort === 'course') {
+      const courseA = getCourseForTask(a);
+      const courseB = getCourseForTask(b);
+      const delta = String(courseA && courseA.name || 'No class').localeCompare(String(courseB && courseB.name || 'No class'));
+      return delta || compareHomeworkTasks(a, b);
+    }
+    if (homeworkViewState.sort === 'status') {
+      const weights = { 'in-progress': 1, 'not-started': 2, completed: 3 };
+      const delta = (weights[getHomeworkStatus(a)] || 9) - (weights[getHomeworkStatus(b)] || 9);
+      return delta || compareHomeworkTasks(a, b);
+    }
+    if (homeworkViewState.sort === 'updated') {
+      const delta = Date.parse(b.updatedAt || b.createdAt || '') - Date.parse(a.updatedAt || a.createdAt || '');
+      return delta || String(a.title || '').localeCompare(String(b.title || ''));
+    }
+    return compareHomeworkTasks(a, b);
+  }
+
+  function getHomeworkFilteredTasks() {
+    return tasks.filter(taskMatchesHomeworkView).sort(compareHomeworkWorkspaceTasks);
+  }
+
+  function getTaskDescription(task) {
+    const notes = String(task && task.notes || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (notes) return notes.slice(0, 120);
+    const kind = normalizeHomeworkKind(task && (task.kind || task.type));
+    if (kind !== 'assignment') return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+    const normalizedStudio = task && task.studio && window.SutraAssignmentStudio
+      ? window.SutraAssignmentStudio.normalizeStudio(task.studio)
+      : null;
+    const nextMilestone = normalizedStudio && Array.isArray(normalizedStudio.milestones)
+      ? normalizedStudio.milestones.find(milestone => !milestone.done)
+      : null;
+    return nextMilestone ? `Next: ${String(nextMilestone.title || 'Milestone')}` : '';
+  }
+
+  function renderHomeworkWorkspaceRow(task) {
+    const course = getCourseForTask(task);
+    const courseName = course ? course.name : 'No class';
+    const color = getCourseColor(task.courseId);
+    const due = getTaskDuePresentation(task);
+    const status = getHomeworkStatus(task);
+    const statusLabel = homeworkStatusLabel(status);
+    const priority = normalizePriority(task.priority);
+    const description = getTaskDescription(task);
+    const progress = studioPctOf(task);
+    const toggleLabel = task.done ? 'Mark assignment as incomplete' : 'Mark assignment complete';
+    return `
+      <tr class="hw-assignment-row ${task.done ? 'is-completed' : ''}" data-task-id="${escHtml(task.id)}" draggable="true" data-drag-title="${escHtml(task.title)}" data-drag-source="homework" data-drag-source-id="${escHtml(task.id)}" data-drag-due-date="${escHtml(task.dueDate || '')}">
+        <td class="hw-assignment-name-cell" data-label="Assignment">
+          <button type="button" class="hw-assignment-title-btn" data-task-open="${escHtml(task.id)}">${escHtml(task.title)}</button>
+          ${description ? `<span class="hw-assignment-description">${escHtml(description)}</span>` : ''}
+          ${progress != null ? `<span class="hw-assignment-progress-copy">${progress}% planned work complete</span>` : ''}
+        </td>
+        <td data-label="Class / activity">
+          <button type="button" class="hw-course-badge ${course && course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>
+        </td>
+        <td class="hw-due-cell ${due.className}" data-label="Due">
+          <span class="hw-due-relation">${escHtml(due.label)}</span>
+          ${due.date && due.date !== due.label ? `<span>${escHtml(due.date)}</span>` : ''}
+          ${due.time ? `<span>${escHtml(due.time)}</span>` : ''}
+        </td>
+        <td data-label="Priority"><span class="hw-priority-badge is-${escHtml(priority)}"><i class="fas fa-angles-up" aria-hidden="true"></i>${escHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span></td>
+        <td data-label="Status"><span class="hw-work-status is-${escHtml(status)}"><i class="fas ${status === 'completed' ? 'fa-check' : status === 'in-progress' ? 'fa-circle-half-stroke' : 'fa-diamond'}" aria-hidden="true"></i>${escHtml(statusLabel)}</span></td>
+        <td class="hw-quick-actions-cell" data-label="Actions">
+          <button type="button" class="hw-row-action" data-task-schedule="${escHtml(task.id)}" aria-label="Schedule ${escHtml(task.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>
+          <button type="button" class="hw-row-action" data-task-toggle="${escHtml(task.id)}" aria-label="${escHtml(toggleLabel)}" title="${escHtml(toggleLabel)}"><i class="fas ${task.done ? 'fa-rotate-left' : 'fa-circle-check'}" aria-hidden="true"></i></button>
+          ${renderTaskMenu(task)}
+        </td>
+      </tr>`;
+  }
+
+  function renderHomeworkWorkspaceRows(filteredTasks) {
+    if (homeworkViewState.tab !== 'class') return filteredTasks.map(renderHomeworkWorkspaceRow).join('');
+
+    const grouped = new Map();
+    filteredTasks.forEach(task => {
+      const course = getCourseForTask(task);
+      const key = course ? String(course.id) : '';
+      if (!grouped.has(key)) grouped.set(key, { course, tasks: [] });
+      grouped.get(key).tasks.push(task);
+    });
+    return Array.from(grouped.values())
+      .sort((a, b) => String(a.course && a.course.name || 'No class').localeCompare(String(b.course && b.course.name || 'No class')))
+      .map(group => {
+        const name = group.course ? group.course.name : 'No class';
+        const kind = group.course && group.course.type === 'misc' ? 'Activity' : 'Class';
+        return `<tr class="hw-assignment-group-row"><th colspan="6" scope="rowgroup"><span>${escHtml(name)}</span><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></th></tr>${group.tasks.map(renderHomeworkWorkspaceRow).join('')}`;
+      }).join('');
+  }
+
+  function renderHomeworkAssignmentsPanel() {
+    const filteredTasks = getHomeworkFilteredTasks();
+    const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
+    const addMethod = getHwAddMethod();
+    let content = '';
+
+    if (!tasks.length && !courses.length) {
+      content = renderEmptyStateRedesign('No homework yet.');
+    } else if (!filteredTasks.length) {
+      content = `<div class="hw-filter-empty"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><h4>No assignments match</h4><p>Try a different search or clear the current filters.</p><button type="button" class="hw-toolbar-btn" data-clear-task-filters>Clear filters</button></div>`;
+    } else {
+      content = `
+        <div class="hw-assignment-table-wrap">
+          <table class="hw-assignment-table">
+            <caption class="sr-only">Homework assignments</caption>
+            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+            <tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>
+          </table>
+        </div>`;
+    }
+
+    return `
+      <section class="hw-assignments-panel" aria-labelledby="hwAssignmentsTitle">
+        <div class="hw-panel-heading">
+          <div><span class="hw-panel-eyebrow">Assignments</span><h3 id="hwAssignmentsTitle">${homeworkViewState.tab === 'class' ? 'Assignments by class' : 'Assignment list'}</h3></div>
+          <span class="hw-result-count">${escHtml(totalLabel)}</span>
+        </div>
+        ${addMethod === 'quick' ? renderQuickAddBar() : ''}
+        ${content}
+        ${addMethod === 'inline' && (courses.length || tasks.length) ? `<div class="hw-panel-inline-add">${renderInlineComposer('')}</div>` : ''}
+      </section>`;
+  }
+
+  function renderExtracurricularPanel() {
+    const activities = courses.filter(course => course.type === 'misc');
+    const visible = activities.slice(0, 4);
+    const rows = visible.map(course => {
+      const activityTasks = tasks.filter(task => String(task.courseId) === String(course.id));
+      const openTasks = activityTasks.filter(task => !task.done).sort(compareHomeworkTasks);
+      const nearest = openTasks[0] || null;
+      const complete = activityTasks.filter(task => task.done).length;
+      const progress = activityTasks.length ? Math.round((complete / activityTasks.length) * 100) : 0;
+      const color = getCourseColor(course.id);
+      const icon = getCourseIconOption(course);
+      const due = nearest ? getTaskDuePresentation(nearest) : null;
+      return `
+        <article class="hw-activity-row">
+          <button type="button" class="hw-activity-icon" data-course-icon="${escHtml(course.id)}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}" aria-label="Choose icon for ${escHtml(course.name)}" aria-haspopup="dialog" aria-controls="hwCourseIconModal" title="Choose icon">
+            <i class="fas ${escHtml(icon.className)}" aria-hidden="true"></i>
+          </button>
+          <div class="hw-activity-main">
+            <button type="button" class="hw-activity-name" data-course-dashboard="${escHtml(course.id)}">${escHtml(course.name)}</button>
+            <span class="hw-activity-category">Extracurricular · ${openTasks.length} open</span>
+            ${activityTasks.length ? `<div class="hw-activity-progress"><span><i style="width:${progress}%"></i></span><small>${progress}%</small></div>` : '<span class="hw-activity-empty-copy">No tasks yet</span>'}
+          </div>
+          <div class="hw-activity-deadline">
+            ${nearest ? `<button type="button" data-task-open="${escHtml(nearest.id)}">${escHtml(due.label)}</button><span>${escHtml(nearest.title)}</span>` : '<span>No upcoming deadline</span>'}
+          </div>
+          <div class="hw-activity-actions">
+            ${nearest ? `<button type="button" data-task-schedule="${escHtml(nearest.id)}" aria-label="Schedule ${escHtml(nearest.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>` : ''}
+            <button type="button" data-open-add-assignment="${escHtml(course.id)}" aria-label="Add a task to ${escHtml(course.name)}" title="Add activity task"><i class="fas fa-plus" aria-hidden="true"></i></button>
+          </div>
+        </article>`;
+    }).join('');
+
+    return `
+      <section class="hw-side-panel hw-extracurricular-panel" aria-labelledby="hwActivitiesTitle">
+        <div class="hw-side-heading"><h3 id="hwActivitiesTitle">Extracurriculars</h3>${activities.length > 4 ? '<button type="button" data-view-activities>View all</button>' : ''}</div>
+        <div class="hw-activity-list">${rows || '<div class="hw-side-empty"><p>No activities yet.</p><span>Track clubs, teams, and commitments here.</span></div>'}</div>
+        <button type="button" class="hw-side-add" data-course-add="misc"><i class="fas fa-plus" aria-hidden="true"></i>Add activity</button>
+      </section>`;
+  }
+
+  function renderUpcomingDeadlinesPanel() {
+    const open = tasks.filter(task => !task.done);
+    const counts = {
+      overdue: open.filter(task => { const offset = getTaskDayOffset(task); return offset != null && offset < 0; }).length,
+      today: open.filter(task => getTaskDayOffset(task) === 0).length,
+      tomorrow: open.filter(task => getTaskDayOffset(task) === 1).length,
+      week: open.filter(task => { const offset = getTaskDayOffset(task); return offset != null && offset >= 0 && offset <= 7; }).length
+    };
+    const row = (key, label, icon) => `<button type="button" class="hw-deadline-row is-${escHtml(key)}" data-deadline-filter="${escHtml(key)}"><i class="fas ${escHtml(icon)}" aria-hidden="true"></i><span>${escHtml(label)}</span><strong>${counts[key]} task${counts[key] === 1 ? '' : 's'}</strong><i class="fas fa-chevron-right" aria-hidden="true"></i></button>`;
+    return `
+      <section class="hw-side-panel hw-deadlines-panel" aria-labelledby="hwDeadlinesTitle">
+        <div class="hw-side-heading"><h3 id="hwDeadlinesTitle">Upcoming Deadlines</h3></div>
+        ${counts.overdue ? row('overdue', 'Overdue', 'fa-triangle-exclamation') : ''}
+        ${row('today', 'Today', 'fa-calendar-day')}
+        ${row('tomorrow', 'Tomorrow', 'fa-calendar-plus')}
+        ${row('week', 'This Week', 'fa-calendar-week')}
+      </section>`;
+  }
+
+  function renderHomeworkWorkspace() {
+    return `
+      <div class="hw-workspace-grid">
+        ${renderHomeworkAssignmentsPanel()}
+        <aside class="hw-workspace-sidebar" aria-label="Homework supporting information">
+          ${renderExtracurricularPanel()}
+          ${renderUpcomingDeadlinesPanel()}
+        </aside>
+      </div>
+      ${renderGlobalAssignmentComposer()}`;
   }
 
   function snoozeTask(taskId) {
@@ -1770,10 +2195,6 @@
 
   function renderGlobalAssignmentComposer() {
     return `
-      <section class="hw-global-add-wrap">
-        <button type="button" id="hwOpenAddAssignment" class="hw-global-add-trigger" aria-label="Add assignment or task" title="Add assignment or task">
-          <i class="fas fa-plus" aria-hidden="true"></i>
-        </button>
         <div class="hw-global-add-modal" id="hwGlobalAddModal" hidden>
           <div class="hw-global-add-card" role="dialog" aria-modal="true" aria-labelledby="hwGlobalAddTitle">
             <div class="hw-global-add-head">
@@ -1823,7 +2244,6 @@
             </div>
           </div>
         </div>
-      </section>
     `;
   }
 
@@ -1893,38 +2313,114 @@
     return true;
   }
 
+  function updateHomeworkCourseFilter() {
+    const select = $('#hwCourseFilter');
+    if (!select) return;
+    const selected = homeworkViewState.course;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    const addOption = (value, label, disabled = false) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      option.disabled = disabled;
+      select.appendChild(option);
+    };
+    addOption('all', 'All classes and activities');
+    addOption('track:class', 'All classes');
+    addOption('track:misc', 'All extracurriculars');
+    const classes = courses.filter(course => course.type === 'class');
+    const activities = courses.filter(course => course.type === 'misc');
+    if (classes.length) {
+      addOption('', 'Classes', true);
+      classes.forEach(course => addOption(`course:${course.id}`, course.name));
+    }
+    if (activities.length) {
+      addOption('', 'Activities', true);
+      activities.forEach(course => addOption(`course:${course.id}`, course.name));
+    }
+    select.value = Array.from(select.options).some(option => option.value === selected) ? selected : 'all';
+    homeworkViewState.course = select.value;
+  }
+
+  function updateHomeworkStaticChrome() {
+    const open = tasks.filter(task => !task.done);
+    const dueToday = open.filter(task => getTaskDayOffset(task) === 0);
+    const dueThisWeek = open.filter(task => { const offset = getTaskDayOffset(task); return offset != null && offset >= 0 && offset <= 7; });
+    const dueTomorrow = open.filter(task => getTaskDayOffset(task) === 1);
+    const inProgress = open.filter(task => getHomeworkStatus(task) === 'in-progress');
+    const completed = tasks.filter(task => task.done);
+    const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const completedThisWeek = completed.filter(task => Date.parse(task.completedAt || '') >= weekAgo);
+    const activities = courses.filter(course => course.type === 'misc');
+    const activityIds = new Set(activities.map(course => String(course.id)));
+    const activityDueThisWeek = dueThisWeek.filter(task => activityIds.has(String(task.courseId)));
+    const inProgressCourses = new Set(inProgress.map(task => String(task.courseId || '')).filter(Boolean));
+
+    setDashboardStat('#hwStatToday', dueToday.length);
+    setDashboardStat('#hwStatTodayNote', dueToday.some(task => normalizePriority(task.priority) === 'high')
+      ? `${dueToday.filter(task => normalizePriority(task.priority) === 'high').length} high priority`
+      : (dueToday.length ? 'Ready for today' : 'Nothing urgent'));
+    setDashboardStat('#hwStatWeek', dueThisWeek.length);
+    setDashboardStat('#hwStatWeekNote', dueTomorrow.length ? `${dueTomorrow.length} due tomorrow` : 'Your next 7 days');
+    setDashboardStat('#hwStatInProgress', inProgress.length);
+    setDashboardStat('#hwStatInProgressNote', inProgressCourses.size ? `Across ${inProgressCourses.size} ${inProgressCourses.size === 1 ? 'class' : 'classes'}` : 'No active plans');
+    setDashboardStat('#hwStatCompleted', completed.length);
+    setDashboardStat('#hwStatCompletedNote', completedThisWeek.length ? `${completedThisWeek.length} this week` : 'All completed work');
+    setDashboardStat('#hwStatActivities', activities.length);
+    setDashboardStat('#hwStatActivitiesNote', activityDueThisWeek.length ? `${activityDueThisWeek.length} due this week` : 'Clubs and other work');
+    setDashboardStat('#hwTabTodayCount', dueToday.length);
+    setDashboardStat('#hwTabWeekCount', dueThisWeek.length);
+
+    updateHomeworkCourseFilter();
+
+    const controlValues = {
+      '#hwSortSelect': homeworkViewState.sort,
+      '#hwStatusFilter': homeworkViewState.status,
+      '#hwPriorityFilter': homeworkViewState.priority,
+      '#hwCompletionFilter': homeworkViewState.completion,
+      '#hwDueFilter': homeworkViewState.due
+    };
+    Object.entries(controlValues).forEach(([selector, value]) => {
+      const control = $(selector);
+      if (control && control.value !== value) control.value = value;
+    });
+    const search = $('#hwSearchInput');
+    if (search && search.value !== homeworkViewState.query) search.value = homeworkViewState.query;
+
+    const activeFilters = ['course', 'status', 'priority', 'completion', 'due']
+      .filter(key => homeworkViewState[key] !== 'all').length;
+    const filterCount = $('#hwFilterCount');
+    if (filterCount) {
+      filterCount.hidden = activeFilters === 0;
+      filterCount.textContent = String(activeFilters);
+    }
+
+    $$('.hw-list-tabs [data-homework-tab]').forEach(button => {
+      const active = button.getAttribute('data-homework-tab') === homeworkViewState.tab;
+      button.classList.toggle('is-active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    $$('.hw-summary-card[data-summary-filter]').forEach(button => {
+      const shortcut = button.getAttribute('data-summary-filter');
+      const pressed = (shortcut === 'today' && homeworkViewState.tab === 'today')
+        || (shortcut === 'week' && homeworkViewState.tab === 'week')
+        || (shortcut === 'completed' && homeworkViewState.tab === 'completed')
+        || (shortcut === 'in-progress' && homeworkViewState.status === 'in-progress')
+        || (shortcut === 'activities' && homeworkViewState.course === 'track:misc');
+      button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    });
+  }
+
   function render() {
     const board = $('#hwDataTable');
-    const headerActions = $('#view-homework .hw-header-actions');
     if (!board) {
       renderLegacyTable();
       return;
     }
 
-    const openTasks = tasks.filter(task => !task.done);
-    const completedCount = tasks.length - openTasks.length;
-    const dueSoonCount = openTasks.reduce((count, task) => {
-      const dueMoment = getTaskDueDateTime(task);
-      if (!dueMoment) return count;
-      const diff = dueMoment.getTime() - Date.now();
-      return diff >= 0 && diff <= (7 * 24 * 60 * 60 * 1000) ? count + 1 : count;
-    }, 0);
-    const completionPercent = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0;
-
-    setDashboardStat('#hwStatOpen', openTasks.length);
-    setDashboardStat('#hwStatDueSoon', dueSoonCount);
-    setDashboardStat('#hwStatCompleted', completedCount);
-    setDashboardStat('#hwStatCourses', courses.length);
-    setDashboardStat('#hwStatProgress', `${completionPercent}% completed`);
-
-    if (headerActions) {
-      headerActions.querySelectorAll('.hw-global-add-wrap').forEach(node => node.remove());
-      headerActions.insertAdjacentHTML('beforeend', renderGlobalAssignmentComposer());
-    }
-
-    const addMethod = getHwAddMethod();
-    const topAdd = addMethod === 'quick' ? renderQuickAddBar() : '';
-    board.innerHTML = topAdd + renderCourseAddBar() + renderTable();
+    updateHomeworkStaticChrome();
+    setSafeHTML(board, renderHomeworkWorkspace());
 
     bindBoardInteractions(board);
     bindInlineComposers(board);
@@ -2159,7 +2655,7 @@
           addModal.hidden = true;
         };
 
-        if (openAddBtn) openAddBtn.addEventListener('click', () => openModal());
+        if (openAddBtn) openAddBtn.onclick = () => openModal();
         if (closeAddBtn) closeAddBtn.addEventListener('click', closeModal);
         addModal.addEventListener('click', event => {
           if (event.target === addModal) closeModal();
@@ -2252,6 +2748,13 @@
       });
     });
 
+    board.querySelectorAll('[data-course-icon]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        openCourseIconPicker(button.getAttribute('data-course-icon'), button);
+      });
+    });
+
     board.querySelectorAll('[data-task-menu-trigger]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();
@@ -2325,6 +2828,142 @@
           showHomeworkToast('Scheduling not available.');
         }
       });
+    });
+
+    board.querySelectorAll('[data-filter-course]').forEach(button => {
+      button.addEventListener('click', () => {
+        const courseId = String(button.getAttribute('data-filter-course') || '');
+        homeworkViewState.tab = 'all';
+        homeworkViewState.course = courseId ? `course:${courseId}` : 'all';
+        render();
+      });
+    });
+
+    board.querySelectorAll('[data-clear-task-filters]').forEach(button => {
+      button.addEventListener('click', () => {
+        resetHomeworkViewFilters();
+        render();
+      });
+    });
+
+    board.querySelectorAll('[data-deadline-filter]').forEach(button => {
+      button.addEventListener('click', () => {
+        const due = String(button.getAttribute('data-deadline-filter') || 'all');
+        resetHomeworkViewFilters();
+        homeworkViewState.due = due;
+        render();
+      });
+    });
+
+    board.querySelectorAll('[data-view-activities]').forEach(button => {
+      button.addEventListener('click', () => {
+        resetHomeworkViewFilters();
+        homeworkViewState.course = 'track:misc';
+        render();
+      });
+    });
+  }
+
+  function resetHomeworkViewFilters() {
+    homeworkViewState.query = '';
+    homeworkViewState.tab = 'all';
+    homeworkViewState.course = 'all';
+    homeworkViewState.status = 'all';
+    homeworkViewState.priority = 'all';
+    homeworkViewState.completion = 'all';
+    homeworkViewState.due = 'all';
+  }
+
+  function applyHomeworkSummaryShortcut(shortcut) {
+    resetHomeworkViewFilters();
+    if (shortcut === 'today') homeworkViewState.tab = 'today';
+    else if (shortcut === 'week') homeworkViewState.tab = 'week';
+    else if (shortcut === 'completed') homeworkViewState.tab = 'completed';
+    else if (shortcut === 'in-progress') homeworkViewState.status = 'in-progress';
+    else if (shortcut === 'activities') homeworkViewState.course = 'track:misc';
+    render();
+  }
+
+  function bindHomeworkWorkspaceControls() {
+    const search = $('#hwSearchInput');
+    if (search) search.addEventListener('input', () => {
+      homeworkViewState.query = search.value;
+      render();
+    });
+
+    const filterToggle = $('#hwFilterToggle');
+    const filterPanel = $('#hwFilterPanel');
+    if (filterToggle && filterPanel) filterToggle.addEventListener('click', () => {
+      filterPanel.hidden = !filterPanel.hidden;
+      filterToggle.setAttribute('aria-expanded', filterPanel.hidden ? 'false' : 'true');
+      if (!filterPanel.hidden) {
+        const first = filterPanel.querySelector('select');
+        if (first) first.focus();
+      }
+    });
+
+    const filters = {
+      hwCourseFilter: 'course',
+      hwStatusFilter: 'status',
+      hwPriorityFilter: 'priority',
+      hwCompletionFilter: 'completion',
+      hwDueFilter: 'due'
+    };
+    Object.entries(filters).forEach(([id, key]) => {
+      const control = $(`#${id}`);
+      if (control) control.addEventListener('change', () => {
+        homeworkViewState[key] = control.value || 'all';
+        render();
+      });
+    });
+
+    const sort = $('#hwSortSelect');
+    if (sort) sort.addEventListener('change', () => {
+      homeworkViewState.sort = sort.value || 'due';
+      render();
+    });
+
+    const clear = $('#hwClearFilters');
+    if (clear) clear.addEventListener('click', () => {
+      resetHomeworkViewFilters();
+      render();
+    });
+
+    $$('.hw-list-tabs [data-homework-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        const tab = String(button.getAttribute('data-homework-tab') || 'all');
+        homeworkViewState.tab = tab;
+        if (tab === 'today' || tab === 'week' || tab === 'completed') {
+          homeworkViewState.status = 'all';
+          homeworkViewState.completion = 'all';
+          homeworkViewState.due = 'all';
+        }
+        render();
+      });
+    });
+
+    $$('.hw-summary-card[data-summary-filter]').forEach(button => {
+      button.addEventListener('click', () => applyHomeworkSummaryShortcut(button.getAttribute('data-summary-filter')));
+    });
+
+    const addClass = $('#hwHeaderAddClass');
+    if (addClass) addClass.addEventListener('click', () => {
+      const overflow = $('#hwOverflowMenu');
+      if (overflow) overflow.open = false;
+      promptAddCourse('class', { returnFocus: addClass });
+    });
+    const addActivity = $('#hwHeaderAddActivity');
+    if (addActivity) addActivity.addEventListener('click', () => {
+      const overflow = $('#hwOverflowMenu');
+      if (overflow) overflow.open = false;
+      promptAddCourse('misc', { returnFocus: addActivity });
+    });
+    const semesterSetup = $('#hwSemesterSetupBtn');
+    if (semesterSetup) semesterSetup.addEventListener('click', () => {
+      const overflow = $('#hwOverflowMenu');
+      if (overflow) overflow.open = false;
+      if (window.SutraSemesterSetup && typeof window.SutraSemesterSetup.open === 'function') window.SutraSemesterSetup.open();
+      else showHomeworkToast('Semester Setup is not available.');
     });
   }
 
@@ -2517,6 +3156,7 @@
 
     setupChipInput('#hwClassChips', '#hwClassInput');
     setupChipInput('#hwMiscChips', '#hwMiscInput');
+    bindHomeworkWorkspaceControls();
 
     const exportBtn = $('#hwExportBtn');
     const importInput = $('#hwImportFile');
@@ -2601,6 +3241,12 @@
 
     document.addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
+      const courseIconModal = $('#hwCourseIconModal');
+      if (courseIconModal && !courseIconModal.hidden) {
+        if (typeof courseIconModal._close === 'function') courseIconModal._close();
+        else courseIconModal.hidden = true;
+        return;
+      }
       const courseQuickModal = $('#hwCourseQuickModal');
       if (courseQuickModal && !courseQuickModal.hidden) {
         courseQuickModal.hidden = true;
@@ -2646,6 +3292,7 @@
       getTasks: () => tasks.map(task => serializeTask(task)),
       getCourses: () => courses.slice(),
       getTaskById: (id) => { const task = getTaskByIdInternal(id); return task ? serializeTask(task) : null; },
+      setCourseIcon,
       // Find-or-create a class course by name, persist, and return { id, name }.
       // Used by Quick Capture's inline "+ New class" so module memory and storage
       // stay in sync (no direct hwCourses:v2 writes from outside this module).

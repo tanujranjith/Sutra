@@ -13503,6 +13503,8 @@ body[data-time-mode="night"] {
 /* Emoji Picker - Final override (single source of truth) */
 .emoji-modal-overlay {
     background: rgba(8, 12, 18, 0.52);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
 }
 
 .emoji-picker {
@@ -23975,44 +23977,47 @@ body.command-palette-open {
     margin-top: 8px;
 }
 
-/* ===== Class Dashboard drawer ===== */
+/* ===== Class Dashboard modal ===== */
 .class-dashboard-drawer {
     position: fixed;
     inset: 0;
-    /* Above the top-nav tab bar (z 2460) so the drawer header isn't clipped —
-       matches the Deadline Radar modal convention. */
+    /* Above the top-nav tab bar (z 2460), matching the Deadline Radar modal. */
     z-index: 3000;
     display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
 }
 
-.class-dashboard-drawer.active { display: block; }
+.class-dashboard-drawer.active { display: flex; }
 
 .class-dashboard-backdrop {
     position: absolute;
     inset: 0;
     background: color-mix(in srgb, #000 42%, transparent);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
 }
 
 .class-dashboard-card {
-    position: absolute;
-    right: 0;
-    top: 0;
-    height: 100%;
-    width: min(420px, 94vw);
+    position: relative;
+    width: min(860px, calc(100vw - 48px));
+    max-height: min(86dvh, 880px);
     padding: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    box-shadow: -10px 0 30px color-mix(in srgb, #000 22%, transparent);
+    border-radius: 18px;
+    box-shadow: 0 24px 64px color-mix(in srgb, #000 42%, transparent);
 }
 
-/* Drawer is a modal surface: force an opaque background so the page does not
+/* The modal surface is opaque so the page does not
    bleed through, regardless of the user's card-style / blur preferences. */
 .class-dashboard-drawer .class-dashboard-card.glass-card {
     background: var(--bg-primary) !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
-    border-left: 1px solid var(--surface-border);
+    border: 1px solid var(--surface-border);
 }
 
 .class-dashboard-body {
@@ -33110,7 +33115,10 @@ body.onboarding-open .editor-toolbar {
     /* Make the notes view a flex column so the editor area flexes into the space
        left below the formatting toolbar (rather than guessing a 100% height that
        double-counts the toolbar and forces a scrollbar). */
-    #view-notes:has(.canvas-editor:not([hidden])) {
+    /* Keep the canvas-only flex layout inside the active Notes surface. Without
+       this guard its `display: flex !important` wins over the view switcher's
+       inline `display: none`, leaving an open canvas painted below Timeline. */
+    #view-notes.active:has(.canvas-editor:not([hidden])) {
         /* !important: beats the broad `.view.active { display: block }` so the
            notes view becomes a flex column on canvas pages only. */
         display: flex !important;
@@ -33208,7 +33216,15 @@ body.canvas-page-active[data-canvas-background="dark-grid"] #view-notes {
     background-color: var(--editor-bg, var(--surface-bg));
 }
 
-/* Make the inner canvas layers transparent so the grid on #view-notes shows through. */
+/* Hide the V2 note editor host and secondary split pane while a canvas page is
+   active, preventing the previous note's content from leaking into the canvas
+   workspace. Without this the V2 host remains visible above the canvas and
+   re-renders the last-visited note's content (Canvas data-isolation fix). */
+body.canvas-page-active .editor-v2-host,
+body.canvas-page-active #notesSecondaryPane {
+    display: none !important;
+}
+
 /* Make the inner canvas layers transparent so the grid on #view-notes shows through. */
 body.canvas-page-active .canvas-editor,
 body.canvas-page-active .canvas-stage-shell {
@@ -33226,12 +33242,14 @@ body.canvas-page-active .canvas-toolbar {
 .canvas-toolbar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     min-height: 46px;
-    padding: 6px 8px;
+    padding: 6px 6px;
     border-bottom: 1px solid var(--surface-border, var(--border));
     background: var(--surface-bg, var(--bg-secondary));
     overflow-x: auto;
+    flex-shrink: 0;
+    scrollbar-width: thin;
 }
 
 .canvas-toolbar .toolbar-btn,
@@ -33242,6 +33260,25 @@ body.canvas-page-active .canvas-toolbar {
 .canvas-toolbar .toolbar-btn.active {
     background: var(--accent-soft, rgba(122, 160, 255, 0.18));
     color: var(--accent);
+}
+
+/* Tool group dividers — small vertical rule between logical groups */
+.canvas-tool-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.canvas-tool-group + .canvas-tool-group {
+    padding-left: 4px;
+    margin-left: 4px;
+    border-left: 1px solid var(--surface-border, rgba(0,0,0,.1));
+}
+
+/* Hide selection-only controls when nothing is selected */
+.canvas-editor:not([data-has-selection="true"]) [data-selection-only] {
+    display: none;
 }
 
 /* Shape picker dropdown */
