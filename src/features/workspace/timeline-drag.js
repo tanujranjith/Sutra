@@ -489,6 +489,10 @@
         if (root.matches && root.matches('[data-drag-source-id]:not([data-block-id])')) rows.push(root);
         root.querySelectorAll('[data-drag-source-id]:not([data-block-id])').forEach(function (row) { rows.push(row); });
         rows.forEach(function (row) {
+            // Homework renders its own schedule action inside a table cell. Appending
+            // another button to a <tr> is invalid table markup, so browsers relocate
+            // it outside the table and it can overlap adjacent panels.
+            if (row.matches('tr') || row.closest('.hw-assignment-table')) return;
             if (row.querySelector('[data-timeline-schedule-trigger]')) return;
             var button = document.createElement('button'); button.type = 'button'; button.className = 'timeline-schedule-trigger';
             button.setAttribute('data-timeline-schedule-trigger', ''); button.textContent = 'Schedule';
