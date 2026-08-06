@@ -78,7 +78,7 @@
     "./src/sync/sync-projection.js?v=20260731-helpdocs1",
     "./src/sync/sync-protocol.js?v=20260716-syncparity1",
     "./src/sync/sync-store.js?v=20260805-device-session1",
-    "./src/sync/sync-transport.js?v=20260718-account-isolation1",
+    "./src/sync/sync-transport.js?v=20260806-runtime-clean1",
     "./src/ui/date-enhancer.js",
     "./src/ui/select-enhancer.js?v=20260708-toolbar-compact",
     "./src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1",

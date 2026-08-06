@@ -348,8 +348,8 @@
     "hash": "5a176198efc28e8d"
   },
   "src/sync/sync-transport.js": {
-    "stamp": "20260718-account-isolation1",
-    "hash": "7dce5359639924ca"
+    "stamp": "20260806-runtime-clean1",
+    "hash": "49363d158e454892"
   },
   "src/ui/select-enhancer.js": {
     "stamp": "20260708-toolbar-compact",

@@ -213,6 +213,7 @@ for (const relPath of CURRENT_RUNTIME_FILES) {
 
 // Recursive scan for stray test/package files anywhere in the tree.
 const plaintextSentinels = [
+  'mock-user-',
   'REMOTE_BOUNDARY_NOTE_TITLE_730',
   'REMOTE_BOUNDARY_NOTE_BODY_730',
   'REMOTE_BOUNDARY_PRIVATE_FILENAME_730.txt',

@@ -78,7 +78,7 @@
       snapshot: null,     // { envelope, cursor }
       assets: {},         // hash -> asset envelope
       devices: {},        // deviceId -> { deviceId, label, lastSeenCursor, revokedAt, wipeRequired, wipeAcknowledgedAt }
-      userId: String(config.userId || 'mock-user-1')
+      userId: String(config.userId || 'memory-user')
     };
     var stats = { pullCalls: 0, pushCalls: 0, rejectedStaleCursor: 0, dedupedOps: 0 };
 
