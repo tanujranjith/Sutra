@@ -96,6 +96,14 @@ separate plaintext-recovery preference. Determinism rules:
 | `exportedAt` | ephemeral | export timestamp, never canonical sync state |
 | `workspaceMeta`, `ui`, `splitPaneContexts` | excluded | device-local save coordination and browser UI state |
 
+`c/pages/<id>` owns every durable page surface. This includes Notepad content,
+Canvas state, and the versioned `page.slides` deck (slide order, elements,
+speaker notes, and bounded inline local image data). Adding, editing, reordering,
+or removing a nested slide produces an upsert for its owning page; deleting the
+page produces the normal page-record tombstone. Snapshot and incremental paths
+therefore project the same Slides and Canvas state without editor-specific
+stores or operations.
+
 Every collection emits an `o/<collection>` ordering doc capturing its array
 order (ids in sequence). Collection entries lacking a usable string `id` fold
 into an `a/<field>.__rest` record (`{ orphans: [...] }` for top-level arrays)
@@ -347,9 +355,9 @@ deleteVault()
 | `conflicts` | device-local encrypted-branch review records and resolved tombstones; never projected as pages |
 
 None of this database is included in `.sutra` exports or any backup. Workspace
-schema v7 adds explicit portability containers (`schema`, `migrationHistory`,
-`migrationDiagnostics`, `compatibility`, and unknown-field preservation)
-and makes `appData.assistantChatHistory` canonical. Existing legacy chat
+schema v6 added explicit portability containers (`schema`, `migrationHistory`,
+`migrationDiagnostics`, `compatibility`, and unknown-field preservation).
+Schema v7 makes `appData.assistantChatHistory` canonical. Existing legacy chat
 localStorage is imported once, then becomes a canonical-to-legacy mirror; an
 empty or stale mirror cannot erase synchronized history. Protocol v1 remains
 compatible: schema version travels independently on every op.

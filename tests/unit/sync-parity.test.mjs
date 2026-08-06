@@ -26,7 +26,7 @@ async function projected(workspace) {
 function identity(deviceId, start = 0) {
   let lamport = start;
   return {
-    deviceId, schemaVersion: 6, clientTime: '2026-07-16T14:00:00.000Z',
+    deviceId, schemaVersion: 7, clientTime: '2026-07-16T14:00:00.000Z',
     nextLamport() { lamport += 1; return lamport; }
   };
 }
@@ -48,7 +48,7 @@ async function protocolTransfer(sourceWorkspace, targetWorkspace, deviceId) {
 test('everything fixture survives actual diff, merge, and projection bootstrap', async () => {
   const deviceA = createEverythingWorkspace({});
   const deviceB = await protocolTransfer(deviceA, {
-    version: 6,
+    version: 7,
     workspaceMeta: { revision: 2, lastWriterTabId: 'device-b' },
     ui: { lastActiveView: 'today' },
     splitPaneContexts: { primary: { pageId: 'device-b-page' } },
@@ -146,6 +146,58 @@ test('reverse changes, deletions, reordering, and empty values survive increment
   const applied = projectionApi.applyProjectionToWorkspace(baselineWorkspace, { records: remote });
   const comparison = comparePortableWorkspaces(changedWorkspace, applied);
   assert.deepEqual(comparison.differences, [], JSON.stringify(comparison.differences.slice(0, 20), null, 2));
+});
+
+test('Slides edits and nested deletions travel incrementally with their canonical page', async () => {
+  const baselineWorkspace = createEverythingWorkspace({});
+  const baseline = await projected(baselineWorkspace);
+  const changedWorkspace = JSON.parse(JSON.stringify(baselineWorkspace));
+  const changedPage = changedWorkspace.pages.find(page => page.id === 'page-parent');
+  changedPage.slides.slides[0].speakerNotes = 'Edited slide notes from device B.';
+  changedPage.slides.slides[0].elements[0].text = 'Edited slide evidence from device B.';
+  changedPage.slides.slides.push({
+    id: 'slide-added-on-b', layout: 'title-body', title: 'Incremental slide',
+    speakerNotes: 'Added incrementally.',
+    elements: [{ id: 'slide-added-text', type: 'text', x: 8, y: 8, width: 80, height: 16, text: 'New slide content.' }]
+  });
+
+  const changed = await projected(changedWorkspace);
+  const outbox = diffApi.computeOutbox({
+    baseHashes: baseline.hashes, currentRecords: changed.records,
+    currentHashes: changed.hashes, previousOutbox: [],
+    identity: identity('slides-device-b', 200)
+  });
+  const pageOps = outbox.ops.filter(op => op.recordKey === 'c/pages/page-parent');
+  assert.equal(pageOps.length, 1);
+  assert.equal(pageOps[0].kind, 'upsert');
+  assert.equal(pageOps[0].payload.content, '<p>Parent sentinel.</p>');
+  assert.equal(pageOps[0].payload.slides.slides[1].id, 'slide-added-on-b');
+
+  const remote = mergeApi.applyOpsToRecords(baseline.records, outbox.ops).records;
+  const applied = projectionApi.applyProjectionToWorkspace(baselineWorkspace, { records: remote });
+  assert.deepEqual(
+    applied.pages.find(page => page.id === 'page-parent').slides,
+    changedPage.slides
+  );
+  assert.equal(applied.pages.find(page => page.id === 'page-parent').content, '<p>Parent sentinel.</p>');
+
+  const afterAdd = await projected(changedWorkspace);
+  const afterDeleteWorkspace = JSON.parse(JSON.stringify(changedWorkspace));
+  const afterDeletePage = afterDeleteWorkspace.pages.find(page => page.id === 'page-parent');
+  afterDeletePage.slides.slides = afterDeletePage.slides.slides.filter(slide => slide.id !== 'slide-parity');
+  const afterDelete = await projected(afterDeleteWorkspace);
+  const deleteOutbox = diffApi.computeOutbox({
+    baseHashes: afterAdd.hashes, currentRecords: afterDelete.records,
+    currentHashes: afterDelete.hashes, previousOutbox: [],
+    identity: identity('slides-device-b', 300)
+  });
+  assert.ok(deleteOutbox.ops.some(op =>
+    op.recordKey === 'c/pages/page-parent' && op.kind === 'upsert'
+    && op.payload.slides.slides.length === 1
+    && op.payload.slides.slides[0].id === 'slide-added-on-b'
+  ));
+  assert.ok(!deleteOutbox.ops.some(op => op.kind === 'delete'),
+    'nested slide deletion is represented by the owning page upsert, not a record tombstone');
 });
 
 test('field-level diff reports exact content paths', () => {

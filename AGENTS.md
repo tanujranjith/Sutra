@@ -2,9 +2,9 @@
 
 > This file is the required starting point for every coding agent, reviewer, and human contributor working on Sutra. Read it before changing code. Use it to understand the product, architecture, completed foundation, current objective, and non-negotiable constraints.
 >
-> **Last verified:** 2026-07-18
+> **Last verified:** 2026-07-22
 > **Branch:** `main`  
-> **Verified against commit:** `1388272d95f1fea039d0c6f0fa67ece49fd55cb9`
+> **Verified against commit:** `f708ec3d48fcc3d2e5d2fbe178aaf35b643e230a`
 
 ## How to use this file
 
@@ -138,7 +138,10 @@ Do not begin a framework rewrite, module-system conversion, TypeScript migration
 - `src/features/academic/`: school schedule, grades, planning, Assignment Studio, Semester Setup, and command-center engines.
 - `src/features/study/`: Homework, AP Study, and Review.
 - `src/features/customization/`: themes, CSS overrides, and sandboxed plugins.
-- `src/features/workspace/`: notifications, business/work views, handwriting, starter-pack data, and other workspace services.
+- `src/features/workspace/`: notifications, business/work views, handwriting, Slides, starter-pack data, and other workspace services.
+  - `mobile-nav.js`: the phone bottom navigation, advanced-section sheet, and Notes drawer accessibility bridge. It must route through the existing canonical tab controls rather than maintain a second destination registry.
+  - `timeline-calendar.js`: the native Month, Week, and Day Timeline calendar views. Phone Month view uses event-count indicators and hands detailed inspection to Day view; Week remains an intentionally contained horizontal schedule.
+  - `slides.js`: the native Notes Slides runtime, editor, presenter, bounded Assistant context, and local export bridge.
 - `src/ui/`: reusable input and interface enhancers.
 - `styles/`: styles grouped by responsibility, but actual cascade order is the order of `<link>` elements in `Sutra.html`.
 - `scripts/`: static checks, validation, deployment tooling, asset generation, and local server utilities.
@@ -293,6 +296,7 @@ Use `SutraDOMSafety`, `SutraSafeStorage`, `reportError`, feature guards, migrati
 
 - The stylesheet folder does not determine precedence. `Sutra.html` link order determines the cascade.
 - Reuse design tokens and existing component patterns before adding new hard-coded values.
+- Assistant disclosures must use shared surface and border tokens; never fall back to a dark-only card color that conflicts with active light-theme text tokens.
 - Keep responsive rules in the established responsive layer unless a feature requires tightly scoped local behavior.
 - Do not reintroduce large inline style blocks into `Sutra.html`.
 - Preserve readable contrast across Default, Dark, Sutra, and custom themes.
@@ -335,6 +339,12 @@ The repository has substantial safety infrastructure:
 - allowlisted deployment artifacts and post-deploy smoke checks.
 
 These systems exist because a local-first app must make data loss visible and recoverable rather than silently failing.
+
+## Mobile shell and responsive navigation
+
+Sutra's phone shell keeps the daily loop immediately available while preserving advanced surfaces through an accessible **All sections** sheet. The sheet is derived from enabled canonical top-level tabs and delegates navigation to their existing handlers; it is not a separate navigation source of truth. Mobile overlays, including the Notes drawer, must retain dialog semantics, focus containment and restoration, Escape and browser-Back behavior where applicable, background scroll locking, safe-area spacing, and reduced-motion support.
+
+Timeline adapts rather than compresses its desktop calendar. On phones, Month view presents a compact date grid with event counts and opens Day view for detail; Week view may scroll horizontally only inside its calendar container. Responsive changes must preserve 44-pixel primary touch targets and must not introduce document-level horizontal overflow.
 
 ## Encrypted backup and Sutra Cloud
 
@@ -380,7 +390,18 @@ The governing rule remains: the Assistant proposes and explains; users approve c
 
 ## Notes evolution
 
-The established Notes system supports hierarchical pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, and linked content. A newer vendored Notes Editor v2 exists behind an `editor.editorV2Enabled` feature flag. Treat flagged editor work as an incremental migration path, not permission to break the stable editor or stored note content.
+The established Notes system supports hierarchical pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, linked content, Canvas, and Slides. A newer vendored Notes Editor v2 exists behind an `editor.editorV2Enabled` feature flag. Treat flagged editor work as an incremental migration path, not permission to break the stable editor or stored note content.
+
+Slides is a third native Notes surface beside Notepad and Canvas. A deck belongs to a normal Note page and is stored in the versioned `page.slides` record; ordinary note content and unknown page fields must remain intact. The runtime lives in `src/features/workspace/slides.js`, its scoped styles live in `styles/features/slides.css`, and its full behavioral contract is documented in [`docs/features/SLIDES.md`](docs/features/SLIDES.md).
+
+Slides invariants:
+
+- Persistent deck state uses the canonical page save/export/import path and therefore participates in encrypted `.sutra` backups and page-level Sutra Sync. Selection, zoom, and other editor-session state must not become durable fields or create Sync churn.
+- `window.SutraSlides` is the registered integration seam. Keep Assistant context bounded, exclude locked decks, and do not add a second remote API or Slides-specific storage source.
+- Notepad, Canvas, and Slides are mutually exclusive visual surfaces. Leaving a deck must hide the Slides root with `hidden`, `inert`, and `aria-hidden`; `.slides-editor[hidden]` must remain an author-level `display: none` backstop so Slides cannot bleed beneath another editor.
+- Slide design colors remain deck-owned. Sutra theme changes apply to editor chrome, controls, rails, and inspectors without rewriting the saved slide artwork.
+- V1 is static and intentionally has no animation model or PPTX import. The current PPTX package is experimental rather than standards-complete and must not be described as a substitute for an encrypted workspace backup.
+- V1 slide images are local-only bounded data URLs inside `page.slides`. They currently round-trip with the page and Sync, but this can grow the workspace; migration to the attachment database is required before encouraging image-heavy decks. Never introduce external image URLs or automatic network fetches.
 
 ## Verification and release system
 
@@ -567,6 +588,8 @@ A task is complete only when:
 11. **Archive documents are not current instructions.** Use them for history, not path or implementation truth.
 12. **The app can appear functional while losing data.** Persistence and export round-trip testing is mandatory for stateful changes.
 13. **Canvas pages visually leak note content through the V2 editor host.** When Notes Editor V2 is active (default-on), the visible note surface is `#editorV2Host`, not `#editor`. The `showCanvasEditorForPage`/`hideCanvasEditor` functions (and their `body.canvas-page-active` CSS backstop) must toggle BOTH the V2 host and the secondary split pane to prevent the previous note's content from displaying above the canvas. Never assume that hiding `#editor` alone is sufficient. The CSS rules at `styles/base/styles.css:33154` already handle `.toolbar-wrapper`, `.view-flow-row`, `.breadcrumbs`, and `.tags-container` but were missing `.editor-v2-host` and `#notesSecondaryPane` before the 2026-07-17 Canvas isolation fix.
+14. **Slides has its own author-level display rule.** Setting the DOM `hidden` property is not sufficient if `.slides-editor { display: flex; }` overrides the browser's user-agent `[hidden]` rule. Keep `.slides-editor[hidden] { display: none !important; }`, the inert/ARIA teardown in `setEditorVisible`, and the Slides-to-Notepad browser regression together.
+15. **Mobile navigation has one canonical route source.** The phone **All sections** sheet is derived from enabled `.top-tab` controls and activates their established handlers. Do not create a parallel route list, direct view mutation path, or mobile-only data source. Preserve its focus trap, focus restoration, Escape/browser-Back dismissal, scroll lock, and the Notes drawer regression coverage when changing the shell.
 
 ---
 

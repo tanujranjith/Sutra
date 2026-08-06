@@ -1,9 +1,14 @@
 # Sutra Sync — manual Account A/B isolation checklist
 
-Run this only against the intended Supabase project after applying, in order:
+For a fresh empty project, apply in order:
 
-1. [`supabase/schema.sql`](../../supabase/schema.sql) for a new project only;
+1. [`supabase/schema.sql`](../../supabase/schema.sql);
 2. [`supabase/sync-schema.sql`](../../supabase/sync-schema.sql);
+
+The current `sync-schema.sql` already contains revoke/wipe and exact asset-path
+definitions. For an existing project created from an older sync schema, apply
+(or safely re-run) these additive migrations in order:
+
 3. [`supabase/migrations/20260716_device_revoke_wipe.sql`](../../supabase/migrations/20260716_device_revoke_wipe.sql);
 4. [`supabase/migrations/20260718_sync_account_isolation.sql`](../../supabase/migrations/20260718_sync_account_isolation.sql).
 

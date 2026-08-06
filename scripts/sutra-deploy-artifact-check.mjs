@@ -45,7 +45,21 @@ const REQUIRED = [
   'sitemap.xml',
   'LICENSE',
   'src/core/app.js',
+  'src/persistence/revocation-wipe.js',
+  'src/sync/sync-protocol.js',
+  'src/sync/sync-crypto.js',
+  'src/sync/sync-projection.js',
+  'src/sync/sync-diff.js',
+  'src/sync/sync-merge.js',
+  'src/sync/sync-store.js',
+  'src/sync/sync-transport.js',
+  'src/sync/sync-engine.js',
+  'src/features/assistant/flow-assistant.js',
+  'src/features/workspace/slides.js',
+  'src/config/asset-manifest.generated.js',
+  'src/config/asset-manifest.generated.json',
   'styles/base/styles.css',
+  'styles/features/slides.css',
   'assets/brand/sutra/generated/favicon.ico',
   'assets/brand/sutra/generated/social-preview.png',
   'assets/vendor/jszip/jszip.min.js'
@@ -181,10 +195,32 @@ function walk(dir, rel = '') {
       if (entry.name === 'package.json' || entry.name === 'package-lock.json') {
         fail(`package metadata leaked into artifact: ${relPath}`);
       }
+      if (/\.(?:sql|map)$/i.test(entry.name)) {
+        fail(`non-runtime SQL/source-map file leaked into artifact: ${relPath}`);
+      }
+      if (/(?:^|[-_.])(?:fixture|fixtures)(?:[-_.]|$)/i.test(entry.name)) {
+        fail(`test fixture leaked into artifact: ${relPath}`);
+      }
     }
   }
 }
 walk(outDir);
+
+// Public URL/publishable-key configuration is intended to ship. Secret-shaped
+// Supabase credentials are not.
+const runtimeConfigPath = join(outDir, 'src', 'config', 'sutra-runtime-config.js');
+if (existsSync(runtimeConfigPath)) {
+  const runtimeConfig = readFileSync(runtimeConfigPath, 'utf8');
+  if (!runtimeConfig.includes('https://blfsmdyvdlhabltiicgx.supabase.co')) {
+    fail('intended public Supabase project URL is missing from runtime config');
+  }
+  if (!runtimeConfig.includes('sb_publishable_wC7rjhwQvGA_Li07vK_Skg_ovfMG_Z_')) {
+    fail('intended Supabase publishable key is missing from runtime config');
+  }
+  if (/(?:sb_secret_|service_role["'\s:=_-]+)[A-Za-z0-9._-]{16,}/i.test(runtimeConfig)) {
+    fail('secret-shaped Supabase credential leaked into runtime config');
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 5. No stale NoteFlow public pages or links in shipped HTML.

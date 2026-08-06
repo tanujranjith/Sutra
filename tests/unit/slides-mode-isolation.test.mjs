@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const slidesSource = await readFile(new URL('../../src/features/workspace/slides.js', import.meta.url), 'utf8');
+const slidesStyles = await readFile(new URL('../../styles/features/slides.css', import.meta.url), 'utf8');
+
+test('hidden Slides editor cannot render beneath Notepad or Canvas', () => {
+  assert.match(
+    slidesStyles,
+    /\.slides-editor\[hidden\]\s*\{[^}]*display:\s*none\s*!important;/s,
+    'Slides must explicitly preserve hidden display because its author flex rule overrides the browser default'
+  );
+});
+
+test('Slides visibility makes inactive editor inert and hidden from accessibility APIs', () => {
+  assert.match(slidesSource, /function setEditorVisible\(visible\)/);
+  assert.match(slidesSource, /root\.hidden\s*=\s*!visible/);
+  assert.match(slidesSource, /root\.toggleAttribute\('inert',\s*!visible\)/);
+  assert.match(slidesSource, /root\.setAttribute\('aria-hidden',\s*visible\s*\?\s*'false'\s*:\s*'true'\)/);
+  assert.match(slidesSource, /else setEditorVisible\(false\)/);
+});
+
+test('Slides mutations use the canonical page bridge instead of whole-workspace restore', () => {
+  assert.match(slidesSource, /function appBridge\(\)/);
+  assert.match(slidesSource, /global\.flowAtelier/);
+  assert.match(slidesSource, /bridge\.pages/);
+  assert.match(slidesSource, /page\.updatedAt\s*=\s*new Date\(\)\.toISOString\(\)/);
+  assert.match(slidesSource, /appBridge\(\)\.persistAppData\(\)/);
+  assert.doesNotMatch(slidesSource, /serializeWorkspace|deserializeWorkspace/);
+});

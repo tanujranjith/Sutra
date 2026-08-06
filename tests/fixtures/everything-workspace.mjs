@@ -93,9 +93,12 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
   const preferences = settings.preferences && typeof settings.preferences === 'object' ? settings.preferences : {};
   return {
     ...base,
-    version: 6,
-    schema: { name: 'sutra-workspace', version: 6, paritySentinel: 'schema-parity' },
-    migrationHistory: [{ id: 'v5->v6', from: 5, to: 6, appliedAt: EVERYTHING_STAMP, paritySentinel: 'migration-parity' }],
+    version: 7,
+    schema: { name: 'sutra-workspace', version: 7, paritySentinel: 'schema-parity' },
+    migrationHistory: [
+      { id: 'v5->v6', from: 5, to: 6, appliedAt: EVERYTHING_STAMP, paritySentinel: 'migration-parity' },
+      { id: 'v6->v7', from: 6, to: 7, appliedAt: EVERYTHING_STAMP, paritySentinel: 'assistant-history-parity' }
+    ],
     pages: [{
       id: 'page-parent', title: 'Parity Parent', type: 'note',
       content: '<p>Parent sentinel.</p>', blocks: [], icon: 'folder',

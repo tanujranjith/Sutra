@@ -563,13 +563,21 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       // Both devices show the identical deterministic winner.
       expect(finalPagesA.find(p => p.id === 'page-second').content)
         .toBe(finalPagesB.find(p => p.id === 'page-second').content);
-      // The conflict is recorded once for the dedicated review UI on the
-      // device that performed the three-way merge, retaining both versions.
-      const conflictsB = await B.page.evaluate(() => window.SutraSync.listConflicts());
-      const pageConflicts = conflictsB.filter(c => c.recordKey === 'c/pages/page-second');
-      expect(pageConflicts.length).toBe(1);
-      expect(pageConflicts[0].type).toBe('page-content-conflict');
-      const bodiesB = [pageConflicts[0].localValue.content, pageConflicts[0].remoteValue.content].sort();
+      // Reconnect/resume may let either device win the single-flight race and
+      // perform the three-way merge before the explicit cycle below. Conflict
+      // stores are device-local, so assert one deterministic conflict identity
+      // across both stores rather than assigning ownership to Device B.
+      const [conflictsA, conflictsB] = await Promise.all([
+        A.page.evaluate(() => window.SutraSync.listConflicts()),
+        B.page.evaluate(() => window.SutraSync.listConflicts())
+      ]);
+      const pageConflicts = [...conflictsA, ...conflictsB]
+        .filter(c => c.recordKey === 'c/pages/page-second');
+      const conflictsById = new Map(pageConflicts.map(conflict => [conflict.id, conflict]));
+      expect(conflictsById.size).toBe(1);
+      const pageConflict = [...conflictsById.values()][0];
+      expect(pageConflict.type).toBe('page-content-conflict');
+      const bodiesB = [pageConflict.localValue.content, pageConflict.remoteValue.content].sort();
       expect(bodiesB[0]).toContain('A version of second');
       expect(bodiesB[1]).toContain('B version of second');
 
@@ -794,6 +802,8 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           'Unique parity evidence.',
           'Complete synthetic parity audit',
           'Synthetic Course Hub',
+          'Unique slide evidence.',
+          'Slide note sentinel.',
           'synthetic-notes.txt',
           'U3ludGhldGljIFN1dHJhIHBhcml0eSBhdHRhY2htZW50Lg==',
           'sk-synthetic-device-only',

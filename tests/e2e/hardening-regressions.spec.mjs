@@ -36,3 +36,26 @@ test('deleteReviewDeck returns true only when a deck actually existed', async ({
   expect(result.secondDelete).toBe(false);
   expect(result.unknownDelete).toBe(false);
 });
+
+test('Slides editor is removed from layout after switching to a normal note', async ({ page }) => {
+  await openApp(page);
+  await page.waitForFunction(() => window.SutraSlides && typeof window.SutraSlides.createPage === 'function');
+
+  const normalPageId = await page.evaluate(() => {
+    const workspace = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
+    const normalPage = workspace.pages.find((item) => item && !(item.slides && Array.isArray(item.slides.slides)));
+    return normalPage && normalPage.id;
+  });
+  expect(normalPageId).toBeTruthy();
+
+  await page.evaluate(() => window.SutraSlides.createPage('Isolation regression deck'));
+  await expect(page.locator('#slidesEditor')).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/slides-page-active/);
+
+  await page.evaluate((pageId) => window.loadPage(pageId), normalPageId);
+  await expect(page.locator('body')).not.toHaveClass(/slides-page-active/);
+  await expect(page.locator('#slidesEditor')).toBeHidden();
+  await expect(page.locator('#slidesEditor')).toHaveAttribute('inert', '');
+  await expect(page.locator('#slidesEditor')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('#notesPrimaryPane')).toBeVisible();
+});

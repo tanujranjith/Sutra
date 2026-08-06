@@ -18,8 +18,10 @@ opening a deck does not cause Sync churn.
 
 ## Local-first behavior
 
-The deck is saved through the canonical workspace serializer and local save
-path. As a result, deck text, themes, layouts, notes, and inline image data
+The deck mutates its owning page through the canonical `flowAtelier.pages`
+bridge and schedules the normal `persistAppData` save path. Ordinary slide
+edits must never invoke whole-workspace serialize/import or restore behavior.
+As a result, deck text, themes, layouts, notes, and inline image data
 participate in normal reload, encrypted `.sutra` export/import, duplication,
 and workspace Sync without a Slides-specific server or network request.
 

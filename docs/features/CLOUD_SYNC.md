@@ -26,7 +26,8 @@ Keep both.
 ## What syncs
 
 Every portable user-created workspace contract syncs: notes and page history,
-spaces, tasks/order/subtasks/dependencies, timeline and planning data, Homework
+Canvas documents, Slides decks (including speaker notes and inline local
+images), spaces, tasks/order/subtasks/dependencies, timeline and planning data, Homework
 courses/assignments and their legacy mirrors, Review, AP Study, Testing Hub,
 Course Hub, school/semester/grade data, Focus, college/life/work/portfolio,
 custom tabs, trash, private vault documents, migration/compatibility recovery
@@ -192,8 +193,9 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   two-tab behavior, verified revoke-and-wipe, ordinary-sign-out preservation,
   zero-requests-when-disabled, full UI flow). Its canonical
   “everything workspace” scenario separately proves snapshot-only bootstrap,
-  field-level parity for every classified record, Assistant runtime hydration,
-  local-mirror restoration, reverse incremental create/update/delete/reorder/
+  schema-v7 field-level parity for every classified record, Assistant runtime
+  hydration, Canvas and Slides page payloads (including incremental Slides
+  add/edit/remove behavior), local-mirror restoration, reverse incremental create/update/delete/reorder/
   empty operations, attachment replacement, ciphertext-only server state, and
   locked reload durability.
 - Static/unit parity:
@@ -207,6 +209,10 @@ The operator-run [Account A/B isolation checklist](../release/SUPABASE_ACCOUNT_I
 states the required direct REST, RPC, Storage, payload-boundary, anonymous, and
 same-profile-account-switch checks without exposing browser credentials to the
 test runner.
+
+The latest repository-wide reconciliation, current parity matrix, unattended
+evidence, release blocker, migration order, and 30-step operator checklist are
+recorded in the [2026-07-22 cloud sync audit](../release/CLOUD_SYNC_AUDIT_2026-07-22.md).
 
 ### Verification boundary (2026-07-18)
 

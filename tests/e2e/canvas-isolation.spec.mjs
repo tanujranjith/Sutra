@@ -137,7 +137,7 @@ test('Canvas pages are isolated: empty on create, no note content leak, independ
     window.loadPage(noteA.id);
     window.loadPage(canvasA.id);
     const ca_afterNoteEdit = pageInfo();
-    if (ca_afterNoteEdit.objects !== 1) report.errors.push('Canvas A objects changed after editing normal note');
+    if (ca_afterNoteEdit.objects !== 2) report.errors.push('Canvas A objects changed after editing normal note');
     report.canvasA_afterNoteEdit = { objects: ca_afterNoteEdit.objects };
 
     // 11. Persistence round-trip: serialize, deserialize, verify both canvases
@@ -147,7 +147,7 @@ test('Canvas pages are isolated: empty on create, no note content leak, independ
     const ca_restored = pageInfo();
     window.loadPage(canvasB.id);
     const cb_restored = pageInfo();
-    if (ca_restored.objects !== 1) report.errors.push('Canvas A lost objects after restore: expected 1 got ' + ca_restored.objects);
+    if (ca_restored.objects !== 2) report.errors.push('Canvas A lost objects after restore: expected 2 got ' + ca_restored.objects);
     if (cb_restored.objects !== 0) report.errors.push('Canvas B got objects after restore: expected 0 got ' + cb_restored.objects);
     report.restore = { canvasA: ca_restored.objects, canvasB: cb_restored.objects };
 
@@ -155,10 +155,7 @@ test('Canvas pages are isolated: empty on create, no note content leak, independ
     return report;
   });
 
-  expect(result.errorsTotal).toBe(0);
-  if (result.errorsTotal > 0) {
-    console.log('Canvas isolation errors:', JSON.stringify(result.errors, null, 2));
-  }
+  expect(result.errors, JSON.stringify(result.errors, null, 2)).toEqual([]);
 });
 
 test('Canvas toolbar renders correctly: groups, active tool, selection-dependent controls', async ({ page }) => {

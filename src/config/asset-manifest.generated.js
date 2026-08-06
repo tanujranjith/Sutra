@@ -12,7 +12,7 @@
     "./src/compat/legacy-homework.js?v=20260709-compat1",
     "./src/components/icons/icon-paths.js?v=20260709-icons-comments",
     "./src/components/icons/index.js?v=20260709-icons-comments",
-    "./src/config/feature-manifest.js?v=20260722-slides1",
+    "./src/config/feature-manifest.js?v=20260722-assistantreceipt1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
     "./src/core/app.js?v=20260722-slides1",
     "./src/core/dom-safety.js?v=20260613-harden1",
@@ -59,7 +59,7 @@
     "./src/features/workspace/mobile-nav.js?v=20260721-mobile1",
     "./src/features/workspace/notifications.js?v=20260716-syncparity1",
     "./src/features/workspace/share-target.js?v=20260712-share1",
-    "./src/features/workspace/slides.js?v=20260722-slides5",
+    "./src/features/workspace/slides.js?v=20260722-slides7",
     "./src/features/workspace/smart-reschedule.js?v=20260712-resched1",
     "./src/features/workspace/starter-packs.data.js?v=20260619-packs1",
     "./src/features/workspace/timeline-calendar.js?v=20260721-mobile1",
@@ -84,7 +84,7 @@
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260710-contracts1",
     "./styles/base/microinteractions.css?v=20260424-opaque-modals",
-    "./styles/base/styles.css?v=20260721-emojiBlur1",
+    "./styles/base/styles.css?v=20260721-themeButtons1",
     "./styles/base/tokens.css?v=20260710-tokens1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
@@ -96,7 +96,7 @@
     "./styles/features/notes-editor-v2.css?v=20260708-editorv2-p5",
     "./styles/features/notes-toolbar.css?v=20260709-toolbar-fields",
     "./styles/features/notifications.css?v=20260605-notif1",
-    "./styles/features/slides.css?v=20260722-slides5",
+    "./styles/features/slides.css?v=20260722-slides6",
     "./styles/features/startup-intro.css",
     "./styles/features/sutra-cloud.css?v=20260618-cloud1",
     "./styles/legacy/app-shell-base.css?v=20260616-cssextract1",
@@ -113,7 +113,7 @@
     "./styles/views/focus-session.css?v=20260614-extract1",
     "./styles/views/settings-redesign.css?v=20260625-cc-segmented-rows",
     "./styles/views/timeline-calendar.css?v=20260721-mobile1",
-    "./styles/views/today-redesign.css?v=20260703-today2"
+    "./styles/views/today-redesign.css?v=20260721-priorityGrid2"
   ],
   "optional": [
     "./assets/brand/sutra/generated/favicon.ico",
@@ -138,6 +138,6 @@
     "./src/features/workspace/business-workspace.js?v=20260705-clb3",
     "./styles/features/sutra-assistant-help.css?v=20260711-notes2",
     "./styles/features/sutra-intelligence.css?v=20260610-intel1",
-    "./styles/views/assistant-view.css?v=20260714-intel1"
+    "./styles/views/assistant-view.css?v=20260722-receipt-surface1"
   ]
 }); })(typeof self !== 'undefined' ? self : globalThis);

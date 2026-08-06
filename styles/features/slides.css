@@ -4,6 +4,13 @@ body.slides-page-active #notesPrimaryPane > :not(#slidesEditor) {
     display: none !important;
 }
 
+/* Author-level display rules override the browser's built-in [hidden] rule.
+   Keep the Slides surface unconditionally out of layout when another note
+   mode is active so it cannot paint beneath Notepad or Canvas. */
+.slides-editor[hidden] {
+    display: none !important;
+}
+
 /* Decks are a workspace, not a document. Remove the note editor's narrow
    reading column and fixed formatting bar while a slide page is active. */
 body.slides-page-active #view-notes .toolbar-wrapper {

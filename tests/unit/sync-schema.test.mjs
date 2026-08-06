@@ -10,6 +10,10 @@ const accountIsolationMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260718_sync_account_isolation.sql'),
   'utf8'
 );
+const revokeWipeMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260716_device_revoke_wipe.sql'),
+  'utf8'
+);
 
 const tables = ['sync_ops', 'sync_devices', 'sync_vault_keys', 'sync_snapshots', 'sync_asset_index'];
 const exposedFunctions = [
@@ -92,4 +96,27 @@ test('operation and vault-key contracts enforce idempotency and split-brain safe
 test('schema is ordered after backup setup and exposes no elevated browser credential', () => {
   assert.match(sql, /Run AFTER supabase\/schema\.sql/i);
   assert.doesNotMatch(sql, /service_role|sb_secret_/i);
+});
+
+test('additive migration chain is ordered, non-destructive, and folded into the fresh schema', () => {
+  assert.ok('20260716_device_revoke_wipe.sql' < '20260718_sync_account_isolation.sql');
+  for (const [name, migration] of [
+    ['device revoke/wipe', revokeWipeMigration],
+    ['account isolation', accountIsolationMigration]
+  ]) {
+    assert.doesNotMatch(migration, /delete\s+from\s+public\.sync_|drop\s+table|truncate\s+/i,
+      `${name} migration must preserve encrypted sync state`);
+  }
+  for (const pattern of [
+    /wipe_required\s+boolean\s+not null default false/i,
+    /wipe_acknowledged_at\s+timestamptz/i,
+    /function public\.sync_get_device_status/i,
+    /function public\.sync_acknowledge_device_wipe/i
+  ]) {
+    assert.match(revokeWipeMigration, pattern);
+    assert.match(sql, pattern, 'fresh sync schema must include the additive revoke/wipe contract');
+  }
+  assert.match(accountIsolationMigration, /array_length\(storage\.foldername\(name\), 1\) = 2/i);
+  assert.match(sql, /array_length\(storage\.foldername\(name\), 1\) = 2/i,
+    'fresh sync schema must include the additive exact-path policy');
 });

@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260722-slides1",
-    "hash": "4a01f86267157440"
+    "stamp": "20260722-assistantreceipt1",
+    "hash": "8df1a9c0c5736ade"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -268,8 +268,8 @@
     "hash": "76654a6d7b2c8d91"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260722-slides5",
-    "hash": "6f84779b35375230"
+    "stamp": "20260722-slides7",
+    "hash": "66763e1cfe0ba2b0"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -360,8 +360,8 @@
     "hash": "b4f058b0e2f2b2a0"
   },
   "styles/base/styles.css": {
-    "stamp": "20260721-emojiBlur1",
-    "hash": "5a06dcd4cc8154be"
+    "stamp": "20260721-themeButtons1",
+    "hash": "e0bb6d03e59f5381"
   },
   "styles/base/tokens.css": {
     "stamp": "20260710-tokens1",
@@ -408,8 +408,8 @@
     "hash": "a7baebe7a7bfbe96"
   },
   "styles/features/slides.css": {
-    "stamp": "20260722-slides5",
-    "hash": "5062f9ffebde6102"
+    "stamp": "20260722-slides6",
+    "hash": "346306a722e199ca"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260711-notes2",
@@ -464,8 +464,8 @@
     "hash": "7fa4e3620410974c"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260714-intel1",
-    "hash": "c11877700b2f3f4e"
+    "stamp": "20260722-receipt-surface1",
+    "hash": "755be5d176378633"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",
@@ -484,7 +484,7 @@
     "hash": "38cecfb56b1d6e1b"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260703-today2",
-    "hash": "e70be88e57f3c89a"
+    "stamp": "20260721-priorityGrid2",
+    "hash": "c4399fbfb6189894"
   }
 }

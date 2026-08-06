@@ -23580,6 +23580,19 @@ body.onboarding-open {
     font-size: 0.74rem;
 }
 
+/* Deadline actions are secondary controls, so keep them on the active theme's
+   surface instead of inheriting a light/default button face. */
+.deadline-radar-schedule-btn {
+    background: var(--button-bg, var(--neumo-bg));
+    border-color: var(--button-border, var(--border));
+    color: var(--button-text, var(--text-primary));
+}
+
+.deadline-radar-schedule-btn:hover {
+    background: var(--button-bg-hover, var(--button-bg, var(--neumo-bg)));
+    color: var(--button-text, var(--text-primary));
+}
+
 .deadline-radar-item-actions {
     display: inline-flex;
     gap: 6px;
