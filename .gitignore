@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 
 # Local secrets / env files (none currently committed — keep it that way)
 .env
@@ -12,6 +13,7 @@ node_modules/
 # .git/info/exclude, which isn't shared — codified here so it's ignored
 # for every clone, not just this machine)
 .claude/scheduled_tasks.lock
+.claude/
 
 # Editor / IDE folders
 .vscode/
