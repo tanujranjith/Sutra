@@ -485,6 +485,40 @@ test('auth expiry and quota failures enter explicit paused states', async () => 
   }
 });
 
+test('a deliberate pause wins over an auth error from an already in-flight cycle', async () => {
+  let releasePull;
+  let markPullStarted;
+  const pullStarted = new Promise(resolve => { markPullStarted = resolve; });
+  const pullGate = new Promise(resolve => { releasePull = resolve; });
+  const engine = engineApi.create({
+    store: makeMemoryStore(),
+    transport: {
+      async getSnapshot() { return { ok: true, snapshot: null }; },
+      async pull() {
+        markPullStarted();
+        await pullGate;
+        const error = new Error('signed out while request was in flight');
+        error.code = 'auth-expired';
+        throw error;
+      }
+    },
+    bridge: makeBridge(starterWorkspace()),
+    identity: { deviceId: 'device-manual-pause', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes()),
+    debounceMs: 0
+  });
+
+  const cycle = engine.syncNow();
+  await pullStarted;
+  engine.pause();
+  releasePull();
+  const outcome = await cycle;
+
+  assert.ok(outcome.error, 'the abandoned request remains observable to its caller');
+  assert.equal(engine.getStatus().state, 'paused', 'ordinary sign-out remains an intentional pause');
+  assert.equal((await engine.syncNow()).skipped, true, 'the paused engine makes no follow-up request');
+});
+
 test('retry backoff includes deterministic jitter through the injected timer seam', async () => {
   const delays = [];
   const store = makeMemoryStore();

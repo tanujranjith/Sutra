@@ -573,7 +573,13 @@
           outcome = await performCycle();
         });
       } catch (error) {
-        if (error && error.code === 'update-required') {
+        // A deliberate pause (for example ordinary account sign-out) may land
+        // while a network cycle is already in flight. Preserve that explicit
+        // user state when the abandoned request later reports an auth error;
+        // it must not relabel an intentional sign-out as an expired session.
+        if (paused && status.state === 'paused') {
+          outcome = { error: error };
+        } else if (error && error.code === 'update-required') {
           setState('update-required', error);
         } else if (error && (error.code === 'auth-expired' || error.code === 'unauthorized')) {
           paused = true;

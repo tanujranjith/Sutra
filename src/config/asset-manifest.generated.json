@@ -73,7 +73,7 @@
     "./src/state/workspace-normalizers.js?v=20260616-state1",
     "./src/sync/sync-crypto.js?v=20260716-sync6",
     "./src/sync/sync-diff.js?v=20260716-sync6",
-    "./src/sync/sync-engine.js?v=20260717-conflict4",
+    "./src/sync/sync-engine.js?v=20260806-signoutpause1",
     "./src/sync/sync-merge.js?v=20260717-conflict4",
     "./src/sync/sync-projection.js?v=20260731-helpdocs1",
     "./src/sync/sync-protocol.js?v=20260716-syncparity1",
