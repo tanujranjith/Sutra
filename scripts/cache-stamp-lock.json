@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260805-syncbeta2",
-    "hash": "529fd72a1c344fd5"
+    "stamp": "20260806-syncdisable2",
+    "hash": "285180b6586eabf3"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",

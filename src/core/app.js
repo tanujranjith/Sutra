@@ -60486,6 +60486,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             setWorkspacePreference('sync.enabled', false);
             persistAppData();
+            await flushAppSaveNow('sync-disable');
             // Sync state (device id, baseline, queue, wrapped key) stays in
             // sutra_sync_db so re-enabling with the same passphrase resumes.
             return true;

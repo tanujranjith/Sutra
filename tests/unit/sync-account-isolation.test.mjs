@@ -52,3 +52,9 @@ test('sync runtime does not contain plaintext logging sinks', () => {
       `${name} must not log sync payloads, keys, or user content`);
   }
 });
+
+test('explicit Sync disable waits for canonical persistence before returning', () => {
+  assert.match(appSource,
+    /async function disableSutraSync\(\)[\s\S]*?setWorkspacePreference\('sync\.enabled', false\);\s*persistAppData\(\);\s*await flushAppSaveNow\('sync-disable'\);/,
+    'reload after a resolved disable must not revive the previous enabled preference');
+});
