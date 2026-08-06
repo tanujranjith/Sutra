@@ -1967,6 +1967,51 @@
       .assistant-panel { transition: none; }
     }
 
+    /* Keep the Assistant in its real workspace context rather than shrinking it
+       into a panel mockup. */
+    .assistant-section { overflow: hidden; }
+    .assistant-layout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .assistant-copy {
+      max-width: 720px;
+      text-align: center;
+    }
+    .assistant-copy .section-header p { margin-left: auto; margin-right: auto; }
+    .assistant-trust-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px 24px;
+      margin: 28px auto 0;
+      text-align: left;
+    }
+    .assistant-fullshot {
+      width: min(1440px, calc(100vw - 48px));
+      margin: 52px auto 0;
+    }
+    .assistant-fullshot figure { margin: 0; }
+    .assistant-fullshot img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(120, 150, 240, 0.22);
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(100, 130, 220, 0.06);
+    }
+    .assistant-fullshot figcaption {
+      margin-top: 16px;
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    @media (max-width: 768px) {
+      .assistant-trust-points { grid-template-columns: 1fr; gap: 10px; max-width: 320px; }
+      .assistant-fullshot { width: min(100%, calc(100vw - 32px)); margin-top: 40px; }
+      .assistant-fullshot img { border-radius: var(--radius-md); }
+    }
+
   </style>
 
   <style id="scrolly-styles">
@@ -2787,7 +2832,7 @@
         <div class="assistant-layout">
 
           <!-- Copy column -->
-          <div class="reveal">
+          <div class="assistant-copy reveal">
             <div class="section-header" style="max-width:none;margin-bottom:0">
               <span class="section-eyebrow">OPTIONAL ASSISTANT</span>
               <h2>Contextual help, <span>without giving up control.</span></h2>
@@ -2809,13 +2854,12 @@
             </ul>
           </div>
 
-          <!-- Real screenshot of Sutra Assistant in a browser-chrome frame -->
-          <div class="assistant-shot reveal">
-            <figure class="shot-frame">
-              <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span class="shot-bar-title">Sutra Assistant</span></div>
+          <!-- Full workspace view: the Assistant is shown in its real Today context. -->
+          <div class="assistant-fullshot reveal">
+            <figure>
               <img src="assets/screenshots/assistant.png" alt="The Sutra Assistant panel open beside the Today view, showing a workspace pulse — one overdue assignment, an overloaded day, and an unscheduled high-priority task — with quick actions you apply or decline." width="1600" height="1000" loading="lazy" decoding="async">
+              <figcaption>AI is optional — Sutra works fully without it.</figcaption>
             </figure>
-            <p class="shot-caption">AI is optional — Sutra works fully without it.</p>
           </div>
 
         </div>
