@@ -50,6 +50,49 @@ test('bottom nav active item tracks the current view', async ({ page }) => {
   expect(activeView).toBe(bodyView);
 });
 
+test('More opens a focus-trapped all-sections sheet and reaches advanced views', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  await expect(more).toBeVisible();
+  await more.click();
+
+  const sheet = page.locator('#sutraMobileMoreOverlay');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('dialog', { name: 'All sections' })).toBeVisible();
+  await expect(page.locator('body')).toHaveClass(/mobile-more-open/);
+  await expect(sheet.locator('[data-mobile-more-view]')).toHaveCount(await page.locator('.view-tab[data-view]:not([hidden])').evaluateAll((nodes) => new Set(nodes.map((node) => node.dataset.view)).size));
+
+  await page.evaluate(() => history.back());
+  await expect(sheet).toBeHidden();
+  await expect(more).toBeFocused();
+
+  await more.click();
+  await expect(sheet).toBeVisible();
+
+  await sheet.locator('[data-mobile-more-view="settings"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('settings');
+  await expect(sheet).toBeHidden();
+});
+
+test('phone sidebar behaves as a modal drawer and Escape restores focus', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  const sidebar = page.locator('#sidebar');
+  const toggle = page.locator('#sidebarToggle');
+  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) await toggle.click();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(sidebar).toHaveAttribute('role', 'dialog');
+  await expect(sidebar).toHaveAttribute('aria-modal', 'true');
+  await expect(page.locator('body')).toHaveClass(/sidebar-open/);
+  await page.keyboard.press('Escape');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('body')).not.toHaveClass(/sidebar-open/);
+  await expect(toggle).toBeFocused();
+});
+
 test('bottom nav is hidden on a desktop viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openApp(page);

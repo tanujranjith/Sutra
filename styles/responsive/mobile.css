@@ -21,6 +21,15 @@
    shadow hover changes and keep only color/background changes minimal.
    ------------------------------------------------------------------------- */
 @media (hover: none) and (pointer: coarse) {
+    button,
+    [role="button"],
+    a,
+    input,
+    select,
+    textarea {
+        touch-action: manipulation;
+    }
+
     .neumo-btn:hover,
     .neumo-card:hover,
     .glass-card:hover,
@@ -108,6 +117,12 @@
         -webkit-text-size-adjust: 100%;
     }
 
+    body.sidebar-open,
+    body.mobile-more-open {
+        overflow: hidden !important;
+        overscroll-behavior: none;
+    }
+
     /* ---- Sidebar drawer ---- */
     /* Sidebar must sit ABOVE the overlay so it remains interactive.
        styles.css forces overlay z-index: 4800 !important, so we go higher. */
@@ -125,6 +140,9 @@
         box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
         padding-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
         padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 
     .sidebar-resize-handle {
@@ -236,7 +254,8 @@
     .view-tab {
         flex: 0 0 auto;
         padding: 10px 14px !important;
-        min-height: 40px;
+        min-height: 44px !important;
+        height: auto !important;
         font-size: 12px !important;
         white-space: nowrap;
         scroll-snap-align: center;
@@ -251,7 +270,13 @@
 
     /* The mobile current-tab toggle is provided in styles.css; keep it visible */
     .view-tabs-toggle {
-        min-height: 40px;
+        min-height: 44px !important;
+    }
+
+    #notifBellBtn,
+    .notif-bell-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
     }
 
     /* ---- Floating editing toolbar ---- */
@@ -1456,6 +1481,7 @@
         align-items: flex-end !important;
         padding: 0 !important;
     }
+    #classDashboardDrawer .class-dashboard-card,
     #classDashboardDrawer .modal-content,
     #deadlineRadarModal .modal-content,
     #homeworkPasteImportModal .modal-content,
@@ -1467,6 +1493,11 @@
         border-radius: 18px 18px 0 0 !important;
         margin: 0 !important;
         padding: 18px 16px calc(env(safe-area-inset-bottom, 0px) + 16px) 16px !important;
+    }
+    #classDashboardDrawer .class-dashboard-card {
+        height: auto !important;
+        min-height: 0 !important;
+        padding: 0 !important;
     }
     /* The student onboarding card is sized differently — let it breathe */
     #studentOnboardingOverlay .student-onboarding-card,
@@ -2077,14 +2108,13 @@
        single row, custom-select chevron room, touch-target floors.
    ========================================================================= */
 
-/* ---- 37a. Storage bar: the 36a grid has 4 tracks but the bar now holds 5
-        children (save status + Save/Export/Import/Sutra Cloud), so the 5th
-        wrapped to a second row that hid under the bottom nav. One row, five
-        tracks. ---- */
+/* ---- 37a. Storage bar: keep save status + Save/Export/Import/Cloud/Sync in
+        one measured row. Optional Sync added a sixth child; without a sixth
+        track it wrapped underneath the phone navigation and became unreachable. ---- */
 @media (max-width: 768px), (max-height: 480px) and (orientation: landscape) {
     #storageOptions,
     .storage-options {
-        grid-template-columns: auto minmax(0, 2fr) repeat(3, minmax(0, 1fr)) !important;
+        grid-template-columns: auto minmax(0, 2fr) repeat(4, minmax(0, 1fr)) !important;
     }
 }
 
@@ -2101,7 +2131,8 @@
 @media (max-width: 640px) {
     #exportFileBtn .btn-text,
     #importFileBtn .btn-text,
-    #sutraCloudOpenBtn .btn-text {
+    #sutraCloudOpenBtn .btn-text,
+    #sutraSyncOpenBtn .btn-text {
         display: none !important;
     }
 }
@@ -2174,6 +2205,137 @@
         min-height: 32px;
         padding-top: 8px;
         padding-bottom: 8px;
+    }
+}
+
+/* ---- 37g. All-sections sheet for the phone bottom bar. The previous More
+        action targeted a hidden legacy toggle, so advanced destinations were
+        technically present but not presented as a usable mobile surface. ---- */
+.sutra-mobile-more-overlay {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .sutra-mobile-more-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 6100;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: max(12px, env(safe-area-inset-top, 0px))
+            max(8px, env(safe-area-inset-right, 0px))
+            env(safe-area-inset-bottom, 0px)
+            max(8px, env(safe-area-inset-left, 0px));
+        background: rgba(6, 10, 18, 0.58);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        opacity: 0;
+        transition: opacity 180ms ease;
+    }
+    .sutra-mobile-more-overlay[hidden] {
+        display: none !important;
+    }
+    .sutra-mobile-more-overlay.open {
+        opacity: 1;
+    }
+    .sutra-mobile-more-sheet {
+        width: min(100%, 520px);
+        max-height: min(82dvh, 720px);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+        border: 1px solid var(--surface-border, var(--border));
+        border-radius: 22px 22px 0 0;
+        background: var(--bg-elevated, var(--bg-primary));
+        color: var(--text-primary);
+        box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.3);
+        transform: translateY(24px);
+        transition: transform 180ms ease;
+    }
+    .sutra-mobile-more-overlay.open .sutra-mobile-more-sheet {
+        transform: translateY(0);
+    }
+    .sutra-mobile-more-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 60px;
+        padding: 10px 12px 8px 18px;
+        border-bottom: 1px solid var(--surface-border, var(--border));
+        background: inherit;
+    }
+    .sutra-mobile-more-header h2 {
+        margin: 0;
+        font-size: 1.05rem;
+    }
+    .sutra-mobile-more-close {
+        width: 44px;
+        height: 44px;
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 auto;
+        border: 0;
+        border-radius: 50%;
+        background: var(--surface-bg-hover, rgba(127, 127, 127, 0.14));
+        color: inherit;
+        font: 500 1.6rem/1 system-ui, sans-serif;
+    }
+    .sutra-mobile-more-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        min-width: 0;
+        padding: 12px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+    .sutra-mobile-more-item {
+        min-width: 0;
+        min-height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--surface-border, var(--border));
+        border-radius: 13px;
+        background: var(--surface-bg, var(--bg-secondary));
+        color: var(--text-primary);
+        font: inherit;
+        text-align: left;
+    }
+    .sutra-mobile-more-item i {
+        width: 20px;
+        flex: 0 0 20px;
+        color: var(--text-secondary);
+        text-align: center;
+    }
+    .sutra-mobile-more-item span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+    .sutra-mobile-more-item.active {
+        border-color: color-mix(in srgb, var(--accent) 58%, var(--surface-border));
+        background: color-mix(in srgb, var(--accent) 12%, var(--surface-bg));
+        color: var(--accent-strong, var(--accent));
+    }
+}
+
+@media (max-width: 359px) {
+    .sutra-mobile-more-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-mobile-more-overlay,
+    .sutra-mobile-more-sheet {
+        transition: none !important;
     }
 }
 

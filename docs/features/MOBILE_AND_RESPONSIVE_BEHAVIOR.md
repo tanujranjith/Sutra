@@ -119,10 +119,13 @@ text is exposed as the `aria-label`.
 
 ### Homework
 
-Course and assignment lists become single-column and card-based on phones. Add/edit
-flows open as modals that scroll internally. Due-date and status controls remain
-tappable at touch-target size. **Import from School Portal** (paste import) works on
-mobile via the same modal pattern.
+The assignment workspace keeps its summary cards in a horizontally scrollable row,
+then stacks the assignment list, Extracurriculars, and Upcoming Deadlines in one
+column. Semantic table rows become task cards on phones without duplicating the
+underlying Homework records. Search, tabs, filters, sorting, quick completion, and
+scheduling remain reachable at touch-target size. Add/edit flows open as modals that
+scroll internally. **Import from School Portal** (paste import) works on mobile via
+the same modal pattern.
 
 ### AP Study
 

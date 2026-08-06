@@ -195,6 +195,57 @@ test('radar renders live data, filters, overflow, and opens the right source', a
   await expect(page.locator('#deadlineRadarModal')).toHaveClass(/active/);
 });
 
+test('radar consolidates linked Homework deadline, due marker, and focus block', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const fa = window.flowAtelier;
+    const due = new Date();
+    due.setDate(due.getDate() + 1);
+    const dueDate = due.getFullYear() + '-' + String(due.getMonth() + 1).padStart(2, '0') + '-' + String(due.getDate()).padStart(2, '0');
+    const homeworkId = 'qa-radar-cpp';
+    const mirrorTaskId = `hw_v2_${homeworkId}`;
+
+    // The one Homework item is deliberately represented in each connected
+    // store, matching the records that previously produced three Radar chips.
+    localStorage.setItem('hwTasks:v2', JSON.stringify([{
+      id: homeworkId, courseId: 'qa-robotics', title: 'Finish the C++ code',
+      dueDate, dueTime: '', done: false, priority: 'high', difficulty: 'medium'
+    }]));
+    localStorage.setItem('hwCourses:v2', JSON.stringify([{ id: 'qa-robotics', name: 'Robotics' }]));
+    fa.tasks.splice(0, fa.tasks.length, {
+      id: mirrorTaskId, title: 'Finish the C++ code', dueDate, dueTime: '',
+      completed: false, isActive: true, scheduleType: 'once', origin: 'homework',
+      homeworkSource: 'v2', homeworkSourceId: homeworkId
+    });
+    fa.timeBlocks.splice(0, fa.timeBlocks.length,
+      {
+        id: `hw_block_v2_${homeworkId}`, date: dueDate, start: '23:00', end: '23:30',
+        name: 'Finish the C++ code — Due', source: 'hw_due'
+      },
+      {
+        id: 'qa-radar-focus', date: dueDate, start: '06:00', end: '06:30',
+        name: 'Focus: Finish the C++ code', source: 'planner_auto',
+        autoSourceKey: `auto:task:${mirrorTaskId}:${dueDate}`
+      }
+    );
+    // The collector cache is frame-scoped, so let the preceding boot render
+    // clear before collecting the intentionally seeded records.
+    await Promise.resolve();
+    const rows = window.collectWorkspaceDeadlines()
+      .filter((item) => /finish the c\+\+ code/i.test(item.title));
+    fa.renderTaskViews();
+    return rows.map((item) => ({ source: item.source, title: item.title, scheduleSummary: item.scheduleSummary || '' }));
+  });
+
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({ source: 'homework', title: 'Finish the C++ code' });
+  expect(result[0].scheduleSummary).toMatch(/^Scheduled /);
+  const chip = page.locator('#upcomingRadarMount .radar-chip', { hasText: 'Finish the C++ code' });
+  await expect(chip).toHaveCount(1);
+  await expect(chip.locator('.radar-chip-meta')).toContainText('Scheduled');
+});
+
 test('Next Up card, footer counts, and empty states use live data', async ({ page }) => {
   await openApp(page);
 

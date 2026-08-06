@@ -380,11 +380,15 @@
         var status = getUrgencyStatus(item, now);
         var mins = due.getHours() * 60 + due.getMinutes();
         var timePart = !isAllDayMinutes(mins) ? ', ' + formatMinutes(mins) : '';
+        var label = '';
         if (status.key === 'overdue' || status.key === 'today') {
-            return (status.key === 'overdue' ? 'Overdue' : 'Today') + timePart;
+            label = (status.key === 'overdue' ? 'Overdue' : 'Today') + timePart;
+        } else if (status.key === 'tomorrow') {
+            label = 'Tomorrow' + timePart;
+        } else {
+            label = due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         }
-        if (status.key === 'tomorrow') return 'Tomorrow' + timePart;
-        return due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return label + (item && item.scheduleSummary ? ' · ' + String(item.scheduleSummary) : '');
     }
 
     /**
