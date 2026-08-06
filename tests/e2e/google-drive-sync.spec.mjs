@@ -70,6 +70,7 @@ async function installDriveMock(page, options = {}) {
     uploads: [],
     deletes: [],
     lists: [],
+    mediaGets: 0,
     resumableInits: [],
     nextId: 1,
     nextVersion: 1
@@ -99,6 +100,10 @@ async function installDriveMock(page, options = {}) {
     if (url.pathname.startsWith('/drive/v3/files/') && method === 'GET' && url.searchParams.get('alt') === 'media') {
       const id = decodeURIComponent(url.pathname.split('/').pop());
       const file = state.files.find(item => item.id === id);
+      state.mediaGets += 1;
+      if (options.mediaDelayMs) {
+        await new Promise(resolve => setTimeout(resolve, options.mediaDelayMs));
+      }
       await route.fulfill({
         status: file ? 200 : 404,
         contentType: 'application/octet-stream',
@@ -194,9 +199,9 @@ async function installDriveMock(page, options = {}) {
   return state;
 }
 
-async function openApp(page) {
+async function openApp(page, options = {}) {
   await installGoogleIdentityMock(page);
-  const drive = await installDriveMock(page);
+  const drive = await installDriveMock(page, options);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
@@ -332,6 +337,26 @@ test('Drive sync enters conflict instead of overwriting local dirty and remote c
   expect(status.state).toBe('conflict');
   expect(drive.uploads).toHaveLength(1);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title)).toBe('Drive Sentinel LOCAL-CONFLICT');
+});
+
+test('a local save during a clean remote pull becomes a conflict instead of being overwritten', async ({ page }) => {
+  const drive = await openApp(page, { mediaDelayMs: 700 });
+  await seedWorkspace(page, 'BASE');
+  const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
+  await fillCloudPassword(page);
+  await connectPromise;
+
+  drive.files[0].version = '99';
+  drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
+  const pullPromise = page.evaluate(() => window.SutraDriveSync.syncNow());
+  await expect.poll(() => drive.mediaGets, { timeout: 10_000 }).toBe(1);
+  await seedWorkspace(page, 'MID-PULL-LOCAL');
+
+  await expect(pullPromise).resolves.toEqual({ conflict: true });
+  await expect(page.locator('#sutraDriveConflictModal')).toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title))
+    .toBe('Drive Sentinel MID-PULL-LOCAL');
+  expect(drive.uploads).toHaveLength(1);
 });
 
 test('Drive sync reports needs-config and refuses connect when no OAuth client ID is configured', async ({ page }) => {

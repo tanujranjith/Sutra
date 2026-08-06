@@ -245,6 +245,12 @@ Conflict behavior is explicit. If this device and the Drive copy both changed,
 Sutra enters a conflict state and offers snapshot-level choices: keep this
 device, use the Drive version here, download this device backup, download the
 Drive backup, or cancel. Sutra does not perform blind last-write-wins merging.
+Manual, debounced-save, and online/focus Drive cycles are serialized; once a
+conflict is established, queued uploads remain blocked until the user chooses
+one of those resolution actions. A clean remote pull also records the local
+mutation revision it inspected. If a confirmed local save lands while the
+encrypted Drive snapshot is downloading or being opened, the pull is no longer
+allowed to restore automatically and becomes an explicit conflict instead.
 
 Direct `file://` launch remains fully local but may not support Google OAuth.
 Use the hosted HTTPS app or localhost for Drive sync. Deployment setup is
@@ -274,10 +280,12 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   encryption/passphrase/retention/restore behavior; only the destination differs.
   Switching destinations ends the current provider's session, resets shared backup
   status, leaves remote backups + the local workspace untouched, and requires
-  connecting the new destination. Because the hosted CSP pins exact origins,
-  **custom destinations (WebDAV/S3/Custom HTTP/other Supabase projects) generally
-  need a self-hosted build** with the origin added to the CSP; the panel detects a
-  CSP-blocked origin and says so. Sutra **rejects `service_role` / root / admin
+  connecting the new destination. The hosted CSP allows the approved
+  `*.supabase.co` wildcard, so **any Supabase project (official or your own)
+  works in the hosted build**; other custom destinations (WebDAV/S3/Custom
+  HTTP) still need a self-hosted build with their origin added to
+  `scripts/lib/csp-policy.mjs` (then `npm run csp:generate`); the panel detects
+  a CSP-blocked origin and says so. Sutra **rejects `service_role` / root / admin
   keys** where detectable. Full provider list:
   [`SUTRA_CLOUD_PROVIDERS.md`](../SUTRA_CLOUD_PROVIDERS.md).
 - **Account:** authentication is provider-specific. The Supabase adapter uses a
@@ -319,6 +327,90 @@ makes **zero** Sutra Cloud requests.
 
 ---
 
+## 5c. Optional encrypted Sutra Sync (multi-device sync)
+
+**Sutra Sync** is true incremental multi-device synchronization — a separate
+system from every backup layer above, with its own spec
+([`docs/architecture/SYNC_PROTOCOL.md`](../architecture/SYNC_PROTOCOL.md)) and
+user guide ([`docs/features/CLOUD_SYNC.md`](../features/CLOUD_SYNC.md)). It is
+**off by default**, lives behind the save bar's **Sync** button, and never
+replaces backups: sync replicates *changes*, backups preserve *moments*.
+
+The three guarantees are distinct and the Sync panel reports each one:
+
+1. **Saved locally** — always on; the canonical IndexedDB write→readback
+   pipeline, untouched by sync. A sync failure can never block local saving,
+   and cloud errors never surface through the local save-failure banner.
+2. **Synced to cloud** — end-to-end-encrypted record-level changes replicated
+   through the configured Supabase project (`supabase/sync-schema.sql`:
+   append-only op log, RLS per user, wrapped vault key, compaction snapshot,
+   content-addressed encrypted attachments in the private `sync-assets`
+   bucket). Direct table access is denied; RPC/Storage access also requires an
+   active, non-revoked auth-session/device binding.
+3. **Backed up** — `.sutra` exports / Sutra Cloud / Drive snapshots, unchanged.
+
+Privacy properties: a random vault master key encrypts every change (AES-GCM-
+256, AAD-bound routing metadata); the key is wrapped by the user's sync
+passphrase (PBKDF2 600k) and only the wrapped blob, authenticated vault-key
+fingerprint, and public KDF parameters ever leave the device; creation and
+passphrase rewrap use compare-and-swap so a differing vault key is never
+overwritten. The
+server sees ciphertext plus bounded routing metadata (op/device ids, record
+keys, sizes) and can never read content. Merging is deterministic three-way:
+independent records, non-overlapping structured fields, moves/reorders, and
+non-overlapping validated note blocks merge automatically. True overlapping
+content keeps both full values in a dedicated local conflict-review record; it
+never creates an automatic sidebar page. Stable resolution markers are ordinary
+encrypted sync records, and only an explicit Keep both action creates a second
+page. An abnormal conflict rate pauses sync before apply/push while local saving
+continues. Legacy exact-copy cleanup requires a fresh encrypted `.sutra` backup
+and never removes unique, ambiguous, or nested content. As before,
+deletes never destroy newer edits, and offline edits queue locally before the
+first network request. Sync operational state (device id, cursor, outbox, wrapped key, the
+Supabase refresh token that keeps sync alive across restarts) lives in the
+dedicated `sutra_sync_db` IndexedDB — **never** inside `.sutra` exports.
+Disabled sync makes zero network requests. Enabling first downloads a complete
+encrypted `.sutra` safety backup; incomplete required attachments block setup
+and also block a supposedly complete compaction snapshot.
+
+**Verified revocation boundary (2026-07-18):** the project operator manually
+verified that server-side revocation blocks a second browser immediately and,
+once that browser reconnects, the authenticated device-status response triggers
+origin-local Sutra data removal. Reload did not restore the data and reuse
+required fresh sign-in/device registration. This browser-origin cleanup cannot
+erase downloaded backups, external files, service-worker application caches, or
+an offline browser before it reconnects.
+
+The synchronized portable workspace is the schema-v7 `mode: "sync"` payload,
+not the plaintext JSON-recovery payload. It includes all classified durable user
+content: notes and version history, tasks/planning/Homework, academic/study/
+college/life/work data, custom tabs, trash, private documents, supported
+settings/preferences, migration/compatibility recovery data, Assistant
+permissions/memory, durable visible Assistant conversations, and the explicit
+portable localStorage mirrors. Conversations retain order, message ids/roles/
+content/timestamps, citations and grounding, memory references, and durable
+action receipts. Syncing chat history is independent of the separate
+“include chats in plaintext recovery JSON” choice.
+
+Course and private-document file bytes travel as fresh-IV encrypted,
+content-addressed assets with post-decryption SHA-256 verification. Inline note
+images, document backgrounds, and embedded handwriting travel inside encrypted
+page records/snapshots. A file reference remains pending/missing until required
+bytes are durably present in `noteflow_attachments_db`; replacing bytes under
+an existing local blob key changes the content hash and forces a verified
+download on the other device.
+
+Sync deliberately excludes credentials and secrets, the publishable runtime
+configuration, browser/session UI, persistence-health/cross-tab stamps,
+generated Help/untouched blank-Assistant seeds, sync queues/cursors/baselines/
+device state, in-flight Assistant buffers and diagnostics, and regenerable
+caches. The non-secret local `sutra:syncAccountHint:v1` only selects this
+browser's account-scoped sync operational namespace; it is neither exported
+nor synchronized. See the exhaustive executable decision matrix in
+`docs/architecture/persistence-inventory.json`.
+
+---
+
 ## 6. Pre-import safety snapshot
 
 Importing replaces your current workspace, so before applying an import Sutra
@@ -353,8 +445,9 @@ one-way door that discards your prior state with no recourse.
   tokens, client secrets, and derived encryption keys** — never exported.
 - **Google Drive sync operational metadata** (`sutra:googleDriveSync:v1`) —
   device-local only.
-- **Assistant chat history** when its encrypted/plaintext backup setting is off;
-  chat storage itself remains local and can be disabled or cleared.
+- **Assistant chat history from a backup** when its encrypted/plaintext backup
+  setting is off. This backup preference does not suppress encrypted Sutra Sync:
+  when durable chat history is enabled, visible conversations synchronize.
 - **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
   in-session unlocked-page set) — not exported; locked pages correctly require
   the PIN again after a reload.
@@ -401,7 +494,8 @@ round-trip in a browser.
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
 | API keys | sessionStorage (default) | Provider credentials | Never exported |
-| Managed Assistant chat store | localStorage | Optional visible conversations | Encrypted backup by default; plaintext recovery opt-in |
+| `appData.assistantChatHistory` | canonical IndexedDB workspace | Optional visible conversations, ids/order/citations/receipts | Encrypted sync and encrypted backup by default; plaintext recovery opt-in |
+| Managed Assistant chat localStorage keys | localStorage compatibility mirror | One-time legacy import, then canonical-to-mirror only | Never authoritative after migration; stale/empty values cannot erase canonical history |
 
 For the authoritative, line-referenced behavior and the verification scripts,
 read [`sutra-save-systems-audit.md`](../architecture/sutra-save-systems-audit.md).

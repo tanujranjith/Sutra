@@ -20,11 +20,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const appJs = readFileSync(resolve(repoRoot, 'src/core/app.js'), 'utf8');
 const persistenceInventory = JSON.parse(readFileSync(resolve(repoRoot, 'docs/architecture/persistence-inventory.json'), 'utf8'));
+const require = createRequire(import.meta.url);
+const syncProtocol = require(resolve(repoRoot, 'src/sync/sync-protocol.js'));
 
 const failures = [];
 const warnings = [];
@@ -77,7 +80,11 @@ if (!persistBody) fail('Could not locate persistAppData function body');
 const buildBody = extractFunctionBody(appJs, /function\s+buildWorkspaceExportPayload\s*\(/);
 if (!buildBody) fail('Could not locate buildWorkspaceExportPayload function body');
 
-const importBody = extractFunctionBody(appJs, /function\s+importWorkspacePayload\s*\(/);
+// importWorkspacePayload is a thin guard wrapper (workspaceImportInProgress
+// flag) around importWorkspacePayloadInner, which holds the actual field
+// hydration this check audits.
+const importBody = extractFunctionBody(appJs, /function\s+importWorkspacePayloadInner\s*\(/)
+    || extractFunctionBody(appJs, /function\s+importWorkspacePayload\s*\(/);
 if (!importBody) fail('Could not locate importWorkspacePayload function body');
 
 // Fields written to appData inside persistAppData (left-hand side of `appData.foo = ...`)
@@ -110,7 +117,12 @@ const groupedImportFields = groupedImportMatch
         Array.from(groupedImportMatch[1].matchAll(/'([a-zA-Z_$][\w$]*)'/g)).map(m => m[1])
     ))
     : [];
-const importReadFields = Array.from(new Set([...directImportReadFields, ...groupedImportFields]));
+const helperImportFields = importBody
+    ? Array.from(new Set(
+        Array.from(importBody.matchAll(/importedField\('([a-zA-Z_$][\w$]*)'/g)).map(m => m[1])
+    ))
+    : [];
+const importReadFields = Array.from(new Set([...directImportReadFields, ...groupedImportFields, ...helperImportFields]));
 
 // ---- 2) Field parity assertions --------------------------------------
 
@@ -139,6 +151,52 @@ exportJsonFields.forEach(field => {
     if (['version', 'exportedAt', 'exportDiagnostics'].includes(field)) return;
     if (!importReadFields.includes(field)) {
         fail(`Export emits "${field}" but importWorkspacePayload never reads it.`);
+    }
+});
+
+// Every persistence field also needs an executable sync decision. This checks
+// names and categories (not counts), then proves the protocol mechanics cover
+// the same field exactly once.
+const decisionCategories = new Set(Object.keys(persistenceInventory.classificationCategories || {}));
+const fieldDecisions = persistenceInventory.workspaceFieldClassifications || {};
+const classifiedFields = syncProtocol.listClassifiedFields();
+const classifiedSeen = new Set();
+classifiedFields.forEach(field => {
+    if (classifiedSeen.has(field)) fail(`Sync classifies field more than once: ${field}`);
+    classifiedSeen.add(field);
+});
+(persistenceInventory.workspaceTopLevelFields || []).forEach(field => {
+    const decision = fieldDecisions[field];
+    if (!decision) fail(`Persistence field has no sync decision: ${field}`);
+    else if (!decisionCategories.has(decision.category)) fail(`Persistence field has invalid sync category: ${field} -> ${decision.category}`);
+    if (!classifiedSeen.has(field)) fail(`Persistence field is absent from sync mechanics: ${field}`);
+});
+classifiedSeen.forEach(field => {
+    if (!(persistenceInventory.workspaceTopLevelFields || []).includes(field)) {
+        fail(`Sync mechanics contain a field absent from the persistence contract: ${field}`);
+    }
+});
+Object.keys(fieldDecisions).forEach(field => {
+    if (!(persistenceInventory.workspaceTopLevelFields || []).includes(field)) {
+        fail(`Sync decision exists for a non-persistence field: ${field}`);
+    }
+});
+
+// Canonical appData defaults must be inventoried; export-only/storage-backed
+// synthetic fields are listed explicitly rather than hidden in exceptions.
+const defaultsBodyForParity = extractFunctionBody(appJs, /function\s+getDefaultAppData\s*\(/);
+const defaultTopLevel = defaultsBodyForParity
+    ? Array.from(new Set(Array.from(defaultsBodyForParity.matchAll(/^ {16}([a-zA-Z_$][\w$]*)\s*:/gm)).map(m => m[1])))
+    : [];
+const syntheticFields = new Set(persistenceInventory.syntheticWorkspaceFields || []);
+defaultTopLevel.forEach(field => {
+    if (!(persistenceInventory.workspaceTopLevelFields || []).includes(field)) {
+        fail(`getDefaultAppData field is absent from persistence inventory: ${field}`);
+    }
+});
+(persistenceInventory.workspaceTopLevelFields || []).forEach(field => {
+    if (!defaultTopLevel.includes(field) && !syntheticFields.has(field)) {
+        fail(`Persistence field is neither a workspace default nor an explicit synthetic field: ${field}`);
     }
 });
 
@@ -174,6 +232,12 @@ requiredLsKeys.forEach(key => {
     if (!lsKeys.includes(key)) {
         fail(`ATELIER_RAW_LOCALSTORAGE_KEYS is missing required key "${key}".`);
     }
+});
+const localStorageDecisions = persistenceInventory.localStorageClassifications || {};
+requiredLsKeys.forEach(key => {
+    const decision = localStorageDecisions[key];
+    if (!decision) fail(`Portable localStorage key has no classification: ${key}`);
+    else if (!decisionCategories.has(decision.category)) fail(`Portable localStorage key has invalid category: ${key}`);
 });
 
 // API-key-style storage keys must NEVER appear in the snapshot list.

@@ -25,8 +25,8 @@
         './src/features/assistant/action-system.js?v=20260714-assistant-trust1',
         './src/features/assistant/note-patch-system.js?v=20260711-note-patch1',
         './src/features/assistant/flow-intelligence.js?v=20260614-storage1',
-        './src/features/assistant/flow-assistant.js?v=20260714-assistant-trust3',
-        './src/features/assistant/sutra-assistant-memory.js?v=20260713-assist-features1',
+        './src/features/assistant/flow-assistant.js?v=20260715-sync2',
+        './src/features/assistant/sutra-assistant-memory.js?v=20260716-syncwipe1',
         './src/features/assistant/sutra-local-help.js?v=20260714-assistant-trust1'
       ],
       styles: [

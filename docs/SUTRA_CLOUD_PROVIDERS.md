@@ -22,7 +22,7 @@ its status, what it stores, and its limitations. For step-by-step setup see
 | Provider | Category | Status | Auth | Hosted build | Backup list |
 |---|---|---|---|---|---|
 | Manual encrypted file | Manual | ✅ | none | ✅ always | n/a (file) |
-| Supabase | Advanced | ✅ | email code | only if the build pins a ref (public build ships none) | yes |
+| Supabase | Advanced | ✅ | email code | ✅ `*.supabase.co` is approved | yes |
 | WebDAV (Nextcloud/ownCloud) | Advanced | ✅ | app password | 🔒 self-host | yes |
 | Custom HTTP | Advanced | ✅ | bearer (opt) | 🔒 self-host | yes |
 | Google Drive | Recommended | ⚙️ needs client ID | OAuth | ✅ after user configuration | yes |
@@ -44,6 +44,9 @@ its status, what it stores, and its limitations. For step-by-step setup see
 - **Today:** use Sutra's encrypted **Drive sync** (Settings → Data → Google
   Drive). It uploads encrypted snapshots to Drive's `appdata` folder using only
   the `drive.appdata` scope.
+- Snapshot pulls are conflict-safe: cycles are serialized, and a local save that
+  lands while a remote snapshot is being downloaded/decrypted changes the pull
+  into an explicit conflict instead of being overwritten.
 - The Sutra Cloud card points you there; deeper backup-list integration is a
   follow-up.
 
@@ -66,8 +69,12 @@ Storage bucket (`backups/<uid>/…`) with **Row Level Security** isolating users
 plus a small `backup_index` row (no workspace content). Email one-time-code auth.
 - **Never paste a `service_role` / secret key** — Sutra rejects keys that look
   like service-role keys; use the public **anon** key.
-- A custom Supabase project ref must be in the CSP, so in the hosted build only
-  the build's configured project works; others need a self-hosted build.
+- The canonical CSP explicitly allows `https://*.supabase.co`, so official and
+  bring-your-own hosted Supabase project origins work. Non-Supabase custom
+  origins still require a self-hosted CSP change.
+- This adapter remains point-in-time encrypted backup. Incremental multi-device
+  synchronization is the separate **Sutra Sync** protocol and requires
+  `supabase/sync-schema.sql`; no other backup provider is relabeled as full sync.
 - Setup + SQL + RLS warnings: [`supabase/README.md`](../supabase/README.md).
 
 ### WebDAV (Nextcloud / ownCloud / generic)

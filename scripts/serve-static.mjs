@@ -3,9 +3,18 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
 import { buildCsp } from './lib/csp-policy.mjs';
+import { assertCoreRuntimeIntegrity } from './lib/core-runtime-integrity.mjs';
 
 const root = resolve(process.env.SUTRA_SERVE_ROOT || process.cwd());
 const port = Number(process.env.PORT || process.argv[2] || 5173);
+
+try {
+  assertCoreRuntimeIntegrity({ appPath: join(root, 'src/core/app.js') });
+} catch (error) {
+  console.error(error.message);
+  console.error('Static server not started — repair the core runtime before serving Sutra.');
+  process.exit(1);
+}
 
 const types = {
   '.html': 'text/html; charset=utf-8',

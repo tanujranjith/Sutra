@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const appSource = readFileSync(path.join(root, 'src', 'core', 'app.js'), 'utf8');
+const inventory = JSON.parse(readFileSync(path.join(root, 'docs', 'architecture', 'persistence-inventory.json'), 'utf8'));
+
+test('application bridge selects an account-scoped sync namespace and fails closed on an account transition', () => {
+  assert.match(appSource, /SUTRA_SYNC_ACCOUNT_HINT_KEY = 'sutra:syncAccountHint:v1'/);
+  assert.match(appSource, /function getSutraSyncStoreScope\(\)[\s\S]*?supabase:/);
+  assert.match(appSource, /SutraSyncStore\.create\(\{ scope \}\)/);
+  assert.match(appSource, /accountSwitchBlocked = \{[\s\S]*?from: prior \|\| 'unbound-existing-sync-state',[\s\S]*?to: current/);
+  assert.match(appSource, /assertSutraSyncAccountIsSafe\(\)/);
+  assert.match(appSource, /assertSutraSyncAccountIsSafe\(\);[\s\S]*?async function unlockSutraSync/);
+  assert.match(appSource, /account-switch-blocked/);
+});
+
+test('account routing hint and sync operational database are explicitly device-local exclusions', () => {
+  const keys = inventory.localStorageClassifications;
+  assert.equal(keys['sutra:syncAccountHint:v1'].category, 'deviceLocal');
+  assert.equal(inventory.otherStorageClassifications.sutra_sync_db.category, 'deviceLocal');
+  assert.match(inventory.otherStorageClassifications.sutra_sync_db.reason, /Account-scoped/i);
+  assert.ok(inventory.deliberateExclusions.some(item => /sync queues.*device IDs/i.test(item)));
+});
+
+test('sync runtime does not contain plaintext logging sinks', () => {
+  const syncDir = path.join(root, 'src', 'sync');
+  for (const name of readdirSync(syncDir).filter(name => name.endsWith('.js'))) {
+    const source = readFileSync(path.join(syncDir, name), 'utf8');
+    assert.doesNotMatch(source, /console\.(?:log|debug|info|warn|error)\s*\(/,
+      `${name} must not log sync payloads, keys, or user content`);
+  }
+});

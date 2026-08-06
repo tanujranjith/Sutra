@@ -44,6 +44,31 @@ test('a healthy boot reports ok and shows NO recovery banner', async ({ page }) 
   await expect(page.locator('#sutraStartupHealthBanner')).toHaveCount(0);
 });
 
+test('the real core runtime boots without parser errors or recovery UI', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await openApp(page);
+  await page.waitForFunction(() => (
+    typeof window.serializeWorkspace === 'function'
+    && typeof window.saveWorkspaceLocally === 'function'
+    && !!window.__sutraPublicBetaTestHooks
+    && !!window.SutraSync
+  ));
+
+  const report = await page.evaluate(() => window.SutraStartupHealth.run());
+  expect(report.ok).toBe(true);
+  expect(report.criticalCount).toBe(0);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+  await expect(page.locator('#sutraStartupHealthBanner')).toHaveCount(0);
+  await expect(page.locator('#sutraIssuePrompt.is-visible')).toHaveCount(0);
+});
+
 test('a simulated CRITICAL failure surfaces a dismissible recovery banner with data-safety actions', async ({ page }) => {
   await openApp(page);
   const report = await page.evaluate(() => window.SutraStartupHealth.run({ simulateMissing: ['app-runtime'] }));

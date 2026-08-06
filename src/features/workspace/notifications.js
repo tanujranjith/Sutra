@@ -1655,10 +1655,10 @@
         if (raw.dismissed) _state.dismissed = Object.assign({}, raw.dismissed);
         if (raw.snoozed) _state.snoozed = Object.assign({}, raw.snoozed);
         if (raw.read) _state.read = Object.assign({}, raw.read);
-        if (raw.lastDigest) _state.lastDigest = raw.lastDigest;
-        if (raw.lastActiveAt) _state.lastActiveAt = raw.lastActiveAt;
-        if (raw.lastWeeklyReviewAt) _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt;
-        if (raw.lastWeeklyNudge) _state.lastWeeklyNudge = raw.lastWeeklyNudge;
+        if (Object.prototype.hasOwnProperty.call(raw, 'lastDigest')) _state.lastDigest = raw.lastDigest;
+        if (Object.prototype.hasOwnProperty.call(raw, 'lastActiveAt')) _state.lastActiveAt = raw.lastActiveAt;
+        if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyReviewAt')) _state.lastWeeklyReviewAt = raw.lastWeeklyReviewAt;
+        if (Object.prototype.hasOwnProperty.call(raw, 'lastWeeklyNudge')) _state.lastWeeklyNudge = raw.lastWeeklyNudge;
         _saveState();
         refresh();
     }

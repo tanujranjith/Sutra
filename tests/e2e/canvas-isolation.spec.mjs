@@ -1,0 +1,245 @@
+import { expect, test } from '@playwright/test';
+
+async function completeOnboarding(page) {
+  await page.evaluate(() => {
+    try {
+      if (typeof window.markStudentOnboardingCompleted === 'function') {
+        window.markStudentOnboardingCompleted(true);
+      }
+    } catch (error) {}
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+      overlay.hidden = true;
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.style.setProperty('display', 'none', 'important');
+      overlay.style.setProperty('pointer-events', 'none', 'important');
+    }
+  });
+}
+
+async function openApp(page) {
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.serializeWorkspace);
+}
+
+test('Canvas pages are isolated: empty on create, no note content leak, independent state', async ({ page }) => {
+  test.setTimeout(60000);
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const space = hooks.createSpace('Isolation QA');
+    const report = { errors: [] };
+
+    // Helper: check if V2 host is hidden
+    function v2Hidden() {
+      const host = document.getElementById('editorV2Host');
+      return !host || host.hidden || host.style.display === 'none';
+    }
+
+    // Helper: check if canvas page is active
+    function canvasActive() {
+      return document.body.classList.contains('canvas-page-active');
+    }
+
+    // Helper: get current page info
+    function pageInfo() {
+      const p = hooks.getCurrentPage();
+      if (!p) return null;
+      return {
+        id: p.id,
+        type: p.type,
+        objects: (p.canvas && p.canvas.objects && p.canvas.objects.length) || 0,
+        content: p.content || ''
+      };
+    }
+
+    // 1. Create note A, navigate to it
+    const noteA = hooks.createNoteInActiveSpace('Note A', '<p>ALPHA</p>');
+    window.loadPage(noteA.id);
+    report.noteA = { id: noteA.id, info: pageInfo(), v2Hidden: v2Hidden(), canvasActive: canvasActive() };
+
+    // 2. Create Canvas A — auto-navigates
+    const canvasA = hooks.createCanvasInActiveSpace('Canvas A');
+    const ca_info = pageInfo();
+    if (ca_info.type !== 'canvas') report.errors.push('Canvas A type is not canvas');
+    if (ca_info.objects !== 0) report.errors.push('Canvas A has objects on create');
+    if (ca_info.content !== '') report.errors.push('Canvas A content is not empty');
+    if (!v2Hidden()) report.errors.push('V2 host not hidden on canvas A');
+    if (!canvasActive()) report.errors.push('canvas-page-active class missing on canvas A');
+    if (document.body.innerText.includes('ALPHA')) report.errors.push('Note A text ALPHA found visible on canvas page');
+    report.canvasA_create = { id: canvasA.id, info: ca_info, v2Hidden: v2Hidden() };
+
+    // 3. Navigate to note B
+    const noteB = hooks.createNoteInActiveSpace('Note B', '<p>BRAVO</p>');
+    window.loadPage(noteB.id);
+    const nb_info = pageInfo();
+    if (v2Hidden()) report.errors.push('V2 host still hidden on note B');
+    if (canvasActive()) report.errors.push('canvas-page-active still present on note B');
+    report.noteB = { id: noteB.id, info: nb_info };
+
+    // 4. Return to Canvas A — verify still empty
+    window.loadPage(canvasA.id);
+    const ca_return = pageInfo();
+    if (ca_return.objects !== 0) report.errors.push('Canvas A objects changed after navigating away');
+    if (!v2Hidden()) report.errors.push('V2 host not hidden on return to canvas A');
+    if (!canvasActive()) report.errors.push('canvas-page-active missing on return to canvas A');
+    report.canvasA_return = { info: ca_return };
+
+    // 5. Add an object to Canvas A
+    const textObj = window.SutraCanvas.addText('Canvas object alpha');
+    const ca_afterAdd = pageInfo();
+    if (ca_afterAdd.objects !== 1) report.errors.push('Canvas A should have 1 object after addText, got ' + ca_afterAdd.objects);
+    if (!textObj || !textObj.id) report.errors.push('addText did not return an object with id');
+    report.canvasA_afterAdd = { objects: ca_afterAdd.objects, textObj: !!textObj };
+
+    // 6. Visit several notes, return to Canvas A — still has its object
+    const noteC = hooks.createNoteInActiveSpace('Note C', '<p>CHARLIE</p>');
+    window.loadPage(noteC.id);
+    window.loadPage(noteB.id);
+    window.loadPage(noteA.id);
+    window.loadPage(canvasA.id);
+    const ca_afterVisit = pageInfo();
+    if (ca_afterVisit.objects !== 1) report.errors.push('Canvas A object count changed after navigating notes, expected 1 got ' + ca_afterVisit.objects);
+    report.canvasA_afterVisit = { objects: ca_afterVisit.objects };
+
+    // 7. Create Canvas B — starts empty
+    const canvasB = hooks.createCanvasInActiveSpace('Canvas B');
+    const cb_info = pageInfo();
+    if (cb_info.objects !== 0) report.errors.push('Canvas B is not empty on create, got ' + cb_info.objects);
+    report.canvasB_create = { id: canvasB.id, objects: cb_info.objects };
+
+    // 8. Two canvases independent: canvas B has 0, canvas A still has 1
+    window.loadPage(canvasA.id);
+    const ca_afterB = pageInfo();
+    if (ca_afterB.objects !== 1) report.errors.push('Canvas A objects changed after creating Canvas B');
+    if (document.body.innerText.includes('Canvas object alpha')) {
+      // This is expected — the canvas contains the text we added
+    }
+    report.canvasA_afterCanvasB = { objects: ca_afterB.objects };
+
+    // 9. Edit Canvas A while Canvas B is visible does not contaminate B
+    window.loadPage(canvasB.id);
+    const cb_beforeEdit = pageInfo();
+    window.loadPage(canvasA.id);
+    window.SutraCanvas.addSticky('Canvas A sticky');
+    window.loadPage(canvasB.id);
+    const cb_afterEdit = pageInfo();
+    if (cb_afterEdit.objects !== 0) report.errors.push('Canvas B got objects after editing Canvas A');
+    report.canvasB_afterEditA = { before: cb_beforeEdit.objects, after: cb_afterEdit.objects };
+
+    // 10. Edit normal note while Canvas A inactive; Canvas A unchanged
+    window.loadPage(noteA.id);
+    window.loadPage(canvasA.id);
+    const ca_afterNoteEdit = pageInfo();
+    if (ca_afterNoteEdit.objects !== 1) report.errors.push('Canvas A objects changed after editing normal note');
+    report.canvasA_afterNoteEdit = { objects: ca_afterNoteEdit.objects };
+
+    // 11. Persistence round-trip: serialize, deserialize, verify both canvases
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    window.deserializeWorkspace(payload);
+    window.loadPage(canvasA.id);
+    const ca_restored = pageInfo();
+    window.loadPage(canvasB.id);
+    const cb_restored = pageInfo();
+    if (ca_restored.objects !== 1) report.errors.push('Canvas A lost objects after restore: expected 1 got ' + ca_restored.objects);
+    if (cb_restored.objects !== 0) report.errors.push('Canvas B got objects after restore: expected 0 got ' + cb_restored.objects);
+    report.restore = { canvasA: ca_restored.objects, canvasB: cb_restored.objects };
+
+    report.errorsTotal = report.errors.length;
+    return report;
+  });
+
+  expect(result.errorsTotal).toBe(0);
+  if (result.errorsTotal > 0) {
+    console.log('Canvas isolation errors:', JSON.stringify(result.errors, null, 2));
+  }
+});
+
+test('Canvas toolbar renders correctly: groups, active tool, selection-dependent controls', async ({ page }) => {
+  test.setTimeout(60000);
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const report = { errors: [] };
+
+    hooks.createSpace('Toolbar QA');
+    const canvasA = hooks.createCanvasInActiveSpace('Toolbar Test');
+    const toolbar = document.getElementById('canvasToolbar');
+    const editorRoot = document.getElementById('canvasEditor');
+
+    // Check toolbar exists and has tool groups
+    if (!toolbar) report.errors.push('Canvas toolbar not found');
+    const groups = toolbar.querySelectorAll('.canvas-tool-group');
+    if (groups.length < 3) report.errors.push('Toolbar has fewer than 3 groups, found ' + groups.length);
+
+    // Check active tool class on select (default)
+    const selectBtn = toolbar.querySelector('[data-canvas-tool="select"]');
+    if (!selectBtn || !selectBtn.classList.contains('active')) report.errors.push('Select tool not active by default');
+
+    // Check data-canvas-tool on editor
+    if (editorRoot.dataset.canvasTool !== 'select') report.errors.push('Editor data-canvas-tool not "select"');
+
+    // Switch to pen tool and verify state updates
+    window.canvasSetTool('pen');
+    const penBtn = toolbar.querySelector('[data-canvas-tool="pen"]');
+    if (!penBtn || !penBtn.classList.contains('active')) report.errors.push('Pen tool not active after setTool');
+    if (selectBtn && selectBtn.classList.contains('active')) report.errors.push('Select tool still active after pen set');
+    if (editorRoot.dataset.canvasTool !== 'pen') report.errors.push('Editor data-canvas-tool not updated to pen');
+
+    // Reset to select
+    window.canvasSetTool('select');
+
+    // Check selection-only controls hidden on empty canvas
+    const selectionControls = toolbar.querySelectorAll('[data-selection-only]');
+    selectionControls.forEach(btn => {
+      const style = window.getComputedStyle(btn);
+      if (style.display !== 'none') {
+        report.errors.push('Selection-only control visible on empty canvas: ' + (btn.title || btn.getAttribute('aria-label') || btn.outerHTML));
+      }
+    });
+
+    // Check toolbar dimensions
+    const toolbarRect = toolbar.getBoundingClientRect();
+    if (toolbarRect.height < 30) report.errors.push('Toolbar height too small: ' + toolbarRect.height);
+
+    // Check stage is positioned below toolbar
+    const stageShell = document.getElementById('canvasStageShell');
+    if (stageShell) {
+      const stageRect = stageShell.getBoundingClientRect();
+      // The toolbar sits above the stage in the flex column.
+      if (stageRect.top < toolbarRect.bottom - 10 && toolbarRect.bottom > stageRect.top + 5) {
+        // Some overlap is normal (toolbar and stage adjacent), not an error
+      }
+    }
+
+    // Add object and check data-has-selection updates
+    window.SutraCanvas.addText('Toolbar test');
+    const hasSelection = editorRoot.dataset.hasSelection;
+    if (hasSelection !== 'true') report.errors.push('data-has-selection not "true" after adding object');
+
+    // Selection-only controls should now be visible
+    selectionControls.forEach(btn => {
+      const style = window.getComputedStyle(btn);
+      if (style.display === 'none') {
+        report.errors.push('Selection-only control hidden after object added: ' + (btn.title || btn.getAttribute('aria-label')));
+      }
+    });
+
+    report.toolbarHeight = toolbarRect.height;
+    report.groupCount = groups.length;
+    report.errorsTotal = report.errors.length;
+    return report;
+  });
+
+  expect(result.errorsTotal).toBe(0);
+  if (result.errorsTotal > 0) {
+    console.log('Toolbar errors:', JSON.stringify(result.errors, null, 2));
+  }
+});

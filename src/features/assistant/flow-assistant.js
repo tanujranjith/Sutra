@@ -267,6 +267,11 @@
 
     function syncActiveV2NoteForContext() {
         try {
+            // During a whole-workspace import/restore/sync-apply the imported
+            // model is the truth: the v2 editor still holds the pre-import
+            // document until loadPage re-syncs it, and writing that stale
+            // state into page.content would silently revert imported content.
+            if (window.__sutraWorkspaceImportInProgress) return;
             const v2 = window.SutraNotesEditorV2;
             if (!v2 || typeof v2.isMounted !== 'function' || !v2.isMounted()) return;
             const host = document.getElementById('editorV2Host');

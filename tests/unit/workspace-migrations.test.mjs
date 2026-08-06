@@ -9,9 +9,9 @@ const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`,
 const NOW = '2026-07-09T12:00:00.000Z';
 
 for (const [name, from, expected] of [
-  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4', 'v4->v5']],
-  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4', 'v4->v5']],
-  ['workspace-v3.json', 3, ['v3->v4', 'v4->v5']]
+  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']],
+  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']],
+  ['workspace-v3.json', 3, ['v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']]
 ]) {
   test(`${name} migrates sequentially to the current schema`, () => {
     const source = fixture(name);
@@ -44,7 +44,7 @@ test('invalid collections are quarantined and relationship defects are reported'
 });
 
 test('recovered/quarantined data in a current workspace survives a re-migration (import round-trip)', () => {
-  // On import the workspace is re-migrated. A v5 backup carrying recovered data
+  // On import the workspace is re-migrated. A current backup carrying recovered data
   // (quarantine, legacy homework snapshot) must keep it — this is what the
   // export/import round-trip now relies on to avoid silently dropping the only
   // copy of migration-recovered content.
@@ -66,7 +66,7 @@ test('destructive migrations announce backup requirements before execution', () 
   assert.ok(backup);
   assert.equal(backup.workspace.version, 2);
   assert.ok(backup.plan.some((step) => step.destructive));
-  assert.equal(result.workspace.version, 5);
+  assert.equal(result.workspace.version, migrations.CURRENT_VERSION);
 });
 
 test('current migrations are idempotent and future workspaces are preserved', () => {
@@ -79,16 +79,27 @@ test('current migrations are idempotent and future workspaces are preserved', ()
   assert.equal(future.workspace.custom, true);
 });
 
-test('v5 adds Sutra 2.0 contracts without dropping plugin-owned fields', () => {
+test('v5 through v7 add Sutra contracts, sync containers, and canonical Assistant history without dropping plugin-owned fields', () => {
   const source = fixture('workspace-v3.json');
   const result = migrations.migrateWorkspace(source, { now: NOW }).workspace;
-  assert.equal(result.version, 5);
-  assert.equal(result.schema.version, 5);
+  assert.equal(result.version, migrations.CURRENT_VERSION);
+  assert.equal(result.schema.version, migrations.CURRENT_VERSION);
   assert.equal(result.studentDecisionState.preset, 'balanced');
   assert.equal(result.assistantPermissions.mode, 'off');
   assert.deepEqual(result.taskDependencies, []);
   assert.deepEqual(result.masteryRecords, []);
   assert.deepEqual(result.collegeAppWorkspace.activities, []);
+  assert.deepEqual(result.privateDocuments, []);
+  assert.deepEqual(result.syncAuditLog, []);
+  assert.deepEqual(result.assistantChatHistory, {
+    version: 1,
+    currentChatId: '',
+    conversations: [],
+    legacyMigrationComplete: false
+  });
+  assert.ok(Array.isArray(result.migrationHistory));
+  assert.equal(typeof result.migrationDiagnostics, 'object');
+  assert.equal(typeof result.compatibility, 'object');
   assert.equal(result.pluginData.unknownSafeField, 'keep');
 });
 

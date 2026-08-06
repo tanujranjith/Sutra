@@ -43,7 +43,7 @@
     <!-- Defensive browser-storage wrapper. Loaded before all feature modules so
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
-    <script src="src/core/safe-storage.js?v=20260614-safestorage2"></script>
+    <script src="src/core/safe-storage.js?v=20260716-syncparity1"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
          first render and can capture boot-time failures.
@@ -53,7 +53,7 @@
     <script src="src/core/error-reporter.js?v=20260613-harden1"></script>
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
-    <script src="src/core/migrations.js?v=20260715-migfix1"></script>
+    <script src="src/core/migrations.js?v=20260716-syncwipe1"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
@@ -66,8 +66,20 @@
     <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
     <script src="src/persistence/workspace-db.js?v=20260714-idb-factory1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
+    <script src="src/persistence/revocation-wipe.js?v=20260716-syncwipe1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
-    <script src="src/config/feature-manifest.js?v=20260714-intel1"></script>
+    <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
+         app.js holds only the bridge). Protocol/crypto/merge run headless in
+         Node tests. Load order: protocol first, engine last, all before app.js. -->
+    <script src="src/sync/sync-protocol.js?v=20260716-syncparity1"></script>
+    <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
+    <script src="src/sync/sync-projection.js?v=20260716-syncparity1"></script>
+    <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
+    <script src="src/sync/sync-merge.js?v=20260717-conflict4"></script>
+    <script src="src/sync/sync-store.js?v=20260718-account-isolation1"></script>
+    <script src="src/sync/sync-transport.js?v=20260718-account-isolation1"></script>
+    <script src="src/sync/sync-engine.js?v=20260717-conflict4"></script>
+    <script src="src/config/feature-manifest.js?v=20260716-syncwipe1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -94,7 +106,8 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260710-tokens1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260712-glass-fix">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260721-emojiBlur1">
+    <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -1085,9 +1098,9 @@
 
             <!-- TIMELINE VIEW (TimeTile) -->
             <section id="view-timeline" class="view view-timeline timeline-redesign">
-                <div class="view-header timeline-hero-header">
-                    <div class="timeline-hero-titles">
-                        <div class="eyebrow">Calendar</div>
+                <div class="sutra-calendar-shell">
+                <div class="view-header timeline-hero-header sutra-calendar-toolbar">
+                    <div class="timeline-hero-titles sutra-calendar-range">
                         <h2 id="timelineHeading">Calendar</h2>
                     </div>
                     <div class="timeline-header-controls timeline-hero-controls">
@@ -1129,10 +1142,10 @@
                             </div>
                         </div>
                     </div>
-                    <p class="timeline-source-status" id="timelineSourceStatus">Plan blocks, events, and study sessions across your day.</p>
+                    <p class="timeline-source-status sr-only" id="timelineSourceStatus" aria-live="polite">Calendar ready.</p>
                 </div>
 
-                <div class="timeline-wrapper glass-panel">
+                <div class="timeline-wrapper glass-panel sutra-calendar-body">
                     <div class="timeline-planner-view" id="timelinePlannerView" hidden></div>
                     <div class="timeline-calendar-view" id="timelineLegacyCalendar"></div>
                 </div>
@@ -1151,6 +1164,7 @@
                     <div class="progress-bar">
                         <div class="progress-fill" id="blockProgressFill" style="width:0%"></div>
                     </div>
+                </div>
                 </div>
             </section>
 
@@ -1446,40 +1460,47 @@
                     <aside class="notes-backlinks" id="notesBacklinksPanel" hidden aria-label="Linked references"></aside>
                     <div class="canvas-editor" id="canvasEditor" hidden aria-label="Canvas page editor">
                         <div class="canvas-toolbar" id="canvasToolbar" role="toolbar" aria-label="Canvas tools">
-                            <button type="button" class="toolbar-btn active" data-canvas-tool="select" onclick="canvasSetTool('select')" title="Select" aria-label="Select"><i class="fas fa-bullseye"></i></button>
-                            <button type="button" class="toolbar-btn" data-canvas-tool="pan" onclick="canvasSetTool('pan')" title="Pan — drag to move around the canvas (or middle-click drag)" aria-label="Pan / move around the canvas"><i class="fas fa-expand-arrows-alt"></i></button>
-                            <button type="button" class="toolbar-btn" data-canvas-tool="pen" onclick="canvasSetTool('pen')" title="Pen — draw on canvas" aria-label="Pen"><i class="fas fa-pen"></i></button>
-                            <button type="button" class="toolbar-btn" data-canvas-tool="text" onclick="canvasSetTool('text'); canvasAddText();" title="Text" aria-label="Add text"><i class="fas fa-font"></i></button>
-                            <button type="button" class="toolbar-btn" data-canvas-tool="sticky" onclick="canvasSetTool('sticky'); canvasAddSticky();" title="Sticky note" aria-label="Add sticky note"><i class="fas fa-sticky-note"></i></button>
-                            <div class="canvas-shape-picker" id="canvasShapePicker">
-                                <button type="button" class="toolbar-btn" id="canvasShapeBtn" onclick="toggleCanvasShapeMenu(event)" title="Add shape" aria-label="Add shape" aria-haspopup="true" aria-expanded="false"><i class="fas fa-shapes"></i></button>
-                                <div class="canvas-shape-menu" id="canvasShapeMenu" role="menu" aria-label="Shapes" hidden>
-                                    <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rectangle')"><span class="canvas-shape-ico" data-shape="rectangle"></span>Rectangle</button>
-                                    <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rounded')"><span class="canvas-shape-ico" data-shape="rounded"></span>Rounded</button>
-                                    <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('ellipse')"><span class="canvas-shape-ico" data-shape="ellipse"></span>Ellipse</button>
-                                    <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('diamond')"><span class="canvas-shape-ico" data-shape="diamond"></span>Diamond</button>
-                                    <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('triangle')"><span class="canvas-shape-ico" data-shape="triangle"></span>Triangle</button>
-                                </div>
+                            <div class="canvas-tool-group" role="group" aria-label="Navigate">
+                                <button type="button" class="toolbar-btn active" data-canvas-tool="select" onclick="canvasSetTool('select')" title="Select" aria-label="Select"><i class="fas fa-bullseye"></i></button>
+                                <button type="button" class="toolbar-btn" data-canvas-tool="pan" onclick="canvasSetTool('pan')" title="Pan — drag to move around the canvas (or middle-click drag)" aria-label="Pan / move around the canvas"><i class="fas fa-expand-arrows-alt"></i></button>
                             </div>
-                            <button type="button" class="toolbar-btn" onclick="canvasAddConnector()" title="Connector" aria-label="Add connector"><i class="fas fa-link"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasAddTable()" title="Table" aria-label="Add table"><i class="fas fa-table"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasOpenInsertNoteModal()" title="Insert Sutra note" aria-label="Insert Sutra note"><i class="fas fa-file-alt"></i></button>
-                            <span class="toolbar-separator"></span>
-                            <button type="button" class="toolbar-btn" onclick="canvasUndo()" title="Undo" aria-label="Undo"><i class="fas fa-undo"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasRedo()" title="Redo" aria-label="Redo"><i class="fas fa-redo"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasDuplicateSelected()" title="Duplicate selection" aria-label="Duplicate selected objects"><i class="fas fa-copy"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasGroupSelected()" title="Group selection" aria-label="Group selected objects"><i class="fas fa-layer-group"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasDeleteSelected()" title="Delete selection" aria-label="Delete selected objects"><i class="fas fa-trash"></i></button>
-                            <span class="toolbar-separator"></span>
-                            <button type="button" class="toolbar-btn" onclick="canvasCreateTaskFromSelection()" title="Task from selection" aria-label="Create task from selected Canvas text"><i class="fas fa-check-square"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasConvertSelectionToNote()" title="Note from selection" aria-label="Create note from selected Canvas text"><i class="fas fa-file-alt"></i></button>
-                            <span class="toolbar-separator"></span>
-                            <button type="button" class="toolbar-btn" onclick="canvasZoomBy(-0.1)" title="Zoom out" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
-                            <button type="button" class="toolbar-zoom-label" id="canvasZoomLabel" onclick="canvasResetZoom()" title="Reset zoom">100%</button>
-                            <button type="button" class="toolbar-btn" onclick="canvasZoomBy(0.1)" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasExportImage()" title="Export Canvas image" aria-label="Export Canvas as image"><i class="fas fa-image"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasExportPdf()" title="Export Canvas PDF" aria-label="Export Canvas as PDF"><i class="fas fa-file-pdf"></i></button>
-                            <button type="button" class="toolbar-btn" onclick="canvasExportJson()" title="Export Canvas JSON" aria-label="Export Canvas as JSON"><i class="fas fa-code"></i></button>
+                            <div class="canvas-tool-group" role="group" aria-label="Draw">
+                                <button type="button" class="toolbar-btn" data-canvas-tool="pen" onclick="canvasSetTool('pen')" title="Pen — draw on canvas" aria-label="Pen"><i class="fas fa-pen"></i></button>
+                                <button type="button" class="toolbar-btn" data-canvas-tool="text" onclick="canvasSetTool('text'); canvasAddText();" title="Text" aria-label="Add text"><i class="fas fa-font"></i></button>
+                                <button type="button" class="toolbar-btn" data-canvas-tool="sticky" onclick="canvasSetTool('sticky'); canvasAddSticky();" title="Sticky note" aria-label="Add sticky note"><i class="fas fa-sticky-note"></i></button>
+                                <div class="canvas-shape-picker" id="canvasShapePicker">
+                                    <button type="button" class="toolbar-btn" id="canvasShapeBtn" onclick="toggleCanvasShapeMenu(event)" title="Add shape" aria-label="Add shape" aria-haspopup="true" aria-expanded="false"><i class="fas fa-shapes"></i></button>
+                                    <div class="canvas-shape-menu" id="canvasShapeMenu" role="menu" aria-label="Shapes" hidden>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rectangle')"><span class="canvas-shape-ico" data-shape="rectangle"></span>Rectangle</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rounded')"><span class="canvas-shape-ico" data-shape="rounded"></span>Rounded</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('ellipse')"><span class="canvas-shape-ico" data-shape="ellipse"></span>Ellipse</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('diamond')"><span class="canvas-shape-ico" data-shape="diamond"></span>Diamond</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('triangle')"><span class="canvas-shape-ico" data-shape="triangle"></span>Triangle</button>
+                                    </div>
+                                </div>
+                                <button type="button" class="toolbar-btn" onclick="canvasAddConnector()" title="Connector" aria-label="Add connector"><i class="fas fa-link"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasAddTable()" title="Table" aria-label="Add table"><i class="fas fa-table"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasOpenInsertNoteModal()" title="Insert Sutra note" aria-label="Insert Sutra note"><i class="fas fa-file-alt"></i></button>
+                            </div>
+                            <div class="canvas-tool-group" role="group" aria-label="Arrange">
+                                <button type="button" class="toolbar-btn" onclick="canvasUndo()" title="Undo" aria-label="Undo"><i class="fas fa-undo"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasRedo()" title="Redo" aria-label="Redo"><i class="fas fa-redo"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasDuplicateSelected()" title="Duplicate selection" aria-label="Duplicate selected objects" data-selection-only><i class="fas fa-copy"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasGroupSelected()" title="Group selection" aria-label="Group selected objects" data-selection-only><i class="fas fa-layer-group"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasDeleteSelected()" title="Delete selection" aria-label="Delete selected objects" data-selection-only><i class="fas fa-trash"></i></button>
+                            </div>
+                            <div class="canvas-tool-group" role="group" aria-label="Convert">
+                                <button type="button" class="toolbar-btn" onclick="canvasCreateTaskFromSelection()" title="Task from selection" aria-label="Create task from selected Canvas text" data-selection-only><i class="fas fa-check-square"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasConvertSelectionToNote()" title="Note from selection" aria-label="Create note from selected Canvas text" data-selection-only><i class="fas fa-file-alt"></i></button>
+                            </div>
+                            <div class="canvas-tool-group" role="group" aria-label="View">
+                                <button type="button" class="toolbar-btn" onclick="canvasZoomBy(-0.1)" title="Zoom out" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
+                                <button type="button" class="toolbar-zoom-label" id="canvasZoomLabel" onclick="canvasResetZoom()" title="Reset zoom">100%</button>
+                                <button type="button" class="toolbar-btn" onclick="canvasZoomBy(0.1)" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasExportImage()" title="Export Canvas image" aria-label="Export Canvas as image"><i class="fas fa-image"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasExportPdf()" title="Export Canvas PDF" aria-label="Export Canvas as PDF"><i class="fas fa-file-pdf"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasExportJson()" title="Export Canvas JSON" aria-label="Export Canvas as JSON"><i class="fas fa-code"></i></button>
+                            </div>
                         </div>
                         <div class="canvas-brush-bar" id="canvasBrushBar" role="toolbar" aria-label="Brush options">
                             <button type="button" class="brush-type-btn active" data-brush-type="pen" title="Pen"><i class="fas fa-pen"></i></button>
@@ -4386,6 +4407,13 @@
                             <p class="cc-foot-help">A safety snapshot is also created automatically before any workspace import. Encrypted .sutra backups need your password to restore. JSON exports and safety snapshots are unencrypted recovery files.</p>
                         </div>
                     </div>
+                    <div class="cc-group cc-group-stacked" id="sutraFullSyncSection">
+                        <div class="cc-group-head"><span class="cc-group-title">Sutra Sync</span><span class="cc-tag cc-tag-info">Optional</span></div>
+                        <p class="cc-foot-help">Keep this workspace synchronized across devices with end-to-end-encrypted incremental changes. Local saving continues if sync is offline. Sync is not a backup: keep encrypted <code>.sutra</code> recovery copies too.</p>
+                        <div class="cc-stacked-actions">
+                            <button class="cc-btn cc-btn-ghost" type="button" onclick="openSutraSyncModal()">Open Sutra Sync</button>
+                        </div>
+                    </div>
                     <div class="cc-group cc-group-stacked" id="sutraDriveSyncSection">
                         <div class="cc-group-head"><span class="cc-group-title">Google Drive Sync</span></div>
                         <p class="cc-foot-help">Off by default. Sutra stays local-first; when you connect Google Drive, snapshots are encrypted in this browser before upload to your Drive app-data folder. Sutra cannot recover a forgotten sync password.</p>
@@ -5017,46 +5045,102 @@
                     </div>
                 </div>
 
-                <!-- Main homework dashboard -->
-                <div id="hwMainArea" style="padding:16px;">
-                    <div class="hw-header-bar">
-                        <div>
-                            <div class="eyebrow">Homework</div>
-                            <h2>Homework Organizer</h2>
-                            <p class="hw-subcopy">A dashboard view for workload, urgency, and course progress.</p>
+                <!-- Main homework workspace -->
+                <div id="hwMainArea" class="hw-workspace-shell">
+                    <header class="hw-page-header">
+                        <div class="hw-page-heading">
+                            <h2>Homework</h2>
+                            <p>Plan, track, and complete your assignments.</p>
                         </div>
-                        <div class="hw-header-actions">
-                            <button id="hwExportBtn" class="hw-btn">Export</button>
-                            <label class="hw-btn" style="cursor:pointer;">Import <input id="hwImportFile" type="file" accept="application/json" style="display:none"></label>
-                            <button id="hwPasteImportBtn" class="hw-btn" type="button" onclick="openHomeworkPasteImport('')" title="Paste assignments from a school portal">Paste Import</button>
-                            <button id="hwResetBtn" class="hw-btn" title="Re-run setup"><i class="fas fa-rotate-right" aria-hidden="true"></i>Setup</button>
+                        <div class="hw-page-actions" aria-label="Homework actions">
+                            <label class="hw-search-field" for="hwSearchInput">
+                                <i class="fas fa-search" aria-hidden="true"></i>
+                                <input id="hwSearchInput" type="search" placeholder="Search" autocomplete="off" />
+                            </label>
+                            <button id="hwFilterToggle" class="hw-toolbar-btn" type="button" aria-expanded="false" aria-controls="hwFilterPanel">
+                                <i class="fas fa-filter" aria-hidden="true"></i><span>Filter</span><span id="hwFilterCount" class="hw-filter-count" hidden>0</span>
+                            </button>
+                            <label class="hw-sort-control" for="hwSortSelect">
+                                <span>Sort:</span>
+                                <select id="hwSortSelect" aria-label="Sort homework">
+                                    <option value="due">Due date</option>
+                                    <option value="priority">Priority</option>
+                                    <option value="course">Class / activity</option>
+                                    <option value="status">Status</option>
+                                    <option value="updated">Recently updated</option>
+                                </select>
+                            </label>
+                            <button id="hwOpenAddAssignment" class="hw-toolbar-btn hw-toolbar-primary" type="button">
+                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add task</span>
+                            </button>
+                            <label class="hw-toolbar-btn hw-file-action" for="hwImportFile">
+                                <i class="fas fa-file-import" aria-hidden="true"></i><span>Import</span>
+                                <input id="hwImportFile" type="file" accept="application/json" hidden />
+                            </label>
+                            <button id="hwExportBtn" class="hw-toolbar-btn" type="button">
+                                <i class="fas fa-file-export" aria-hidden="true"></i><span>Export</span>
+                            </button>
+                            <details id="hwOverflowMenu" class="hw-overflow-menu">
+                                <summary class="hw-toolbar-btn hw-icon-only" aria-label="More homework actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
+                                <div class="hw-overflow-popover" role="menu">
+                                    <button id="hwPasteImportBtn" type="button" role="menuitem" onclick="openHomeworkPasteImport('')"><i class="fas fa-paste" aria-hidden="true"></i>Paste import</button>
+                                    <button id="hwSemesterSetupBtn" type="button" role="menuitem"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>Semester setup</button>
+                                    <button id="hwHeaderAddClass" type="button" role="menuitem"><i class="fas fa-graduation-cap" aria-hidden="true"></i>Add class</button>
+                                    <button id="hwHeaderAddActivity" type="button" role="menuitem"><i class="fas fa-people-group" aria-hidden="true"></i>Add activity</button>
+                                    <button id="hwResetBtn" class="danger" type="button" role="menuitem"><i class="fas fa-rotate-right" aria-hidden="true"></i>Reset Homework</button>
+                                </div>
+                            </details>
                         </div>
+                    </header>
+
+                    <div id="hwFilterPanel" class="hw-filter-panel" hidden>
+                        <label>Class or activity<select id="hwCourseFilter"><option value="all">All classes and activities</option></select></label>
+                        <label>Status<select id="hwStatusFilter"><option value="all">Any status</option><option value="not-started">Not started</option><option value="in-progress">In progress</option><option value="completed">Completed</option></select></label>
+                        <label>Priority<select id="hwPriorityFilter"><option value="all">Any priority</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+                        <label>Completion<select id="hwCompletionFilter"><option value="all">Open and completed</option><option value="open">Open only</option><option value="completed">Completed only</option></select></label>
+                        <label>Due date<select id="hwDueFilter"><option value="all">Any due date</option><option value="overdue">Overdue</option><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="week">Next 7 days</option><option value="undated">No due date</option></select></label>
+                        <button id="hwClearFilters" class="hw-filter-clear" type="button">Clear filters</button>
                     </div>
-                    <div class="hw-dashboard-grid" aria-live="polite">
-                        <article class="hw-stat-card">
-                            <div class="hw-stat-label">Open Tasks</div>
-                            <div class="hw-stat-value" id="hwStatOpen">0</div>
-                            <div class="hw-stat-note" id="hwStatProgress">0% completed</div>
-                        </article>
-                        <article class="hw-stat-card">
-                            <div class="hw-stat-label">Due Soon</div>
-                            <div class="hw-stat-value" id="hwStatDueSoon">0</div>
-                            <div class="hw-stat-note">Due in the next 7 days</div>
-                        </article>
-                        <article class="hw-stat-card">
-                            <div class="hw-stat-label">Completed</div>
-                            <div class="hw-stat-value" id="hwStatCompleted">0</div>
-                            <div class="hw-stat-note">Assignments finished</div>
-                        </article>
-                        <article class="hw-stat-card">
-                            <div class="hw-stat-label">Tracks</div>
-                            <div class="hw-stat-value" id="hwStatCourses">0</div>
-                            <div class="hw-stat-note">Classes + activities</div>
-                        </article>
-                    </div>
-                    <div class="hw-dashboard-body" id="hwDataTable"></div>
+
+                    <section class="hw-summary-grid" aria-label="Homework summary" aria-live="polite">
+                        <button class="hw-summary-card is-urgent" type="button" data-summary-filter="today">
+                            <span class="hw-summary-top"><i class="fas fa-calendar-day" aria-hidden="true"></i><span>Due Today</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
+                            <span class="hw-summary-value"><strong id="hwStatToday">0</strong> <span>tasks</span></span>
+                            <span class="hw-summary-note" id="hwStatTodayNote">Nothing urgent</span>
+                        </button>
+                        <button class="hw-summary-card is-upcoming" type="button" data-summary-filter="week">
+                            <span class="hw-summary-top"><i class="fas fa-calendar-week" aria-hidden="true"></i><span>Upcoming This Week</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
+                            <span class="hw-summary-value"><strong id="hwStatWeek">0</strong> <span>tasks</span></span>
+                            <span class="hw-summary-note" id="hwStatWeekNote">Your next 7 days</span>
+                        </button>
+                        <button class="hw-summary-card is-active" type="button" data-summary-filter="in-progress">
+                            <span class="hw-summary-top"><i class="fas fa-circle-notch" aria-hidden="true"></i><span>In Progress</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
+                            <span class="hw-summary-value"><strong id="hwStatInProgress">0</strong> <span>tasks</span></span>
+                            <span class="hw-summary-note" id="hwStatInProgressNote">Across your classes</span>
+                        </button>
+                        <button class="hw-summary-card is-completed" type="button" data-summary-filter="completed">
+                            <span class="hw-summary-top"><i class="fas fa-circle-check" aria-hidden="true"></i><span>Completed</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
+                            <span class="hw-summary-value"><strong id="hwStatCompleted">0</strong> <span>tasks</span></span>
+                            <span class="hw-summary-note" id="hwStatCompletedNote">All completed work</span>
+                        </button>
+                        <button class="hw-summary-card is-activity" type="button" data-summary-filter="activities">
+                            <span class="hw-summary-top"><i class="fas fa-people-group" aria-hidden="true"></i><span>Extracurriculars</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
+                            <span class="hw-summary-value"><strong id="hwStatActivities">0</strong> <span>activities</span></span>
+                            <span class="hw-summary-note" id="hwStatActivitiesNote">Clubs and other work</span>
+                        </button>
+                    </section>
+
+                    <nav class="hw-list-tabs" aria-label="Assignment views">
+                        <button type="button" class="is-active" data-homework-tab="all" aria-current="page">All Assignments</button>
+                        <button type="button" data-homework-tab="class">By Class</button>
+                        <button type="button" data-homework-tab="today">Due Today <span id="hwTabTodayCount" class="hw-tab-count">0</span></button>
+                        <button type="button" data-homework-tab="week">This Week <span id="hwTabWeekCount" class="hw-tab-count">0</span></button>
+                        <button type="button" data-homework-tab="completed">Completed</button>
+                    </nav>
+
+                    <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260701-loops2"></script>
+                <script src="src/features/study/homework.js?v=20260721-courseicons5"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5264,7 +5348,7 @@
 
     <div id="classDashboardDrawer" class="class-dashboard-drawer" aria-hidden="true" role="dialog" aria-modal="true">
         <div class="class-dashboard-backdrop" onclick="closeClassDashboardDrawer()"></div>
-        <aside class="class-dashboard-card glass-card">
+        <aside class="class-dashboard-card glass-card" aria-label="Class dashboard">
             <div class="class-dashboard-body"></div>
         </aside>
     </div>
@@ -5935,6 +6019,10 @@
             <i class="fas fa-cloud"></i>
             <span class="btn-text">Sutra Cloud</span>
         </button>
+        <button class="storage-btn" id="sutraSyncOpenBtn" onclick="openSutraSyncModal()" title="Sutra Sync — optional encrypted multi-device sync">
+            <i class="fas fa-rotate"></i>
+            <span class="btn-text">Sync</span>
+        </button>
     </div>
 
     <section class="sutra-save-failure-banner" id="sutraSaveFailureBanner" role="alert" aria-live="assertive" aria-labelledby="sutraSaveFailureTitle" hidden>
@@ -5958,6 +6046,119 @@
         </div>
         <pre class="sutra-save-failure-details" id="sutraSaveFailureDetails" hidden></pre>
     </section>
+
+    <!-- Sutra Sync — optional, consent-first, E2E-encrypted multi-device sync.
+         Distinct from backups: "Saved locally", "Synced to cloud", and
+         "Backed up" are three different guarantees, and this panel says which
+         is which. Spec: docs/architecture/SYNC_PROTOCOL.md -->
+    <div class="modal" id="sutraSyncModal">
+        <div class="modal-content sutra-sync-modal" role="dialog" aria-modal="true" aria-labelledby="sutraSyncModalTitle" aria-describedby="sutraSyncStatusCard">
+            <div class="modal-header">
+                <h3 class="modal-title" id="sutraSyncModalTitle">
+                    <i class="fas fa-rotate" aria-hidden="true"></i> Sutra Sync
+                </h3>
+                <button class="close-btn" type="button" data-modal-close onclick="closeSutraSyncModal()" aria-label="Close Sutra Sync">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="sutra-sync-status-card" id="sutraSyncStatusCard" aria-live="polite"></div>
+
+                <!-- Setup (sync disabled) -->
+                <section class="sutra-sync-section" id="sutraSyncSetup" hidden aria-labelledby="sutraSyncSetupTitle">
+                    <h4 id="sutraSyncSetupTitle">Turn on encrypted sync</h4>
+                    <p class="sutra-sync-hint">
+                        Sync keeps this workspace identical across your devices. Changes are
+                        end-to-end encrypted with a passphrase only you know — the server
+                        stores ciphertext it can never read. Sutra stays fully usable
+                        offline and without sync.
+                    </p>
+                    <p class="sutra-sync-hint">
+                        Before the first merge, Sutra downloads a complete encrypted
+                        safety backup. Keep it somewhere safe; setup stops if a required
+                        attachment is missing.
+                    </p>
+                    <p class="sutra-sync-hint" id="sutraSyncSignInHint" hidden>
+                        Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in via Sutra Cloud</button> first, then come back here.
+                    </p>
+                    <label class="sutra-sync-label" for="sutraSyncPassphraseInput">Sync passphrase (8+ characters)</label>
+                    <input type="password" id="sutraSyncPassphraseInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
+                    <label class="sutra-sync-label" for="sutraSyncPassphraseConfirmInput">Confirm passphrase</label>
+                    <input type="password" id="sutraSyncPassphraseConfirmInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
+                    <p class="sutra-sync-warning">
+                        <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+                        Losing this passphrase (and the recovery kit) makes synced data
+                        unrecoverable — nobody, including Sutra, can decrypt it for you.
+                    </p>
+                    <div class="sutra-sync-actions">
+                        <button class="storage-btn primary" type="button" id="sutraSyncEnableBtn">Turn on sync</button>
+                    </div>
+                    <p class="sutra-sync-error" id="sutraSyncSetupError" role="alert" hidden></p>
+                </section>
+
+                <!-- Locked (enabled, passphrase needed this session) -->
+                <section class="sutra-sync-section" id="sutraSyncLocked" hidden aria-labelledby="sutraSyncLockedTitle">
+                    <h4 id="sutraSyncLockedTitle">Unlock sync</h4>
+                    <p class="sutra-sync-hint">Enter your sync passphrase to resume syncing on this device.</p>
+                    <label class="sutra-sync-label" for="sutraSyncUnlockInput">Sync passphrase</label>
+                    <input type="password" id="sutraSyncUnlockInput" class="sutra-sync-input" autocomplete="current-password" />
+                    <div class="sutra-sync-actions">
+                        <button class="storage-btn primary" type="button" id="sutraSyncUnlockBtn">Unlock &amp; sync</button>
+                        <button class="storage-btn" type="button" id="sutraSyncDisableFromLockedBtn">Turn off sync</button>
+                    </div>
+                    <p class="sutra-sync-error" id="sutraSyncUnlockError" role="alert" hidden></p>
+                </section>
+
+                <!-- Running (enabled + unlocked) -->
+                <section class="sutra-sync-section" id="sutraSyncRunning" hidden aria-labelledby="sutraSyncRunningTitle">
+                    <h4 id="sutraSyncRunningTitle" class="sr-only">Sync controls</h4>
+                    <div class="sutra-sync-actions">
+                        <button class="storage-btn primary" type="button" id="sutraSyncNowBtn"><i class="fas fa-rotate" aria-hidden="true"></i> Sync now</button>
+                        <button class="storage-btn" type="button" id="sutraSyncPauseBtn">Pause</button>
+                        <button class="storage-btn" type="button" id="sutraSyncDevicesBtn" aria-expanded="false" aria-controls="sutraSyncDevicesPanel">Devices</button>
+                        <button class="storage-btn" type="button" id="sutraSyncConflictsBtn" aria-expanded="false" aria-controls="sutraSyncConflictsPanel">Conflicts</button>
+                    </div>
+                    <div class="sutra-sync-panel" id="sutraSyncDevicesPanel" hidden>
+                        <h5>Connected devices</h5>
+                        <ul class="sutra-sync-list" id="sutraSyncDevicesList"></ul>
+                    </div>
+                    <div class="sutra-sync-panel" id="sutraSyncConflictsPanel" hidden>
+                        <h5>Conflicts to review</h5>
+                        <p class="sutra-sync-hint">Sutra merges independent fields and non-overlapping note blocks automatically. A genuinely overlapping edit stays here with both encrypted versions; it never becomes a sidebar page unless you choose “Keep both as pages.”</p>
+                        <ul class="sutra-sync-list" id="sutraSyncConflictsList"></ul>
+                        <div class="sutra-sync-actions">
+                            <button class="storage-btn" type="button" id="sutraSyncCleanupLegacyConflictsBtn">Clean up old conflict copies</button>
+                        </div>
+                        <p class="sutra-sync-hint" id="sutraSyncCleanupLegacyConflictsSummary" role="status" aria-live="polite"></p>
+                    </div>
+                    <details class="sutra-sync-advanced">
+                        <summary>Security &amp; maintenance</summary>
+                        <div class="sutra-sync-actions">
+                            <button class="storage-btn" type="button" id="sutraSyncRecoveryKitBtn">Export recovery kit</button>
+                            <button class="storage-btn" type="button" id="sutraSyncChangePassBtn">Change passphrase</button>
+                            <button class="storage-btn" type="button" id="sutraSyncCompactBtn">Optimize sync data</button>
+                            <button class="storage-btn" type="button" id="sutraSyncLockBtn">Lock on this device</button>
+                            <button class="storage-btn" type="button" id="sutraSyncDisableBtn">Turn off sync</button>
+                            <button class="storage-btn danger" type="button" id="sutraSyncDeleteVaultBtn">Delete cloud vault…</button>
+                        </div>
+                        <div class="sutra-sync-panel" id="sutraSyncChangePassPanel" hidden>
+                            <h5>Change sync passphrase</h5>
+                            <label class="sutra-sync-label" for="sutraSyncCurrentPassInput">Current passphrase</label>
+                            <input type="password" id="sutraSyncCurrentPassInput" class="sutra-sync-input" autocomplete="current-password" />
+                            <label class="sutra-sync-label" for="sutraSyncNewPassInput">New passphrase (8+ characters)</label>
+                            <input type="password" id="sutraSyncNewPassInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
+                            <label class="sutra-sync-label" for="sutraSyncNewPassConfirmInput">Confirm new passphrase</label>
+                            <input type="password" id="sutraSyncNewPassConfirmInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
+                            <div class="sutra-sync-actions">
+                                <button class="storage-btn primary" type="button" id="sutraSyncChangePassSaveBtn">Save new passphrase</button>
+                                <button class="storage-btn" type="button" id="sutraSyncChangePassCancelBtn">Cancel</button>
+                            </div>
+                            <p class="sutra-sync-error" id="sutraSyncChangePassError" role="alert" hidden></p>
+                        </div>
+                    </details>
+                    <p class="sutra-sync-error" id="sutraSyncRunningError" role="alert" hidden></p>
+                </section>
+            </div>
+        </div>
+    </div>
 
     <!-- Sutra Cloud — optional, consent-first, provider-based encrypted backup -->
     <div class="modal" id="sutraCloudModal">
@@ -7266,14 +7467,14 @@
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
     <script src="src/features/workspace/today-command-center.js?v=20260703-today1"></script>
-    <script src="src/config/sutra-runtime-config.js?v=20260606-drive-sync"></script>
+    <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
     <!-- Notes editor v2 (opt-in, Settings → Editor): vendored TipTap/ProseMirror
          engine (window.SutraEditor) + Sutra integration glue (window.SutraNotesEditorV2).
          Loads before app.js so the flag can mount at boot; app.js only touches it
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260708-editorv2-p6"></script>
-<script src="src/core/app.js?v=20260715-migfix1"></script>
+<script src="src/core/app.js?v=20260721-runtime-recovery3"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
@@ -7285,11 +7486,11 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260605-quotes1"></script>
-    <script src="src/features/workspace/notifications.js?v=20260707-batch1"></script>
+    <script src="src/features/workspace/notifications.js?v=20260716-syncparity1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260620-mobilenav1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260721-mobile1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260707-batch1"></script>
@@ -7298,7 +7499,8 @@
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
-    <script src="src/features/workspace/timeline-drag.js?v=20260712-drag1"></script>
+    <script src="src/features/workspace/timeline-drag.js?v=20260721-drag2"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20260721-mobile1"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
@@ -7673,17 +7875,18 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260707-mobileopt2">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260721-classmodal2">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260605-notif1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260701-loops1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260721-menuopaque1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260708-editorv2-p5">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
+    <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260703-today2">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260710-contracts1">

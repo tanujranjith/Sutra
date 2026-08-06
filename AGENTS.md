@@ -2,7 +2,7 @@
 
 > This file is the required starting point for every coding agent, reviewer, and human contributor working on Sutra. Read it before changing code. Use it to understand the product, architecture, completed foundation, current objective, and non-negotiable constraints.
 >
-> **Last verified:** 2026-07-12  
+> **Last verified:** 2026-07-18
 > **Branch:** `main`  
 > **Verified against commit:** `1388272d95f1fea039d0c6f0fa67ece49fd55cb9`
 
@@ -182,8 +182,97 @@ The `.sutra` file is the canonical portable full-workspace backup.
 - Secrets and provider credentials must be stripped from every export path.
 - Restore conflicts must be shown rather than silently using last-write-wins behavior.
 - Backup providers receive ciphertext only.
+- Google Drive remains encrypted whole-snapshot sync, separate from incremental
+  Sutra Sync. Drive cycles must be single-flight, and a clean remote pull must
+  bind its restore decision to the local mutation revision: if a confirmed save
+  lands while the snapshot is downloading/decrypting, enter the existing
+  snapshot conflict chooser instead of overwriting that save.
 
 For provider status and adapter rules, use [`docs/SUTRA_CLOUD_PROVIDERS.md`](docs/SUTRA_CLOUD_PROVIDERS.md). For data semantics, use [`docs/privacy-security/DATA_AND_BACKUPS.md`](docs/privacy-security/DATA_AND_BACKUPS.md).
+
+## Multi-device sync (Sutra Sync)
+
+Sutra Sync is incremental, end-to-end-encrypted multi-device sync — a system
+**separate from backups** (sync replicates changes; backups preserve moments;
+both must keep working independently). The normative spec is
+[`docs/architecture/SYNC_PROTOCOL.md`](docs/architecture/SYNC_PROTOCOL.md);
+user-facing behavior is [`docs/features/CLOUD_SYNC.md`](docs/features/CLOUD_SYNC.md);
+the backend contract is [`supabase/sync-schema.sql`](supabase/sync-schema.sql).
+
+Invariants any change must preserve:
+
+- Off by default. Disabled sync makes zero network requests and never opens
+  the sync database. Local saving never blocks on sync, and sync errors never
+  surface through the local save-failure banner.
+- The server stores ciphertext plus bounded routing metadata only. The vault
+  master key exists unwrapped only in memory; only the passphrase-wrapped blob
+  is stored or uploaded. Never create a new vault key while the server's key
+  state is unknown, and never overwrite a differing server key (split-brain
+  poisons the op log irrecoverably).
+- Merging is deterministic, field-aware three-way at record level. Semantic
+  equality and non-overlapping fields merge silently; note HTML uses a safe
+  top-level-block merge. Only overlapping incompatible content creates one
+  deterministic item in Sync > Conflicts — never an automatic sidebar page.
+  Both complete values remain reviewable, delete-versus-edit preserves the
+  edit, and encrypted stable resolution markers prevent resolved conflicts
+  from reappearing. Pushes remain idempotent (stable opIds, server-side dedupe,
+  causal baseHash ordering, Lamport high-water, stale-cursor re-pull).
+- An unresolved alternate branch must be durably written to the dedicated
+  conflict store before the merged workspace is applied or pushed. If that
+  local write fails, the cycle aborts without advancing its cursor/baseline;
+  the current workspace and durable outbox remain intact for retry.
+- The pure engine lives in `src/sync/` (dual-mode, Node-testable, injected
+  dependencies); `src/core/app.js` holds only the bridge. Remote applies go
+  through `importWorkspacePayload(..., { silent: true })` — never through the
+  interactive restore path — and the import-time guard
+  (`workspaceImportInProgress`) must keep stale editor state from overwriting
+  imported content.
+- The sync projection is built from the dedicated sensitive-stripped
+  `mode: "sync"` payload, not plaintext recovery JSON. Its schema-v7
+  portability decisions must cover every field and nested durable contract in
+  `persistence-inventory.json` exactly once. Durable Assistant conversations,
+  private documents, page version history, compatibility/quarantine data, and
+  required attachment bytes are portable; generated Help/blank-chat seeds,
+  browser UI, credentials, and sync operations are not.
+- `appData.assistantChatHistory` is the authoritative durable Assistant store.
+  The legacy localStorage chat keys are one-time migration/compatibility mirrors:
+  canonical state writes them, but they never overwrite a migrated canonical
+  value. Assistant mutation and every allowlisted portable localStorage mirror
+  must trigger the confirmed-durable-save seam; remote apply and startup hydrate
+  must restore the canonical value, mirror, and live Assistant/UI consumer. Empty
+  collections are real synchronized values, not “missing.”
+- Ordinary sign-out clears cloud auth/vault material and pauses sync but keeps
+  the local workspace. **Revoke & wipe** is separate: the owner revokes another
+  registered device immediately server-side; only the dedicated authenticated
+  status RPC, bound to the configured project + exact user/session/device, may
+  trigger the target browser's next-contact wipe. Generic auth/network failures
+  must never delete data. Every tab must stop writes, clear its session state,
+  and remain fail-closed until the canonical origin-data wipe verifies and the
+  server records acknowledgement. Offline devices cannot be erased until they
+  reconnect; downloaded backups and external files are outside browser control.
+  The project operator manually verified this next-contact path against the
+  configured Supabase project on 2026-07-18: Device A revoked Device B, Device
+  B wiped on reconnect, reload did not restore its workspace, and reuse required
+  fresh authentication and device registration. This evidence does not replace
+  the automated fail-closed cases or cross-account authorization checks.
+- Sync authorization is server-derived: direct sync-table access is denied,
+  every browser RPC derives ownership from `auth.uid()` plus its active device
+  session, and `sync-assets` Storage permits only the exact authenticated
+  `<user-id>/<64-character-content-hash>` path. Client-supplied ownership hints
+  are stripped defensively and are never authoritative. This browser's sync
+  operational state is account-namespaced inside `sutra_sync_db`; an account
+  change fails closed before pull/push/unlock so queues, device IDs, baselines,
+  wrapped keys, refresh tokens, assets, and conflict records cannot cross
+  accounts. Preserve the local workspace rather than combining cloud accounts.
+  The reviewed/static guarantees do not substitute for the operator-run
+  Account A/B REST/RPC/Storage/payload checklist in
+  `docs/release/SUPABASE_ACCOUNT_ISOLATION_CHECKLIST.md`.
+- Per-save-mutating fields need a `recordFieldPolicies` entry
+  (hashVolatile/localOnly), and asset replacement must update/verify the content
+  hash before a receiver marks the reference complete. The bar is proven
+  quiescence: a settle cycle pushes zero ops, while the canonical everything-
+  workspace fixture has field-level bootstrap and reverse-incremental parity.
+- `npm run test:e2e:sync` is part of `npm run verify` and must stay there.
 
 ## Safety layer and prohibited shortcuts
 
@@ -250,6 +339,19 @@ These systems exist because a local-first app must make data loss visible and re
 ## Encrypted backup and Sutra Cloud
 
 Sutra supports encrypted `.sutra` backups and a provider-based cloud layer. Manual encrypted files remain the simplest universal option. Google Drive, OneDrive, Dropbox, Supabase, WebDAV, Custom HTTP, and preview/self-hosted provider paths are documented according to implementation and configuration status. Provider adapters receive ciphertext only and must not handle plaintext workspace data.
+
+## Multi-device sync
+
+Sutra Sync (2026-07) added true incremental multi-device synchronization on
+top of the persistence foundations: pure engine modules under `src/sync/`,
+  field-aware three-way merge with dedicated deterministic conflict review, an
+end-to-end-encrypted vault (wrapped master key, AAD-bound envelopes), offline
+outbox with idempotent pushes, compaction snapshots with authenticated-cursor
+bootstrap, content-addressed encrypted attachment sync, a Supabase backend
+schema (`supabase/sync-schema.sql`), and a save-bar Sync panel that
+distinguishes Saved locally / Synced to cloud / Backed up. It was built so one
+workspace follows the student across devices without weakening the local-first
+and ciphertext-only guarantees. Rules live in §2 "Multi-device sync".
 
 ## Connected academic planning
 
@@ -378,6 +480,7 @@ Unless a task specifically changes the project direction, do not:
 4. Identify persistence, migration, export/import, CSP, accessibility, and responsive implications.
 5. Check recent commits when working in an area that has changed recently.
 6. Define a bounded implementation plan and the validation required.
+7. Before changing `src/core/app.js` in a dirty worktree, preserve a byte-for-byte recovery copy under ignored `.tmp/recovery/`. Run `npm run check:runtime` before serving the app, updating cache stamps, building `.deploy`, or reporting the change complete. Visual inspection and a cache-stamp bump are never substitutes for this gate.
 
 Do not implement from a prompt alone without first reconciling it with the repository.
 
@@ -461,6 +564,7 @@ A task is complete only when:
 10. **Flagged systems are migration seams.** Notes Editor v2 and preview cloud providers must not silently replace stable paths before compatibility is proven.
 11. **Archive documents are not current instructions.** Use them for history, not path or implementation truth.
 12. **The app can appear functional while losing data.** Persistence and export round-trip testing is mandatory for stateful changes.
+13. **Canvas pages visually leak note content through the V2 editor host.** When Notes Editor V2 is active (default-on), the visible note surface is `#editorV2Host`, not `#editor`. The `showCanvasEditorForPage`/`hideCanvasEditor` functions (and their `body.canvas-page-active` CSS backstop) must toggle BOTH the V2 host and the secondary split pane to prevent the previous note's content from displaying above the canvas. Never assume that hiding `#editor` alone is sufficient. The CSS rules at `styles/base/styles.css:33154` already handle `.toolbar-wrapper`, `.view-flow-row`, `.breadcrumbs`, and `.tags-container` but were missing `.editor-v2-host` and `#notesSecondaryPane` before the 2026-07-17 Canvas isolation fix.
 
 ---
 

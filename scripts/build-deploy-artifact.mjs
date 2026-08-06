@@ -29,9 +29,19 @@ import {
   statSync
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { assertCoreRuntimeIntegrity } from './lib/core-runtime-integrity.mjs';
 
 const repoRoot = resolve(process.cwd());
 const outDir = join(repoRoot, '.deploy');
+
+try {
+  assertCoreRuntimeIntegrity({ appPath: join(repoRoot, 'src/core/app.js') });
+} catch (error) {
+  console.error(error.message);
+  console.error('build:deploy FAILED — existing .deploy artifact was preserved.');
+  process.exit(1);
+}
+
 const assetManifest = JSON.parse(readFileSync(join(repoRoot, 'src/config/asset-manifest.generated.json'), 'utf8'));
 
 /**

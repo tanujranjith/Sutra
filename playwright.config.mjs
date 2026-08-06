@@ -7,6 +7,7 @@ const responsiveTestMatch = [
   // Student-critical phone flows get real device coverage in the scheduled
   // compatibility matrix, not only a desktop test that resizes itself.
   /.*mobile-nav\.spec\.mjs$/,
+  /.*homework-course-icons\.spec\.mjs$/,
   /.*quick-capture-student-flow\.spec\.mjs$/,
   /.*today-redesign\.spec\.mjs$/,
   /.*onboarding-redesign\.spec\.mjs$/

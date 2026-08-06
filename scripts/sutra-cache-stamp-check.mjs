@@ -25,11 +25,22 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { assertCoreRuntimeIntegrity } from './lib/core-runtime-integrity.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCK_REL = 'scripts/cache-stamp-lock.json';
 const LOCK_PATH = resolve(repoRoot, LOCK_REL);
 const UPDATE = process.argv.includes('--update');
+
+if (UPDATE) {
+  try {
+    assertCoreRuntimeIntegrity({ appPath: resolve(repoRoot, 'src/core/app.js') });
+  } catch (error) {
+    console.error(error.message);
+    console.error('Cache-stamp lock not updated — a broken core runtime must never receive a blessed cache stamp.');
+    process.exit(1);
+  }
+}
 
 // Hand-authored sources of ?v= stamps. The generated asset manifest COPIES
 // these stamps (and is verified separately by assets:check), so scanning it

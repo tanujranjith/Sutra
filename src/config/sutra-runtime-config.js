@@ -6,9 +6,10 @@ window.SUTRA_CONFIG = window.SUTRA_CONFIG || {};
 window.SUTRA_CONFIG.googleDriveClientId = window.SUTRA_CONFIG.googleDriveClientId || '';
 
 // ── Sutra Cloud: optional advanced Supabase provider configuration ────────────
-// Sutra Cloud itself is provider-based. These two values configure only its
-// optional Supabase destination; Manual encrypted backups, Google Drive, and
-// other providers remain independent and never require Supabase.
+// Sutra Cloud itself is provider-based. These two values configure its
+// optional Supabase backup destination and the separate optional Sutra Sync
+// transport; Manual encrypted backups, Google Drive, and other providers
+// remain independent and never require Supabase.
 // Both values below are PUBLIC, publishable configuration — safe to ship in a
 // static build, exactly like the Google client ID above:
 //   • supabaseUrl     → your project URL, e.g. https://abcdefgh.supabase.co
@@ -20,10 +21,8 @@ window.SUTRA_CONFIG.googleDriveClientId = window.SUTRA_CONFIG.googleDriveClientI
 // are empty it shows as "not configured" and makes zero network requests
 // (consent-first); the rest of Sutra Cloud is unaffected.
 //
-// SETUP: after creating your Supabase project (see supabase/README.md), also add
-// your exact project origin (https://<ref>.supabase.co) to the `connect-src` CSP
-// in scripts/lib/csp-policy.mjs, then run `npm run csp:generate` to update the
-// HTML and hosting header outputs. CSP cannot read this runtime file, so an
-// exact self-hosted project origin still requires an explicit build change.
-window.SUTRA_CONFIG.supabaseUrl = window.SUTRA_CONFIG.supabaseUrl || '';
-window.SUTRA_CONFIG.supabaseAnonKey = window.SUTRA_CONFIG.supabaseAnonKey || '';
+// The canonical CSP currently permits HTTPS Supabase project origins while
+// continuing to block unrelated hosts. Non-Supabase custom endpoints still
+// require an explicit CSP change in scripts/lib/csp-policy.mjs.
+window.SUTRA_CONFIG.supabaseUrl = window.SUTRA_CONFIG.supabaseUrl || 'https://blfsmdyvdlhabltiicgx.supabase.co';
+window.SUTRA_CONFIG.supabaseAnonKey = window.SUTRA_CONFIG.supabaseAnonKey || 'sb_publishable_wC7rjhwQvGA_Li07vK_Skg_ovfMG_Z_';

@@ -83,6 +83,9 @@ mustContain('src/core/app.js', "parents = ['appDataFolder']", 'Drive sync create
 mustContain('src/core/app.js', "spaces: 'appDataFolder'", 'Drive sync discovers files in appDataFolder');
 mustContain('src/core/app.js', 'sutraDriveSyncRuntime.accessToken', 'Drive access token is runtime-only');
 mustContain('src/core/app.js', 'sutraDriveSyncRuntime.derivedKey', 'Drive derived key is runtime-only');
+mustContain('src/core/app.js', 'sutraDriveSyncRuntime.cyclePromise', 'Drive manual, debounce, and auto cycles are serialized');
+mustContain('src/core/app.js', 'enterSutraDriveConflict(remote', 'Drive conflict state cancels queued upload work');
+mustContain('src/core/app.js', '!meta.localDirty || sutraDriveSyncRuntime.conflictRemote', 'Drive conflict blocks automatic upload scheduling');
 mustContain('src/config/sutra-runtime-config.js', 'googleDriveClientId', 'public Drive OAuth client ID runtime config');
 mustContain('Sutra.html', 'src/config/sutra-runtime-config.js', 'runtime config loads before app');
 
@@ -650,7 +653,16 @@ mustContain('Sutra.html', 'id="courseHubMount"', 'Course Hub mount point');
 mustContain('Sutra.html', 'id="allDueMount"', 'All Due mount point');
 mustContain('Sutra.html', 'id="view-courses"', 'Course Hub view section');
 mustContain('Sutra.html', 'id="view-alldue"', 'All Due view section');
-mustContain('Sutra.html', 'src/core/app.js?v=20260715-migfix1', 'app.js cache-busted so the stale-migration-skew fix ships');
+mustContain('Sutra.html', 'src/core/app.js?v=', 'app.js cache-busted so the Sutra Sync bridge ships');
+
+// ---- Sutra Sync (incremental encrypted multi-device sync) ----------------
+mustContain('Sutra.html', 'src/sync/sync-engine.js?v=', 'sync engine module loads before app.js');
+mustContain('Sutra.html', 'src/sync/sync-protocol.js?v=', 'sync protocol module loads before app.js');
+mustContain('src/core/app.js', 'function notifySutraSyncLocalSave', 'confirmed-save hook feeds the sync engine');
+mustContain('src/core/app.js', "notifySutraSyncLocalSave(reason, summary); } catch (syncError)", 'sync hook wrapped so it can never block local saving');
+mustContain('src/core/app.js', 'function applySyncMergedWorkspace', 'merged remote state applies through the standard import path');
+mustContain('src/core/app.js', "importWorkspacePayload(mergedWorkspaceJson, { silent: true, sync: true })", 'sync applies use silent sync-mode import (no interactive restore, with durable mirror hydration)');
+mustContain('src/core/app.js', "getWorkspacePreference('sync.enabled', false)", 'sync is gated on the sync.enabled preference (default OFF)');
 mustContain('Sutra.html', '<option value="atelier" selected>Sutra Workspace (.sutra)</option>', 'note-export modal defaults to .sutra');
 
 // ---- Document backgrounds (per-page image + blur + dim) ------------------

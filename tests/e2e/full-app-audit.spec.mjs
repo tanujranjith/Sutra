@@ -405,28 +405,97 @@ test('desktop: toast appears and auto-dismisses (notification micro-interaction)
   expect(transition && transition !== 'all 0s ease 0s').toBeTruthy();
 });
 
-test('mobile (390px): every view fits with no horizontal overflow', async ({ page }) => {
-  const diag = attachDiagnostics(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await openApp(page);
-  await enableCourseHub(page);
+for (const viewport of [
+  { width: 320, height: 640 },
+  { width: 375, height: 667 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+  { width: 768, height: 1024 }
+]) {
+  test(`responsive (${viewport.width}px): every view fits with no horizontal overflow`, async ({ page }) => {
+    const diag = attachDiagnostics(page);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    await enableCourseHub(page);
 
-  const viewReport = {};
-  for (const view of PRIMARY_VIEWS) {
-    await page.evaluate((v) => window.setActiveView(v), view);
-    await page.waitForTimeout(100);
-    const info = await page.evaluate(() => ({
-      docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      bodyOverflow: document.body.scrollWidth - document.body.clientWidth
-    }));
-    viewReport[view] = info;
+    const viewReport = {};
+    for (const view of PRIMARY_VIEWS) {
+      await page.evaluate((v) => window.setActiveView(v), view);
+      await page.waitForTimeout(100);
+      const info = await page.evaluate(() => ({
+        docOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        bodyOverflow: document.body.scrollWidth - document.body.clientWidth
+      }));
+      viewReport[view] = info;
+    }
+    const overflowViews = Object.entries(viewReport).filter(([, v]) => v.docOverflow > 2 || v.bodyOverflow > 2).map(([k, v]) => `${k}(doc +${v.docOverflow}px, body +${v.bodyOverflow}px)`);
+    const criticalConsole = diag.consoleErrors.filter((e) => isCriticalConsole(e.text));
+    console.log('AUDIT::' + JSON.stringify({ section: 'RESPONSIVE_CRAWL', viewport, viewReport, overflowViews, criticalConsoleCount: criticalConsole.length }));
+
+    expect(overflowViews, `views with horizontal overflow at ${viewport.width}px`).toEqual([]);
+    expect(diag.pageErrors).toEqual([]);
+  });
+}
+
+test('public and companion surfaces stay viewport-bound across phone and tablet widths', async ({ page }) => {
+  const surfaces = [
+    '/HomePage.html',
+    '/404.html',
+    '/oauth-callback.html',
+    '/extension/popup.html',
+    '/extension/options.html'
+  ];
+  const widths = [320, 430, 768];
+  const findings = [];
+
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: width < 700 ? 844 : 1024 });
+    for (const surface of surfaces) {
+      await page.goto(surface, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(80);
+      const layout = await page.evaluate(() => ({
+        documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        bodyOverflow: document.body.scrollWidth - document.body.clientWidth,
+        bodyOverflowX: getComputedStyle(document.body).overflowX
+      }));
+      findings.push({ surface, width, ...layout });
+    }
   }
-  const overflowViews = Object.entries(viewReport).filter(([, v]) => v.docOverflow > 2).map(([k, v]) => `${k}(+${v.docOverflow}px)`);
-  const criticalConsole = diag.consoleErrors.filter((e) => isCriticalConsole(e.text));
-  console.log('AUDIT::' + JSON.stringify({ section: 'MOBILE_CRAWL', viewReport, overflowViews, criticalConsoleCount: criticalConsole.length }));
 
-  expect(overflowViews, 'mobile views with horizontal overflow').toEqual([]);
-  expect(diag.pageErrors).toEqual([]);
+  const failures = findings.filter((item) => item.documentOverflow > 2 || (item.bodyOverflow > 2 && !['hidden', 'clip'].includes(item.bodyOverflowX)));
+  console.log('AUDIT::' + JSON.stringify({ section: 'PUBLIC_RESPONSIVE_CRAWL', findings, failures }));
+  expect(failures, 'public or extension surfaces with horizontal overflow').toEqual([]);
+});
+
+test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openApp(page);
+  await page.evaluate(() => window.openSutraSyncModal());
+  const dialog = page.locator('#sutraSyncModal .sutra-sync-modal');
+  await expect(dialog).toBeVisible();
+  const layout = await dialog.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const input = node.querySelector('.sutra-sync-input');
+    const actions = Array.from(node.querySelectorAll('.sutra-sync-actions .storage-btn')).filter((button) => button.offsetParent !== null);
+    return {
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+      viewportWidth: innerWidth,
+      viewportHeight: innerHeight,
+      inputFontSize: input ? parseFloat(getComputedStyle(input).fontSize) : 16,
+      shortestAction: actions.length ? Math.min(...actions.map((button) => button.getBoundingClientRect().height)) : 44,
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+  expect(layout.left).toBeGreaterThanOrEqual(0);
+  expect(layout.right).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  expect(layout.top).toBeGreaterThanOrEqual(0);
+  expect(layout.bottom).toBeLessThanOrEqual(layout.viewportHeight + 1);
+  expect(layout.inputFontSize).toBeGreaterThanOrEqual(16);
+  expect(layout.shortestAction).toBeGreaterThanOrEqual(44);
+  expect(layout.documentOverflow).toBeLessThanOrEqual(2);
 });
 
 test('mobile (390px): tap targets on the bottom nav are usable', async ({ page }) => {
@@ -435,16 +504,16 @@ test('mobile (390px): tap targets on the bottom nav are usable', async ({ page }
 
   const tapTargets = await page.evaluate(() => {
     // Sample the primary nav controls a thumb must hit on a phone.
-    const sel = '.view-tab:not([hidden]):not([style*="display:none"]), .mobile-nav-item, .bottom-nav button, #notifBellBtn, #chatbotBtn';
+    const sel = '.view-tab:not([hidden]):not([style*="display:none"]), .sutra-bottom-nav button, .mobile-nav-item, .bottom-nav button, #notifBellBtn, #chatbotBtn';
     const els = Array.from(document.querySelectorAll(sel)).filter((el) => el.offsetParent !== null);
     return els.slice(0, 16).map((el) => {
       const r = el.getBoundingClientRect();
       return { tag: el.tagName, cls: (el.className || '').toString().slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) };
     });
   });
-  const tooSmall = tapTargets.filter((t) => (t.h > 0 && t.h < 36) || (t.w > 0 && t.w < 24));
+  const tooSmall = tapTargets.filter((t) => (t.h > 0 && t.h < 44) || (t.w > 0 && t.w < 24));
   console.log('AUDIT::' + JSON.stringify({ section: 'MOBILE_TAP_TARGETS', count: tapTargets.length, tooSmall }));
 
   // Visible primary nav targets should meet a reasonable minimum height.
-  expect(tooSmall, 'tap targets under 36px tall').toEqual([]);
+  expect(tooSmall, 'primary navigation tap targets under 44px tall').toEqual([]);
 });

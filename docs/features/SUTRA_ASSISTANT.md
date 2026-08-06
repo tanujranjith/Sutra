@@ -300,6 +300,29 @@ chat protection, and offline local routes. If a streaming provider disconnects
 after returning text, Sutra saves the partial response with an interruption
 label before offering retry rather than discarding what already arrived.
 
+### Durable history, backups, and Sutra Sync
+
+When **Save chat history** is enabled, the visible conversation store is durable
+user data. It preserves conversation/message order, ids, roles, content,
+timestamps, titles, provider/model labels, claim types, citations/sources,
+grounding metadata, memory-used ids, durable action receipts, favorites,
+partial-response markers, archive/pin state, and forward-compatible fields.
+Creating, updating, emptying, or clearing history participates in the same
+confirmed local-save seam as workspace edits.
+
+- Encrypted `.sutra` backups include sanitized visible history by default;
+  plaintext JSON includes it only after the user enables the separate plaintext
+  recovery option.
+- With optional Sutra Sync enabled, durable history is included in the encrypted
+  sync projection regardless of the plaintext JSON option. A second device
+  restores both the local mirror and the live Assistant runtime/UI; empty
+  histories are synchronized as real values rather than ignored.
+- An untouched generated blank conversation is not durable user content and is
+  reconstructed locally. A user-created empty thread is durable and does sync.
+- In-flight requests, streaming buffers, abort controllers, typing indicators,
+  temporary diagnostics, hidden prompts/reasoning, raw provider payloads, and
+  uncommitted messages never enter backups or sync.
+
 ### API keys are session-only
 
 Provider **API keys live in this browser session only**
@@ -308,7 +331,8 @@ Provider **API keys live in this browser session only**
 - **never written to long-term storage** (not in localStorage, not in IndexedDB),
 - **never included in Google Drive sync snapshots** and never uploaded as Sutra
   workspace data,
-- **never included in any export** (`.sutra` or JSON).
+- **never included in any export** (`.sutra` or JSON) or Sutra Sync operation,
+  snapshot, asset, diagnostic, or recovery kit.
 
 Because keys are session-scoped, you re-enter your key when you start a new
 session or after importing a workspace on a new device. The provider and model
@@ -438,7 +462,26 @@ dropped, and the attachment chip explains the safest supported next step.
 
 ---
 
-## 8. Privacy boundaries (summary)
+## 8. Durable conversation ownership and sync
+
+Durable visible conversations are owned by
+`appData.assistantChatHistory` (workspace schema v7). The historical
+`sutra:assistantChats:v1` and current-chat localStorage keys are compatibility
+mirrors: an existing profile imports them once, canonical state wins same-id
+ties, and every later write flows canonical workspace → mirror. Startup and
+remote sync hydrate the live dock/full-page Assistant from canonical state.
+An empty or stale browser mirror therefore cannot overwrite a newer synchronized
+conversation. An untouched generated “New chat” remains ephemeral composer
+state.
+
+With Save chat history enabled, thread/message ids, order, roles, content,
+timestamps, sources/citations, grounding, durable receipts, memory-used ids, and
+supported thread metadata travel only inside encrypted operations/snapshots.
+API keys, OAuth/Supabase tokens, passphrases, streaming buffers, abort
+controllers, typing/in-flight state, and transient token/latency diagnostics
+never enter the workspace projection.
+
+## 9. Privacy boundaries (summary)
 
 - **Sutra Intelligence runs locally** and calls no server.
 - **AI requests go browser → the provider you chose**, and nowhere else. Sutra
@@ -457,7 +500,7 @@ For the full local-first picture, see [`PRIVACY_AND_LOCAL_FIRST.md`](../privacy-
 
 ---
 
-## 9. Mobile and tablet behavior
+## 10. Mobile and tablet behavior
 
 The Assistant panel is built to remain usable on small screens:
 
@@ -472,7 +515,7 @@ space while preserving the header, badge, and composer.
 
 ---
 
-## 10. Offline behavior
+## 11. Offline behavior
 
 Sutra itself runs offline — opening the workspace, reading and editing notes,
 and reviewing local signals all work with no connection, because **Sutra
@@ -483,7 +526,7 @@ to keep even the AI side on your own machine or network.
 
 ---
 
-## 11. Limitations
+## 12. Limitations
 
 - **The Assistant cannot answer with a model while offline** unless you have
   configured a reachable Local / Custom OpenAI-Compatible endpoint.
@@ -499,7 +542,7 @@ to keep even the AI side on your own machine or network.
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 **The Assistant won't return a model answer.**
 Confirm you have selected a provider and entered its API key for this session. Check that you are online,
@@ -533,7 +576,7 @@ indicator) to reveal it.
 
 ---
 
-## 13. Developer notes (stable hooks & globals)
+## 14. Developer notes (stable hooks & globals)
 
 - **Badge hook:** `data-sutra-component="assistant-intelligence-badge"`.
 - **Window bridge globals (canonical):** `window.sutraAssistant` (the Assistant
@@ -548,7 +591,7 @@ indicator) to reveal it.
 
 ---
 
-## 14. The action harness (workspace actions, references, undo)
+## 15. The action harness (workspace actions, references, undo)
 
 The 2026-06 Assistant upgrade added a centralized, validated action harness so
 the Assistant can take real, reviewable actions across the workspace.
@@ -618,7 +661,7 @@ never pass through it.
 
 ---
 
-## 15. Intelligence reliability + diagnostics (`SutraIntelligenceDiagnostics`)
+## 16. Intelligence reliability + diagnostics (`SutraIntelligenceDiagnostics`)
 
 Every remote provider request runs through the single core
 `performIntelligenceRequest` in `src/core/app.js`. Its deterministic

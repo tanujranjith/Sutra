@@ -51,6 +51,22 @@ test('new spaces open protected Help & Docs without silent Untitled notes', asyn
   expect(result.untitledCount).toBe(0);
 });
 
+test('Help & Docs stays first in the regular sidebar page list', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const space = hooks.createSpace('QA Help Order Space');
+    hooks.createNoteInActiveSpace('First student note');
+    hooks.createNoteInActiveSpace('Second student note');
+    const help = hooks.getHelpPageForSpace(space.id);
+    const renderedPageIds = Array.from(document.querySelectorAll('#pagesList > .page-item'))
+      .map((row) => row.dataset.pageId);
+    return { helpId: help && help.id, renderedPageIds };
+  });
+
+  expect(result.renderedPageIds[0]).toBe(result.helpId);
+});
+
 test('imports and assistant-created notes route to the active space and round-trip', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(() => {

@@ -58,7 +58,7 @@ has('Sutra.html', 'flex-wrap:wrap', 'document-background action rows wrap rather
 
 console.log('\nMobile polish pass (2026-06-11) — phone chrome + editor contract');
 // Storage bar must stay a single compact row on phones (status + 3 buttons).
-has('styles/responsive/mobile.css', 'grid-template-columns: auto 1.4fr 1fr 1fr', 'storage bar is a single compact row on phones');
+has('styles/responsive/mobile.css', 'repeat(4, minmax(0, 1fr))', 'storage bar keeps Save, backup, cloud, and Sync controls in one phone row');
 // Assistant quick-action chips scroll horizontally instead of stacking 2-3 rows.
 has('styles/responsive/mobile.css', /\.view-flow-row\s*\{[^}]*flex-wrap:\s*nowrap/, 'assistant chips are a single scrollable row on phones', true);
 // Notes: the chips row clears the fixed toolbar (prevents the chip/toolbar collision).
@@ -84,6 +84,13 @@ has('styles/themes/sutra-pro.css', /\.cw-filter\s*\{[\s\S]*appearance:\s*none/, 
 has('styles/themes/sutra-pro.css', 'background-image:', 'Course Hub filters render a custom select caret');
 // Template-category pills scroll in one row inside the New Page sheet.
 has('styles/responsive/mobile.css', '.template-picker-category-tabs', 'New Page template pills have mobile rules');
+has('styles/responsive/mobile.css', '.sutra-mobile-more-sheet', 'phone navigation exposes a dedicated all-sections sheet');
+has('src/features/workspace/mobile-nav.js', "setAttribute('aria-modal', 'true')", 'mobile section sheet and notes drawer use modal semantics');
+has('src/features/workspace/mobile-nav.js', "history.pushState", 'phone section sheet closes through browser Back');
+has('styles/views/timeline-calendar.css', '.sutra-calendar-month-events:not([data-event-count="0"])::before', 'phone Month view uses compact event-count indicators');
+has('styles/views/timeline-calendar.css', '-webkit-overflow-scrolling: touch', 'calendar canvases keep contained momentum scrolling');
+has('styles/features/cloud-sync.css', 'max-height: calc(100dvh', 'Sync sheet is bounded to the dynamic mobile viewport');
+has('extension/options.html', 'min-width: 0', 'extension settings do not force a 360px minimum viewport');
 
 if (failures) { console.error(`\nResponsive guard FAILED: ${failures} issue${failures === 1 ? '' : 's'}.`); process.exit(1); }
 console.log('\nResponsive guard passed — required mobile hooks present.');

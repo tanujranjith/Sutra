@@ -154,8 +154,8 @@ Manual backups work entirely offline and never depend on a provider.
 
 Sutra is a static browser app with a strict **Content Security Policy (CSP)**.
 The browser only allows network requests to origins explicitly listed in the
-CSP, and Sutra's CSP guard **forbids wildcards**, so arbitrary cloud origins
-cannot be allowed dynamically.
+CSP. The guard permits only reviewed host families (including Supabase's
+project-origin family); arbitrary cloud origins cannot be allowed dynamically.
 
 | Destination | Hosted build | Notes |
 |---|---|---|
@@ -163,8 +163,8 @@ cannot be allowed dynamically.
 | OneDrive | ✅ Works in-app | Paste a SPA client ID; restore reads from Microsoft CDN host families allowed in CSP (reviewed exception) |
 | Dropbox | ✅ Works in-app | Paste an App-folder app key; `*.dropboxapi.com` + `www.dropbox.com` in CSP |
 | Box | 🔒 Self-host | Needs a confidential secret; use Manual into a Box-synced folder, or a token-exchange proxy |
-| Supabase (configured project) | ⚙️ Build pins a ref | Works only if the build's CSP pins a project ref — the **public build ships none**, so Supabase shows "needs setup" there |
-| Supabase (other project) | 🔒 Self-host | Add your ref to the CSP |
+| Supabase (configured project) | ✅ Works after setup | `https://*.supabase.co` is a reviewed CSP family; configure a public project URL/key |
+| Supabase (other project) | ✅ Works after setup | Any hosted `*.supabase.co` project origin is allowed; self-hosted non-Supabase origins need a CSP change |
 | WebDAV / S3 / Custom HTTP | 🔒 Self-host | Add your origin to the CSP |
 | Manual encrypted file | ✅ Always | No network |
 
@@ -174,13 +174,12 @@ cannot be allowed dynamically.
 local server, and Vercel header synchronized. Sutra detects
 a CSP-blocked origin and tells you in the panel rather than failing silently.
 
-Sutra ships a small, **reviewed** set of CSP `connect-src` wildcards only for
-OneDrive restore (Microsoft's sharded content CDN — `*.1drv.com`,
+Sutra ships a small, **reviewed** set of CSP `connect-src` wildcard families for
+Supabase project origins and OneDrive restore (Microsoft's sharded content CDN — `*.1drv.com`,
 `*.sharepoint.com`, `*.microsoftpersonalcontent.com`, `*.dms.live.net` — whose
 download host is dynamic per account/region). The CSP guard
-(`scripts/sutra-csp-check.mjs`) allows **only** those families and still rejects any
-other connect/frame wildcard. Sutra does **not** ship broad `*.supabase.co`-style
-wildcards, because a self-hosted build can pin its own exact project ref instead.
+(`scripts/sutra-csp-check.mjs`) allows **only** those families and still rejects
+any other connect/frame wildcard.
 
 ---
 

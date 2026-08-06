@@ -1095,6 +1095,9 @@
         retrieve, buildPromptSnippets, recordUsed, inferCategories, describeAll,
         // UI
         openManager,
+        // Emergency revocation cleanup: clears only the in-memory fallback;
+        // browser storage is deleted by the canonical origin wipe routine.
+        clearRuntimeCache() { memFallback._clear(); },
         // test hooks
         __setStorageForTests(stub) { injectedStorage = stub || null; },
         __resetForTests() { injectedStorage = null; memFallback._clear(); }

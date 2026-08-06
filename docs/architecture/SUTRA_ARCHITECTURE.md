@@ -217,6 +217,35 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
   access tokens and derived keys in memory only, persists only non-secret
   device-local metadata at `sutra:googleDriveSync:v1`, and uses the same
   encrypted envelope with `purpose: "google-drive-sync"`.
+- **Optional Sutra Sync** is a separate incremental replication system. Its
+  pure dual-mode engine modules live under `src/sync/`; `src/core/app.js` is the
+  bridge to confirmed durable saves, the portable sensitive-stripped
+  projection, attachment storage, and silent verified imports. Operational
+  state is isolated in account-scoped namespaces inside `sutra_sync_db`; the
+  workspace IndexedDB remains the running source of truth. An authenticated
+  account change fails closed before pull/push/unlock so one profile cannot
+  reuse another account's queue, device ID, wrapped key, baseline, or refresh
+  token. Disabled sync opens no sync database and makes no
+  network request. Its merge is field-aware and deterministic: semantic
+  equality, non-overlapping fields, moves/reorders, and non-overlapping note
+  blocks converge automatically. Only incompatible overlapping content creates
+  one dedicated conflict-review record; it never becomes a sidebar page.
+  Resolution markers ride the encrypted `syncAuditLog`, and an abnormal-rate
+  circuit breaker pauses sync without blocking local saves. This is sync-time
+  block merging, not a CRDT/OT collaborative editor. The normative contract is
+  [`SYNC_PROTOCOL.md`](./SYNC_PROTOCOL.md).
+- **Workspace schema v7 makes sync portability and Assistant ownership explicit.** The classification
+  in `persistence-inventory.json` covers all top-level fields, named nested
+  durable contracts, localStorage mirrors, browser stores, assets, secrets, and
+  deliberate exclusions. `appData.assistantChatHistory` owns durable
+  conversations; legacy Assistant localStorage keys migrate once and thereafter
+  mirror canonical state only. `mode: "sync"` is a dedicated encrypted projection:
+  it includes durable Assistant conversations, private documents, page version
+  history, compatibility/quarantine containers, and unknown non-secret fields;
+  it excludes browser UI, sync operations, credentials, and generated records.
+  The round-trip guard validates names and decisions, while the everything-
+  workspace fixture compares field-level bootstrap and reverse incremental
+  reconstruction after normal import/migration/normalization/readback.
 
 Storage names like `noteflow_atelier_db` are **legacy-named compatibility
 identifiers**, kept so existing installs keep working.
@@ -236,8 +265,8 @@ For the broader privacy stance, see
   or the local server. The local static server used by Playwright adds the same CSP plus
   `frame-ancestors 'none'`. Production static hosts must set that directive as
   an HTTP response header because browsers ignore it in CSP meta tags.
-- Fresh startup, manual encrypted `.sutra` backup, and JSON backup should make
-  zero third-party requests. Remaining remote paths are user-triggered and
+- Fresh startup with sync disabled, manual encrypted `.sutra` backup, and JSON
+  backup should make zero third-party requests. Remaining remote paths are user-triggered and
   limited to optional Google Drive OAuth/sync, configured AI providers,
   localhost/127.0.0.1 local endpoints, approved feedback/media embeds, AP
   Classroom/resource/help links, ChatGPT/Spotify shortcuts, and disclosed
@@ -288,8 +317,9 @@ Run with Node from the project root:
   feature-isolation / error-reporting (`error-isolation.spec.mjs`).
 
 - `node scripts/smoke-check.mjs` — core invariants.
-- `node scripts/round-trip-check.mjs` — save/export/import field parity, secret
-  redaction, the localStorage allow-list, and the cache-warming guards.
+- `node scripts/round-trip-check.mjs` — exact save/export/import/sync-
+  classification field parity, nested-contract coverage, secret redaction, the
+  localStorage decision matrix, and cache-warming guards.
 - `node scripts/version-history-check.mjs` — version-history invariants.
 - `node scripts/sutra-docbg-check.mjs` — Document Background checks.
 - `node scripts/sutra-rebrand-check.mjs` — rebrand guard.
@@ -351,7 +381,8 @@ cascade and the global-scope execution order both depend on it. Do not reorder.
 
 1. **`<head>`** — `assets/vendor/jszip` → core **safety layer** (`safe-storage` →
    `error-reporter` → `dom-safety` → `feature-guard` → `migrations`) →
-   **`src/state/workspace-normalizers.js`** → `components/icons/*` →
+   **`src/state/workspace-normalizers.js`** → `src/sync/*` in protocol-to-engine
+   dependency order → `components/icons/*` →
    stylesheets `styles/features/startup-intro.css`, `styles/base/styles.css`,
    `styles/themes/sutra-pro.css`, `styles/features/sutra-intelligence.css` →
    `boot/startup-intro.js`, `ui/*` enhancers, `data/emoji-keywords`.

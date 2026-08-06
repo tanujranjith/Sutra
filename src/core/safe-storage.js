@@ -189,6 +189,20 @@
     if (!anyImportant) hideBanner();
   }
 
+  // Metadata-only mutation signal. The canonical workspace bridge listens for
+  // explicitly classified portable mirror keys and schedules a normal
+  // IndexedDB save; the event never exposes the stored value (which could be
+  // sensitive for keys outside that allowlist).
+  function publishMutation(key, operation) {
+    try {
+      window.dispatchEvent(new CustomEvent('sutra:safe-storage-mutated', {
+        detail: { key: String(key || ''), operation: operation === 'remove' ? 'remove' : 'set' }
+      }));
+    } catch (e) {
+      /* Advisory only; the localStorage write already succeeded. */
+    }
+  }
+
   function set(key, value, opts) {
     opts = opts || {};
     var importance = opts.importance || 'optional';
@@ -211,6 +225,7 @@
     try {
       window.localStorage.setItem(key, str); // sutra-allow-storage: this IS the SutraSafeStorage wrapper
       clearDegraded(key);
+      publishMutation(key, 'set');
       return { ok: true };
     } catch (e) {
       var c = classify(e);
@@ -241,6 +256,7 @@
     try {
       window.localStorage.removeItem(key);
       clearDegraded(key);
+      publishMutation(key, 'remove');
       return { ok: true };
     } catch (e) {
       var c = classify(e);

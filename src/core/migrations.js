@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var CURRENT_VERSION = 5;
+  var CURRENT_VERSION = 7;
   var registry = Object.create(null);
 
   function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
@@ -183,6 +183,35 @@
     next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 5 });
     return next;
   }, { description: 'Add Sutra 2.0 planning, mastery, privacy, collaboration, and portfolio contracts.' });
+
+  register(5, function migrateV5ToV6(workspace) {
+    var next = workspace;
+    next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 6 });
+    next.migrationHistory = Array.isArray(next.migrationHistory) ? next.migrationHistory : [];
+    next.migrationDiagnostics = isObject(next.migrationDiagnostics) ? next.migrationDiagnostics : {};
+    next.compatibility = isObject(next.compatibility) ? next.compatibility : {};
+    next.privateDocuments = Array.isArray(next.privateDocuments) ? next.privateDocuments : [];
+    next.syncAuditLog = Array.isArray(next.syncAuditLog) ? next.syncAuditLog : [];
+    return next;
+  }, { description: 'Version the complete encrypted sync-portability contract and recovery fields.' });
+
+  register(6, function migrateV6ToV7(workspace) {
+    var next = workspace;
+    var history = isObject(next.assistantChatHistory) ? next.assistantChatHistory : {};
+    next.assistantChatHistory = Object.assign({}, history, {
+      version: 1,
+      currentChatId: typeof history.currentChatId === 'string' ? history.currentChatId : '',
+      conversations: Array.isArray(history.conversations) ? history.conversations : [],
+      // Existing v6 profiles may still have their only durable chat copy in
+      // the legacy SafeStorage/localStorage mirror. The browser runtime imports
+      // that mirror exactly once and then flips this marker. Keeping the marker
+      // in the canonical workspace prevents a stale/empty mirror from ever
+      // overriding synchronized history on later starts.
+      legacyMigrationComplete: history.legacyMigrationComplete === true
+    });
+    next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 7 });
+    return next;
+  }, { description: 'Make Assistant conversations canonical workspace data with one-time legacy mirror migration.' });
 
   function plan(input, targetVersion) {
     var target = normalizeVersion(targetVersion || CURRENT_VERSION);

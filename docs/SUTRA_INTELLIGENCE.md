@@ -214,14 +214,22 @@ AP Study; Assignment Studio; Grade Planner; Semester Setup; School Schedule;
 College / Life / Business; themes + custom themes; UI preferences and settings;
 onboarding state; pinned pages; notifications state; the Assistant **Activity
 log**; and **Assistant Memory** (`sutra:assistantMemory:v1`, which rides along in
-the localStorage snapshot).
+the localStorage snapshot). Durable conversations themselves are canonical in
+`appData.assistantChatHistory`; the old localStorage chat keys are one-time
+migration/compatibility mirrors. When **Save chat history** is enabled, encrypted
+`.sutra` backups include the sanitized durable conversation store; plaintext
+JSON includes it only with the separate explicit plaintext-recovery opt-in.
+Encrypted Sutra Sync always includes that durable store and its conversation/
+message order, citations, grounding, memory references, and durable receipts,
+independent of the plaintext JSON preference.
 
 **Never exported** (deliberate security exclusions): AI provider **API keys**,
 access/refresh tokens, client secrets, passwords, `.sutra` passphrases, derived
-encryption keys, Google Drive device-local sync metadata, transient chat history,
+encryption keys, Google Drive device-local sync metadata, in-flight/streaming
+chat buffers, abort/request state, typing indicators, token/latency diagnostics,
 in-session unlocked-page state, and regenerable caches. API keys are session-only
-and never appear in `.sutra`, JSON, Activity logs,
-Memory, diagnostics, prompts, or cloud snapshots.
+and never appear in `.sutra`, JSON, Sutra Sync, Activity logs, Memory,
+diagnostics, prompts, or cloud snapshots.
 
 **Import** restores into the correct authoritative store, migrates older exports,
 tolerates missing or newer sections, validates before writing, avoids partial

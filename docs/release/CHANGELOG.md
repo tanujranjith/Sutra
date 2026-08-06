@@ -2,6 +2,71 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-07 - Sutra Sync: encrypted multi-device sync
+
+True incremental multi-device synchronization, built as a NEW layer separate
+from backups — encrypted `.sutra` exports, Sutra Cloud provider backups, and
+Google Drive snapshot sync are unchanged. Off by default; zero network and
+zero sync-database access until explicitly enabled. Spec:
+`docs/architecture/SYNC_PROTOCOL.md`; user guide: `docs/features/CLOUD_SYNC.md`.
+
+- **New pure modules** under `src/sync/` (protocol/canonical hashing, vault
+  crypto, projection, diff, three-way merge, sync store, transports, engine) —
+  dual-mode (browser + CommonJS), fully unit-tested headless in Node,
+  including a seeded randomized convergence property test.
+- **Record-level three-way merge**: independent edits merge automatically;
+  non-overlapping fields on one structured record merge recursively, while
+  true non-note overlaps retain both complete values for conflict review;
+  concurrent same-note edits preserve BOTH versions via deterministic conflict
+  copies (identical on every device); deletes never destroy newer edits
+  (tombstones + edit-wins resurrection); offline edits queue in a local outbox
+  with idempotent, retry-safe pushes (stable op ids, stale-cursor re-pull).
+- **End-to-end encryption**: random 256-bit vault master key (AES-GCM-256,
+  fresh IV per envelope, AAD-bound routing metadata), wrapped by a user
+  passphrase (PBKDF2 600k); authenticated vault-key fingerprint and
+  compare-and-swap prevent split-brain overwrites; wrapped-key bootstrap for
+  new devices; recovery kit export; passphrase change rewraps without re-encrypting history. The
+  server stores ciphertext only.
+- **Supabase backend** (`supabase/sync-schema.sql`): append-only encrypted op
+  log with server-cursor pulls and atomic cursor-checked pushes, device
+  registry with revocation, wrapped vault keys, compaction snapshots,
+  content-addressed encrypted attachment blobs in a private `sync-assets`
+  bucket — direct table grants are revoked and every browser RPC/asset request
+  requires both account ownership and an active auth-session/device binding;
+  vault deletion via a guarded SECURITY DEFINER RPC. The client transport
+  speaks the same JSON shapes as the fully-mocked e2e backend.
+- **Attachment sync**: course-file blobs travel content-addressed
+  (`syncContentHash` on file records), encrypted, deduplicated, upload-before-
+  push / fetch-after-apply, with the existing missing-blob state as the
+  pending UI.
+- **Crash/offline and multi-tab hardening**: the coalesced outbox persists
+  before the first network request; status-specific paused states avoid request
+  storms; Web Locks have an expiring IndexedDB lease fallback; incomplete
+  assets block a supposedly complete compaction snapshot.
+- **App integration**: a third confirmed-save hook (never blocks local
+  saving), whole-workspace remote apply through the standard import path
+  (migrations + normalizers) with a new import-time guard that stops the open
+  editor's stale state from overwriting imported content (also fixes a latent
+  restore bug), silent-import mode, echo suppression, save-busy deferral, and
+  a stale-tab gate matching the app's multi-tab reload contract.
+- **Sync panel** in the save bar: status card distinguishing Saved locally /
+  Synced to cloud / Backed up, setup with passphrase + warnings, unlock,
+  pause, devices (revoke), conflict review (open/dismiss), recovery kit,
+  passphrase change, optimize (compaction), disable, and typed-confirmation
+  vault deletion. In-app Help & Docs section included.
+- **First-enable safety**: setup downloads a real encrypted `.sutra` recovery
+  file before the first merge/push and refuses to continue if required
+  attachment bytes are missing.
+- **Gates**: new `npm run test:e2e:sync` (two-browser-context device
+  convergence, offline divergence, conflict copies, delete-vs-edit, snapshot
+  bootstrap + reload, attachments, two-tab behavior, zero-requests-when-
+  disabled, full UI flow on a mocked Supabase backend) is now part of
+  `npm run verify`.
+- **Docs reconciled**: stale `supabase/README.md` CSP-wildcard claims fixed
+  (the hosted CSP allows `*.supabase.co`; custom Supabase projects work
+  without self-hosting), `SUTRA_CLOUD.md` provider categories corrected,
+  `DATA_AND_BACKUPS.md` gained §5c.
+
 ## 2026-07 - Sutra Intelligence reliability + diagnostics hardening
 
 Hardened the single remote-request core (`performIntelligenceRequest`) for
