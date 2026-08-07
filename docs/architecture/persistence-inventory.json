@@ -143,6 +143,8 @@
     "assistantChatHistory.conversations[].messages[]": ["id", "role", "content", "createdAt", "claimType", "sources", "grounding", "contextTags", "memoryUsedIds", "receipt", "providerLabel", "modelLabel", "favorite", "partial", "restoredFromBackup"],
     "courseWorkspace.files[]": ["id", "courseId", "linkedEntityType", "linkedEntityId", "name", "originalName", "mimeType", "sizeBytes", "kind", "tags", "createdAt", "updatedAt", "source", "storageType", "blobKey", "url", "description", "summary", "syncContentHash"],
     "settings.preferences": ["appearance", "layout", "editor", "tasks", "calendar", "today", "focus", "quotes", "study", "business", "assistant", "studentPreferences", "integrations", "notifications", "accessibility", "startup", "data", "workspace", "sync"],
+    "settings.preferences.today": ["priorityFocus", "dashboard"],
+    "settings.preferences.today.dashboard": ["version", "preset", "order", "hidden", "sizes"],
     "settings.preferences.quotes": ["showInSidebar", "showInCustomTabs", "sourceMode", "enabledCategories", "customQuotes"],
     "settings.preferences.quotes.customQuotes[]": ["id", "text", "author", "category", "createdAt", "updatedAt"],
     "homeworkWorkspace": ["schemaVersion", "revision", "courses", "tasks", "quarantine", "updatedAt", "lastMutation"],

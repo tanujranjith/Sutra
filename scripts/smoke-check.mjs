@@ -400,6 +400,12 @@ mustContain('src/features/workspace/today-command-center.js', 'window.SutraToday
 mustContain('src/features/workspace/today-command-center.js', 'getNextPriorityItem', 'deterministic next-priority helper');
 mustContain('src/features/workspace/today-command-center.js', 'groupItemsByTimeHorizon', 'time-horizon grouping helper');
 mustContain('src/core/app.js', 'function renderUpcomingRadar', 'upcoming radar renderer wrapper');
+mustContain('Sutra.html', 'src/features/workspace/today-dashboard.js?v=', 'today dashboard customizer cache-busted include');
+mustContain('Sutra.html', 'id="todayDashboardModal"', 'today dashboard customizer modal');
+mustContain('Sutra.html', 'id="todayCustomizeDashboardBtn"', 'today dashboard customizer entry point');
+mustContain('src/features/workspace/today-dashboard.js', 'window.SutraTodayDashboard', 'today dashboard API exposed on window');
+mustContain('src/core/app.js', "getWorkspacePreference('today.dashboard'", 'today dashboard canonical preference bridge');
+mustContain('docs/architecture/persistence-inventory.json', '"settings.preferences.today.dashboard"', 'today dashboard nested persistence contract');
 
 // Custom Tabs — user-composed widget dashboards
 mustContain('Sutra.html', 'src/features/workspace/custom-tabs.js?v=', 'custom tabs module cache-busted include');

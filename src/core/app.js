@@ -3740,7 +3740,10 @@ function populateProgressDashboard() {
                     weekStart: 'sunday'
                 },
                 today: {
-                    priorityFocus: 'balanced'
+                    priorityFocus: 'balanced',
+                    dashboard: (typeof window !== 'undefined' && window.SutraTodayDashboard && typeof window.SutraTodayDashboard.getDefaultPreferences === 'function')
+                        ? window.SutraTodayDashboard.getDefaultPreferences()
+                        : { version: 1, preset: 'calm', order: [], hidden: [], sizes: {} }
                 },
                 focus: {
                     defaultMinutes: 25
@@ -4019,7 +4022,10 @@ function populateProgressDashboard() {
                     weekStart: normalizeSettingChoice(calendarSource.weekStart, ['sunday', 'monday'], defaults.calendar.weekStart)
                 },
                 today: {
-                    priorityFocus: normalizeSettingChoice(todaySource.priorityFocus, ['balanced', 'assignments', 'calendar', 'tasks', 'review'], defaults.today.priorityFocus)
+                    priorityFocus: normalizeSettingChoice(todaySource.priorityFocus, ['balanced', 'assignments', 'calendar', 'tasks', 'review'], defaults.today.priorityFocus),
+                    dashboard: (typeof window !== 'undefined' && window.SutraTodayDashboard && typeof window.SutraTodayDashboard.normalizePreferences === 'function')
+                        ? window.SutraTodayDashboard.normalizePreferences(todaySource.dashboard)
+                        : (todaySource.dashboard && typeof todaySource.dashboard === 'object' ? todaySource.dashboard : defaults.today.dashboard)
                 },
                 focus: {
                     defaultMinutes: Math.floor(clampSettingNumber(focusSource.defaultMinutes, defaults.focus.defaultMinutes, 5, 180))
@@ -23041,6 +23047,7 @@ function populateProgressDashboard() {
                     });
                 }
             } catch (e) { /* non-critical */ }
+            try { if (window.SutraTodayDashboard && typeof window.SutraTodayDashboard.applyPreferences === 'function') window.SutraTodayDashboard.applyPreferences(); } catch (e) { /* non-critical */ }
         }
 
         function renderProgressView() {
@@ -68245,6 +68252,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             guard('persistence-health-ui', bindSutraPersistenceHealthUi, { label: 'Save health', badge: false });
             guard('backup-folder', initSutraBackupFolder, { label: 'Backup folder', badge: false }); // folder restore must never block startup
             guard('modal-manager', () => SutraModalManager.init(), { label: 'Dialogs' });
+            guard('today-dashboard', () => {
+                if (!window.SutraTodayDashboard) return;
+                window.SutraTodayDashboard.configure({
+                    getPreferences: () => getWorkspacePreference('today.dashboard', window.SutraTodayDashboard.getDefaultPreferences()),
+                    setPreferences: (next) => setWorkspacePreference('today.dashboard', next, { refresh: false })
+                });
+                window.SutraTodayDashboard.init();
+            }, { label: 'Today dashboard', badge: false });
             const recoveryModeActive = !!(window.SutraRecoveryMode && typeof window.SutraRecoveryMode.isActive === 'function' && window.SutraRecoveryMode.isActive());
             if (recoveryModeActive) {
                 guard('core-ui', initApp, { label: 'Workspace', severity: 'critical' });

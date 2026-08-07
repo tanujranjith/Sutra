@@ -315,7 +315,17 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         editor: { ...(preferences.editor || {}), writingWidth: 'wide', showMetadata: false, fontScale: 110 },
         tasks: { ...(preferences.tasks || {}), sortStrategy: 'due_first', showCompleted: false },
         calendar: { ...(preferences.calendar || {}), defaultView: 'month', timeFormat: '24', weekStart: 'monday' },
-        today: { ...(preferences.today || {}), priorityFocus: 'deadlines' },
+        today: {
+          ...(preferences.today || {}),
+          priorityFocus: 'assignments',
+          dashboard: {
+            version: 1,
+            preset: 'custom',
+            order: ['next-up', 'upcoming-radar', 'review', 'assignments', 'today-plan', 'calendar', 'tasks', 'tests', 'tonight', 'backup', 'priorities', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
+            hidden: ['tracker', 'momentum'],
+            sizes: { review: 'wide', assignments: 'standard', priorities: 'wide' }
+          }
+        },
         focus: { ...(preferences.focus || {}), defaultMinutes: 40 },
         quotes: { showInSidebar: true, showInCustomTabs: true, sourceMode: 'custom', enabledCategories: ['self-affirmation'], customQuotes: [{
           id: 'quote-parity', text: 'Synthetic courage belongs in the portable workspace.', author: 'Parity Student', category: 'self-affirmation', createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP

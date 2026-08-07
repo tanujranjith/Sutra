@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-nav16e",
-    "hash": "3952eaca272850b2"
+    "stamp": "20260807-todaywidgets1",
+    "hash": "e690aeaec8541c16"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -299,6 +299,10 @@
     "stamp": "20260721-radar-consolidation1",
     "hash": "9000432533f4d577"
   },
+  "src/features/workspace/today-dashboard.js": {
+    "stamp": "20260807-todaywidgets1",
+    "hash": "db4294be16ce2bb9"
+  },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20260728-entity1",
     "hash": "6ee0586443745a0e"
@@ -516,7 +520,7 @@
     "hash": "38cecfb56b1d6e1b"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260807-nav16e",
-    "hash": "524e1212650eaee5"
+    "stamp": "20260807-todaywidgets1",
+    "hash": "f6feb928ecbefd57"
   }
 }

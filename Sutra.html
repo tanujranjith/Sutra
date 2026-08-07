@@ -524,6 +524,7 @@
                                 <button type="button" role="menuitem" class="today-hero-menu-item" onclick="bindCommandPaletteInput(); openCommandPalette('')"><i class="fas fa-terminal"></i><span>Command palette (Ctrl/⌘+K)</span></button>
                                 <button type="button" role="menuitem" id="todayPasteImportBtn" class="today-hero-menu-item"><i class="fas fa-file-import"></i><span>Paste assignments / syllabus</span></button>
                                 <button type="button" role="menuitem" id="todayWeeklyReviewBtn" class="today-hero-menu-item"><i class="fas fa-calendar-check"></i><span>Weekly review</span></button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" data-open-today-dashboard><i class="fas fa-table-cells-large"></i><span>Customize Today</span></button>
                                 <button type="button" role="menuitem" id="applyPlanTimelineBtn" class="today-hero-menu-item"><i class="fas fa-calendar-plus"></i><span>Apply plan to calendar</span></button>
                                 <button type="button" role="menuitem" id="autoBlockEventsBtn" class="today-hero-menu-item"><i class="fas fa-bolt"></i><span>Auto-block events now</span></button>
                                 <label class="today-hero-menu-toggle">
@@ -539,6 +540,16 @@
 
                 <!-- School-day strip — rendered by src/features/academic/school-schedule.js -->
                 <section id="sutraSchoolDayStrip" class="glass-card ssched-strip" aria-label="School day" hidden></section>
+
+                <div class="today-dashboard-toolbar" aria-label="Today dashboard layout">
+                    <div>
+                        <span class="today-dashboard-toolbar-label"><i class="fas fa-table-cells-large" aria-hidden="true"></i> Dashboard</span>
+                        <span id="todayDashboardSummary" class="today-dashboard-summary">Calm layout</span>
+                    </div>
+                    <button id="todayCustomizeDashboardBtn" class="neumo-btn today-dashboard-customize" type="button" data-open-today-dashboard>
+                        <i class="fas fa-sliders" aria-hidden="true"></i> Customize
+                    </button>
+                </div>
 
                 <div class="today-cc-layout">
 
@@ -1109,6 +1120,33 @@
                     </div>
 
             </section>
+
+            <div id="todayDashboardModal" class="modal today-dashboard-modal" aria-hidden="true" hidden>
+                <div class="today-dashboard-dialog modal-content" role="dialog" aria-modal="true" aria-labelledby="todayDashboardTitle" aria-describedby="todayDashboardDescription" tabindex="-1">
+                    <div class="today-dashboard-modal-header">
+                        <div>
+                            <div class="eyebrow">Today dashboard</div>
+                            <h2 id="todayDashboardTitle">Make Today yours</h2>
+                            <p id="todayDashboardDescription">Choose a starting layout, then show, arrange, and resize the widgets that help you plan your day.</p>
+                        </div>
+                        <button class="today-dashboard-close" type="button" data-close-today-dashboard data-modal-close aria-label="Close Today customization"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="today-dashboard-preset-section">
+                        <h3>Starting layout</h3>
+                        <div class="today-dashboard-presets" role="group" aria-label="Today layout presets">
+                            <button type="button" data-today-dashboard-preset="calm" aria-pressed="true"><strong>Calm</strong><span>Daily essentials first</span></button>
+                            <button type="button" data-today-dashboard-preset="study" aria-pressed="false"><strong>Study</strong><span>Coursework and review</span></button>
+                            <button type="button" data-today-dashboard-preset="everything" aria-pressed="false"><strong>Everything</strong><span>All available widgets</span></button>
+                        </div>
+                    </div>
+                    <div id="todayDashboardWidgetList" class="today-dashboard-widget-list" aria-label="Today widgets"></div>
+                    <div id="todayDashboardLive" class="sr-only" aria-live="polite"></div>
+                    <div class="today-dashboard-modal-footer">
+                        <button class="neumo-btn" type="button" data-reset-today-dashboard>Reset to Calm</button>
+                        <button class="neumo-btn today-dashboard-done" type="button" data-close-today-dashboard>Done</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- TIMELINE VIEW (TimeTile) -->
             <section id="view-timeline" class="view view-timeline timeline-redesign">
@@ -7615,6 +7653,10 @@
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
     <!-- Today command center — pure planning helpers + Upcoming Radar renderer -->
     <script src="src/features/workspace/today-command-center.js?v=20260721-radar-consolidation1"></script>
+    <!-- Today dashboard composition — pure preference normalization + accessible
+         widget customizer. Loaded before app.js so Today preferences normalize
+         through the canonical workspace state. -->
+    <script src="src/features/workspace/today-dashboard.js?v=20260807-todaywidgets1"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
     <!-- Notes editor v2 (opt-in, Settings → Editor): vendored TipTap/ProseMirror
          engine (window.SutraEditor) + Sutra integration glue (window.SutraNotesEditorV2).
@@ -7622,7 +7664,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-nav16e"></script>
+<script src="src/core/app.js?v=20260807-todaywidgets1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -8042,7 +8084,7 @@
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-scrollcontain1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-nav16e">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-todaywidgets1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
