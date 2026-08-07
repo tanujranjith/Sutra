@@ -5,6 +5,10 @@
   var MAX_SOURCE_CHARS = 1000000;
   var MAX_ITEMS = 1200;
   var MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11 };
+  var IcsEngine = global && global.sutraIcs;
+  if (!IcsEngine && typeof require === 'function') {
+    try { IcsEngine = require('./icalendar.js'); } catch (error) { IcsEngine = null; }
+  }
 
   function clone(value) {
     if (typeof structuredClone === 'function') return structuredClone(value);
@@ -114,6 +118,26 @@
     return match ? match[1].replace(/\\n/gi, ' ').replace(/\\,/g, ',').trim() : '';
   }
   function parseIcs(text, source) {
+    if (IcsEngine && typeof IcsEngine.parse === 'function') {
+      var parsedCalendar = IcsEngine.parse(text);
+      if (!parsedCalendar.ok) return [];
+      return parsedCalendar.events.map(function (entry, index) {
+        var start = IcsEngine.parseDateTime(entry.DTSTART, entry.DTSTART_PARAMS);
+        if (!start || !start.dateKey) return null;
+        var summary = IcsEngine.decodeText(entry.SUMMARY || '').trim() || 'Calendar event';
+        var item = makeItem({
+          kind: /exam|test|quiz|midterm|final/i.test(summary) ? 'exam' : (entry.RRULE ? 'recurring_class' : 'event'),
+          title: summary,
+          date: start.dateKey,
+          time: start.time || '',
+          details: IcsEngine.decodeText(entry.DESCRIPTION || ''),
+          confidence: 0.98,
+          confidenceReasons: ['Structured calendar event']
+        }, source, index);
+        item.importIdentity = 'ics:' + hash(IcsEngine.buildCalendarSourceUid(entry));
+        return item;
+      }).filter(Boolean);
+    }
     var blocks = text.replace(/\r?\n[ \t]/g, '').split(/BEGIN:VEVENT/i).slice(1).map(function (part) { return part.split(/END:VEVENT/i)[0]; });
     return blocks.map(function (block, index) {
       var summary = icsValue(block, 'SUMMARY'), start = icsValue(block, 'DTSTART'), uid = icsValue(block, 'UID');

@@ -22,6 +22,7 @@
         var target = key(date); var base = text(block.date).slice(0, 10); var recurrence = text(block.recurrence || 'none').toLowerCase();
         if (base && target < base) return false;
         if (block.recurrenceUntil && target > text(block.recurrenceUntil).slice(0, 10)) return false;
+        if (Array.isArray(block.recurrenceExceptions) && block.recurrenceExceptions.indexOf(target) >= 0) return false;
         if (block.source === 'calendar_ics' && block.preserveRecurrence !== true) return base === target;
         if (recurrence === 'daily') return true;
         if (recurrence === 'weekdays') return date.getDay() > 0 && date.getDay() < 6;

@@ -1015,9 +1015,9 @@
         events.forEach(function (evt, idx) {
             var summary = String(evt.SUMMARY || '').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\n/gi, ' ').trim()
                 || ('Event ' + (idx + 1));
-            var startInfo = bridge.parseIcsDateTimeInfo(evt.DTSTART);
+            var startInfo = bridge.parseIcsDateTimeInfo(evt.DTSTART, evt.DTSTART_PARAMS);
             if (!startInfo || !startInfo.dateKey) return;
-            var endInfo = bridge.parseIcsDateTimeInfo(evt.DTEND);
+            var endInfo = bridge.parseIcsDateTimeInfo(evt.DTEND, evt.DTEND_PARAMS);
             var startTime = startInfo.time || '09:00';
             var startMins = timeToMinutes(startTime) || 9 * 60;
             var endMins = endInfo && endInfo.time ? timeToMinutes(endInfo.time) : null;

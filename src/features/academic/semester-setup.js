@@ -324,7 +324,7 @@
         var items = [];
         events.slice(0, 500).forEach(function (evt) {
             var summary = String(evt.SUMMARY || '').replace(/\\,/g, ',').replace(/\\;/g, ';').trim();
-            var startInfo = bridge.parseIcsDateTimeInfo(evt.DTSTART);
+            var startInfo = bridge.parseIcsDateTimeInfo(evt.DTSTART, evt.DTSTART_PARAMS);
             if (!summary || !startInfo || !startInfo.dateKey) return;
             var lower = summary.toLowerCase();
             var kind = NO_SCHOOL_RE.test(lower) ? 'no_school' : (EXAM_RE.test(lower) ? 'exam' : (ASSIGNMENT_RE.test(lower) ? 'assignment' : 'event'));

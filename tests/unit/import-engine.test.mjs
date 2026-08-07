@@ -31,6 +31,11 @@ test('CSV and ICS previews preserve structured source identity', () => {
   assert.match(ics.items[0].importIdentity, /^ics:/);
 });
 
+test('ICS preview rejects an incomplete calendar instead of importing partial events', () => {
+  const preview = SutraImport.preview({ format: 'ics', sourceId: 'calendar', text: 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:partial\nSUMMARY:Partial exam\nDTSTART:20261003T090000\nEND:VEVENT' });
+  assert.equal(preview.items.length, 0);
+});
+
 test('re-import matching distinguishes duplicate and reviewed update', () => {
   const first = SutraImport.preview({ format: 'csv', sourceId: 'portal', text: 'title,course,due\nEssay,English,2026-09-01' });
   const prior = { ...first.items[0], id: 'existing-1' };

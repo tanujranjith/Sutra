@@ -9366,13 +9366,13 @@ function populateProgressDashboard() {
             // Minimal ICS parsing surface so feature modules (school-schedule
             // subscriptions, Semester Setup) reuse the battle-tested core
             // parser instead of shipping a second one.
-            window.sutraIcs = {
+            window.sutraIcs = Object.assign(window.sutraIcs || {}, {
                 parseIcsEvents: (text) => parseIcsEvents(text),
-                parseIcsDateTimeInfo: (raw) => parseIcsDateTimeInfo(raw),
+                parseIcsDateTimeInfo: (raw, params) => parseIcsDateTimeInfo(raw, params),
                 parseUntilFromRrule: (rrule) => parseUntilFromRrule(rrule),
                 parseByDayFromRrule: (rrule) => parseByDayFromRrule(rrule),
                 buildCalendarSourceUid: (evt) => buildCalendarSourceUid(evt)
-            };
+            });
         } catch (err) { /* non-critical: window may be unavailable in tests */ }
 
         // Application State
@@ -58018,7 +58018,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return toTimeString(hours, minutes);
         }
 
-        function parseIcsDateTimeInfo(raw) {
+        function parseIcsDateTimeInfo(raw, params) {
+            const engine = typeof window !== 'undefined' ? window.sutraIcs : null;
+            if (engine && typeof engine.parseDateTime === 'function') {
+                return engine.parseDateTime(raw, params);
+            }
             const value = String(raw || '').trim();
             if (!value) return null;
             if (/^\d{8}$/.test(value)) {
@@ -58097,6 +58101,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function parseIcsEvents(icsText) {
+            const engine = typeof window !== 'undefined' ? window.sutraIcs : null;
+            if (engine && typeof engine.parseIcsEvents === 'function') {
+                return engine.parseIcsEvents(icsText);
+            }
             const rawLines = String(icsText || '')
                 .replace(/\r\n/g, '\n')
                 .replace(/\r/g, '\n')
@@ -58240,6 +58248,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function triggerCalendarIcsImport() {
             const input = document.getElementById('calendarIcsInput');
             if (!input) return;
+            const menu = document.getElementById('timelineMoreMenu');
+            const menuButton = document.getElementById('timelineMoreBtn');
+            if (menu) menu.hidden = true;
+            if (menuButton) menuButton.setAttribute('aria-expanded', 'false');
             input.value = '';
             input.click();
         }
@@ -58306,132 +58318,140 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
             try {
                 const text = await readFileAsText(file);
-                const events = parseIcsEvents(text);
-                if (!events.length) {
-                    showToast('No events found in ICS file');
+                const engine = typeof window !== 'undefined' ? window.sutraIcs : null;
+                if (!engine || typeof engine.toTimeBlocks !== 'function') {
+                    showToast('Calendar import is still loading. Try again in a moment.');
+                    return;
+                }
+                const preview = engine.toTimeBlocks(text, {
+                    fileName: String(file.name || 'calendar.ics'),
+                    sourceId: `file:${String(file.name || 'calendar.ics').trim().toLowerCase()}`
+                });
+                if (!preview.ok) {
+                    const message = preview.errors && preview.errors[0] && preview.errors[0].message;
+                    showToast(message || 'That file is not a valid iCalendar file.');
                     return;
                 }
 
-                // Cleanup old behavior where ICS imports created tasks.
-                const legacyCalendarTasks = (Array.isArray(tasks) ? tasks : []).filter(task => task && task.origin === 'calendar');
-                if (legacyCalendarTasks.length) {
-                    const legacyIds = new Set(legacyCalendarTasks.map(task => task.id));
-                    tasks = tasks.filter(task => !legacyIds.has(task.id));
-                    taskOrder = taskOrder.filter(id => !legacyIds.has(id));
-                    legacyIds.forEach(id => {
-                        delete taskStreaks[id];
-                        removeTaskReferencesFromDayStates(id);
-                    });
+                const currentBlocks = Array.isArray(timeBlocks) ? timeBlocks : [];
+                const exactByUid = new Map(currentBlocks
+                    .filter(block => block && block.source === 'calendar_ics' && block.sourceUid)
+                    .map(block => [String(block.sourceUid), block]));
+                const legacyByUid = new Map(currentBlocks
+                    .filter(block => block && block.source === 'calendar_ics' && !block.calendarImportId)
+                    .map(block => [String(block.calendarUid || block.sourceUid || ''), block]));
+                const usedIds = new Set();
+                const incomingUids = new Set();
+                const plan = preview.blocks.map(block => {
+                    incomingUids.add(String(block.sourceUid));
+                    let existing = exactByUid.get(String(block.sourceUid));
+                    if (!existing && block.calendarUid) existing = legacyByUid.get(String(block.calendarUid));
+                    if (existing && usedIds.has(existing.id)) existing = null;
+                    if (existing) usedIds.add(existing.id);
+                    return { block, existingId: existing ? existing.id : null };
+                });
+                const createdCount = plan.filter(row => !row.existingId).length;
+                const updatedCount = plan.length - createdCount;
+                const removedBlocks = currentBlocks.filter(block => block
+                    && block.source === 'calendar_ics'
+                    && block.calendarImportId === preview.calendarImportId
+                    && !incomingUids.has(String(block.sourceUid || '')));
+                const removedCount = removedBlocks.length;
+                if (!plan.length && !removedCount) {
+                    const skipped = preview.stats && preview.stats.skipped ? ` ${preview.stats.skipped} malformed event${preview.stats.skipped === 1 ? '' : 's'} were skipped.` : '';
+                    showToast(`No importable events found.${skipped}`);
+                    return;
                 }
+                const warningCount = Array.isArray(preview.warnings) ? preview.warnings.length : 0;
+                const warningSample = warningCount
+                    ? `\n\n${warningCount} warning${warningCount === 1 ? '' : 's'}: ${preview.warnings.slice(0, 2).map(item => item.message).join(' ')}`
+                    : '';
+                const confirmed = await showCustomConfirmDialog({
+                    title: `Import ${preview.calendarName || file.name || 'calendar'}`,
+                    message: `${preview.stats.parsed} event${preview.stats.parsed === 1 ? '' : 's'} parsed into ${preview.blocks.length} Timeline block${preview.blocks.length === 1 ? '' : 's'}.\n\n${createdCount} will be added, ${updatedCount} updated, and ${removedCount} removed from this calendar only.${warningSample}`,
+                    confirmText: 'Import Events',
+                    cancelText: 'Cancel'
+                });
+                if (!confirmed) return;
 
-                const existingByUid = new Map(
-                    (Array.isArray(timeBlocks) ? timeBlocks : [])
-                        .filter(block => block && block.source === 'calendar_ics' && block.sourceUid)
-                        .map(block => [block.sourceUid, block])
-                );
+                const beforeBlocks = cloneSerializable(currentBlocks, []);
+                const beforeTasks = cloneSerializable(tasks, []);
+                const beforeTaskOrder = cloneSerializable(taskOrder, []);
+                const beforeTaskStreaks = cloneSerializable(taskStreaks, {});
+                const beforeDayStates = cloneSerializable(dayStates, {});
+                try {
+                    plan.forEach(row => {
+                        if (row.existingId) {
+                            const index = timeBlocks.findIndex(block => block && block.id === row.existingId);
+                            if (index >= 0) {
+                                const existing = timeBlocks[index] || {};
+                                timeBlocks[index] = { ...existing, ...row.block, id: existing.id, createdAt: existing.createdAt || row.block.createdAt };
+                                return;
+                            }
+                        }
+                        const collision = timeBlocks.some(existing => existing && existing.id === row.block.id);
+                        timeBlocks.push({ ...row.block, id: collision ? `${row.block.id}_${simpleHash(row.block.sourceUid)}` : row.block.id });
+                    });
+                    timeBlocks = timeBlocks.filter(block => !(block
+                        && block.source === 'calendar_ics'
+                        && block.calendarImportId === preview.calendarImportId
+                        && !incomingUids.has(String(block.sourceUid || ''))));
 
-                let createdCount = 0;
-                let updatedCount = 0;
-                const importedSourceUids = new Set();
-                events.forEach((evt, idx) => {
-                    const summary = decodeIcsText(evt.SUMMARY || `Calendar Event ${idx + 1}`).trim();
-                    const description = decodeIcsText(evt.DESCRIPTION || '').trim();
-                    const location = decodeIcsText(evt.LOCATION || '').trim();
-                    const startInfo = parseIcsDateTimeInfo(evt.DTSTART);
-                    if (!summary || !startInfo || !startInfo.dateKey) return;
+                    // Remove pre-Timeline calendar tasks only after review succeeds.
+                    const legacyCalendarTasks = (Array.isArray(tasks) ? tasks : []).filter(task => task && task.origin === 'calendar');
+                    if (legacyCalendarTasks.length) {
+                        const legacyIds = new Set(legacyCalendarTasks.map(task => task.id));
+                        tasks = tasks.filter(task => !legacyIds.has(task.id));
+                        taskOrder = taskOrder.filter(id => !legacyIds.has(id));
+                        legacyIds.forEach(id => {
+                            delete taskStreaks[id];
+                            removeTaskReferencesFromDayStates(id);
+                        });
+                    }
 
-                    const rrule = String(evt.RRULE || '').toUpperCase();
-                    let recurrence = 'none';
-                    let weeklyDays = [];
-                    const recurrenceUntil = parseUntilFromRrule(rrule);
-                    if (rrule.includes('FREQ=DAILY')) {
-                        recurrence = 'daily';
-                    } else if (rrule.includes('FREQ=WEEKLY')) {
-                        weeklyDays = parseByDayFromRrule(rrule);
-                        const weekdaysPattern = [1, 2, 3, 4, 5];
-                        const isWeekdays = weekdaysPattern.every(day => weeklyDays.includes(day)) && weeklyDays.length === weekdaysPattern.length;
-                        if (isWeekdays) {
-                            recurrence = 'weekdays';
-                        } else {
-                            recurrence = 'weekly';
-                            if (!weeklyDays.length) weeklyDays = [parseDate(startInfo.dateKey).getDay()];
+                    timeBlocks.sort((a, b) => {
+                        const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+                        if (dateCompare) return dateCompare;
+                        const aStart = parseTimeToMinutes(a.start) || 0;
+                        const bStart = parseTimeToMinutes(b.start) || 0;
+                        return aStart - bStart;
+                    });
+                    saveTimeBlocks();
+                    persistAppData();
+                    await flushAppSaveNow('calendar-ics-import');
+                } catch (error) {
+                    timeBlocks = beforeBlocks;
+                    tasks = beforeTasks;
+                    taskOrder = beforeTaskOrder;
+                    taskStreaks = beforeTaskStreaks;
+                    dayStates = beforeDayStates;
+                    saveTimeBlocks();
+                    persistAppData();
+                    try {
+                        await flushAppSaveNow('calendar-ics-import-rollback');
+                    } catch (rollbackError) {
+                        console.error('ICS import rollback could not be confirmed', rollbackError);
+                        try {
+                            error.calendarRollbackFailed = true;
+                            error.calendarRollbackError = rollbackError;
+                        } catch (markError) {
+                            console.error('Could not mark the calendar rollback failure', markError);
                         }
                     }
-
-                    const endInfo = parseIcsDateTimeInfo(evt.DTEND);
-                    let startTime = startInfo.time || '09:00';
-                    let endTime = endInfo && endInfo.time ? endInfo.time : null;
-                    const startMins = parseTimeToMinutes(startTime);
-                    let endMins = parseTimeToMinutes(endTime);
-                    if (!Number.isFinite(endMins) || endMins <= startMins) {
-                        endMins = Math.min((startMins || 0) + 60, 23 * 60 + 59);
-                    }
-                    endTime = minutesToTimeString(endMins);
-
-                    const sourceUid = buildCalendarSourceUid(evt);
-                    importedSourceUids.add(sourceUid);
-                    const referenceUrl = extractGoogleDocsUrl(evt.URL, evt.DESCRIPTION, evt.LOCATION);
-                    const nextBlock = {
-                        name: summary,
-                        start: startTime,
-                        end: endTime,
-                        category: 'work',
-                        color: '#4f8cff',
-                        recurrence: 'none',
-                        importedRecurrence: recurrence,
-                        preserveRecurrence: false,
-                        date: startInfo.dateKey,
-                        recurrenceUntil: recurrenceUntil || null,
-                        weeklyDays: [],
-                        notes: [description, location].filter(Boolean).join(' | ') || null,
-                        referenceUrl: referenceUrl || null,
-                        source: 'calendar_ics',
-                        sourceUid,
-                        updatedAt: Date.now()
-                    };
-
-                    const existing = existingByUid.get(sourceUid);
-                    if (existing) {
-                        Object.assign(existing, nextBlock);
-                        updatedCount += 1;
-                    } else {
-                        timeBlocks.push({
-                            id: `ics_${simpleHash(sourceUid)}_${Math.random().toString(36).slice(2, 6)}`,
-                            ...nextBlock,
-                            createdAt: Date.now()
-                        });
-                        createdCount += 1;
-                    }
-                });
-
-                const beforeSyncCount = Array.isArray(timeBlocks) ? timeBlocks.length : 0;
-                timeBlocks = (Array.isArray(timeBlocks) ? timeBlocks : []).filter(block => {
-                    if (!block || block.source !== 'calendar_ics') return true;
-                    if (!block.sourceUid) return false; // remove legacy orphaned imports
-                    return importedSourceUids.has(block.sourceUid);
-                });
-                const removedCount = Math.max(0, beforeSyncCount - timeBlocks.length);
-
-                if (!createdCount && !updatedCount && !removedCount) {
-                    showToast('No importable events found');
-                    return;
+                    throw error;
                 }
-
-                timeBlocks.sort((a, b) => {
-                    const aStart = parseTimeToMinutes(a.start) || 0;
-                    const bStart = parseTimeToMinutes(b.start) || 0;
-                    return aStart - bStart;
-                });
-                saveTimeBlocks();
-                persistAppData();
                 autoCreateTimelineBlocksFromEvents({ silent: true });
                 renderTaskViews();
                 renderTimeline();
                 try { populateProgressDashboard(); } catch (e) { /* non-critical */ }
-                showToast(`Calendar synced: ${createdCount} added, ${updatedCount} updated, ${removedCount} removed`);
+                showToast(`Calendar imported: ${createdCount} added, ${updatedCount} updated, ${removedCount} removed`);
             } catch (err) {
                 console.error('ICS import failed', err);
-                showToast('Calendar import failed');
+                if (err && err.calendarRollbackFailed) {
+                    showToast('Calendar import failed and the rollback save could not be confirmed. Export a backup before closing Sutra.');
+                } else {
+                    showToast('Calendar import failed. Your Timeline is unchanged.');
+                }
             } finally {
                 if (input) input.value = '';
             }
@@ -77472,6 +77492,7 @@ function doesTimeBlockOccurOnDate(block, targetDate) {
 
     if (explicitDate && targetKey < explicitDate) return false;
     if (recurrenceUntil && targetKey > recurrenceUntil) return false;
+    if (Array.isArray(block.recurrenceExceptions) && block.recurrenceExceptions.includes(targetKey)) return false;
 
     // Calendar imports default to fixed-date events.
     // Recurrence is honored only when preserveRecurrence is explicitly enabled.

@@ -63,7 +63,8 @@
     <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
     <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
     <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
-    <script src="src/domain/import-engine.js?v=20260710-import1"></script>
+    <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
+    <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
     <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
     <script src="src/persistence/workspace-db.js?v=20260729-idb-close-retry1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
@@ -1136,6 +1137,7 @@
                                     </select>
                                 </div>
                                 <div class="timeline-more-group timeline-push-time-menu-group">
+                                    <button type="button" role="menuitem" id="timelineImportIcsBtn" class="timeline-more-action" onclick="triggerCalendarIcsImport()">Import calendar (.ics)...</button>
                                     <button type="button" role="menuitem" id="timelinePushTimeBtn" class="timeline-more-action">Push time...</button>
                                     <button type="button" role="menuitem" id="timelineUndoPushTimeBtn" class="timeline-more-action" hidden disabled>Undo last Push time</button>
                                 </div>
@@ -7458,10 +7460,10 @@
     <!-- Academic planning modules (engines + getDefault/normalize factories).
          Loaded BEFORE app.js so the core registers their workspaces in
          appData, backups, and import normalization. -->
-    <script src="src/features/academic/school-schedule.js?v=20260610-academic1"></script>
+    <script src="src/features/academic/school-schedule.js?v=20260807-ics1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260707-batch1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20260630-assist-hw1"></script>
+    <script src="src/features/academic/semester-setup.js?v=20260807-ics1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -7490,7 +7492,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-pagelinks1"></script>
+<script src="src/core/app.js?v=20260807-ics2"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7521,7 +7523,7 @@
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
     <script src="src/features/workspace/timeline-drag.js?v=20260730-pushTime1"></script>
-    <script src="src/features/workspace/timeline-calendar.js?v=20260730-timeFormat2"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20260807-ics1"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>

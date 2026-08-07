@@ -36,6 +36,26 @@ Creation, edit, delete, conflict detection, undo, linked Homework/Task source
 identity, persistence rollback, and `sutra:schedule-changed` remain owned by
 the existing Timeline adapter and app runtime.
 
+## iCalendar import
+
+**More > Import calendar (.ics)** and **Settings > Packs & advanced > Calendar
+data files** use the same local parser and mandatory preview. No calendar text
+is uploaded. Common `VEVENT` fields map into canonical `timeBlocks`, including
+`TZID`/UTC/floating timestamps, `DTEND` or `DURATION`, all-day and multi-day
+events, location, description, safe HTTP(S) URLs, categories, colors, and the
+supported daily/weekly recurrence subset. `EXDATE`, finite `COUNT`, `UNTIL`,
+`RDATE`, and moved instances identified by `RECURRENCE-ID` are retained where
+the Timeline model can represent them. Unsupported recurrence intervals or
+frequencies import once and produce a review warning instead of silently
+creating an inaccurate repeating schedule.
+
+Each file is source-scoped by its filename and each event is keyed by calendar
+UID plus recurrence identity. Re-importing the same filename updates that
+calendar and removes events that disappeared from that file only; it cannot
+delete blocks imported from a different `.ics` file. A valid preview must be
+approved before changes are applied, and persistence failure restores the
+complete prior Timeline state.
+
 ## Push time
 
 **More > Push time** moves every canonical Timeline block forward or backward

@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-pagelinks1",
-    "hash": "8812c06b46a69475"
+    "stamp": "20260807-ics2",
+    "hash": "4e8d5ebac82ac509"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -91,9 +91,13 @@
     "stamp": "20260709-homework-store1",
     "hash": "757c3d86b785a544"
   },
+  "src/domain/icalendar.js": {
+    "stamp": "20260807-ics3",
+    "hash": "f7b9eb86d508c54f"
+  },
   "src/domain/import-engine.js": {
-    "stamp": "20260710-import1",
-    "hash": "ca4ec795935860f5"
+    "stamp": "20260807-ics2",
+    "hash": "c275198eea7edbcd"
   },
   "src/domain/learning-engine.js": {
     "stamp": "20260710-learning1",
@@ -144,12 +148,12 @@
     "hash": "c0069d1ff403727b"
   },
   "src/features/academic/school-schedule.js": {
-    "stamp": "20260610-academic1",
-    "hash": "108b113147fcf5a6"
+    "stamp": "20260807-ics1",
+    "hash": "dc27185df3807bc9"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20260630-assist-hw1",
-    "hash": "7f4d5722c1d7fd2b"
+    "stamp": "20260807-ics1",
+    "hash": "095bc3670ad9c824"
   },
   "src/features/assistant/action-system.js": {
     "stamp": "20260714-assistant-trust1",
@@ -284,8 +288,8 @@
     "hash": "4f806de479b221c8"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260730-timeFormat2",
-    "hash": "8c10a7b32aa8c962"
+    "stamp": "20260807-ics1",
+    "hash": "2ac12059694bb537"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
