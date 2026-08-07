@@ -57444,6 +57444,10 @@ function getActiveEditor() {
         function openSutraCloudModal() {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
+            // The Cloud and Sync sheets are mutually exclusive save-bar
+            // surfaces: never stack one above the other. Closing the sibling
+            // first keeps exactly one .modal.active and one scroll-lock owner.
+            closeSutraSyncModal();
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
             sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state
@@ -57460,7 +57464,11 @@ function getActiveEditor() {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
             modal.classList.remove('active');
-            try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
+            // Only release the scroll lock when no other modal is still open
+            // (a sibling sheet may legitimately remain active).
+            if (!document.querySelector('.modal.active')) {
+                try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
+            }
         }
 
         // Opens the in-app Help & Docs page and jumps to the Sutra Cloud section.
@@ -62291,6 +62299,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function openSutraSyncModal() {
             const modal = sutraSyncEl('sutraSyncModal');
             if (!modal) return;
+            // Never stack the Sync sheet above the Cloud sheet (or vice
+            // versa): close the sibling before activating this one.
+            closeSutraCloudModal();
             sutraSyncRuntime.lastFocus = document.activeElement;
             bindSutraSyncUi();
             modal.classList.add('active');
@@ -62306,7 +62317,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const modal = sutraSyncEl('sutraSyncModal');
             if (!modal) return;
             modal.classList.remove('active');
-            try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
+            // Only release the scroll lock when no other modal is still open.
+            if (!document.querySelector('.modal.active')) {
+                try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
+            }
             [
                 'sutraSyncPassphraseInput', 'sutraSyncPassphraseConfirmInput',
                 'sutraSyncUnlockInput', 'sutraSyncCurrentPassInput',
