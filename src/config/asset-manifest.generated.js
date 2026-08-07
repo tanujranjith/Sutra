@@ -14,7 +14,7 @@
     "./src/components/icons/index.js?v=20260709-icons-comments",
     "./src/config/feature-manifest.js?v=20260729-providerwiz1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20260807-ics2",
+    "./src/core/app.js?v=20260807-focusatmospheres1",
     "./src/core/dom-safety.js?v=20260613-harden1",
     "./src/core/error-reporter.js?v=20260613-harden1",
     "./src/core/feature-guard.js?v=20260613-harden1",
@@ -115,7 +115,7 @@
     "./styles/themes/macos26-redesign.css?v=20260712-glass-fix",
     "./styles/themes/sutra-pro.css?v=20260709-comments",
     "./styles/views/custom-tabs.css?v=20260706-ctabs3",
-    "./styles/views/focus-session.css?v=20260614-extract1",
+    "./styles/views/focus-session.css?v=20260807-atmospheres1",
     "./styles/views/settings-redesign.css?v=20260625-cc-segmented-rows",
     "./styles/views/timeline-calendar.css?v=20260721-mobile1",
     "./styles/views/today-redesign.css?v=20260723-mobiletoday4"

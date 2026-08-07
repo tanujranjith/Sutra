@@ -124,7 +124,7 @@
     <link rel="stylesheet" href="styles/legacy/app-shell-base.css?v=20260616-cssextract1">
 
     <!-- Focus Session Overlay Styles -->
-    <link rel="stylesheet" href="styles/views/focus-session.css?v=20260614-extract1">
+    <link rel="stylesheet" href="styles/views/focus-session.css?v=20260807-atmospheres1">
 
     <!-- Analytics removed for the public beta. Sutra is local-first: the
          workspace shell makes no third-party tracking requests on load. If
@@ -7492,7 +7492,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-ics2"></script>
+<script src="src/core/app.js?v=20260807-focusatmospheres1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -8173,6 +8173,7 @@
          ================================================================ -->
     <div id="focusSessionOverlay"
          class="focus-session-overlay"
+         data-ambient="gradient"
          hidden
          role="dialog"
          aria-modal="true"
@@ -8272,12 +8273,12 @@
             </div>
 
             <!-- Ambient background preset picker -->
-            <div class="fs-ambient-bar" role="group" aria-label="Ambient background">
-                <button class="fs-ambient-chip active" data-ambient="gradient"   onclick="fsSetAmbient('gradient')"  title="Minimal gradient">Minimal</button>
-                <button class="fs-ambient-chip"        data-ambient="fireplace"  onclick="fsSetAmbient('fireplace')" title="Warm fireplace">Fireplace</button>
-                <button class="fs-ambient-chip"        data-ambient="nightsky"   onclick="fsSetAmbient('nightsky')"  title="Deep night sky">Night Sky</button>
-                <button class="fs-ambient-chip"        data-ambient="rain"       onclick="fsSetAmbient('rain')"      title="Rainy glass">Rain</button>
-                <button class="fs-ambient-chip"        data-ambient="library"    onclick="fsSetAmbient('library')"   title="Library desk">Library</button>
+            <div class="fs-ambient-bar" role="group" aria-label="Focus atmosphere">
+                <button class="fs-ambient-chip active" data-ambient="gradient"   aria-pressed="true"  onclick="fsSetAmbient('gradient')"  title="Quiet minimal atmosphere"><i class="fas fa-circle" aria-hidden="true"></i><span>Minimal</span></button>
+                <button class="fs-ambient-chip"        data-ambient="fireplace"  aria-pressed="false" onclick="fsSetAmbient('fireplace')" title="Warm fireplace atmosphere"><i class="fas fa-fire" aria-hidden="true"></i><span>Fireplace</span></button>
+                <button class="fs-ambient-chip"        data-ambient="nightsky"   aria-pressed="false" onclick="fsSetAmbient('nightsky')"  title="Deep night sky atmosphere"><i class="fas fa-moon" aria-hidden="true"></i><span>Night Sky</span></button>
+                <button class="fs-ambient-chip"        data-ambient="rain"       aria-pressed="false" onclick="fsSetAmbient('rain')"      title="Rain on glass atmosphere"><i class="fas fa-cloud-rain" aria-hidden="true"></i><span>Rain</span></button>
+                <button class="fs-ambient-chip"        data-ambient="library"    aria-pressed="false" onclick="fsSetAmbient('library')"   title="Warm library atmosphere"><i class="fas fa-book-open" aria-hidden="true"></i><span>Library</span></button>
             </div>
         </div>
 

@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-ics2",
-    "hash": "4e8d5ebac82ac509"
+    "stamp": "20260807-focusatmospheres1",
+    "hash": "411020f97f9ac3c3"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -492,8 +492,8 @@
     "hash": "af0b8bb807caf0f3"
   },
   "styles/views/focus-session.css": {
-    "stamp": "20260614-extract1",
-    "hash": "9b655e76e054d1f7"
+    "stamp": "20260807-atmospheres1",
+    "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
     "stamp": "20260625-cc-segmented-rows",

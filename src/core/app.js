@@ -82694,10 +82694,14 @@ function fsSetAmbient(preset, save) {
     if (!FS_AMBIENT_PRESETS.includes(preset)) return;
 
     var bgEl = document.getElementById('fsAmbientBg');
+    var overlay = document.getElementById('focusSessionOverlay');
     if (bgEl) bgEl.setAttribute('data-ambient', preset);
+    if (overlay) overlay.setAttribute('data-ambient', preset);
 
     document.querySelectorAll('.fs-ambient-chip').forEach(function(chip) {
-        chip.classList.toggle('active', chip.getAttribute('data-ambient') === preset);
+        var selected = chip.getAttribute('data-ambient') === preset;
+        chip.classList.toggle('active', selected);
+        chip.setAttribute('aria-pressed', String(selected));
     });
 
     if (_fsSession && save !== false) {
