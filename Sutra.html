@@ -108,7 +108,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-scrollbounds1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
@@ -5039,10 +5039,10 @@
             <!-- Homework view (embedded into main-content) -->
             <section id="view-homework" class="view view-homework" style="display:none;">
                 <!-- Setup popup (shown when no courses exist) -->
-                <div id="hwSetupOverlay" class="hw-setup-overlay" style="display:none;">
+                <div id="hwSetupOverlay" class="hw-setup-overlay" role="dialog" aria-modal="true" aria-labelledby="hwSetupTitle" aria-describedby="hwSetupDescription" style="display:none;">
                     <div class="hw-setup-card">
-                        <h2>Set Up Your Classes</h2>
-                        <p>Add your classes below. Press Enter or comma after each name. You can always add more later.</p>
+                        <h2 id="hwSetupTitle">Set Up Your Classes</h2>
+                        <p id="hwSetupDescription">Add your classes below. Press Enter or comma after each name. You can always add more later.</p>
                         <label>Classes</label>
                         <div class="hw-chip-input" id="hwClassChips">
                             <input id="hwClassInput" placeholder="Type a class and press Enter" />
@@ -5156,7 +5156,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260721-courseicons5"></script>
+                <script src="src/features/study/homework.js?v=20260807-cohesion1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7933,7 +7933,7 @@
     <!-- storage/taskbar measurement script removed because the taskbar was deleted -->
     <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
-    <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260424-opaque-modals">
+    <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260723-unified2">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
@@ -7941,7 +7941,7 @@
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260721-menuopaque1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260722-slides6">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
@@ -7949,7 +7949,7 @@
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-scrollcontain1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260723-mobiletoday4">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-cohesion2">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">

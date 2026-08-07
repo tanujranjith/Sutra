@@ -50,7 +50,7 @@
     "./src/features/notes/editor-v2.js?v=20260807-pagelinks1",
     "./src/features/study/ap-study.js?v=20260707-batch1",
     "./src/features/study/code-highlight.js?v=20260620-hl1",
-    "./src/features/study/homework.js?v=20260721-courseicons5",
+    "./src/features/study/homework.js?v=20260807-cohesion1",
     "./src/features/study/math-render.js?v=20260620-math1",
     "./src/features/study/review.js?v=20260528-flow-upgrade",
     "./src/features/workspace/activation-metrics.js?v=20260702-activation1",
@@ -87,8 +87,8 @@
     "./src/ui/student-loop-actions.js?v=20260709-studentloop1",
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260723-layercontract1",
-    "./styles/base/microinteractions.css?v=20260424-opaque-modals",
-    "./styles/base/styles.css?v=20260807-scrollbounds1",
+    "./styles/base/microinteractions.css?v=20260807-cohesion1",
+    "./styles/base/styles.css?v=20260807-cohesion1",
     "./styles/base/tokens.css?v=20260807-themefocus1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
@@ -96,7 +96,7 @@
     "./styles/features/command-center.css?v=20260705-clb2",
     "./styles/features/customization.css?v=20260601-handwriting-mods",
     "./styles/features/daily-quotes.css?v=20260807-customquotes1",
-    "./styles/features/homework-redesign.css?v=20260721-menuopaque1",
+    "./styles/features/homework-redesign.css?v=20260807-cohesion1",
     "./styles/features/issue-prompt.css?v=20260617-issue1",
     "./styles/features/notes-editor-v2.css?v=20260807-themefocus1",
     "./styles/features/notes-toolbar.css?v=20260709-toolbar-fields",
@@ -121,7 +121,7 @@
     "./styles/views/focus-session.css?v=20260807-atmospheres1",
     "./styles/views/settings-redesign.css?v=20260625-cc-segmented-rows",
     "./styles/views/timeline-calendar.css?v=20260721-mobile1",
-    "./styles/views/today-redesign.css?v=20260723-mobiletoday4"
+    "./styles/views/today-redesign.css?v=20260807-cohesion2"
   ],
   "optional": [
     "./assets/brand/sutra/generated/favicon.ico",

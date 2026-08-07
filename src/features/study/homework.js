@@ -32,6 +32,7 @@
   let courses = [];
   let tasks = [];
   let activeTaskMenuId = null;
+  let setupDismissedForSession = false;
   let courseQuickModalState = { type: 'class', onCreated: null };
   const homeworkViewState = {
     query: '',
@@ -3049,9 +3050,11 @@
     return !!(homeworkView && homeworkView.classList.contains('active'));
   }
 
-  function showSetup() {
+  function showSetup(options = {}) {
     const overlay = $('#hwSetupOverlay');
     if (!overlay) return;
+
+    if (options.preserveDismissal !== true) setupDismissedForSession = false;
 
     overlay.style.display = 'flex';
     overlay.classList.remove('fade-out');
@@ -3068,6 +3071,11 @@
     if (!overlay) return;
     overlay.classList.remove('fade-out');
     overlay.style.display = 'none';
+  }
+
+  function dismissSetupForSession() {
+    setupDismissedForSession = true;
+    hideSetupImmediate();
   }
 
   function hideSetup(callback) {
@@ -3132,7 +3140,7 @@
   }
 
   function shouldPromptSetup() {
-    return courses.length === 0;
+    return courses.length === 0 && !setupDismissedForSession;
   }
 
   function handleHomeworkViewChange(nextView) {
@@ -3143,7 +3151,7 @@
     }
 
     if (shouldPromptSetup()) {
-      showSetup();
+      showSetup({ preserveDismissal: true });
       return;
     }
 
@@ -3164,6 +3172,7 @@
     const setupDoneBtn = $('#hwSetupDone');
     const setupSkipBtn = $('#hwSetupSkip');
     const setupOverlay = $('#hwSetupOverlay');
+    const setupImportLink = setupOverlay && setupOverlay.querySelector('.hw-setup-import-link');
 
     const legacyAddBtn = $('#addBtn');
     const legacyTaskInput = $('#task');
@@ -3204,12 +3213,18 @@
     }
 
     if (setupSkipBtn) {
-      setupSkipBtn.addEventListener('click', () => hideSetupImmediate());
+      setupSkipBtn.addEventListener('click', dismissSetupForSession);
+    }
+
+    if (setupImportLink) {
+      setupImportLink.addEventListener('click', () => {
+        setupDismissedForSession = true;
+      });
     }
 
     if (setupOverlay) {
       setupOverlay.addEventListener('click', event => {
-        if (event.target === setupOverlay) hideSetupImmediate();
+        if (event.target === setupOverlay) dismissSetupForSession();
       });
     }
 
@@ -3263,7 +3278,7 @@
       }
       if (!isHomeworkViewActive()) return;
       const overlay = $('#hwSetupOverlay');
-      if (overlay && overlay.style.display !== 'none') hideSetupImmediate();
+      if (overlay && overlay.style.display !== 'none') dismissSetupForSession();
     });
 
     window.addEventListener('resize', () => {

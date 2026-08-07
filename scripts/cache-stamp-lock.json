@@ -228,8 +228,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260721-courseicons5",
-    "hash": "674583d5e7aacf83"
+    "stamp": "20260807-cohesion1",
+    "hash": "5f22dcc27364d5dc"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -372,12 +372,12 @@
     "hash": "ab7a4a971ad8a392"
   },
   "styles/base/microinteractions.css": {
-    "stamp": "20260424-opaque-modals",
-    "hash": "b4f058b0e2f2b2a0"
+    "stamp": "20260807-cohesion1",
+    "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260807-scrollbounds1",
-    "hash": "10a3952505c8cc02"
+    "stamp": "20260807-cohesion1",
+    "hash": "a2a6d7802fc88419"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -408,8 +408,8 @@
     "hash": "3bcf3e999e605556"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260721-menuopaque1",
-    "hash": "ab096c24d4de9629"
+    "stamp": "20260807-cohesion1",
+    "hash": "ea118b3f0f81607c"
   },
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",
@@ -516,7 +516,7 @@
     "hash": "38cecfb56b1d6e1b"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260723-mobiletoday4",
-    "hash": "f28df8e3bb5cc6d0"
+    "stamp": "20260807-cohesion2",
+    "hash": "8fcab7c2d576d8af"
   }
 }

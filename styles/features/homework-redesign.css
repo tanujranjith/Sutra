@@ -556,6 +556,12 @@ body.dark .hw-card-meta.hw-meta-conflict { color: #f5c97a; background: rgba(245,
 .hw-toolbar-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .hw-toolbar-primary:hover { filter: brightness(1.07); background: var(--accent); }
 .hw-toolbar-primary i { color: currentColor; }
+
+body[data-theme-key="default"]:not([data-theme="dark"]) .hw-toolbar-primary,
+body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-strong) 55%, transparent);
+}
 .hw-icon-only { width: 42px; padding: 0; list-style: none; }
 .hw-icon-only::-webkit-details-marker { display: none; }
 .hw-file-action { cursor: pointer; }

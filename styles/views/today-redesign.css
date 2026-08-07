@@ -76,6 +76,15 @@
     transform: translateY(0) scale(0.98);
 }
 
+/* The default palette intentionally uses a pale sand accent. Give its primary
+   actions dark ink instead of relying on white text that washes out. */
+body[data-theme-key="default"]:not([data-theme="dark"]) #view-today.today-redesign .today-hero-primary,
+body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primary {
+    background: var(--accent) !important;
+    color: var(--text-primary) !important;
+    border-color: color-mix(in srgb, var(--accent-strong) 55%, transparent) !important;
+}
+
 /* ── 2. Hero row: Next Up + Upcoming Radar ──────────────────────────────── */
 
 #view-today.today-redesign .today-hero-row {

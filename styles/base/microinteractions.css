@@ -311,8 +311,8 @@ body.animations-enabled .hw-setup-card {
 .todo-add-btn:focus-visible,
 .todo-filter-btn:focus-visible,
 .hw-btn:focus-visible {
-  outline: 2.5px solid rgba(var(--accent-rgb), 0.65) !important;
-  outline-offset: 2px !important;
+  outline: 2px solid var(--accent-strong, var(--accent)) !important;
+  outline-offset: 3px !important;
 }
 
 /* Suppress default browser outline on mouse click (only show for keyboard) */
