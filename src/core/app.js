@@ -23930,6 +23930,7 @@ function populateProgressDashboard() {
             try {
                 (Array.isArray(timeBlocks) ? timeBlocks : []).forEach(block => {
                     if (!block || !block.date) return;
+                    if (block.completed === true) return;
                     if (block.source === 'ap_study_exam' || block.source === 'ap_study_session') return;
                     if (linkedTimelineBlockIds.has(String(block.id || ''))) return;
                     const due = normalizeDeadlineDate(block.date, block.start);
@@ -25219,7 +25220,11 @@ function populateProgressDashboard() {
             catch (err) { return []; }
         }
 
-        function recoveryCanQuickAct(item) {
+        function recoveryCanMarkDone(item) {
+            return !!item && (item.source === 'homework' || item.source === 'task' || item.source === 'timeline');
+        }
+
+        function recoveryCanReschedule(item) {
             return !!item && (item.source === 'homework' || item.source === 'task');
         }
 
@@ -25252,6 +25257,16 @@ function populateProgressDashboard() {
                     try { renderTaskViews && renderTaskViews(); } catch (e) { /* non-critical */ }
                     return true;
                 }
+                if (item.source === 'timeline' && typeof timeBlocks !== 'undefined' && Array.isArray(timeBlocks)) {
+                    const row = timeBlocks.find(block => String(block && block.id) === sourceId);
+                    if (!row || change.done !== true) return false;
+                    row.completed = true;
+                    row.completedAt = new Date().toISOString();
+                    row.updatedAt = row.completedAt;
+                    try { saveTimeBlocks && saveTimeBlocks(); } catch (e) { return false; }
+                    try { renderTimeline && renderTimeline(); } catch (e) { /* non-critical */ }
+                    return true;
+                }
             } catch (err) { window.SutraReportError && window.SutraReportError(err, 'overdueRecovery:mutate', 'warning'); }
             return false;
         }
@@ -25263,7 +25278,7 @@ function populateProgressDashboard() {
         }
 
         function recoveryRescheduleAll(when) {
-            const targets = overdueDeadlineItems().filter(recoveryCanQuickAct);
+            const targets = overdueDeadlineItems().filter(recoveryCanReschedule);
             const dateKey = recoveryDateKey(when);
             let n = 0;
             targets.forEach(it => { if (mutateDeadlineRecord(it, { dueDate: dateKey })) n += 1; });
@@ -25278,7 +25293,7 @@ function populateProgressDashboard() {
             const items = overdueDeadlineItems();
             const body = modal.querySelector('.overdue-recovery-body');
             const toolbar = modal.querySelector('#overdueRecoveryToolbar');
-            const quickCount = items.filter(recoveryCanQuickAct).length;
+            const quickCount = items.filter(recoveryCanReschedule).length;
             if (toolbar) {
                 const toolbarHtml = items.length === 0
                     ? ''
@@ -25298,16 +25313,17 @@ function populateProgressDashboard() {
                     bodyHtml = `<ul class="overdue-recovery-list">${items.map(i => {
                         const dueLabel = (() => { try { return i.due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } })();
                         const daysLate = (() => { try { return Math.max(1, Math.round((Date.now() - i.due.getTime()) / 86400000)); } catch (e) { return 0; } })();
-                        const canAct = recoveryCanQuickAct(i);
+                        const canMarkDone = recoveryCanMarkDone(i);
+                        const canReschedule = recoveryCanReschedule(i);
                         return `<li class="overdue-recovery-item" data-recover-id="${escapeHtml(i.id)}">
                             <div class="overdue-recovery-main">
                                 <div class="overdue-recovery-title">${escapeHtml(i.title)}</div>
                                 <div class="overdue-recovery-meta">${escapeHtml(i.source)}${i.subtitle ? ' · ' + escapeHtml(i.subtitle) : ''} · was due ${escapeHtml(dueLabel)}${daysLate ? ` · ${daysLate}d late` : ''}</div>
                             </div>
                             <div class="overdue-recovery-actions">
-                                ${canAct ? `<button type="button" class="neumo-btn active" data-recover-done="${escapeHtml(i.id)}" title="Mark done">Done</button>` : ''}
-                                ${canAct ? `<button type="button" class="neumo-btn" data-recover-move="today" data-recover-move-id="${escapeHtml(i.id)}" title="Move to today">Today</button>` : ''}
-                                ${canAct ? `<button type="button" class="neumo-btn" data-recover-move="tomorrow" data-recover-move-id="${escapeHtml(i.id)}" title="Move to tomorrow">Tomorrow</button>` : ''}
+                                ${canMarkDone ? `<button type="button" class="neumo-btn active" data-recover-done="${escapeHtml(i.id)}" title="Mark done">Done</button>` : ''}
+                                ${canReschedule ? `<button type="button" class="neumo-btn" data-recover-move="today" data-recover-move-id="${escapeHtml(i.id)}" title="Move to today">Today</button>` : ''}
+                                ${canReschedule ? `<button type="button" class="neumo-btn" data-recover-move="tomorrow" data-recover-move-id="${escapeHtml(i.id)}" title="Move to tomorrow">Tomorrow</button>` : ''}
                                 <button type="button" class="neumo-btn" data-recover-open="${escapeHtml(i.id)}" title="Open">Open</button>
                             </div>
                         </li>`;

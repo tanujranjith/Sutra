@@ -74,7 +74,9 @@ schedule context, but do not create Sutra notification-center reminders or
 overdue alerts. By default, only the most recent five local calendar days of
 an imported file can enter Today, All Due, Recovery, or the upcoming radar;
 older events remain Timeline history. Manually created Timeline blocks retain
-their existing reminder behavior.
+their existing reminder behavior. An overdue Timeline block can be marked
+complete from Today → Recover; it remains visible in Timeline with its
+completion state, but leaves deadline-driven surfaces.
 
 ## Push time
 
