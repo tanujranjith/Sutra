@@ -566,6 +566,9 @@ mustContain('src/features/assistant/flow-assistant.js', "type: 'slides_create_de
 mustContain('src/features/assistant/flow-assistant.js', "type: 'slides_edit_deck'", 'Slides atomic editing action registered');
 mustContain('src/features/workspace/surface-assistant-actions.js', 'function applyCanvas', 'pure Canvas Assistant operation engine present');
 mustContain('src/features/workspace/surface-assistant-actions.js', 'function applySlides', 'pure Slides Assistant operation engine present');
+mustContain('src/features/workspace/slides.js', 'function slidesUndo()', 'Slides session undo bridge present');
+mustContain('src/features/workspace/slides.js', 'function beginElementDrag', 'Slides direct object manipulation present');
+mustContain('src/features/workspace/slides.js', 'function syncElementInspector', 'Slides selection inspector present');
 mustContain('src/features/workspace/canvas-workbench.js', 'function fitViewport', 'Canvas fit-to-content engine present');
 mustContain('src/features/workspace/canvas-workbench.js', 'function pasteSelection', 'Canvas structured clipboard engine present');
 mustContain('src/core/app.js', 'function canvasArrangeSelection', 'Canvas arrangement bridge present');

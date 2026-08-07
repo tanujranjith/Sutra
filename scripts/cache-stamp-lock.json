@@ -280,8 +280,8 @@
     "hash": "76654a6d7b2c8d91"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "cd4da461084a1ff7"
+    "stamp": "20260807-slidesworkbench1",
+    "hash": "55fd658d86e2cc50"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -444,8 +444,8 @@
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260722-slides6",
-    "hash": "346306a722e199ca"
+    "stamp": "20260807-slidesworkbench1",
+    "hash": "092dd11fd8c243b0"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",

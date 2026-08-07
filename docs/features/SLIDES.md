@@ -16,6 +16,21 @@ The current interaction state—selected slide, selected element, inspector
 visibility, and presenter position—is session-only. It is never persisted, so
 opening a deck does not cause Sync churn.
 
+## Workbench editing
+
+The editor includes session-scoped undo/redo, direct drag and resize for text,
+shapes, charts, and local images, plus a selection inspector for text size,
+weight, text color, fill, layer order, copy, duplicate, and delete. Arrow keys
+nudge the selected object; Shift increases the movement. `Ctrl/Cmd+C`, `V`,
+`D`, `Z`, and `Y` copy, paste, duplicate, undo, and redo. Page Up/Down and the
+toolbar reorder the active slide.
+
+These interactions mutate only the owning `page.slides` record through the
+canonical workspace bridge. Undo and clipboard data remain editor-session state
+and do not become durable fields. Presentation mode uses read-only elements,
+supports keyboard navigation, and lets a presenter toggle speaker notes with
+`N`.
+
 ## Local-first behavior
 
 The deck mutates its owning page through the canonical `flowAtelier.pages`

@@ -45,3 +45,12 @@ test('Slides uses the canonical locked-page authorization boundary', () => {
   assert.match(slidesSource, /page && pageContentAuthorized\(page\) \? page : null/);
   assert.match(slidesSource, /page && pageContentAuthorized\(page\) && page\.slides/);
 });
+
+test('Slides workbench keeps manipulation session-scoped and uses canonical page persistence', () => {
+  assert.match(slidesSource, /function slidesUndo\(\)/);
+  assert.match(slidesSource, /function beginElementDrag/);
+  assert.match(slidesSource, /function syncElementInspector/);
+  assert.match(slidesSource, /page\.slides\s*=\s*cloneDeck\(entry\.deck\)/);
+  assert.match(slidesSource, /page\.updatedAt\s*=\s*new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(slidesSource, /localStorage\.setItem|fetch\(|XMLHttpRequest/);
+});
