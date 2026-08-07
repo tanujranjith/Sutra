@@ -19,6 +19,21 @@ The date field remains the centered-date compatibility control. Today, previous,
 and next navigation keep their local date semantics: Day moves one day, Week
 moves seven days, and Month moves one calendar month.
 
+## Fast calendar controls
+
+When the calendar itself has focus, its keyboard controls keep planning fast
+without creating another scheduler or bypassing the canonical block modal:
+
+- **Left/Right** or **[/]** move by the visible view's natural step.
+- **T** returns to today; **D**, **W**, and **M** select Day, Week, or Month.
+- **N** opens the established block form at the next local 45-minute opening
+  on the focused date (falling back to 9:00 AM when the displayed day is full).
+- **?** announces the available shortcuts for screen-reader users.
+
+Text fields, selects, and buttons retain their normal keyboard behavior. The
+calendar's live status area announces navigation and creation intent; it does
+not persist any additional UI state.
+
 ## Scheduling contracts
 
 The calendar keeps the existing `window.SutraTimelineDrag` contract intact:

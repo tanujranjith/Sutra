@@ -296,8 +296,8 @@
     "hash": "0bdf44d3dad8df1a"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260807-ics1",
-    "hash": "2ac12059694bb537"
+    "stamp": "20260807-calendarworkbench1",
+    "hash": "aee1b4265eeb50b1"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
