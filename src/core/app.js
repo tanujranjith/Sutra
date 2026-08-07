@@ -55255,6 +55255,27 @@ function getActiveEditor() {
             }
             return performEncryptedSutraWorkspaceExport(options);
         }
+        async function exportUnencryptedSutraPackage(options = {}) {
+            const confirmed = options.confirmed === true || (typeof window !== 'undefined' && window.confirm('This .sutra backup will NOT be encrypted. Anyone with the file can read your workspace. Continue only if you trust its destination.'));
+            if (!confirmed) return false;
+            try {
+                // This intentionally emits the same verified internal package that
+                // encrypted backups wrap. It remains a legacy-compatible plaintext
+                // ZIP package, but never bypasses the complete-attachment preflight.
+                const internalPackage = await buildCanonicalSutraPackageBytes({ ...options, requireCompleteAttachments: true });
+                const filename = options.filenamePrefix ? buildWorkspaceExportFilename(String(options.filenamePrefix)) : buildWorkspaceExportFilename('sutra_UNENCRYPTED_workspace');
+                await triggerBlobDownload(new Blob([internalPackage.bytes], { type: 'application/zip' }), filename);
+                recordAtelierDataHealth({ lastAtelierExportAt: new Date().toISOString() });
+                clearResolvedExportFailure();
+                showToast('Unencrypted .sutra exported. Keep this readable file somewhere private.', { durationMs: 6000 });
+                return { filename, manifest: internalPackage.manifest, encrypted: false };
+            } catch (error) {
+                console.error('Unencrypted Sutra export failed', error);
+                recordPersistenceFailure(error, { reason: 'unencrypted-sutra-export', phase: 'sutra-export' });
+                showToast(`Unencrypted .sutra export failed: ${error.message || 'Unknown error'}`);
+                throw error;
+            }
+        }
 
         // ====================================================================
         // Sutra Cloud — optional, consent-first, end-to-end-encrypted backup.
@@ -60673,6 +60694,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 async createBackupBlob(passphrase, options = {}) {
                     return createEncryptedSutraBackupBlob({ ...options, passphrase });
                 },
+                // Compatibility-only plaintext package export. Kept beside the
+                // encrypted API so the inline Settings control never depends on a
+                // private app.js closure or introduces a broad new window global.
+                exportUnencryptedPackage: exportUnencryptedSutraPackage,
                 async inspectEnvelope(blobOrBuffer) {
                     const buffer = blobOrBuffer && typeof blobOrBuffer.arrayBuffer === 'function'
                         ? await blobOrBuffer.arrayBuffer()

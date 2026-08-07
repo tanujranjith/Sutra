@@ -4495,9 +4495,11 @@
                         <div class="cc-group-head"><span class="cc-group-title">Backups</span></div>
                         <div class="cc-stacked-actions">
                             <button class="cc-btn cc-btn-ghost" id="exportAtelierWorkspaceBtn" onclick="exportWorkspaceAsAtelierPackage()">Encrypted Workspace Backup (.sutra)</button>
+                            <button class="cc-btn cc-btn-ghost" id="exportUnencryptedSutraWorkspaceBtn" onclick="window.SutraEncryptedBackups.exportUnencryptedPackage()">Unencrypted Workspace Backup (.sutra)</button>
                             <button class="cc-btn cc-btn-ghost" id="exportWorkspaceBtn" onclick="exportToFile()">Export Workspace JSON (unencrypted)</button>
                             <button class="cc-btn cc-btn-ghost" id="importWorkspaceBtn" onclick="importFromFile()">Import Workspace / Docs</button>
                         </div>
+                        <p class="cc-section-copy">Unencrypted <strong>.sutra</strong> is an optional compatibility export. It is readable by anyone who gets the file; Sutra asks for confirmation before creating it. Use the encrypted backup for normal protection.</p>
                         <div class="sutra-data-safety-grid" aria-label="Backup health and data safety">
                             <article class="sutra-data-safety-card">
                                 <span class="sutra-data-safety-label">Last .sutra export</span>
@@ -7696,7 +7698,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-canvas1"></script>
+<script src="src/core/app.js?v=20260807-backup25"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
