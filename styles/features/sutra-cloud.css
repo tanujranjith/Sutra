@@ -38,6 +38,42 @@
     color: var(--text-secondary);
 }
 
+.sutra-cloud-sync-first {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0 0 14px;
+    padding: 14px;
+    border: 1px solid var(--border-color, rgba(125, 125, 125, 0.25));
+    border-radius: 12px;
+    background: var(--surface-2, rgba(125, 125, 125, 0.08));
+}
+
+.sutra-cloud-sync-first h4,
+.sutra-cloud-sync-first p {
+    margin: 0;
+}
+
+.sutra-cloud-sync-first h4 {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.sutra-cloud-sync-first p {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+    .sutra-cloud-sync-first {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
 .sutra-cloud-status {
     margin: 0 0 14px;
     font-size: 13px;

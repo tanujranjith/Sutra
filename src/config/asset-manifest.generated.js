@@ -107,7 +107,7 @@
     "./styles/features/sidebar-page-actions.css?v=20260803-overflow1",
     "./styles/features/slides.css?v=20260807-slidesworkbench1",
     "./styles/features/startup-intro.css",
-    "./styles/features/sutra-cloud.css?v=20260618-cloud1",
+    "./styles/features/sutra-cloud.css?v=20260807-cloud26",
     "./styles/legacy/app-shell-base.css?v=20260616-cssextract1",
     "./styles/legacy/mobile-global.css?v=20260616-cssextract1",
     "./styles/legacy/refinement.css?v=20260616-cssextract1",

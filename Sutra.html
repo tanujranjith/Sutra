@@ -6344,7 +6344,15 @@
                 <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Choose where Sutra stores your encrypted backups.</p>
+                <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Start with encrypted multi-device Sync, then choose a backup destination when you want a recoverable snapshot.</p>
+
+                <section class="sutra-cloud-sync-first" aria-labelledby="sutraCloudSyncFirstTitle">
+                    <div>
+                        <h4 id="sutraCloudSyncFirstTitle">Use Sutra on another device</h4>
+                        <p>Sign in by email, set a Sync passphrase, and keep your workspace encrypted while it moves between your devices. Sync replicates changes; backups remain separate recovery points.</p>
+                    </div>
+                    <button class="storage-btn primary" type="button" id="sutraCloudOpenSyncBtn" onclick="window.openSutraSyncModal()">Set up multi-device Sync</button>
+                </section>
 
                 <!-- Status card (current destination, connection, last backup, issues) -->
                 <div class="sutra-cloud-status-card" id="sutraCloudStatusCard" aria-live="polite"></div>
@@ -6377,7 +6385,7 @@
 
                 <!-- Choose destination -->
                 <div class="sutra-cloud-section">
-                    <h4 class="sutra-cloud-h">Choose backup destination</h4>
+                    <h4 class="sutra-cloud-h">Backup destinations</h4>
                     <div class="sutra-cloud-card-group" id="sutraCloudCardsRecommended"></div>
                     <details class="sutra-cloud-advanced" id="sutraCloudAdvanced">
                         <summary><i class="fas fa-screwdriver-wrench" aria-hidden="true"></i> Advanced destinations</summary>
@@ -8116,7 +8124,7 @@
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
-    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
+    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260807-cloud26">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-scrollcontain1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-todaywidgets1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
