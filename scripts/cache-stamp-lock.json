@@ -28,16 +28,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260807-actionrepair2",
-    "hash": "803c8c2c23338aad"
+    "stamp": "20260807-providers1",
+    "hash": "ef8d6dfbe7ee90c3"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-signaturethemes1",
-    "hash": "8df26f2a854b6a04"
+    "stamp": "20260807-providers1",
+    "hash": "f2f0fdc58b3826fe"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -180,8 +180,8 @@
     "hash": "1d0489289b3b61aa"
   },
   "src/features/assistant/model-capabilities.js": {
-    "stamp": "20260714-assistant-trust1",
-    "hash": "d1f47d7483b004c9"
+    "stamp": "20260807-providers1",
+    "hash": "0b9ca6702885e144"
   },
   "src/features/assistant/note-patch-system.js": {
     "stamp": "20260711-note-patch1",

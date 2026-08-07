@@ -277,6 +277,9 @@ You bring your own AI provider. Sutra supports:
 - **Google Gemini**
 - **Groq**
 - **OpenRouter**
+- **NVIDIA NIM**
+- **Mistral AI**
+- **Together AI**
 - **DeepSeek**
 - **xAI (Grok)**
 - **Perplexity (Sonar)**
@@ -362,6 +365,7 @@ balance.
 | **Local / Custom endpoint** | **Free** (your hardware) | Fully offline, no key | Ollama / LM Studio |
 | **OpenAI** | Paid (add credit) | Top-tier GPT models | platform.openai.com |
 | **Anthropic Claude** | Paid (add credit) | Top-tier Claude models | console.anthropic.com |
+| **NVIDIA NIM / Mistral / Together AI** | Provider-specific | Hosted open models through OpenAI-compatible APIs | Their provider console |
 | **DeepSeek / xAI / Perplexity** | Provider-specific | Text-first assistant chat and approved action proposals | Their provider console |
 
 > Tip: start with **Groq** or **Google Gemini** — both are free and take about two
@@ -401,6 +405,21 @@ balance.
 2. Open **Keys** (account menu) → **Create Key** and **copy** it.
 3. In Sutra: provider **OpenRouter**. To stay free, choose a **Model ID that ends
    in `:free`** from OpenRouter's model list; paid models need account credit.
+
+### NVIDIA NIM, Mistral AI, and Together AI
+
+These are first-class provider choices using Sutra's audited OpenAI-compatible
+request path. Create a key in the provider's console, paste it into the matching
+field in **Settings ▸ Assistant ▸ API keys**, select the provider, then use
+**Refresh models** or enter the exact current model ID.
+
+- NVIDIA API Catalog / hosted NIM uses `integrate.api.nvidia.com`.
+- Mistral uses `api.mistral.ai` and includes Mistral/Pixtral model families.
+- Together uses `api.together.xyz` and namespaced model IDs such as
+  `provider/model-name`.
+
+Availability and pricing belong to each provider. Sutra does not silently route
+between them, and all three keys remain session-only and export-excluded.
 
 ### DeepSeek, xAI (Grok), and Perplexity (Sonar)
 
@@ -659,7 +678,8 @@ all grade math comes from `SutraGradePlanner.engine`, never the model.
 
 `window.SutraProviderMeta` centralizes provider metadata (label, description,
 key dashboard URL, docs URL, requiresKey) for OpenAI, Anthropic, Gemini, Groq,
-OpenRouter, DeepSeek, xAI, Perplexity, and a Local endpoint. Its presence-only
+OpenRouter, NVIDIA NIM, Mistral AI, Together AI, DeepSeek, xAI, Perplexity, and
+a Local endpoint. Its presence-only
 `hasKey` / `hasAnyKey` booleans and `openKeySettings(provider)` feed the
 empty-state "Connect an AI provider" card and the Assistant guide. Raw keys
 never pass through it.

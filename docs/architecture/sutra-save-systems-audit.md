@@ -215,7 +215,8 @@ the export. They are NOT separately exported and do not need to be._
 **sessionStorage — never exported (default credentials/ephemeral)**
 `groq_api_key`, `openai_api_key`, `anthropic_api_key`, `gemini_api_key`,
 `openrouter_api_key`, `deepseek_api_key`, `xai_api_key`,
-`perplexity_api_key`, `local_api_key`, `chat_history`,
+`perplexity_api_key`, `nvidia_api_key`, `mistral_api_key`,
+`together_api_key`, `local_api_key`, `chat_history`,
 `noteflow_ui_scroll_state_v1`.
 
 ---

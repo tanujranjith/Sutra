@@ -115,6 +115,9 @@
         groq: 'openai_compatible',
         openai: 'openai_compatible',
         openrouter: 'openai_compatible',
+        nvidia: 'openai_compatible',
+        mistral: 'openai_compatible',
+        together: 'openai_compatible',
         // These adapters all use the same audited OpenAI-compatible request
         // builder in app.js. They remain text-first unless a selected model is
         // explicitly recognized as vision-capable below; we do not infer native
@@ -145,6 +148,9 @@
         openai: { maxFileBytes: 20 * 1024 * 1024, maxTotalAttachmentBytes: 20 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 8 },
         groq: { maxFileBytes: 8 * 1024 * 1024, maxTotalAttachmentBytes: 16 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 4 },
         openrouter: { maxFileBytes: 16 * 1024 * 1024, maxTotalAttachmentBytes: 24 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 6 },
+        nvidia: { maxFileBytes: 8 * 1024 * 1024, maxTotalAttachmentBytes: 16 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 4 },
+        mistral: { maxFileBytes: 8 * 1024 * 1024, maxTotalAttachmentBytes: 16 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 4 },
+        together: { maxFileBytes: 8 * 1024 * 1024, maxTotalAttachmentBytes: 16 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 4 },
         local: { maxFileBytes: 8 * 1024 * 1024, maxTotalAttachmentBytes: 16 * 1024 * 1024, maxPdfPages: 0, maxFilesPerRequest: 4 }
     };
 

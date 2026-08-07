@@ -98,7 +98,8 @@ device). For the full layout, see [`DATA_AND_BACKUPS.md`](./DATA_AND_BACKUPS.md)
 Sutra Assistant can use a language model, but **Sutra runs no model servers of
 its own.** When a reply needs a model, the request goes **directly from your
 browser to the AI provider you have chosen** (OpenAI, Anthropic Claude, Google
-Gemini, Groq, OpenRouter, DeepSeek, xAI, Perplexity, or a Custom
+Gemini, Groq, OpenRouter, NVIDIA NIM, Mistral AI, Together AI, DeepSeek, xAI,
+Perplexity, or a Custom
 OpenAI-Compatible / Local endpoint). There is no Sutra relay in the middle.
 
 The local signal layer - **Sutra Intelligence** - that reads your workspace to

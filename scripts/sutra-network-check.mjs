@@ -18,6 +18,9 @@ const approved = [
   'https://api.anthropic.com',
   'https://generativelanguage.googleapis.com',
   'https://openrouter.ai',
+  'https://integrate.api.nvidia.com',
+  'https://api.mistral.ai',
+  'https://api.together.xyz',
   // Additional opt-in AI providers (OpenAI-compatible chat endpoints, pinned in
   // the Sutra.html connect-src). Calls happen only after the user pastes their
   // own key; keys stay session-only and never enter exports.
@@ -64,9 +67,15 @@ const approved = [
   'https://console.groq.com',
   'https://platform.openai.com',
   'https://console.anthropic.com',
+  'https://build.nvidia.com',
+  'https://console.mistral.ai',
+  'https://api.together.ai',
   // Provider documentation links (Assistant guide / provider registry).
   // Rendered as user-clicked anchors only — never fetched by the app.
   'https://docs.anthropic.com',
+  'https://docs.api.nvidia.com',
+  'https://docs.mistral.ai',
+  'https://docs.together.ai',
   'https://ai.google.dev',
   'https://platform.deepseek.com',
   'https://console.x.ai',

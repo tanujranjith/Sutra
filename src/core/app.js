@@ -68817,8 +68817,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             target.classList.add('cc-flash');
             setTimeout(() => target.classList.remove('cc-flash'), 1600);
             const provider = (typeof getCurrentChatProvider === 'function') ? getCurrentChatProvider() : 'groq';
-            const focusMap = { groq: 'groqApiKeyInput', openai: 'openaiApiKeyInput', anthropic: 'anthropicApiKeyInput', gemini: 'geminiApiKeyInput', openrouter: 'openrouterApiKeyInput' };
-            const focusEl = document.getElementById(focusMap[provider]);
+            const focusEl = getProviderApiKeyInput(provider);
             if (focusEl) focusEl.focus();
         }, 60);
     }
@@ -68856,7 +68855,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
     const deepseekApiKeyInput = document.getElementById('deepseekApiKeyInput');
     const xaiApiKeyInput = document.getElementById('xaiApiKeyInput');
     const perplexityApiKeyInput = document.getElementById('perplexityApiKeyInput');
+    const nvidiaApiKeyInput = document.getElementById('nvidiaApiKeyInput');
+    const mistralApiKeyInput = document.getElementById('mistralApiKeyInput');
+    const togetherApiKeyInput = document.getElementById('togetherApiKeyInput');
     const localApiKeyInput = document.getElementById('localApiKeyInput');
+    const PROVIDER_KEY_INPUTS = Object.freeze({
+        groq: groqApiKeyInput, openai: openaiApiKeyInput, anthropic: anthropicApiKeyInput,
+        gemini: geminiApiKeyInput, openrouter: openrouterApiKeyInput, deepseek: deepseekApiKeyInput,
+        xai: xaiApiKeyInput, perplexity: perplexityApiKeyInput, nvidia: nvidiaApiKeyInput,
+        mistral: mistralApiKeyInput, together: togetherApiKeyInput, local: localApiKeyInput
+    });
     const chatInfoBtn = document.getElementById('chatInfoBtn');
     const chatInfo = document.getElementById('chatbotInfo');
     const CHAT_PROVIDER_STORAGE_KEY = 'chat_provider';
@@ -69021,6 +69029,39 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 type: 'openai_compatible',
                 models: []
             },
+            // NVIDIA API Catalog / hosted NIM — OpenAI-compatible. The catalog's
+            // live model list is authoritative because availability changes.
+            nvidia: {
+                label: 'NVIDIA NIM',
+                keyStorage: 'nvidia_api_key',
+                defaultModel: '',
+                modelsEndpoint: 'https://integrate.api.nvidia.com/v1/models',
+                chatEndpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+                type: 'openai_compatible',
+                models: []
+            },
+            // Mistral's v1 REST surface uses the OpenAI chat/model shapes and
+            // Bearer authentication. Keep exact model IDs user-selected.
+            mistral: {
+                label: 'Mistral AI',
+                keyStorage: 'mistral_api_key',
+                defaultModel: '',
+                modelsEndpoint: 'https://api.mistral.ai/v1/models',
+                chatEndpoint: 'https://api.mistral.ai/v1/chat/completions',
+                type: 'openai_compatible',
+                models: []
+            },
+            // Together's documented compatibility base is api.together.xyz/v1;
+            // its namespaced model IDs are discovered rather than hard-coded.
+            together: {
+                label: 'Together AI',
+                keyStorage: 'together_api_key',
+                defaultModel: '',
+                modelsEndpoint: 'https://api.together.xyz/v1/models',
+                chatEndpoint: 'https://api.together.xyz/v1/chat/completions',
+                type: 'openai_compatible',
+                models: []
+            },
             // DeepSeek — OpenAI-compatible. Base https://api.deepseek.com (verified
             // against api-docs.deepseek.com 2026-06). Live GET /models returns the
             // current list (data[].id); deepseek-chat / deepseek-reasoner are the
@@ -69123,16 +69164,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function getProviderApiKeyInput(provider) {
-            if (provider === 'groq') return groqApiKeyInput;
-            if (provider === 'openai') return openaiApiKeyInput;
-            if (provider === 'anthropic') return anthropicApiKeyInput;
-            if (provider === 'gemini') return geminiApiKeyInput;
-            if (provider === 'openrouter') return openrouterApiKeyInput;
-            if (provider === 'deepseek') return deepseekApiKeyInput;
-            if (provider === 'xai') return xaiApiKeyInput;
-            if (provider === 'perplexity') return perplexityApiKeyInput;
-            if (provider === 'local') return localApiKeyInput;
-            return null;
+            return PROVIDER_KEY_INPUTS[provider] || null;
         }
 
         function looksLikeApiKeyForProvider(provider, value) {
@@ -69146,6 +69178,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (provider === 'deepseek') return /^sk-[A-Za-z0-9]+$/.test(candidate);
             if (provider === 'xai') return /^xai-[A-Za-z0-9_-]+$/.test(candidate);
             if (provider === 'perplexity') return /^pplx-[A-Za-z0-9_-]+$/.test(candidate);
+            if (provider === 'nvidia') return /^nvapi-[A-Za-z0-9_-]+$/.test(candidate);
             return /^(sk-|gsk_|AIza|xai-|pplx-)[A-Za-z0-9_-]+$/.test(candidate);
         }
 
@@ -69173,33 +69206,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function populateKeyInputsFromStorage() {
-            if (groqApiKeyInput) groqApiKeyInput.value = getProviderApiKey('groq');
-            if (openaiApiKeyInput) openaiApiKeyInput.value = getProviderApiKey('openai');
-            if (anthropicApiKeyInput) anthropicApiKeyInput.value = getProviderApiKey('anthropic');
-            if (geminiApiKeyInput) geminiApiKeyInput.value = getProviderApiKey('gemini');
-            if (openrouterApiKeyInput) openrouterApiKeyInput.value = getProviderApiKey('openrouter');
-            if (deepseekApiKeyInput) deepseekApiKeyInput.value = getProviderApiKey('deepseek');
-            if (xaiApiKeyInput) xaiApiKeyInput.value = getProviderApiKey('xai');
-            if (perplexityApiKeyInput) perplexityApiKeyInput.value = getProviderApiKey('perplexity');
-            if (localApiKeyInput) localApiKeyInput.value = getProviderApiKey('local');
+            Object.keys(PROVIDER_KEY_INPUTS).forEach(provider => {
+                const input = PROVIDER_KEY_INPUTS[provider];
+                if (input) input.value = getProviderApiKey(provider);
+            });
         }
 
         function saveAllApiKeys() {
-            const keyMap = {
-                groq: groqApiKeyInput ? groqApiKeyInput.value.trim() : '',
-                openai: openaiApiKeyInput ? openaiApiKeyInput.value.trim() : '',
-                anthropic: anthropicApiKeyInput ? anthropicApiKeyInput.value.trim() : '',
-                gemini: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
-                openrouter: openrouterApiKeyInput ? openrouterApiKeyInput.value.trim() : '',
-                deepseek: deepseekApiKeyInput ? deepseekApiKeyInput.value.trim() : '',
-                xai: xaiApiKeyInput ? xaiApiKeyInput.value.trim() : '',
-                perplexity: perplexityApiKeyInput ? perplexityApiKeyInput.value.trim() : '',
-                local: localApiKeyInput ? localApiKeyInput.value.trim() : ''
-            };
-            Object.keys(keyMap).forEach(provider => {
+            Object.keys(PROVIDER_KEY_INPUTS).forEach(provider => {
                 const config = CHAT_PROVIDER_CONFIG[provider];
-                if (!config) return;
-                writeSensitiveValue(config.keyStorage, keyMap[provider]);
+                const input = PROVIDER_KEY_INPUTS[provider];
+                if (!config || !input) return;
+                writeSensitiveValue(config.keyStorage, input.value.trim());
             });
             showToast('API keys saved for this session');
             updateChatKeyBanner();
@@ -69388,7 +69406,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const resp = await fetch(config.modelsEndpoint, { method: 'GET', headers });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-            const all = (Array.isArray(data.data) ? data.data : []).map(model => String(model?.id || '').trim()).filter(Boolean);
+            const modelRows = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+            const all = modelRows.map(model => String(model?.id || '').trim()).filter(Boolean);
             if (provider === 'openai') {
                 return all.filter(model => /gpt|o\d|omni|mini|nano/i.test(model));
             }
@@ -74901,6 +74920,9 @@ ${cspMeta}
                         { id: 'openai', label: 'OpenAI', requiresKey: true, cost: 'Usage billed by OpenAI', privacy: 'Remote: selected context goes directly to OpenAI', description: 'GPT models; image input supported.', keyUrl: 'https://platform.openai.com/api-keys', docsUrl: 'https://platform.openai.com/docs' },
                         { id: 'anthropic', label: 'Anthropic', requiresKey: true, cost: 'Usage billed by Anthropic', privacy: 'Remote: selected context goes directly to Anthropic', description: 'Claude models; PDFs and images supported.', keyUrl: 'https://console.anthropic.com/settings/keys', docsUrl: 'https://docs.anthropic.com' },
                         { id: 'openrouter', label: 'OpenRouter', requiresKey: true, cost: 'Model-specific pricing', privacy: 'Remote: selected context goes through OpenRouter', description: 'One key for many hosted models.', keyUrl: 'https://openrouter.ai/keys', docsUrl: 'https://openrouter.ai/docs' },
+                        { id: 'nvidia', label: 'NVIDIA NIM', requiresKey: true, cost: 'Provider pricing / API Catalog credits', privacy: 'Remote: selected context goes directly to NVIDIA', description: 'Hosted NIM access to NVIDIA and open models.', keyUrl: 'https://build.nvidia.com/settings/api-keys', docsUrl: 'https://docs.api.nvidia.com/nim/reference/llm-apis' },
+                        { id: 'mistral', label: 'Mistral AI', requiresKey: true, cost: 'Usage billed by Mistral', privacy: 'Remote: selected context goes directly to Mistral', description: 'Mistral and Pixtral chat models.', keyUrl: 'https://console.mistral.ai/api-keys/', docsUrl: 'https://docs.mistral.ai/api/' },
+                        { id: 'together', label: 'Together AI', requiresKey: true, cost: 'Usage billed by Together AI', privacy: 'Remote: selected context goes directly to Together AI', description: 'One OpenAI-compatible API for many hosted open models.', keyUrl: 'https://api.together.ai/settings/api-keys', docsUrl: 'https://docs.together.ai/docs/inference/openai-compatibility' },
                         { id: 'deepseek', label: 'DeepSeek', requiresKey: true, cost: 'Usage billed by DeepSeek', privacy: 'Remote: selected context goes directly to DeepSeek', description: 'OpenAI-compatible chat and reasoning models.', keyUrl: 'https://platform.deepseek.com/api_keys', docsUrl: 'https://api-docs.deepseek.com/' },
                         { id: 'xai', label: 'xAI (Grok)', requiresKey: true, cost: 'Usage billed by xAI', privacy: 'Remote: selected context goes directly to xAI', description: 'OpenAI-compatible Grok chat models.', keyUrl: 'https://console.x.ai/', docsUrl: 'https://docs.x.ai/' },
                         { id: 'perplexity', label: 'Perplexity (Sonar)', requiresKey: true, cost: 'Usage billed by Perplexity', privacy: 'Remote: selected context may include provider web results', description: 'Web-grounded Sonar chat models; external web results may be used by the provider.', keyUrl: 'https://www.perplexity.ai/settings/api', docsUrl: 'https://docs.perplexity.ai/' },
@@ -74909,7 +74931,9 @@ ${cspMeta}
                     hasKey: (provider) => { try { return !!getProviderApiKey(provider); } catch (e) { return false; } },
                     hasAnyKey: () => {
                         try {
-                            if (['groq', 'openai', 'anthropic', 'gemini', 'openrouter', 'deepseek', 'xai', 'perplexity'].some(p => !!getProviderApiKey(p))) return true;
+                            const remoteProviders = Object.keys(CHAT_PROVIDER_CONFIG)
+                                .filter(provider => !CHAT_PROVIDER_CONFIG[provider].isLocal);
+                            if (remoteProviders.some(provider => !!getProviderApiKey(provider))) return true;
                             const local = getWorkspacePreference('assistant.localEndpoint', {});
                             return !!(local && String(local.baseUrl || '').trim());
                         } catch (e) { return false; }
@@ -75538,7 +75562,7 @@ ${cspMeta}
         if (refreshChatModelsBtn) {
             refreshChatModelsBtn.addEventListener('click', refreshModelsForCurrentProvider);
         }
-        [groqApiKeyInput, openaiApiKeyInput, anthropicApiKeyInput, geminiApiKeyInput, openrouterApiKeyInput]
+        Object.values(PROVIDER_KEY_INPUTS)
             .filter(Boolean)
             .forEach(input => {
                 input.addEventListener('keypress', (e) => {

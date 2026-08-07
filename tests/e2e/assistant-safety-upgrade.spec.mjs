@@ -131,7 +131,7 @@ test('no-provider tutoring stays button-driven and makes zero provider requests'
   const providerHits = [];
   await page.route('**/*', route => {
     const url = route.request().url();
-    if (/api\.(?:openai|anthropic|groq|x\.ai|deepseek|perplexity)\.com|generativelanguage\.googleapis\.com|openrouter\.ai/.test(url)) providerHits.push(url);
+    if (/api\.(?:openai|anthropic|groq|x\.ai|deepseek|perplexity)\.com|generativelanguage\.googleapis\.com|openrouter\.ai|integrate\.api\.nvidia\.com|api\.mistral\.ai|api\.together\.xyz/.test(url)) providerHits.push(url);
     return route.continue();
   });
   await openApp(page);

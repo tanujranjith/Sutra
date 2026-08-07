@@ -241,7 +241,12 @@ requiredLsKeys.forEach(key => {
 });
 
 // API-key-style storage keys must NEVER appear in the snapshot list.
-const sensitiveLsKeys = ['groq_api_key', 'openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'openrouter_api_key', 'chat_history'];
+const sensitiveLsKeys = [
+    'groq_api_key', 'openai_api_key', 'anthropic_api_key', 'gemini_api_key',
+    'openrouter_api_key', 'deepseek_api_key', 'xai_api_key', 'perplexity_api_key',
+    'nvidia_api_key', 'mistral_api_key', 'together_api_key', 'local_api_key',
+    'chat_history'
+];
 sensitiveLsKeys.forEach(key => {
     if (lsKeys.includes(key)) {
         fail(`Sensitive key "${key}" must not be in ATELIER_RAW_LOCALSTORAGE_KEYS — secrets belong in sessionStorage only.`);

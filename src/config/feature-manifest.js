@@ -18,7 +18,7 @@
         './src/domain/notes-knowledge-core.js?v=20260711-knowledge1',
         './src/features/assistant/assistant-core.js?v=20260714-assistant-trust1',
         './src/features/assistant/assistant-safety.js?v=20260714-intel1',
-        './src/features/assistant/model-capabilities.js?v=20260714-assistant-trust1',
+        './src/features/assistant/model-capabilities.js?v=20260807-providers1',
         './src/features/assistant/intelligence-diagnostics.js?v=20260714-intel1',
         './src/features/assistant/sutra-product-knowledge.js?v=20260714-assistant-trust1',
         './src/features/assistant/sutra-capability-registry.js?v=20260711-notes2',
