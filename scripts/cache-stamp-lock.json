@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-duress2",
-    "hash": "4d0347ce6ad33117"
+    "stamp": "20260807-settings15",
+    "hash": "eaca65456b8ed64f"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -508,8 +508,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20260625-cc-segmented-rows",
-    "hash": "47cf3a0e07e551e2"
+    "stamp": "20260807-settings15b",
+    "hash": "6e47e2793964e87f"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20260721-mobile1",

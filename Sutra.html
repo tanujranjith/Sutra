@@ -2957,8 +2957,8 @@
         <header class="cc-page-header">
             <div class="cc-page-header-text">
                 <span class="cc-eyebrow">Settings</span>
-                <h1 class="cc-title">Workspace Settings</h1>
-                <p class="cc-subtitle">Tune appearance, workflows, integrations, and local-first behavior &mdash; staged until you save.</p>
+                <h1 class="cc-title">Settings</h1>
+                <p class="cc-subtitle">Start with everyday workspace controls. Deeper tools stay tucked away until you need them.</p>
             </div>
             <div class="cc-page-header-meta">
                 <div class="cc-status" id="settingsStatusPill" data-state="saved" role="status" aria-live="polite">
@@ -2973,40 +2973,53 @@
             </div>
         </header>
 
-        <div class="cc-mobile-nav" aria-label="Settings categories (mobile)">
-            <select id="settingsCategorySelect" class="modal-input cc-mobile-select" aria-label="Settings category">
-                <optgroup label="General">
+        <div class="cc-discovery">
+            <div class="cc-search" role="search">
+                <i class="fas fa-magnifying-glass cc-search-icon" aria-hidden="true"></i>
+                <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search settings, e.g. backup or motion" aria-label="Search all settings" aria-describedby="settingsSearchHint" autocomplete="off" />
+                <kbd class="cc-search-shortcut" id="settingsSearchShortcut" aria-hidden="true">/</kbd>
+                <button type="button" class="cc-search-clear" id="settingsSearchClearBtn" aria-label="Clear settings search" title="Clear search" hidden>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
+                <p class="cc-search-hint" id="settingsSearchHint" role="status" aria-live="polite">Search by setting, feature, or task.</p>
+            </div>
+
+            <div class="cc-mobile-nav" aria-label="Settings categories (mobile)">
+                <label class="cc-mobile-label" for="settingsCategorySelect">Category</label>
+                <select id="settingsCategorySelect" class="modal-input cc-mobile-select" aria-label="Settings category">
+                <optgroup label="Essentials">
                     <option value="appearance">Appearance</option>
                     <option value="layout">Layout</option>
                     <option value="editor">Editor</option>
                     <option value="notes">Notes & Formatting</option>
                 </optgroup>
-                <optgroup label="Tools">
+                <optgroup label="Planning &amp; learning">
                     <option value="tasks">Tasks</option>
                     <option value="calendar">Calendar</option>
                     <option value="homework">Homework</option>
                     <option value="study">Study</option>
-                    <option value="business">Business</option>
-                    <option value="assistant">Assistant</option>
                 </optgroup>
-                <optgroup label="System">
+                <optgroup label="Services &amp; safety">
+                    <option value="assistant">Assistant</option>
                     <option value="integrations">Integrations</option>
                     <option value="notifications">Notifications</option>
                     <option value="accessibility">Accessibility</option>
                     <option value="data">Data</option>
                 </optgroup>
-                <optgroup label="Advanced">
+                <optgroup label="Advanced &amp; packs">
+                    <option value="business">Business</option>
                     <option value="advanced">Advanced</option>
                     <option value="mods">Customization</option>
                 </optgroup>
-            </select>
+                </select>
+            </div>
         </div>
 
         <div class="cc-body">
             <aside class="cc-sidebar" aria-label="Settings categories">
                 <nav class="cc-sidebar-nav" id="settingsNavList">
                     <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">General</span>
+                        <span class="cc-sidebar-group-label">Essentials</span>
                         <button type="button" class="cc-sidebar-item active" data-settings-nav="appearance">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-palette"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -3037,7 +3050,7 @@
                         </button>
                     </div>
                     <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">Tools</span>
+                        <span class="cc-sidebar-group-label">Planning &amp; learning</span>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="tasks">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-list-check"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -3066,13 +3079,9 @@
                                 <span class="cc-sidebar-item-copy">AP &amp; hub</span>
                             </span>
                         </button>
-                        <button type="button" class="cc-sidebar-item" data-settings-nav="business">
-                            <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-briefcase"></i></span>
-                            <span class="cc-sidebar-item-text">
-                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Business</span>
-                                <span class="cc-sidebar-item-copy">Modules &amp; density</span>
-                            </span>
-                        </button>
+                    </div>
+                    <div class="cc-sidebar-group">
+                        <span class="cc-sidebar-group-label">Services &amp; safety</span>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="assistant">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-wand-magic-sparkles"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -3080,9 +3089,6 @@
                                 <span class="cc-sidebar-item-copy">Panel &amp; suggestions</span>
                             </span>
                         </button>
-                    </div>
-                    <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">System</span>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="integrations">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-plug"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -3112,8 +3118,23 @@
                             </span>
                         </button>
                     </div>
-                    <div class="cc-sidebar-group">
-                        <span class="cc-sidebar-group-label">Advanced</span>
+                    <details class="cc-sidebar-disclosure" id="settingsAdvancedGroup">
+                        <summary class="cc-sidebar-disclosure-summary">
+                            <span class="cc-sidebar-disclosure-icon" aria-hidden="true"><i class="fas fa-layer-group"></i></span>
+                            <span class="cc-sidebar-disclosure-text">
+                                <span class="cc-sidebar-disclosure-title">Advanced &amp; packs</span>
+                                <span class="cc-sidebar-disclosure-copy">Business, experiments, custom CSS</span>
+                            </span>
+                            <i class="fas fa-chevron-down cc-sidebar-disclosure-chevron" aria-hidden="true"></i>
+                        </summary>
+                        <div class="cc-sidebar-group cc-sidebar-group-collapsible">
+                        <button type="button" class="cc-sidebar-item" data-settings-nav="business">
+                            <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-briefcase"></i></span>
+                            <span class="cc-sidebar-item-text">
+                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Business</span>
+                                <span class="cc-sidebar-item-copy">Modules &amp; density</span>
+                            </span>
+                        </button>
                         <button type="button" class="cc-sidebar-item" data-settings-nav="advanced">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-sliders"></i></span>
                             <span class="cc-sidebar-item-text">
@@ -3128,18 +3149,23 @@
                                 <span class="cc-sidebar-item-copy">Custom CSS &amp; Safe Mode</span>
                             </span>
                         </button>
-                    </div>
+                        </div>
+                    </details>
                 </nav>
                 <div class="cc-sidebar-foot">
-                    <button type="button" class="cc-btn cc-btn-quiet cc-btn-block" id="settingsResetAllBtn">Reset all categories</button>
+                    <details class="cc-sidebar-utilities">
+                        <summary>Reset options</summary>
+                        <button type="button" class="cc-btn cc-btn-quiet cc-btn-block" id="settingsResetAllBtn">Reset all categories</button>
+                    </details>
                 </div>
             </aside>
 
             <main class="cc-main">
-                <div class="cc-search">
-                    <i class="fas fa-magnifying-glass cc-search-icon" aria-hidden="true"></i>
-                    <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search all settings" aria-label="Search all settings" />
-                    <p class="cc-search-hint" id="settingsSearchHint">Searches all settings.</p>
+                <div class="cc-search-empty" id="settingsSearchEmpty" hidden>
+                    <span class="cc-search-empty-icon" aria-hidden="true"><i class="fas fa-magnifying-glass"></i></span>
+                    <h2>No settings found</h2>
+                    <p>Try a broader term such as <strong>backup</strong>, <strong>font</strong>, or <strong>calendar</strong>.</p>
+                    <button type="button" class="cc-btn cc-btn-ghost" id="settingsSearchEmptyClearBtn">Clear search</button>
                 </div>
 
                 <section class="cc-section active" data-settings-section="appearance">
@@ -7583,7 +7609,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-duress2"></script>
+<script src="src/core/app.js?v=20260807-settings15"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7990,7 +8016,7 @@
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260723-unified2">
-    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
+    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260807-settings15b">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">

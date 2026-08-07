@@ -31946,10 +31946,15 @@ function buildOnboardingPlanPreview() {
             const fallback = getSettingsSectionCategoryFallback();
             const resolved = available.has(requested) ? requested : fallback;
             activeSettingsCategory = resolved;
+            const searchInput = document.getElementById('settingsSearchInput');
+            if (options.clearSearch === true && searchInput) {
+                searchInput.value = '';
+            }
 
             document.querySelectorAll('#view-settings [data-settings-nav]').forEach(button => {
                 const buttonCategory = String(button.getAttribute('data-settings-nav') || '').toLowerCase();
                 button.classList.toggle('active', buttonCategory === resolved);
+                button.setAttribute('aria-current', buttonCategory === resolved ? 'page' : 'false');
             });
             sections.forEach(section => {
                 const sectionCategory = String(section.getAttribute('data-settings-section') || '').toLowerCase();
@@ -31961,6 +31966,14 @@ function buildOnboardingPlanPreview() {
             const mobileSelect = document.getElementById('settingsCategorySelect');
             if (mobileSelect && mobileSelect.value !== resolved) {
                 mobileSelect.value = resolved;
+            }
+
+            const advancedGroup = document.getElementById('settingsAdvancedGroup');
+            const advancedCategories = new Set(['business', 'advanced', 'mods']);
+            if (advancedGroup && advancedCategories.has(resolved)) {
+                advancedGroup.open = true;
+            } else if (advancedGroup && !String(searchInput && searchInput.value || '').trim()) {
+                advancedGroup.open = false;
             }
 
             if (options.skipSearch !== true) {
@@ -31979,6 +31992,25 @@ function buildOnboardingPlanPreview() {
             }
         }
 
+        function clearSettingsSearch(options = {}) {
+            const searchInput = document.getElementById('settingsSearchInput');
+            if (!searchInput) return;
+            searchInput.value = '';
+            filterSettingsControlsBySearch();
+            if (options.focus === true) {
+                searchInput.focus();
+            }
+        }
+
+        function updateSettingsContextualPreview(query) {
+            const previewRail = document.querySelector('#view-settings .cc-preview-rail');
+            const settingsBody = document.querySelector('#view-settings .cc-body');
+            const previewCategories = new Set(['appearance', 'layout']);
+            const showPreview = !query && previewCategories.has(activeSettingsCategory);
+            if (previewRail) previewRail.hidden = !showPreview;
+            if (settingsBody) settingsBody.dataset.preview = showPreview ? 'true' : 'false';
+        }
+
         function filterSettingsControlsBySearch() {
             const searchInput = document.getElementById('settingsSearchInput');
             const query = String(searchInput && searchInput.value || '').trim().toLowerCase();
@@ -31989,14 +32021,20 @@ function buildOnboardingPlanPreview() {
             sections.forEach(section => {
                 const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
                 const isActive = category === activeSettingsCategory;
-                const candidates = section.querySelectorAll('[data-setting-item], .atelier-setting-row, .settings-row, .settings-card');
+                const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
+                const candidates = Array.from(section.querySelectorAll('[data-setting-item], .atelier-setting-row, .settings-row, .settings-card'));
+                const categoryText = `${navButton ? navButton.textContent : ''} ${section.querySelector('.cc-section-title')?.textContent || ''} ${section.querySelector('.cc-section-copy')?.textContent || ''}`.toLowerCase();
+                const categoryMatches = !!query && categoryText.includes(query);
                 let sectionMatches = 0;
                 candidates.forEach(item => {
                     const text = String(item.textContent || '').toLowerCase();
-                    const show = !query || text.includes(query);
+                    const show = !query || categoryMatches || text.includes(query);
                     item.style.display = show ? '' : 'none';
                     if (show) sectionMatches += 1;
                 });
+                if (!candidates.length && (categoryMatches || String(section.textContent || '').toLowerCase().includes(query))) {
+                    sectionMatches = 1;
+                }
                 // With a query, Settings behaves like a global search: every
                 // category containing a match is shown, so results retain their
                 // labels and controls instead of forcing the student to search
@@ -32004,15 +32042,43 @@ function buildOnboardingPlanPreview() {
                 const showSection = query ? sectionMatches > 0 : isActive;
                 section.classList.toggle('active', showSection);
                 section.style.display = showSection ? '' : 'none';
+                if (navButton) {
+                    navButton.hidden = !!query && sectionMatches === 0;
+                    navButton.setAttribute('aria-hidden', navButton.hidden ? 'true' : 'false');
+                }
                 if (sectionMatches && query) matchingCategories += 1;
                 if (query) visibleCount += sectionMatches;
             });
+
+            document.querySelectorAll('#view-settings .cc-sidebar-group').forEach(group => {
+                const hasVisibleItem = Array.from(group.querySelectorAll('[data-settings-nav]')).some(button => !button.hidden);
+                group.hidden = !!query && !hasVisibleItem;
+            });
+            const advancedGroup = document.getElementById('settingsAdvancedGroup');
+            if (advancedGroup) {
+                const hasVisibleAdvancedItem = Array.from(advancedGroup.querySelectorAll('[data-settings-nav]')).some(button => !button.hidden);
+                advancedGroup.hidden = !!query && !hasVisibleAdvancedItem;
+                if (query && hasVisibleAdvancedItem) advancedGroup.open = true;
+                if (!query && !new Set(['business', 'advanced', 'mods']).has(activeSettingsCategory)) advancedGroup.open = false;
+            }
+
+            const settingsMain = document.querySelector('#view-settings .cc-main');
+            if (settingsMain) settingsMain.classList.toggle('is-searching', !!query);
+            const emptyState = document.getElementById('settingsSearchEmpty');
+            if (emptyState) emptyState.hidden = !query || visibleCount > 0;
+            const clearButton = document.getElementById('settingsSearchClearBtn');
+            if (clearButton) clearButton.hidden = !query;
+            const shortcut = document.getElementById('settingsSearchShortcut');
+            if (shortcut) shortcut.hidden = !!query;
+            const discovery = document.querySelector('#view-settings .cc-discovery');
+            if (discovery) discovery.dataset.searching = query ? 'true' : 'false';
             const searchHint = document.getElementById('settingsSearchHint');
             if (searchHint) {
                 searchHint.textContent = query
                     ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories} categor${matchingCategories === 1 ? 'y' : 'ies'}.`
-                    : 'Searches all settings.';
+                    : 'Search by setting, feature, or task.';
             }
+            updateSettingsContextualPreview(query);
         }
 
         function syncWorkspacePreferenceControls() {
@@ -32143,7 +32209,7 @@ function buildOnboardingPlanPreview() {
                 if (button.dataset.bound === 'true') return;
                 button.dataset.bound = 'true';
                 button.addEventListener('click', () => {
-                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance');
+                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance', { clearSearch: true });
                 });
             });
 
@@ -32151,7 +32217,7 @@ function buildOnboardingPlanPreview() {
             if (mobileSelect && mobileSelect.dataset.bound !== 'true') {
                 mobileSelect.dataset.bound = 'true';
                 mobileSelect.addEventListener('change', () => {
-                    setActiveSettingsCategory(mobileSelect.value || 'appearance');
+                    setActiveSettingsCategory(mobileSelect.value || 'appearance', { clearSearch: true });
                 });
             }
 
@@ -32159,6 +32225,34 @@ function buildOnboardingPlanPreview() {
             if (searchInput && searchInput.dataset.bound !== 'true') {
                 searchInput.dataset.bound = 'true';
                 searchInput.addEventListener('input', filterSettingsControlsBySearch);
+                searchInput.addEventListener('keydown', event => {
+                    if (event.key === 'Escape' && searchInput.value) {
+                        event.preventDefault();
+                        clearSettingsSearch({ focus: true });
+                    }
+                });
+            }
+            const searchClearBtn = document.getElementById('settingsSearchClearBtn');
+            if (searchClearBtn && searchClearBtn.dataset.bound !== 'true') {
+                searchClearBtn.dataset.bound = 'true';
+                searchClearBtn.addEventListener('click', () => clearSettingsSearch({ focus: true }));
+            }
+            const searchEmptyClearBtn = document.getElementById('settingsSearchEmptyClearBtn');
+            if (searchEmptyClearBtn && searchEmptyClearBtn.dataset.bound !== 'true') {
+                searchEmptyClearBtn.dataset.bound = 'true';
+                searchEmptyClearBtn.addEventListener('click', () => clearSettingsSearch({ focus: true }));
+            }
+            const settingsRoot = document.getElementById('view-settings');
+            if (settingsRoot && settingsRoot.dataset.searchShortcutBound !== 'true') {
+                settingsRoot.dataset.searchShortcutBound = 'true';
+                document.addEventListener('keydown', event => {
+                    if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+                    if (!settingsRoot.classList.contains('active')) return;
+                    const target = event.target;
+                    if (target && (target.matches('input, textarea, select') || target.isContentEditable)) return;
+                    event.preventDefault();
+                    searchInput?.focus();
+                });
             }
 
             document.querySelectorAll('#view-settings [data-settings-reset-section]').forEach(button => {
