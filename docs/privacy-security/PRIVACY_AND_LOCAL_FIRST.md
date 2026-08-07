@@ -133,6 +133,13 @@ re-entered after a reload - the in-session "unlocked" state is intentionally
 gated behind the lock screen. The lock is part of the page's stored data and
 travels in backups, so a restored page is still locked.
 
+The same in-session authorization gate protects every page-owned plaintext
+surface. Until the page is unlocked, Sutra does not hydrate its body into the
+editor DOM or expose its body, Canvas model, Slides deck, version previews, or
+derived excerpts to search, backlinks, review generation, Canvas, Slides,
+Assistant context, plugins, or document export. Titles and lock status remain
+visible so the student can find and unlock the page.
+
 ---
 
 ## 8. How to export and own your data

@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260806-syncdisable2",
-    "hash": "285180b6586eabf3"
+    "stamp": "20260807-lockprivacy1",
+    "hash": "a38f5adf1ba97850"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -272,8 +272,8 @@
     "hash": "76654a6d7b2c8d91"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260722-slides7",
-    "hash": "66763e1cfe0ba2b0"
+    "stamp": "20260807-lockprivacy1",
+    "hash": "800f8c08abe4e12c"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",

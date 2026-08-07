@@ -376,7 +376,9 @@ function normalizeCanvasObject(rawObject, seenIds) {
         zIndex: Math.round(normalizeCanvasNumber(rawObject.zIndex, 0, -10000, 10000)),
         locked: rawObject.locked === true,
         groupId: typeof rawObject.groupId === 'string' && rawObject.groupId ? rawObject.groupId : '',
-        text: typeof rawObject.text === 'string' ? rawObject.text.slice(0, 8000) : '',
+        // Linked-note cards are references, not copies. Older builds persisted a
+        // plaintext excerpt that could reveal a source after it was locked.
+        text: type === 'linked-note' ? '' : (typeof rawObject.text === 'string' ? rawObject.text.slice(0, 8000) : ''),
         label: typeof rawObject.label === 'string' ? rawObject.label.slice(0, 500) : '',
         color: normalizeCanvasColor(rawObject.color, ''),
         fill: normalizeCanvasColor(rawObject.fill, ''),
@@ -30568,6 +30570,10 @@ function buildOnboardingPlanPreview() {
                 opts = opts || {};
                 const page = (typeof getPageById === 'function') ? getPageById(noteId) : null;
                 if (!page) { try { setActiveView('review'); } catch (e) {} return false; }
+                if (!isPageContentAuthorized(page)) {
+                    showToast('Unlock the note before generating review cards');
+                    return false;
+                }
                 const tsv = sutraBuildReviewTsvFromContent(page.content || '', opts);
                 return sutraOpenReviewGen({ rawText: tsv, title: opts.title || (page.title ? `Review: ${page.title}` : 'Review set'), subject: opts.subject || '', source: `note:${noteId}` });
             },
@@ -38866,6 +38872,10 @@ function buildOnboardingPlanPreview() {
                 else if (typeof atelierAlert === 'function') atelierAlert('Open a note first.', { title: 'Version History' });
                 return;
             }
+            if (!isPageContentAuthorized(page)) {
+                if (typeof showToast === 'function') showToast('Unlock the note before viewing its version history');
+                return;
+            }
             const modal = document.getElementById('versionHistoryModal');
             const body = document.getElementById('versionHistoryBody');
             if (!modal || !body) return;
@@ -46087,7 +46097,8 @@ function getActiveEditor() {
         }
 
         function getPrimaryCanvasPage() {
-            return pages.find(p => p && p.id === currentPageId && normalizePageType(p.type) === PAGE_TYPES.CANVAS) || null;
+            const page = pages.find(p => p && p.id === currentPageId && normalizePageType(p.type) === PAGE_TYPES.CANVAS) || null;
+            return page && isPageContentAuthorized(page) ? page : null;
         }
 
         function getCanvasSearchText(page) {
@@ -46344,6 +46355,7 @@ function getActiveEditor() {
 
         function getCanvasLinkedNoteExcerpt(page) {
             if (!page) return 'Linked page could not be found.';
+            if (!isPageContentAuthorized(page)) return 'Unlock the linked note to preview it.';
             if (normalizePageType(page.type) === PAGE_TYPES.CANVAS) {
                 return `${normalizeCanvasModel(page.canvas).objects.length} canvas objects`;
             }
@@ -46852,9 +46864,12 @@ function getActiveEditor() {
                 showToast('Pick a valid note first');
                 return null;
             }
+            if (!isPageContentAuthorized(linkedPage)) {
+                showToast('Unlock that note before inserting it into Canvas');
+                return null;
+            }
             return addCanvasObject('linked-note', {
                 label: linkedPage.title || 'Linked note',
-                text: getCanvasLinkedNoteExcerpt(linkedPage),
                 ref: { type: 'page', id: linkedPage.id },
                 width: 280,
                 height: 150
@@ -46864,9 +46879,13 @@ function getActiveEditor() {
         function canvasOpenInsertNoteModal() {
             const page = getPrimaryCanvasPage();
             if (!page) return;
-            const candidates = pages.filter(candidate => candidate && candidate.id !== page.id && !isHelpDocsPage(candidate) && (candidate.spaceId || 'default') === (page.spaceId || 'default'));
+            const candidates = pages.filter(candidate => candidate
+                && candidate.id !== page.id
+                && !isHelpDocsPage(candidate)
+                && isPageContentAuthorized(candidate)
+                && (candidate.spaceId || 'default') === (page.spaceId || 'default'));
             if (!candidates.length) {
-                showToast('No notes available in this space');
+                showToast('No unlocked notes are available in this space');
                 return;
             }
             const body = document.createElement('div');
@@ -47820,7 +47839,7 @@ function getActiveEditor() {
             const needles = ['data-page-id="' + pageId + '"', "data-page-id='" + pageId + "'"];
             const out = [];
             pages.forEach(p => {
-                if (!p || p.id === pageId) return;
+                if (!p || p.id === pageId || !isPageContentAuthorized(p)) return;
                 const html = String(p.content || '');
                 if (needles.some(n => html.indexOf(n) !== -1)) {
                     out.push({ id: p.id, title: String(p.title || 'Untitled') });
@@ -47842,13 +47861,13 @@ function getActiveEditor() {
         function getRelatedNotes(pageId, limit) {
             if (!pageId || !Array.isArray(pages)) return [];
             const page = pages.find(p => p.id === pageId);
-            if (!page) return [];
+            if (!page || !isPageContentAuthorized(page)) return [];
             const myTokens = new Set(tokenizeForRelated((page.title || '') + ' ' + (page.content || '')));
             if (myTokens.size < 2) return [];
             const backIds = new Set(getBacklinksForPage(pageId).map(b => b.id));
             const scored = [];
             pages.forEach(p => {
-                if (!p || p.id === pageId || isHelpDocsPage(p) || backIds.has(p.id)) return;
+                if (!p || p.id === pageId || isHelpDocsPage(p) || backIds.has(p.id) || !isPageContentAuthorized(p)) return;
                 const toks = tokenizeForRelated((p.title || '') + ' ' + (p.content || ''));
                 let shared = 0;
                 const seen = new Set();
@@ -47960,6 +47979,12 @@ function getActiveEditor() {
             
             const page = pages.find(p => p.id === currentPageId);
             if (page) {
+                // Locked plaintext is absent from the editor DOM. Never copy the
+                // cleared privacy surface back over canonical page content.
+                if (!isPageContentAuthorized(page)) {
+                    updateSaveStatus('saved');
+                    return;
+                }
                 // Section 17 — capture a recoverable PRE-EDIT checkpoint BEFORE we
                 // overwrite the live page's title/content below. Throttled + de-duped,
                 // so sustained typing yields periodic checkpoints, not one per keystroke,
@@ -48642,6 +48667,15 @@ function getActiveEditor() {
         function isPageEffectivelyLocked(pageId) {
             const page = pages.find(p => p.id === pageId);
             return !!(page && page.isLocked && page.lockHash && !unlockedPageIds.has(pageId));
+        }
+
+        // Canonical read boundary for page-owned plaintext. Titles and lock
+        // metadata remain discoverable, but content-bearing features must pass.
+        function isPageContentAuthorized(pageOrId) {
+            const page = typeof pageOrId === 'object' && pageOrId
+                ? pageOrId
+                : pages.find(entry => entry && String(entry.id) === String(pageOrId || ''));
+            return !!(page && !(page.isLocked && page.lockHash && !unlockedPageIds.has(page.id)));
         }
 
         // Prompt for a locked page's PIN and verify it. Returns true once the
@@ -59363,6 +59397,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 },
                 getBacklinksForPage: (id) => getBacklinksForPage(id),
                 getRelatedNotes: (id, limit) => getRelatedNotes(id, limit),
+                isPageContentAuthorized: (id) => isPageContentAuthorized(id),
                 renderMathBlocksIn: (el) => renderMathBlocksIn(el),
                 searchAll: (q) => (typeof globalSearchAll === 'function' ? globalSearchAll(q) : null),
                 getTrash: () => (Array.isArray(trash) ? trash.slice() : []),
@@ -64478,6 +64513,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // DOM state is lost when serialised through innerHTML.
         function loadPageContentIntoEditor(editor, page) {
             if (!editor || !page) return;
+            if (!isPageContentAuthorized(page)) {
+                disposeDrawingControllersForEditor(editor);
+                editor.contentEditable = 'false';
+                editor.replaceChildren();
+                if (editor.id === 'editor' && isNotesEditorV2Active()) {
+                    try {
+                        if (typeof window.SutraNotesEditorV2.setContent === 'function') window.SutraNotesEditorV2.setContent('');
+                    } catch (err) { /* privacy surface is already cleared */ }
+                }
+                return;
+            }
             // Notes editor v2: the primary #editor is a hidden mirror. Fill it
             // with canonical storage HTML (anchors, not hydrated blocks) and
             // hand the same HTML to the TipTap document. Skip hydration — the
@@ -75138,6 +75184,7 @@ ${cspMeta}
                 renderTaskViews: () => { if (_origRenderTaskViews) _origRenderTaskViews(); },
                 renderPagesList: () => { if (_origRenderPagesList) _origRenderPagesList(); },
                 getPageById: (id) => (Array.isArray(pages) ? pages.find(page => page && String(page.id) === String(id)) : null),
+                isPageContentAuthorized: (pageOrId) => isPageContentAuthorized(pageOrId),
                 checkpointPage: (page, label) => {
                     if (!page || typeof createVersionSnapshot !== 'function') return null;
                     return createVersionSnapshot(page, label || 'Before Assistant change', { force: true });
@@ -76728,7 +76775,7 @@ ${cspMeta}
                 const q = mentionMatch[1].trim().toLowerCase();
                 const allPages = (Array.isArray(pages) ? pages : []).filter(p => p && !p.isSystemPage);
                 const matches = allPages
-                    .filter(p => !q || String(p.title || '').toLowerCase().includes(q))
+                    .filter(p => isPageContentAuthorized(p) && (!q || String(p.title || '').toLowerCase().includes(q)))
                     .slice(0, 8)
                     .map(p => ({ title: (p.title || 'Untitled').split('::').pop(), desc: 'Attach as context', icon: 'fa-file-lines', _page: p }));
                 asstBuildPopup(matches, (it) => {
@@ -76748,6 +76795,10 @@ ${cspMeta}
 
         function asstAttachNoteAsContext(page) {
             if (!page) return;
+            if (!isPageContentAuthorized(page)) {
+                showToast('Unlock the note before attaching it to Assistant');
+                return false;
+            }
             const label = (page.title || 'Note').split('::').pop();
             let text = '';
             if (page.id === currentPageId) {

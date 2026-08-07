@@ -29,3 +29,10 @@ test('Slides mutations use the canonical page bridge instead of whole-workspace 
   assert.match(slidesSource, /appBridge\(\)\.persistAppData\(\)/);
   assert.doesNotMatch(slidesSource, /serializeWorkspace|deserializeWorkspace/);
 });
+
+test('Slides uses the canonical locked-page authorization boundary', () => {
+  assert.match(slidesSource, /function pageContentAuthorized\(page\)/);
+  assert.match(slidesSource, /bridge\.isPageContentAuthorized/);
+  assert.match(slidesSource, /page && pageContentAuthorized\(page\) \? page : null/);
+  assert.match(slidesSource, /page && pageContentAuthorized\(page\) && page\.slides/);
+});
