@@ -121,6 +121,50 @@ test('everything fixture covers every portable top-level and named nested contra
   }
 });
 
+test('every inventory-approved workspace field survives an isolated incremental sync change', async () => {
+  const portableCategories = new Set(['record', 'ordered', 'atomic', 'compatibility']);
+  const fields = Object.entries(inventory.workspaceFieldClassifications)
+    .filter(([, decision]) => portableCategories.has(decision.category))
+    .map(([field]) => field);
+
+  function stampField(workspace, field, token) {
+    const value = workspace[field];
+    if (Array.isArray(value)) {
+      if (value.length && value[0] && typeof value[0] === 'object' && !Array.isArray(value[0])) {
+        value[0] = { ...value[0], parityAuditToken: token };
+      } else {
+        workspace[field] = value.concat([token]);
+      }
+      return;
+    }
+    if (value && typeof value === 'object') {
+      workspace[field] = { ...value, parityAuditToken: token };
+      return;
+    }
+    workspace[field] = `${String(value || '')}:${token}`;
+  }
+
+  for (const field of fields) {
+    const baselineWorkspace = createEverythingWorkspace({});
+    const changedWorkspace = structuredClone(baselineWorkspace);
+    const token = `isolated-sync-parity:${field}`;
+    stampField(changedWorkspace, field, token);
+
+    const baseline = await projected(baselineWorkspace);
+    const changed = await projected(changedWorkspace);
+    const outbox = diffApi.computeOutbox({
+      baseHashes: baseline.hashes, currentRecords: changed.records,
+      currentHashes: changed.hashes, previousOutbox: [], identity: identity(`audit-${field}`)
+    });
+    assert.ok(outbox.ops.length > 0, `${field} mutation did not produce an incremental operation`);
+
+    const remote = mergeApi.applyOpsToRecords(baseline.records, outbox.ops).records;
+    const applied = projectionApi.applyProjectionToWorkspace(baselineWorkspace, { records: remote });
+    const comparison = comparePortableWorkspaces(changedWorkspace, applied);
+    assert.deepEqual(comparison.differences, [], `${field} failed isolated portability:\n${JSON.stringify(comparison.differences.slice(0, 8), null, 2)}`);
+  }
+});
+
 test('reverse changes, deletions, reordering, and empty values survive incremental ops', async () => {
   const baselineWorkspace = createEverythingWorkspace({});
   const baseline = await projected(baselineWorkspace);
