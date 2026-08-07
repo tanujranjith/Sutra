@@ -410,7 +410,7 @@
       'updatedAt', 'createdAt', 'collapsed', 'spaceId', 'parentId', 'folderId',
       'icon', 'theme', 'type', 'isTemporary', 'temporaryCreatedAt',
       'temporaryExpiresAt', 'isLocked', 'lockHash', 'lockSalt', 'lockedAt',
-      'lockAutoLock', 'isSystemPage', 'builtInId', 'systemRole'
+      'lockAutoLock', 'lockDuressVerifier', 'isSystemPage', 'builtInId', 'systemRole'
     ].indexOf(leaf) !== -1;
   }
 

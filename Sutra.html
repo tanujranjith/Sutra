@@ -77,7 +77,7 @@
     <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-projection.js?v=20260731-helpdocs1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
-    <script src="src/sync/sync-merge.js?v=20260717-conflict4"></script>
+    <script src="src/sync/sync-merge.js?v=20260807-duress1"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
@@ -108,7 +108,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-cohesion1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-duress1">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
@@ -6777,6 +6777,13 @@
                         <button type="button" class="lock-modal-manage-btn" id="lockManageLockAgainBtn">
                             <i class="fas fa-lock" aria-hidden="true"></i> Lock again now
                         </button>
+                        <button type="button" class="lock-modal-manage-btn danger" id="lockManageDuressBtn">
+                            <i class="fas fa-shield-halved" aria-hidden="true"></i>
+                            <span id="lockManageDuressLabel">Configure duress deletion PIN</span>
+                        </button>
+                        <button type="button" class="lock-modal-manage-btn" id="lockManageRemoveDuressBtn" hidden>
+                            <i class="fas fa-shield" aria-hidden="true"></i> Disable duress deletion
+                        </button>
                         <button type="button" class="lock-modal-manage-btn danger" id="lockManageRemoveBtn">
                             <i class="fas fa-unlock-alt" aria-hidden="true"></i> Remove PIN protection
                         </button>
@@ -6798,6 +6805,33 @@
                                placeholder="••••" maxlength="8" autocomplete="new-password" aria-describedby="lockPinChangeConfirmError" />
                         <span class="lock-modal-error" id="lockPinChangeConfirmError" role="alert" aria-atomic="true"></span>
                     </div>
+                </div>
+
+                <!-- VIEW: configure the optional destructive alternate PIN -->
+                <div class="lock-modal-view" id="lockViewDuress">
+                    <div class="lock-duress-warning" role="note">
+                        <strong>Danger: intentional permanent deletion</strong>
+                        <p>Entering this alternate PIN on the lock screen will immediately remove this page and its sub-pages from the active workspace, Sutra Trash, and local workspace snapshots. It will not unlock the page and there is no confirmation at trigger time.</p>
+                        <p id="lockDuressScopeText"></p>
+                        <p>Downloaded backups, cloud backups, or another device that has not synced may still contain an older copy. Browsers cannot guarantee physical storage erasure.</p>
+                    </div>
+                    <div class="lock-modal-field">
+                        <label for="lockDuressPin">Duress deletion PIN</label>
+                        <input type="password" inputmode="numeric" class="lock-modal-pin-input" id="lockDuressPin"
+                               placeholder="••••••" minlength="6" maxlength="8" autocomplete="new-password" aria-describedby="lockDuressPinError" />
+                        <span class="lock-modal-error" id="lockDuressPinError" role="alert" aria-atomic="true"></span>
+                    </div>
+                    <div class="lock-modal-field">
+                        <label for="lockDuressPinConfirm">Confirm duress PIN</label>
+                        <input type="password" inputmode="numeric" class="lock-modal-pin-input" id="lockDuressPinConfirm"
+                               placeholder="••••••" minlength="6" maxlength="8" autocomplete="new-password" aria-describedby="lockDuressPinConfirmError" />
+                        <span class="lock-modal-error" id="lockDuressPinConfirmError" role="alert" aria-atomic="true"></span>
+                    </div>
+                    <label class="lock-duress-ack" for="lockDuressAcknowledge">
+                        <input type="checkbox" id="lockDuressAcknowledge" aria-describedby="lockDuressAcknowledgeError" />
+                        <span>I understand that using this alternate PIN permanently deletes the protected page without another warning.</span>
+                    </label>
+                    <span class="lock-modal-error" id="lockDuressAcknowledgeError" role="alert" aria-atomic="true"></span>
                 </div>
 
             </div>
@@ -7549,7 +7583,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-providers1"></script>
+<script src="src/core/app.js?v=20260807-duress2"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>

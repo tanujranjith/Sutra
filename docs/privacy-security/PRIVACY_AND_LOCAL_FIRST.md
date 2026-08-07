@@ -141,6 +141,20 @@ derived excerpts to search, backlinks, review generation, Canvas, Slides,
 Assistant context, plugins, or document export. Titles and lock status remain
 visible so the student can find and unlock the page.
 
+An unlocked page can optionally be given a separate **duress deletion PIN**.
+Setup requires entering it twice, acknowledging the destructive behavior, and
+using a value different from the normal page PIN. The raw value is never stored;
+Sutra keeps one salted, high-cost verifier. Entering that alternate PIN on the
+lock screen removes the page and its sub-pages without a trigger-time
+confirmation, including their entries in Sutra Trash and local in-app workspace
+snapshots. A normal PIN always unlocks and an incorrect PIN never deletes.
+
+This is best-effort deletion from the active browser workspace, not a promise of
+physical secure erasure. Downloaded backups, cloud snapshots, browser/device
+backups, or another device that has not synchronized may still contain older
+copies. Duplicating a locked page never copies its duress verifier; each copy
+must be configured deliberately.
+
 ---
 
 ## 8. How to export and own your data

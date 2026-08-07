@@ -683,7 +683,7 @@ function clonePageBlocks(rawBlocks, options = {}) {
 // `state` captures ONLY user-editable, note-level authoring content that a user
 // reasonably expects Version History to recover. It deliberately EXCLUDES:
 //   - identity / timestamps     (id, createdAt, updatedAt)
-//   - security / lock metadata  (isLocked, lockHash, lockSalt, lockedAt, lockAutoLock)
+//   - security / lock metadata  (isLocked, lockHash, lockSalt, lockDuressVerifier, lockedAt, lockAutoLock)
 //   - lifecycle flags           (isTemporary, temporary*)
 //   - workspace placement       (spaceId), sidebar UI (collapsed), per-page theme
 //   - the version history array itself (versions)
@@ -888,6 +888,10 @@ function normalizePagesCollection(rawPages) {
             lockSalt: typeof page.lockSalt === 'string' && page.lockSalt ? page.lockSalt : null,
             lockedAt: normalizeOptionalIsoTimestamp(page.lockedAt),
             lockAutoLock: ['navigation','5min','15min','60min','session'].includes(page.lockAutoLock) ? page.lockAutoLock : 'navigation',
+            // Opaque v1$salt$PBKDF2 verifier. It is only meaningful while the
+            // ordinary page lock is valid; raw duress PINs are never persisted.
+            lockDuressVerifier: page.isLocked === true && page.lockHash && page.lockSalt && typeof page.lockDuressVerifier === 'string'
+                && /^v1\$[0-9a-f]{32}\$[0-9a-f]{64}$/i.test(page.lockDuressVerifier) ? page.lockDuressVerifier.toLowerCase() : null,
             // Spaces (Section 6) — pages without spaceId default to 'default' space
             spaceId: typeof page.spaceId === 'string' && page.spaceId ? page.spaceId : 'default',
             canvas: pageType === PAGE_TYPES.CANVAS ? normalizeCanvasModel(page.canvas) : null,
@@ -43483,6 +43487,8 @@ function buildOnboardingPlanPreview() {
   <li>Any page can be PIN-protected from the page context menu (<strong>···</strong> → <strong>Lock with PIN</strong>).</li>
   <li>PINs are 4–8 digits. The raw PIN is never stored — only a SHA-256 hash with a per-page random salt is persisted. This keeps the page private within your browser, but it is not full disk encryption.</li>
   <li>A locked page shows a PIN entry screen instead of its content. The correct PIN unlocks it for the rest of the session.</li>
+  <li><strong>Optional duress deletion:</strong> after unlocking normally, Lock settings can configure a separate 6–8 digit alternate PIN. Entering it on the lock screen permanently removes that page tree from the active workspace, Sutra Trash, and local workspace snapshots without another warning. The normal and duress PINs must differ, and duplicates never inherit the destructive PIN.</li>
+  <li>Downloaded/cloud backups and another unsynced device may still contain an older copy; browser apps cannot guarantee physical secure erasure. The raw duress PIN is never stored, only a salted high-cost verifier.</li>
   <li><strong>Auto-lock</strong> options (gear icon on the lock screen):
     <ul>
       <li><em>When leaving page</em> (default) — re-locks as soon as you navigate away.</li>
@@ -48191,15 +48197,77 @@ function getActiveEditor() {
         // page). Kept separate from deletePage() so programmatic paths (test
         // hooks, batch cleanup) exercise the exact same cleanup logic without the
         // user-facing confirm/PIN gates.
-        function executePageDeletion(idsToDelete) {
+        function purgeDuressPageRecoverySurfaces(idsToDelete) {
+            // Duress deletion deliberately bypasses/cleans the two local recovery
+            // surfaces that could otherwise restore the page in this browser.
+            const nextTrash = (Array.isArray(trash) ? trash : []).filter(record => {
+                return !(record && record.kind === 'page' && record.payload && idsToDelete.has(record.payload.id));
+            });
+            try {
+                const snapshots = getWorkspaceSnapshots();
+                let changed = false;
+                snapshots.forEach(snapshot => {
+                    const payload = snapshot && snapshot.payload;
+                    if (!payload) return;
+                    let snapshotChanged = false;
+                    if (Array.isArray(payload.pages)) {
+                        const before = payload.pages.length;
+                        payload.pages = payload.pages.filter(entry => !(entry && idsToDelete.has(entry.id)));
+                        if (payload.pages.length !== before) snapshotChanged = true;
+                    }
+                    if (Array.isArray(payload.trash)) {
+                        const trashBefore = payload.trash.length;
+                        payload.trash = payload.trash.filter(record => {
+                            return !(record && record.kind === 'page' && record.payload && idsToDelete.has(record.payload.id));
+                        });
+                        if (payload.trash.length !== trashBefore) snapshotChanged = true;
+                    }
+                    if (Array.isArray(payload.tasks)) {
+                        payload.tasks.forEach(task => {
+                            if (task && task.noteId && idsToDelete.has(task.noteId)) {
+                                task.noteId = null;
+                                snapshotChanged = true;
+                            }
+                        });
+                    }
+                    if (snapshotChanged) {
+                        snapshot.summary = buildWorkspaceSnapshotSummary(payload);
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    const saved = saveWorkspaceSnapshots(snapshots);
+                    if (saved && saved.ok === false) return false;
+                }
+                trash = nextTrash;
+                return true;
+            } catch (error) {
+                console.warn('Could not fully purge local workspace snapshots during duress deletion.', error);
+                return false;
+            }
+        }
+
+        function executePageDeletion(idsToDelete, options = {}) {
+            const permanent = options.permanent === true;
             // Capture deleted pages into Trash first, so a delete is recoverable
             // (restore/purge) instead of permanent. Help pages are never trashed.
-            try {
-                const removed = pages.filter(p => idsToDelete.has(p.id) && !isHelpDocsPage(p));
-                if (removed.length) addPagesToTrash(removed);
-            } catch (err) { /* non-critical — never block the delete */ }
+            if (permanent) {
+                if (!purgeDuressPageRecoverySurfaces(idsToDelete)) {
+                    showToast('Page was not removed because its local recovery copies could not be cleared.');
+                    return false;
+                }
+            } else {
+                try {
+                    const removed = pages.filter(p => idsToDelete.has(p.id) && !isHelpDocsPage(p));
+                    if (removed.length) addPagesToTrash(removed);
+                } catch (err) { /* non-critical — never block the delete */ }
+            }
 
             clearStoredPageUiState(Array.from(idsToDelete));
+            idsToDelete.forEach(id => {
+                unlockedPageIds.delete(id);
+                clearAutoLockTimer(id);
+            });
 
             pages = pages.filter(p => !idsToDelete.has(p.id));
             cleanupPinnedNotePageRefs();
@@ -48246,7 +48314,14 @@ function getActiveEditor() {
                 }
             }
             renderPagesList();
-            showToast('Page deleted successfully!');
+            if (options.toast !== false) showToast(permanent ? 'Page removed.' : 'Page deleted successfully!');
+            if (permanent) {
+                try {
+                    const flushed = flushAppSaveNow('duress-page-deletion');
+                    if (flushed && typeof flushed.catch === 'function') flushed.catch(error => console.warn('Duress deletion save retry needed.', error));
+                } catch (error) { console.warn('Duress deletion save retry needed.', error); }
+            }
+            return true;
         }
 
         // ---- Trash (recently-deleted pages / tasks / homework: restore / purge) ----
@@ -48720,12 +48795,15 @@ function getActiveEditor() {
                 collapsed: false,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                // Duplicate inherits all lock fields — same PIN protects both copies
+                // The ordinary lock follows the copy; destructive duress state does not.
                 isLocked: originalPage.isLocked === true,
                 lockHash: originalPage.lockHash || null,
                 lockSalt: originalPage.lockSalt || null,
                 lockedAt: originalPage.lockedAt || null,
                 lockAutoLock: originalPage.lockAutoLock || 'navigation',
+                // Destructive alternate PINs never copy implicitly. Every duplicate
+                // requires its own deliberate duress setup.
+                lockDuressVerifier: null,
                 // Document background travels with the duplicate (deep-copied + normalized).
                 documentBackground: normalizeDocumentBackground(originalPage.documentBackground)
             };
@@ -48762,6 +48840,56 @@ function getActiveEditor() {
         async function verifyPagePin(pin, storedHash, salt) {
             const hash = await hashPinWithSalt(pin, salt);
             return hash === storedHash;
+        }
+
+        const PAGE_DURESS_KDF_ITERATIONS = 210000;
+
+        function parsePageDuressVerifier(value) {
+            const match = /^v1\$([0-9a-f]{32})\$([0-9a-f]{64})$/i.exec(String(value || ''));
+            return match ? { saltHex: match[1].toLowerCase(), hashHex: match[2].toLowerCase() } : null;
+        }
+
+        function lockHexToBytes(hex) {
+            const clean = String(hex || '');
+            const bytes = new Uint8Array(Math.floor(clean.length / 2));
+            for (let index = 0; index < bytes.length; index++) bytes[index] = parseInt(clean.slice(index * 2, index * 2 + 2), 16);
+            return bytes;
+        }
+
+        async function derivePageDuressHash(pin, saltHex) {
+            const key = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(String(pin)), { name: 'PBKDF2' }, false, ['deriveBits']
+            );
+            const bits = await crypto.subtle.deriveBits({
+                name: 'PBKDF2',
+                hash: 'SHA-256',
+                salt: lockHexToBytes(saltHex),
+                iterations: PAGE_DURESS_KDF_ITERATIONS
+            }, key, 256);
+            return Array.from(new Uint8Array(bits)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function createPageDuressVerifier(pin) {
+            const saltHex = await generateLockSalt();
+            const hashHex = await derivePageDuressHash(pin, saltHex);
+            return `v1$${saltHex}$${hashHex}`;
+        }
+
+        async function verifyPageDuressPin(pin, verifier) {
+            const parsed = parsePageDuressVerifier(verifier);
+            if (!parsed) return false;
+            try {
+                return (await derivePageDuressHash(pin, parsed.saltHex)) === parsed.hashHex;
+            } catch (error) {
+                console.warn('Duress PIN verification failed safely.', error);
+                return false;
+            }
+        }
+
+        function validateDuressPinInput(pin) {
+            const value = String(pin || '');
+            if (!/^\d{6,8}$/.test(value)) return 'Duress PIN must be 6–8 digits.';
+            return null;
         }
 
         function validatePinInput(pin) {
@@ -48837,6 +48965,7 @@ function getActiveEditor() {
             if (!page) return false;
             // Flush unsaved editor content before locking so the content is captured
             if (pageId === currentPageId) savePage();
+            page.lockDuressVerifier = null;
             const salt = await generateLockSalt();
             const hash = await hashPinWithSalt(pin, salt);
             page.isLocked = true;
@@ -48852,6 +48981,9 @@ function getActiveEditor() {
         async function changePageLock(pageId, newPin) {
             const page = pages.find(p => p.id === pageId);
             if (!page) return false;
+            if (page.lockDuressVerifier && await verifyPageDuressPin(newPin, page.lockDuressVerifier)) {
+                return { ok: false, code: 'matches-duress' };
+            }
             const salt = await generateLockSalt();
             const hash = await hashPinWithSalt(newPin, salt);
             page.lockHash = hash;
@@ -48860,7 +48992,40 @@ function getActiveEditor() {
             // Keep unlocked in session since user just authenticated to reach this
             savePagesToLocal();
             renderPagesList();
+            return { ok: true };
+        }
+
+        async function setPageDuressPin(pageId, pin) {
+            const page = pages.find(p => p.id === pageId);
+            if (!page || !page.isLocked || !page.lockHash || !page.lockSalt || !unlockedPageIds.has(pageId)) {
+                return { ok: false, code: 'not-authorized' };
+            }
+            if (await verifyPagePin(pin, page.lockHash, page.lockSalt)) {
+                return { ok: false, code: 'matches-normal' };
+            }
+            page.lockDuressVerifier = await createPageDuressVerifier(pin);
+            page.updatedAt = new Date().toISOString();
+            savePagesToLocal();
+            renderPagesList();
+            return { ok: true };
+        }
+
+        function clearPageDuressPin(pageId) {
+            const page = pages.find(p => p.id === pageId);
+            if (!page || !unlockedPageIds.has(pageId)) return false;
+            page.lockDuressVerifier = null;
+            page.updatedAt = new Date().toISOString();
+            savePagesToLocal();
+            renderPagesList();
             return true;
+        }
+
+        function performPageDuressDeletion(page) {
+            if (!page || !page.id || isHelpDocsPage(page) || !parsePageDuressVerifier(page.lockDuressVerifier)) return false;
+            const idsToDelete = collectPageIdsForDeletion(page.id);
+            if (!idsToDelete.size) return false;
+            closeSidebarPageActionsMenus();
+            return executePageDeletion(idsToDelete, { permanent: true });
         }
 
         function removePageLock(pageId) {
@@ -48870,6 +49035,7 @@ function getActiveEditor() {
             page.lockHash = null;
             page.lockSalt = null;
             page.lockedAt = null;
+            page.lockDuressVerifier = null;
             unlockedPageIds.delete(pageId);
             savePagesToLocal();
             renderPagesList();
@@ -48997,8 +49163,14 @@ function getActiveEditor() {
                     return;
                 }
 
-                const ok = await verifyPagePin(pin, page.lockHash, page.lockSalt);
-                if (ok) {
+                // When configured, derive both answers before branching. This keeps
+                // ordinary unlocks and failed attempts on the same expensive path
+                // and ensures the real PIN always wins if imported data is corrupt.
+                const [normalPinOk, duressPinOk] = await Promise.all([
+                    verifyPagePin(pin, page.lockHash, page.lockSalt),
+                    page.lockDuressVerifier ? verifyPageDuressPin(pin, page.lockDuressVerifier) : Promise.resolve(false)
+                ]);
+                if (normalPinOk) {
                     unlockedPageIds.add(page.id);
                     startAutoLockTimer(page.id, page.lockAutoLock);
                     hideLockedPageScreen();
@@ -49010,6 +49182,16 @@ function getActiveEditor() {
                     updateWordCount();
                     renderPagesList();
                     try { input.value = ''; } catch (err) {}
+                } else if (duressPinOk) {
+                    // No trigger-time confirmation by design: the destructive
+                    // behavior was explicitly acknowledged during setup.
+                    input.value = '';
+                    input.disabled = true;
+                    if (!performPageDuressDeletion(page)) {
+                        input.disabled = false;
+                        errorEl.textContent = 'Page was not removed because local recovery cleanup could not be verified.';
+                        input.focus();
+                    }
                 } else {
                     errorEl.textContent = 'Incorrect PIN. Please try again.';
                     input.value = '';
@@ -49122,6 +49304,8 @@ function getActiveEditor() {
             const confirmBtn = document.getElementById('setPageLockConfirmBtn');
             const changeBtn = document.getElementById('lockManageChangeBtn');
             const lockAgainBtn = document.getElementById('lockManageLockAgainBtn');
+            const duressBtn = document.getElementById('lockManageDuressBtn');
+            const removeDuressBtn = document.getElementById('lockManageRemoveDuressBtn');
             const removeBtn = document.getElementById('lockManageRemoveBtn');
 
             if (!modal) return;
@@ -49133,10 +49317,12 @@ function getActiveEditor() {
                 // Reset all views
                 _showLockModalView('set');
                 _clearLockModalErrors();
-                ['lockPinNew','lockPinConfirm','lockPinChange','lockPinChangeConfirm'].forEach(id => {
+                ['lockPinNew','lockPinConfirm','lockPinChange','lockPinChangeConfirm','lockDuressPin','lockDuressPinConfirm'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
                 });
+                const ack = document.getElementById('lockDuressAcknowledge');
+                if (ack) ack.checked = false;
             };
 
             cancelBtn && cancelBtn.addEventListener('click', closeModal_);
@@ -49153,6 +49339,7 @@ function getActiveEditor() {
                 const view = _activeLockModalView();
                 if (view === 'set') await _handleLockModalSetPin();
                 else if (view === 'change') await _handleLockModalChangePin();
+                else if (view === 'duress') await _handleLockModalSetDuress();
                 else if (view === 'manage') closeModal_();
             });
 
@@ -49166,6 +49353,33 @@ function getActiveEditor() {
                 closeModal_();
                 if (pageId) manualLockPage(pageId);
                 showToast('Page locked.');
+            });
+
+            duressBtn && duressBtn.addEventListener('click', () => {
+                const pageId = _lockModalTargetPageId;
+                const target = pages.find(page => page && page.id === pageId);
+                const count = pageId ? collectPageIdsForDeletion(pageId).size : 0;
+                const scope = document.getElementById('lockDuressScopeText');
+                if (scope) scope.textContent = count > 1
+                    ? `Current scope: this page and ${count - 1} sub-page${count === 2 ? '' : 's'}.`
+                    : 'Current scope: this page only.';
+                _showLockModalView('duress');
+                document.getElementById('lockDuressPin')?.focus();
+                if (target && target.lockDuressVerifier) showToast('Enter a new duress PIN to replace the existing one.');
+            });
+
+            removeDuressBtn && removeDuressBtn.addEventListener('click', async () => {
+                const pageId = _lockModalTargetPageId;
+                closeModal_();
+                if (!pageId) return;
+                const confirmed = await showCustomConfirmDialog({
+                    title: 'Disable duress deletion',
+                    message: 'Disable the alternate destructive PIN for this page? The normal page PIN will keep working.',
+                    confirmText: 'Disable duress PIN',
+                    cancelText: 'Keep enabled',
+                    confirmVariant: 'danger'
+                });
+                if (confirmed && clearPageDuressPin(pageId)) showToast('Duress deletion disabled.');
             });
 
             removeBtn && removeBtn.addEventListener('click', async () => {
@@ -49252,11 +49466,19 @@ function getActiveEditor() {
             }
 
             const pageId = _lockModalTargetPageId;
+            const result = await changePageLock(pageId, pin);
+            if (!result || result.ok === false) {
+                const el = document.getElementById('lockPinChangeError');
+                if (el) el.textContent = result && result.code === 'matches-duress'
+                    ? 'The normal PIN must differ from the configured duress PIN.'
+                    : 'PIN could not be updated.';
+                document.getElementById('lockPinChange')?.focus();
+                return;
+            }
+
             document.getElementById('setPageLockModal')?.classList.remove('active');
             document.body.classList.remove('modal-open');
             _lockModalTargetPageId = null;
-
-            await changePageLock(pageId, pin);
             showToast('PIN updated.');
             _showLockModalView('set');
             _clearLockModalErrors();
@@ -49266,13 +49488,66 @@ function getActiveEditor() {
             });
         }
 
+        async function _handleLockModalSetDuress() {
+            const pin = document.getElementById('lockDuressPin')?.value || '';
+            const confirmPin = document.getElementById('lockDuressPinConfirm')?.value || '';
+            const acknowledged = document.getElementById('lockDuressAcknowledge')?.checked === true;
+            _clearLockModalErrors();
+
+            const pinError = validateDuressPinInput(pin);
+            if (pinError) {
+                const el = document.getElementById('lockDuressPinError');
+                if (el) el.textContent = pinError;
+                document.getElementById('lockDuressPin')?.focus();
+                return;
+            }
+            if (pin !== confirmPin) {
+                const el = document.getElementById('lockDuressPinConfirmError');
+                if (el) el.textContent = 'Duress PINs do not match.';
+                document.getElementById('lockDuressPinConfirm')?.focus();
+                return;
+            }
+            if (!acknowledged) {
+                const el = document.getElementById('lockDuressAcknowledgeError');
+                if (el) el.textContent = 'Acknowledge the permanent deletion behavior before enabling it.';
+                document.getElementById('lockDuressAcknowledge')?.focus();
+                return;
+            }
+
+            const pageId = _lockModalTargetPageId;
+            const result = await setPageDuressPin(pageId, pin);
+            if (!result || result.ok === false) {
+                const el = document.getElementById('lockDuressPinError');
+                if (el) el.textContent = result && result.code === 'matches-normal'
+                    ? 'The duress PIN must differ from the normal page PIN.'
+                    : 'Unlock the page with its normal PIN before configuring duress deletion.';
+                document.getElementById('lockDuressPin')?.focus();
+                return;
+            }
+
+            document.getElementById('setPageLockModal')?.classList.remove('active');
+            document.body.classList.remove('modal-open');
+            _lockModalTargetPageId = null;
+            _showLockModalView('set');
+            _clearLockModalErrors();
+            ['lockDuressPin','lockDuressPinConfirm'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            const ack = document.getElementById('lockDuressAcknowledge');
+            if (ack) ack.checked = false;
+            showToast('Duress deletion PIN enabled. Store it separately from the normal PIN.');
+        }
+
         function _showLockModalView(viewName) {
-            ['set','manage','change'].forEach(name => {
+            ['set','manage','change','duress'].forEach(name => {
                 const el = document.getElementById(`lockView${name.charAt(0).toUpperCase() + name.slice(1)}`);
                 if (el) el.classList.toggle('active', name === viewName);
             });
             const confirmBtn = document.getElementById('setPageLockConfirmBtn');
             const title = document.getElementById('setPageLockTitle');
+            if (confirmBtn) confirmBtn.classList.toggle('btn-danger', viewName === 'duress');
+            if (confirmBtn) confirmBtn.classList.toggle('btn-primary', viewName !== 'duress');
             if (viewName === 'set') {
                 if (confirmBtn) { confirmBtn.textContent = 'Set PIN'; confirmBtn.hidden = false; }
                 if (title) title.textContent = 'Protect page with PIN';
@@ -49282,11 +49557,14 @@ function getActiveEditor() {
             } else if (viewName === 'change') {
                 if (confirmBtn) { confirmBtn.textContent = 'Update PIN'; confirmBtn.hidden = false; }
                 if (title) title.textContent = 'Change PIN';
+            } else if (viewName === 'duress') {
+                if (confirmBtn) { confirmBtn.textContent = 'Enable destructive PIN'; confirmBtn.hidden = false; }
+                if (title) title.textContent = 'Duress deletion PIN';
             }
         }
 
         function _activeLockModalView() {
-            for (const name of ['set','manage','change']) {
+            for (const name of ['set','manage','change','duress']) {
                 const el = document.getElementById(`lockView${name.charAt(0).toUpperCase() + name.slice(1)}`);
                 if (el && el.classList.contains('active')) return name;
             }
@@ -49294,7 +49572,7 @@ function getActiveEditor() {
         }
 
         function _clearLockModalErrors() {
-            ['lockPinNewError','lockPinConfirmError','lockPinChangeError','lockPinChangeConfirmError'].forEach(id => {
+            ['lockPinNewError','lockPinConfirmError','lockPinChangeError','lockPinChangeConfirmError','lockDuressPinError','lockDuressPinConfirmError','lockDuressAcknowledgeError'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = '';
             });
@@ -49310,6 +49588,11 @@ function getActiveEditor() {
                 // Page is locked — only show manage view if unlocked in session
                 if (unlockedPageIds.has(pageId)) {
                     _showLockModalView('manage');
+                    const configured = !!parsePageDuressVerifier(page.lockDuressVerifier);
+                    const label = document.getElementById('lockManageDuressLabel');
+                    const removeDuress = document.getElementById('lockManageRemoveDuressBtn');
+                    if (label) label.textContent = configured ? 'Change duress deletion PIN' : 'Configure duress deletion PIN';
+                    if (removeDuress) removeDuress.hidden = !configured;
                 } else {
                     showToast('Unlock the page first to manage its lock settings.');
                     return;
@@ -49319,10 +49602,12 @@ function getActiveEditor() {
             }
 
             _clearLockModalErrors();
-            ['lockPinNew','lockPinConfirm','lockPinChange','lockPinChangeConfirm'].forEach(id => {
+            ['lockPinNew','lockPinConfirm','lockPinChange','lockPinChangeConfirm','lockDuressPin','lockDuressPinConfirm'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.value = '';
             });
+            const ack = document.getElementById('lockDuressAcknowledge');
+            if (ack) ack.checked = false;
 
             const modal = document.getElementById('setPageLockModal');
             if (modal) {
@@ -59593,6 +59878,15 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 buildWorkspaceExportFilename: (prefix, date) => buildWorkspaceExportFilename(prefix, date),
                 formatLocalExportTimestamp: (date) => formatLocalExportTimestamp(date),
                 lockPageWithPin: (pageId, pin) => setPageLock(pageId, pin),
+                setPageDuressPin: (pageId, pin) => setPageDuressPin(pageId, pin),
+                clearPageDuressPin: (pageId) => clearPageDuressPin(pageId),
+                lockPageNow: (pageId) => manualLockPage(pageId),
+                openPageLockSettings: (pageId) => openSetLockModal(pageId),
+                getPageLockState: (pageId) => {
+                    const page = pages.find(entry => entry && entry.id === pageId);
+                    return page ? { isLocked: !!(page.isLocked && page.lockHash), hasDuress: !!parsePageDuressVerifier(page.lockDuressVerifier), sessionUnlocked: unlockedPageIds.has(pageId) } : null;
+                },
+                duplicatePageById: (pageId) => duplicatePage(pageId),
                 // Full user flow (confirm dialog + PIN gate) — the
                 // locked-note-delete suite exercises the real path through this.
                 deletePageById: (pageId) => deletePage(pageId),

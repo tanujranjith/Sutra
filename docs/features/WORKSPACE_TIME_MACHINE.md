@@ -16,7 +16,8 @@ records the planned additions (see `docs/FEATURE_WAVE_PROGRESS.md`).
 - Snapshots are **secret-safe by construction**: they capture only editable
   content fields (`title`, `content`, `icon`, `tags`, layout, comments,
   footnotes, citations, blocks). Identity (`id`, `spaceId`, timestamps) and
-  security fields (`isLocked`, `lockHash`, `lockSalt`) are **never** captured.
+  security fields (`isLocked`, `lockHash`, `lockSalt`, `lockDuressVerifier`) are
+  **never** captured.
 - History survives the `.sutra` round-trip. Invariants are enforced by
   `npm run check:versions` (`scripts/version-history-check.mjs`).
 

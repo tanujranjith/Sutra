@@ -154,7 +154,7 @@ Legend: **R** = survives refresh / IndexedDB reload · **X** = in export payload
 |---|---|---|:--:|:--:|:--:|---|
 | Notes/editor | content, title, order, icon, theme, timestamps, collapsed | `appData.pages[]` | ✓ | ✓ | ✓ | PASS |
 | Notes/editor | page mode (size/margins), document layout (header/footer/page #), formatting | `pages[].pageMode/documentLayout/formatting` | ✓ | ✓ | ✓ | PASS |
-| Notes/editor | locked pages (PIN hash/salt) | `pages[].isLocked/lockHash/lockSalt` | ✓ | ✓ | ✓ | PASS |
+| Notes/editor | locked pages (PIN hash/salt + optional duress verifier) | `pages[].isLocked/lockHash/lockSalt/lockDuressVerifier` | ✓ | ✓ | ✓ | PASS |
 | Notes/editor | comments, suggestions, footnotes, citations, version history | `pages[].*` | ✓ | ✓ | ✓ | PASS |
 | Notes/editor | **inline images** (pasted) | `data:` URI inside `pages[].content` | ✓ | ✓ (→ `assets/` in `.atelier`) | ✓ | PASS |
 | Spaces/folders | space defs, page→space links | `appData.spaces`, `pages[].spaceId` | ✓ | ✓ | ✓ | PASS |

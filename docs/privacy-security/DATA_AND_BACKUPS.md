@@ -435,7 +435,8 @@ one-way door that discards your prior state with no recourse.
 **Travels in a backup (`.sutra` and JSON):**
 
 - All notes (content, structure, inline images, **Document Backgrounds**, locked-
-  page lock data), spaces, pinned pages.
+  page lock data including an optional opaque duress verifier), spaces, pinned
+  pages. Raw normal or duress PINs are never stored or exported.
 - Tasks, time blocks, homework (courses + assignments), Course Hub metadata
   **and file binaries**.
 - Testing Hub, AP Study, Review, College, Academic, Life, Projects & Work data.
@@ -458,9 +459,15 @@ one-way door that discards your prior state with no recourse.
 - **Assistant chat history from a backup** when its encrypted/plaintext backup
   setting is off. This backup preference does not suppress encrypted Sutra Sync:
   when durable chat history is enabled, visible conversations synchronize.
-- **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
+  - **Regenerable caches** and ephemeral UI state (e.g. scroll position, the
   in-session unlocked-page set) — not exported; locked pages correctly require
   the PIN again after a reload.
+
+An intentionally used duress deletion PIN removes the protected page tree from
+the active browser workspace, Sutra Trash, and local in-app workspace snapshots.
+It cannot erase downloaded exports, cloud or device backups, browser-profile
+backups, or stale copies on an offline device; those copies remain subject to
+their own retention and synchronization behavior.
 
 ---
 

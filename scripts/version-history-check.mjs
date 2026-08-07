@@ -166,7 +166,7 @@ const ISO_B = '2021-06-01T00:00:00.000Z';
     ok(JSON.stringify(snap.state.documentLayout) === JSON.stringify(p.documentLayout), 'rich: documentLayout captured');
     ok(JSON.stringify(snap.state.pageMode) === JSON.stringify(p.pageMode), 'rich: pageMode captured');
     // Security + identity must never enter a snapshot.
-    ok(!('isLocked' in snap.state) && !('lockHash' in snap.state) && !('lockSalt' in snap.state),
+    ok(!('isLocked' in snap.state) && !('lockHash' in snap.state) && !('lockSalt' in snap.state) && !('lockDuressVerifier' in snap.state),
         'rich: lock/security fields are NEVER captured');
     ok(!('id' in snap.state) && !('spaceId' in snap.state) && !('createdAt' in snap.state) && !('versions' in snap.state),
         'rich: identity/placement/timestamps/history are NEVER captured');
@@ -219,7 +219,7 @@ const ISO_B = '2021-06-01T00:00:00.000Z';
 // ---- 6) Restore recovers selected state; lock/identity untouched --------
 {
     const p = makeRichPage();
-    p.isLocked = true; p.lockHash = 'HASH'; p.lockSalt = 'SALT'; p.lockAutoLock = 'session';
+    p.isLocked = true; p.lockHash = 'HASH'; p.lockSalt = 'SALT'; p.lockAutoLock = 'session'; p.lockDuressVerifier = 'DURESS';
     const snap = api.buildPageVersionSnapshot(p, 'snap', { id: 'r', savedAt: ISO_A });
     const originalTitle = p.title;
     const originalContent = p.content;
@@ -228,7 +228,7 @@ const ISO_B = '2021-06-01T00:00:00.000Z';
     ok(p.title === originalTitle && p.content === originalContent, 'restore: title + content recovered');
     ok(p.tags.length === 2 && p.tags[0].name === 'math', 'restore: tags recovered');
     ok(p.icon === '📘', 'restore: icon recovered');
-    ok(p.isLocked === true && p.lockHash === 'HASH' && p.lockSalt === 'SALT' && p.lockAutoLock === 'session',
+    ok(p.isLocked === true && p.lockHash === 'HASH' && p.lockSalt === 'SALT' && p.lockAutoLock === 'session' && p.lockDuressVerifier === 'DURESS',
         'restore: lock/security metadata is never weakened or overwritten');
     ok(typeof p.updatedAt === 'string', 'restore: updatedAt refreshed');
 

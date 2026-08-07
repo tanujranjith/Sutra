@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-providers1",
-    "hash": "f2f0fdc58b3826fe"
+    "stamp": "20260807-duress2",
+    "hash": "4d0347ce6ad33117"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -336,8 +336,8 @@
     "hash": "caf496517229c79f"
   },
   "src/sync/sync-merge.js": {
-    "stamp": "20260717-conflict4",
-    "hash": "f3ade27f69644c7e"
+    "stamp": "20260807-duress1",
+    "hash": "ffff17d59a6f04c3"
   },
   "src/sync/sync-projection.js": {
     "stamp": "20260731-helpdocs1",
@@ -376,8 +376,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260807-cohesion1",
-    "hash": "a2a6d7802fc88419"
+    "stamp": "20260807-duress1",
+    "hash": "8ea8d6d8eba3ab0b"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",

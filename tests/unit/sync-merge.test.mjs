@@ -114,6 +114,29 @@ test('non-overlapping fields changed on the same record merge without conflict',
   assert.equal(onA.conflicts.length, 0);
 });
 
+test('page duress verifier synchronizes as opaque lock metadata without exposing a credential field', async () => {
+  const baseWs = baseWorkspace();
+  baseWs.pages[0] = {
+    id: 'p1', title: 'Protected', content: '<p>base</p>', isLocked: true,
+    lockHash: 'normal-hash', lockSalt: 'normal-salt', lockDuressVerifier: null
+  };
+  const base = await projectionOf(baseWs);
+  const wsA = structuredClone(baseWs);
+  wsA.pages[0].title = 'Protected notes';
+  const wsB = structuredClone(baseWs);
+  wsB.pages[0].lockDuressVerifier = `v1$${'a'.repeat(32)}$${'b'.repeat(64)}`;
+  const A = await outboxFor(base, wsA, 'device-a');
+  const B = await outboxFor(base, wsB, 'device-b');
+  const onA = await mergeOn(base, A.current, A.ops, B.ops);
+  const onB = await mergeOn(base, B.current, B.ops, A.ops);
+
+  assert.deepEqual(onA.mergedRecords, onB.mergedRecords);
+  assert.equal(onA.conflicts.length, 0);
+  assert.equal(onA.mergedRecords['c/pages/p1'].title, 'Protected notes');
+  assert.equal(onA.mergedRecords['c/pages/p1'].lockDuressVerifier, wsB.pages[0].lockDuressVerifier);
+  assert.equal(Object.hasOwn(onA.mergedRecords['c/pages/p1'], 'lockDuressPin'), false);
+});
+
 test('overlapping non-page fields choose deterministically and retain both values for review', async () => {
   const base = await projectionOf(baseWorkspace());
   const wsA = baseWorkspace(); wsA.tasks[0].text = 'A wording';

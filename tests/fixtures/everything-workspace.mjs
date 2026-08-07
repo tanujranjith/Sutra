@@ -129,6 +129,7 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
       isLocked: true, lockHash: 'synthetic-lock-hash',
       lockSalt: 'synthetic-lock-salt', lockedAt: EVERYTHING_STAMP, lockAutoLock: 'session',
+      lockDuressVerifier: 'v1$00000000000000000000000000000000$1111111111111111111111111111111111111111111111111111111111111111',
       pageMode: { enabled: true, size: 'a4', margins: { top: 18, bottom: 19, left: 20, right: 21 } },
       documentBackground: { enabled: true, dataUrl: EVERYTHING_INLINE_IMAGE, blurPx: 3, overlayOpacity: 0.2, name: 'parity-background.png', mimeType: 'image/png' },
       formatting: { fontFamily: 'Georgia', fontSize: '18', lineHeight: '1.7', textColor: '#112233', alignment: 'justify' },
