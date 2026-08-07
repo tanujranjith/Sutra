@@ -2,11 +2,39 @@
  * tests/helpers/extract-function.mjs — behavior-level source assertions.
  *
  * Extracts a top-level function declaration body from a classic runtime
- * script (e.g. src/core/app.js) with a string/template/comment-aware brace
- * scanner, so tests can assert on the actual call graph and conditions
+ * script (e.g. src/core/app.js) with a string/template/comment/regex-aware
+ * brace scanner, so tests can assert on the actual call graph and conditions
  * instead of loose regex fragments. Pure Node module; no runtime deps.
  */
 'use strict';
+
+// A `/` after these characters starts a regular-expression literal rather
+// than a division. Line-start is treated as regex-start.
+const REGEX_START_AFTER = /[\(,\[=!&|?{}:;+\-*%^~<>]/;
+const REGEX_START_AFTER_TEST = new RegExp(REGEX_START_AFTER.source);
+
+function isRegexLiteralStart(prevSignificant) {
+  if (prevSignificant === null || prevSignificant === '\n') return true;
+  return REGEX_START_AFTER_TEST.test(prevSignificant);
+}
+
+// Scans a `/.../` regex literal beginning at `start` (the opening slash).
+// Returns the index of the closing `/`, or -1 if the line ends first
+// (regex literals cannot span raw newlines).
+function skipRegexLiteral(text, start, len) {
+  let i = start + 1;
+  let inClass = false;
+  while (i < len) {
+    const ch = text[i];
+    if (ch === '\\') { i += 2; continue; }
+    if (ch === '\n' || ch === '\r') return -1;
+    if (ch === '[') { inClass = true; i += 1; continue; }
+    if (ch === ']') { inClass = false; i += 1; continue; }
+    if (ch === '/' && !inClass) return i;
+    i += 1;
+  }
+  return -1;
+}
 
 const DECL_PATTERNS = [
   (name) => new RegExp(`\\bfunction\\s+${name}\\s*\\(`, 'g'),
@@ -31,6 +59,7 @@ function locateBody(source, startIndex) {
   let parenDepth = 0;
   let braceDepth = 0;
   let bodyStart = -1;
+  let prevSignificant = null;
   while (i < len) {
     const ch = source[i];
     if (ch === "'" || ch === '"') {
@@ -41,6 +70,7 @@ function locateBody(source, startIndex) {
         if (source[i] === quote) break;
         i += 1;
       }
+      prevSignificant = quote;
     } else if (ch === '`') {
       // Template literal: skip content and nested ${...} expressions.
       i += 1;
@@ -54,17 +84,28 @@ function locateBody(source, startIndex) {
         if (c === '`' && exprDepth === 0) break;
         i += 1;
       }
+      prevSignificant = '`';
     } else if (ch === '/' && source[i + 1] === '/') {
       while (i < len && source[i] !== '\n') i += 1;
+      prevSignificant = '\n';
     } else if (ch === '/' && source[i + 1] === '*') {
       i += 2;
       while (i < len && !(source[i] === '*' && source[i + 1] === '/')) i += 1;
       i += 2;
+      prevSignificant = '\n';
       continue;
+    } else if (ch === '/') {
+      const regexEnd = isRegexLiteralStart(prevSignificant) ? skipRegexLiteral(source, i, len) : -1;
+      if (regexEnd >= 0) {
+        i = regexEnd;
+        prevSignificant = '/';
+      }
     } else if (ch === '(') {
       parenDepth += 1;
+      prevSignificant = ch;
     } else if (ch === ')') {
       parenDepth = Math.max(0, parenDepth - 1);
+      prevSignificant = ch;
     } else if (ch === '{') {
       if (parenDepth === 0 && bodyStart === -1) {
         bodyStart = i;
@@ -72,9 +113,13 @@ function locateBody(source, startIndex) {
       } else if (bodyStart !== -1) {
         braceDepth += 1;
       }
+      prevSignificant = ch;
     } else if (ch === '}' && bodyStart !== -1) {
       braceDepth -= 1;
       if (braceDepth === 0) return { bodyStart, bodyEnd: i + 1 };
+      prevSignificant = ch;
+    } else {
+      if (!/\s/.test(ch)) prevSignificant = ch;
     }
     i += 1;
   }
@@ -107,7 +152,7 @@ function callCount(body, name) {
 /**
  * Extracts the balanced `{...}` block that begins after `marker` (the first
  * `{` after the marker, closed by its matching brace, string/template/
- * comment-aware). Returns { start, end, body } where body includes the
+ * comment/regex-aware). Returns { start, end, body } where body includes the
  * braces, or null. Useful for object-literal arrow methods such as
  * `discoverModels: async (provider) => { ... }`.
  */
@@ -120,6 +165,7 @@ export function extractBalancedBlock(source, marker) {
   const len = text.length;
   let i = openIndex;
   let depth = 0;
+  let prevSignificant = null;
   while (i < len) {
     const ch = text[i];
     if (ch === "'" || ch === '"') {
@@ -130,6 +176,7 @@ export function extractBalancedBlock(source, marker) {
         if (text[i] === quote) break;
         i += 1;
       }
+      prevSignificant = quote;
     } else if (ch === '`') {
       i += 1;
       let exprDepth = 0;
@@ -142,20 +189,33 @@ export function extractBalancedBlock(source, marker) {
         if (c === '`' && exprDepth === 0) break;
         i += 1;
       }
+      prevSignificant = '`';
     } else if (ch === '/' && text[i + 1] === '/') {
       while (i < len && text[i] !== '\n') i += 1;
+      prevSignificant = '\n';
     } else if (ch === '/' && text[i + 1] === '*') {
       i += 2;
       while (i < len && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
       i += 2;
+      prevSignificant = '\n';
       continue;
+    } else if (ch === '/') {
+      const regexEnd = isRegexLiteralStart(prevSignificant) ? skipRegexLiteral(text, i, len) : -1;
+      if (regexEnd >= 0) {
+        i = regexEnd;
+        prevSignificant = '/';
+      }
     } else if (ch === '{') {
       depth += 1;
+      prevSignificant = ch;
     } else if (ch === '}') {
       depth -= 1;
       if (depth === 0) {
         return { start: markerIndex, end: i + 1, body: text.slice(markerIndex, i + 1) };
       }
+      prevSignificant = ch;
+    } else {
+      if (!/\s/.test(ch)) prevSignificant = ch;
     }
     i += 1;
   }

@@ -143,6 +143,10 @@ record value so hash-volatile metadata is not needlessly clobbered.
 Additional exclusions stripped from within the `a/settings` record:
 - **`settings.preferences.sync`** — the sync-enable flag and endpoint are
   device-local, and must never force-enable sync on another device.
+- **`settings.preferences.assistant.localEndpoint`** — the machine-specific
+  local AI endpoint (`baseUrl`, `model`, `visionCapable`) describes this
+  device; one device's `192.168.x.x` or `localhost` address must never become
+  another device's model configuration.
 - **`settings.dataHealth`** — mutates on every local save
   (`lastSaveAttemptAt`); syncing it would keep the settings record permanently
   dirty and replicate device-local persistence-health stamps.

@@ -4178,10 +4178,35 @@ function populateProgressDashboard() {
             return resolved === undefined ? fallbackValue : resolved;
         }
 
+        function sanitizeLocalEndpointBaseUrl(value) {
+            if (typeof value !== 'string') return value;
+            const trimmed = value.trim();
+            if (!trimmed) return '';
+            if (trimmed.length > 2048) return trimmed.slice(0, 2048);
+            let candidate = trimmed;
+            if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate)) {
+                candidate = 'http://' + candidate;
+            }
+            let parsed = null;
+            try {
+                parsed = new URL(candidate);
+            } catch (error) {
+                return trimmed;
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return trimmed;
+            if (parsed.username || parsed.password) return trimmed;
+            const path = parsed.pathname.replace(/\/+$/, '');
+            if (path === '/') return parsed.protocol + '//' + parsed.host + '/';
+            return parsed.protocol + '//' + parsed.host + path + '/';
+        }
+
         function setWorkspacePreference(path, value, options = {}) {
             if (!appSettings) return;
             const segments = String(path || '').split('.').filter(Boolean);
             if (!segments.length) return;
+            if (String(path) === 'assistant.localEndpoint.baseUrl') {
+                value = sanitizeLocalEndpointBaseUrl(value);
+            }
             ensureWorkspacePreferences();
             let cursor = appSettings.preferences;
             for (let index = 0; index < segments.length - 1; index += 1) {

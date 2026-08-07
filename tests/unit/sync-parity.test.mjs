@@ -102,6 +102,8 @@ test('everything fixture covers every portable top-level and named nested contra
       Object.assign({}, ...fixture.assistantChatHistory.conversations[0].messages.map(row => row)),
     'courseWorkspace.files[]': fixture.courseWorkspace.files[0],
     'settings.preferences': fixture.settings.preferences,
+    'settings.preferences.assistant': fixture.settings.preferences.assistant,
+    'settings.preferences.assistant.localEndpoint': fixture.settings.preferences.assistant.localEndpoint,
     'settings.preferences.today': fixture.settings.preferences.today,
     'settings.preferences.today.dashboard': fixture.settings.preferences.today.dashboard,
     'settings.preferences.quotes': fixture.settings.preferences.quotes,

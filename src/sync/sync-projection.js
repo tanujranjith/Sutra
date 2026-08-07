@@ -94,21 +94,47 @@
     return orphans;
   }
 
-  function stripDeviceLocalSettings(settingsValue) {
-    var settings = clone(settingsValue);
-    if (!settings || typeof settings !== 'object') return settings;
-    var strippedKeys = protocolApi.CLASSIFICATION.strippedSettingsKeys || [];
-    for (var k = 0; k < strippedKeys.length; k += 1) {
-      delete settings[strippedKeys[k]];
-    }
-    if (settings.preferences && typeof settings.preferences === 'object') {
-      var stripped = protocolApi.CLASSIFICATION.strippedSettingsPreferenceSections;
-      for (var i = 0; i < stripped.length; i += 1) {
-        delete settings.preferences[stripped[i]];
-      }
-    }
-    return settings;
-  }
+function nestedGet(object, segments) {
+var node = object;
+for (var i = 0; i < segments.length; i += 1) {
+if (!node || typeof node !== 'object' || Array.isArray(node)
+|| !Object.prototype.hasOwnProperty.call(node, segments[i])) return undefined;
+node = node[segments[i]];
+}
+return node;
+}
+
+function stripDeviceLocalSettings(settingsValue) {
+var settings = clone(settingsValue);
+if (!settings || typeof settings !== 'object') return settings;
+var strippedKeys = protocolApi.CLASSIFICATION.strippedSettingsKeys || [];
+for (var k = 0; k < strippedKeys.length; k += 1) {
+delete settings[strippedKeys[k]];
+}
+if (settings.preferences && typeof settings.preferences === 'object') {
+var stripped = protocolApi.CLASSIFICATION.strippedSettingsPreferenceSections;
+for (var i = 0; i < stripped.length; i += 1) {
+delete settings.preferences[stripped[i]];
+}
+var subpaths = protocolApi.CLASSIFICATION.strippedSettingsPreferenceSubpaths || [];
+for (var sp = 0; sp < subpaths.length; sp += 1) {
+var segments = subpaths[sp].split('.');
+var parent = settings.preferences;
+var key = null;
+var reachable = true;
+for (var si = 0; si < segments.length; si += 1) {
+if (si === segments.length - 1) { key = segments[si]; break; }
+if (!parent || typeof parent !== 'object' || Array.isArray(parent)
+|| !Object.prototype.hasOwnProperty.call(parent, segments[si])) { reachable = false; break; }
+parent = parent[segments[si]];
+}
+if (reachable && key !== null && parent && typeof parent === 'object' && !Array.isArray(parent)) {
+delete parent[key];
+}
+}
+}
+return settings;
+}
 
   // Course attachment bytes travel through the encrypted asset channel, never
   // inside an operation/snapshot record. missingBlob is device-local material-
@@ -372,6 +398,21 @@
         var currentSync = currentSettings.preferences ? currentSettings.preferences.sync : undefined;
         if (!incoming.preferences || typeof incoming.preferences !== 'object') incoming.preferences = {};
         if (currentSync !== undefined) incoming.preferences.sync = clone(currentSync);
+        var subpaths = protocolApi.CLASSIFICATION.strippedSettingsPreferenceSubpaths || [];
+        for (var sub = 0; sub < subpaths.length; sub += 1) {
+          var segments = subpaths[sub].split('.');
+          var currentValue = nestedGet(currentSettings.preferences, segments);
+          if (currentValue === undefined) continue;
+          var cursor = incoming.preferences;
+          for (var seg = 0; seg < segments.length - 1; seg += 1) {
+            if (!cursor || typeof cursor !== 'object' || Array.isArray(cursor)) { cursor = null; break; }
+            if (cursor[segments[seg]] === undefined) cursor[segments[seg]] = {};
+            cursor = cursor[segments[seg]];
+          }
+          if (cursor && typeof cursor === 'object' && !Array.isArray(cursor)) {
+            cursor[segments[segments.length - 1]] = clone(currentValue);
+          }
+        }
       }
       if (field === 'courseWorkspace' && incoming && Array.isArray(incoming.files)) {
         var currentCourse = currentWorkspace && currentWorkspace.courseWorkspace && typeof currentWorkspace.courseWorkspace === 'object'

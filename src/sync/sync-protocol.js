@@ -206,7 +206,11 @@
     // another device. settings.dataHealth mutates on every local save
     // (lastSaveAttemptAt) — syncing it would keep the settings record
     // permanently dirty and replicate device-local health stamps.
+    // assistant.localEndpoint is the machine-specific local AI endpoint
+    // (base URL, model, vision flag) — one device's 192.168.x.x address must
+    // never become another device's model config.
     strippedSettingsPreferenceSections: ['sync'],
+    strippedSettingsPreferenceSubpaths: ['assistant.localEndpoint'],
     strippedSettingsKeys: ['dataHealth']
   };
 
