@@ -56,7 +56,7 @@ fixtures by `npm run check:migrations`.
 - A curated allow-list of standalone **localStorage preferences** is embedded in
   exports (focus-timer state, streak settings, AI provider/model **choices**, the
   Assistant Activity log, and a couple of feature flags).
-- **Secrets** (AI provider API keys) use **`sessionStorage` only** and are never persisted or exported.
+- **Secrets** (AI provider API keys) use **`sessionStorage` only** and are never persisted or exported. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
 
 ---
 

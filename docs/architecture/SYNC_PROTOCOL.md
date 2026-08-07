@@ -146,7 +146,9 @@ Additional exclusions stripped from within the `a/settings` record:
 - **`settings.preferences.assistant.localEndpoint`** — the machine-specific
   local AI endpoint (`baseUrl`, `model`, `visionCapable`) describes this
   device; one device's `192.168.x.x` or `localhost` address must never become
-  another device's model configuration.
+  another device's model configuration. It is also excluded from every
+  workspace export/import path, so a backup restore preserves the receiving
+  device's local endpoint instead of importing one from another device.
 - **`settings.dataHealth`** — mutates on every local save
   (`lastSaveAttemptAt`); syncing it would keep the settings record permanently
   dirty and replicate device-local persistence-health stamps.

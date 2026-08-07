@@ -4083,8 +4083,8 @@ function populateProgressDashboard() {
                         aboutUser: String(assistantPersonalizationSource.aboutUser || '').slice(0, 2000)
                     },
                     localEndpoint: {
-                        enabled: assistantLocalEndpointSource.enabled === true,
-                        baseUrl: String(assistantLocalEndpointSource.baseUrl || '').trim().slice(0, 300),
+                        enabled: assistantLocalEndpointSource.enabled === true && !!sanitizeLocalEndpointBaseUrl(assistantLocalEndpointSource.baseUrl),
+                        baseUrl: sanitizeLocalEndpointBaseUrl(assistantLocalEndpointSource.baseUrl),
                         model: String(assistantLocalEndpointSource.model || '').trim().slice(0, 120),
                         visionCapable: assistantLocalEndpointSource.visionCapable === true
                     },
@@ -4179,10 +4179,10 @@ function populateProgressDashboard() {
         }
 
         function sanitizeLocalEndpointBaseUrl(value) {
-            if (typeof value !== 'string') return value;
+            if (typeof value !== 'string') return '';
             const trimmed = value.trim();
             if (!trimmed) return '';
-            if (trimmed.length > 2048) return trimmed.slice(0, 2048);
+            if (trimmed.length > 2048) return '';
             let candidate = trimmed;
             if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate)) {
                 candidate = 'http://' + candidate;
@@ -4191,10 +4191,10 @@ function populateProgressDashboard() {
             try {
                 parsed = new URL(candidate);
             } catch (error) {
-                return trimmed;
+                return '';
             }
-            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return trimmed;
-            if (parsed.username || parsed.password) return trimmed;
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+            if (parsed.username || parsed.password || parsed.search || parsed.hash) return '';
             const path = parsed.pathname.replace(/\/+$/, '');
             if (path === '/') return parsed.protocol + '//' + parsed.host + '/';
             return parsed.protocol + '//' + parsed.host + path + '/';
@@ -54713,10 +54713,15 @@ function getActiveEditor() {
             if (!includeSensitiveSettings) {
                 stripSensitiveSettingFields(settingsClone, redactedSettingsPaths, []);
             }
-            // Sync enablement/backend selection are device-local operational
-            // configuration, never portable workspace data.
+            // Sync routing and Local AI endpoint settings are device-local
+            // configuration, never portable workspace data. Keep assistant
+            // preferences such as memory depth while dropping the entire local
+            // endpoint object so URL-shaped secrets cannot enter any export.
             if (settingsClone.preferences && typeof settingsClone.preferences === 'object') {
                 delete settingsClone.preferences.sync;
+                if (settingsClone.preferences.assistant && typeof settingsClone.preferences.assistant === 'object') {
+                    delete settingsClone.preferences.assistant.localEndpoint;
+                }
             }
             // Chats are private user content. A payload is plaintext-readable
             // when it is the JSON recovery format OR when the caller explicitly
@@ -60018,6 +60023,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const localSyncPreference = appSettings && appSettings.preferences && appSettings.preferences.sync
                 ? cloneSerializable(appSettings.preferences.sync, { enabled: false, endpoint: '' })
                 : null;
+            const localAssistantEndpoint = appSettings && appSettings.preferences && appSettings.preferences.assistant
+                && appSettings.preferences.assistant.localEndpoint
+                ? cloneSerializable(appSettings.preferences.assistant.localEndpoint, { enabled: false, baseUrl: '', model: '', visionCapable: false })
+                : { enabled: false, baseUrl: '', model: '', visionCapable: false };
+            if (localAssistantEndpoint) {
+                localAssistantEndpoint.baseUrl = sanitizeLocalEndpointBaseUrl(localAssistantEndpoint.baseUrl);
+                localAssistantEndpoint.enabled = localAssistantEndpoint.enabled === true && !!localAssistantEndpoint.baseUrl;
+                localAssistantEndpoint.model = String(localAssistantEndpoint.model || '').trim().slice(0, 120);
+                localAssistantEndpoint.visionCapable = localAssistantEndpoint.visionCapable === true;
+            }
             const wrappedWorkspace = data && data.workspace && typeof data.workspace === 'object';
             const migrationSource = wrappedWorkspace ? data.workspace : data;
             if (window.SutraMigrations && typeof window.SutraMigrations.migrateWorkspace === 'function') {
@@ -60259,6 +60274,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     enabled: localSyncPreference.enabled === true,
                     endpoint: typeof localSyncPreference.endpoint === 'string' ? localSyncPreference.endpoint : ''
                 };
+            }
+            // Older backups may still contain this device-specific setting.
+            // Restore only the receiving browser's sanitized configuration.
+            if (localAssistantEndpoint) {
+                if (!appSettings.preferences.assistant || typeof appSettings.preferences.assistant !== 'object') {
+                    appSettings.preferences.assistant = {};
+                }
+                appSettings.preferences.assistant.localEndpoint = localAssistantEndpoint;
             }
             appSettings.autoEventBlocksEnabled = appSettings.autoEventBlocksEnabled !== false;
             appSettings.notesSplitViewEnabled = appSettings.notesSplitViewEnabled === true;
