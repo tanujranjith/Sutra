@@ -30,6 +30,41 @@ test('backlinks: a page that links to another shows up as a linked reference', a
   expect(r.selfExcluded).toBe(true);
 });
 
+test('page links navigate from Editor v2, switch spaces, and support the keyboard', async ({ page }) => {
+  await openApp(page);
+  const seeded = await page.evaluate(() => {
+    const H = window.__sutraPublicBetaTestHooks;
+    const originalSpaceId = H.getActiveSpaceId();
+    const target = H.createNoteInActiveSpace('Linked target', '<p>Destination.</p>');
+    const sourceSpace = H.createSpace('Link source space');
+    const linkHtml = '<p><span class="page-link" data-page-id="' + target.id
+      + '" contenteditable="false">Linked target</span></p>';
+    const source = H.createNoteInActiveSpace('Linked source', linkHtml);
+    window.loadPage(source.id);
+    return { originalSpaceId, sourceSpaceId: sourceSpace.id, sourceId: source.id, targetId: target.id };
+  });
+
+  await expect(page.locator('#editorV2Host .page-link[data-page-id="' + seeded.targetId + '"]')).toBeVisible();
+  const pageLink = page.locator('#editorV2Host .page-link[data-page-id="' + seeded.targetId + '"]');
+  await expect(pageLink).toHaveAttribute('role', 'link');
+  await expect(pageLink).toHaveAttribute('tabindex', '0');
+  await pageLink.click();
+  await page.waitForFunction(targetId => window.flowAtelier.currentPageId === targetId, seeded.targetId);
+  expect(await page.evaluate(() => window.__sutraPublicBetaTestHooks.getActiveSpaceId())).toBe(seeded.originalSpaceId);
+
+  await page.evaluate(({ sourceSpaceId, sourceId }) => {
+    const H = window.__sutraPublicBetaTestHooks;
+    H.switchSpace(sourceSpaceId);
+    window.loadPage(sourceId);
+  }, seeded);
+  const keyboardLink = page.locator('#editorV2Host .page-link[data-page-id="' + seeded.targetId + '"]');
+  await keyboardLink.focus();
+  await expect(keyboardLink).toBeFocused();
+  await keyboardLink.press('Enter');
+  await page.waitForFunction(targetId => window.flowAtelier.currentPageId === targetId, seeded.targetId);
+  expect(await page.evaluate(() => window.__sutraPublicBetaTestHooks.getActiveSpaceId())).toBe(seeded.originalSpaceId);
+});
+
 test('fuzzy search matches a subsequence in a note title', async ({ page }) => {
   await openApp(page);
   const found = await page.evaluate(() => {

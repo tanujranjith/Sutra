@@ -626,6 +626,21 @@
             el.setAttribute('aria-label', label);
             el.setAttribute('title', label);
         });
+        Array.prototype.slice.call(state.hostEl.querySelectorAll('.page-link[data-page-id]')).forEach(function (el) {
+            var pageId = String(el.getAttribute('data-page-id') || '').trim();
+            var label = String(el.getAttribute('aria-label') || '').trim();
+            if (!label) {
+                label = 'Open linked page ' + String(el.textContent || '').replace(/^\s*\u{1F4C4}\s*/u, '').trim();
+            }
+            el.setAttribute('role', 'link');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('aria-label', label.trim());
+            el.setAttribute('title', label.trim());
+            if (!pageId) {
+                el.setAttribute('aria-disabled', 'true');
+                el.classList.add('page-link-broken');
+            }
+        });
     }
 
     function active(name, attrs) {

@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-lockprivacy1",
-    "hash": "a38f5adf1ba97850"
+    "stamp": "20260807-pagelinks1",
+    "hash": "8812c06b46a69475"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -212,8 +212,8 @@
     "hash": "3b1743d4329b2d0a"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260730-undoIsolation1",
-    "hash": "81d352db228ff531"
+    "stamp": "20260807-pagelinks1",
+    "hash": "b1d98ccd341fd3bb"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -372,8 +372,8 @@
     "hash": "b4f058b0e2f2b2a0"
   },
   "styles/base/styles.css": {
-    "stamp": "20260730-pushTime1",
-    "hash": "282ce84c3322002a"
+    "stamp": "20260807-pagelinks1",
+    "hash": "bd69d3a3f28238b1"
   },
   "styles/base/tokens.css": {
     "stamp": "20260710-tokens1",

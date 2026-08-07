@@ -19002,16 +19002,43 @@ function populateProgressDashboard() {
             });
             bindPrimaryScrollTracking();
 
-            // Event delegation for page-link clicks inside the editor
-            editor.addEventListener('click', (e) => {
-                const pageLinkEl = e.target.closest('.page-link');
-                if (pageLinkEl) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const pageId = pageLinkEl.dataset.pageId;
-                    if (pageId) loadPage(pageId);
+            // One delegated route covers the classic editor, Editor v2's
+            // ProseMirror host, and split-view's secondary editor. The previous
+            // listener lived on #editor only, which is hidden while v2 is active.
+            const notesEditorContainer = document.getElementById('notesEditorContainer');
+            const activatePageLink = (event) => {
+                const eventTarget = event.target && event.target.nodeType === Node.ELEMENT_NODE
+                    ? event.target
+                    : event.target && event.target.parentElement;
+                const pageLinkEl = eventTarget && eventTarget.closest
+                    ? eventTarget.closest('.page-link[data-page-id]')
+                    : null;
+                if (!pageLinkEl || !notesEditorContainer || !notesEditorContainer.contains(pageLinkEl)) return false;
+                const pageId = String(pageLinkEl.dataset.pageId || '').trim();
+                const targetPage = pages.find(page => page && page.id === pageId);
+                event.preventDefault();
+                event.stopPropagation();
+                if (!targetPage) {
+                    pageLinkEl.classList.add('page-link-broken');
+                    pageLinkEl.setAttribute('aria-disabled', 'true');
+                    showToast('This linked page is no longer available.');
+                    return true;
                 }
-            });
+                const targetSpaceId = String(targetPage.spaceId || 'default');
+                if (targetSpaceId !== String(activeSpaceId || 'default')) {
+                    switchSpace(targetSpaceId);
+                }
+                loadPage(targetPage.id);
+                return true;
+            };
+            if (notesEditorContainer) {
+                notesEditorContainer.addEventListener('click', activatePageLink);
+                // Capture before ProseMirror handles Enter/Space as an edit.
+                notesEditorContainer.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    activatePageLink(event);
+                }, true);
+            }
 
             function getSelectedIndentableBlocks() {
                 const selection = window.getSelection();
@@ -64511,6 +64538,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // Loads page content into a live editor element. Embed blocks with shadow
         // DOMs must be hydrated AFTER the base HTML is in the DOM because shadow
         // DOM state is lost when serialised through innerHTML.
+        function enhanceEditorPageLinks(container) {
+            if (!container || !container.querySelectorAll) return;
+            container.querySelectorAll('.page-link[data-page-id]').forEach(link => {
+                const pageId = String(link.dataset.pageId || '').trim();
+                const targetPage = pages.find(page => page && page.id === pageId);
+                link.setAttribute('role', 'link');
+                link.setAttribute('tabindex', '0');
+                if (targetPage) {
+                    const label = `Open linked page ${String(targetPage.title || 'Untitled')}`;
+                    link.setAttribute('aria-label', label);
+                    link.setAttribute('title', label);
+                    link.removeAttribute('aria-disabled');
+                    link.classList.remove('page-link-broken');
+                } else {
+                    link.setAttribute('aria-label', 'Linked page unavailable');
+                    link.setAttribute('title', 'Linked page unavailable');
+                    link.setAttribute('aria-disabled', 'true');
+                    link.classList.add('page-link-broken');
+                }
+            });
+        }
+
         function loadPageContentIntoEditor(editor, page) {
             if (!editor || !page) return;
             if (!isPageContentAuthorized(page)) {
@@ -64540,6 +64589,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
                 const v2Host = getNotesEditorV2Host();
                 if (v2Host) v2Host.dataset.pageId = String(page.id || '');
+                enhanceEditorPageLinks(v2Host);
                 applyDocumentBackgroundForEditor(editor, page);
                 return;
             }
@@ -64553,6 +64603,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Set base HTML first (sanitized, with YouTube player cards on file://)
             var baseHtml = sanitizeEditorHtml(page.content || '');
             editor.innerHTML = baseHtml;
+            enhanceEditorPageLinks(editor);
             editor.contentEditable = 'true';
             if (!hasHttpDocumentOrigin()) {
                 replaceYouTubeIframesWithPlayerCards(editor);
@@ -66839,7 +66890,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         const pageId = opt.dataset.pageId;
                         const targetPage = pages.find(p => p.id === pageId);
                         if (targetPage) {
-                            const linkHtml = '<span class="page-link" data-page-id="' + targetPage.id + '" contenteditable="false">\u{1F4C4} ' + escapeHtml(targetPage.title) + '</span>&nbsp;';
+                            const safePageId = escapeHtml(String(targetPage.id || ''));
+                            const safeTitle = escapeHtml(String(targetPage.title || 'Untitled'));
+                            const ariaLabel = escapeHtml(`Open linked page ${String(targetPage.title || 'Untitled')}`);
+                            const linkHtml = '<span class="page-link" data-page-id="' + safePageId
+                                + '" contenteditable="false" role="link" tabindex="0" aria-label="' + ariaLabel
+                                + '" title="' + ariaLabel + '">\u{1F4C4} ' + safeTitle + '</span>&nbsp;';
                             closePageLinkModal();
                             insertHtmlAtCursor(linkHtml);
                             showToast('Page link inserted!');

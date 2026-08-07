@@ -13,6 +13,12 @@ Click a reference to jump there.
 - Panel is built with safe DOM construction (no raw HTML), excludes the page
   itself, and stays hidden on canvas pages and pages with no inbound links.
 
+Page-link activation is delegated from the shared Notes editor container so the
+same stored token works in the classic editor, Editor v2, and split view. Links
+are keyboard focusable and activate with Enter or Space. A link to a page in
+another Space switches to that Space before opening the target; a dangling link
+is reported as unavailable rather than silently doing nothing.
+
 ## Fuzzy, relevance-ranked global search
 
 Global search (Shift+Ctrl+F / "Search everywhere") now:

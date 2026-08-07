@@ -18717,6 +18717,20 @@ body:not([data-theme="dark"]) .focus-timer {
     transform: translateY(-1px);
 }
 
+.editor .page-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.editor .page-link.page-link-broken {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: var(--surface-bg);
+    cursor: not-allowed;
+    text-decoration: line-through;
+    transform: none;
+}
+
 /* Help page in-editor anchor buttons */
 .editor .help-anchor-btn {
     display: inline-flex;
