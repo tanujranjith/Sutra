@@ -32,6 +32,15 @@
     return protocolApi.stableStringify(a) === protocolApi.stableStringify(b);
   }
 
+  // Opaque, deterministic audit reference for an op. The raw opId encodes
+  // the originating device identity (<deviceId>:<lamport>); conflict
+  // resolution records sync to every device, so they carry only a content
+  // hash of that id — never the id itself. Same input -> same ref, so
+  // resolution markers stay stable across devices and retries.
+  async function auditRefFor(op) {
+    return op && op.opId ? await protocolApi.hashText(String(op.opId)) : null;
+  }
+
   function deterministicEquivalentValue(a, b) {
     var aText = protocolApi.stableStringify(a);
     var bText = protocolApi.stableStringify(b);
@@ -882,6 +891,8 @@
           winner: 'remote-edit',
           winnerOpId: remoteEdit && remoteEdit.opId || null,
           loserOpId: localDelete && localDelete.opId || null,
+          winnerAuditId: await auditRefFor(remoteEdit),
+          loserAuditId: await auditRefFor(localDelete),
           deletedSide: 'local',
           fieldConflicts: localDeleteFields,
           baseValue: clone(baseRecords[key]),
@@ -908,6 +919,8 @@
           winner: 'local-edit',
           winnerOpId: localEdit && localEdit.opId || null,
           loserOpId: remoteDelete && remoteDelete.opId || null,
+          winnerAuditId: await auditRefFor(localEdit),
+          loserAuditId: await auditRefFor(remoteDelete),
           deletedSide: 'remote',
           fieldConflicts: remoteDeleteFields,
           baseValue: clone(baseRecords[key]),
@@ -988,6 +1001,8 @@
         winner: localWins ? 'local' : 'remote',
         winnerOpId: localOp && remoteOp ? (localWins ? localOp : remoteOp).opId : null,
         loserOpId: localOp && remoteOp ? (localWins ? remoteOp : localOp).opId : null,
+        winnerAuditId: await auditRefFor(localOp && remoteOp ? (localWins ? localOp : remoteOp) : null),
+        loserAuditId: await auditRefFor(localOp && remoteOp ? (localWins ? remoteOp : localOp) : null),
         deterministic: !!(localOp && remoteOp),
         fieldConflicts: fieldMerge.conflicts,
         baseValue: clone(inBase ? baseRecords[key] : undefined),

@@ -62019,14 +62019,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // explicit choices use different ids so concurrent human choices
             // remain auditable instead of overwriting each other silently.
             const resolutionId = `sync-resolution-${conflict.id}-${choice}`;
+            // The resolution marker travels to every device, so it carries
+            // only opaque audit references (content hashes of the competing
+            // opIds) — never the raw opIds, which embed the originating
+            // device identity.
             records[window.SutraSyncProtocol.collectionKey('syncAuditLog', resolutionId)] = {
                 id: resolutionId,
                 kind: 'sync_conflict_resolution',
                 conflictId: String(conflict.id),
                 recordKey: String(conflict.recordKey || ''),
                 resolution: choice,
-                winnerOpId: conflict.winnerOpId || null,
-                loserOpId: conflict.loserOpId || null
+                winnerAuditId: conflict.winnerAuditId || null,
+                loserAuditId: conflict.loserAuditId || null
             };
             const auditOrderKey = window.SutraSyncProtocol.orderingKey('syncAuditLog');
             const auditOrder = Array.isArray(records[auditOrderKey]) ? records[auditOrderKey].slice() : [];

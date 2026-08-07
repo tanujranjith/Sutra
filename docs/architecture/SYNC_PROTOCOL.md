@@ -287,7 +287,11 @@ Field-aware resolution:
   hash, and field paths. Replay deduplicates them. A user resolution writes a
   stable `sync_conflict_resolution` entry in the encrypted `syncAuditLog`
   collection; every device then tombstones/suppresses the matching review item.
-  Only the explicit **Keep both as pages** action creates a second normal page.
+  That entry travels to every device, so it carries only opaque audit
+  references — the content hash of each competing opId (`winnerAuditId` /
+  `loserAuditId`) — never the raw opIds, which embed the originating device
+  identity. Only the explicit **Keep both as pages** action creates a second
+  normal page.
 - Eight novel conflict ids within sixty seconds trips the `conflict-storm`
   circuit breaker before remote apply or push. Local saving and the durable
   outbox continue, but cloud sync pauses for review instead of creating a loop.

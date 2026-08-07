@@ -520,3 +520,52 @@ test('seeded property: two devices always converge regardless of merge direction
     );
   }
 });
+
+test('conflict audit references are opaque, deterministic, and never embed the device id', async () => {
+  const base = await projectionOf(baseWorkspace());
+  const wsA = baseWorkspace(); wsA.tasks[0].text = 'A wording';
+  const wsB = baseWorkspace(); wsB.tasks[0].text = 'B wording';
+  const A = await outboxFor(base, wsA, 'device-private-a');
+  const B = await outboxFor(base, wsB, 'device-private-b');
+  const onA = await mergeOn(base, A.current, A.ops, B.ops);
+  const onB = await mergeOn(base, B.current, B.ops, A.ops);
+
+  assert.equal(onA.conflicts.length, 1);
+  const conflict = onA.conflicts[0];
+  assert.equal(conflict.winnerAuditId.length, 64, 'audit ref is a sha256 hex digest');
+  assert.match(conflict.winnerAuditId, /^[0-9a-f]{64}$/);
+  assert.equal(conflict.loserAuditId.length, 64);
+  assert.ok(!conflict.winnerAuditId.includes('device-private-a'), 'winner audit ref must not leak the device id');
+  assert.ok(!conflict.winnerAuditId.includes('device-private-b'), 'winner audit ref must not leak the losing device id');
+  assert.ok(!conflict.loserAuditId.includes('device-private-a'), 'loser audit ref must not leak the device id');
+  assert.ok(!conflict.loserAuditId.includes('device-private-b'), 'loser audit ref must not leak the losing device id');
+  assert.notEqual(conflict.winnerAuditId, conflict.loserAuditId, 'winner and loser refs stay distinguishable');
+  // Direction independence: both devices see the same opaque refs.
+  assert.equal(onB.conflicts[0].winnerAuditId, conflict.winnerAuditId);
+  assert.equal(onB.conflicts[0].loserAuditId, conflict.loserAuditId);
+  // Determinism: re-merging identical inputs reproduces the refs.
+  const again = await mergeOn(base, A.current, A.ops, B.ops);
+  assert.equal(again.conflicts[0].winnerAuditId, conflict.winnerAuditId);
+  assert.equal(again.conflicts[0].loserAuditId, conflict.loserAuditId);
+});
+
+test('delete-versus-edit conflicts carry opaque audit references for both sides', async () => {
+  const base = await projectionOf(baseWorkspace());
+  const wsA = baseWorkspace();
+  wsA.tasks.splice(0, 1);                       // A deletes t1
+  const wsB = baseWorkspace();
+  wsB.tasks[0].text = 'edit wins';              // B edits t1
+  const A = await outboxFor(base, wsA, 'device-delta-a');
+  const B = await outboxFor(base, wsB, 'device-delta-b');
+  const onA = await mergeOn(base, A.current, A.ops, B.ops);
+
+  const conflict = onA.conflicts.find(c => c.type === 'delete-edit-conflict');
+  assert.ok(conflict, 'delete-versus-edit conflict exists');
+  assert.match(conflict.winnerAuditId, /^[0-9a-f]{64}$/);
+  assert.match(conflict.loserAuditId, /^[0-9a-f]{64}$/);
+  assert.ok(!conflict.winnerAuditId.includes('device-delta-a'), 'winner audit ref must not leak the device id');
+  assert.ok(!conflict.winnerAuditId.includes('device-delta-b'), 'winner audit ref must not leak the losing device id');
+  assert.ok(!conflict.loserAuditId.includes('device-delta-a'), 'loser audit ref must not leak the device id');
+  assert.ok(!conflict.loserAuditId.includes('device-delta-b'), 'loser audit ref must not leak the losing device id');
+  assert.notEqual(conflict.winnerAuditId, conflict.loserAuditId);
+});
