@@ -458,6 +458,10 @@
         } catch (e) { /* bridge not ready */ }
 
         deadlines.forEach(function (item) {
+            // Imported external calendar entries are schedule context. They
+            // must not become overdue Sutra reminders simply because the file
+            // includes historical events.
+            if (!item || item.notificationEligible === false) return;
             var source = item.source || 'task';
             if (!prefs.categories[source]) return;
 

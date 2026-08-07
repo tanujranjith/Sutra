@@ -69,7 +69,10 @@ UID plus recurrence identity. Re-importing the same filename updates that
 calendar and removes events that disappeared from that file only; it cannot
 delete blocks imported from a different `.ics` file. A valid preview must be
 approved before changes are applied, and persistence failure restores the
-complete prior Timeline state.
+complete prior Timeline state. Imported calendar entries remain visible as
+schedule context, but do not create Sutra notification-center reminders or
+overdue alerts; manually created Timeline blocks retain their existing reminder
+behavior.
 
 ## Push time
 

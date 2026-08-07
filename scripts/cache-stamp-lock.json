@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-localendpoint2",
-    "hash": "517aaa5ec182bd82"
+    "stamp": "20260807-icsnotifications1",
+    "hash": "ea7a468d3ecc7fb2"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -272,8 +272,8 @@
     "hash": "5513961d16964f01"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260805-syncbeta1",
-    "hash": "6b22bdaba25ada36"
+    "stamp": "20260807-icsnotifications1",
+    "hash": "c3b9273c2a3e5c3e"
   },
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",

@@ -23940,6 +23940,11 @@ function populateProgressDashboard() {
                         due,
                         priority: 'medium',
                         status: 'scheduled',
+                        // Imported calendars provide schedule context, not a
+                        // backlog of Sutra deadlines. Keep the events visible
+                        // in Timeline while preventing historical imports from
+                        // flooding the notification center as overdue work.
+                        notificationEligible: block.source !== 'calendar_ics',
                         overdue: due < now
                     });
                 });
