@@ -91,7 +91,7 @@
     "./styles/base/tokens.css?v=20260807-themefocus1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
-    "./styles/features/cloud-sync.css?v=20260721-mobile1",
+    "./styles/features/cloud-sync.css?v=20260807-scrollcontain1",
     "./styles/features/command-center.css?v=20260705-clb2",
     "./styles/features/customization.css?v=20260601-handwriting-mods",
     "./styles/features/homework-redesign.css?v=20260721-menuopaque1",

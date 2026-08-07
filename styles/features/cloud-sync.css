@@ -4,9 +4,47 @@
    existing theme variables so light/dark/custom themes all work.
    ========================================================================== */
 
+#sutraSyncModal {
+    overscroll-behavior: contain;
+}
+
 .sutra-sync-modal {
     max-width: 560px;
     width: min(560px, calc(100vw - 32px));
+    max-height: min(900px, calc(100dvh - 32px)) !important;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden !important;
+    /* Sync can sit over dense Notes content. An opaque, paint-contained sheet
+       prevents workspace text from showing through or ghosting while its
+       internal scroller moves, including on browsers with flaky backdrop
+       compositing. */
+    background: var(--bg-primary, #ffffff) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    isolation: isolate;
+    contain: paint;
+}
+
+/* Glass themes intentionally make generic dialogs translucent with a more
+   specific selector. Sync is the exception: dense workspace text must never
+   become part of this security/status surface. */
+#sutraSyncModal .sutra-sync-modal {
+    background: var(--bg-primary, #ffffff) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+.sutra-sync-modal > .modal-body {
+    min-height: 0;
+    max-height: none;
+    margin-bottom: 0;
+    padding-right: 4px;
+    padding-bottom: 4px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
 }
 
 .sutra-sync-status-card {
@@ -148,6 +186,8 @@
     overflow-wrap: anywhere;
 }
 
+.sutra-sync-list li > span { min-width: 0; }
+
 .sutra-sync-list li .sync-item-meta { opacity: 0.75; font-size: 0.8rem; }
 .sutra-sync-list li.sync-item-revoked { opacity: 0.55; text-decoration: line-through; }
 .sutra-sync-list li.sync-item-empty { justify-content: center; opacity: 0.7; }
@@ -197,7 +237,10 @@
         max-width: none;
         max-height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)));
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        /* responsive/mobile.css contributes the bottom-sheet drag-handle as
+           ::before. Give that pseudo-element its own row so it cannot consume
+           the header row and collapse the title over scrolled body content. */
+        grid-template-rows: auto auto minmax(0, 1fr);
         overflow: hidden;
         border-radius: 20px 20px 0 0;
     }
@@ -214,6 +257,8 @@
         -webkit-overflow-scrolling: touch;
         scroll-padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
         padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+        padding-right: 0;
+        scrollbar-gutter: auto;
     }
     .sutra-sync-input { font-size: 16px; }
     .sutra-sync-actions { flex-direction: column; align-items: stretch; }
