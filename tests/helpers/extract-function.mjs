@@ -159,7 +159,12 @@ function callCount(body, name) {
 export function extractBalancedBlock(source, marker) {
   const markerIndex = String(source).indexOf(marker);
   if (markerIndex === -1) return null;
-  const openIndex = String(source).indexOf('{', markerIndex + marker.length);
+  // When the marker itself ends with the opening brace (e.g. 'var PRESETS = {'),
+  // that brace is the block opener; otherwise find the first `{` after it.
+  const trimmedMarker = String(marker).replace(/\s+$/, '');
+  const openIndex = trimmedMarker.endsWith('{')
+    ? markerIndex + trimmedMarker.length - 1
+    : String(source).indexOf('{', markerIndex + marker.length);
   if (openIndex === -1) return null;
   const text = String(source);
   const len = text.length;
