@@ -509,6 +509,45 @@
         persist();
     }
 
+    // Duress/permanent note deletion must not leave flashcards derived from
+    // that note behind. Removes decks (and their items/sessions) whose
+    // source is the deleted note, plus any card that still points at it.
+    function purgeNoteContent(noteIds) {
+        const ws = safeWorkspace();
+        if (!ws) return { failed: true };
+        const ids = new Set((Array.isArray(noteIds) ? noteIds : []).map(id => String(id || '').trim()).filter(Boolean));
+        if (!ids.size) return { decks: 0, items: 0, sessions: 0 };
+        const removedDeckIds = new Set();
+        const decksBefore = ws.decks.length;
+        ws.decks = ws.decks.filter(deck => {
+            const fromNote = String(deck && deck.sourceType || '') === 'note'
+                && (ids.has(String(deck.sourceId || '')) || ids.has(String(deck.sourceNoteId || '')));
+            if (fromNote) removedDeckIds.add(String(deck.id));
+            return !fromNote;
+        });
+        const itemsBefore = ws.items.length;
+        ws.items = ws.items.filter(item => {
+            if (removedDeckIds.has(String(item && item.deckId || ''))) return false;
+            if (ids.has(String(item && item.sourceNoteId || ''))) return false;
+            if (String(item && item.sourceType || '') === 'note' && ids.has(String(item && item.sourceId || ''))) return false;
+            return true;
+        });
+        const sessionsBefore = ws.sessions.length;
+        ws.sessions = ws.sessions.filter(session => {
+            const decks = Array.isArray(session && session.deckIds) ? session.deckIds : [];
+            return !decks.some(deckId => removedDeckIds.has(String(deckId)));
+        });
+        const removed = {
+            decks: decksBefore - ws.decks.length,
+            items: itemsBefore - ws.items.length,
+            sessions: sessionsBefore - ws.sessions.length
+        };
+        if (removed.decks || removed.items || removed.sessions) {
+            try { persist(); } catch (err) { return { failed: true, removed }; }
+        }
+        return removed;
+    }
+
     function toggleStar(itemId) {
         const ws = safeWorkspace();
         if (!ws) return;
@@ -3782,5 +3821,10 @@ render();
     // Lets Flow Assistant's undo path remove a deck it just created.
     window.deleteReviewDeck = function (deckId) {
         try { const removed = deleteDeck(deckId); if (typeof renderReviewWorkspace === 'function') renderReviewWorkspace(); return removed !== false; } catch (err) { console.warn('deleteReviewDeck failed', err); return false; }
+    };
+    // Duress/permanent note deletion purges derived Review content through
+    // this seam (called by executePageDeletion's permanent branch).
+    window.purgeReviewContentForNoteIds = function (noteIds) {
+        try { return purgeNoteContent(noteIds); } catch (err) { console.warn('purgeReviewContentForNoteIds failed', err); return { failed: true }; }
     };
 })();

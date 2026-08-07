@@ -48907,11 +48907,31 @@ function getActiveEditor() {
 
         function executePageDeletion(idsToDelete, options = {}) {
             const permanent = options.permanent === true;
+
+            // Duress/permanent deletion must not leave flashcards derived from
+            // the removed notes behind. The Review seam returns {failed:true}
+            // when the purge could not be persisted, so the deletion aborts
+            // fail-closed instead of leaving duressed content recoverable.
+            function purgeReviewContentForDeletedPages(pageIds) {
+                try {
+                    if (typeof window.purgeReviewContentForNoteIds !== 'function') return true;
+                    const result = window.purgeReviewContentForNoteIds(Array.from(pageIds));
+                    return !(result && result.failed === true);
+                } catch (error) {
+                    console.warn('Could not purge Review content during permanent deletion.', error);
+                    return false;
+                }
+            }
+
             // Capture deleted pages into Trash first, so a delete is recoverable
             // (restore/purge) instead of permanent. Help pages are never trashed.
             if (permanent) {
                 if (!purgeDuressPageRecoverySurfaces(idsToDelete)) {
                     showToast('Page was not removed because its local recovery copies could not be cleared.');
+                    return false;
+                }
+                if (!purgeReviewContentForDeletedPages(idsToDelete)) {
+                    showToast('Page was not removed because its Review content could not be cleared.');
                     return false;
                 }
             } else {

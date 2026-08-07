@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-backup26",
-    "hash": "f53f1547338f38b9"
+    "stamp": "20260807-backup27",
+    "hash": "f416c2b2c819284d"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -236,8 +236,8 @@
     "hash": "9683cdb464e6b16c"
   },
   "src/features/study/review.js": {
-    "stamp": "20260528-flow-upgrade",
-    "hash": "9a2b793e8e7e5f83"
+    "stamp": "20260807-purge1",
+    "hash": "aefdeb9b209f3a59"
   },
   "src/features/workspace/activation-metrics.js": {
     "stamp": "20260702-activation1",
