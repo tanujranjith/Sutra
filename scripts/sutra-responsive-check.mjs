@@ -92,7 +92,10 @@ has('styles/views/today-redesign.css', /@media \(max-width: 640px\) \{[\s\S]*?bo
 has('src/features/workspace/mobile-nav.js', /matchMedia\('\(max-width: 640px\)'\)/, 'phone navigation breakpoint remains aligned at 640px', true);
 has('styles/views/timeline-calendar.css', '.sutra-calendar-month-events:not([data-event-count="0"])::before', 'phone Month view uses compact event-count indicators');
 has('styles/views/timeline-calendar.css', '-webkit-overflow-scrolling: touch', 'calendar canvases keep contained momentum scrolling');
-has('styles/features/cloud-sync.css', 'max-height: calc(100dvh', 'Sync sheet is bounded to the dynamic mobile viewport');
+// Sync sheet is bounded to the dynamic mobile viewport, and the mobile rule
+// must outrank the desktop cap (which already carries !important).
+has('styles/features/cloud-sync.css', 'max-height: min(900px, calc(100dvh - 32px)) !important', 'Sync sheet desktop max-height cap stays authoritative');
+has('styles/features/cloud-sync.css', 'max-height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px))) !important', 'Sync sheet phone max-height carries !important so the bottom-sheet bound applies');
 has('extension/options.html', 'min-width: 0', 'extension settings do not force a 360px minimum viewport');
 
 if (failures) { console.error(`\nResponsive guard FAILED: ${failures} issue${failures === 1 ? '' : 's'}.`); process.exit(1); }

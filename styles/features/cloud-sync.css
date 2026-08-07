@@ -235,7 +235,7 @@
     .sutra-sync-modal {
         width: 100%;
         max-width: none;
-        max-height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)));
+        max-height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px))) !important;
         display: grid;
         /* responsive/mobile.css contributes the bottom-sheet drag-handle as
            ::before. Give that pseudo-element its own row so it cannot consume
