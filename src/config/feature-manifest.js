@@ -5,7 +5,7 @@
     business: Object.freeze({
       id: 'business', displayName: 'Business Pack', pack: 'work', defaultEnabled: false,
       dependencies: [],
-      scripts: ['./src/features/workspace/business-workspace.js?v=20260705-clb3'],
+      scripts: ['./src/features/workspace/business-workspace.js?v=20260807-opsqueue1'],
       styles: [],
       initialization: 'NoteFlowBusiness.init', teardown: 'NoteFlowBusiness.teardown',
       navigationEntries: ['business'], persistenceNamespace: 'businessWorkspace',

@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "5d65ee99bb9d373a"
+    "stamp": "20260807-businessops1",
+    "hash": "93991a7da2844b97"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -248,8 +248,8 @@
     "hash": "0f1060b20127996f"
   },
   "src/features/workspace/business-workspace.js": {
-    "stamp": "20260705-clb3",
-    "hash": "7acf80c83e9e8e48"
+    "stamp": "20260807-opsqueue1",
+    "hash": "eb4ce1fb3fbf3725"
   },
   "src/features/workspace/canvas-workbench.js": {
     "stamp": "20260807-canvas1",

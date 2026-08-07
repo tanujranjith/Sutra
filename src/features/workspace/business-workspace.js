@@ -571,6 +571,31 @@
             const h = healthByProject.get(project.id);
             return h && h.score < 50;
         }).length;
+        // A deliberately small, deterministic operating queue. It reuses the
+        // existing deadline and health signals rather than inventing a second
+        // task system, so every card still opens its canonical Business record.
+        const queuePriority = { overdue: 120, today: 110, tomorrow: 95, 'this-week': 75, 'next-week': 55, later: 30 };
+        const queued = new Map();
+        const addQueueItem = (item) => {
+            if (!item || !item.entityType || !item.entityId) return;
+            const id = `${item.entityType}:${item.entityId}`;
+            const current = queued.get(id);
+            if (!current || item.priority > current.priority || (item.priority === current.priority && String(item.date || '') < String(current.date || ''))) queued.set(id, item);
+        };
+        deadlines.forEach(item => addQueueItem({
+            ...item,
+            priority: (queuePriority[item.bucket] || 0) + (item.type === 'Invoice' && item.bucket === 'overdue' ? 12 : 0),
+            reason: item.bucket === 'overdue' ? 'Overdue — unblock it first' : item.bucket === 'today' ? 'Due today' : item.nextAction || 'Review next step'
+        }));
+        activeProjects.forEach(project => {
+            const health = healthByProject.get(project.id);
+            if (!health || health.score >= 50) return;
+            addQueueItem({
+                entityType: 'project', entityId: project.id, type: 'Project', title: project.name || 'Untitled project', date: project.dueDate || '',
+                priority: 105 - health.score, reason: health.factors[0] || 'Project health needs attention', health
+            });
+        });
+        const nextActions = Array.from(queued.values()).sort((a, b) => b.priority - a.priority || String(a.date || '').localeCompare(String(b.date || '')) || String(a.title).localeCompare(String(b.title))).slice(0, 6);
         // Probability-weighted pipeline + conversion (operator pipeline view).
         const weightedPipeline = sum(openOpportunities, item => normalizeFiniteNumber(item.value, 0) * (normalizeFiniteNumber(item.probability, 0) / 100));
         const wonCount = workspace.opportunities.filter(item => String(item.stage || '').toLowerCase() === 'won').length;
@@ -586,6 +611,7 @@
             deadlines,
             recentActivity,
             healthByProject,
+            nextActions,
             metrics: {
                 activeProjects: activeProjects.length,
                 atRiskProjects: atRiskProjects.length,
@@ -920,6 +946,28 @@
             recent: (a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')),
             name: (a, b) => String(a.name || '').localeCompare(String(b.name || ''))
         });
+    }
+
+    function renderOperatingQueue(model) {
+        const items = model.nextActions || [];
+        return `
+            <article class="glass-card business-card business-side-card business-operating-queue">
+                <div class="business-card-head">
+                    <div><h3>Run the business</h3><p>The next few local actions with the highest operational urgency.</p></div>
+                </div>
+                ${items.length ? `<div class="business-list">${items.map(item => `
+                    <article class="business-item-card compact business-queue-item">
+                        <div class="business-item-top"><strong>${escapeText(item.title)}</strong>${renderPill(item.bucket ? slugLabel(item.bucket) : (item.health ? item.health.label : item.type))}</div>
+                        <div class="business-item-sub">${escapeText(item.reason || item.nextAction || 'Review next step')}</div>
+                        <div class="business-item-meta"><span>${escapeText(item.date ? relativeDueLabel(item.date) : 'No date')}</span><span>${escapeText(item.type)}</span></div>
+                        <div class="business-item-actions">
+                            <button class="neumo-btn business-mini-btn" type="button" data-biz-action="select-detail" data-entity="${escapeText(item.entityType)}" data-id="${escapeText(item.entityId)}">Open</button>
+                            ${item.entityType === 'task' ? `<button class="neumo-btn business-mini-btn" type="button" data-biz-action="mark-complete" data-entity="task" data-id="${escapeText(item.entityId)}">Complete</button>` : ''}
+                        </div>
+                    </article>
+                `).join('')}</div>` : renderEmptyState('No urgent actions', 'As work, invoices, and follow-ups gain dates, the most urgent items will appear here.', 'New Project', 'project')}
+            </article>
+        `;
     }
 
     function renderProjectCard(model, project, compact = false) {
@@ -2136,6 +2184,7 @@
                     </div>
                 </div>
                 <div class="business-side-column">
+                    ${renderOperatingQueue(model)}
                     ${renderDetailPanel(model)}
                     ${model.preferences.showActivity ? renderRecentActivityCard(model) : ''}
                     ${model.preferences.showDeadlines ? renderDeadlinesCard(model) : ''}
