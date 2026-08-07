@@ -59428,6 +59428,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const file = input && input.files ? input.files[0] : null;
             if (!file) return;
 
+            if (!assertIcsImportSize(file)) return;
+
             try {
                 const text = await readFileAsText(file);
                 const engine = typeof window !== 'undefined' ? window.sutraIcs : null;
@@ -59791,6 +59793,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         const MAX_IMPORT_FILE_BYTES = 750 * 1024 * 1024;       // 750 MB compressed/on-disk
         const MAX_ZIP_ENTRIES = 5000;                          // parts + attachments
         const MAX_ZIP_DECOMPRESSED_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB — blocks zip bombs
+        // Calendar (.ics) and other plain-text analysis imports are read into
+        // memory as text. 25 MB covers multi-year calendars with attachments
+        // while refusing pathological files before any read or allocation.
+        const MAX_ICS_IMPORT_BYTES = 25 * 1024 * 1024;
+
+        function assertIcsImportSize(file) {
+            if (file && typeof file.size === 'number' && file.size > MAX_ICS_IMPORT_BYTES) {
+                showToast(`That file is too large to import (${formatByteCount(file.size)}). The limit is ${formatByteCount(MAX_ICS_IMPORT_BYTES)}.`);
+                return false;
+            }
+            return true;
+        }
 
         // Guard a freshly-loaded JSZip archive against zip bombs: too many entries
         // or an implausible decompressed size (read from the ZIP central directory
@@ -75822,6 +75836,10 @@ ${cspMeta}
             body.querySelector('#smartImportFileInput')?.addEventListener('change', async event => {
                 const file = event.target.files && event.target.files[0];
                 if (!file) return;
+                if (!assertIcsImportSize(file)) {
+                    body.querySelector('#smartImportStatus').textContent = `Refused: ${file.name} is too large to analyze (limit ${formatByteCount(MAX_ICS_IMPORT_BYTES)}).`;
+                    return;
+                }
                 const text = await file.text();
                 body.querySelector('#smartImportText').value = text.slice(0, 80000);
                 body.querySelector('#smartImportStatus').textContent = `Loaded ${file.name} (${Math.round(file.size / 1024)} KB).`;
