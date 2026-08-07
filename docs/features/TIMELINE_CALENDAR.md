@@ -71,8 +71,10 @@ delete blocks imported from a different `.ics` file. A valid preview must be
 approved before changes are applied, and persistence failure restores the
 complete prior Timeline state. Imported calendar entries remain visible as
 schedule context, but do not create Sutra notification-center reminders or
-overdue alerts; manually created Timeline blocks retain their existing reminder
-behavior.
+overdue alerts. By default, only the most recent five local calendar days of
+an imported file can enter Today, All Due, Recovery, or the upcoming radar;
+older events remain Timeline history. Manually created Timeline blocks retain
+their existing reminder behavior.
 
 ## Push time
 

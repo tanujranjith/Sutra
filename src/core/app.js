@@ -23735,6 +23735,8 @@ function populateProgressDashboard() {
             }
             const out = [];
             const now = new Date();
+            const importedCalendarHistoryCutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            importedCalendarHistoryCutoff.setDate(importedCalendarHistoryCutoff.getDate() - 5);
             // A timeline block may reference work through several legacy field
             // names. Normalize those links once so Today can distinguish work
             // that still needs a time from work that is already on the plan.
@@ -23932,6 +23934,10 @@ function populateProgressDashboard() {
                     if (linkedTimelineBlockIds.has(String(block.id || ''))) return;
                     const due = normalizeDeadlineDate(block.date, block.start);
                     if (!due) return;
+                    // Keep a short recent-history window for imported calendars,
+                    // but do not turn a years-old .ics archive into a current
+                    // student backlog. Timeline retains the full import.
+                    if (block.source === 'calendar_ics' && due < importedCalendarHistoryCutoff) return;
                     out.push({
                         id: `block:${block.id}`,
                         source: 'timeline',

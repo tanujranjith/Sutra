@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-icsnotifications1",
-    "hash": "ea7a468d3ecc7fb2"
+    "stamp": "20260807-icswindow1",
+    "hash": "dc4d4a6f3cc3e70c"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",

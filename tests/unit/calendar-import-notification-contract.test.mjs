@@ -59,3 +59,10 @@ test('the canonical deadline bridge marks ICS blocks non-notifying without chang
   assert.match(collector.body, /notificationEligible: block\.source !== 'calendar_ics'/);
   assert.match(collector.body, /source: 'timeline'/);
 });
+
+test('the canonical deadline bridge keeps only five recent local days of imported ICS history', () => {
+  const collector = extractFunction(appSource, 'collectWorkspaceDeadlines');
+  assert.ok(collector, 'canonical deadline collector exists');
+  assert.match(collector.body, /importedCalendarHistoryCutoff\.setDate\(importedCalendarHistoryCutoff\.getDate\(\) - 5\)/);
+  assert.match(collector.body, /block\.source === 'calendar_ics' && due < importedCalendarHistoryCutoff/);
+});
