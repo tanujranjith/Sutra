@@ -3300,6 +3300,16 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="cc-row" data-setting-item>
+                            <span class="cc-row-icon" aria-hidden="true"><i class="fas fa-quote-left"></i></span>
+                            <div class="cc-row-text">
+                                <span class="cc-row-name">Quotes</span>
+                                <span class="cc-row-help">Add personal quotes, choose categories, and control where they appear.</span>
+                            </div>
+                            <div class="cc-row-control">
+                                <button type="button" class="cc-btn cc-btn-ghost" id="openQuoteManagerBtn">Manage quotes</button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -7492,7 +7502,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-actionrepair2"></script>
+<script src="src/core/app.js?v=20260807-customquotes3"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7508,7 +7518,7 @@
     <script src="src/features/study/math-render.js?v=20260620-math1"></script>
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
-    <script src="src/features/workspace/daily-lock-in-quote.js?v=20260605-quotes1"></script>
+    <script src="src/features/workspace/daily-lock-in-quote.js?v=20260807-customquotes2"></script>
     <script src="src/features/workspace/notifications.js?v=20260805-syncbeta1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
@@ -7516,7 +7526,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20260723-unified3"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260707-batch1"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260807-customquotes1"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
@@ -7902,6 +7912,7 @@
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260625-cc-segmented-rows">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
+    <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260721-menuopaque1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">

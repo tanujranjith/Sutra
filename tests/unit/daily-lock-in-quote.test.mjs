@@ -28,6 +28,49 @@ test('daily quote selection is deterministic for a local calendar day', () => {
   const bank = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
   const day = quote.getLocalDayNumber(new Date(2026, 6, 15, 23, 30));
   assert.deepEqual(quote.pickDailyQuote(bank, day), quote.pickDailyQuote(bank, day));
+  assert.notDeepEqual(quote.pickDailyQuote(bank, day, 1), quote.pickDailyQuote(bank, day));
+});
+
+test('custom quote settings are bounded, normalized, and deduplicated', () => {
+  const settings = quote.normalizeSettings({
+    showInSidebar: false,
+    sourceMode: 'custom',
+    enabledCategories: ['Self Affirmation', 'self-affirmation', 'Love'],
+    customQuotes: [
+      { id: 'unsafe id!', text: '  I can do hard things.  ', author: '  Me  ', category: 'Self Affirmation', futureField: 'preserve-me' },
+      { id: 'duplicate', text: 'I can do hard things.', author: 'Someone else', category: 'love' },
+      { id: 'unicode', text: '我能做到。', author: 'Me', category: 'Personal' },
+      { text: '', author: 'Nobody' }
+    ]
+  });
+  assert.equal(settings.showInSidebar, false);
+  assert.equal(settings.sourceMode, 'custom');
+  assert.deepEqual(settings.enabledCategories, ['self-affirmation', 'love']);
+  assert.equal(settings.customQuotes.length, 2);
+  assert.equal(settings.customQuotes[0].id, 'unsafeid');
+  assert.equal(settings.customQuotes[0].text, 'I can do hard things.');
+  assert.equal(settings.customQuotes[0].author, 'Me');
+  assert.equal(settings.customQuotes[0].category, 'self-affirmation');
+  assert.equal(settings.customQuotes[0].futureField, 'preserve-me');
+  assert.equal(settings.customQuotes[1].text, '我能做到。');
+});
+
+test('surface and category controls filter the shared quote collection', () => {
+  const builtIn = [
+    { id: 'focus', text: 'Focus built in.', author: 'Sutra', category: 'focus' },
+    { id: 'love', text: 'Love built in.', author: 'Sutra', category: 'love' }
+  ];
+  const settings = {
+    showInSidebar: true,
+    showInCustomTabs: false,
+    sourceMode: 'all',
+    enabledCategories: ['self-affirmation'],
+    customQuotes: [{ id: 'mine', text: 'I belong here.', author: 'Me', category: 'self-affirmation' }]
+  };
+  assert.deepEqual(quote.buildAvailableQuotes(builtIn, settings, 'sidebar').map(row => row.id), ['mine']);
+  assert.deepEqual(quote.buildAvailableQuotes(builtIn, settings, 'custom-tab'), []);
+  const builtOnly = quote.buildAvailableQuotes(builtIn, { ...settings, sourceMode: 'built-in', enabledCategories: ['focus'] }, 'sidebar');
+  assert.deepEqual(builtOnly.map(row => row.id), ['focus']);
 });
 
 test('midnight calculation follows local DST rules east and west of UTC', () => {

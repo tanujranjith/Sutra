@@ -162,7 +162,15 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP
     }],
     taskOrder: ['task-parity-b', 'task-parity-a'],
-    timeBlocks: [{ id: 'time-parity', title: 'Parity study block', date: '2026-07-18', startTime: '16:00', endTime: '16:45', taskId: 'task-parity-a', noteId: 'page-child', protected: true }],
+    timeBlocks: [{
+      id: 'time-parity', title: 'Parity study block', name: 'Parity study block', date: '2026-07-18',
+      startTime: '16:00', endTime: '16:45', start: '16:00', end: '16:45', category: 'study', color: '#6079d8',
+      recurrence: 'weekly', weeklyDays: [6], recurrenceUntil: '2026-08-15', recurrenceExceptions: [],
+      preserveRecurrence: true, importedRecurrence: false, isAllDay: false, notes: 'Everything fixture calendar block.',
+      referenceUrl: '', source: 'sutra', sourceUid: '', calendarImportId: '', calendarName: 'Sutra', calendarUid: '',
+      calendarRecurrenceId: '', calendarTimeZone: 'America/Grand_Turk', calendarRrule: '',
+      taskId: 'task-parity-a', noteId: 'page-child', protected: true, createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP
+    }],
     streaks: { dayStates: { '2026-07-16': 'complete' }, taskStreaks: { 'task-parity-a': 4 }, streakState: { globalCurrent: 4, globalBest: 9, globalLastKeptDateKey: '2026-07-16', freezesRemainingThisWeek: 1, freezeWeekKey: '2026-W29' } },
     habitTracker: { habits: [{ id: 'habit-parity', name: 'Review parity cards', frequency: 'daily' }], dayStates: { 'habit-parity:2026-07-16': true } },
     collegeTracker: atomic(base, 'collegeTracker', {
@@ -308,6 +316,9 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         calendar: { ...(preferences.calendar || {}), defaultView: 'month', timeFormat: '24', weekStart: 'monday' },
         today: { ...(preferences.today || {}), priorityFocus: 'deadlines' },
         focus: { ...(preferences.focus || {}), defaultMinutes: 40 },
+        quotes: { showInSidebar: true, showInCustomTabs: true, sourceMode: 'custom', enabledCategories: ['self-affirmation'], customQuotes: [{
+          id: 'quote-parity', text: 'Synthetic courage belongs in the portable workspace.', author: 'Parity Student', category: 'self-affirmation', createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP
+        }] },
         study: { ...(preferences.study || {}), homeworkAddMethod: 'modal', apDefaultSection: 'practice' },
         business: { ...(preferences.business || {}), compactCards: true, defaultView: 'list' },
         assistant: { ...(preferences.assistant || {}), enabled: true, saveChatHistory: true, includeChatsInEncryptedBackups: true, includeChatsInPlaintextRecovery: false, chatMemoryMode: 'recent', chatMemoryDepth: 15, requireApprovalForActions: true,

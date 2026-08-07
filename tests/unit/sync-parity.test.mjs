@@ -95,12 +95,15 @@ test('everything fixture covers every portable top-level and named nested contra
   const samples = {
     'pages[]': Object.assign({}, ...fixture.pages),
     'tasks[]': Object.assign({}, ...fixture.tasks),
+    'timeBlocks[]': fixture.timeBlocks[0],
     assistantChatHistory: fixture.assistantChatHistory,
     'assistantChatHistory.conversations[]': fixture.assistantChatHistory.conversations[0],
     'assistantChatHistory.conversations[].messages[]':
       Object.assign({}, ...fixture.assistantChatHistory.conversations[0].messages.map(row => row)),
     'courseWorkspace.files[]': fixture.courseWorkspace.files[0],
     'settings.preferences': fixture.settings.preferences,
+    'settings.preferences.quotes': fixture.settings.preferences.quotes,
+    'settings.preferences.quotes.customQuotes[]': fixture.settings.preferences.quotes.customQuotes[0],
     homeworkWorkspace: fixture.homeworkWorkspace,
     reviewWorkspace: fixture.reviewWorkspace
   };

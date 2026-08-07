@@ -1294,20 +1294,35 @@
 
     function renderQuoteWidget(body, tab, widget) {
         var cfg = widget.config || {};
+        var bank = (window.SutraQuote && typeof window.SutraQuote.getAvailableQuotes === 'function')
+            ? window.SutraQuote.getAvailableQuotes({ surface: 'custom-tab' })
+            : BUILTIN_QUOTES.map(function (quote, fallbackIndex) {
+                return { id: 'fallback-' + fallbackIndex, text: quote.text, author: quote.by, category: 'motivational' };
+            });
+        if (!bank.length) {
+            body.appendChild(emptyMsg('No quotes are enabled for Custom Tabs. Choose a source or add a personal quote.'));
+            if (window.SutraQuote && typeof window.SutraQuote.openManager === 'function') {
+                body.appendChild(btn('ctab-add-btn', 'Manage quotes', function () { window.SutraQuote.openManager(); }, { icon: 'fa-quote-left' }));
+            }
+            return;
+        }
         var idx = Number.isInteger(cfg.index) ? cfg.index : 0;
-        idx = ((idx % BUILTIN_QUOTES.length) + BUILTIN_QUOTES.length) % BUILTIN_QUOTES.length;
-        var q = BUILTIN_QUOTES[idx];
+        idx = ((idx % bank.length) + bank.length) % bank.length;
+        var q = bank[idx];
         body.appendChild(el('p', 'ctab-quote-text', '“' + q.text + '”'));
-        body.appendChild(el('p', 'ctab-quote-by', '— ' + q.by));
+        body.appendChild(el('p', 'ctab-quote-by', '— ' + (q.author || q.by || 'Personal')));
         body.appendChild(btn('ctab-add-btn', 'New quote', function () {
             mutateTab(tab.id, function (t) {
                 var w = findWidget(t, widget.id);
                 if (!w) return;
                 if (!w.config || typeof w.config !== 'object') w.config = {};
-                w.config.index = (idx + 1) % BUILTIN_QUOTES.length;
+                w.config.index = (idx + 1) % bank.length;
             }, { rerender: false });
             rerenderWidgetBody(tab.id, widget.id);
         }, { icon: 'fa-rotate' }));
+        if (window.SutraQuote && typeof window.SutraQuote.openManager === 'function') {
+            body.appendChild(btn('ctab-add-btn ctab-quote-manage', 'Manage', function () { window.SutraQuote.openManager(); }, { icon: 'fa-sliders' }));
+        }
     }
 
     function setupHeadingWidget() {
@@ -2442,6 +2457,9 @@
         window.addEventListener('sutra:custom-tabs-changed', function () {
             editingTabs = {};
             rebuild();
+        });
+        window.addEventListener('sutra:quotes-changed', function () {
+            rebuildSections();
         });
     }
 

@@ -3629,6 +3629,53 @@ function populateProgressDashboard() {
             return normalizeSettingChoice(value, SETTINGS_TASK_SORT_OPTIONS, fallbackValue);
         }
 
+        function normalizeWorkspaceQuoteCategory(value, fallbackValue = 'personal') {
+            const normalized = String(value == null ? '' : value)
+                .trim()
+                .toLowerCase()
+                .replace(/&/g, ' and ')
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '')
+                .slice(0, 40);
+            return normalized || fallbackValue;
+        }
+
+        function normalizeWorkspaceCustomQuotes(value) {
+            const rows = Array.isArray(value) ? value : [];
+            const normalized = [];
+            const seenText = new Set();
+            rows.some((row, index) => {
+                if (normalized.length >= 200) return true;
+                if (!row || typeof row !== 'object') return false;
+                const text = String(row.text || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+                if (!text) return false;
+                const textKey = text.toLocaleLowerCase();
+                if (seenText.has(textKey)) return false;
+                seenText.add(textKey);
+                let id = String(row.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+                if (!id) {
+                    let hash = 2166136261;
+                    const hashInput = `${text}|${String(row.author || '')}|${index}`;
+                    for (let cursor = 0; cursor < hashInput.length; cursor += 1) {
+                        hash ^= hashInput.charCodeAt(cursor);
+                        hash = Math.imul(hash, 16777619);
+                    }
+                    id = `quote_${(hash >>> 0).toString(36)}_${index}`;
+                }
+                normalized.push({
+                    ...row,
+                    id,
+                    text,
+                    author: String(row.author || 'Personal').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Personal',
+                    category: normalizeWorkspaceQuoteCategory(row.category, 'personal'),
+                    createdAt: String(row.createdAt || '').slice(0, 40),
+                    updatedAt: String(row.updatedAt || '').slice(0, 40)
+                });
+                return false;
+            });
+            return normalized;
+        }
+
         function getDefaultWorkspacePreferences() {
             return {
                 appearance: {
@@ -3693,6 +3740,13 @@ function populateProgressDashboard() {
                 },
                 focus: {
                     defaultMinutes: 25
+                },
+                quotes: {
+                    showInSidebar: true,
+                    showInCustomTabs: true,
+                    sourceMode: 'all',
+                    enabledCategories: [],
+                    customQuotes: []
                 },
                 study: {
                     homeworkAddMethod: 'inline',
@@ -3887,6 +3941,7 @@ function populateProgressDashboard() {
             const calendarSource = { ...defaults.calendar, ...(legacySeed.calendar || {}), ...(source.calendar || {}) };
             const todaySource = { ...defaults.today, ...(legacySeed.today || {}), ...(source.today || {}) };
             const focusSource = { ...defaults.focus, ...(legacySeed.focus || {}), ...(source.focus || {}) };
+            const quotesSource = { ...defaults.quotes, ...(legacySeed.quotes || {}), ...(source.quotes || {}) };
             const studySource = { ...defaults.study, ...(legacySeed.study || {}), ...(source.study || {}) };
             const businessSource = { ...defaults.business, ...(legacySeed.business || {}), ...(source.business || {}) };
             const assistantSource = { ...defaults.assistant, ...(legacySeed.assistant || {}), ...(source.assistant || {}) };
@@ -3964,6 +4019,16 @@ function populateProgressDashboard() {
                 },
                 focus: {
                     defaultMinutes: Math.floor(clampSettingNumber(focusSource.defaultMinutes, defaults.focus.defaultMinutes, 5, 180))
+                },
+                quotes: {
+                    showInSidebar: quotesSource.showInSidebar !== false,
+                    showInCustomTabs: quotesSource.showInCustomTabs !== false,
+                    sourceMode: normalizeSettingChoice(quotesSource.sourceMode, ['all', 'built-in', 'custom'], defaults.quotes.sourceMode),
+                    enabledCategories: Array.from(new Set((Array.isArray(quotesSource.enabledCategories) ? quotesSource.enabledCategories : [])
+                        .map(value => normalizeWorkspaceQuoteCategory(value, ''))
+                        .filter(Boolean)))
+                        .slice(0, 48),
+                    customQuotes: normalizeWorkspaceCustomQuotes(quotesSource.customQuotes)
                 },
                 study: {
                     homeworkAddMethod: normalizeSettingChoice(studySource.homeworkAddMethod, ['inline', 'quick', 'panel'], defaults.study.homeworkAddMethod),
@@ -4180,6 +4245,10 @@ function populateProgressDashboard() {
                 applyAssistantPanelDefault: sectionName === 'assistant' || sectionName === 'all'
             });
             persistAppData();
+            if ((sectionName === 'quotes' || sectionName === 'all')
+                && window.SutraQuote && typeof window.SutraQuote.refresh === 'function') {
+                try { window.SutraQuote.refresh(); } catch (error) { /* quote feature is non-critical */ }
+            }
         }
 
         function getPlannerDayWindowFromPreferences() {
@@ -37363,18 +37432,14 @@ function buildOnboardingPlanPreview() {
         // ===========================================================================
 
         // ===== INSPIRATIONAL QUOTE ROTATION (Section 25) =====
-        const ATELIER_QUOTES = [
-            '"Stay hungry, stay foolish."',
-            '"Move fast. Break things."',
-            '"Make it work, make it right, make it fast."',
-            '"The only way to do great work is to love what you do."',
-            '"Done is better than perfect."',
-            '"Simplicity is the ultimate sophistication."'
-        ];
 
         function rotateAtelierQuote() {
-            const pick = ATELIER_QUOTES[Math.floor(Math.random() * ATELIER_QUOTES.length)];
-            document.querySelectorAll('.stay-hungry-quote').forEach(el => { el.textContent = pick; });
+            // The workspace quote service owns selection and markup. The legacy
+            // startup guard keeps this bridge, but must never replace the quote
+            // container's children or bypass user source/category preferences.
+            if (window.SutraQuote && typeof window.SutraQuote.refresh === 'function') {
+                window.SutraQuote.refresh();
+            }
         }
 
         // Re-rotate quotes when the user mode setup opens
