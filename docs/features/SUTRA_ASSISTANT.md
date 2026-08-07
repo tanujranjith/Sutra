@@ -275,6 +275,17 @@ If a referenced task, note, course, deck, or Timeline block changes after review
 the entire plan fails closed as stale before its first mutation and must be
 reviewed again.
 
+Canvas and Slides use two high-level typed action pairs rather than exposing raw
+page writes: `canvas_create_board` / `canvas_edit_board` and
+`slides_create_deck` / `slides_edit_deck`. Edit actions are limited to the
+current unlocked surface, stable page/slide/element/object IDs, and at most 24
+reviewed operations. Their pure operation engine validates the complete batch
+before any mutation, then the owning Canvas or Slides bridge commits through the
+canonical page persistence path. Activity keeps field-level, fingerprint-bound
+undo data so a later student edit is never silently overwritten. Slides actions
+support text, shapes, charts, arrangement, order, notes, theme, and size, but
+never remote image fetching or image-element mutation.
+
 ---
 
 ## 7. Providers, model, and keys

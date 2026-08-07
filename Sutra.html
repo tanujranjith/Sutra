@@ -81,7 +81,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260807-agentplans2"></script>
+    <script src="src/config/feature-manifest.js?v=20260807-surfaces2"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -7657,6 +7657,7 @@
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
     <script src="src/features/workspace/today-dashboard.js?v=20260807-todaywidgets1"></script>
+    <script src="src/features/workspace/surface-assistant-actions.js?v=20260807-surfaces2"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
     <!-- Notes editor v2 (opt-in, Settings → Editor): vendored TipTap/ProseMirror
          engine (window.SutraEditor) + Sutra integration glue (window.SutraNotesEditorV2).
@@ -7664,12 +7665,12 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-todaywidgets1"></script>
+<script src="src/core/app.js?v=20260807-surfaces2"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
-    <script src="src/features/workspace/slides.js?v=20260807-lockprivacy1"></script>
+    <script src="src/features/workspace/slides.js?v=20260807-surfaces2"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260709-studentloop1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never

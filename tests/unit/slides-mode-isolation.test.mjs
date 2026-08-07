@@ -30,6 +30,15 @@ test('Slides mutations use the canonical page bridge instead of whole-workspace 
   assert.doesNotMatch(slidesSource, /serializeWorkspace|deserializeWorkspace/);
 });
 
+test('Slides Assistant edits stay typed, canonical, local, and undoable', () => {
+  assert.match(slidesSource, /function validateAssistantOperations\(operations, options\)/);
+  assert.match(slidesSource, /engine\.applySlides\(page\.slides, operations/);
+  assert.match(slidesSource, /function undoAssistantMutation\(payload\)/);
+  assert.match(slidesSource, /engine\.undoSlides\(page\.slides, payload\)/);
+  assert.match(slidesSource, /page\.slides\s*=\s*restored\.model/);
+  assert.doesNotMatch(slidesSource, /fetch\(|XMLHttpRequest/);
+});
+
 test('Slides uses the canonical locked-page authorization boundary', () => {
   assert.match(slidesSource, /function pageContentAuthorized\(page\)/);
   assert.match(slidesSource, /bridge\.isPageContentAuthorized/);

@@ -28,16 +28,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260807-agentplans2",
-    "hash": "2bcc6827390917e0"
+    "stamp": "20260807-surfaces2",
+    "hash": "5d65ee99bb9d373a"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-todaywidgets1",
-    "hash": "e690aeaec8541c16"
+    "stamp": "20260807-surfaces2",
+    "hash": "ca3b59c6cfb456f6"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -168,8 +168,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260807-agentplans2",
-    "hash": "3d3e10dcbac9e782"
+    "stamp": "20260807-surfaces2",
+    "hash": "4ed417516c42ba85"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
@@ -192,8 +192,8 @@
     "hash": "115268116c9d2f3d"
   },
   "src/features/assistant/sutra-capability-registry.js": {
-    "stamp": "20260711-notes2",
-    "hash": "70e198a07dc0eea2"
+    "stamp": "20260807-surfaces2",
+    "hash": "1554da3db2165bd0"
   },
   "src/features/assistant/sutra-local-help.js": {
     "stamp": "20260714-assistant-trust1",
@@ -276,8 +276,8 @@
     "hash": "76654a6d7b2c8d91"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260807-lockprivacy1",
-    "hash": "800f8c08abe4e12c"
+    "stamp": "20260807-surfaces2",
+    "hash": "cd4da461084a1ff7"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -286,6 +286,10 @@
   "src/features/workspace/starter-packs.data.js": {
     "stamp": "20260619-packs1",
     "hash": "4f806de479b221c8"
+  },
+  "src/features/workspace/surface-assistant-actions.js": {
+    "stamp": "20260807-surfaces2",
+    "hash": "0bdf44d3dad8df1a"
   },
   "src/features/workspace/timeline-calendar.js": {
     "stamp": "20260807-ics1",

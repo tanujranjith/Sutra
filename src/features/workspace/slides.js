@@ -94,7 +94,86 @@
   function present() { var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page); if (!deck) return; var overlay = document.createElement('div'); overlay.className = 'slides-present-overlay'; var stage = document.createElement('div'); stage.className = 'slides-present-stage'; var notes = document.createElement('aside'); notes.className = 'slides-present-notes'; var close = document.createElement('button'); close.type = 'button'; close.textContent = 'Exit presentation'; overlay.append(stage, notes, close); document.body.appendChild(overlay); var index = deck.slides.indexOf(activeSlide(deck)); function draw() { var slide = deck.slides[index]; stage.replaceChildren(); stage.style.background = slide.background || (themes[deck.theme] || themes.sutra).bg; slide.elements.forEach(function (element) { stage.appendChild(renderElement(Object.assign({}, element), deck)); }); notes.textContent = slide.speakerNotes || 'No speaker notes for this slide.'; } function key(event) { if (event.key === 'Escape') close.click(); if ((event.key === 'ArrowRight' || event.key === ' ') && index < deck.slides.length - 1) { index++; draw(); event.preventDefault(); } if (event.key === 'ArrowLeft' && index > 0) { index--; draw(); event.preventDefault(); } } close.onclick = function () { document.removeEventListener('keydown', key, true); overlay.remove(); }; document.addEventListener('keydown', key, true); draw(); }
   function printPdf() { var data = workspace(); var page = pageFrom(data); if (!page) return; var popup = global.open('', '_blank', 'noopener,noreferrer'); if (!popup) { showToast('Allow pop-ups to print Slides as PDF.'); return; } var deck = deckFor(page); popup.document.write('<!doctype html><title>' + escapeHtml(page.title) + '</title><style>@page{size:landscape;margin:0}.slide{width:13.333in;height:7.5in;page-break-after:always;padding:.5in;box-sizing:border-box;font-family:Arial;white-space:pre-wrap}</style>' + deck.slides.map(function (slide) { return '<section class="slide" style="background:' + escapeHtml(slide.background || themes[deck.theme].bg) + '">' + slide.elements.filter(function (element) { return element.type !== 'image'; }).map(function (element) { return '<div style="font-size:' + Math.max(8, Math.min(72, Number(element.fontSize || 3) * 7)) + 'pt">' + escapeHtml(element.text) + '</div>'; }).join('') + '</section>'; }).join('') + '<script>addEventListener("load",function(){print()})<\/script>'); popup.document.close(); } // sutra-allow-html: printable document is built from escaped deck text and bounded numeric styles.
   function exportPptx() { var page = pageFrom(workspace()); if (!page || !global.JSZip) { showToast('PPTX export is unavailable in this browser.'); return; } var deck = deckFor(page); var zip = new global.JSZip(); zip.file('[Content_Types].xml', '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/></Types>'); zip.file('sutra-slides.json', JSON.stringify({ format: 'sutra-slides-pptx', deck: deck }, null, 2)); deck.slides.forEach(function (slide, index) { zip.file('ppt/slides/slide' + (index + 1) + '.xml', '<slide><title>' + escapeText(slide.title) + '</title><notes>' + escapeText(slide.speakerNotes) + '</notes><elements>' + escapeText(JSON.stringify(slide.elements)) + '</elements></slide>'); }); zip.generateAsync({ type: 'blob' }).then(function (blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (page.title || 'presentation').replace(/[^a-z0-9_-]+/gi, '_') + '.pptx'; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000); showToast('PPTX package exported.'); }); }
-  function getContext() { var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page); if (!page || !deck) return null; return { id: page.id, title: page.title || 'Untitled presentation', type: 'slides', theme: deck.theme || 'sutra', size: deck.size || 'widescreen', slideCount: deck.slides.length, slides: deck.slides.slice(0, 30).map(function (slide) { return { id: slide.id, title: String(slide.title || '').slice(0, 300), layout: slide.layout || 'blank', background: String(slide.background || '').slice(0, 64), speakerNotes: String(slide.speakerNotes || '').slice(0, 2000), elements: (Array.isArray(slide.elements) ? slide.elements : []).slice(0, 40).map(function (element) { return { id: element.id, type: element.type, x: Number(element.x) || 0, y: Number(element.y) || 0, width: Number(element.width) || 0, height: Number(element.height) || 0, zIndex: Number(element.zIndex) || 0, fontSize: Number(element.fontSize) || 0, fontWeight: String(element.fontWeight || '').slice(0, 32), fill: String(element.fill || '').slice(0, 64), color: String(element.color || '').slice(0, 64), borderColor: String(element.borderColor || '').slice(0, 64), borderWidth: Number(element.borderWidth) || 0, text: String(element.text || '').slice(0, 2000), alt: String(element.alt || '').slice(0, 300), chart: element.type === 'chart' && element.chart ? { labels: (element.chart.labels || []).slice(0, 12).map(function (label) { return String(label).slice(0, 100); }), values: (element.chart.values || []).slice(0, 12).map(Number) } : undefined }; }) }; }) }; }
+  function getContext() {
+    var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page);
+    if (!page || !deck) return null;
+    return {
+      id: page.id, title: page.title || 'Untitled presentation', type: 'slides',
+      theme: deck.theme || 'sutra', size: deck.size || 'widescreen', slideCount: deck.slides.length,
+      slides: deck.slides.slice(0, 10).map(function (slide) {
+        return {
+          id: slide.id, title: String(slide.title || '').slice(0, 300), layout: slide.layout || 'blank',
+          background: String(slide.background || '').slice(0, 64), speakerNotes: String(slide.speakerNotes || '').slice(0, 500),
+          elements: (Array.isArray(slide.elements) ? slide.elements : []).slice(0, 10).map(function (element) {
+            return {
+              id: element.id, type: element.type, x: Number(element.x) || 0, y: Number(element.y) || 0,
+              width: Number(element.width) || 0, height: Number(element.height) || 0, zIndex: Number(element.zIndex) || 0,
+              fontSize: Number(element.fontSize) || 0, fontWeight: String(element.fontWeight || '').slice(0, 32),
+              fill: String(element.fill || '').slice(0, 64), color: String(element.color || '').slice(0, 64),
+              borderColor: String(element.borderColor || '').slice(0, 64), borderWidth: Number(element.borderWidth) || 0,
+              text: String(element.text || '').slice(0, 240), alt: String(element.alt || '').slice(0, 160),
+              chart: element.type === 'chart' && element.chart ? {
+                labels: (element.chart.labels || []).slice(0, 12).map(function (label) { return String(label).slice(0, 100); }),
+                values: (element.chart.values || []).slice(0, 12).map(Number)
+              } : undefined
+            };
+          })
+        };
+      })
+    };
+  }
+  function assistantEngine() { return global.SutraSurfaceAssistantActions || null; }
+  function validateAssistantOperations(operations, options) {
+    var engine = assistantEngine();
+    if (!engine || typeof engine.applySlides !== 'function') return { ok: false, error: 'Slides Assistant engine is unavailable.' };
+    var page = pageFrom(workspace());
+    var deck = options && options.create ? { version: 1, size: 'widescreen', theme: 'sutra', slides: [] } : (page && deckFor(page));
+    if (!deck) return { ok: false, error: 'Open an unlocked Slides deck first.' };
+    var sequence = 0;
+    return engine.applySlides(deck, operations, { idFactory: function () { sequence += 1; return 'slides-preview-' + sequence; }, now: 'preview' });
+  }
+  function createAssistantDeck(spec) {
+    var input = spec && typeof spec === 'object' ? spec : {};
+    var engine = assistantEngine();
+    if (!engine || typeof engine.applySlides !== 'function') return { ok: false, error: 'Slides Assistant engine is unavailable.' };
+    var operations = (Array.isArray(input.slides) ? input.slides : []).map(function (slide) { return Object.assign({}, slide, { type: 'add_slide' }); });
+    if (input.theme) operations.push({ type: 'theme', theme: input.theme });
+    if (input.size) operations.push({ type: 'size', size: input.size });
+    var applied = engine.applySlides({ version: 1, size: 'widescreen', theme: 'sutra', slides: [] }, operations, { idFactory: id, now: new Date().toISOString() });
+    if (!applied.ok) return applied;
+    var page = createPage(String(input.title || 'Presentation').slice(0, 180), { deck: applied.model });
+    return { ok: !!page, page: page, slideCount: applied.model.slides.length };
+  }
+  function applyAssistantOperations(operations) {
+    var page = pageFrom(workspace());
+    var engine = assistantEngine();
+    if (!page || !deckFor(page)) return { ok: false, error: 'Open an unlocked Slides deck first.' };
+    if (!engine || typeof engine.applySlides !== 'function') return { ok: false, error: 'Slides Assistant engine is unavailable.' };
+    var applied = engine.applySlides(page.slides, operations, { idFactory: id, now: new Date().toISOString() });
+    if (!applied.ok) return applied;
+    page.slides = applied.model;
+    page.updatedAt = new Date().toISOString();
+    applied.undo.pageId = page.id;
+    if (applied.createdSlideIds.length) activeSlideId = applied.createdSlideIds[applied.createdSlideIds.length - 1];
+    scheduleSave();
+    render();
+    return Object.assign(applied, { pageId: page.id });
+  }
+  function undoAssistantMutation(payload) {
+    var engine = assistantEngine();
+    if (!engine || typeof engine.undoSlides !== 'function' || !payload || !payload.pageId) return { ok: false, error: 'Slides undo is unavailable.' };
+    var bridge = appBridge();
+    var page = bridge.pages.find(function (item) { return item && item.id === payload.pageId; }) || null;
+    if (!page || !pageContentAuthorized(page) || !deckFor(page)) return { ok: false, error: 'Unlock the Slides deck before undoing this edit.' };
+    var restored = engine.undoSlides(page.slides, payload);
+    if (!restored.ok) return restored;
+    page.slides = restored.model;
+    page.updatedAt = new Date().toISOString();
+    bridge.persistAppData();
+    if (page.id === activePageId) render();
+    if (typeof bridge.renderPagesList === 'function') bridge.renderPagesList();
+    return { ok: true, pageId: page.id };
+  }
   function refresh() {
     var data;
     try { data = workspace(); } catch (error) { return; }
@@ -105,7 +184,8 @@
     if (visible) { mount(); render(); } else setEditorVisible(false);
     document.body.classList.toggle('slides-page-active', visible);
   }
-  function createPage(title) { var bridge = appBridge(); var now = new Date().toISOString(); var page = { id: id(), title: title || 'Presentation', type: 'note', content: '', blocks: [], icon: '🖼️', spaceId: bridge.getActiveSpaceId ? bridge.getActiveSpaceId() : 'default', createdAt: now, updatedAt: now, slides: { version: 1, size: 'widescreen', theme: 'sutra', slides: [makeSlide('title', title || 'Untitled presentation')] } }; bridge.pages.push(page); bridge.persistAppData(); if (typeof bridge.renderPagesList === 'function') bridge.renderPagesList(); if (typeof global.loadPage === 'function') global.loadPage(page.id); return page; }
+  function createPage(title, options) { var bridge = appBridge(); var now = new Date().toISOString(); var deck = options && options.deck && Array.isArray(options.deck.slides) ? cloneDeck(options.deck) : { version: 1, size: 'widescreen', theme: 'sutra', slides: [makeSlide('title', title || 'Untitled presentation')] }; var page = { id: id(), title: title || 'Presentation', type: 'note', content: '', blocks: [], icon: '🖼️', spaceId: bridge.getActiveSpaceId ? bridge.getActiveSpaceId() : 'default', createdAt: now, updatedAt: now, slides: deck }; bridge.pages.push(page); bridge.persistAppData(); if (typeof bridge.renderPagesList === 'function') bridge.renderPagesList(); if (typeof global.loadPage === 'function') global.loadPage(page.id); return page; }
+  function cloneDeck(deck) { return JSON.parse(JSON.stringify(deck)); }
   function createFromNewPageDialog() { var titleInput = document.getElementById('newPageName'); var title = titleInput && titleInput.value || 'Presentation'; var modal = document.getElementById('newPageModal'); if (modal) modal.classList.remove('active'); createPage(title); }
-  global.addEventListener('sutra:note-page-loaded', refresh); setInterval(refresh, 350); global.SutraSlides = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return pageFrom(workspace()); }, getContext: getContext, addSlide: function () { mutate(function (deck) { var slide = makeSlide('title-body', 'New slide'); deck.slides.push(slide); activeSlideId = slide.id; }); }, present: present, exportPdf: printPdf, exportPptx: exportPptx };
+  global.addEventListener('sutra:note-page-loaded', refresh); setInterval(refresh, 350); global.SutraSlides = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return pageFrom(workspace()); }, getContext: getContext, addSlide: function () { mutate(function (deck) { var slide = makeSlide('title-body', 'New slide'); deck.slides.push(slide); activeSlideId = slide.id; }); }, validateAssistantOperations: validateAssistantOperations, createAssistantDeck: createAssistantDeck, applyAssistantOperations: applyAssistantOperations, undoAssistantMutation: undoAssistantMutation, present: present, exportPdf: printPdf, exportPptx: exportPptx };
 }(window));

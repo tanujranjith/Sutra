@@ -560,6 +560,14 @@ mustContain('src/features/assistant/flow-assistant.js', "type: 'convert_note_to_
 mustContain('src/features/assistant/flow-assistant.js', "type: 'link_workspace_objects'", 'link_workspace_objects action registered');
 mustContain('src/features/assistant/flow-assistant.js', "type: 'start_focus_session'", 'start_focus_session action registered');
 mustContain('src/features/assistant/flow-assistant.js', "type: 'change_context_depth'", 'change_context_depth action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'canvas_create_board'", 'Canvas board creation action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'canvas_edit_board'", 'Canvas atomic editing action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'slides_create_deck'", 'Slides deck creation action registered');
+mustContain('src/features/assistant/flow-assistant.js', "type: 'slides_edit_deck'", 'Slides atomic editing action registered');
+mustContain('src/features/workspace/surface-assistant-actions.js', 'function applyCanvas', 'pure Canvas Assistant operation engine present');
+mustContain('src/features/workspace/surface-assistant-actions.js', 'function applySlides', 'pure Slides Assistant operation engine present');
+mustContain('src/core/app.js', 'function canvasApplyAssistantOperations', 'Canvas canonical Assistant bridge present');
+mustContain('src/features/workspace/slides.js', 'function applyAssistantOperations', 'Slides canonical Assistant bridge present');
 
 // Object linking helper.
 mustContain('src/features/assistant/flow-assistant.js', 'function addPageLinks', 'object linking helper present');

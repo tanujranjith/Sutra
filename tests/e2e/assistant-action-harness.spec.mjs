@@ -111,7 +111,8 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
     return {
       hasCore: ['update_task_status', 'reschedule_tasks', 'change_task_priority', 'create_task',
         'create_timeline_block', 'delete_timeline_block', 'append_note_text', 'create_note_from_response',
-        'create_recovery_plan', 'run_grade_what_if', 'solve_target_grade', 'import_assignments']
+        'create_recovery_plan', 'run_grade_what_if', 'solve_target_grade', 'import_assignments',
+        'canvas_create_board', 'canvas_edit_board', 'slides_create_deck', 'slides_edit_deck']
         .every((t) => types.includes(t)),
       defOk: !!def && def.undoSupported === true && typeof def.description === 'string',
       riskLevels: H.riskLevels,
@@ -125,6 +126,9 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
         { type: 'create_page', title: 'Plan note', body: '# Plan', planActionId: 'note' },
         { type: 'create_task', title: 'Do the work', planActionId: 'task', dependsOn: ['note'] }
       ]),
+      canvasEditUndoable: H.getUndoSupport('canvas_edit_board').supported,
+      slidesEditUndoable: H.getUndoSupport('slides_edit_deck').supported,
+      surfaceEngineLoaded: !!window.SutraSurfaceAssistantActions,
       validationBlocksUnknown: H.validateAction({ type: 'drop_all_tables' }).ok === false,
       noDeleteTaskAction: !types.includes('delete_task') && !types.includes('delete_tasks')
     };
@@ -140,6 +144,9 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
   expect(result.aliasNormalized).toBe('medium');
   expect(result.dependencyPlan.ok).toBe(true);
   expect(result.dependencyPlan.steps[1].dependsOn).toEqual(['note']);
+  expect(result.canvasEditUndoable).toBe(true);
+  expect(result.slidesEditUndoable).toBe(true);
+  expect(result.surfaceEngineLoaded).toBe(true);
   expect(result.validationBlocksUnknown).toBe(true);
   expect(result.noDeleteTaskAction).toBe(true);
 });

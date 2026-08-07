@@ -28,6 +28,7 @@
         homework: 'Homework',
         notes: 'Notes & pages',
         canvas: 'Canvas',
+        slides: 'Slides',
         courses: 'Course Hub',
         timeline: 'Timeline',
         review: 'Review & flashcards',
@@ -77,6 +78,12 @@
         canvas_create_task_from_selection: { domain: 'canvas', scope: 'currentView' },
         canvas_create_note_from_selection: { domain: 'canvas', scope: 'currentView' },
         canvas_group_selection: { domain: 'canvas', scope: 'currentView' },
+        canvas_create_board: { domain: 'canvas', scope: 'none', reversible: true },
+        canvas_edit_board: { domain: 'canvas', scope: 'currentView', reversible: true },
+
+        // Slides
+        slides_create_deck: { domain: 'slides', scope: 'none', reversible: true },
+        slides_edit_deck: { domain: 'slides', scope: 'currentView', reversible: true },
 
         // Planner tasks
         create_task: { domain: 'tasks', scope: 'none', reversible: true },

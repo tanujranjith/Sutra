@@ -53,3 +53,17 @@ as the only backup. Use encrypted `.sutra` export for a complete backup.
 `window.SutraSlides` is the namespaced integration seam. It provides page
 creation, current-deck lookup, add-slide, presenter launch, and local export
 commands. No remote API or unscoped global is introduced.
+
+The bridge also exposes the reviewed Assistant seam. `slides_create_deck`
+creates a local deck from bounded slide specifications, while
+`slides_edit_deck` applies up to 24 operations to the current unlocked deck.
+Supported operations add or update slides, speaker notes, local text, shapes,
+and charts; arrange elements; reorder slides; and change theme or size. The
+Assistant cannot create or alter image elements and never accepts a remote image
+URL or performs a network fetch.
+
+Operations are validated by the pure
+`src/features/workspace/surface-assistant-actions.js` engine before the page is
+mutated. A batch commits through the normal page save path as one change and
+records a field-level Activity undo patch. Undo is fingerprint-bound to the
+touched slides/elements so it fails closed if the student changed them again.

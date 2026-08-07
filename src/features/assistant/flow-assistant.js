@@ -882,6 +882,10 @@
         { type: 'canvas_create_task_from_selection', desc: 'Create a Sutra task from the current Canvas selection', risk: 'high', fields: {} },
         { type: 'canvas_create_note_from_selection', desc: 'Create a Sutra note from selected Canvas text or grouped cards', risk: 'high', fields: { title: 'string?' } },
         { type: 'canvas_group_selection', desc: 'Organize selected Canvas objects into a labeled group', risk: 'high', fields: { label: 'string?' } },
+        { type: 'canvas_create_board', desc: 'Create a new Canvas board from a safe local template and optional reviewed object/connect/group/arrange operations. Added objects may declare clientId values that later operations reference.', risk: 'high', fields: { title: 'string', templateId: 'blank|concept_map|essay_brainstorm|weekly_study_plan?', operations: '[{type,clientId,objectType,text,label,shape,x,y,width,height,fill,stroke,objectId,patch,objectIds,layout,gap,fromId,toId,direction,value}]?' } },
+        { type: 'canvas_edit_board', desc: 'Atomically create, edit, arrange, connect, group, or restyle objects on the current unlocked Canvas. Use stable object ids from context; every operation is reviewed and the whole batch is undoable.', risk: 'high', fields: { pageId: 'string', operations: '[{type,clientId,objectType,text,label,shape,x,y,width,height,fill,stroke,objectId,patch,objectIds,layout,gap,fromId,toId,direction,value}]' } },
+        { type: 'slides_create_deck', desc: 'Create a local Slides deck with reviewed slide titles, layouts, speaker notes, text, shapes, and charts. Assistant actions never fetch remote images.', risk: 'high', fields: { title: 'string', theme: 'sutra|nature|midnight|paper?', size: 'widescreen|standard?', slides: '[{title,layout,background,speakerNotes,body,elements}]' } },
+        { type: 'slides_edit_deck', desc: 'Atomically add/update/arrange Slides content, reorder slides, or change deck theme/size on the current unlocked deck. Use stable slide and element ids from context; the batch is undoable.', risk: 'high', fields: { pageId: 'string', operations: '[{type,slideId,elementId,elementIds,slideIds,title,layout,background,speakerNotes,afterSlideId,element,patch,gap,theme,size}]' } },
         { type: 'create_review_deck', desc: 'Create a review deck (optionally with cards)', risk: 'medium', fields: { name: 'string', description: 'string?', cards: '[{front,back}]?', linkPageId: 'string?' } },
         { type: 'add_review_cards', desc: 'Add cards to an existing review deck', risk: 'medium', fields: { deckId: 'string', cards: '[{front,back}]' } },
         { type: 'create_cram_session', desc: 'Add a cram session entry', risk: 'medium', fields: { topic: 'string', days: 'number?' } },
@@ -1135,6 +1139,8 @@
             '- Never put more than ~8 actions in one reply.',
             '- When a request truly needs multiple ordered atomic actions, give every action a stable "planActionId" and add "dependsOn": ["earlier-id"] where a step requires an earlier result. Dependencies may reference only earlier actions in the same array. Sutra will review the dependency plan and apply it in order.',
             '- Do not use dependency metadata when one higher-level workflow action already captures the whole request.',
+            '- For Canvas, prefer one canvas_edit_board action containing up to 24 reviewed operations. Use context.canvas.pageId and stable object ids. New add operations may declare a short clientId so later connect/group/arrange operations in the same action can reference it. Never invent ids for existing objects.',
+            '- For Slides, prefer one slides_edit_deck action containing up to 24 reviewed operations. Use context.slides.id and its stable slide/element ids. Create only text, shapes, and charts; never invent data URLs, external image URLs, or claim to fetch an image.',
             '- The user must confirm each action; do not assume anything is applied. Sutra renders every action as an approval card the user must click — so PROPOSE, never declare. Say "I can mark that as taken — approve the card below" or "Want me to…?", NOT "I\'ve marked…" / "I\'ll mark…". Never claim a change happened; you cannot apply anything yourself.',
             '- If the user just asked a question, do NOT propose actions. Only propose when the action is clearly useful.',
             '- If context.canvas is present, it is a bounded summary of the active Canvas page. Use Canvas actions only for that active Canvas, and expect explicit user confirmation.',
@@ -1942,6 +1948,50 @@
             case 'canvas_add_text':
                 if (!action.text || typeof action.text !== 'string') return { ok: false, error: 'Missing text' };
                 break;
+            case 'canvas_create_board': {
+                if (!action.title || typeof action.title !== 'string') return { ok: false, error: 'Missing Canvas title' };
+                if (action.templateId && !['blank', 'concept_map', 'essay_brainstorm', 'weekly_study_plan'].includes(action.templateId)) return { ok: false, error: 'Unsupported Canvas template' };
+                if (action.operations != null && !Array.isArray(action.operations)) return { ok: false, error: 'Canvas operations must be an array' };
+                if (Array.isArray(action.operations) && action.operations.length) {
+                    const api = canvasApi();
+                    const checked = api && typeof api.validateAssistantOperations === 'function'
+                        ? api.validateAssistantOperations(action.operations, { create: true, templateId: action.templateId || 'blank' })
+                        : { ok: false, error: 'Canvas Assistant engine is unavailable.' };
+                    if (!checked.ok) return { ok: false, error: checked.error || 'Invalid Canvas operations' };
+                }
+                break;
+            }
+            case 'canvas_edit_board': {
+                const api = canvasApi();
+                const context = api && typeof api.getContext === 'function' ? api.getContext() : null;
+                if (!context || !context.pageId) return { ok: false, error: 'Open an unlocked Canvas page first' };
+                if (!action.pageId || String(action.pageId) !== String(context.pageId)) return { ok: false, error: 'Canvas pageId must match the current Canvas' };
+                if (!Array.isArray(action.operations) || !action.operations.length) return { ok: false, error: 'No Canvas operations provided' };
+                const checked = typeof api.validateAssistantOperations === 'function' ? api.validateAssistantOperations(action.operations) : { ok: false, error: 'Canvas Assistant engine is unavailable.' };
+                if (!checked.ok) return { ok: false, error: checked.error || 'Invalid Canvas operations' };
+                break;
+            }
+            case 'slides_create_deck': {
+                if (!action.title || typeof action.title !== 'string') return { ok: false, error: 'Missing presentation title' };
+                if (!Array.isArray(action.slides) || !action.slides.length || action.slides.length > 20) return { ok: false, error: 'Provide 1 to 20 reviewed slides' };
+                const api = slidesApi();
+                const operations = action.slides.map(slide => ({ ...slide, type: 'add_slide' }));
+                if (action.theme) operations.push({ type: 'theme', theme: action.theme });
+                if (action.size) operations.push({ type: 'size', size: action.size });
+                const checked = api && typeof api.validateAssistantOperations === 'function' ? api.validateAssistantOperations(operations, { create: true }) : { ok: false, error: 'Slides Assistant engine is unavailable.' };
+                if (!checked.ok) return { ok: false, error: checked.error || 'Invalid Slides content' };
+                break;
+            }
+            case 'slides_edit_deck': {
+                const api = slidesApi();
+                const context = api && typeof api.getContext === 'function' ? api.getContext() : null;
+                if (!context || !context.id) return { ok: false, error: 'Open an unlocked Slides deck first' };
+                if (!action.pageId || String(action.pageId) !== String(context.id)) return { ok: false, error: 'Slides pageId must match the current deck' };
+                if (!Array.isArray(action.operations) || !action.operations.length) return { ok: false, error: 'No Slides operations provided' };
+                const checked = typeof api.validateAssistantOperations === 'function' ? api.validateAssistantOperations(action.operations) : { ok: false, error: 'Slides Assistant engine is unavailable.' };
+                if (!checked.ok) return { ok: false, error: checked.error || 'Invalid Slides operations' };
+                break;
+            }
             case 'create_review_deck':
                 if (!action.name) return { ok: false, error: 'Missing deck name' };
                 break;
@@ -3265,6 +3315,10 @@
             case 'canvas_create_task_from_selection': return applyCanvasCreateTaskFromSelection(action);
             case 'canvas_create_note_from_selection': return applyCanvasCreateNoteFromSelection(action);
             case 'canvas_group_selection': return applyCanvasGroupSelection(action);
+            case 'canvas_create_board': return applyCanvasCreateBoard(action);
+            case 'canvas_edit_board': return applyCanvasEditBoard(action);
+            case 'slides_create_deck': return applySlidesCreateDeck(action);
+            case 'slides_edit_deck': return applySlidesEditDeck(action);
             case 'create_review_deck': return applyCreateReviewDeck(action);
             case 'add_review_cards': return applyAddReviewCards(action);
             case 'create_cram_session': return applyCreateCramSession(action);
@@ -3346,6 +3400,10 @@
             case 'canvas_create_task_from_selection': return 'Create task from current Canvas selection';
             case 'canvas_create_note_from_selection': return `Create note from Canvas selection${action.title ? `: ${action.title}` : ''}`;
             case 'canvas_group_selection': return `Group selected Canvas objects${action.label ? `: ${action.label}` : ''}`;
+            case 'canvas_create_board': return `Create Canvas board: "${truncate(action.title, 80)}"`;
+            case 'canvas_edit_board': return `Apply ${Array.isArray(action.operations) ? action.operations.length : 0} Canvas edit${Array.isArray(action.operations) && action.operations.length === 1 ? '' : 's'}`;
+            case 'slides_create_deck': return `Create Slides deck: "${truncate(action.title, 80)}"`;
+            case 'slides_edit_deck': return `Apply ${Array.isArray(action.operations) ? action.operations.length : 0} Slides edit${Array.isArray(action.operations) && action.operations.length === 1 ? '' : 's'}`;
             case 'create_review_deck': return `Create review deck "${action.name}"${Array.isArray(action.cards) ? ` with ${action.cards.length} cards` : ''}`;
             case 'add_review_cards': return `Add ${action.cards.length} cards to deck ${action.deckId}`;
             case 'create_cram_session': return `Start cram session: "${action.topic}"`;
@@ -3475,13 +3533,36 @@
         'triage_deadlines', 'create_recovery_plan', 'convert_note_to_study_system',
         'import_assignments', 'schedule_review_session',
         'create_memory', 'update_memory', 'promote_memory_to_note', 'enable_memory', 'disable_memory',
-        'delete_memory', 'clear_expired_memories', 'clear_temporary_memories'
+        'delete_memory', 'clear_expired_memories', 'clear_temporary_memories',
+        'canvas_create_board', 'canvas_edit_board', 'slides_create_deck', 'slides_edit_deck'
     ]);
 
     function actionUndoNote(action) {
         return UNDOABLE_TYPES.has(action.type)
             ? 'Undo available from Activity after applying.'
             : 'Undo is not available for this action.';
+    }
+
+    function describeSurfaceOperation(operation, surface) {
+        const op = operation && typeof operation === 'object' ? operation : {};
+        if (surface === 'canvas') {
+            if (op.type === 'add') return `Add ${op.objectType || 'text'}${op.text ? `: ${truncate(op.text, 60)}` : ''}`;
+            if (op.type === 'update') return `Edit object ${truncate(op.objectId || '', 32)}`;
+            if (op.type === 'arrange') return `Arrange ${(op.objectIds || []).length} objects as ${op.layout || 'grid'}`;
+            if (op.type === 'connect') return `Connect ${truncate(op.fromId || '', 24)} to ${truncate(op.toId || '', 24)}${op.label ? `: ${truncate(op.label, 40)}` : ''}`;
+            if (op.type === 'group') return `Group ${(op.objectIds || []).length} objects${op.label ? ` as ${truncate(op.label, 40)}` : ''}`;
+            if (op.type === 'background') return `Set background to ${op.value || 'grid'}`;
+        } else {
+            if (op.type === 'add_slide') return `Add slide: ${truncate(op.title || 'Untitled slide', 60)}`;
+            if (op.type === 'update_slide') return `Edit slide ${truncate(op.slideId || '', 32)}`;
+            if (op.type === 'add_element') return `Add ${(op.element && (op.element.elementType || op.element.type)) || 'text'} to slide ${truncate(op.slideId || '', 24)}`;
+            if (op.type === 'update_element') return `Edit element ${truncate(op.elementId || '', 32)}`;
+            if (op.type === 'arrange_elements') return `Arrange ${(op.elementIds || []).length} elements as ${op.layout || 'grid'}`;
+            if (op.type === 'reorder_slides') return `Reorder ${(op.slideIds || []).length} slides`;
+            if (op.type === 'theme') return `Set theme to ${op.theme || 'sutra'}`;
+            if (op.type === 'size') return `Set slide size to ${op.size || 'widescreen'}`;
+        }
+        return `Unsupported ${surface} operation`;
     }
 
     function buildPreviewHtml(action, risk) {
@@ -3583,6 +3664,31 @@
                     if (conflicts.length) rows.push(`<div class="flow-preview-warn">⚠ Overlaps existing: ${conflicts.map(esc).join('; ')}</div>`);
                 }
                 break;
+            case 'canvas_create_board':
+            case 'canvas_edit_board': {
+                const operations = Array.isArray(action.operations) ? action.operations : [];
+                rows.push(`<div class="flow-preview-what">${action.type === 'canvas_create_board' ? `Create <strong>${esc(truncate(action.title, 70))}</strong> from the ${esc(action.templateId || 'blank')} template` : 'Edit the current Canvas'} with ${operations.length} reviewed operation${operations.length === 1 ? '' : 's'}:</div>`);
+                if (operations.length) rows.push(li(operations.slice(0, 12).map(operation => esc(describeSurfaceOperation(operation, 'canvas')))));
+                if (operations.length > 12) rows.push(`<div class="flow-preview-dim">…and ${operations.length - 12} more.</div>`);
+                rows.push('<div class="flow-preview-where">Runs locally as one atomic Canvas change. Existing locked objects are never edited, and Activity can undo the batch unless the touched objects changed again.</div>');
+                break;
+            }
+            case 'slides_create_deck': {
+                const slides = Array.isArray(action.slides) ? action.slides : [];
+                rows.push(`<div class="flow-preview-what">Create <strong>${esc(truncate(action.title, 70))}</strong> with ${slides.length} slide${slides.length === 1 ? '' : 's'}${action.theme ? ` using the ${esc(action.theme)} theme` : ''}.</div>`);
+                rows.push(li(slides.slice(0, 12).map(slide => esc(truncate(slide && slide.title || 'Untitled slide', 80)))));
+                if (slides.length > 12) rows.push(`<div class="flow-preview-dim">…and ${slides.length - 12} more.</div>`);
+                rows.push('<div class="flow-preview-where">Creates only local text, shapes, and charts. It never fetches or embeds a remote image.</div>');
+                break;
+            }
+            case 'slides_edit_deck': {
+                const operations = Array.isArray(action.operations) ? action.operations : [];
+                rows.push(`<div class="flow-preview-what">Apply ${operations.length} reviewed operation${operations.length === 1 ? '' : 's'} to the current Slides deck:</div>`);
+                rows.push(li(operations.slice(0, 12).map(operation => esc(describeSurfaceOperation(operation, 'slides')))));
+                if (operations.length > 12) rows.push(`<div class="flow-preview-dim">…and ${operations.length - 12} more.</div>`);
+                rows.push('<div class="flow-preview-where">Runs locally as one atomic deck change. Activity can undo the batch unless a touched slide or element changed again.</div>');
+                break;
+            }
             case 'create_page':
                 rows.push(`<div class="flow-preview-what">Create note <strong>${esc(truncate(action.title, 70))}</strong>${action.body ? ` (${String(action.body).split(/\s+/).length} words)` : ''} in Notes.</div>`);
                 break;
@@ -3713,6 +3819,7 @@
             return '<div class="flow-before-after"><span>Before: current note text</span><span>After: note text is updated; Activity keeps an undo snapshot where possible</span></div>';
         }
         if (type === 'apply_note_tags') return '<div class="flow-before-after"><span>Before: current note tags</span><span>After: reviewed tag set; Activity can restore the prior tags</span></div>';
+        if (type === 'canvas_edit_board' || type === 'slides_edit_deck') return '<div class="flow-before-after"><span>Before: current surface objects and arrangement</span><span>After: only the reviewed operations are applied atomically; Activity keeps a stale-safe undo patch</span></div>';
         return '';
     }
 
@@ -4710,9 +4817,13 @@
             ? buildConversationMessages(options.conversation, options) : [];
         if (safety && typeof safety.selectContext === 'function' && typeof safety.budgetContext === 'function') {
             const memoryIds = Array.isArray(ctx.memoryUsedIds) ? ctx.memoryUsedIds : [];
+            const currentScreen = [];
+            if (ctx.activeNote) currentScreen.push({ id: ctx.activeNote.id, kind: 'note', title: ctx.activeNote.title, value: ctx.activeNote, priority: 95 });
+            if (ctx.canvas) currentScreen.push({ id: ctx.canvas.pageId, kind: 'canvas', title: ctx.canvas.title, value: ctx.canvas, priority: 98 });
+            if (ctx.slides) currentScreen.push({ id: ctx.slides.id, kind: 'slides', title: ctx.slides.title, value: ctx.slides, priority: 98 });
             const selection = safety.selectContext({
                 explicitTargets: options.explicitTargets || [],
-                currentScreen: ctx.activeNote ? [{ id: ctx.activeNote.id, kind: 'note', title: ctx.activeNote.title, value: ctx.activeNote, priority: 95 }] : [],
+                currentScreen,
                 selectedText: ctx.selection ? [{ id: 'selection', kind: 'selection', title: 'Selected text', value: ctx.selection, priority: 92 }] : [],
                 linked: (ctx.retrievedNotes || []).map(source => ({ id: source.noteId, kind: 'note', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' })),
                 course: ctx.course ? [{ id: ctx.course.id || ctx.course.name, kind: 'course', title: ctx.course.name, value: ctx.course }] : [],
@@ -4733,6 +4844,14 @@
             if (ctx.activeNote) {
                 const row = includedRows.get('note:' + ctx.activeNote.id);
                 if (row) ctx.activeNote = row.value; else delete ctx.activeNote;
+            }
+            if (ctx.canvas) {
+                const row = includedRows.get('canvas:' + ctx.canvas.pageId);
+                if (row) ctx.canvas = row.value; else delete ctx.canvas;
+            }
+            if (ctx.slides) {
+                const row = includedRows.get('slides:' + ctx.slides.id);
+                if (row) ctx.slides = row.value; else delete ctx.slides;
             }
             if (ctx.course) {
                 const row = includedRows.get('course:' + (ctx.course.id || ctx.course.name));
@@ -5210,6 +5329,10 @@
         return (typeof window !== 'undefined' && window.SutraCanvas) ? window.SutraCanvas : null;
     }
 
+    function slidesApi() {
+        return (typeof window !== 'undefined' && window.SutraSlides) ? window.SutraSlides : null;
+    }
+
     function applyCanvasAddSticky(action) {
         const api = canvasApi();
         if (!api || typeof api.addSticky !== 'function') return { ok: false, message: 'Canvas is not available.' };
@@ -5247,6 +5370,56 @@
         if (!api || typeof api.group !== 'function') return { ok: false, message: 'Canvas is not available.' };
         const group = api.group(null, action.label || 'Group');
         return group ? { ok: true, message: 'Grouped selected Canvas objects.', payload: { canvasGroupId: group.id } } : { ok: false, message: 'Select two or more Canvas objects first.' };
+    }
+
+    function applyCanvasCreateBoard(action) {
+        const api = canvasApi();
+        if (!api || typeof api.createAssistantBoard !== 'function') return { ok: false, message: 'Canvas Assistant editing is unavailable.' };
+        const result = api.createAssistantBoard({ title: action.title, templateId: action.templateId || 'blank', operations: action.operations || [] });
+        const page = result && result.page;
+        if (!result || !result.ok || !page) return { ok: false, message: result && (result.error || result.message) || 'Could not create the Canvas board.' };
+        return {
+            ok: true,
+            message: `Created Canvas "${truncate(page.title || action.title, 60)}"${result.operationCount ? ` with ${result.operationCount} reviewed edit${result.operationCount === 1 ? '' : 's'}` : ''}.`,
+            payload: { createdObjectIds: [{ kind: 'page', id: page.id }], affected: [{ kind: 'page', id: page.id, title: page.title }] }
+        };
+    }
+
+    function applyCanvasEditBoard(action) {
+        const api = canvasApi();
+        if (!api || typeof api.applyAssistantOperations !== 'function') return { ok: false, message: 'Canvas Assistant editing is unavailable.' };
+        const result = api.applyAssistantOperations(action.operations);
+        if (!result || !result.ok) return { ok: false, message: result && (result.error || result.message) || 'Could not edit the Canvas board.' };
+        return {
+            ok: true,
+            message: `Applied ${result.operationCount} reviewed Canvas edit${result.operationCount === 1 ? '' : 's'}.`,
+            payload: { undoPayload: result.undo, createdObjectIds: [], affected: [{ kind: 'page', id: result.pageId }] }
+        };
+    }
+
+    function applySlidesCreateDeck(action) {
+        const api = slidesApi();
+        if (!api || typeof api.createAssistantDeck !== 'function') return { ok: false, message: 'Slides Assistant editing is unavailable.' };
+        const result = api.createAssistantDeck({ title: action.title, theme: action.theme, size: action.size, slides: action.slides });
+        const page = result && result.page;
+        if (!result || !result.ok || !page) return { ok: false, message: result && (result.error || result.message) || 'Could not create the Slides deck.' };
+        return {
+            ok: true,
+            message: `Created "${truncate(page.title || action.title, 60)}" with ${result.slideCount} slide${result.slideCount === 1 ? '' : 's'}.`,
+            payload: { createdObjectIds: [{ kind: 'page', id: page.id }], affected: [{ kind: 'page', id: page.id, title: page.title }] }
+        };
+    }
+
+    function applySlidesEditDeck(action) {
+        const api = slidesApi();
+        if (!api || typeof api.applyAssistantOperations !== 'function') return { ok: false, message: 'Slides Assistant editing is unavailable.' };
+        const result = api.applyAssistantOperations(action.operations);
+        if (!result || !result.ok) return { ok: false, message: result && (result.error || result.message) || 'Could not edit the Slides deck.' };
+        return {
+            ok: true,
+            message: `Applied ${result.operationCount} reviewed Slides edit${result.operationCount === 1 ? '' : 's'}.`,
+            payload: { undoPayload: result.undo, createdObjectIds: [], affected: [{ kind: 'page', id: result.pageId }] }
+        };
     }
 
     // --------------------------------------------------------------
@@ -5455,6 +5628,16 @@
                 return 1;
             }
             return 0;
+        }
+        if (payload.kind === 'canvas_assistant_patch') {
+            const api = canvasApi();
+            const result = api && typeof api.undoAssistantMutation === 'function' ? api.undoAssistantMutation(payload) : null;
+            return result && result.ok ? 1 : 0;
+        }
+        if (payload.kind === 'slides_assistant_patch') {
+            const api = slidesApi();
+            const result = api && typeof api.undoAssistantMutation === 'function' ? api.undoAssistantMutation(payload) : null;
+            return result && result.ok ? 1 : 0;
         }
         if (payload.kind === 'page_snapshot' && payload.snapshot && payload.snapshot.pageId) {
             const b = bridge();
@@ -7340,12 +7523,18 @@
         try { ctx = i ? i.deriveStudentContext() : null; } catch (e) { ctx = null; }
         const selection = getEditorSelection();
         const canvasContext = getCanvasContextSummary();
+        const slidesContext = getSlidesContextSummary();
 
         // Context-sensitive first.
         if (canvasContext) {
-            items.push({ label: 'Canvas map', prompt: 'Look at this Canvas summary and suggest a concept-map structure. Propose Canvas actions only if they clearly improve the active Canvas.' });
+            items.push({ label: 'Canvas map', prompt: 'Look at this Canvas summary and propose one canvas_edit_board action that creates, connects, groups, or arranges objects only where it clearly improves the active Canvas. Use the current pageId and stable object ids.' });
             items.push({ label: 'Canvas selection → task', prompt: 'Turn the selected Canvas content into a task. Propose one canvas_create_task_from_selection action.' });
             items.push({ label: 'Group selection', prompt: 'If the selected Canvas objects belong together, propose one canvas_group_selection action with a concise label.' });
+        }
+        if (slidesContext) {
+            items.push({ label: 'Improve deck', prompt: 'Review the current Slides context and propose one slides_edit_deck action with a small set of high-value edits. Use the current pageId plus stable slide and element ids.' });
+            items.push({ label: 'Add summary slide', prompt: 'Propose one slides_edit_deck action that adds a concise summary slide grounded in the current deck.' });
+            items.push({ label: 'Polish speaker notes', prompt: 'Propose one slides_edit_deck action that improves speaker notes for the most important slides without changing their claims.' });
         }
         if (selection) {
             items.push({ label: 'Selection → tasks', prompt: 'Turn the selected text into concrete tasks. Propose create_task actions, one per task.' });
@@ -7554,7 +7743,7 @@
             const sel = getEditorSelection();
             if (note && note.locked) detail = 'Locked note (body excluded)';
             else if (note && sel) detail = 'Current note + selected text';
-            else if (note) detail = note.type === 'canvas' ? 'Current canvas' : 'Current note';
+            else if (note) detail = note.type === 'canvas' ? 'Current canvas' : (note.type === 'slides' ? 'Current slides' : 'Current note');
         }
         if (!detail) {
             const depth = normalizeDepth();
@@ -7630,10 +7819,16 @@
         ]
     };
     QUICK_GRID_BY_VIEW.canvas = [
-        { icon: '🗺️', title: 'Create concept map', sub: 'From this canvas', prompt: 'Look at this Canvas summary and suggest a concept-map structure. Propose Canvas actions only if they clearly improve the active Canvas.' },
+        { icon: '🗺️', title: 'Create concept map', sub: 'From this canvas', prompt: 'Look at this Canvas summary and propose one canvas_edit_board action with reviewed add, connect, group, and arrange operations. Use the current pageId and stable object ids.' },
         { icon: '✅', title: 'Selection → task', sub: 'One click', prompt: 'Turn the selected Canvas content into a task. Propose one canvas_create_task_from_selection action.' },
         { icon: '🗂️', title: 'Group selection', sub: 'Organize cards', prompt: 'If the selected Canvas objects belong together, propose one canvas_group_selection action with a concise label.' },
         { icon: '📝', title: 'Note from selection', sub: 'Capture it', prompt: 'Create a note from my Canvas selection. Propose one canvas_create_note_from_selection action.' }
+    ];
+    QUICK_GRID_BY_VIEW.slides = [
+        { icon: '🪄', title: 'Improve this deck', sub: 'Reviewed edits', prompt: 'Review this Slides context and propose one slides_edit_deck action with a small set of high-value edits using stable slide and element ids.' },
+        { icon: '📑', title: 'Add summary slide', sub: 'Synthesize', prompt: 'Propose one slides_edit_deck action that adds a concise summary slide grounded in the current deck.' },
+        { icon: '🎤', title: 'Speaker notes', sub: 'Presentation help', prompt: 'Propose one slides_edit_deck action that improves speaker notes without changing the deck\'s factual claims.' },
+        { icon: '🧩', title: 'Arrange elements', sub: 'Clean layout', prompt: 'Use stable element ids to propose one slides_edit_deck action that arranges the current slide more clearly.' }
     ];
 
     function getQuickGrid() {
@@ -7641,6 +7836,7 @@
         if (view === 'notes') {
             const note = getActiveNoteSummary();
             if (note && note.type === 'canvas') return QUICK_GRID_BY_VIEW.canvas;
+            if (note && note.type === 'slides') return QUICK_GRID_BY_VIEW.slides;
         }
         return QUICK_GRID_BY_VIEW[view] || QUICK_GRID_BY_VIEW.today;
     }
@@ -7660,7 +7856,7 @@
                 else {
                     const sel = getEditorSelection();
                     meta = sel ? `Selected text · ${sel.length.toLocaleString()} characters`
-                        : (note.type === 'canvas' ? `Canvas · ${note.objectCount || 0} objects` : `Full note · ${note.wordCount || 0} words`);
+                        : (note.type === 'canvas' ? `Canvas · ${note.objectCount || 0} objects` : (note.type === 'slides' ? `Slides · ${note.slideCount || 0} slides` : `Full note · ${note.wordCount || 0} words`));
                 }
             }
         } else if (view === 'courses') {

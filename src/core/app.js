@@ -47325,10 +47325,25 @@ function getActiveEditor() {
                 connectionCount: canvas.connections.length,
                 groupCount: canvas.groups.length,
                 background: canvas.background,
+                objects: canvas.objects
+                    .slice(0, 40)
+                    .map(object => ({
+                        id: object.id,
+                        type: object.type,
+                        x: Number(object.x) || 0,
+                        y: Number(object.y) || 0,
+                        width: Number(object.width) || 0,
+                        height: Number(object.height) || 0,
+                        rotation: Number(object.rotation) || 0,
+                        zIndex: Number(object.zIndex) || 0,
+                        locked: object.locked === true,
+                        text: String(object.text || object.label || '').slice(0, 240),
+                        groupId: object.groupId || ''
+                    })),
                 visibleText: canvas.objects
                     .filter(object => ['text', 'sticky', 'frame', 'linked-note', 'homework', 'task', 'timeline', 'ap-study', 'review', 'college'].includes(object.type))
-                    .slice(0, 40)
-                    .map(object => ({ id: object.id, type: object.type, text: String(object.text || object.label || '').slice(0, 500), selected: selected.has(object.id), ref: object.ref || null })),
+                    .slice(0, 30)
+                    .map(object => ({ id: object.id, type: object.type, text: String(object.text || object.label || '').slice(0, 300), selected: selected.has(object.id), ref: object.ref || null })),
                 connectorLabels: canvas.connections.filter(connection => connection.label).slice(0, 30).map(connection => ({ id: connection.id, label: connection.label })),
                 groupLabels: canvas.groups.filter(group => group.label).slice(0, 30).map(group => ({ id: group.id, label: group.label, objectIds: group.objectIds.slice(0, 20) })),
                 selectionSummary: canvas.objects
@@ -48003,6 +48018,73 @@ function getActiveEditor() {
             }
         }
 
+        function canvasAssistantEngine() {
+            return (typeof window !== 'undefined' && window.SutraSurfaceAssistantActions) ? window.SutraSurfaceAssistantActions : null;
+        }
+
+        function validateCanvasAssistantOperations(operations, options = {}) {
+            const engine = canvasAssistantEngine();
+            if (!engine || typeof engine.applyCanvas !== 'function') return { ok: false, error: 'Canvas Assistant engine is unavailable.' };
+            const page = options.create === true ? null : getPrimaryCanvasPage();
+            if (!page && options.create !== true) return { ok: false, error: 'Open an unlocked Canvas page first.' };
+            const model = options.create === true
+                ? createCanvasTemplateModel(options.templateId || 'blank')
+                : normalizeCanvasModel(page.canvas);
+            let sequence = 0;
+            return engine.applyCanvas(model, operations, {
+                idFactory: () => `canvas-preview-${++sequence}`,
+                now: 'preview'
+            });
+        }
+
+        function canvasCreateAssistantBoard(spec = {}) {
+            const engine = canvasAssistantEngine();
+            if (!engine || typeof engine.applyCanvas !== 'function') return { ok: false, error: 'Canvas Assistant engine is unavailable.' };
+            const templateId = ['blank', 'concept_map', 'essay_brainstorm', 'weekly_study_plan'].includes(spec.templateId) ? spec.templateId : 'blank';
+            let canvas = createCanvasTemplateModel(templateId);
+            let operationCount = 0;
+            if (Array.isArray(spec.operations) && spec.operations.length) {
+                const applied = engine.applyCanvas(canvas, spec.operations, { idFactory: generateId, now: new Date().toISOString() });
+                if (!applied.ok) return applied;
+                canvas = applied.model;
+                operationCount = applied.operationCount;
+            }
+            const page = createCanvasPage(String(spec.title || 'Canvas').slice(0, 180), { canvas });
+            return { ok: !!page, page, operationCount };
+        }
+
+        function canvasApplyAssistantOperations(operations) {
+            const page = getPrimaryCanvasPage();
+            const engine = canvasAssistantEngine();
+            if (!page) return { ok: false, error: 'Open an unlocked Canvas page first.' };
+            if (!engine || typeof engine.applyCanvas !== 'function') return { ok: false, error: 'Canvas Assistant engine is unavailable.' };
+            const applied = engine.applyCanvas(page.canvas, operations, { idFactory: generateId, now: new Date().toISOString() });
+            if (!applied.ok) return applied;
+            pushCanvasUndo(page);
+            page.canvas = normalizeCanvasModel(applied.model);
+            applied.undo.pageId = page.id;
+            const runtime = ensureCanvasRuntime(page);
+            if (runtime && applied.createdObjectIds.length) runtime.selectedObjectIds = applied.createdObjectIds.slice();
+            saveCanvasPage(page, { persist: true });
+            renderCanvasPage(page);
+            return { ...applied, pageId: page.id };
+        }
+
+        function canvasUndoAssistantMutation(payload) {
+            const engine = canvasAssistantEngine();
+            if (!engine || typeof engine.undoCanvas !== 'function' || !payload || !payload.pageId) return { ok: false, error: 'Canvas undo is unavailable.' };
+            const page = pages.find(item => item && item.id === payload.pageId && normalizePageType(item.type) === PAGE_TYPES.CANVAS) || null;
+            if (!page || !isPageContentAuthorized(page)) return { ok: false, error: 'Unlock the Canvas page before undoing this edit.' };
+            const restored = engine.undoCanvas(page.canvas, payload);
+            if (!restored.ok) return restored;
+            if (page.id === currentPageId) pushCanvasUndo(page);
+            page.canvas = normalizeCanvasModel(restored.model);
+            saveCanvasPage(page, { persist: true });
+            if (page.id === currentPageId) renderCanvasPage(page);
+            else renderPagesList();
+            return { ok: true, pageId: page.id };
+        }
+
         function installSutraCanvasApi() {
             try {
                 window.SutraCanvas = {
@@ -48057,7 +48139,11 @@ function getActiveEditor() {
                     exportJson: () => {
                         const page = getPrimaryCanvasPage();
                         return page ? normalizeCanvasModel(page.canvas) : null;
-                    }
+                    },
+                    validateAssistantOperations: validateCanvasAssistantOperations,
+                    createAssistantBoard: canvasCreateAssistantBoard,
+                    applyAssistantOperations: canvasApplyAssistantOperations,
+                    undoAssistantMutation: canvasUndoAssistantMutation
                 };
                 window.getCanvasAssistantContext = getCanvasAssistantContext;
                 window.canvasExportJson = canvasExportJson;
