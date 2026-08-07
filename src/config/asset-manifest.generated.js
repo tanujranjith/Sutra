@@ -14,7 +14,7 @@
     "./src/components/icons/index.js?v=20260709-icons-comments",
     "./src/config/feature-manifest.js?v=20260807-providers1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20260807-settings15",
+    "./src/core/app.js?v=20260807-nav16e",
     "./src/core/dom-safety.js?v=20260613-harden1",
     "./src/core/error-reporter.js?v=20260613-harden1",
     "./src/core/feature-guard.js?v=20260613-harden1",
@@ -58,7 +58,7 @@
     "./src/features/workspace/custom-tabs.js?v=20260807-customquotes1",
     "./src/features/workspace/daily-lock-in-quote.js?v=20260807-customquotes2",
     "./src/features/workspace/handwriting.js?v=20260601-handwriting",
-    "./src/features/workspace/mobile-nav.js?v=20260723-unified3",
+    "./src/features/workspace/mobile-nav.js?v=20260807-nav16d",
     "./src/features/workspace/notifications.js?v=20260805-syncbeta1",
     "./src/features/workspace/share-target.js?v=20260712-share1",
     "./src/features/workspace/slides.js?v=20260807-lockprivacy1",
@@ -88,7 +88,7 @@
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260723-layercontract1",
     "./styles/base/microinteractions.css?v=20260807-cohesion1",
-    "./styles/base/styles.css?v=20260807-duress1",
+    "./styles/base/styles.css?v=20260807-nav16d",
     "./styles/base/tokens.css?v=20260807-themefocus1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
@@ -121,7 +121,7 @@
     "./styles/views/focus-session.css?v=20260807-atmospheres1",
     "./styles/views/settings-redesign.css?v=20260807-settings15b",
     "./styles/views/timeline-calendar.css?v=20260721-mobile1",
-    "./styles/views/today-redesign.css?v=20260807-cohesion2"
+    "./styles/views/today-redesign.css?v=20260807-nav16e"
   ],
   "optional": [
     "./assets/brand/sutra/generated/favicon.ico",

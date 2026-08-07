@@ -19,9 +19,10 @@
 
   var ICONS = {
     today: 'fa-house', timeline: 'fa-calendar-days', notes: 'fa-pen-to-square',
-    homework: 'fa-book-open', apstudy: 'fa-graduation-cap', collegeapp: 'fa-building-columns',
-    college: 'fa-building-columns', life: 'fa-heart', business: 'fa-briefcase',
-    courses: 'fa-book', settings: 'fa-gear', progress: 'fa-chart-line', review: 'fa-layer-group'
+    homework: 'fa-book-open', apstudy: 'fa-graduation-cap', collegeapp: 'fa-university',
+    college: 'fa-university', life: 'fa-seedling', business: 'fa-briefcase',
+    courses: 'fa-book', alldue: 'fa-bell', assistantview: 'fa-robot',
+    settings: 'fa-gear', progress: 'fa-chart-line', review: 'fa-layer-group'
   };
   var MAX_ITEMS = 5;
   var navEl = null;
@@ -47,6 +48,15 @@
     try { if (!reducedMotion() && navigator.vibrate) navigator.vibrate(8); } catch (e) { /* nc */ }
   }
   function activeView() { return (document.body && document.body.dataset.view) || 'today'; }
+
+  function iconForTab(tab, view) {
+    if (ICONS[view]) return ICONS[view];
+    var sourceIcon = tab && tab.querySelector ? tab.querySelector('i') : null;
+    var sourceClass = sourceIcon
+      ? Array.prototype.find.call(sourceIcon.classList, function (name) { return name.indexOf('fa-') === 0; })
+      : '';
+    return sourceClass || 'fa-star';
+  }
 
   function enabledTabs() {
     return Array.prototype.slice.call(document.querySelectorAll('.view-tab'))
@@ -148,7 +158,7 @@
       button.setAttribute('data-mobile-more-view', view);
       if (view === current) button.setAttribute('aria-current', 'page');
       var icon = document.createElement('i');
-      icon.className = 'fas ' + (ICONS[view] || 'fa-circle');
+      icon.className = 'fas ' + iconForTab(tab, view);
       icon.setAttribute('aria-hidden', 'true');
       var label = document.createElement('span');
       label.textContent = (tab.textContent || view).replace(/\s+/g, ' ').trim();
@@ -413,7 +423,7 @@
       b.setAttribute('data-bn-view', view);
       b.setAttribute('aria-label', (tab.textContent || view).trim());
       var i = document.createElement('i');
-      i.className = 'fas ' + (ICONS[view] || 'fa-circle');
+      i.className = 'fas ' + iconForTab(tab, view);
       i.setAttribute('aria-hidden', 'true');
       var span = document.createElement('span');
       span.textContent = shortLabel(tab);

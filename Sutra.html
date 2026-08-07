@@ -108,7 +108,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-duress1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-nav16d">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260709-comments">
     <style id="view-visibility-fallback">
@@ -378,7 +378,7 @@
                 </div>
                 <div class="nav-left">
                                         <div class="tabs-shell">
-                                            <div class="view-tabs" role="tablist" aria-label="Workspace views">
+                                            <div class="view-tabs" role="group" aria-label="Workspace navigation and utilities">
                                                     <button class="view-tab active" data-view="today">Today</button>
                                                     <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
                                                     <button class="view-tab" data-view="notes">Notes</button>
@@ -393,9 +393,9 @@
                                                     <button id="tabCourses" class="view-tab" data-view="courses" title="Courses — your class cockpit"><i class="fas fa-book" aria-hidden="true"></i> Courses</button>
                                                     <button id="tabAllDue" class="view-tab" data-view="alldue" title="All Due — everything due across your classes"><i class="fas fa-bell" aria-hidden="true"></i> All Due</button>
                                                     <button id="tabAssistantView" class="view-tab" data-view="assistantview" title="Sutra Assistant — full-screen AI chat"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
-                                                    <button class="view-tab" data-view="settings" aria-label="Settings" title="Settings">
+                                                    <button class="view-tab view-tab-utility" data-view="settings" aria-label="Settings" title="Settings">
                                                         <i class="fas fa-cog" aria-hidden="true"></i>
-                                                        <span class="sr-only">Settings</span>
+                                                        <span class="view-tab-label">Settings</span>
                                                     </button>
                                                     <div class="view-more" id="moreViewsWrapper" hidden>
                                                         <button type="button" class="view-more-toggle" id="moreViewsToggle" aria-expanded="false" aria-label="More tabs" title="More tabs">
@@ -403,24 +403,37 @@
                                                             <span class="view-more-current">More</span>
                                                             <i class="fas fa-chevron-down" aria-hidden="true"></i>
                                                         </button>
-                                                        <div class="view-more-menu" id="moreViewsMenu" role="menu" aria-label="Overflow tabs">
-                                                            <button class="view-tab view-more-item" data-view="today" role="menuitem">Today</button>
-                                                            <button class="view-tab view-more-item" data-view="homework" role="menuitem">Homework</button>
-                                                            <button class="view-tab view-more-item" data-view="notes" role="menuitem">Notes</button>
-                                                            <button class="view-tab view-more-item" data-view="timeline" role="menuitem">Timeline</button>
-                                                            <button class="view-tab view-more-item" data-view="apstudy" role="menuitem">Review &amp; Tests</button>
-                                                            <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
-                                                            <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;">Review</button>
-                                                            <button class="view-tab view-more-item" data-view="collegeapp" role="menuitem">College</button>
-                                                            <button class="view-tab view-more-item" data-view="life" role="menuitem">Life</button>
-                                                            <button class="view-tab view-more-item" data-view="business" role="menuitem">Business</button>
-                                                            <button class="view-tab view-more-item" data-view="courses" role="menuitem">Courses</button>
-                                                            <button class="view-tab view-more-item" data-view="alldue" role="menuitem">All Due</button>
-                                                            <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
-                                                            <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings">
-                                                                <i class="fas fa-cog" aria-hidden="true"></i>
-                                                                <span class="sr-only">Settings</span>
-                                                            </button>
+                                                        <div class="view-more-menu" id="moreViewsMenu" role="menu" aria-label="All workspace sections">
+                                                            <div class="view-more-group" data-nav-group="daily" role="group" aria-labelledby="moreViewsDailyLabel">
+                                                                <span class="view-more-group-label" id="moreViewsDailyLabel">Daily loop</span>
+                                                                <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Today</span></button>
+                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>Homework</span></button>
+                                                                <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Notes</span></button>
+                                                                <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-calendar-days" aria-hidden="true"></i><span>Timeline</span></button>
+                                                            </div>
+                                                            <div class="view-more-group" data-nav-group="learning" role="group" aria-labelledby="moreViewsLearningLabel">
+                                                                <span class="view-more-group-label" id="moreViewsLearningLabel">Learning</span>
+                                                                <button class="view-tab view-more-item" data-view="apstudy" role="menuitem"><i class="fas fa-graduation-cap" aria-hidden="true"></i><span>Review &amp; Tests</span></button>
+                                                                <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
+                                                                <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;"><span>Review</span></button>
+                                                                <button class="view-tab view-more-item" data-view="courses" role="menuitem"><i class="fas fa-book" aria-hidden="true"></i><span>Courses</span></button>
+                                                                <button class="view-tab view-more-item" data-view="alldue" role="menuitem"><i class="fas fa-bell" aria-hidden="true"></i><span>All Due</span></button>
+                                                            </div>
+                                                            <div class="view-more-group" data-nav-group="workspace" role="group" aria-labelledby="moreViewsWorkspaceLabel">
+                                                                <span class="view-more-group-label" id="moreViewsWorkspaceLabel">Workspace</span>
+                                                                <button class="view-tab view-more-item" data-view="collegeapp" role="menuitem"><i class="fas fa-university" aria-hidden="true"></i><span>College</span></button>
+                                                                <button class="view-tab view-more-item" data-view="life" role="menuitem"><i class="fas fa-seedling" aria-hidden="true"></i><span>Life</span></button>
+                                                                <button class="view-tab view-more-item" data-view="business" role="menuitem"><i class="fas fa-briefcase" aria-hidden="true"></i><span>Business</span></button>
+                                                            </div>
+                                                            <div class="view-more-group" data-nav-group="custom" role="group" aria-labelledby="moreViewsCustomLabel" hidden>
+                                                                <span class="view-more-group-label" id="moreViewsCustomLabel">My dashboards</span>
+                                                                <div class="view-more-custom-items" data-view-more-custom-items></div>
+                                                            </div>
+                                                            <div class="view-more-group" data-nav-group="tools" role="group" aria-labelledby="moreViewsToolsLabel">
+                                                                <span class="view-more-group-label" id="moreViewsToolsLabel">Tools</span>
+                                                                <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i><span>Assistant</span></button>
+                                                                <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings"><i class="fas fa-cog" aria-hidden="true"></i><span>Settings</span></button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div id="sutraCountdownNav" role="group" aria-label="Pinned countdowns" style="display:none;"></div>
@@ -7609,7 +7622,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-settings15"></script>
+<script src="src/core/app.js?v=20260807-nav16e"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7630,7 +7643,7 @@
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260723-unified3"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260807-nav16d"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260807-customquotes1"></script>
@@ -8029,7 +8042,7 @@
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260618-cloud1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-scrollcontain1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-cohesion2">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-nav16e">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
@@ -8078,11 +8091,19 @@
                     wrap.classList.add('open');
                     menu.classList.add('open');
                     toggle.setAttribute('aria-expanded', 'true');
+                    window.requestAnimationFrame(function () {
+                        var active = menu.querySelector('.view-more-item[aria-current="page"]:not([hidden])');
+                        var first = active || Array.prototype.find.call(menu.querySelectorAll('.view-more-item:not([hidden])'), function (item) {
+                            return item.offsetParent !== null;
+                        });
+                        if (first) first.focus();
+                    });
                 }
-                function closeMenu() {
+                function closeMenu(options) {
                     wrap.classList.remove('open');
                     menu.classList.remove('open');
                     toggle.setAttribute('aria-expanded', 'false');
+                    if (options && options.restoreFocus && typeof toggle.focus === 'function') toggle.focus();
                 }
                 function toggleMenu() {
                     if (wrap.classList.contains('open')) closeMenu(); else openMenu();
@@ -8110,6 +8131,7 @@
                 toggle.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopImmediatePropagation();
+                    if (e.detail === 0) toggleMenu();
                 }, true);
 
                 // Outside-tap closer that ignores both the toggle/wrapper and
@@ -8125,6 +8147,26 @@
                 menu.addEventListener('click', function (e) {
                     var item = e.target && e.target.closest && e.target.closest('.view-tab[data-view]');
                     if (item) closeMenu();
+                });
+                menu.addEventListener('keydown', function (e) {
+                    var items = Array.prototype.filter.call(menu.querySelectorAll('.view-more-item:not([hidden])'), function (item) {
+                        return item.offsetParent !== null;
+                    });
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeMenu({ restoreFocus: true });
+                        return;
+                    }
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || !items.length) return;
+                    var current = items.indexOf(document.activeElement);
+                    var next = current;
+                    if (e.key === 'Home') next = 0;
+                    else if (e.key === 'End') next = items.length - 1;
+                    else if (e.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
+                    else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+                    e.preventDefault();
+                    items[next].focus();
                 });
             }
             if (document.readyState === 'loading') {

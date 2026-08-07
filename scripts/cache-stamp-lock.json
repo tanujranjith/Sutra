@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-settings15",
-    "hash": "eaca65456b8ed64f"
+    "stamp": "20260807-nav16e",
+    "hash": "3952eaca272850b2"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -264,8 +264,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260723-unified3",
-    "hash": "e4db535d37c8c451"
+    "stamp": "20260807-nav16d",
+    "hash": "5513961d16964f01"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260805-syncbeta1",
@@ -376,8 +376,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260807-duress1",
-    "hash": "8ea8d6d8eba3ab0b"
+    "stamp": "20260807-nav16d",
+    "hash": "58f96f701ea9b85d"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -516,7 +516,7 @@
     "hash": "38cecfb56b1d6e1b"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260807-cohesion2",
-    "hash": "8fcab7c2d576d8af"
+    "stamp": "20260807-nav16e",
+    "hash": "524e1212650eaee5"
   }
 }

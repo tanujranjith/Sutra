@@ -24394,7 +24394,7 @@ function populateProgressDashboard() {
             try {
                 return typeof window !== 'undefined'
                     && window.matchMedia
-                    && window.matchMedia('(max-width: 720px)').matches;
+                    && window.matchMedia('(max-width: 640px)').matches;
             } catch (err) {
                 return false;
             }
@@ -27249,8 +27249,63 @@ function buildOnboardingPlanPreview() {
         function closeMoreViewsMenu() {
             const wrapper = document.querySelector('.view-more');
             const toggle = document.getElementById('moreViewsToggle');
+            const menu = document.getElementById('moreViewsMenu');
             if (wrapper) wrapper.classList.remove('open');
+            if (menu) menu.classList.remove('open');
             if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        const TOP_NAV_DAILY_VIEWS = new Set(['today', 'homework', 'notes', 'timeline', 'apstudy']);
+        const TOP_NAV_ALWAYS_VISIBLE_VIEWS = new Set(['today', 'settings']);
+
+        function isProgressiveTopNavView(tab) {
+            if (!tab || !tab.dataset) return false;
+            const view = String(tab.dataset.view || '');
+            if (!view || tab.dataset.customTab) return false;
+            return !TOP_NAV_DAILY_VIEWS.has(view) && view !== 'settings';
+        }
+
+        function syncCustomMoreViewItems(menu, primaryTabs) {
+            const mount = menu && menu.querySelector('[data-view-more-custom-items]');
+            if (!mount) return;
+            mount.replaceChildren();
+            primaryTabs.filter(tab => tab.dataset && tab.dataset.customTab).forEach(tab => {
+                const clone = tab.cloneNode(true);
+                clone.removeAttribute('id');
+                clone.classList.add('view-more-item');
+                clone.classList.remove('active');
+                clone.setAttribute('role', 'menuitem');
+                clone.setAttribute('tabindex', '-1');
+                clone.hidden = true;
+                clone.style.display = '';
+                clone.dataset.generatedOverflowItem = 'true';
+                mount.appendChild(clone);
+            });
+        }
+
+        function syncMoreViewGroups(menu) {
+            if (!menu) return;
+            menu.querySelectorAll('.view-more-group').forEach(group => {
+                const hasVisibleItem = Array.from(group.querySelectorAll('.view-more-item[data-view]'))
+                    .some(item => !item.hidden && item.style.display !== 'none' && item.getAttribute('aria-hidden') !== 'true');
+                group.hidden = !hasVisibleItem;
+            });
+        }
+
+        function syncTopNavAccessibility(tabsRow, menu) {
+            const current = String(activeView || 'today');
+            Array.from(tabsRow.children).forEach(node => {
+                if (!node.classList || !node.classList.contains('view-tab') || !node.dataset.view) return;
+                const isCurrent = node.dataset.view === current;
+                if (isCurrent) node.setAttribute('aria-current', 'page');
+                else node.removeAttribute('aria-current');
+            });
+            menu.querySelectorAll('.view-more-item[data-view]').forEach(item => {
+                const isCurrent = item.dataset.view === current;
+                if (isCurrent) item.setAttribute('aria-current', 'page');
+                else item.removeAttribute('aria-current');
+                item.setAttribute('tabindex', '-1');
+            });
         }
 
         function syncTopNavTabOverflow() {
@@ -27262,26 +27317,39 @@ function buildOnboardingPlanPreview() {
 
             const primaryTabs = Array.from(tabsRow.children)
                 .filter(node => node && node.classList && node.classList.contains('view-tab') && node.dataset && node.dataset.view);
+            syncCustomMoreViewItems(menu, primaryTabs);
             const resetPrimaryTabs = () => {
                 primaryTabs.forEach(tab => {
                     if (tab.dataset) tab.dataset.overflowHidden = 'false';
                     if (!tab.hidden) tab.style.display = '';
                 });
             };
+            const tabIsEligible = tab => {
+                const view = tab && tab.dataset ? tab.dataset.view : '';
+                if (!view || tab.hidden || !isViewEnabled(view)) return false;
+                if (typeof shouldShowViewForWorkspaceMode === 'function' && !shouldShowViewForWorkspaceMode(view)) return false;
+                return true;
+            };
 
             const getOverflowCandidates = () => primaryTabs
                 .filter(tab => {
                     const view = tab.dataset.view;
-                    if (typeof shouldShowViewForWorkspaceMode === 'function' && !shouldShowViewForWorkspaceMode(view)) return false;
-                    return isViewEnabled(view) && view !== activeView && !tab.hidden;
+                    return tabIsEligible(tab)
+                        && tab.style.display !== 'none'
+                        && view !== activeView
+                        && !TOP_NAV_ALWAYS_VISIBLE_VIEWS.has(view);
                 })
                 .sort((left, right) => {
+                    const leftCustom = left.dataset.customTab ? 1 : 0;
+                    const rightCustom = right.dataset.customTab ? 1 : 0;
+                    if (leftCustom !== rightCustom) return rightCustom - leftCustom;
                     const leftSecondary = isSecondaryNavView(left.dataset.view) ? 1 : 0;
                     const rightSecondary = isSecondaryNavView(right.dataset.view) ? 1 : 0;
                     if (leftSecondary !== rightSecondary) return rightSecondary - leftSecondary;
                     return primaryTabs.indexOf(right) - primaryTabs.indexOf(left);
                 });
 
+            const overflowedViews = new Set();
             const hideOverflowingTabs = () => {
                 const overflowCandidates = getOverflowCandidates();
                 while (tabsRow.scrollWidth > tabsRow.clientWidth + 2 && overflowCandidates.length) {
@@ -27289,6 +27357,7 @@ function buildOnboardingPlanPreview() {
                     if (!tab) break;
                     tab.style.display = 'none';
                     if (tab.dataset) tab.dataset.overflowHidden = 'true';
+                    overflowedViews.add(tab.dataset.view);
                 }
                 return tabsRow.scrollWidth > tabsRow.clientWidth + 2;
             };
@@ -27301,36 +27370,35 @@ function buildOnboardingPlanPreview() {
             });
 
             wrapper.hidden = true;
-            wrapper.style.visibility = '';
+            wrapper.style.visibility = 'hidden';
             closeMoreViewsMenu();
 
+            primaryTabs.forEach(tab => {
+                if (!tabIsEligible(tab) || !isProgressiveTopNavView(tab)) return;
+                tab.style.display = 'none';
+                tab.dataset.overflowHidden = 'true';
+                overflowedViews.add(tab.dataset.view);
+            });
+
+            if (overflowedViews.size) wrapper.hidden = false;
             const initialOverflow = tabsRow.scrollWidth > tabsRow.clientWidth + 2;
-            if (!initialOverflow) {
-                syncMoreViewsMenu();
-                return;
-            }
+            if (initialOverflow && wrapper.hidden) wrapper.hidden = false;
 
-            wrapper.hidden = false;
-            wrapper.style.visibility = 'hidden';
-            tabsShell.classList.add('tabs-shell-overflowing');
-
-            let severeCompactionApplied = false;
-            let unresolvedOverflow = hideOverflowingTabs();
+            // Preserve the daily-loop destinations before optional chrome. If
+            // the row is tight, compact clock/integration utilities first;
+            // only then move additional view tabs into More.
+            let unresolvedOverflow = tabsRow.scrollWidth > tabsRow.clientWidth + 2;
+            let severeCompactionApplied = unresolvedOverflow;
             if (unresolvedOverflow) {
-                severeCompactionApplied = true;
                 tabsShell.classList.add('tabs-shell-overflow-severe');
-                resetPrimaryTabs();
-                unresolvedOverflow = hideOverflowingTabs();
+                unresolvedOverflow = tabsRow.scrollWidth > tabsRow.clientWidth + 2;
             }
-
-            const overflowedViews = new Set(primaryTabs
-                .filter(tab => tab.dataset.overflowHidden === 'true' && isViewEnabled(tab.dataset.view))
-                .map(tab => tab.dataset.view));
+            if (unresolvedOverflow) unresolvedOverflow = hideOverflowingTabs();
 
             menu.querySelectorAll('.view-tab[data-view]').forEach(item => {
                 const view = item.dataset.view;
                 const modeHides = typeof shouldShowViewForWorkspaceMode === 'function' && !shouldShowViewForWorkspaceMode(view);
-                item.hidden = !overflowedViews.has(view) || modeHides;
+                item.hidden = !overflowedViews.has(view) || modeHides || !isViewEnabled(view);
                 // Mirror emphasis classes onto overflow menu items so visible-but-secondary
                 // workspaces look the same in the menu as in the tab bar.
                 item.classList.remove('mode-hidden', 'mode-deemphasized', 'mode-primary');
@@ -27346,13 +27414,16 @@ function buildOnboardingPlanPreview() {
                 }
             });
 
+            syncMoreViewGroups(menu);
+            syncTopNavAccessibility(tabsRow, menu);
             wrapper.style.visibility = '';
 
-            const hasMenuItems = overflowedViews.size > 0;
+            const hasMenuItems = Array.from(menu.querySelectorAll('.view-more-item[data-view]'))
+                .some(item => !item.hidden && item.style.display !== 'none');
             wrapper.hidden = !hasMenuItems;
             if (wrapper.hidden) closeMoreViewsMenu();
 
-            tabsShell.classList.toggle('tabs-shell-overflowing', initialOverflow || hasMenuItems || unresolvedOverflow);
+            tabsShell.classList.toggle('tabs-shell-overflowing', hasMenuItems || initialOverflow || unresolvedOverflow);
             tabsShell.classList.toggle('tabs-shell-overflow-severe', severeCompactionApplied);
             syncMoreViewsMenu();
         }
@@ -27384,12 +27455,22 @@ function buildOnboardingPlanPreview() {
             if (activeSecondary) {
                 currentLabel.textContent = activeSecondary.textContent.trim();
                 wrapper.classList.add('has-active-secondary');
+                toggle.setAttribute('aria-label', `More sections, current section ${currentLabel.textContent}`);
             } else if (activePrimaryTab) {
                 currentLabel.textContent = activePrimaryTab.textContent.trim();
                 wrapper.classList.add('has-active-secondary');
+                toggle.setAttribute('aria-label', `More sections, current section ${currentLabel.textContent}`);
             } else {
                 currentLabel.textContent = 'More';
                 wrapper.classList.remove('has-active-secondary');
+                toggle.setAttribute('aria-label', 'More workspace sections');
+            }
+            const menu = document.getElementById('moreViewsMenu');
+            if (menu) {
+                menu.querySelectorAll('.view-more-item[data-view]').forEach(item => {
+                    if (item.dataset.view === activeView) item.setAttribute('aria-current', 'page');
+                    else item.removeAttribute('aria-current');
+                });
             }
         }
 
@@ -33930,6 +34011,9 @@ function buildOnboardingPlanPreview() {
                     if (event.key === 'Escape') closeMoreViewsMenu();
                 });
             }
+            window.addEventListener('noteflow:view-changed', () => {
+                window.requestAnimationFrame(syncTopNavTabOverflow);
+            });
             syncMoreViewsMenu();
             syncTopNavTabOverflow();
 
@@ -33937,6 +34021,30 @@ function buildOnboardingPlanPreview() {
             const viewToggle = document.querySelector('.view-tabs-toggle');
             const viewTabs = document.querySelector('.view-tabs');
             if (viewToggle && viewTabs) {
+                viewTabs.addEventListener('keydown', event => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    const targets = Array.from(viewTabs.children).flatMap(node => {
+                        if (!node || !node.classList) return [];
+                        if (node.classList.contains('view-tab') || node.classList.contains('view-tab-add')) return [node];
+                        if (node.classList.contains('view-more')) {
+                            const moreToggle = node.querySelector('.view-more-toggle');
+                            return moreToggle ? [moreToggle] : [];
+                        }
+                        return [];
+                    }).filter(node => node.offsetParent !== null && !node.hidden && !node.disabled);
+                    if (!targets.length) return;
+                    const focused = event.target.closest('button');
+                    const currentIndex = targets.indexOf(focused);
+                    if (currentIndex === -1) return;
+                    event.preventDefault();
+                    let nextIndex = currentIndex;
+                    if (event.key === 'Home') nextIndex = 0;
+                    else if (event.key === 'End') nextIndex = targets.length - 1;
+                    else if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % targets.length;
+                    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + targets.length) % targets.length;
+                    targets[nextIndex].focus();
+                });
+
                 // initialize label
                 const active = viewTabs.querySelector('.view-tab.active:not([hidden])');
                 const initialTab = active || viewTabs.querySelector('.view-tab:not([hidden])');

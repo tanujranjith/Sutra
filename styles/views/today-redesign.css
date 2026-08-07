@@ -683,7 +683,7 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primar
    The desktop command center remains intact. Phones replace its stacked
    chrome/cards with a dedicated shell using the same canonical actions and
    ranking engines. */
-@media (max-width: 720px) {
+@media (max-width: 640px) {
     body.mobile-today-mode {
         padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important;
         background: var(--bg-primary, #fbf8f2);

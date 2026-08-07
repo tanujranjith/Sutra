@@ -87,6 +87,9 @@ has('styles/responsive/mobile.css', '.template-picker-category-tabs', 'New Page 
 has('styles/responsive/mobile.css', '.sutra-mobile-more-sheet', 'phone navigation exposes a dedicated all-sections sheet');
 has('src/features/workspace/mobile-nav.js', "setAttribute('aria-modal', 'true')", 'mobile section sheet and notes drawer use modal semantics');
 has('src/features/workspace/mobile-nav.js', "history.pushState", 'phone section sheet closes through browser Back');
+has('src/core/app.js', /function shouldUseMobileTodayMode\(\)[\s\S]*?matchMedia\('\(max-width: 640px\)'\)/, 'mobile Today uses the same 640px boundary as phone navigation', true);
+has('styles/views/today-redesign.css', /@media \(max-width: 640px\) \{[\s\S]*?body\.mobile-today-mode \.top-nav/, 'mobile Today hides desktop navigation only while the phone bar is available', true);
+has('src/features/workspace/mobile-nav.js', /matchMedia\('\(max-width: 640px\)'\)/, 'phone navigation breakpoint remains aligned at 640px', true);
 has('styles/views/timeline-calendar.css', '.sutra-calendar-month-events:not([data-event-count="0"])::before', 'phone Month view uses compact event-count indicators');
 has('styles/views/timeline-calendar.css', '-webkit-overflow-scrolling: touch', 'calendar canvases keep contained momentum scrolling');
 has('styles/features/cloud-sync.css', 'max-height: calc(100dvh', 'Sync sheet is bounded to the dynamic mobile viewport');
