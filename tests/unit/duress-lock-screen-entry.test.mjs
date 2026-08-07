@@ -11,6 +11,8 @@ test('locked pages offer a normal-PIN-gated entry into duress setup', () => {
   assert.ok(render, 'locked-page screen renderer exists');
   assert.match(render.body, /id="lockScreenDuressSetupBtn"/);
   assert.match(render.body, /Enter your normal PIN, then set a separate 6/);
+  assert.match(render.body, /https:\/\/blog\.randomoracle\.io\/2021\/05\/28\/design-considerations-for-a-duress-pin-part-i\//);
+  assert.match(render.body, /target="_blank" rel="noopener noreferrer"/);
   assert.match(render.body, /setupDuressAfterUnlock = true/);
   assert.match(render.body, /form\.requestSubmit\(\)/);
   assert.match(render.body, /openSetLockModal\(page\.id, \{ openDuress: true \}\)/);

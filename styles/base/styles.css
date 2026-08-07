@@ -31342,6 +31342,17 @@ i[class*="fa-"] > .atelier-icon,
     text-align: center;
 }
 
+.locked-page-screen .lock-screen-duress-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.locked-page-screen .lock-screen-duress-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 .locked-page-screen .lock-screen-remove-btn {
     background: none;
     border: none;
