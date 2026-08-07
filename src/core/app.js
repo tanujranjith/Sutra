@@ -54673,9 +54673,14 @@ function getActiveEditor() {
             if (settingsClone.preferences && typeof settingsClone.preferences === 'object') {
                 delete settingsClone.preferences.sync;
             }
+            // Chats are private user content. A payload is plaintext-readable
+            // when it is the JSON recovery format OR when the caller explicitly
+            // labels the package plaintext (the unencrypted .sutra path). Both
+            // honour assistant.includeChatsInPlaintextRecovery (default false);
+            // encrypted packages keep using includeChatsInEncryptedBackups.
             const assistantChatHistory = syncMode
                 ? collectAssistantChatSyncSnapshot()
-                : collectAssistantChatBackupSnapshot({ plaintext: mode === 'json' });
+                : collectAssistantChatBackupSnapshot({ plaintext: options.plaintextChatPrivacy === true || mode === 'json' });
             const notificationsState = (typeof window !== 'undefined' && window.SutraNotifications && typeof window.SutraNotifications.exportState === 'function')
                 ? cloneSerializable(window.SutraNotifications.exportState(), {})
                 : {};
@@ -55189,7 +55194,8 @@ function getActiveEditor() {
             }
             const fullPayload = buildWorkspaceExportPayload({
                 mode: 'full',
-                includeSensitiveSettings: false
+                includeSensitiveSettings: false,
+                plaintextChatPrivacy: options.plaintextChatPrivacy === true
             });
             const missingBlobs = findMissingCourseExportBlobs(fullPayload);
             if (missingBlobs.length) {
@@ -55262,7 +55268,10 @@ function getActiveEditor() {
                 // This intentionally emits the same verified internal package that
                 // encrypted backups wrap. It remains a legacy-compatible plaintext
                 // ZIP package, but never bypasses the complete-attachment preflight.
-                const internalPackage = await buildCanonicalSutraPackageBytes({ ...options, requireCompleteAttachments: true });
+                // Chats are flagged plaintext here so they are omitted unless the
+                // user explicitly opted into plaintext chat recovery — a readable
+                // file must not silently carry private conversations.
+                const internalPackage = await buildCanonicalSutraPackageBytes({ ...options, requireCompleteAttachments: true, plaintextChatPrivacy: true });
                 const filename = options.filenamePrefix ? buildWorkspaceExportFilename(String(options.filenamePrefix)) : buildWorkspaceExportFilename('sutra_UNENCRYPTED_workspace');
                 await triggerBlobDownload(new Blob([internalPackage.bytes], { type: 'application/zip' }), filename);
                 recordAtelierDataHealth({ lastAtelierExportAt: new Date().toISOString() });
