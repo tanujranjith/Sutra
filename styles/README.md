@@ -16,7 +16,7 @@ map only.
 | Folder | Files | What it is |
 |---|---|---|
 | `base/` | `styles.css` (the large core), `microinteractions.css` | Design tokens, components, layout, and interaction polish. The foundation everything else layers over. |
-| `themes/` | `sutra-pro.css`, `glass.css`, `macos26-redesign.css`, `dune.css` | The "pro" surface plus authored glass, platform-inspired, and cinematic preset theme layers. |
+| `themes/` | `sutra-pro.css`, `glass.css`, `macos26-redesign.css`, `dune.css`, `signature-presets.css` | The "pro" surface plus authored glass, platform-inspired, cinematic, and signature preset theme layers. |
 | `views/` | `focus-session.css`, `settings-redesign.css` | View-specific styling extracted from the app shell. |
 | `features/` | `sutra-intelligence.css`, `customization.css`, `command-center.css`, `academic-command-center.css`, `academic-planning.css`, `notifications.css`, `startup-intro.css` | Per-feature styling. |
 | `responsive/` | `mobile.css` | Mobile / tablet overrides. Loads late on purpose. |

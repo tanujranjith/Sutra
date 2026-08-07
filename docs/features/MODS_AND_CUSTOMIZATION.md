@@ -7,6 +7,15 @@ lights. Decorative layers never intercept input, stop moving under reduced/off
 motion settings, disappear in forced-colors and print modes, and make no network
 requests.
 
+Three additional signature presets cover deliberately different working moods:
+
+- **Blueprint** uses a measured technical grid, mono display type, square panels,
+  and cyan instrument controls.
+- **Paper** is a warm, tactile print-studio treatment with ink typography, flat
+  surfaces, and firm focus rings instead of glass.
+- **Arcade** uses curved translucent bento surfaces, a restrained neon grid, and
+  magenta/cyan light while keeping body text at accessible contrast.
+
 > **See [docs/CSS_MODS_GUIDE.md](CSS_MODS_GUIDE.md) for the full guide.** It is the
 > complete CSS reference — cascade order, design tokens, stable selectors, ~18 safe
 > copy-paste examples, and recovery — so you can customize Sutra without reading the

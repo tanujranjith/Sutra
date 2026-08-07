@@ -5773,6 +5773,33 @@
                     <div class="preset-name">Dune</div>
                 </div>
 
+                <div class="preset-card" onclick="applyPresetTheme('blueprint')" data-theme="blueprint">
+                    <div class="preset-preview">
+                        <div class="preset-color" style="background: #061522"></div>
+                        <div class="preset-color" style="background: #0b2940"></div>
+                        <div class="preset-color" style="background: #5ad7ff"></div>
+                    </div>
+                    <div class="preset-name">Blueprint</div>
+                </div>
+
+                <div class="preset-card" onclick="applyPresetTheme('paper')" data-theme="paper">
+                    <div class="preset-preview">
+                        <div class="preset-color" style="background: #f5eee2"></div>
+                        <div class="preset-color" style="background: #e7dccb"></div>
+                        <div class="preset-color" style="background: #c64d32"></div>
+                    </div>
+                    <div class="preset-name">Paper</div>
+                </div>
+
+                <div class="preset-card" onclick="applyPresetTheme('arcade')" data-theme="arcade">
+                    <div class="preset-preview">
+                        <div class="preset-color" style="background: #13082d"></div>
+                        <div class="preset-color" style="background: #35125d"></div>
+                        <div class="preset-color" style="background: #ff65d4"></div>
+                    </div>
+                    <div class="preset-name">Arcade</div>
+                </div>
+
                 <div class="preset-card" onclick="applyPresetTheme('custom-theme')" data-theme="custom-theme">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f7f8fb"></div>
@@ -7502,7 +7529,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-customquotes3"></script>
+<script src="src/core/app.js?v=20260807-signaturethemes1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
@@ -7927,6 +7954,7 @@
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
+    <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

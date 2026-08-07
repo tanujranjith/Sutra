@@ -9835,6 +9835,27 @@ function populateProgressDashboard() {
                 accent: '#d8aa63',
                 sidebar: '#2c1f17',
                 button: '#cfa56a'
+            },
+            blueprint: {
+                name: 'Blueprint',
+                mode: 'dark',
+                accent: '#5ad7ff',
+                sidebar: '#081a2a',
+                button: '#153d58'
+            },
+            paper: {
+                name: 'Paper',
+                mode: 'light',
+                accent: '#c64d32',
+                sidebar: '#e8dece',
+                button: '#26231f'
+            },
+            arcade: {
+                name: 'Arcade',
+                mode: 'dark',
+                accent: '#ff65d4',
+                sidebar: '#180b35',
+                button: '#4a1f72'
             }
         };
 
