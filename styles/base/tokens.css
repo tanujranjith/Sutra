@@ -72,6 +72,14 @@
   --sutra-mobile-nav-height: 4.75rem;
 }
 
+/* Preset and generated themes attach their palette to body. Re-resolve the
+   shared focus contract at that same scope so controls use the active theme's
+   accent instead of the root fallback (the warm onboarding gold). */
+body {
+  --sutra-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-strong, var(--accent, #526ff4)) 34%, transparent);
+  --sutra-focus-outline: 2px solid var(--accent-strong, var(--accent, #526ff4));
+}
+
 [data-theme="dark"],
 [data-theme-key="dark"],
 body.dark-mode {

@@ -376,8 +376,8 @@
     "hash": "10a3952505c8cc02"
   },
   "styles/base/tokens.css": {
-    "stamp": "20260710-tokens1",
-    "hash": "aaa679deb92363f5"
+    "stamp": "20260807-themefocus1",
+    "hash": "ebeb7ab6123e7975"
   },
   "styles/features/academic-command-center.css": {
     "stamp": "20260614-acc1",
@@ -408,8 +408,8 @@
     "hash": "3e852556c6ccee3b"
   },
   "styles/features/notes-editor-v2.css": {
-    "stamp": "20260807-scrollbounds1",
-    "hash": "eca4193d2330674e"
+    "stamp": "20260807-themefocus1",
+    "hash": "1d33076448de7c46"
   },
   "styles/features/notes-toolbar.css": {
     "stamp": "20260709-toolbar-fields",

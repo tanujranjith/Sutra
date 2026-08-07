@@ -208,6 +208,9 @@
 
 .editor-v2-host .ProseMirror-focused {
     outline: none;
+    /* The insertion caret is the editor's intentional focus affordance. The
+       shared form-control ring would outline the entire document surface. */
+    box-shadow: none;
 }
 
 .editor-v2-host .ProseMirror .is-editor-empty:first-child::before,
