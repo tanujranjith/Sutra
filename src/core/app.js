@@ -71055,9 +71055,23 @@ ${cspMeta}
             });
         }
 
-        function prepareAssistantMessageForRender(rawMessage) {
+        function getAssistantTriggerText(messageIndex) {
+            const list = Array.isArray(convo) ? convo : [];
+            let cursor = Number.isInteger(messageIndex) ? Math.min(messageIndex - 1, list.length - 1) : list.length - 1;
+            for (; cursor >= 0; cursor -= 1) {
+                const message = list[cursor];
+                if (message && message.role === 'user' && String(message.content || '').trim()) return String(message.content);
+            }
+            return '';
+        }
+
+        function prepareAssistantMessageForRender(rawMessage, messageIndex, explicitUserText) {
+            const directUserText = String(explicitUserText || '').trim();
+            const userText = directUserText || getAssistantTriggerText(messageIndex);
             const parseActions = clean => {
-                if (window.flowAssistant && typeof window.flowAssistant.parseActions === 'function') return window.flowAssistant.parseActions(clean || '');
+                if (window.flowAssistant && typeof window.flowAssistant.parseActions === 'function') {
+                    return window.flowAssistant.parseActions(clean || '', { userText });
+                }
                 return null;
             };
             let view = null;
@@ -71095,7 +71109,7 @@ ${cspMeta}
             const bubble = document.createElement('div');
             bubble.className = 'bubble';
             if (role === 'assistant') {
-                const renderView = prepareAssistantMessageForRender({ role, content: text, thoughts: preStoredThoughts || [] });
+                const renderView = prepareAssistantMessageForRender({ role, content: text, thoughts: preStoredThoughts || [] }, index, buildOpts && buildOpts.userText);
                 const thoughts = renderView.thoughts || [];
                 const clean = renderView.cleanContent || '';
                 const flowResult = renderView.actionResult;
@@ -71106,7 +71120,8 @@ ${cspMeta}
 
                 const answerHost = document.createElement('div');
                 bubble.appendChild(answerHost);
-                const claimBadge = buildAssistantClaimBadge(buildOpts && buildOpts.claimType);
+                const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : (buildOpts && buildOpts.claimType);
+                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
                 if (claimBadge) bubble.appendChild(claimBadge);
                 const memoryBadge = buildAssistantMemoryBadge(buildOpts && buildOpts.memoryUsedIds);
                 if (memoryBadge) bubble.appendChild(memoryBadge);
@@ -74894,7 +74909,7 @@ ${cspMeta}
                             deterministicEngines: [cmd.localEngine || (cmd.sources && cmd.sources.length ? 'Product Knowledge' : 'Sutra Intelligence')],
                             actionsProposed: cmd.actionsProposed || []
                         });
-                        appendMessage('assistant', reply, null, null, { sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
+                        appendMessage('assistant', reply, null, null, { userText: text, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         convo.push({ role: 'user', content: text });
                         convo.push({ role: 'assistant', content: reply, sources: cmd.sources, grounding: cmd.grounding, claimType: localClaim, memoryUsedIds: cmd.memoryUsedIds, receipt: localReceipt });
                         saveConvo();
@@ -75123,7 +75138,7 @@ ${cspMeta}
                 const { clean: _splitClean } = splitThinkBlocks(assistantText);
                 const persistClean = _splitClean || assistantText;
                 const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
-                    ? window.flowAssistant.parseActions(persistClean) : null;
+                    ? window.flowAssistant.parseActions(persistClean, { userText: text }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
                 const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
                 if (isStale) {
@@ -75132,7 +75147,7 @@ ${cspMeta}
                     const _staleMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
                     if (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length) _staleMsg.sources = flowEnrichment.sources;
                     if (flowEnrichment && flowEnrichment.retrieval) _staleMsg.grounding = { evidenceStatus: flowEnrichment.retrieval.evidenceStatus, query: flowEnrichment.retrieval.query, scope: flowEnrichment.retrieval.scope };
-                    _staleMsg.claimType = flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion';
+                    _staleMsg.claimType = actionTypes.length ? 'proposed_action' : (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion');
                     if (flowEnrichment && flowEnrichment.context && flowEnrichment.context.memoryUsedIds) _staleMsg.memoryUsedIds = flowEnrichment.context.memoryUsedIds;
                     sendConvoRef.push(_staleMsg);
                     const original = chatStore.conversations.find(chat => chat && chat.id === sendChatId);
@@ -75151,12 +75166,12 @@ ${cspMeta}
                 const _grounding = flowEnrichment && flowEnrichment.retrieval
                     ? { evidenceStatus: flowEnrichment.retrieval.evidenceStatus, query: flowEnrichment.retrieval.query, scope: flowEnrichment.retrieval.scope }
                     : null;
-                const _claimType = flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion';
+                const _claimType = actionTypes.length ? 'proposed_action' : (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion');
                 const _memoryUsedIds = flowEnrichment && flowEnrichment.context && flowEnrichment.context.memoryUsedIds;
                 // Ephemeral per-response stats (latency/usage/retries/…). The id
                 // is safe to persist; the stats live only in the session Map.
                 const _statsId = registerIntelligenceResponseStats(result, { reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto') });
-                appendMessage('assistant', assistantText, null, null, { instant: wasLiveStreamed, sources: flowEnrichment && flowEnrichment.sources, grounding: _grounding, claimType: _claimType, memoryUsedIds: _memoryUsedIds, receipt: responseReceipt, responseStatsId: _statsId });
+                appendMessage('assistant', assistantText, null, null, { userText: text, instant: wasLiveStreamed, sources: flowEnrichment && flowEnrichment.sources, grounding: _grounding, claimType: _claimType, memoryUsedIds: _memoryUsedIds, receipt: responseReceipt, responseStatsId: _statsId });
                 const _persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
                 if (_statsId) _persistMsg.id = _statsId;
                 if (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length) _persistMsg.sources = flowEnrichment.sources;
@@ -75703,7 +75718,7 @@ ${cspMeta}
                     col.appendChild(tagRow);
                 }
             } else {
-                const renderView = prepareAssistantMessageForRender(msgObj);
+                const renderView = prepareAssistantMessageForRender(msgObj, opts.index);
                 const clean = renderView.cleanContent || '';
                 const finalThoughts = renderView.thoughts || thoughts || [];
                 const displayedClean = renderView.displayedContent || '';
@@ -75720,7 +75735,8 @@ ${cspMeta}
                     asstRenderMathIn(answer); // typeset any $...$ / $$...$$ LaTeX via KaTeX
                 }
                 bubble.appendChild(answer);
-                const claimBadge = buildAssistantClaimBadge(msgObj.claimType);
+                const renderedClaimType = flowResult && flowResult.actions && flowResult.actions.length ? 'proposed_action' : msgObj.claimType;
+                const claimBadge = buildAssistantClaimBadge(renderedClaimType);
                 if (claimBadge) bubble.appendChild(claimBadge);
                 const memoryBadge = buildAssistantMemoryBadge(msgObj.memoryUsedIds);
                 if (memoryBadge) bubble.appendChild(memoryBadge);
@@ -77227,7 +77243,7 @@ ${cspMeta}
                 const { clean: _splitClean } = splitThinkBlocks(assistantText);
                 const persistClean = _splitClean || assistantText;
                 const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
-                    ? window.flowAssistant.parseActions(persistClean) : null;
+                    ? window.flowAssistant.parseActions(persistClean, { userText: displayText || sendText }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
                 const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });
                 const persistMsg = { role: 'assistant', content: persistClean, receipt: responseReceipt };
@@ -77236,7 +77252,7 @@ ${cspMeta}
                 if (_respStatsId) persistMsg.id = _respStatsId;
                 if (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length) persistMsg.sources = flowEnrichment.sources;
                 if (flowEnrichment && flowEnrichment.retrieval) persistMsg.grounding = { evidenceStatus: flowEnrichment.retrieval.evidenceStatus, query: flowEnrichment.retrieval.query, scope: flowEnrichment.retrieval.scope };
-                persistMsg.claimType = flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion';
+                persistMsg.claimType = actionTypes.length ? 'proposed_action' : (flowEnrichment && flowEnrichment.sources && flowEnrichment.sources.length ? 'workspace_fact' : 'generative_suggestion');
                 if (flowEnrichment && flowEnrichment.context && flowEnrichment.context.memoryUsedIds) persistMsg.memoryUsedIds = flowEnrichment.context.memoryUsedIds;
 
                 if (isStale) {

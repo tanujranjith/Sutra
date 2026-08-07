@@ -137,6 +137,11 @@ something, it proposes — you decide.
   review deck, and similar).
 - **Suggested Changes** — proposed edits are shown as **Apply / Decline cards**.
   Nothing changes until you click **Apply**; **Decline** dismisses the proposal.
+- **Missing-payload repair** — if a provider clearly promises a Timeline
+  change but omits its structured action payload, Sutra can recover only named,
+  concrete dates from the immediately preceding user message and turn them into
+  the same review cards. Vague or explicitly uncertain dates are skipped; the
+  repair never applies anything by itself.
 - **Confirm Before Applying Changes** — a setting that requires an explicit
   confirmation step before any proposed change is written, for an extra guardrail.
 - **Insert into Note** — drop the Assistant's response (or generated content)

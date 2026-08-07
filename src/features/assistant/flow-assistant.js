@@ -1261,7 +1261,7 @@
         return out;
     }
 
-    function parseActions(replyText) {
+    function parseActions(replyText, options) {
         const src = String(replyText || '');
         const actions = [];
         let cleanText = src;
@@ -1325,7 +1325,7 @@
         // the assistant can never just *say* it acted without a confirmable
         // action. These are confirm-gated like any other proposal.
         if (!actions.length) {
-            const inferred = inferActionsFromReply(src);
+            const inferred = inferActionsFromReply(src, options || {});
             if (inferred.length) return { actions: inferred, cleanText, inferred: true };
         }
 
@@ -1374,25 +1374,130 @@
     // Turn a model's stated (but un-emitted) scheduling/creation/exam action
     // into a confirmable proposal. Conservative: requires explicit verbs + a
     // real target so the assistant can never just *say* it acted.
-    function inferActionsFromReply(replyText) {
+    function parseTimelineProposalDate(value, options) {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        try {
+            const parser = typeof window !== 'undefined' && window.SutraStudentDateParser;
+            if (parser && typeof parser.parseNaturalDate === 'function') {
+                const parsed = parser.parseNaturalDate(text, { now: options && options.now ? new Date(options.now) : new Date() });
+                if (parsed && parsed.date) return parsed.date;
+            }
+        } catch (e) { /* fall through to the established Intelligence parser */ }
+        const i = intel();
+        return (i && typeof i.toISODate === 'function') ? (i.toISODate(text) || '') : toISODate(text);
+    }
+
+    function timelineProposalTime(value) {
+        let start = '09:00';
+        try {
+            const parser = typeof window !== 'undefined' && window.SutraStudentDateParser;
+            const parsed = parser && typeof parser.parseNaturalTime === 'function' ? parser.parseNaturalTime(value) : null;
+            if (parsed && parsed.time) start = parsed.time;
+        } catch (e) { /* keep the reviewable default */ }
+        if (start === '09:00') {
+            const match = String(value || '').match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+            if (match) {
+                let hour = Number(match[1]) % 12;
+                if (/p/i.test(match[3])) hour += 12;
+                start = String(hour).padStart(2, '0') + ':' + (match[2] || '00');
+            }
+        }
+        const parts = start.split(':').map(Number);
+        const endMinutes = ((parts[0] || 0) * 60 + (parts[1] || 0) + 60) % (24 * 60);
+        return {
+            start,
+            end: String(Math.floor(endMinutes / 60)).padStart(2, '0') + ':' + String(endMinutes % 60).padStart(2, '0')
+        };
+    }
+
+    function cleanInferredTimelineTitle(value) {
+        let title = String(value || '').replace(/\s+/g, ' ').trim();
+        if (title.includes(':')) title = title.slice(title.lastIndexOf(':') + 1).trim();
+        title = title
+            .replace(/^(?:and\s+)?(?:please\s+)?(?:can\s+(?:you|u)\s+|could\s+(?:you|u)\s+|would\s+(?:you|u)\s+)?(?:add|schedule|put|create)\s+/i, '')
+            .replace(/\s+(?:to|onto|into|on)\s+(?:my|the|your)\s+(?:calendar|timeline)\s*$/i, '')
+            .replace(/^(?:the|a|an|my|your)\s+/i, '')
+            .replace(/[,:\-\s]+$/g, '')
+            .trim();
+        if (/\b(?:no exact|unknown|uncertain|estimated|expected|interpreted|approximately|maybe|possibly)\b/i.test(title)) return '';
+        if (!title || /^(?:it|this|that|these|those|date|dates|event|events)$/i.test(title)) return '';
+        return truncate(title, 80);
+    }
+
+    // Recover named date proposals from the immediately preceding USER turn.
+    // This is deliberately narrower than generic natural-language extraction:
+    // it requires a named event directly joined to a concrete/relative date,
+    // skips uncertainty language, caps the batch, and only feeds normal
+    // confirm-gated create_timeline_block cards.
+    function inferTimelineActionsFromUserText(userText, options) {
+        const source = String(userText || '');
+        if (!source.trim() || source.length > 12000) return [];
+        const month = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+        const datePhrase = '(?:' + month + '\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?|\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?|in\\s+\\d{1,3}\\s*(?:days?|weeks?|months?))';
+        const relation = '(?:\\s*,?\\s*(?:begins?|starts?|happens?|occurs?|is|on|for)\\s+|\\s*[, :]\\s*)';
+        const candidateRe = new RegExp('(?:^|[\\n.;])\\s*([^\\n.;]{2,120}?)' + relation + '(' + datePhrase + ')', 'gi');
+        const actions = [];
+        const seen = new Set();
+        let match;
+        while (actions.length < 8 && (match = candidateRe.exec(source)) !== null) {
+            const title = cleanInferredTimelineTitle(match[1]);
+            if (!title) continue;
+            const date = parseTimelineProposalDate(match[2], options || {});
+            if (!date) continue;
+            const key = title.toLowerCase() + '|' + date;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const vicinity = source.slice(match.index, Math.min(source.length, candidateRe.lastIndex + 48));
+            const time = timelineProposalTime(vicinity);
+            actions.push({
+                type: 'create_timeline_block',
+                name: title,
+                date,
+                start: time.start,
+                end: time.end,
+                label: `Add "${truncate(title, 50)}" to your timeline — ${date} ${time.start}`,
+                _inferred: true,
+                _inferenceSource: 'preceding-user-turn'
+            });
+        }
+        return actions;
+    }
+
+    function inferActionsFromReply(replyText, options) {
         const text = String(replyText || '');
         if (!text.trim() || text.length > 4000) return [];
         const examInferred = inferExamStatusFromReply(text);
         if (examInferred.length) return examInferred;
         const lc = text.toLowerCase();
-        const i = intel();
-        const toISO = (i && typeof i.toISODate === 'function') ? i.toISODate : toISODate;
 
         const verb = /\b(add(?:ing|ed)?|schedul\w*|put(?:ting)?|block(?:ing|ed)?|set\s+(?:it|up|a)|place|creat\w*)\b/.test(lc);
         const calendarTarget = /\b(calendar|timeline)\b/.test(lc);
         if (!(verb && calendarTarget)) return [];
 
-        const date = toISO(text);
+        const userText = String(options && options.userText || '').trim();
+        if (userText) {
+            const batch = inferTimelineActionsFromUserText(userText, options || {});
+            if (batch.length) return batch;
+            // A user turn is only safe evidence when the bounded extractor found
+            // a named, concrete date. Do not let the looser reply-era fallback
+            // reinterpret an explicitly vague range ("second week, no exact
+            // date") as a made-up generic event.
+            return [];
+        }
+
+        const evidenceText = text;
+        // Preserve the established reply-only date semantics for compatibility.
+        // The richer student-date parser is used only for preceding-turn repair,
+        // where its relative-date support is required.
+        const i = intel();
+        const replyToISO = (i && typeof i.toISODate === 'function') ? i.toISODate : toISODate;
+        const date = replyToISO(evidenceText);
         if (!date) return [];
 
         // Time: "10:00 AM", "10am", "3 pm".
         let start = '09:00', end = '10:00';
-        const tm = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
+        const tm = evidenceText.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b/i);
         if (tm) {
             let h = Number(tm[1]) % 12;
             if (/p/i.test(tm[3])) h += 12;
@@ -1400,7 +1505,7 @@
             start = String(h).padStart(2, '0') + ':' + mm;
             end = String((h + 1) % 24).padStart(2, '0') + ':' + mm;
         }
-        const title = inferScheduleTitle(text) || 'Event';
+        const title = inferScheduleTitle(evidenceText) || 'Event';
         return [{
             type: 'create_timeline_block',
             name: title, date, start, end,

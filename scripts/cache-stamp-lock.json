@@ -28,16 +28,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260729-providerwiz1",
-    "hash": "89998de1b82ba9b4"
+    "stamp": "20260807-actionrepair2",
+    "hash": "803c8c2c23338aad"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-focusatmospheres1",
-    "hash": "411020f97f9ac3c3"
+    "stamp": "20260807-actionrepair2",
+    "hash": "b3bd541edade1b82"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -168,8 +168,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260722-slides1",
-    "hash": "998487642f36c566"
+    "stamp": "20260807-actionrepair2",
+    "hash": "e589074eabeeeefd"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
