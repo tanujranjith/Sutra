@@ -37,6 +37,32 @@ SDK. That keeps Sutra static-file compatible, avoids remote dependencies, and
 lets the app reuse existing page, space, pinning, search, export, restore, theme,
 Assistant, and modal systems.
 
+## Workbench editing
+
+The Canvas workbench now provides marquee and grouped selection, keyboard
+nudging, internal copy/paste that preserves connections and complete groups,
+alignment, distribution, tidy-grid layout, layer ordering, explicit object
+locking, and 16-pixel snapping. Locked objects remain selectable so they can be
+unlocked, but cannot be moved, resized, deleted, arranged, or nudged while
+locked. Selection and clipboard state remain editor-session data; they are not
+written into the durable page model.
+
+Viewport navigation includes cursor-centered wheel zoom, trackpad pan, fit all,
+fit selection, a clickable minimap, and a compact live board status. These use
+the pure geometry helpers in `src/features/workspace/canvas-workbench.js` while
+the adapter in `src/core/app.js` owns canonical saves, undo snapshots, and page
+rendering. Background and snap controls continue to modify the existing Canvas
+model rather than introducing a second preferences store.
+
+Keyboard behavior while Canvas is active:
+
+- `Ctrl/Cmd+A`, `C`, `V`, and `D` select, copy, paste, and duplicate.
+- Arrow keys nudge by one pixel; Shift+Arrow nudges by ten.
+- `Ctrl/Cmd+G` groups and `Ctrl/Cmd+Shift+G` ungroups.
+- `V`, `H`, and `P` select the pointer, hand, and pen tools.
+- `F` fits all content; `Shift+F` fits the selection; `0` resets the viewport.
+- Space temporarily activates hand panning without changing the chosen tool.
+
 ## Product Research
 
 Reviewed official/current primary sources:

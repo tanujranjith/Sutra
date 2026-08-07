@@ -46516,7 +46516,13 @@ function getActiveEditor() {
                     undoStack: [],
                     redoStack: [],
                     drag: null,
-                    drawing: null
+                    drawing: null,
+                    marquee: null,
+                    clipboard: null,
+                    pasteOffset: 0,
+                    spacePan: false,
+                    minimapVisible: true,
+                    viewportSaveTimer: null
                 };
             }
             page.canvas = normalizeCanvasModel(page.canvas);
@@ -46526,12 +46532,25 @@ function getActiveEditor() {
         function getCanvasEls() {
             return {
                 root: document.getElementById('canvasEditor'),
+                shell: document.getElementById('canvasStageShell'),
                 world: document.getElementById('canvasWorld'),
                 objects: document.getElementById('canvasObjects'),
                 svg: document.getElementById('canvasSvgLayer'),
                 zoom: document.getElementById('canvasZoomLabel'),
-                toolbar: document.getElementById('canvasToolbar')
+                toolbar: document.getElementById('canvasToolbar'),
+                selectionBar: document.getElementById('canvasSelectionBar'),
+                selectionCount: document.getElementById('canvasSelectionCount'),
+                marquee: document.getElementById('canvasMarquee'),
+                minimap: document.getElementById('canvasMinimap'),
+                minimapItems: document.getElementById('canvasMinimapItems'),
+                minimapViewport: document.getElementById('canvasMinimapViewport'),
+                status: document.getElementById('canvasStatusSummary'),
+                snap: document.getElementById('canvasSnapBtn')
             };
+        }
+
+        function canvasWorkbench() {
+            return (typeof window !== 'undefined' && window.SutraCanvasWorkbench) ? window.SutraCanvasWorkbench : null;
         }
 
         function pushCanvasUndo(page) {
@@ -46562,6 +46581,7 @@ function getActiveEditor() {
             const { x, y, zoom } = canvas.viewport;
             els.world.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
             if (els.zoom) els.zoom.textContent = `${Math.round(zoom * 100)}%`;
+            renderCanvasMinimap(page);
             const shell = els.root && els.root.querySelector('.canvas-stage-shell');
             if (shell) {
                 shell.style.setProperty('--cvp-x', `${x}px`);
@@ -46596,6 +46616,7 @@ function getActiveEditor() {
             div.tabIndex = 0;
             div.setAttribute('role', 'button');
             div.setAttribute('aria-label', object.label || object.text || `${object.type} object`);
+            div.setAttribute('aria-pressed', activeCanvasRuntime && activeCanvasRuntime.selectedObjectIds.includes(object.id) ? 'true' : 'false');
             div.style.left = `${object.x}px`;
             div.style.top = `${object.y}px`;
             div.style.width = `${object.width}px`;
@@ -46739,6 +46760,7 @@ function getActiveEditor() {
             renderCanvasConnections(page);
             applyCanvasTransform(page);
             syncCanvasToolbarState(runtime.tool);
+            renderCanvasWorkbenchChrome(page);
             // Toggle selection-only controls: show duplicate/group/delete/convert
             // only when at least one canvas object is selected.
             var hasSel = page.canvas.objects.length > 0 && runtime.selectedObjectIds && runtime.selectedObjectIds.length > 0;
@@ -46930,25 +46952,29 @@ function getActiveEditor() {
             // not the object — let the event bubble to the stage-shell pan handler.
             if (runtime.tool === 'pan' || event.button === 1) return;
             const object = page.canvas.objects.find(item => item.id === objectId);
-            if (!object || object.locked) return;
+            if (!object) return;
             if (event.target && event.target.closest && event.target.closest('textarea,.canvas-card-open')) return;
             event.preventDefault();
             if (event.shiftKey) {
                 if (runtime.selectedObjectIds.includes(objectId)) runtime.selectedObjectIds = runtime.selectedObjectIds.filter(id => id !== objectId);
                 else runtime.selectedObjectIds.push(objectId);
             } else if (!runtime.selectedObjectIds.includes(objectId)) {
-                runtime.selectedObjectIds = [objectId];
+                const group = object.groupId ? page.canvas.groups.find(item => item && item.id === object.groupId) : null;
+                runtime.selectedObjectIds = group && Array.isArray(group.objectIds) && group.objectIds.length
+                    ? group.objectIds.filter(id => page.canvas.objects.some(item => item.id === id))
+                    : [objectId];
             }
+            if (object.locked) { renderCanvasPage(page); return; }
             const resizing = !!(event.target && event.target.closest && event.target.closest('.canvas-object-resize'));
-            pushCanvasUndo(page);
             runtime.drag = {
                 objectId,
                 resizing,
+                changed: false,
                 startX: event.clientX,
                 startY: event.clientY,
                 original: runtime.selectedObjectIds.map(id => {
                     const selected = page.canvas.objects.find(item => item.id === id);
-                    return selected ? { id, x: selected.x, y: selected.y, width: selected.width, height: selected.height } : null;
+                    return selected && !selected.locked ? { id, x: selected.x, y: selected.y, width: selected.width, height: selected.height } : null;
                 }).filter(Boolean)
             };
             try { event.currentTarget.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
@@ -46959,6 +46985,22 @@ function getActiveEditor() {
             const page = getPrimaryCanvasPage();
             const runtime = ensureCanvasRuntime(page);
             if (!page || !runtime) return;
+            if (runtime.marquee) {
+                const els = getCanvasEls();
+                const rect = els.shell ? els.shell.getBoundingClientRect() : { left: 0, top: 0 };
+                runtime.marquee.currentX = event.clientX - rect.left;
+                runtime.marquee.currentY = event.clientY - rect.top;
+                if (els.marquee) {
+                    const left = Math.min(runtime.marquee.startX, runtime.marquee.currentX);
+                    const top = Math.min(runtime.marquee.startY, runtime.marquee.currentY);
+                    els.marquee.hidden = false;
+                    els.marquee.style.left = `${left}px`;
+                    els.marquee.style.top = `${top}px`;
+                    els.marquee.style.width = `${Math.abs(runtime.marquee.currentX - runtime.marquee.startX)}px`;
+                    els.marquee.style.height = `${Math.abs(runtime.marquee.currentY - runtime.marquee.startY)}px`;
+                }
+                return;
+            }
             // Viewport pan (drag-to-move-around) takes precedence over object drag.
             if (runtime.panning) {
                 const p = runtime.panning;
@@ -46981,15 +47023,26 @@ function getActiveEditor() {
             if (!runtime.drag) return;
             const dx = (event.clientX - runtime.drag.startX) / page.canvas.viewport.zoom;
             const dy = (event.clientY - runtime.drag.startY) / page.canvas.viewport.zoom;
+            if (!runtime.drag.changed && Math.abs(dx) + Math.abs(dy) > 0.5) {
+                pushCanvasUndo(page);
+                runtime.drag.changed = true;
+            }
+            if (!runtime.drag.changed) return;
+            const workbench = canvasWorkbench();
+            const shouldSnap = page.canvas.snapToGrid !== false && !event.altKey;
             runtime.drag.original.forEach(snapshot => {
                 const object = page.canvas.objects.find(item => item.id === snapshot.id);
-                if (!object) return;
+                if (!object || object.locked) return;
                 if (runtime.drag.resizing) {
-                    object.width = Math.max(24, snapshot.width + dx);
-                    object.height = Math.max(24, snapshot.height + dy);
+                    const width = Math.max(24, snapshot.width + dx);
+                    const height = Math.max(24, snapshot.height + dy);
+                    object.width = shouldSnap && workbench ? Math.max(24, workbench.snapValue(width)) : width;
+                    object.height = shouldSnap && workbench ? Math.max(24, workbench.snapValue(height)) : height;
                 } else {
-                    object.x = snapshot.x + dx;
-                    object.y = snapshot.y + dy;
+                    const x = snapshot.x + dx;
+                    const y = snapshot.y + dy;
+                    object.x = shouldSnap && workbench ? workbench.snapValue(x) : x;
+                    object.y = shouldSnap && workbench ? workbench.snapValue(y) : y;
                 }
                 object.updatedAt = new Date().toISOString();
             });
@@ -47000,6 +47053,29 @@ function getActiveEditor() {
             const page = getPrimaryCanvasPage();
             const runtime = ensureCanvasRuntime(page);
             if (!page || !runtime) return;
+            if (runtime.marquee) {
+                const marquee = runtime.marquee;
+                const workbench = canvasWorkbench();
+                const vp = page.canvas.viewport;
+                const left = Math.min(marquee.startX, marquee.currentX);
+                const top = Math.min(marquee.startY, marquee.currentY);
+                const width = Math.abs(marquee.currentX - marquee.startX);
+                const height = Math.abs(marquee.currentY - marquee.startY);
+                const hitIds = workbench && width + height > 5 ? workbench.selectInRect(page.canvas.objects, {
+                    x: (left - vp.x) / vp.zoom,
+                    y: (top - vp.y) / vp.zoom,
+                    width: width / vp.zoom,
+                    height: height / vp.zoom
+                }) : [];
+                runtime.selectedObjectIds = marquee.additive
+                    ? Array.from(new Set(marquee.initialIds.concat(hitIds)))
+                    : hitIds;
+                runtime.marquee = null;
+                const els = getCanvasEls();
+                if (els.marquee) els.marquee.hidden = true;
+                renderCanvasPage(page);
+                return;
+            }
             if (runtime.panning) {
                 const vx = runtime.panning.vx;
                 const vy = runtime.panning.vy;
@@ -47014,8 +47090,9 @@ function getActiveEditor() {
                 return;
             }
             if (!runtime.drag) return;
+            const changed = runtime.drag.changed === true;
             runtime.drag = null;
-            saveCanvasPage(page, { persist: true });
+            if (changed) saveCanvasPage(page, { persist: true });
         }
 
         function startCanvasPanInertia(page, runtime, vx, vy) {
@@ -47041,12 +47118,13 @@ function getActiveEditor() {
             const page = getPrimaryCanvasPage();
             const runtime = ensureCanvasRuntime(page);
             if (!page || !runtime || !runtime.selectedObjectIds.length) return;
+            const deletable = new Set(page.canvas.objects.filter(object => runtime.selectedObjectIds.includes(object.id) && !object.locked).map(object => object.id));
+            if (!deletable.size) { showToast('Unlock the selection before deleting it'); return; }
             pushCanvasUndo(page);
-            const ids = new Set(runtime.selectedObjectIds);
-            page.canvas.objects = page.canvas.objects.filter(object => !ids.has(object.id));
-            page.canvas.connections = page.canvas.connections.filter(connection => !ids.has(connection.fromId) && !ids.has(connection.toId));
+            page.canvas.objects = page.canvas.objects.filter(object => !deletable.has(object.id));
+            page.canvas.connections = page.canvas.connections.filter(connection => !deletable.has(connection.fromId) && !deletable.has(connection.toId));
             page.canvas.groups = page.canvas.groups
-                .map(group => ({ ...group, objectIds: group.objectIds.filter(id => !ids.has(id)) }))
+                .map(group => ({ ...group, objectIds: group.objectIds.filter(id => !deletable.has(id)) }))
                 .filter(group => group.objectIds.length > 0);
             runtime.selectedObjectIds = [];
             saveCanvasPage(page, { persist: true });
@@ -47057,28 +47135,10 @@ function getActiveEditor() {
             const page = getPrimaryCanvasPage();
             const runtime = ensureCanvasRuntime(page);
             if (!page || !runtime || !runtime.selectedObjectIds.length) return [];
-            pushCanvasUndo(page);
-            const newIds = [];
-            runtime.selectedObjectIds.forEach(id => {
-                const object = page.canvas.objects.find(item => item.id === id);
-                if (!object) return;
-                const copy = normalizeCanvasObject({
-                    ...JSON.parse(JSON.stringify(object)),
-                    id: generateId(),
-                    x: object.x + 28,
-                    y: object.y + 28,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }, new Set(page.canvas.objects.map(item => item.id).concat(newIds)));
-                if (copy) {
-                    page.canvas.objects.push(copy);
-                    newIds.push(copy.id);
-                }
-            });
-            runtime.selectedObjectIds = newIds;
-            saveCanvasPage(page, { persist: true });
-            renderCanvasPage(page);
-            return newIds;
+            if (!canvasCopySelected({ silent: true })) return [];
+            if (!canvasPasteSelected({ silent: true })) return [];
+            showToast('Canvas selection duplicated');
+            return runtime.selectedObjectIds.slice();
         }
 
         function canvasGroupSelected() {
@@ -47162,15 +47222,45 @@ function getActiveEditor() {
             if (!page) return;
             page.canvas.viewport.x = normalizeCanvasNumber(delta.x, page.canvas.viewport.x);
             page.canvas.viewport.y = normalizeCanvasNumber(delta.y, page.canvas.viewport.y);
-            page.canvas.viewport.zoom = normalizeCanvasNumber(delta.zoom, page.canvas.viewport.zoom, 0.1, 4);
+            page.canvas.viewport.zoom = normalizeCanvasNumber(delta.zoom, page.canvas.viewport.zoom, 0.2, 4);
             saveCanvasPage(page, { persist: true });
             applyCanvasTransform(page);
         }
 
-        function canvasZoomBy(amount) {
+        function canvasScheduleViewportSave(page) {
+            const runtime = ensureCanvasRuntime(page);
+            if (!page || !runtime) return;
+            if (runtime.viewportSaveTimer) clearTimeout(runtime.viewportSaveTimer);
+            runtime.viewportSaveTimer = setTimeout(() => {
+                runtime.viewportSaveTimer = null;
+                saveCanvasPage(page, { persist: true });
+            }, 180);
+        }
+
+        function canvasZoomAt(nextZoom, point = null, options = {}) {
             const page = getPrimaryCanvasPage();
             if (!page) return;
-            canvasSetViewport({ zoom: page.canvas.viewport.zoom + amount });
+            const els = getCanvasEls();
+            const rect = els.shell ? els.shell.getBoundingClientRect() : { left: 0, top: 0, width: 1, height: 1 };
+            const screenX = point && Number.isFinite(point.clientX) ? point.clientX - rect.left : rect.width / 2;
+            const screenY = point && Number.isFinite(point.clientY) ? point.clientY - rect.top : rect.height / 2;
+            const viewport = page.canvas.viewport;
+            const oldZoom = viewport.zoom;
+            const zoom = normalizeCanvasNumber(nextZoom, oldZoom, 0.2, 4);
+            const worldX = (screenX - viewport.x) / oldZoom;
+            const worldY = (screenY - viewport.y) / oldZoom;
+            viewport.x = screenX - worldX * zoom;
+            viewport.y = screenY - worldY * zoom;
+            viewport.zoom = zoom;
+            applyCanvasTransform(page);
+            if (options.persist === false) canvasScheduleViewportSave(page);
+            else saveCanvasPage(page, { persist: true });
+        }
+
+        function canvasZoomBy(amount, point = null) {
+            const page = getPrimaryCanvasPage();
+            if (!page) return;
+            canvasZoomAt(page.canvas.viewport.zoom + amount, point);
         }
 
         function canvasResetZoom() {
@@ -47184,6 +47274,205 @@ function getActiveEditor() {
             page.canvas.background = value;
             saveCanvasPage(page, { persist: true });
             renderCanvasPage(page);
+        }
+
+        function canvasSelectAll() {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            if (!page || !runtime) return [];
+            runtime.selectedObjectIds = page.canvas.objects.filter(object => !object.locked).map(object => object.id);
+            renderCanvasPage(page);
+            return runtime.selectedObjectIds.slice();
+        }
+
+        function canvasFitView(selectionOnly = false) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            const els = getCanvasEls();
+            if (!page || !runtime || !workbench || !els.shell) return null;
+            const ids = selectionOnly && runtime.selectedObjectIds.length ? runtime.selectedObjectIds : null;
+            const fitted = workbench.fitViewport(page.canvas.objects, {
+                width: els.shell.clientWidth,
+                height: els.shell.clientHeight
+            }, { ids, padding: 88, minZoom: 0.2, maxZoom: 2 });
+            page.canvas.viewport = { x: fitted.x, y: fitted.y, zoom: fitted.zoom };
+            saveCanvasPage(page, { persist: true });
+            applyCanvasTransform(page);
+            return fitted;
+        }
+
+        function canvasToggleSnap() {
+            const page = getPrimaryCanvasPage();
+            if (!page) return false;
+            page.canvas.snapToGrid = page.canvas.snapToGrid === false;
+            saveCanvasPage(page, { persist: true });
+            renderCanvasWorkbenchChrome(page);
+            showToast(page.canvas.snapToGrid ? 'Canvas snapping on' : 'Canvas snapping off');
+            return page.canvas.snapToGrid;
+        }
+
+        function canvasCycleBackground() {
+            const page = getPrimaryCanvasPage();
+            if (!page) return null;
+            const backgrounds = ['blank', 'grid', 'dots', 'lined', 'graph', 'dark-grid'];
+            const index = backgrounds.indexOf(page.canvas.background);
+            const value = backgrounds[(index + 1 + backgrounds.length) % backgrounds.length];
+            canvasSetBackground(value);
+            showToast(`Canvas background: ${value.replace('-', ' ')}`);
+            return value;
+        }
+
+        function canvasToggleMinimap() {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            if (!page || !runtime) return false;
+            runtime.minimapVisible = runtime.minimapVisible === false;
+            renderCanvasWorkbenchChrome(page);
+            return runtime.minimapVisible;
+        }
+
+        function canvasApplyObjectResult(result, message) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            if (!page || !runtime || !result || result.ok === false || !Array.isArray(result.objects)) {
+                if (result && result.error) showToast(result.error);
+                return false;
+            }
+            if (!Array.isArray(result.changedIds) || !result.changedIds.length) return false;
+            pushCanvasUndo(page);
+            page.canvas.objects = result.objects;
+            const now = new Date().toISOString();
+            const changed = new Set(result.changedIds);
+            page.canvas.objects.forEach(object => { if (changed.has(object.id)) object.updatedAt = now; });
+            saveCanvasPage(page, { persist: true });
+            renderCanvasPage(page);
+            if (message) showToast(message);
+            return true;
+        }
+
+        function canvasArrangeSelection(command) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench) return false;
+            return canvasApplyObjectResult(workbench.arrange(page.canvas.objects, runtime.selectedObjectIds, command), 'Canvas selection arranged');
+        }
+
+        function canvasChangeLayer(command) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench) return false;
+            return canvasApplyObjectResult(workbench.changeLayer(page.canvas.objects, runtime.selectedObjectIds, command), 'Canvas layer order updated');
+        }
+
+        function canvasToggleSelectionLock() {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench || !runtime.selectedObjectIds.length) return false;
+            const result = workbench.toggleLocked(page.canvas.objects, runtime.selectedObjectIds);
+            const changed = canvasApplyObjectResult({ ok: true, objects: result.objects, changedIds: result.changedIds }, result.locked ? 'Canvas selection locked' : 'Canvas selection unlocked');
+            if (changed && result.locked) runtime.selectedObjectIds = [];
+            renderCanvasPage(page);
+            return changed;
+        }
+
+        function canvasCopySelected(options = {}) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench || !runtime.selectedObjectIds.length) return false;
+            runtime.clipboard = workbench.copySelection(page.canvas, runtime.selectedObjectIds);
+            runtime.pasteOffset = 0;
+            if (!options.silent) showToast(`${runtime.clipboard.objects.length} Canvas object${runtime.clipboard.objects.length === 1 ? '' : 's'} copied`);
+            return true;
+        }
+
+        function canvasPasteSelected(options = {}) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench || !runtime.clipboard) return false;
+            runtime.pasteOffset = (runtime.pasteOffset || 0) + 12;
+            const result = workbench.pasteSelection(page.canvas, runtime.clipboard, {
+                idFactory: generateId,
+                offset: 20 + runtime.pasteOffset
+            });
+            if (!result.ok) { showToast(result.error || 'Canvas clipboard is empty'); return false; }
+            pushCanvasUndo(page);
+            page.canvas = normalizeCanvasModel(result.model);
+            runtime.selectedObjectIds = result.selectedIds;
+            saveCanvasPage(page, { persist: true });
+            renderCanvasPage(page);
+            if (!options.silent) showToast('Canvas selection pasted');
+            return true;
+        }
+
+        function canvasNudgeSelection(dx, dy) {
+            const page = getPrimaryCanvasPage();
+            const runtime = ensureCanvasRuntime(page);
+            const workbench = canvasWorkbench();
+            if (!page || !runtime || !workbench || !runtime.selectedObjectIds.length) return false;
+            const result = workbench.nudge(page.canvas.objects, runtime.selectedObjectIds, dx, dy, { snapToGrid: false });
+            return canvasApplyObjectResult({ ok: true, objects: result.objects, changedIds: result.changedIds });
+        }
+
+        function renderCanvasWorkbenchChrome(page) {
+            const runtime = ensureCanvasRuntime(page);
+            const els = getCanvasEls();
+            if (!page || !runtime) return;
+            const count = runtime.selectedObjectIds.length;
+            if (els.selectionBar) els.selectionBar.hidden = count === 0;
+            if (els.selectionCount) els.selectionCount.textContent = `${count} selected`;
+            if (els.status) els.status.textContent = `${page.canvas.objects.length} object${page.canvas.objects.length === 1 ? '' : 's'}${count ? ` · ${count} selected` : ''}`;
+            if (els.snap) els.snap.setAttribute('aria-pressed', String(page.canvas.snapToGrid !== false));
+            if (els.minimap) els.minimap.hidden = runtime.minimapVisible === false;
+            const minimapButton = document.getElementById('canvasMinimapBtn');
+            if (minimapButton) minimapButton.setAttribute('aria-pressed', String(runtime.minimapVisible !== false));
+            const lockButton = document.getElementById('canvasLockSelectionBtn');
+            if (lockButton && count) {
+                const allLocked = page.canvas.objects.filter(object => runtime.selectedObjectIds.includes(object.id)).every(object => object.locked);
+                lockButton.setAttribute('aria-label', allLocked ? 'Unlock selected objects' : 'Lock selected objects');
+                lockButton.title = allLocked ? 'Unlock selection' : 'Lock selection';
+            }
+            renderCanvasMinimap(page);
+        }
+
+        function renderCanvasMinimap(page) {
+            const runtime = activeCanvasRuntime;
+            const workbench = canvasWorkbench();
+            const els = getCanvasEls();
+            if (!page || !runtime || !workbench || !els.minimap || els.minimap.hidden || !els.minimapItems || !els.minimapViewport || !els.shell) return;
+            const bounds = workbench.getBounds(page.canvas.objects) || { x: -400, y: -300, width: 800, height: 600, right: 400, bottom: 300 };
+            const padding = 80;
+            const world = { x: bounds.x - padding, y: bounds.y - padding, width: Math.max(320, bounds.width + padding * 2), height: Math.max(240, bounds.height + padding * 2) };
+            const map = els.minimapItems.parentElement;
+            const mapWidth = map.clientWidth || 162;
+            const mapHeight = map.clientHeight || 110;
+            const scale = Math.min(mapWidth / world.width, mapHeight / world.height);
+            const offsetX = (mapWidth - world.width * scale) / 2;
+            const offsetY = (mapHeight - world.height * scale) / 2;
+            runtime.minimapTransform = { world, scale, offsetX, offsetY };
+            els.minimapItems.replaceChildren();
+            const selected = new Set(runtime.selectedObjectIds);
+            page.canvas.objects.slice(0, 400).forEach(object => {
+                const item = document.createElement('div');
+                item.className = `canvas-minimap-item${selected.has(object.id) ? ' selected' : ''}${object.locked ? ' locked' : ''}`;
+                item.style.left = `${offsetX + (object.x - world.x) * scale}px`;
+                item.style.top = `${offsetY + (object.y - world.y) * scale}px`;
+                item.style.width = `${Math.max(2, object.width * scale)}px`;
+                item.style.height = `${Math.max(2, object.height * scale)}px`;
+                els.minimapItems.appendChild(item);
+            });
+            const vp = page.canvas.viewport;
+            const viewX = -vp.x / vp.zoom;
+            const viewY = -vp.y / vp.zoom;
+            els.minimapViewport.style.left = `${offsetX + (viewX - world.x) * scale}px`;
+            els.minimapViewport.style.top = `${offsetY + (viewY - world.y) * scale}px`;
+            els.minimapViewport.style.width = `${Math.max(4, els.shell.clientWidth / vp.zoom * scale)}px`;
+            els.minimapViewport.style.height = `${Math.max(4, els.shell.clientHeight / vp.zoom * scale)}px`;
         }
 
         function canvasInsertExistingNote(pageId) {
@@ -47361,16 +47650,16 @@ function getActiveEditor() {
             root.addEventListener('pointerup', handleCanvasPointerUp);
             root.addEventListener('pointercancel', handleCanvasPointerUp);
 
-            // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y for canvas undo/redo.
-            // Attached at the document level so it fires regardless of which canvas
-            // element (toolbar button, object, background) has focus.
             document.addEventListener('keydown', (event) => {
-                if (!getPrimaryCanvasPage()) return;
+                const page = getPrimaryCanvasPage();
+                const runtime = ensureCanvasRuntime(page);
+                if (!page || !runtime) return;
                 if (root.hidden) return;
-                // Ignore if focus is in a text input / contenteditable (let the editor handle it)
                 const target = event.target;
                 if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
                     (target.isContentEditable && !target.closest('#canvasEditor')))) return;
+                const command = event.ctrlKey || event.metaKey;
+                const key = String(event.key || '').toLowerCase();
                 if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === 'z' && !event.shiftKey) {
                     event.preventDefault();
                     canvasUndo();
@@ -47378,10 +47667,30 @@ function getActiveEditor() {
                            (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
                     event.preventDefault();
                     canvasRedo();
-                } else if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === 'Delete') {
-                    event.preventDefault();
-                    canvasDeleteSelected();
-                }
+                } else if (command && key === 'a') { event.preventDefault(); canvasSelectAll(); }
+                else if (command && key === 'c') { event.preventDefault(); canvasCopySelected(); }
+                else if (command && key === 'v') { event.preventDefault(); canvasPasteSelected(); }
+                else if (command && key === 'd') { event.preventDefault(); canvasDuplicateSelected(); }
+                else if (command && key === 'g' && event.shiftKey) { event.preventDefault(); canvasUngroupSelected(); }
+                else if (command && key === 'g') { event.preventDefault(); canvasGroupSelected(); }
+                else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); canvasDeleteSelected(); }
+                else if (event.key === 'Escape') { event.preventDefault(); setCanvasSelection([]); canvasSetTool('select'); }
+                else if (event.key === 'ArrowLeft') { event.preventDefault(); canvasNudgeSelection(event.shiftKey ? -10 : -1, 0); }
+                else if (event.key === 'ArrowRight') { event.preventDefault(); canvasNudgeSelection(event.shiftKey ? 10 : 1, 0); }
+                else if (event.key === 'ArrowUp') { event.preventDefault(); canvasNudgeSelection(0, event.shiftKey ? -10 : -1); }
+                else if (event.key === 'ArrowDown') { event.preventDefault(); canvasNudgeSelection(0, event.shiftKey ? 10 : 1); }
+                else if (key === 'f') { event.preventDefault(); canvasFitView(event.shiftKey); }
+                else if (key === '0') { event.preventDefault(); canvasResetZoom(); }
+                else if (key === 'v') canvasSetTool('select');
+                else if (key === 'h') canvasSetTool('pan');
+                else if (key === 'p') canvasSetTool('pen');
+                else if (event.code === 'Space' && !runtime.spacePan) { runtime.spacePan = true; root.classList.add('is-space-panning'); event.preventDefault(); }
+            });
+            document.addEventListener('keyup', event => {
+                const runtime = activeCanvasRuntime;
+                if (!runtime || event.code !== 'Space') return;
+                runtime.spacePan = false;
+                root.classList.remove('is-space-panning');
             });
 
             root.addEventListener('wheel', event => {
@@ -47389,7 +47698,14 @@ function getActiveEditor() {
                 if (!page) return;
                 if (event.ctrlKey || event.metaKey) {
                     event.preventDefault();
-                    canvasZoomBy(event.deltaY > 0 ? -0.1 : 0.1);
+                    const factor = Math.exp(-event.deltaY * 0.002);
+                    canvasZoomAt(page.canvas.viewport.zoom * factor, event, { persist: false });
+                } else {
+                    event.preventDefault();
+                    page.canvas.viewport.x -= event.shiftKey ? event.deltaY : event.deltaX;
+                    page.canvas.viewport.y -= event.shiftKey ? 0 : event.deltaY;
+                    applyCanvasTransform(page);
+                    canvasScheduleViewportSave(page);
                 }
             }, { passive: false });
             root.addEventListener('click', event => {
@@ -47408,10 +47724,26 @@ function getActiveEditor() {
                     const page = getPrimaryCanvasPage();
                     const runtime = ensureCanvasRuntime(page);
                     if (!page || !runtime) return;
-                    const wantPan = runtime.tool === 'pan' || event.button === 1;
-                    if (!wantPan) return;
                     // Don't hijack clicks on interactive controls inside cards.
                     if (event.target && event.target.closest && event.target.closest('textarea, input, button, .canvas-card-open')) return;
+                    const onObject = event.target && event.target.closest && event.target.closest('.canvas-object');
+                    const wantPan = runtime.tool === 'pan' || runtime.spacePan || event.button === 1;
+                    if (!wantPan && runtime.tool === 'select' && !onObject && event.button === 0) {
+                        const rect = stageShell.getBoundingClientRect();
+                        runtime.marquee = {
+                            startX: event.clientX - rect.left,
+                            startY: event.clientY - rect.top,
+                            currentX: event.clientX - rect.left,
+                            currentY: event.clientY - rect.top,
+                            initialIds: runtime.selectedObjectIds.slice(),
+                            additive: event.shiftKey
+                        };
+                        if (!event.shiftKey) runtime.selectedObjectIds = [];
+                        event.preventDefault();
+                        try { stageShell.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
+                        return;
+                    }
+                    if (!wantPan) return;
                     event.preventDefault();
                     runtime.drag = null;
                     if (runtime.inertiaRaf) { cancelAnimationFrame(runtime.inertiaRaf); runtime.inertiaRaf = null; }
@@ -47431,6 +47763,25 @@ function getActiveEditor() {
                     stageShell.classList.add('is-panning');
                 });
             }
+            const minimapMap = document.getElementById('canvasMinimapMap');
+            if (minimapMap) minimapMap.addEventListener('pointerdown', event => {
+                event.stopPropagation();
+                const page = getPrimaryCanvasPage();
+                const runtime = ensureCanvasRuntime(page);
+                const transform = runtime && runtime.minimapTransform;
+                const shell = document.getElementById('canvasStageShell');
+                if (!page || !runtime || !transform || !shell) return;
+                event.preventDefault();
+                const rect = minimapMap.getBoundingClientRect();
+                const mapX = event.clientX - rect.left;
+                const mapY = event.clientY - rect.top;
+                const worldX = transform.world.x + (mapX - transform.offsetX) / transform.scale;
+                const worldY = transform.world.y + (mapY - transform.offsetY) / transform.scale;
+                page.canvas.viewport.x = shell.clientWidth / 2 - worldX * page.canvas.viewport.zoom;
+                page.canvas.viewport.y = shell.clientHeight / 2 - worldY * page.canvas.viewport.zoom;
+                applyCanvasTransform(page);
+                canvasScheduleViewportSave(page);
+            });
 
             // Brush definitions: each type × size has lineWidth, opacity, lineCap, blendMode, smooth
             const BRUSH_DEFS = {
@@ -48111,10 +48462,17 @@ function getActiveEditor() {
                         return connection;
                     },
                     select: setCanvasSelection,
+                    selectAll: canvasSelectAll,
                     moveObject: canvasMoveObject,
                     resizeObject: canvasResizeObject,
                     duplicate: (ids) => { if (ids) setCanvasSelection(Array.isArray(ids) ? ids : [ids]); return canvasDuplicateSelected(); },
+                    copy: canvasCopySelected,
+                    paste: canvasPasteSelected,
+                    nudge: canvasNudgeSelection,
                     deleteSelected: (ids) => { if (ids) setCanvasSelection(Array.isArray(ids) ? ids : [ids]); return canvasDeleteSelected(); },
+                    arrange: canvasArrangeSelection,
+                    changeLayer: canvasChangeLayer,
+                    toggleLock: canvasToggleSelectionLock,
                     group: (ids, label = 'Group') => {
                         if (ids) setCanvasSelection(Array.isArray(ids) ? ids : [ids]);
                         const group = canvasGroupSelected();
@@ -48129,6 +48487,11 @@ function getActiveEditor() {
                     undo: canvasUndo,
                     redo: canvasRedo,
                     setViewport: canvasSetViewport,
+                    fitView: canvasFitView,
+                    zoomAt: canvasZoomAt,
+                    toggleSnap: canvasToggleSnap,
+                    cycleBackground: canvasCycleBackground,
+                    toggleMinimap: canvasToggleMinimap,
                     setBackground: canvasSetBackground,
                     insertLinkedNote: canvasInsertExistingNote,
                     convertSelectionToNote: canvasConvertSelectionToNote,

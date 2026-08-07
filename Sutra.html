@@ -108,7 +108,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-nav16d">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260807-canvas1">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260721-mobile1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
@@ -1542,6 +1542,7 @@
                             <div class="canvas-tool-group" role="group" aria-label="Arrange">
                                 <button type="button" class="toolbar-btn" onclick="canvasUndo()" title="Undo" aria-label="Undo"><i class="fas fa-undo"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasRedo()" title="Redo" aria-label="Redo"><i class="fas fa-redo"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasSelectAll()" title="Select all (Ctrl+A)" aria-label="Select all Canvas objects"><i class="fas fa-object-group"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasDuplicateSelected()" title="Duplicate selection" aria-label="Duplicate selected objects" data-selection-only><i class="fas fa-copy"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasGroupSelected()" title="Group selection" aria-label="Group selected objects" data-selection-only><i class="fas fa-layer-group"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasDeleteSelected()" title="Delete selection" aria-label="Delete selected objects" data-selection-only><i class="fas fa-trash"></i></button>
@@ -1554,10 +1555,27 @@
                                 <button type="button" class="toolbar-btn" onclick="canvasZoomBy(-0.1)" title="Zoom out" aria-label="Zoom out"><i class="fas fa-minus"></i></button>
                                 <button type="button" class="toolbar-zoom-label" id="canvasZoomLabel" onclick="canvasResetZoom()" title="Reset zoom">100%</button>
                                 <button type="button" class="toolbar-btn" onclick="canvasZoomBy(0.1)" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus"></i></button>
+                                <button type="button" class="toolbar-btn" onclick="canvasFitView()" title="Fit board to view (F)" aria-label="Fit Canvas content to view"><i class="fas fa-compress-arrows-alt"></i></button>
+                                <button type="button" class="toolbar-btn" id="canvasBackgroundBtn" onclick="canvasCycleBackground()" title="Change board background" aria-label="Change Canvas background"><i class="fas fa-border-all"></i></button>
+                                <button type="button" class="toolbar-btn" id="canvasMinimapBtn" onclick="canvasToggleMinimap()" title="Toggle minimap" aria-label="Toggle Canvas minimap" aria-pressed="true"><i class="fas fa-map"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasExportImage()" title="Export Canvas image" aria-label="Export Canvas as image"><i class="fas fa-image"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasExportPdf()" title="Export Canvas PDF" aria-label="Export Canvas as PDF"><i class="fas fa-file-pdf"></i></button>
                                 <button type="button" class="toolbar-btn" onclick="canvasExportJson()" title="Export Canvas JSON" aria-label="Export Canvas as JSON"><i class="fas fa-code"></i></button>
                             </div>
+                        </div>
+                        <div class="canvas-selection-bar" id="canvasSelectionBar" role="toolbar" aria-label="Selected object arrangement" hidden>
+                            <span class="canvas-selection-count" id="canvasSelectionCount">0 selected</span>
+                            <button type="button" onclick="canvasArrangeSelection('align-left')" title="Align left" aria-label="Align selected objects left"><i class="fas fa-align-left"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('align-center')" title="Align horizontal centers" aria-label="Align selected object centers horizontally"><i class="fas fa-align-center"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('align-top')" title="Align top" aria-label="Align selected objects to top"><i class="fas fa-level-up-alt"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('align-middle')" title="Align vertical centers" aria-label="Align selected object centers vertically"><i class="fas fa-grip-lines"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('distribute-horizontal')" title="Distribute horizontally" aria-label="Distribute selected objects horizontally"><i class="fas fa-arrows-alt-h"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('distribute-vertical')" title="Distribute vertically" aria-label="Distribute selected objects vertically"><i class="fas fa-arrows-alt-v"></i></button>
+                            <button type="button" onclick="canvasArrangeSelection('tidy-grid')" title="Tidy into grid" aria-label="Tidy selected objects into a grid"><i class="fas fa-th"></i></button>
+                            <span class="canvas-selection-divider" aria-hidden="true"></span>
+                            <button type="button" onclick="canvasChangeLayer('backward')" title="Send backward" aria-label="Send selected objects backward"><i class="fas fa-angle-down"></i></button>
+                            <button type="button" onclick="canvasChangeLayer('forward')" title="Bring forward" aria-label="Bring selected objects forward"><i class="fas fa-angle-up"></i></button>
+                            <button type="button" id="canvasLockSelectionBtn" onclick="canvasToggleSelectionLock()" title="Lock or unlock selection" aria-label="Lock or unlock selected objects"><i class="fas fa-lock"></i></button>
                         </div>
                         <div class="canvas-brush-bar" id="canvasBrushBar" role="toolbar" aria-label="Brush options">
                             <button type="button" class="brush-type-btn active" data-brush-type="pen" title="Pen"><i class="fas fa-pen"></i></button>
@@ -1590,9 +1608,21 @@
                                     <div class="canvas-objects-layer" id="canvasObjects"></div>
                             </div>
                             <canvas class="canvas-draw-layer" id="canvasDrawLayer" aria-hidden="true"></canvas>
+                            <div class="canvas-marquee" id="canvasMarquee" hidden aria-hidden="true"></div>
+                            <aside class="canvas-minimap" id="canvasMinimap" aria-label="Canvas minimap">
+                                <div class="canvas-minimap-map" id="canvasMinimapMap">
+                                    <div class="canvas-minimap-items" id="canvasMinimapItems"></div>
+                                    <div class="canvas-minimap-viewport" id="canvasMinimapViewport"></div>
+                                </div>
+                            </aside>
                             <div class="canvas-empty-state" id="canvasEmptyState">
                                 <strong>Canvas</strong>
                                 <span>Add text, sticky notes, shapes, links, tables, or Sutra cards.</span>
+                            </div>
+                            <div class="canvas-statusbar" aria-live="polite">
+                                <span id="canvasStatusSummary">0 objects</span>
+                                <button type="button" id="canvasSnapBtn" onclick="canvasToggleSnap()" aria-pressed="true" title="Toggle 16-pixel grid snapping"><i class="fas fa-magnet"></i> Snap</button>
+                                <span class="canvas-shortcut-hint">Drag empty space to select · Space/hand to pan · F to fit</span>
                             </div>
                         </div>
                     </div>
@@ -7657,6 +7687,7 @@
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
     <script src="src/features/workspace/today-dashboard.js?v=20260807-todaywidgets1"></script>
+    <script src="src/features/workspace/canvas-workbench.js?v=20260807-canvas1"></script>
     <script src="src/features/workspace/surface-assistant-actions.js?v=20260807-surfaces2"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
     <!-- Notes editor v2 (opt-in, Settings → Editor): vendored TipTap/ProseMirror
@@ -7665,7 +7696,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-surfaces2"></script>
+<script src="src/core/app.js?v=20260807-canvas1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>

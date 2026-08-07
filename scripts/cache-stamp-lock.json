@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "ca3b59c6cfb456f6"
+    "stamp": "20260807-canvas1",
+    "hash": "11aec34e5d69a919"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -251,6 +251,10 @@
     "stamp": "20260705-clb3",
     "hash": "7acf80c83e9e8e48"
   },
+  "src/features/workspace/canvas-workbench.js": {
+    "stamp": "20260807-canvas1",
+    "hash": "b895d2d53903118f"
+  },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260807-customquotes1",
     "hash": "f0aa49dfd964b4ff"
@@ -384,8 +388,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260807-nav16d",
-    "hash": "58f96f701ea9b85d"
+    "stamp": "20260807-canvas1",
+    "hash": "1c2657d6b58d099d"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",

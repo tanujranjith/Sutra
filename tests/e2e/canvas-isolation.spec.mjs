@@ -220,6 +220,14 @@ test('Canvas toolbar renders correctly: groups, active tool, selection-dependent
     window.SutraCanvas.addText('Toolbar test');
     const hasSelection = editorRoot.dataset.hasSelection;
     if (hasSelection !== 'true') report.errors.push('data-has-selection not "true" after adding object');
+    if (!window.SutraCanvasWorkbench) report.errors.push('Canvas workbench engine is unavailable');
+    ['selectAll', 'copy', 'paste', 'nudge', 'arrange', 'changeLayer', 'toggleLock', 'fitView', 'toggleSnap', 'toggleMinimap'].forEach(name => {
+      if (typeof window.SutraCanvas[name] !== 'function') report.errors.push('Canvas workbench API missing: ' + name);
+    });
+    const selectionBar = document.getElementById('canvasSelectionBar');
+    if (!selectionBar || selectionBar.hidden) report.errors.push('Selection workbench is hidden after adding an object');
+    const minimap = document.getElementById('canvasMinimap');
+    if (!minimap || minimap.hidden) report.errors.push('Canvas minimap is unavailable by default');
 
     // Selection-only controls should now be visible
     selectionControls.forEach(btn => {
