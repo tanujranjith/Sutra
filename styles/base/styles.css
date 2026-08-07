@@ -31318,6 +31318,30 @@ i[class*="fa-"] > .atelier-icon,
     transform: scale(0.98);
 }
 
+.locked-page-screen .lock-screen-duress-btn {
+    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--surface-border));
+    border-radius: 10px;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 8px 12px;
+}
+
+.locked-page-screen .lock-screen-duress-btn:hover,
+.locked-page-screen .lock-screen-duress-btn:focus-visible {
+    background: var(--surface-bg-hover);
+}
+
+.locked-page-screen .lock-screen-duress-note {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    line-height: 1.45;
+    margin: -2px 0 2px;
+    text-align: center;
+}
+
 .locked-page-screen .lock-screen-remove-btn {
     background: none;
     border: none;

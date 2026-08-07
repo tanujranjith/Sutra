@@ -49840,6 +49840,8 @@ function getActiveEditor() {
                     />
                     <span class="lock-screen-error" id="lockScreenError" role="alert" aria-atomic="true"></span>
                     <button type="submit" class="lock-screen-submit-btn">Unlock</button>
+                    <button type="button" class="lock-screen-duress-btn" id="lockScreenDuressSetupBtn">Set up duress PIN</button>
+                    <p class="lock-screen-duress-note">Enter your normal PIN, then set a separate 6–8 digit PIN that deletes this page and its sub-pages when used here.</p>
                     <button type="button" class="lock-screen-remove-btn" id="lockScreenRemoveBtn">Remove PIN permanently</button>
                 </form>
                 <p class="lock-privacy-note">PIN protection keeps this page private in your local browser. It is not full encryption.</p>
@@ -49850,6 +49852,8 @@ function getActiveEditor() {
             const errorEl = document.getElementById('lockScreenError');
             const gearBtn = document.getElementById('lockScreenGear');
             const autolockMenu = document.getElementById('lockAutolockMenu');
+            const duressSetupBtn = document.getElementById('lockScreenDuressSetupBtn');
+            let setupDuressAfterUnlock = false;
 
             requestAnimationFrame(() => { try { input.focus(); } catch (e) {} });
 
@@ -49881,6 +49885,16 @@ function getActiveEditor() {
                 }
             }, true);
 
+            duressSetupBtn && duressSetupBtn.addEventListener('click', () => {
+                if (!input.value) {
+                    errorEl.textContent = 'Enter your normal PIN first, then we will open duress setup.';
+                    input.focus();
+                    return;
+                }
+                setupDuressAfterUnlock = true;
+                form.requestSubmit();
+            });
+
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const pin = input.value;
@@ -49901,6 +49915,8 @@ function getActiveEditor() {
                     page.lockDuressVerifier ? verifyPageDuressPin(pin, page.lockDuressVerifier) : Promise.resolve(false)
                 ]);
                 if (normalPinOk) {
+                    const openDuressSetup = setupDuressAfterUnlock;
+                    setupDuressAfterUnlock = false;
                     unlockedPageIds.add(page.id);
                     startAutoLockTimer(page.id, page.lockAutoLock);
                     hideLockedPageScreen();
@@ -49912,6 +49928,9 @@ function getActiveEditor() {
                     updateWordCount();
                     renderPagesList();
                     try { input.value = ''; } catch (err) {}
+                    if (openDuressSetup) {
+                        requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
+                    }
                 } else if (duressPinOk) {
                     // No trigger-time confirmation by design: the destructive
                     // behavior was explicitly acknowledged during setup.
@@ -50308,7 +50327,7 @@ function getActiveEditor() {
             });
         }
 
-        function openSetLockModal(pageId) {
+        function openSetLockModal(pageId, options = {}) {
             const page = pages.find(p => p.id === pageId);
             if (!page) return;
             _bindLockModalOnce();
@@ -50317,7 +50336,14 @@ function getActiveEditor() {
             if (page.isLocked && page.lockHash) {
                 // Page is locked — only show manage view if unlocked in session
                 if (unlockedPageIds.has(pageId)) {
-                    _showLockModalView('manage');
+                    if (options.openDuress === true) {
+                        const count = collectPageIdsForDeletion(pageId).size;
+                        const scope = document.getElementById('lockDuressScopeText');
+                        if (scope) scope.textContent = count > 1
+                            ? `Current scope: this page and ${count - 1} sub-page${count === 2 ? '' : 's'}.`
+                            : 'Current scope: this page only.';
+                    }
+                    _showLockModalView(options.openDuress === true ? 'duress' : 'manage');
                     const configured = !!parsePageDuressVerifier(page.lockDuressVerifier);
                     const label = document.getElementById('lockManageDuressLabel');
                     const removeDuress = document.getElementById('lockManageRemoveDuressBtn');

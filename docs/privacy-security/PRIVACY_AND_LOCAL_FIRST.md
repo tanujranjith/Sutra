@@ -149,6 +149,11 @@ lock screen removes the page and its sub-pages without a trigger-time
 confirmation, including their entries in Sutra Trash and local in-app workspace
 snapshots. A normal PIN always unlocks and an incorrect PIN never deletes.
 
+The locked-page screen includes **Set up duress PIN**. Enter the normal page PIN
+there first; after authorization, Sutra opens the destructive-PIN form directly.
+This makes setup discoverable without allowing anyone who lacks the normal PIN
+to configure or weaken the page lock.
+
 This is best-effort deletion from the active browser workspace, not a promise of
 physical secure erasure. Downloaded backups, cloud snapshots, browser/device
 backups, or another device that has not synchronized may still contain older
