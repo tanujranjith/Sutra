@@ -1,7 +1,11 @@
 (function canvasWorkbenchFactory(root, factory) {
   var api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
-  if (root) root.SutraCanvasWorkbench = api;
+  // Register through the supported `globalThis.*` alias form so the
+  // architecture guardrail inventory sees and ratchets this window API
+  // (the bare `root.*` form is invisible to the guardrail scan).
+  if (typeof globalThis !== 'undefined') globalThis.SutraCanvasWorkbench = api;
+  else if (root) root.SutraCanvasWorkbench = api;
 }(typeof globalThis !== 'undefined' ? globalThis : this, function buildCanvasWorkbench() {
   'use strict';
 
