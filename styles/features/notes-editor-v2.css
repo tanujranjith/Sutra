@@ -759,7 +759,9 @@ body.notes-pages-mode #view-notes .editor-v2-host {
     box-shadow: none;
 }
 body.notes-pages-mode #view-notes .editor-v2-host .ProseMirror {
-    min-height: 1056px; /* one page tall, matching the card min-height */
+    /* The outer page card owns the physical page minimum. Filling the host
+       avoids adding a second 1,056px minimum below title, tags, and padding. */
+    min-height: 100%;
 }
 /* Page-break atoms extend to the page-card edges (same trick the classic
    editor uses via --notes-page-pad-x). */

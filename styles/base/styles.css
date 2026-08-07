@@ -27003,6 +27003,15 @@ body.notes-pages-mode #view-notes .notes-pane-primary {
     margin-right: auto;
     border-radius: 2px;
     min-height: 1056px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* The page card owns the one-page minimum. Let the editor consume the
+   remaining content box after title/tags instead of stacking another full
+   page-height minimum inside the card. */
+body.notes-pages-mode #view-notes .notes-pane-primary > .editor {
+    flex: 1 1 auto;
 }
 
 /* Active/highlighted state for the pages toggle button */
@@ -27025,6 +27034,7 @@ body.notes-pages-mode #pagesToggleBtn {
         --notes-page-pad-x: 24px;
         padding: 32px var(--notes-page-pad-x) 60px;
         width: 100%;
+        min-height: max(560px, calc(100dvh - 132px));
     }
 }
 
