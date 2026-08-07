@@ -4,6 +4,7 @@
 
   var MAX_ACTION_BYTES = 256000;
   var MAX_PLAN_ACTIONS = 100;
+  var MAX_TARGET_SNAPSHOT_BYTES = 32000;
   var definitions = Object.create(null);
   var journal = Object.create(null);
 
@@ -191,10 +192,15 @@
     var source = Array.isArray(input) ? input : (input && Array.isArray(input.actions) ? input.actions : []);
     return source.map(function (row, index) {
       var wrapped = isObject(row) && isObject(row.action);
+      var action = clone(wrapped ? row.action : row);
+      if (!wrapped && isObject(action)) {
+        delete action.planActionId;
+        delete action.dependsOn;
+      }
       return {
         id: String((wrapped && row.id) || (!wrapped && row && row.planActionId) || ('step-' + (index + 1))),
-        action: clone(wrapped ? row.action : row),
-        dependsOn: (wrapped && Array.isArray(row.dependsOn) ? row.dependsOn : []).map(String),
+        action: action,
+        dependsOn: (Array.isArray(row && row.dependsOn) ? row.dependsOn : []).map(String),
         index: index
       };
     });
@@ -208,6 +214,14 @@
    */
   function previewPlan(input, context) {
     var ctx = context || {};
+    // A student must be able to inspect a proposed plan before granting write
+    // or destructive permission. Permission enforcement belongs to Apply;
+    // callers may opt into stricter preview-time enforcement explicitly.
+    var validationContext = ctx;
+    if (ctx.enforcePermissionsOnPreview !== true && Object.prototype.hasOwnProperty.call(ctx, 'permissions')) {
+      validationContext = Object.assign({}, ctx);
+      delete validationContext.permissions;
+    }
     var rows = normalizePlanRows(input);
     if (!rows.length) return { ok: false, code: 'empty_plan', steps: [], issues: ['Plan has no actions.'] };
     if (rows.length > (ctx.maxActions || MAX_PLAN_ACTIONS)) return { ok: false, code: 'plan_too_large', steps: [], issues: ['Plan has too many actions.'] };
@@ -219,13 +233,26 @@
         if (!seenIds.has(dependency)) issues.push('Step ' + (index + 1) + ': dependency "' + dependency + '" must reference an earlier step.');
       });
       seenIds.add(row.id);
-      var checked = validate(row.action, ctx);
+      var checked = validate(row.action, validationContext);
       if (!checked.ok) issues.push('Step ' + (index + 1) + ': ' + checked.error);
       var def = checked.definition || get(row.action && row.action.type);
       var preview = null;
+      var targetSnapshot = null;
       if (checked.ok && def) {
         try { preview = def.preview(checked.value, ctx); }
         catch (error) { issues.push('Step ' + (index + 1) + ': preview failed: ' + (error.message || String(error))); }
+        if (typeof ctx.snapshot === 'function') {
+          try {
+            var rawSnapshot = ctx.snapshot(checked.value, { id: row.id, index: index, definition: def });
+            targetSnapshot = rawSnapshot === undefined ? null : clone(rawSnapshot);
+            if (JSON.stringify(targetSnapshot).length > MAX_TARGET_SNAPSHOT_BYTES) {
+              targetSnapshot = null;
+              issues.push('Step ' + (index + 1) + ': target snapshot is too large.');
+            }
+          } catch (error) {
+            issues.push('Step ' + (index + 1) + ': target snapshot failed: ' + (error.message || String(error)));
+          }
+        }
       }
       return {
         id: row.id,
@@ -238,11 +265,14 @@
         affectedEntities: def ? def.affectedEntities.slice() : [],
         destructive: !!(def && def.destructive),
         requiresConfirmation: !!(def && requiresConfirmation(def)),
+        targetSnapshot: targetSnapshot,
         valid: checked.ok
       };
     });
     var normalizedActions = steps.map(function (step) { return step.action; });
-    var previewId = 'plan_' + stableHash({ actions: normalizedActions, dependencies: steps.map(function (step) { return [step.id, step.dependsOn]; }) });
+    var targetSnapshots = steps.map(function (step) { return [step.id, step.targetSnapshot]; });
+    var stateFingerprint = stableHash(targetSnapshots);
+    var previewId = 'plan_' + stableHash({ actions: normalizedActions, dependencies: steps.map(function (step) { return [step.id, step.dependsOn]; }), targetSnapshots: targetSnapshots });
     return {
       ok: issues.length === 0,
       code: issues.length ? 'validation_failed' : 'ready_for_review',
@@ -252,6 +282,7 @@
       affectedEntities: Array.from(new Set(steps.flatMap(function (step) { return step.affectedEntities; }))).sort(),
       permissions: Array.from(new Set(steps.flatMap(function (step) { return step.permissions; }))).sort(),
       destructive: steps.some(function (step) { return step.destructive; }),
+      stateFingerprint: stateFingerprint,
       normalizedActions: normalizedActions
     };
   }
@@ -329,11 +360,26 @@
     if (ctx.reviewed !== true) {
       return { ok: false, code: 'review_required', outcomes: [], warnings: ['Explicit review is required before applying assistant actions.'] };
     }
-    var expectedId = previewPlan(preview.steps.map(function (step) {
+    var freshPreview = previewPlan(preview.steps.map(function (step) {
       return { id: step.id, action: step.action, dependsOn: step.dependsOn };
-    }), ctx).previewId;
-    if (expectedId !== preview.previewId) {
+    }), ctx);
+    if (!freshPreview.ok) {
+      return { ok: false, code: 'validation_failed', outcomes: [], warnings: freshPreview.issues || ['The plan is no longer valid.'] };
+    }
+    if (freshPreview.previewId !== preview.previewId || freshPreview.stateFingerprint !== preview.stateFingerprint) {
       return { ok: false, code: 'stale_preview', outcomes: [], warnings: ['The plan changed after preview. Review it again before applying.'] };
+    }
+    for (var permissionIndex = 0; permissionIndex < preview.normalizedActions.length; permissionIndex += 1) {
+      var permissionCheck = validate(preview.normalizedActions[permissionIndex], ctx);
+      if (!permissionCheck.ok) {
+        var missingPermission = (permissionCheck.issues || []).some(function (issue) { return /missing permission/.test(issue); });
+        return {
+          ok: false,
+          code: missingPermission ? 'permission_denied' : 'validation_failed',
+          outcomes: [],
+          warnings: permissionCheck.issues || [permissionCheck.error || 'The plan is not authorized.']
+        };
+      }
     }
     var planKey = 'plan:' + preview.previewId;
     if (journal[planKey] && journal[planKey].status === 'committed') {
@@ -399,7 +445,7 @@
     } catch (error) { return { ok: false, code: 'undo_failed', message: error.message || String(error) }; }
   }
 
-  var api = { VERSION: '2.1.0', register: register, get: get, list: list, validate: validate, executeSync: executeSync, executePlan: executePlan, previewPlan: previewPlan, applyPlan: applyPlan, rollbackPlan: rollbackPlan, undo: undoReceipt, schemaFromLegacyFields: schemaFromLegacyFields, _journal: journal };
+  var api = { VERSION: '2.2.0', register: register, get: get, list: list, validate: validate, executeSync: executeSync, executePlan: executePlan, previewPlan: previewPlan, applyPlan: applyPlan, rollbackPlan: rollbackPlan, undo: undoReceipt, schemaFromLegacyFields: schemaFromLegacyFields, _journal: journal };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantActionSystem = api;
 }(typeof window !== 'undefined' ? window : globalThis));

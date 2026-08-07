@@ -121,6 +121,10 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
       gradeRisk: H.classifyRisk({ type: 'run_grade_what_if', courseName: 'X', score: 90 }),
       undoUnsupported: H.getUndoSupport('navigate'),
       aliasNormalized: H.classifyRisk({ type: 'complete_tasks', taskIds: ['a', 'b'] }),
+      dependencyPlan: H.inspectPlan([
+        { type: 'create_page', title: 'Plan note', body: '# Plan', planActionId: 'note' },
+        { type: 'create_task', title: 'Do the work', planActionId: 'task', dependsOn: ['note'] }
+      ]),
       validationBlocksUnknown: H.validateAction({ type: 'drop_all_tables' }).ok === false,
       noDeleteTaskAction: !types.includes('delete_task') && !types.includes('delete_tasks')
     };
@@ -134,6 +138,8 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
   expect(result.gradeRisk).toBe('read_only');
   expect(result.undoUnsupported.supported).toBe(false);
   expect(result.aliasNormalized).toBe('medium');
+  expect(result.dependencyPlan.ok).toBe(true);
+  expect(result.dependencyPlan.steps[1].dependsOn).toEqual(['note']);
   expect(result.validationBlocksUnknown).toBe(true);
   expect(result.noDeleteTaskAction).toBe(true);
 });

@@ -1133,6 +1133,8 @@
             '- Use only the action types in the Actions Bank below.',
             '- One JSON array per block. Include a "label" field on each action that is a short human-readable description.',
             '- Never put more than ~8 actions in one reply.',
+            '- When a request truly needs multiple ordered atomic actions, give every action a stable "planActionId" and add "dependsOn": ["earlier-id"] where a step requires an earlier result. Dependencies may reference only earlier actions in the same array. Sutra will review the dependency plan and apply it in order.',
+            '- Do not use dependency metadata when one higher-level workflow action already captures the whole request.',
             '- The user must confirm each action; do not assume anything is applied. Sutra renders every action as an approval card the user must click — so PROPOSE, never declare. Say "I can mark that as taken — approve the card below" or "Want me to…?", NOT "I\'ve marked…" / "I\'ll mark…". Never claim a change happened; you cannot apply anything yourself.',
             '- If the user just asked a question, do NOT propose actions. Only propose when the action is clearly useful.',
             '- If context.canvas is present, it is a bounded summary of the active Canvas page. Use Canvas actions only for that active Canvas, and expect explicit user confirmation.',
@@ -3831,11 +3833,33 @@
         return receipt;
     }
 
+    function inspectWorkspacePlan(actions) {
+        const source = Array.isArray(actions) ? actions : [];
+        const explicit = source.some(action => action && (action.planActionId || (Array.isArray(action.dependsOn) && action.dependsOn.length)));
+        const seen = new Set();
+        const issues = [];
+        const steps = source.map((action, index) => {
+            const id = explicit ? String(action && action.planActionId || '').trim() : `step-${index + 1}`;
+            const dependsOn = explicit
+                ? Array.from(new Set((Array.isArray(action && action.dependsOn) ? action.dependsOn : []).map(value => String(value || '').trim()).filter(Boolean))).slice(0, 12)
+                : [];
+            if (explicit && (!id || seen.has(id))) issues.push(`Step ${index + 1} needs a unique planActionId.`);
+            dependsOn.forEach(dependency => {
+                if (!seen.has(dependency)) issues.push(`Step ${index + 1} dependency "${dependency}" must reference an earlier step.`);
+            });
+            if (id) seen.add(id);
+            return { id: id || `invalid-${index + 1}`, index, dependsOn };
+        });
+        return { explicit, ok: issues.length === 0, issues, steps };
+    }
+
     function renderActionCards(hostEl, actions, opts) {
         if (!hostEl || !Array.isArray(actions) || actions.length === 0) return;
         const showPreviews = getPref('assistant.showActionPreviews', true) !== false;
         const confirmMode = getConfirmationMode();
         const isBatch = actions.length > 1;
+        const planStructure = inspectWorkspacePlan(actions);
+        const planStates = new Map(planStructure.steps.map(step => [step.id, 'pending']));
 
         // Special case: a single import_assignments action renders as a review table.
         if (actions.length === 1 && (normalizeActionFields(actions[0]).type === 'import_assignments')) {
@@ -3914,7 +3938,7 @@
             reviewHead.className = 'flow-action-review-head';
             reviewHead.innerHTML = `
                 <div class="flow-action-review-title">
-                    <strong>Proposed plan</strong>
+                    <strong>${planStructure.explicit ? 'Proposed workspace plan' : 'Proposed plan'}</strong>
                     <span>${actions.length} step${actions.length === 1 ? '' : 's'}${riskCounts.high ? ` · ${riskCounts.high} high risk` : ''}<span class="flow-action-review-progress"></span></span>
                 </div>
                 <div class="flow-action-review-controls">
@@ -3931,6 +3955,7 @@
                 showToast(res.message);
                 if (res.ok) {
                     undoAllBtn.disabled = true;
+                    if (planStructure.explicit) planStates.forEach((value, id) => planStates.set(id, 'pending'));
                     // Reflect the group undo on every applied card's receipt.
                     wrap.querySelectorAll('.flow-action-receipt').forEach(r => {
                         r.classList.add('flow-action-receipt-undone');
@@ -3969,23 +3994,32 @@
 
         actions.forEach((rawAction, idx) => {
             const action = normalizeActionFields(rawAction);
+            const planStep = planStructure.steps[idx];
             const card = document.createElement('div');
             card.className = 'flow-action-card';
-            const valid = validateAction(action);
+            const actionValidation = validateAction(action);
+            const valid = planStructure.ok ? actionValidation : { ok: false, error: planStructure.issues[0] || 'Invalid workspace plan.' };
             const risk = classifyRisk(action);
             const previewTargetSnapshot = liveActionValidation(action).snapshot;
             card.setAttribute('data-risk', risk);
             card.setAttribute('data-action-type', action.type);
+            if (planStructure.explicit) card.setAttribute('data-plan-step-id', planStep.id);
 
             // READ-ONLY actions (local grade math etc.) run immediately and
             // render their deterministic result — no approval needed, no
             // mutation occurs.
-            if (risk === 'read_only') {
+            if (risk === 'read_only' && !planStructure.explicit) {
                 const header = document.createElement('div');
                 header.className = 'flow-action-card-head';
                 header.innerHTML = `<span class="flow-action-risk flow-risk-read_only" title="Read-only — computed locally">local</span>`
                     + `<span class="flow-action-label">${esc(action.label || describeAction(action))}</span>`;
                 card.appendChild(header);
+                if (planStructure.explicit) {
+                    const dependency = document.createElement('div');
+                    dependency.className = 'flow-action-dependencies';
+                    dependency.textContent = `Step ${idx + 1}${planStep.dependsOn.length ? ` · after ${planStep.dependsOn.join(', ')}` : ' · no dependencies'}`;
+                    card.appendChild(dependency);
+                }
                 const body = document.createElement('div');
                 body.className = 'flow-action-result';
                 if (valid.ok) {
@@ -3998,6 +4032,7 @@
                 }
                 card.appendChild(body);
                 wrap.appendChild(card);
+                if (planStructure.explicit && valid.ok) planStates.set(planStep.id, 'applied');
                 return;
             }
 
@@ -4010,6 +4045,13 @@
                 header.insertAdjacentHTML('afterbegin', `<label class="flow-action-select"><input type="checkbox" checked aria-label="Select action: ${esc(label)}"><span>Select</span></label>`);
             }
             card.appendChild(header);
+
+            if (planStructure.explicit) {
+                const dependency = document.createElement('div');
+                dependency.className = 'flow-action-dependencies';
+                dependency.textContent = `Step ${idx + 1}${planStep.dependsOn.length ? ` · after ${planStep.dependsOn.join(', ')}` : ' · no dependencies'}`;
+                card.appendChild(dependency);
+            }
 
             if (showPreviews) {
                 // Student-readable preview first; raw JSON tucked away under
@@ -4065,6 +4107,19 @@
             applyBtn.textContent = actionApplyLabel(action);
             applyBtn.disabled = !valid.ok;
             const doApply = async () => {
+                if (planStructure.explicit) {
+                    const unmet = planStep.dependsOn.filter(dependency => planStates.get(dependency) !== 'applied');
+                    if (unmet.length) {
+                        let status = card.querySelector('.flow-plan-dependency-error');
+                        if (!status) {
+                            status = document.createElement('div');
+                            status.className = 'flow-action-error flow-plan-dependency-error';
+                            card.appendChild(status);
+                        }
+                        status.textContent = `Apply the required earlier step${unmet.length === 1 ? '' : 's'} first: ${unmet.join(', ')}.`;
+                        return;
+                    }
+                }
                 const currentTargets = liveActionValidation(action, previewTargetSnapshot);
                 if (!currentTargets.ok) {
                     card.dataset.confirmed = 'false';
@@ -4095,11 +4150,16 @@
                 if (result.ok) {
                     // Receipt = what happened + deep link + inline undo. This is
                     // the closure of the propose → approve → apply loop.
-                    card.appendChild(buildReceiptEl(action, result, { onUndone: () => noteBatchProgress(-1) }));
+                    card.appendChild(buildReceiptEl(action, result, { onUndone: () => {
+                        noteBatchProgress(-1);
+                        if (planStructure.explicit) planStates.set(planStep.id, 'pending');
+                    } }));
                     showToast(result.message);
                     applyBtn.textContent = 'Applied';
+                    if (planStructure.explicit) planStates.set(planStep.id, 'applied');
                     noteBatchProgress(1);
                 } else {
+                    if (planStructure.explicit) planStates.set(planStep.id, 'failed');
                     const status = document.createElement('div');
                     status.className = 'flow-action-error';
                     status.textContent = `✗ ${result.message}`;
@@ -4138,6 +4198,7 @@
                 card.classList.add('flow-action-declined');
                 applyBtn.disabled = true;
                 declineBtn.disabled = true;
+                if (planStructure.explicit) planStates.set(planStep.id, 'declined');
             });
 
             actionsRow.appendChild(applyBtn);
@@ -8010,7 +8071,7 @@
         // cards (buildActionFence). It is never consumed by an applier and is stripped
         // from the cleaned action below — but it must be tolerated here so strict types
         // (e.g. delete_memory "Forget this memory?" cards) don't throw "Unknown field".
-        const aliases = new Set(['task', 'name', 'content', 'body', 'note', 'class', 'course', 'className', 'item', 'level', 'context', 'duration', 'subtasks', 'tasks', 'label']);
+        const aliases = new Set(['task', 'name', 'content', 'body', 'note', 'class', 'course', 'className', 'item', 'level', 'context', 'duration', 'subtasks', 'tasks', 'label', 'planActionId', 'dependsOn']);
         ACTION_CATALOG.forEach(entry => {
             if (system.get(entry.type)) return;
             const cap = window.SutraCapabilityRegistry && window.SutraCapabilityRegistry.get
@@ -8149,6 +8210,7 @@
             const normalized = normalizeActionFields(action);
             return { html: buildPreviewHtml(normalized, classifyRisk(normalized)), label: describeAction(normalized) };
         },
+        inspectPlan(actions) { return inspectWorkspacePlan(actions); },
         applyAction(action, meta) {
             const extra = EXTRA_ACTION_DEFINITIONS[action && action.type];
             if (extra) {
@@ -8181,7 +8243,8 @@
             if (!system || typeof system.previewPlan !== 'function') return { ok: false, code: 'action_system_unavailable', steps: [], issues: ['Assistant action system is unavailable.'] };
             return system.previewPlan(plan, {
                 permissions: resolveAssistantActionPermissions(meta, true),
-                maxActions: meta && meta.maxActions
+                maxActions: meta && meta.maxActions,
+                snapshot: (action) => liveActionValidation(action).snapshot
             });
         },
         applyPlan(preview, meta) {
@@ -8192,6 +8255,7 @@
                 ...(meta || {}),
                 reviewed: !!(meta && meta.reviewed),
                 permissions: resolveAssistantActionPermissions(meta, false),
+                snapshot: (action) => liveActionValidation(action).snapshot,
                 commit: (action) => applyActionLogged(action, Object.assign({ batchId }, meta || {})),
                 rollback: (receipt) => {
                     const result = receipt && receipt.result;

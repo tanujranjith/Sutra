@@ -545,6 +545,10 @@ mustContain('src/features/assistant/flow-intelligence.js', 'window.sutraIntellig
 
 // New action catalog entries (workflows) + risk classification.
 mustContain('src/features/assistant/flow-assistant.js', 'function classifyRisk', 'action risk classifier present');
+mustContain('src/features/assistant/action-system.js', 'stateFingerprint: stateFingerprint', 'assistant plan state fingerprinting present');
+mustContain('src/features/assistant/action-system.js', 'code: \'stale_preview\'', 'assistant plan stale-preview refusal present');
+mustContain('src/features/assistant/flow-assistant.js', 'function inspectWorkspacePlan', 'assistant dependency-plan inspector present');
+mustContain('src/features/assistant/flow-assistant.js', 'inspectPlan(actions)', 'assistant plan inspector exposed through typed harness');
 mustContain('src/features/assistant/flow-assistant.js', "type: 'import_assignments'", 'import_assignments action registered');
 mustContain('src/features/assistant/flow-assistant.js', "type: 'create_study_plan'", 'create_study_plan action registered');
 mustContain('src/features/assistant/flow-assistant.js', "type: 'create_exam_plan'", 'create_exam_plan action registered');

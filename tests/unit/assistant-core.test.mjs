@@ -35,7 +35,7 @@ test('canonical render model gives both shells identical visible content, action
     sources: [{ id: 'chunk-1', noteId: 'n1', title: 'Source', quote: 'Evidence' }],
     claimType: 'workspace_fact',
     memoryUsedIds: ['m1'],
-    receipt: { schema: 'sutra-assistant-receipt/1', local: false, provider: 'Mock' }
+    receipt: { schema: 'sutra-assistant-receipt/1', local: false, provider: 'Mock', createdAt: '2026-07-12T12:00:00.000Z' }
   };
   const options = {
     splitContent: content => ({ thoughts: ['private plan'], clean: content.replace(/<think>[\s\S]*?<\/think>/, '').trim() }),

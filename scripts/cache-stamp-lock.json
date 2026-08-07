@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260807-providers1",
-    "hash": "ef8d6dfbe7ee90c3"
+    "stamp": "20260807-agentplans2",
+    "hash": "2bcc6827390917e0"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -156,8 +156,8 @@
     "hash": "095bc3670ad9c824"
   },
   "src/features/assistant/action-system.js": {
-    "stamp": "20260714-assistant-trust1",
-    "hash": "9900f0ad49a81f0b"
+    "stamp": "20260807-agentplans2",
+    "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
     "stamp": "20260714-assistant-trust1",
@@ -168,8 +168,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260807-actionrepair2",
-    "hash": "e589074eabeeeefd"
+    "stamp": "20260807-agentplans2",
+    "hash": "3d3e10dcbac9e782"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
@@ -496,8 +496,8 @@
     "hash": "76a5ad75e57c83b5"
   },
   "styles/themes/sutra-pro.css": {
-    "stamp": "20260709-comments",
-    "hash": "7fa4e3620410974c"
+    "stamp": "20260807-agentplans1",
+    "hash": "3208734a65002e8c"
   },
   "styles/views/assistant-view.css": {
     "stamp": "20260722-receipt-surface1",

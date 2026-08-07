@@ -179,3 +179,51 @@ test('applyPlan rejects a preview mutated after review', async () => {
   const result = await system.applyPlan(preview, { reviewed: true, commit: () => ({ ok: true }) });
   assert.equal(result.code, 'stale_preview');
 });
+
+test('plans remain reviewable before write permission and fail closed at Apply', async () => {
+  const def = register({ confirmation: 'writes', permissions: ['workspace.delete'], destructive: true });
+  const preview = system.previewPlan([
+    { id: 'remove', action: { type: def.type, title: 'Remove stale block' } }
+  ], { permissions: ['workspace.read'] });
+  assert.equal(preview.ok, true);
+  assert.deepEqual(preview.permissions, ['workspace.delete']);
+  const result = await system.applyPlan(preview, {
+    reviewed: true,
+    permissions: ['workspace.read'],
+    commit: () => ({ ok: true })
+  });
+  assert.equal(result.code, 'permission_denied');
+});
+
+test('workspace target drift invalidates a reviewed plan before any step commits', async () => {
+  let revision = 'revision-1';
+  let commits = 0;
+  const def = register({ confirmation: 'never', permissions: [] });
+  const snapshot = () => ({ revision });
+  const preview = system.previewPlan([
+    { id: 'edit', action: { type: def.type, title: 'Edit current task' } }
+  ], { snapshot });
+  assert.equal(preview.ok, true);
+  revision = 'revision-2';
+  const stale = await system.applyPlan(preview, {
+    reviewed: true,
+    snapshot,
+    commit: () => ({ ok: true, changedId: String(++commits) })
+  });
+  assert.equal(stale.code, 'stale_preview');
+  assert.equal(commits, 0);
+});
+
+test('raw provider plan metadata becomes typed dependencies without entering action schemas', () => {
+  const first = register({ confirmation: 'never', permissions: [] });
+  const second = register({ confirmation: 'never', permissions: [] });
+  const preview = system.previewPlan([
+    { type: first.type, title: 'Create the note', planActionId: 'note' },
+    { type: second.type, title: 'Link the task', planActionId: 'task', dependsOn: ['note'] }
+  ]);
+  assert.equal(preview.ok, true);
+  assert.equal(preview.steps[0].id, 'note');
+  assert.deepEqual(preview.steps[1].dependsOn, ['note']);
+  assert.equal('planActionId' in preview.steps[0].action, false);
+  assert.equal('dependsOn' in preview.steps[1].action, false);
+});

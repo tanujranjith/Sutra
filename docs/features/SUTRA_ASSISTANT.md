@@ -266,6 +266,15 @@ so Retry cannot duplicate tasks, homework, blocks, note insertions, cards, plans
 or memories. Sutra reports Undo/rollback success only after authoritative state
 confirms it.
 
+Multi-step workspace plans use stable step IDs and explicit dependencies that may
+reference only earlier steps. The review surface shows those dependencies and
+will not apply a dependent step before its prerequisites. Review is intentionally
+available before write or destructive permission is granted; Apply performs the
+permission check. Every plan preview also binds to a bounded live-target snapshot.
+If a referenced task, note, course, deck, or Timeline block changes after review,
+the entire plan fails closed as stale before its first mutation and must be
+reviewed again.
+
 ---
 
 ## 7. Providers, model, and keys
