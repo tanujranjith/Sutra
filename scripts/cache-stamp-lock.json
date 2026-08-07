@@ -475,6 +475,10 @@
     "stamp": "20260723-unified2",
     "hash": "71c6d8cb963fa901"
   },
+  "styles/themes/dune.css": {
+    "stamp": "20260807-dune3",
+    "hash": "8b6daa5488340471"
+  },
   "styles/themes/glass.css": {
     "stamp": "20260712-glass-fix",
     "hash": "125b698224d06332"

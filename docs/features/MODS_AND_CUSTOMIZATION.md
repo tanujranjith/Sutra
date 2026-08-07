@@ -1,5 +1,12 @@
 # Customization
 
+Built-in presets may have an authored visual language rather than only changing
+accent colors. For example, **Dune** adds a local CSS-only desert sky, layered
+dunes, carved-metal glass surfaces, display typography, and subtle instrument
+lights. Decorative layers never intercept input, stop moving under reduced/off
+motion settings, disappear in forced-colors and print modes, and make no network
+requests.
+
 > **See [docs/CSS_MODS_GUIDE.md](CSS_MODS_GUIDE.md) for the full guide.** It is the
 > complete CSS reference — cascade order, design tokens, stable selectors, ~18 safe
 > copy-paste examples, and recovery — so you can customize Sutra without reading the
