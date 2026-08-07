@@ -104,4 +104,62 @@ function callCount(body, name) {
   return (body.match(pattern) || []).length;
 }
 
+/**
+ * Extracts the balanced `{...}` block that begins after `marker` (the first
+ * `{` after the marker, closed by its matching brace, string/template/
+ * comment-aware). Returns { start, end, body } where body includes the
+ * braces, or null. Useful for object-literal arrow methods such as
+ * `discoverModels: async (provider) => { ... }`.
+ */
+export function extractBalancedBlock(source, marker) {
+  const markerIndex = String(source).indexOf(marker);
+  if (markerIndex === -1) return null;
+  const openIndex = String(source).indexOf('{', markerIndex + marker.length);
+  if (openIndex === -1) return null;
+  const text = String(source);
+  const len = text.length;
+  let i = openIndex;
+  let depth = 0;
+  while (i < len) {
+    const ch = text[i];
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      i += 1;
+      while (i < len) {
+        if (text[i] === '\\') { i += 2; continue; }
+        if (text[i] === quote) break;
+        i += 1;
+      }
+    } else if (ch === '`') {
+      i += 1;
+      let exprDepth = 0;
+      while (i < len) {
+        const c = text[i];
+        if (c === '\\') { i += 2; continue; }
+        if (c === '$' && text[i + 1] === '{') { exprDepth += 1; i += 2; continue; }
+        if (c === '{' && exprDepth > 0) { exprDepth += 1; i += 1; continue; }
+        if (c === '}' && exprDepth > 0) { exprDepth -= 1; i += 1; continue; }
+        if (c === '`' && exprDepth === 0) break;
+        i += 1;
+      }
+    } else if (ch === '/' && text[i + 1] === '/') {
+      while (i < len && text[i] !== '\n') i += 1;
+    } else if (ch === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < len && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
+      i += 2;
+      continue;
+    } else if (ch === '{') {
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return { start: markerIndex, end: i + 1, body: text.slice(markerIndex, i + 1) };
+      }
+    }
+    i += 1;
+  }
+  return null;
+}
+
 export { extractFunction, callCount };

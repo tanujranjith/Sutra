@@ -75986,7 +75986,12 @@ ${cspMeta}
                             const local = getWorkspacePreference('assistant.localEndpoint', {}) || {};
                             const base = String(local.baseUrl || '').replace(/\/+$/, '');
                             if (!base) throw new Error('Configure the local endpoint base URL first.');
-                            const response = await fetch(base + '/models', { method: 'GET' });
+                            // Mirror the chat path: an optional session-held
+                            // local_api_key rides as a Bearer token when present;
+                            // open local servers (Ollama) still work keyless.
+                            const localKey = getProviderApiKey('local');
+                            const headers = localKey ? { Authorization: `Bearer ${localKey}` } : {};
+                            const response = await fetch(base + '/models', { method: 'GET', headers });
                             const data = await response.json();
                             if (!response.ok) throw new Error((data && data.error && data.error.message) || ('HTTP ' + response.status));
                             const models = (Array.isArray(data.data) ? data.data : Array.isArray(data.models) ? data.models : [])

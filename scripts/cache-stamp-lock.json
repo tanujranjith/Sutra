@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-backup27",
-    "hash": "f416c2b2c819284d"
+    "stamp": "20260807-backup28",
+    "hash": "4c326274d284eaa5"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
