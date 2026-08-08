@@ -27288,13 +27288,22 @@ body.notes-pages-mode .atelier-page-break.is-selected {
 }
 .hw-paste-card {
     position: relative;
+    box-sizing: border-box;
     width: 100%;
     max-width: 900px;
     max-height: 86vh;
     padding: 18px;
     display: grid;
+    grid-template-rows: auto auto auto minmax(80px, 1fr) auto;
     gap: 10px;
-    overflow: hidden;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--bg-primary);
+    border: 1px solid var(--surface-border);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 }
 .hw-paste-head {
     display: flex;
@@ -27302,6 +27311,8 @@ body.notes-pages-mode .atelier-page-break.is-selected {
     align-items: flex-start;
     gap: 12px;
 }
+.hw-paste-head > div { min-width: 0; }
+.hw-paste-head h3 { margin: 0; }
 .hw-paste-help {
     margin: 4px 0 0;
     font-size: 0.82rem;
