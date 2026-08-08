@@ -2443,3 +2443,43 @@
         pointer-events: auto;
     }
 }
+
+/* ---- 37g. Notes phone editor chrome. Keep the formatting rail pinned to
+   the viewport rather than letting older toolbar rules place it mid-document.
+   The page-list drawer control gets its own row, so neither control covers the
+   note title or first editable line. ---- */
+@media (max-width: 640px) {
+    body[data-view="notes"] #view-notes .toolbar-wrapper {
+        position: fixed !important;
+        top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+        left: 8px !important;
+        right: 8px !important;
+        width: auto !important;
+        max-width: calc(100vw - 16px) !important;
+        height: 52px !important;
+        min-height: 52px !important;
+        padding: 4px 8px !important;
+        z-index: 2600 !important;
+    }
+    body[data-view="notes"] #sidebarToggle,
+    body[data-view="notes"] #sidebarToggle.collapsed {
+        top: calc(env(safe-area-inset-top, 0px) + 68px) !important;
+        left: calc(env(safe-area-inset-left, 0px) + 12px) !important;
+        width: 44px !important;
+        height: 44px !important;
+        z-index: 2601 !important;
+    }
+    body[data-view="notes"] #view-notes .toolbar {
+        width: 100% !important;
+        min-width: 0 !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+    body[data-view="notes"] #view-notes .editor-container,
+    body[data-view="notes"] #notesEditorContainer {
+        padding-top: calc(env(safe-area-inset-top, 0px) + 124px) !important;
+        padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5rem) !important;
+    }
+}
