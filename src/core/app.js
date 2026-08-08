@@ -26443,7 +26443,6 @@ function populateProgressDashboard() {
                         <h2 class="atelier-onboarding-title" id="onboardingTitle">Welcome to Sutra.</h2>
                         <p class="atelier-onboarding-sub">Your academic life, woven into one private workspace. Local-first, private by default, no account needed.</p>
                         <div class="atelier-onboarding-daily-loop">
-                            <div class="atelier-onboarding-loop-icon"><i class="fas fa-arrows-spin" aria-hidden="true"></i></div>
                             <p><strong>Your daily loop:</strong> Capture schoolwork &rarr; See what is due &rarr; Know what to do next &rarr; Take notes &rarr; Schedule work &rarr; Study and review &rarr; Keep your workspace backed up.</p>
                         </div>
                     </header>

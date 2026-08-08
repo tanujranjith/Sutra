@@ -40,3 +40,8 @@ test('onboarding screens offer deferral and point students at the daily loop', (
   assert.ok(mode, 'renderModeStep is a top-level declaration');
   assert.match(mode.body, /Advanced features[\s\S]*available in Settings/);
 });
+
+test('welcome onboarding does not render an unsupported decorative icon glyph', () => {
+  assert.match(app, /Your academic life, woven into one private workspace/);
+  assert.doesNotMatch(app, /fa-arrows-spin/);
+});
