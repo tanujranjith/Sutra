@@ -248,3 +248,96 @@ test('Canvas toolbar renders correctly: groups, active tool, selection-dependent
     console.log('Toolbar errors:', JSON.stringify(result.errors, null, 2));
   }
 });
+
+test('Canvas shape picker creates the selected shape through the toolbar', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    hooks.createSpace('Shape picker QA');
+    hooks.createCanvasInActiveSpace('Shape picker test');
+  });
+
+  const shapeButton = page.locator('#canvasShapeBtn');
+  const shapeMenu = page.locator('#canvasShapeMenu');
+  await shapeButton.click();
+  await expect(shapeButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(shapeMenu).toBeVisible();
+
+  const toolbarIconState = await page.evaluate(() => ({
+    unknown: document.querySelectorAll('#canvasToolbar svg[data-atelier-icon-name="unknown"]').length,
+    hydrated: document.querySelectorAll('#canvasToolbar svg.atelier-icon').length,
+    menuParentIsBody: document.getElementById('canvasShapeMenu').parentElement === document.body
+  }));
+  expect(toolbarIconState.unknown).toBe(0);
+  expect(toolbarIconState.hydrated).toBeGreaterThan(10);
+  expect(toolbarIconState.menuParentIsBody).toBe(true);
+
+  await page.getByRole('menuitem', { name: 'Diamond' }).click();
+  const created = await page.evaluate(() => {
+    const objects = window.SutraCanvas.getCurrentPage().canvas.objects;
+    const object = objects[objects.length - 1];
+    return {
+      count: objects.length,
+      type: object && object.type,
+      shape: object && object.shape,
+      menuHidden: document.getElementById('canvasShapeMenu').hidden,
+      expanded: document.getElementById('canvasShapeBtn').getAttribute('aria-expanded')
+    };
+  });
+
+  expect(created).toEqual({
+    count: 1,
+    type: 'shape',
+    shape: 'diamond',
+    menuHidden: true,
+    expanded: 'false'
+  });
+});
+
+test('Canvas pen strokes never move a selected object', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    hooks.createSpace('Pen isolation QA');
+    hooks.createCanvasInActiveSpace('Pen isolation test');
+    const sticky = window.SutraCanvas.addSticky('Anchored note', { x: 260, y: 160 });
+    const pageModel = window.SutraCanvas.getCurrentPage();
+    const before = { x: sticky.x, y: sticky.y };
+    const stickyElement = document.querySelector(`[data-object-id="${sticky.id}"]`);
+
+    // Simulate an interrupted object gesture, then draw. This is the stale-drag
+    // path that previously let a pen stroke move the selected object.
+    stickyElement.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, button: 0, pointerId: 41, clientX: 280, clientY: 180
+    }));
+    window.canvasSetTool('pen');
+
+    const drawLayer = document.getElementById('canvasDrawLayer');
+    const root = document.getElementById('canvasEditor');
+    let parentMoves = 0;
+    root.addEventListener('pointermove', () => { parentMoves += 1; });
+    drawLayer.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, button: 0, pointerId: 42, clientX: 520, clientY: 320
+    }));
+    drawLayer.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true, button: 0, pointerId: 42, clientX: 620, clientY: 390
+    }));
+    drawLayer.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true, button: 0, pointerId: 42, clientX: 620, clientY: 390
+    }));
+
+    const anchored = pageModel.canvas.objects.find((object) => object.id === sticky.id);
+    return {
+      before,
+      after: { x: anchored.x, y: anchored.y },
+      freehandCount: pageModel.canvas.objects.filter((object) => object.type === 'freehand').length,
+      parentMoves
+    };
+  });
+
+  expect(result.after).toEqual(result.before);
+  expect(result.freehandCount).toBe(1);
+  expect(result.parentMoves).toBe(0);
+});

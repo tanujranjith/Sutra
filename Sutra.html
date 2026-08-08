@@ -1526,13 +1526,13 @@
                                 <button type="button" class="toolbar-btn" data-canvas-tool="text" onclick="canvasSetTool('text'); canvasAddText();" title="Text" aria-label="Add text"><i class="fas fa-font"></i></button>
                                 <button type="button" class="toolbar-btn" data-canvas-tool="sticky" onclick="canvasSetTool('sticky'); canvasAddSticky();" title="Sticky note" aria-label="Add sticky note"><i class="fas fa-sticky-note"></i></button>
                                 <div class="canvas-shape-picker" id="canvasShapePicker">
-                                    <button type="button" class="toolbar-btn" id="canvasShapeBtn" onclick="toggleCanvasShapeMenu(event)" title="Add shape" aria-label="Add shape" aria-haspopup="true" aria-expanded="false"><i class="fas fa-shapes"></i></button>
+                                    <button type="button" class="toolbar-btn" id="canvasShapeBtn" title="Add shape" aria-label="Add shape" aria-haspopup="true" aria-expanded="false"><i class="fas fa-shapes"></i></button>
                                     <div class="canvas-shape-menu" id="canvasShapeMenu" role="menu" aria-label="Shapes" hidden>
-                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rectangle')"><span class="canvas-shape-ico" data-shape="rectangle"></span>Rectangle</button>
-                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('rounded')"><span class="canvas-shape-ico" data-shape="rounded"></span>Rounded</button>
-                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('ellipse')"><span class="canvas-shape-ico" data-shape="ellipse"></span>Ellipse</button>
-                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('diamond')"><span class="canvas-shape-ico" data-shape="diamond"></span>Diamond</button>
-                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" onclick="canvasAddShapeFromMenu('triangle')"><span class="canvas-shape-ico" data-shape="triangle"></span>Triangle</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" data-canvas-shape="rectangle"><span class="canvas-shape-ico" data-shape="rectangle"></span>Rectangle</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" data-canvas-shape="rounded"><span class="canvas-shape-ico" data-shape="rounded"></span>Rounded</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" data-canvas-shape="ellipse"><span class="canvas-shape-ico" data-shape="ellipse"></span>Ellipse</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" data-canvas-shape="diamond"><span class="canvas-shape-ico" data-shape="diamond"></span>Diamond</button>
+                                        <button type="button" class="canvas-shape-menu-item" role="menuitem" data-canvas-shape="triangle"><span class="canvas-shape-ico" data-shape="triangle"></span>Triangle</button>
                                     </div>
                                 </div>
                                 <button type="button" class="toolbar-btn" onclick="canvasAddConnector()" title="Connector" aria-label="Add connector"><i class="fas fa-link"></i></button>
@@ -7712,6 +7712,8 @@
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
 <script src="src/core/app.js?v=20260808-focusunified2"></script>
+    <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
+    <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
