@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-onboardingflow2",
-    "hash": "2b0b71730abee570"
+    "stamp": "20260807-onboardingflow3",
+    "hash": "d8abfb6106e43e0b"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -228,8 +228,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260807-cohesion1",
-    "hash": "5f22dcc27364d5dc"
+    "stamp": "20260807-cohesion2",
+    "hash": "fced22c221585e0b"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -420,8 +420,8 @@
     "hash": "3bcf3e999e605556"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260807-cohesion1",
-    "hash": "ea118b3f0f81607c"
+    "stamp": "20260807-cohesion2",
+    "hash": "9a3783cbf7c875c1"
   },
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",

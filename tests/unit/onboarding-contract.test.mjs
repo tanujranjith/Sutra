@@ -71,6 +71,10 @@ test('onboarding classes use Homework’s canonical API and can be selected as p
   assert.match(sync.body, /SutraHomeworkStore/, 'the canonical store is a fallback before the Homework UI is ready');
   assert.doesNotMatch(sync.body, /localStorage\.setItem/, 'onboarding does not directly write legacy storage');
 
+  const continueStep = extractFunction(app, 'goContinue');
+  assert.ok(continueStep, 'goContinue is an onboarding helper');
+  assert.match(continueStep.body, /commitPendingOnboardingClassInput\(\)/, 'Continue retains a class that was typed but not submitted with Enter');
+
   const mode = extractFunction(app, 'renderModeStep');
   assert.ok(mode, 'renderModeStep is an onboarding helper');
   assert.match(mode.body, /Choose the pages you want/, 'the mode step has an explicit page chooser');

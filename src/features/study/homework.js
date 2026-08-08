@@ -1633,6 +1633,26 @@
       }).join('');
   }
 
+  function hasActiveHomeworkTaskFilters() {
+    return !!(
+      homeworkViewState.query
+      || homeworkViewState.course !== 'all'
+      || homeworkViewState.status !== 'all'
+      || homeworkViewState.priority !== 'all'
+      || homeworkViewState.completion !== 'all'
+      || homeworkViewState.due !== 'all'
+    );
+  }
+
+  function renderEmptyClassState() {
+    const classes = courses.filter(course => course.type === 'class');
+    const rows = classes.map(course => {
+      const color = getCourseColor(course.id);
+      return `<li class="hw-empty-class-row"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></li>`;
+    }).join('');
+    return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul></div>`;
+  }
+
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
@@ -1641,6 +1661,8 @@
 
     if (!tasks.length && !courses.length) {
       content = renderEmptyStateRedesign('No homework yet.');
+    } else if (!filteredTasks.length && homeworkViewState.tab === 'class' && !hasActiveHomeworkTaskFilters()) {
+      content = renderEmptyClassState();
     } else if (!filteredTasks.length) {
       content = `<div class="hw-filter-empty"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><h4>No assignments match</h4><p>Try a different search or clear the current filters.</p><button type="button" class="hw-toolbar-btn" data-clear-task-filters>Clear filters</button></div>`;
     } else {

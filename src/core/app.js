@@ -26862,7 +26862,10 @@ function buildOnboardingPlanPreview() {
                     showToast('Sutra is ready. Rerun setup any time from Settings.');
                     return;
                 }
-                if (step === 'classes') syncOnboardingClassesToHomework();
+                if (step === 'classes') {
+                    commitPendingOnboardingClassInput();
+                    syncOnboardingClassesToHomework();
+                }
                 commitDraftToState();
                 const idx = currentStepIndex();
                 if (idx >= ONBOARDING_STEPS.length - 1) {
@@ -26896,6 +26899,18 @@ function buildOnboardingPlanPreview() {
                         try { if (typeof window.SutraReportError === 'function') window.SutraReportError(err, { where: 'onboarding.auxiliary-modal' }, 'warning'); } catch (reportErr) { /* non-critical */ }
                     }
                 }, 300);
+            }
+
+            function commitPendingOnboardingClassInput() {
+                const input = document.getElementById('onbClassInput');
+                const value = String(input && input.value || '').trim().replace(/,$/, '');
+                if (!value) return false;
+                const draftRef = getDraft();
+                draftRef.classes = Array.isArray(draftRef.classes) ? draftRef.classes : [];
+                const exists = draftRef.classes.some(name => String(name || '').trim().toLowerCase() === value.toLowerCase());
+                if (!exists) draftRef.classes.push(value);
+                if (input) input.value = '';
+                return !exists;
             }
 
             function syncOnboardingClassesToHomework() {

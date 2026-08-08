@@ -950,6 +950,26 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-filter-empty h4 { margin: 9px 0 0; color: var(--text-primary); font-size: 0.95rem; }
 .hw-filter-empty p { margin: 5px 0 13px; font-size: 0.78rem; }
 .hw-filter-empty .hw-toolbar-btn { min-height: 36px; }
+.hw-empty-class-list {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 420px);
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hw-empty-class-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 9px;
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
 
 .hw-workspace-sidebar { display: grid; gap: 14px; min-width: 0; }
 .hw-activity-list { display: grid; }
