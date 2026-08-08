@@ -7,6 +7,14 @@
     padding: 0 !important;
     overflow: hidden;
 }
+/* The full Assistant is already open, so its floating launcher is redundant.
+   Hide it (and other workspace FABs) here instead of letting those global
+   controls cover Assistant quick actions or the message composer on phones. */
+body[data-view="assistantview"] #chatbotBtn,
+body[data-view="assistantview"] #feedbackFabBtn,
+body[data-view="assistantview"] #focusModeQuickToggle {
+    display: none !important;
+}
 .asst-shell {
     /* All colors reference Sutra's theme tokens — no hardcoded palette */
     --asst-bg-0: var(--bg-secondary);

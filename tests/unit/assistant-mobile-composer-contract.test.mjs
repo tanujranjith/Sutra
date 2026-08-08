@@ -13,3 +13,7 @@ test('Assistant quick actions stay one scrollable row on phones', () => {
   assert.match(assistantStyles, /#view-assistantview \.asst-chips \{[\s\S]*?flex-wrap: nowrap;[\s\S]*?overflow-x: auto;/);
   assert.match(assistantStyles, /#view-assistantview \.asst-chip \{ flex: 0 0 auto; \}/);
 });
+
+test('Assistant workspace page hides redundant floating controls', () => {
+  assert.match(assistantStyles, /body\[data-view="assistantview"\] #chatbotBtn,[\s\S]*?body\[data-view="assistantview"\] #feedbackFabBtn,[\s\S]*?body\[data-view="assistantview"\] #focusModeQuickToggle \{[\s\S]*?display: none !important;/);
+});

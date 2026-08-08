@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260808-assistantclose1",
-    "hash": "41dc895d9ec58714"
+    "stamp": "20260808-assistantfab1",
+    "hash": "f560f3d3eb0e079c"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -508,8 +508,8 @@
     "hash": "3208734a65002e8c"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260808-assistantclose1",
-    "hash": "5250be0e52e69e7d"
+    "stamp": "20260808-assistantfab1",
+    "hash": "db216eb4138f5552"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",
