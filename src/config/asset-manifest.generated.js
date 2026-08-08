@@ -12,7 +12,7 @@
     "./src/compat/legacy-homework.js?v=20260709-compat1",
     "./src/components/icons/icon-paths.js?v=20260709-icons-comments",
     "./src/components/icons/index.js?v=20260709-icons-comments",
-    "./src/config/feature-manifest.js?v=20260807-businessops1",
+    "./src/config/feature-manifest.js?v=20260808-mobilecomposer1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
     "./src/core/app.js?v=20260807-onboardingflow3",
     "./src/core/dom-safety.js?v=20260613-harden1",
@@ -149,6 +149,6 @@
     "./src/features/workspace/business-workspace.js?v=20260807-opsqueue1",
     "./styles/features/sutra-assistant-help.css?v=20260729-providerwiz1",
     "./styles/features/sutra-intelligence.css?v=20260610-intel1",
-    "./styles/views/assistant-view.css?v=20260722-receipt-surface1"
+    "./styles/views/assistant-view.css?v=20260808-mobilecomposer1"
   ]
 }); })(typeof self !== 'undefined' ? self : globalThis);

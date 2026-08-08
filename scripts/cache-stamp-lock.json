@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260807-businessops1",
-    "hash": "93991a7da2844b97"
+    "stamp": "20260808-mobilecomposer1",
+    "hash": "5b361c372167d4e7"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -508,8 +508,8 @@
     "hash": "3208734a65002e8c"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260722-receipt-surface1",
-    "hash": "755be5d176378633"
+    "stamp": "20260808-mobilecomposer1",
+    "hash": "83d9c377e77902d2"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",

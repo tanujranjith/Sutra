@@ -779,6 +779,41 @@ body.motion-off .asst-mic-btn.is-listening { animation: none; }
     }
 }
 
+/* Phone shell: the Save bar and the canonical bottom navigation are fixed
+   above this view. Reserve their shared footprint inside the Assistant frame
+   so the composer remains visible instead of being painted underneath them. */
+@media (max-width: 640px) {
+    #view-assistantview {
+        padding: 0 0 calc(var(--sutra-mobile-nav-height, 4.75rem) + 4.75rem) !important;
+        overflow: hidden;
+    }
+    #view-assistantview .asst-shell {
+        height: 100%;
+        min-height: 0;
+    }
+    #view-assistantview .asst-body {
+        padding: 18px 12px 4px;
+    }
+    #view-assistantview .asst-hero {
+        padding: 20px 12px;
+    }
+    #view-assistantview .asst-chips {
+        width: 100%;
+        max-width: none;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding: 4px 12px 8px;
+    }
+    #view-assistantview .asst-chips::-webkit-scrollbar { display: none; }
+    #view-assistantview .asst-chip { flex: 0 0 auto; }
+    #view-assistantview .asst-input-wrap { padding: 6px 12px 12px; }
+    #view-assistantview .asst-hint { display: none; }
+}
+
 /* Reduce animations for users who prefer that */
 @media (prefers-reduced-motion: reduce) {
     .asst-shell::before, .asst-shell::after { animation: none; }
