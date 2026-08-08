@@ -57,6 +57,11 @@ test('onboarding auxiliary dialogs return to the step that launched them', () =>
   assert.ok(bind, 'bindMain is an onboarding helper');
   assert.match(bind.body, /openStarterPacks\(\{ onClose \}\)/, 'starter packs receive a resume callback');
   assert.match(bind.body, /openHomeworkPasteImport\('', \{ onClose \}\)/, 'paste import receives a resume callback');
+
+  const finishWithImport = extractFunction(app, 'finishWithImport');
+  assert.ok(finishWithImport, 'finishWithImport is an onboarding helper');
+  assert.match(finishWithImport.body, /onCancel/, 'final import cancellation returns to onboarding');
+  assert.match(finishWithImport.body, /onImported/, 'only a successful import completes onboarding');
 });
 
 test('onboarding classes use Homework’s canonical API and can be selected as pages', () => {

@@ -17,5 +17,7 @@ test('homework paste import uses a self-contained, scroll-safe dialog card', () 
 test('homework paste import can resume the onboarding flow after cancellation', () => {
   assert.match(app, /function openHomeworkPasteImport\(prefillText, options\)/);
   assert.match(app, /modal\._onClose = options && typeof options\.onClose === 'function' \? options\.onClose : null/);
-  assert.match(app, /function closeHomeworkPasteImport\(\)[\s\S]*if \(onClose\) setTimeout\(\(\) => onClose\(\), 0\)/);
+  assert.match(app, /modal\._onCancel = options && typeof options\.onCancel === 'function' \? options\.onCancel : null/);
+  assert.match(app, /function closeHomeworkPasteImport\(reason\)[\s\S]*closeReason === 'imported'/);
+  assert.match(app, /closeHomeworkPasteImport\('imported'\)/, 'successful imports are distinct from cancellation');
 });

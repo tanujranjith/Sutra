@@ -27001,16 +27001,18 @@ function buildOnboardingPlanPreview() {
                 persistOnboardingState();
             }
 
-            // Import-first exit: finish setup and immediately open the paste importer so a
-            // student with assignments already somewhere gets a real plan in one step.
-            // Text pasted during the Setup step prefills the importer.
+            // Keep the final import inside the setup flow until it succeeds. Cancelling
+            // returns to Finish instead of treating an abandoned import as completion.
             function finishWithImport() {
                 const pasteText = String(getDraft().pastedImportText || '').trim();
-                commitOnboardingCompletion();
-                close({ startTour: false, openPasteImport: pasteText || true });
-                showToast(pasteText
-                    ? 'Setup complete. Review your assignments to build your plan.'
-                    : 'Setup complete. Paste your assignments to build your plan.');
+                launchAuxiliaryModal((onCancel) => openHomeworkPasteImport(pasteText, {
+                    onCancel,
+                    onImported: () => {
+                        commitOnboardingCompletion();
+                        try { setActiveView('today'); } catch (err) { /* non-critical */ }
+                        showToast('Setup complete. Your assignments are ready in Homework and Today.');
+                    }
+                }));
             }
 
             function finish() {
@@ -27018,9 +27020,7 @@ function buildOnboardingPlanPreview() {
                 const chosenAction = draftRef.tourChoice;
                 const pasteText = String(draftRef.pastedImportText || '').trim();
                 if (pasteText) {
-                    commitOnboardingCompletion();
-                    close({ startTour: false, openPasteImport: pasteText });
-                    showToast('Setup complete. Review your assignments to build your plan.');
+                    finishWithImport();
                     return;
                 }
                 commitOnboardingCompletion();
@@ -83036,6 +83036,8 @@ function openHomeworkPasteImport(prefillText, options) {
     const modal = document.getElementById('homeworkPasteImportModal');
     if (!modal) return;
     modal._onClose = options && typeof options.onClose === 'function' ? options.onClose : null;
+    modal._onCancel = options && typeof options.onCancel === 'function' ? options.onCancel : null;
+    modal._onImported = options && typeof options.onImported === 'function' ? options.onImported : null;
     const textarea = modal.querySelector('#homeworkPasteInput');
     const previewHost = modal.querySelector('#homeworkPastePreview');
     const statusEl = modal.querySelector('#homeworkPasteStatus');
@@ -83200,14 +83202,20 @@ function openHomeworkPasteImport(prefillText, options) {
     setTimeout(() => { try { textarea.focus(); } catch (err) {} }, 40);
 }
 
-function closeHomeworkPasteImport() {
+function closeHomeworkPasteImport(reason) {
     const modal = document.getElementById('homeworkPasteImportModal');
     if (!modal) return;
+    const closeReason = reason || 'cancel';
     const onClose = typeof modal._onClose === 'function' ? modal._onClose : null;
+    const onCancel = typeof modal._onCancel === 'function' ? modal._onCancel : null;
+    const onImported = typeof modal._onImported === 'function' ? modal._onImported : null;
     modal._onClose = null;
+    modal._onCancel = null;
+    modal._onImported = null;
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
-    if (onClose) setTimeout(() => onClose(), 0);
+    const callback = closeReason === 'imported' ? (onImported || onClose) : (onCancel || onClose);
+    if (callback) setTimeout(() => callback(), 0);
 }
 
 // ================================================================
@@ -83345,7 +83353,7 @@ function submitHomeworkPasteImport() {
     }
     // Close on success AND on the all-skipped re-paste (the common bookmarklet
     // re-run) — a modal stuck open on "Imported 0" read like a failure.
-    if (imported > 0 || updated > 0 || (imported === 0 && invalid === 0 && skipped === rowEls.length)) closeHomeworkPasteImport();
+    if (imported > 0 || updated > 0 || (imported === 0 && invalid === 0 && skipped === rowEls.length)) closeHomeworkPasteImport('imported');
 }
 
 // ================================================================
