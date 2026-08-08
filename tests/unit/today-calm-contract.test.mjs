@@ -4,6 +4,7 @@ import test from 'node:test';
 import { extractBalancedBlock } from '../helpers/extract-function.mjs';
 
 const source = readFileSync(new URL('../../src/features/workspace/today-dashboard.js', import.meta.url), 'utf8');
+const appShell = readFileSync(new URL('../../Sutra.html', import.meta.url), 'utf8');
 
 function widgetIds() {
   const widgetsStart = source.indexOf('var WIDGETS = [');
@@ -47,4 +48,9 @@ test('the daily-loop hero and backup confidence widgets are part of the catalog'
   const presets = loadPresets();
   assert.ok(!presets.calm.hidden.includes('next-up'), 'Next up is never hidden in calm mode');
   assert.ok(!presets.calm.hidden.includes('backup'), 'backup confidence is never hidden in calm mode');
+});
+
+test('Today dashboard label uses text rather than an unsupported icon glyph', () => {
+  assert.match(appShell, /<span class="today-dashboard-toolbar-label">Dashboard<\/span>/);
+  assert.doesNotMatch(appShell, /fa-table-cells-large/);
 });
