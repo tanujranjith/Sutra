@@ -81,7 +81,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260808-mobilecomposer1"></script>
+    <script src="src/config/feature-manifest.js?v=20260808-assistantclose1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -4843,9 +4843,14 @@
     <div class="asst-sidebar" id="asstSidebar">
       <div class="asst-sidebar-head">
         <span class="asst-sidebar-title">Chats</span>
-        <button class="asst-new-chat-btn" id="asstNewChatBtn" title="New chat" aria-label="New chat">
-          <i class="fas fa-plus" aria-hidden="true"></i>
-        </button>
+        <div class="asst-sidebar-actions">
+          <button class="asst-sidebar-close" id="asstSidebarClose" type="button" title="Hide chat list" aria-label="Hide chat list">
+            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+          </button>
+          <button class="asst-new-chat-btn" id="asstNewChatBtn" title="New chat" aria-label="New chat">
+            <i class="fas fa-plus" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
       <div class="asst-sidebar-search-row">
         <input type="search" class="asst-sidebar-search" id="asstSearch" placeholder="Search chats…" aria-label="Search chats">
@@ -4858,7 +4863,7 @@
     <div class="asst-main" id="asstMainPanel">
       <!-- Header bar: title, model badge, actions -->
       <div class="asst-topbar" id="asstTopbar">
-        <button class="asst-topbar-menu" id="asstSidebarToggle" type="button" title="Toggle chat list" aria-label="Toggle chat list">
+        <button class="asst-topbar-menu" id="asstSidebarToggle" type="button" title="Toggle chat list" aria-label="Toggle chat list" aria-expanded="false">
           <i class="fas fa-bars" aria-hidden="true"></i>
         </button>
         <div class="asst-topbar-titles">
@@ -7706,7 +7711,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-<script src="src/core/app.js?v=20260807-onboardingflow3"></script>
+<script src="src/core/app.js?v=20260808-assistantclose1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>

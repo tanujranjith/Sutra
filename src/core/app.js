@@ -76884,8 +76884,16 @@ ${cspMeta}
                 settingsBtn: document.getElementById('asstSettingsBtn'),
                 customizeBtn: document.getElementById('asstCustomizeBtn'),
                 sidebarToggle: document.getElementById('asstSidebarToggle'),
+                sidebarClose: document.getElementById('asstSidebarClose'),
                 moreBtn: document.getElementById('asstMoreBtn')
             };
+        }
+
+        function asstSetSidebarOpen(isOpen) {
+            if (!asstCache.shell) return;
+            const open = !!isOpen;
+            asstCache.shell.classList.toggle('show-sidebar', open);
+            if (asstCache.sidebarToggle) asstCache.sidebarToggle.setAttribute('aria-expanded', String(open));
         }
 
         function asstScrollToBottom() {
@@ -78736,7 +78744,14 @@ ${cspMeta}
             if (asstCache.clearAllBtn) { asstCache.clearAllBtn.classList.add('danger'); asstCache.clearAllBtn.addEventListener('click', asstClearAll); }
             if (asstCache.sidebarToggle) {
                 asstCache.sidebarToggle.addEventListener('click', () => {
-                    if (asstCache.shell) asstCache.shell.classList.toggle('show-sidebar');
+                    const isOpen = !!asstCache.shell?.classList.contains('show-sidebar');
+                    asstSetSidebarOpen(!isOpen);
+                });
+            }
+            if (asstCache.sidebarClose) {
+                asstCache.sidebarClose.addEventListener('click', () => {
+                    asstSetSidebarOpen(false);
+                    asstCache.sidebarToggle?.focus();
                 });
             }
             // Drag-and-drop files onto the message area

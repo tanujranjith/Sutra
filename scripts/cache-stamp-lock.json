@@ -28,16 +28,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260808-mobilecomposer1",
-    "hash": "5b361c372167d4e7"
+    "stamp": "20260808-assistantclose1",
+    "hash": "41dc895d9ec58714"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-onboardingflow3",
-    "hash": "d8abfb6106e43e0b"
+    "stamp": "20260808-assistantclose1",
+    "hash": "40e84347d220b94b"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -508,8 +508,8 @@
     "hash": "3208734a65002e8c"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260808-mobilecomposer1",
-    "hash": "83d9c377e77902d2"
+    "stamp": "20260808-assistantclose1",
+    "hash": "5250be0e52e69e7d"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",
