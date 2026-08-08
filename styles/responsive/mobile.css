@@ -2483,3 +2483,13 @@
         padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5rem) !important;
     }
 }
+
+/* ---- 37h. Life is an active grid, so its feature padding bypasses the
+   shared view clearance. Keep the final tracker card scrollable above the
+   fixed Save bar and phone navigation. ---- */
+@media (max-width: 640px) {
+    #view-life.active {
+        padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5rem) !important;
+        scroll-padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5.5rem);
+    }
+}

@@ -114,7 +114,7 @@
     "./styles/legacy/responsive-hardening.css?v=20260616-cssextract1",
     "./styles/legacy/ui-refresh.css?v=20260616-cssextract1",
     "./styles/legacy/workspace-overrides.css?v=20260703-voice1",
-    "./styles/responsive/mobile.css?v=20260808-noteschrome1",
+    "./styles/responsive/mobile.css?v=20260808-lifeclearance1",
     "./styles/themes/dune.css?v=20260807-dune3",
     "./styles/themes/glass.css?v=20260712-glass-fix",
     "./styles/themes/macos26-redesign.css?v=20260712-glass-fix",
