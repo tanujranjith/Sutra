@@ -17,5 +17,10 @@ test('Timeline workbench remains local-first and respects text controls', () => 
     assert.doesNotMatch(source, /\bfetch\s*\(/);
     assert.doesNotMatch(source, /localStorage\s*\./);
     assert.match(source, /INPUT\|TEXTAREA\|SELECT\|BUTTON/);
-    assert.match(source, /Press question mark for keyboard shortcuts/);
+  assert.match(source, /Press question mark for keyboard shortcuts/);
+});
+
+test('Day time views use a distinct class from Month day cells', () => {
+    assert.match(source, /sutra-calendar-time-view sutra-calendar-time-' \+ mode/);
+    assert.doesNotMatch(source, /sutra-calendar-time-view sutra-calendar-' \+ mode/);
 });

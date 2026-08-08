@@ -296,8 +296,8 @@
     "hash": "0bdf44d3dad8df1a"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260807-calendarworkbench1",
-    "hash": "aee1b4265eeb50b1"
+    "stamp": "20260808-mobileday1",
+    "hash": "952c87438d22dbc9"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
@@ -524,8 +524,8 @@
     "hash": "6e47e2793964e87f"
   },
   "styles/views/timeline-calendar.css": {
-    "stamp": "20260721-mobile1",
-    "hash": "38cecfb56b1d6e1b"
+    "stamp": "20260808-mobileday1",
+    "hash": "d711e1fd39e74488"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260807-todaywidgets1",

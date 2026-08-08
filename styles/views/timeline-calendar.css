@@ -99,7 +99,12 @@
     .sutra-calendar-more { display: none; }
     .sutra-calendar-time-view { min-height: min(520px, 62dvh); height: 62dvh; }
     .sutra-calendar-time-grid { grid-template-columns: 48px repeat(var(--sutra-calendar-day-count), minmax(92px, 1fr)); min-width: calc(48px + var(--sutra-calendar-day-count) * 92px); }
-    .sutra-calendar-day.sutra-calendar-time-view .sutra-calendar-time-grid { min-width: 100%; grid-template-columns: 48px minmax(0, 1fr); }
+    /* Day time views must not inherit the Month-cell .sutra-calendar-day rules:
+       those center a grid at its intrinsic width and squeeze the schedule on phones. */
+    .sutra-calendar-time-day.sutra-calendar-time-view { display: block; min-height: min(520px, 62dvh); padding: 0; border: 0; background: transparent; cursor: default; }
+    .sutra-calendar-time-day.sutra-calendar-time-view .sutra-calendar-time-scroll,
+    .sutra-calendar-time-day.sutra-calendar-time-view .sutra-calendar-time-grid { width: 100%; }
+    .sutra-calendar-time-day.sutra-calendar-time-view .sutra-calendar-time-grid { min-width: 100%; grid-template-columns: 48px minmax(0, 1fr); }
     .sutra-calendar-time-column { cursor: pointer; }
 }
 @media (prefers-reduced-motion: reduce) { .sutra-calendar-day, .sutra-calendar-event, .sutra-calendar-month-event { transition: none !important; } }

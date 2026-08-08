@@ -66,7 +66,7 @@
     "./src/features/workspace/smart-reschedule.js?v=20260712-resched1",
     "./src/features/workspace/starter-packs.data.js?v=20260619-packs1",
     "./src/features/workspace/surface-assistant-actions.js?v=20260807-surfaces2",
-    "./src/features/workspace/timeline-calendar.js?v=20260807-calendarworkbench1",
+    "./src/features/workspace/timeline-calendar.js?v=20260808-mobileday1",
     "./src/features/workspace/timeline-drag.js?v=20260730-pushTime1",
     "./src/features/workspace/today-command-center.js?v=20260721-radar-consolidation1",
     "./src/features/workspace/today-dashboard.js?v=20260807-todaywidgets1",
@@ -123,7 +123,7 @@
     "./styles/views/custom-tabs.css?v=20260706-ctabs3",
     "./styles/views/focus-session.css?v=20260807-atmospheres1",
     "./styles/views/settings-redesign.css?v=20260807-settings15b",
-    "./styles/views/timeline-calendar.css?v=20260721-mobile1",
+    "./styles/views/timeline-calendar.css?v=20260808-mobileday1",
     "./styles/views/today-redesign.css?v=20260807-todaywidgets1"
   ],
   "optional": [
