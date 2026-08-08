@@ -24,6 +24,10 @@ timers are excluded). Aggregate your time by subject for the last N days:
 - API: `recordFocusSession({minutes, subject, category})` and
   `getFocusStatsBySubject(days)`. New persisted `focusSessions` collection
   (round-trips like the rest of the workspace).
+- **Focus Session** is the full-screen presentation of that same canonical
+  timer: its duration, remaining time, and play/pause state always match the
+  sidebar timer. An explicit shortcut such as **Start 50-min focus** first sets
+  that one timer to 50 minutes, then opens it full-screen.
 
 ## Storage-usage gauge
 

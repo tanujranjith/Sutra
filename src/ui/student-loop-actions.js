@@ -11,10 +11,18 @@
     function startFocus() {
         try {
             if (window.flowAtelier && typeof window.flowAtelier.startFocusSession === 'function') {
-                window.flowAtelier.startFocusSession(null, { plannedDurationSeconds: 25 * 60 });
+                window.flowAtelier.startFocusSession(null, {
+                    plannedDurationSeconds: 50 * 60,
+                    autostart: true
+                });
                 return;
             }
-            if (typeof window.startFocusSession === 'function') window.startFocusSession();
+            if (typeof window.startFocusSession === 'function') {
+                window.startFocusSession(null, {
+                    plannedDurationSeconds: 50 * 60,
+                    autostart: true
+                });
+            }
         } catch (err) { /* non-critical action */ }
     }
 

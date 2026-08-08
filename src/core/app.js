@@ -18404,7 +18404,86 @@ function populateProgressDashboard() {
         let timerRingtonePreviewNodes = [];
         let timerWheelFrameRafId = null;
         let focusTimerVisibilityBound = false;
+        let focusTimerBridgeBound = false;
         let activeTimedHabitTimerId = null;
+
+        // Focus Session is a presentation of this canonical timer, not a second
+        // clock. A private DOM event bridge keeps the classic-script scopes
+        // decoupled without creating another window API.
+        function getFocusTimerSnapshot() {
+            if (focusTimer.running) syncRunningTimerFromClock();
+            return {
+                durationSeconds: Math.max(1, Math.floor(Number(focusTimer.durationSeconds) || 0)),
+                remaining: Math.max(0, Math.floor(Number(focusTimer.remaining) || 0)),
+                running: !!focusTimer.running
+            };
+        }
+
+        function syncFocusTimerDurationInputs() {
+            const total = Math.max(1, Math.floor(Number(focusTimer.durationSeconds) || 0));
+            const hoursInput = document.getElementById('hoursInput');
+            const minutesInput = document.getElementById('minutesInput');
+            const secondsInput = document.getElementById('secondsInput');
+            if (hoursInput) hoursInput.value = Math.floor(total / 3600);
+            if (minutesInput) minutesInput.value = Math.floor((total % 3600) / 60);
+            if (secondsInput) secondsInput.value = total % 60;
+        }
+
+        function setFocusTimerDurationSeconds(seconds) {
+            const duration = Math.max(1, Math.floor(Number(seconds) || 0));
+            pauseTimer();
+            hideTimerDonePopup();
+            focusTimer.durationSeconds = duration;
+            focusTimer.remaining = duration;
+            syncFocusTimerDurationInputs();
+            saveFocusState();
+            updateTimerUI();
+            return getFocusTimerSnapshot();
+        }
+
+        function dispatchFocusTimerUpdate() {
+            try {
+                document.dispatchEvent(new CustomEvent('sutra:focus-timer-updated', { detail: getFocusTimerSnapshot() }));
+            } catch (error) { /* Focus view is optional; the canonical timer still works. */ }
+        }
+
+        function bindFocusTimerBridge() {
+            if (focusTimerBridgeBound) return;
+            focusTimerBridgeBound = true;
+            document.addEventListener('sutra:focus-timer-command', function(event) {
+                const detail = event && event.detail;
+                if (!detail || typeof detail !== 'object') return;
+                switch (detail.action) {
+                    case 'set-duration':
+                        detail.result = setFocusTimerDurationSeconds(detail.seconds);
+                        break;
+                    case 'start':
+                        startTimer();
+                        detail.result = getFocusTimerSnapshot();
+                        break;
+                    case 'pause':
+                        pauseTimer();
+                        detail.result = getFocusTimerSnapshot();
+                        break;
+                    case 'toggle':
+                        if (focusTimer.running) pauseTimer(); else startTimer();
+                        detail.result = getFocusTimerSnapshot();
+                        break;
+                    case 'reset':
+                        pauseTimer();
+                        hideTimerDonePopup();
+                        focusTimer.remaining = Math.max(1, Number(focusTimer.durationSeconds) || 0);
+                        saveFocusState();
+                        updateTimerUI();
+                        detail.result = getFocusTimerSnapshot();
+                        break;
+                    case 'snapshot':
+                    default:
+                        detail.result = getFocusTimerSnapshot();
+                        break;
+                }
+            });
+        }
 
         function normalizeTimerRingtone(value) {
             const key = String(value || '').trim().toLowerCase();
@@ -18726,7 +18805,10 @@ function populateProgressDashboard() {
             const display = document.getElementById('timerDisplay');
             const modeEl = document.getElementById('timerMode');
             const progressBar = document.getElementById('timerProgress');
-            if (!display || !modeEl || !progressBar) return;
+            if (!display || !modeEl || !progressBar) {
+                dispatchFocusTimerUpdate();
+                return;
+            }
 
             renderWheelTimerDisplay(formatTime(focusTimer.remaining));
             modeEl.textContent = 'Timer';
@@ -18751,6 +18833,7 @@ function populateProgressDashboard() {
             // buttons
             document.getElementById('timerStartBtn').style.display = focusTimer.running ? 'none' : 'inline-block';
             document.getElementById('timerPauseBtn').style.display = focusTimer.running ? 'inline-block' : 'none';
+            dispatchFocusTimerUpdate();
         }
 
         function updateToolbarFocusTimerCountdown() {
@@ -18946,6 +19029,7 @@ function populateProgressDashboard() {
 
         function initFocusTimer() {
             loadFocusState();
+            bindFocusTimerBridge();
             // wire up controls
             const startBtn = document.getElementById('timerStartBtn');
             const pauseBtn = document.getElementById('timerPauseBtn');
@@ -83787,6 +83871,29 @@ let _fsSession = null;
 let _fsIntervalId = null;
 let _fsKeyboardBound = false;
 
+function _fsTimerCommand(action, seconds) {
+    var detail = { action: action, seconds: seconds, result: null };
+    try {
+        document.dispatchEvent(new CustomEvent('sutra:focus-timer-command', { detail: detail }));
+    } catch (error) { /* The focus view retains legacy state only until the canonical timer is ready. */ }
+    return detail.result;
+}
+
+function _fsApplyTimerSnapshot(snapshot) {
+    if (!_fsSession || !snapshot || typeof snapshot !== 'object') return snapshot || null;
+    var duration = Math.max(1, Math.floor(Number(snapshot.durationSeconds) || 0));
+    var remaining = Math.max(0, Math.min(duration, Math.floor(Number(snapshot.remaining) || 0)));
+    _fsSession.plannedDurationSeconds = duration;
+    _fsSession.elapsedSeconds = Math.max(0, duration - remaining);
+    _fsSession.running = !!snapshot.running;
+    _fsSession.lastTickAt = _fsSession.running ? new Date().toISOString() : null;
+    return snapshot;
+}
+
+function _fsSyncFromCanonicalTimer() {
+    return _fsApplyTimerSnapshot(_fsTimerCommand('snapshot'));
+}
+
 function _fsGenerateId() {
     return 'fs_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36);
 }
@@ -83816,6 +83923,7 @@ function _fsOpenOverlay() {
     const overlay = document.getElementById('focusSessionOverlay');
     if (!overlay) return;
 
+    _fsSyncFromCanonicalTimer();
     _fsPopulateUI();
 
     overlay.removeAttribute('hidden');
@@ -83835,7 +83943,7 @@ function _fsOpenOverlay() {
 }
 
 function _fsCloseOverlay(reason) {
-    _fsPauseTimer();
+    // Closing the full-screen view must not alter the canonical sidebar timer.
 
     // Flush notes before closing
     var notesArea = document.getElementById('fsNotesTextarea');
@@ -83953,43 +84061,26 @@ function _fsUpdateUI() {
     if (completeBtn) completeBtn.style.display = s.taskId ? '' : 'none';
 }
 
-// ---------- Timer tick ----------
+// ---------- Canonical timer controls ----------
 
 function _fsStartTimer() {
-    if (!_fsSession || _fsSession.running) return;
-    _fsSession.running   = true;
-    _fsSession.lastTickAt = new Date().toISOString();
-    if (_fsIntervalId) clearInterval(_fsIntervalId);
-    _fsIntervalId = setInterval(_fsTick, 1000);
+    if (!_fsSession) return;
+    _fsApplyTimerSnapshot(_fsTimerCommand('start'));
     _fsUpdateUI();
 }
 
 function _fsPauseTimer() {
-    if (!_fsSession || !_fsSession.running) return;
-    _fsSession.running = false;
+    if (!_fsSession) return;
     if (_fsIntervalId) { clearInterval(_fsIntervalId); _fsIntervalId = null; }
+    _fsApplyTimerSnapshot(_fsTimerCommand('pause'));
     _fsUpdateUI();
 }
 
 function _fsTick() {
-    if (!_fsSession) return;
-    _fsSession.elapsedSeconds += 1;
-    _fsSession.lastTickAt = new Date().toISOString();
-
-    var planned = _fsSession.plannedDurationSeconds;
-    if (planned > 0 && _fsSession.elapsedSeconds >= planned) {
-        _fsSession.elapsedSeconds = planned;
-        _fsPauseTimer();
-        _fsUpdateUI();
-        _fsPersistSession();
-        try { if (typeof playTimerDoneChime === 'function') playTimerDoneChime(); } catch (e) {}
-        try { if (typeof showToast === 'function') showToast('Focus session complete! Great work.', { durationMs: 4000 }); } catch (e) {}
-        return;
-    }
-
+    // Kept as a compatibility no-op for older callers. The sidebar timer owns
+    // the clock and publishes its state back to Focus Session.
+    _fsSyncFromCanonicalTimer();
     _fsUpdateUI();
-    // Autosave every 30 s to guard against accidental closure
-    if (_fsSession.elapsedSeconds % 30 === 0) _fsPersistSession();
 }
 
 // ---------- Public controls (called from onclick) ----------
@@ -84002,9 +84093,7 @@ function fsTogglePlay() {
 
 function fsReset() {
     if (!_fsSession) return;
-    _fsPauseTimer();
-    _fsSession.elapsedSeconds = 0;
-    _fsSession.lastTickAt     = null;
+    _fsApplyTimerSnapshot(_fsTimerCommand('reset'));
     _fsUpdateUI();
     _fsPersistSession();
 }
@@ -84015,23 +84104,11 @@ function fsRestart() {
 }
 
 function fsMinimize() {
-    // Save state and close visually; session keeps running in background (paused)
-    _fsPauseTimer();
     _fsCloseOverlay('minimize');
-    try { if (typeof showToast === 'function') showToast('Session saved — tap "Launch Focus Mode" to return.', { durationMs: 3500 }); } catch (e) {}
+    try { if (typeof showToast === 'function') showToast('Focus view closed — the timer keeps its state.', { durationMs: 3500 }); } catch (e) {}
 }
 
-async function fsClose() {
-    if (_fsSession && _fsSession.elapsedSeconds > 5) {
-        const message = 'Close this focus session? Your current progress will be cleared.';
-        let ok;
-        if (typeof atelierConfirm === 'function') {
-            ok = await atelierConfirm(message, { title: 'Close focus session', confirmText: 'Close session', cancelText: 'Keep going', destructive: true });
-        } else {
-            ok = false;
-        }
-        if (!ok) return;
-    }
+function fsClose() {
     _fsCloseOverlay('abandon');
 }
 
@@ -84039,7 +84116,6 @@ function fsSaveAndContinue() {
     if (!_fsSession) { _fsCloseOverlay('save'); return; }
     var notesArea = document.getElementById('fsNotesTextarea');
     if (notesArea) _fsSession.sessionNotes = notesArea.value || '';
-    _fsPauseTimer();
     _fsCloseOverlay('save');
     try { if (typeof showToast === 'function') showToast('Focus session saved.'); } catch (e) {}
 }
@@ -84140,6 +84216,9 @@ function restoreFocusSessionIfActive() {
     }
 
     _fsSession = restored;
+    // A restored Focus view inherits the canonical timer instead of reviving a
+    // second historical countdown.
+    _fsSyncFromCanonicalTimer();
 
     // Update the sidebar launch button label to signal an active session
     _fsUpdateLaunchBtnLabel();
@@ -84158,30 +84237,38 @@ function _fsUpdateLaunchBtnLabel() {
     }
 }
 
-// Called from the sidebar button — opens existing session or starts a blank one
+// Called from the sidebar button — opens the same canonical timer full-screen.
 function startFocusSession(taskId, opts) {
     opts = opts || {};
+    var requestedDuration = Number(opts.plannedDurationSeconds);
+    var hasRequestedDuration = Number.isFinite(requestedDuration) && requestedDuration > 0;
 
-    // If there's already an active session and no new taskId, reopen it
-    if (_fsSession && _fsSession.id && !taskId) {
+    // An explicit duration (for example Today’s 50-minute focus action) resets
+    // the canonical timer before opening its full-screen presentation.
+    if (hasRequestedDuration) {
+        _fsTimerCommand('set-duration', Math.floor(requestedDuration));
+    }
+
+    // If there is already a matching session, reuse its context but always
+    // refresh it from the one timer. This also makes the sidebar launch button
+    // a pure full-screen view of the timer the student already configured.
+    if (_fsSession && _fsSession.id && (!taskId || _fsSession.taskId === taskId)) {
+        _fsSyncFromCanonicalTimer();
+        if (opts.autostart) _fsApplyTimerSnapshot(_fsTimerCommand('start'));
         _fsOpenOverlay();
+        _fsPersistSession();
         return;
     }
 
-    // If there's a session tied to the same task, reopen that
-    if (_fsSession && _fsSession.id && taskId && _fsSession.taskId === taskId) {
-        _fsOpenOverlay();
-        return;
-    }
-
-    // New session
     var task = taskId ? ((typeof tasks !== 'undefined' && Array.isArray(tasks) ? tasks : []).find(function(t) { return t && t.id === taskId; }) || null) : null;
+    var timerSnapshot = _fsTimerCommand('snapshot');
+    var plannedDuration = timerSnapshot && timerSnapshot.durationSeconds
+        ? timerSnapshot.durationSeconds
+        : FS_DEFAULT_DURATION_SECONDS;
 
-    var plannedDuration = FS_DEFAULT_DURATION_SECONDS;
-    if (opts.plannedDurationSeconds !== undefined) {
-        var p = Math.floor(Number(opts.plannedDurationSeconds) || 0);
-        if (p >= 0) plannedDuration = p;
-    } else if (task) {
+    if (!timerSnapshot && hasRequestedDuration) {
+        plannedDuration = Math.floor(requestedDuration);
+    } else if (!timerSnapshot && task) {
         try {
             var mins = typeof getTaskEstimatedMinutes === 'function' ? getTaskEstimatedMinutes(task) : 0;
             if (mins > 0) plannedDuration = mins * 60;
@@ -84202,11 +84289,20 @@ function startFocusSession(taskId, opts) {
         lastTickAt:             null
     };
 
+    _fsApplyTimerSnapshot(timerSnapshot);
+    if (opts.autostart) _fsApplyTimerSnapshot(_fsTimerCommand('start'));
     _fsOpenOverlay();
     _fsPersistSession();
     _fsUpdateLaunchBtnLabel();
     try { window.SutraActivation && window.SutraActivation.record('focus'); } catch (e) {}
 }
+
+// The timer publishes every state change; Focus Session only redraws that state.
+document.addEventListener('sutra:focus-timer-updated', function(event) {
+    if (!_fsSession) return;
+    _fsApplyTimerSnapshot(event && event.detail);
+    _fsUpdateUI();
+});
 
 // ---------- Keyboard ----------
 
