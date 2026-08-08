@@ -24653,7 +24653,7 @@ function populateProgressDashboard() {
                                 <h2 class="mobile-card-title" id="todayMobileNextTitle">${escapeCommandHtml(rnItem.title)}</h2>
                                 ${meta ? `<div class="mobile-card-sub">${escapeCommandHtml(meta)}</div>` : ''}
                                 <div class="today-mobile-nudge"><i class="far fa-clock" aria-hidden="true"></i><span>${escapeCommandHtml(nudge)}</span></div>
-                                <button type="button" class="today-mobile-focus-cta" data-mobile-action="rightnow-start" data-rn-id="${escapeCommandHtml(rnItem.sourceId || '')}" data-rn-source="${escapeCommandHtml(rnItem.source || '')}" data-rn-title="${escapeCommandHtml(rnItem.title)}">
+                                <button type="button" class="today-mobile-focus-cta" data-mobile-action="rightnow-start" data-rn-id="${escapeCommandHtml(rnItem.sourceId || '')}" data-rn-source="${escapeCommandHtml(rnItem.source || '')}" data-rn-title="${escapeCommandHtml(rnItem.title)}" data-rn-focus-seconds="${Math.round(focusMinutes * 60)}">
                                     <i class="fas fa-play" aria-hidden="true"></i>
                                     <span>Start ${focusMinutes}-min focus</span>
                                 </button>
@@ -24727,8 +24727,11 @@ function populateProgressDashboard() {
                     } else if (action === 'rightnow-start') {
                         const sid = btn.getAttribute('data-rn-id');
                         const src = btn.getAttribute('data-rn-source');
-                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid);
-                        else if (typeof startFocusSession === 'function') startFocusSession();
+                        const title = btn.getAttribute('data-rn-title') || 'Focus Session';
+                        const seconds = Math.max(60, Math.floor(Number(btn.getAttribute('data-rn-focus-seconds')) || 0));
+                        const options = { plannedDurationSeconds: seconds, autostart: true, title };
+                        if ((src === 'homework' || src === 'task') && sid && typeof startFocusSession === 'function') startFocusSession(sid, options);
+                        else if (typeof startFocusSession === 'function') startFocusSession(null, options);
                     } else if (action === 'rightnow-open') {
                         const id = btn.getAttribute('data-rn-itemid');
                         const all = (typeof collectWorkspaceDeadlines === 'function') ? collectWorkspaceDeadlines() : [];

@@ -26,3 +26,10 @@ test('Today starts the requested 50-minute session through the same timer', () =
   assert.match(studentLoopActions, /autostart:\s*true/);
   assert.match(appRuntime, /if \(hasRequestedDuration\) \{[\s\S]*?_fsTimerCommand\('set-duration', Math\.floor\(requestedDuration\)\)/);
 });
+
+test('mobile Today passes the duration shown on its focus button into the canonical timer', () => {
+  assert.match(appRuntime, /data-rn-focus-seconds="\$\{Math\.round\(focusMinutes \* 60\)\}"/);
+  assert.match(appRuntime, /const seconds = Math\.max\(60, Math\.floor\(Number\(btn\.getAttribute\('data-rn-focus-seconds'\)\) \|\| 0\)\)/);
+  assert.match(appRuntime, /const options = \{ plannedDurationSeconds: seconds, autostart: true, title \}/);
+  assert.match(appRuntime, /startFocusSession\(sid, options\)[\s\S]*?startFocusSession\(null, options\)/);
+});

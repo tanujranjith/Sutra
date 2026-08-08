@@ -14,7 +14,7 @@
     "./src/components/icons/index.js?v=20260709-icons-comments",
     "./src/config/feature-manifest.js?v=20260808-assistantfab1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20260808-focusunified1",
+    "./src/core/app.js?v=20260808-focusunified2",
     "./src/core/dom-safety.js?v=20260613-harden1",
     "./src/core/error-reporter.js?v=20260613-harden1",
     "./src/core/feature-guard.js?v=20260613-harden1",
