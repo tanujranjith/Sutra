@@ -26056,7 +26056,11 @@ body.focus-mode .sidebar::before {
 }
 
 .top-nav .tabs-shell.tabs-shell-overflow-severe .toolbar-time-widget {
-    display: none;
+    display: inline;
+    min-width: 56px;
+    font-size: 11px;
+    letter-spacing: 0;
+    white-space: nowrap;
 }
 
 .top-nav .tabs-shell.tabs-shell-overflow-severe .tab-clock-main {

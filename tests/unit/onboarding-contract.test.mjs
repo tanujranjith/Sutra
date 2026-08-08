@@ -4,6 +4,7 @@ import test from 'node:test';
 import { extractFunction } from '../helpers/extract-function.mjs';
 
 const app = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf8');
+const styles = readFileSync(new URL('../../styles/base/styles.css', import.meta.url), 'utf8');
 
 test('onboarding defaults are local-first, skippable, and start at welcome', () => {
   const extract = extractFunction(app, 'getDefaultAppData');
@@ -44,4 +45,36 @@ test('onboarding screens offer deferral and point students at the daily loop', (
 test('welcome onboarding does not render an unsupported decorative icon glyph', () => {
   assert.match(app, /Your academic life, woven into one private workspace/);
   assert.doesNotMatch(app, /fa-arrows-spin/);
+});
+
+test('onboarding auxiliary dialogs return to the step that launched them', () => {
+  const launch = extractFunction(app, 'launchAuxiliaryModal');
+  assert.ok(launch, 'launchAuxiliaryModal is an onboarding helper');
+  assert.match(launch.body, /commitDraftToState\(\)/, 'the draft is retained before the auxiliary dialog opens');
+  assert.match(launch.body, /show\(\{ jumpTo: step \}\)/, 'closing the auxiliary dialog resumes the same onboarding step');
+
+  const bind = extractFunction(app, 'bindMain');
+  assert.ok(bind, 'bindMain is an onboarding helper');
+  assert.match(bind.body, /openStarterPacks\(\{ onClose \}\)/, 'starter packs receive a resume callback');
+  assert.match(bind.body, /openHomeworkPasteImport\('', \{ onClose \}\)/, 'paste import receives a resume callback');
+});
+
+test('onboarding classes use Homework’s canonical API and can be selected as pages', () => {
+  const sync = extractFunction(app, 'syncOnboardingClassesToHomework');
+  assert.ok(sync, 'syncOnboardingClassesToHomework is an onboarding helper');
+  assert.match(sync.body, /window\.SutraHomework\.addCourse/, 'classes are added through Homework’s registered API');
+  assert.match(sync.body, /SutraHomeworkStore/, 'the canonical store is a fallback before the Homework UI is ready');
+  assert.doesNotMatch(sync.body, /localStorage\.setItem/, 'onboarding does not directly write legacy storage');
+
+  const mode = extractFunction(app, 'renderModeStep');
+  assert.ok(mode, 'renderModeStep is an onboarding helper');
+  assert.match(mode.body, /Choose the pages you want/, 'the mode step has an explicit page chooser');
+  assert.match(mode.body, /renderSpaceTiles\(draftRef\)/, 'the page chooser renders the existing selectable page tiles');
+});
+
+test('an enabled clock remains legible when navigation is compacted', () => {
+  const severeClockRule = styles.match(/\.top-nav \.tabs-shell\.tabs-shell-overflow-severe \.toolbar-time-widget\s*\{([\s\S]*?)\n\}/);
+  assert.ok(severeClockRule, 'severe navigation compaction has a clock rule');
+  assert.match(severeClockRule[1], /display:\s*inline/, 'the clock text is not hidden during severe compaction');
+  assert.match(severeClockRule[1], /white-space:\s*nowrap/, 'the compact clock remains readable as one time value');
 });

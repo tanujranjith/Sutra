@@ -26540,8 +26540,15 @@ function populateProgressDashboard() {
                     <div class="atelier-onboarding-cards atelier-onboarding-cards-focus" role="group" aria-label="Workspace focus">
                         ${cards}
                     </div>
+                    <section class="atelier-onboarding-setup-section">
+                        <h3 class="atelier-onboarding-setup-h">Choose the pages you want</h3>
+                        <p class="atelier-onboarding-setup-help">Turn pages on or off for your workspace. You can change these choices any time in Settings.</p>
+                        <div class="atelier-onboarding-feature-grid" role="group" aria-label="Pages to show in Sutra">
+                            ${renderSpaceTiles(draftRef)}
+                        </div>
+                    </section>
                     <details class="atelier-onboarding-summary-details">
-                        <summary class="atelier-onboarding-summary-toggle">Your core surfaces</summary>
+                        <summary class="atelier-onboarding-summary-toggle">What are the core surfaces?</summary>
                         <div class="atelier-onboarding-surface-grid">
                             ${surfaces}
                         </div>
@@ -26753,14 +26760,8 @@ function buildOnboardingPlanPreview() {
                     const importPortalBtn = document.getElementById('onbImportPortalBtn');
                     if (importPortalBtn) {
                         importPortalBtn.addEventListener('click', () => {
-                            try {
-                                if (typeof openHomeworkPasteImport === 'function') {
-                                    close();
-                                    setTimeout(function() {
-                                        try { openHomeworkPasteImport(); } catch (err2) { /* non-critical */ }
-                                    }, 300);
-                                }
-                            } catch (err) { /* non-critical */ }
+                            if (typeof openHomeworkPasteImport !== 'function') return;
+                            launchAuxiliaryModal((onClose) => openHomeworkPasteImport('', { onClose }));
                         });
                     }
                 } else if (step === 'setup') {
@@ -26769,14 +26770,8 @@ function buildOnboardingPlanPreview() {
                     const spBtn = document.getElementById('onbStarterPacksBtn');
                     if (spBtn) {
                         spBtn.addEventListener('click', () => {
-                            try {
-                                if (typeof starterPacksGoList === 'function') {
-                                    close();
-                                    setTimeout(function() {
-                                        try { starterPacksGoList(); } catch (err2) { /* non-critical */ }
-                                    }, 300);
-                                }
-                            } catch (err) { /* non-critical */ }
+                            if (typeof openStarterPacks !== 'function') return;
+                            launchAuxiliaryModal((onClose) => openStarterPacks({ onClose }));
                         });
                     }
                 } else if (step === 'mode') {
@@ -26786,6 +26781,17 @@ function buildOnboardingPlanPreview() {
                             draftRef.workspaceFocus = btn.getAttribute('data-onb-focus') || 'student';
                             draftRef.enabledSpaces = pickDefaultEnabledSpaces(draftRef.userIntent, draftRef.workspaceFocus);
                             render();
+                        });
+                    });
+                    main.querySelectorAll('[data-onb-feature]').forEach(input => {
+                        input.addEventListener('change', () => {
+                            const view = input.getAttribute('data-onb-feature') || '';
+                            if (!view) return;
+                            const draftRef = getDraft();
+                            draftRef.enabledSpaces = draftRef.enabledSpaces || {};
+                            draftRef.enabledSpaces[view] = !!input.checked;
+                            const card = input.closest('[data-onb-feature-card]');
+                            if (card) card.classList.toggle('is-enabled', !!input.checked);
                         });
                     });
                 } else if (step === 'protect') {
@@ -26856,6 +26862,7 @@ function buildOnboardingPlanPreview() {
                     showToast('Sutra is ready. Rerun setup any time from Settings.');
                     return;
                 }
+                if (step === 'classes') syncOnboardingClassesToHomework();
                 commitDraftToState();
                 const idx = currentStepIndex();
                 if (idx >= ONBOARDING_STEPS.length - 1) {
@@ -26870,6 +26877,61 @@ function buildOnboardingPlanPreview() {
                     persistOnboardingState();
                     render();
                 }
+            }
+
+            // An auxiliary modal is allowed to interrupt onboarding without completing or
+            // skipping it. Preserve the current draft, then resume this exact step when
+            // the student closes the auxiliary flow.
+            function launchAuxiliaryModal(openModal) {
+                const step = currentStepKey();
+                commitDraftToState();
+                close({ startTour: false });
+                setTimeout(() => {
+                    try {
+                        openModal(() => {
+                            setTimeout(() => show({ jumpTo: step }), 0);
+                        });
+                    } catch (err) {
+                        try { show({ jumpTo: step }); } catch (resumeErr) { /* non-critical */ }
+                        try { if (typeof window.SutraReportError === 'function') window.SutraReportError(err, { where: 'onboarding.auxiliary-modal' }, 'warning'); } catch (reportErr) { /* non-critical */ }
+                    }
+                }, 300);
+            }
+
+            function syncOnboardingClassesToHomework() {
+                const sourceClasses = getDraft().classes || [];
+                const names = Array.from(new Set(sourceClasses
+                    .map(name => String(name || '').trim())
+                    .filter(Boolean)
+                    .map(name => name.toLowerCase())))
+                    .map(name => sourceClasses.find(item => String(item || '').trim().toLowerCase() === name));
+                if (!names.length) return false;
+                try {
+                    if (window.SutraHomework && typeof window.SutraHomework.addCourse === 'function') {
+                        names.forEach(name => window.SutraHomework.addCourse(name));
+                        return true;
+                    }
+                } catch (err) { /* fall through to the canonical store */ }
+                try {
+                    const store = window.SutraHomeworkStore;
+                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return false;
+                    const snapshot = store.getSnapshot() || {};
+                    const courses = Array.isArray(snapshot.courses) ? snapshot.courses.slice() : [];
+                    const known = new Set(courses.map(course => String(course && course.name || '').trim().toLowerCase()));
+                    let added = false;
+                    names.forEach(name => {
+                        const key = String(name || '').trim();
+                        if (!key || known.has(key.toLowerCase())) return;
+                        courses.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, name: key, type: 'class' });
+                        known.add(key.toLowerCase());
+                        added = true;
+                    });
+                    if (added) {
+                        store.replace({ ...snapshot, courses }, { reason: 'onboarding-classes' });
+                        window.dispatchEvent(new CustomEvent('homework:updated'));
+                    }
+                    return added;
+                } catch (err) { return false; }
             }
 
             function commitDraftToState() {
@@ -27036,25 +27098,9 @@ function buildOnboardingPlanPreview() {
                     }
                 } catch (err) { /* non-critical */ }
                 try {
-                    // 5. Classes → homework subjects.
-                    if (Array.isArray(d.classes) && d.classes.length && typeof localStorage !== 'undefined') {
-                        const existing = (function () { try { return readLocalArraySafe('hwCourses:v2'); } catch (e) { return []; } })();
-                        const known = new Set((Array.isArray(existing) ? existing : []).map(c => String(c.name || '').trim().toLowerCase()));
-                        const out = Array.isArray(existing) ? existing.slice() : [];
-                        let added = false;
-                        d.classes.forEach(name => {
-                            const key = String(name || '').trim();
-                            if (!key || known.has(key.toLowerCase())) return;
-                            out.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, name: key, type: 'class' });
-                            known.add(key.toLowerCase());
-                            added = true;
-                        });
-                        if (added) {
-                            try { writeLocalArraySafe('hwCourses:v2', out); } catch (err) { /* non-critical */ }
-                            try { localStorage.setItem('hwSchemaVersion', '3'); } catch (err) { /* non-critical */ }
-                            try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (err) { /* non-critical */ }
-                        }
-                    }
+                    // 5. Classes to Homework. Delegate to the registered homework API or
+                    // its canonical store; onboarding must never write legacy storage itself.
+                    syncOnboardingClassesToHomework();
                 } catch (err) { /* non-critical */ }
                 try {
                     // 6. AP subjects → apStudyWorkspace.
@@ -31171,9 +31217,10 @@ function buildOnboardingPlanPreview() {
         }
 
         // ---- Starter Packs UI ----
-        function openStarterPacks() {
+        function openStarterPacks(options) {
             const modal = document.getElementById('starterPacksModal');
             if (!modal) return;
+            modal._onClose = options && typeof options.onClose === 'function' ? options.onClose : null;
             starterPacksView.mode = 'list';
             starterPacksView.packId = '';
             renderStarterPacks();
@@ -31182,7 +31229,11 @@ function buildOnboardingPlanPreview() {
         }
         function closeStarterPacks() {
             const modal = document.getElementById('starterPacksModal');
-            if (modal) modal.classList.remove('active');
+            if (!modal) return;
+            const onClose = typeof modal._onClose === 'function' ? modal._onClose : null;
+            modal._onClose = null;
+            modal.classList.remove('active');
+            if (onClose) setTimeout(() => onClose(), 0);
         }
         function starterPacksGoList() { starterPacksView.mode = 'list'; renderStarterPacks(); }
         function starterPacksPreview(packId) { starterPacksView.mode = 'preview'; starterPacksView.packId = packId; renderStarterPacks(); }
@@ -82981,9 +83032,10 @@ function getSutraLmsBookmarkletCode() {
     return 'javascript:(' + sutraLmsBookmarkletSource.toString() + ')();';
 }
 
-function openHomeworkPasteImport(prefillText) {
+function openHomeworkPasteImport(prefillText, options) {
     const modal = document.getElementById('homeworkPasteImportModal');
     if (!modal) return;
+    modal._onClose = options && typeof options.onClose === 'function' ? options.onClose : null;
     const textarea = modal.querySelector('#homeworkPasteInput');
     const previewHost = modal.querySelector('#homeworkPastePreview');
     const statusEl = modal.querySelector('#homeworkPasteStatus');
@@ -83151,8 +83203,11 @@ function openHomeworkPasteImport(prefillText) {
 function closeHomeworkPasteImport() {
     const modal = document.getElementById('homeworkPasteImportModal');
     if (!modal) return;
+    const onClose = typeof modal._onClose === 'function' ? modal._onClose : null;
+    modal._onClose = null;
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
+    if (onClose) setTimeout(() => onClose(), 0);
 }
 
 // ================================================================
