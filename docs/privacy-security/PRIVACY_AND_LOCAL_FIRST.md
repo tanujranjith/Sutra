@@ -154,10 +154,10 @@ there first; after authorization, Sutra opens the destructive-PIN form directly.
 This makes setup discoverable without allowing anyone who lacks the normal PIN
 to configure or weaken the page lock.
 
-The setup hint also links to an external technical explainer, [Design
-considerations for a duress PIN](https://blog.randomoracle.io/2021/05/28/design-considerations-for-a-duress-pin-part-i/).
-It explains the general security concept; Sutra's alternate PIN has the
-specific local behavior described above and does not contact emergency services.
+The setup hint includes an in-app **What is a duress PIN?** explainer. It makes
+the general concept and Sutra's specific local behavior clear without opening an
+external site: the alternate PIN does not unlock the page or contact emergency
+services, and its destructive action has no trigger-time confirmation.
 
 This is best-effort deletion from the active browser workspace, not a promise of
 physical secure erasure. Downloaded backups, cloud snapshots, browser/device

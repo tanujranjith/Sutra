@@ -49841,7 +49841,7 @@ function getActiveEditor() {
                     <span class="lock-screen-error" id="lockScreenError" role="alert" aria-atomic="true"></span>
                     <button type="submit" class="lock-screen-submit-btn">Unlock</button>
                     <button type="button" class="lock-screen-duress-btn" id="lockScreenDuressSetupBtn">Set up duress PIN</button>
-                    <p class="lock-screen-duress-note">Enter your normal PIN, then set a separate 6–8 digit PIN that deletes this page and its sub-pages when used here. <a class="lock-screen-duress-link" href="https://blog.randomoracle.io/2021/05/28/design-considerations-for-a-duress-pin-part-i/" target="_blank" rel="noopener noreferrer">What is a duress PIN?</a></p>
+                    <p class="lock-screen-duress-note">Enter your normal PIN, then set a separate 6–8 digit PIN that deletes this page and its sub-pages when used here. <button type="button" class="lock-screen-duress-link" id="lockScreenDuressExplainerBtn">What is a duress PIN?</button></p>
                     <button type="button" class="lock-screen-remove-btn" id="lockScreenRemoveBtn">Remove PIN permanently</button>
                 </form>
                 <p class="lock-privacy-note">PIN protection keeps this page private in your local browser. It is not full encryption.</p>
@@ -49853,6 +49853,7 @@ function getActiveEditor() {
             const gearBtn = document.getElementById('lockScreenGear');
             const autolockMenu = document.getElementById('lockAutolockMenu');
             const duressSetupBtn = document.getElementById('lockScreenDuressSetupBtn');
+            const duressExplainerBtn = document.getElementById('lockScreenDuressExplainerBtn');
             let setupDuressAfterUnlock = false;
 
             requestAnimationFrame(() => { try { input.focus(); } catch (e) {} });
@@ -49893,6 +49894,13 @@ function getActiveEditor() {
                 }
                 setupDuressAfterUnlock = true;
                 form.requestSubmit();
+            });
+            duressExplainerBtn && duressExplainerBtn.addEventListener('click', () => {
+                showCustomAlertDialog({
+                    title: 'What is a duress PIN?',
+                    message: 'A duress PIN is a separate alternate PIN for an emergency or coercion situation. It must be different from your normal page PIN.\n\nIn Sutra, entering a configured duress PIN on this page\'s lock screen does not unlock the page or contact anyone. It immediately removes this page and its sub-pages from the active workspace, Trash, and local workspace snapshots.\n\nThere is no confirmation when the duress PIN is entered. Downloaded backups, cloud snapshots, device backups, or another device that has not synchronized may still contain an older copy. Use a unique 6 to 8 digit PIN and only enable it if this behavior is right for you.',
+                    confirmText: 'I understand'
+                });
             });
 
             form.addEventListener('submit', async (e) => {

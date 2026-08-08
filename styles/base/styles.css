@@ -31343,7 +31343,13 @@ i[class*="fa-"] > .atelier-icon,
 }
 
 .locked-page-screen .lock-screen-duress-link {
+    appearance: none;
+    background: none;
+    border: 0;
     color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
     text-decoration: underline;
     text-underline-offset: 2px;
 }

@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260807-duressexplainer1",
-    "hash": "90dfa234c301750e"
+    "stamp": "20260807-duressmodal1",
+    "hash": "293cdd0cd3b52ffd"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -388,8 +388,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260807-duressexplainer1",
-    "hash": "810b37f91642805e"
+    "stamp": "20260807-duressmodal1",
+    "hash": "d1114372be814e56"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
