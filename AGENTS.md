@@ -362,6 +362,8 @@ These systems exist because a local-first app must make data loss visible and re
 
 Sutra's phone shell keeps the daily loop immediately available while preserving advanced surfaces through an accessible **All sections** sheet. The sheet is derived from enabled canonical top-level tabs and delegates navigation to their existing handlers; it is not a separate navigation source of truth. Mobile overlays, including the Notes drawer, must retain dialog semantics, focus containment and restoration, Escape and browser-Back behavior where applicable, background scroll locking, safe-area spacing, and reduced-motion support.
 
+Desktop navigation follows the same single-shell rule. The top navigation is global and visually stable, while secondary navigation is section-owned. The Notes page tree is contextual to Notes; Today, Homework, Timeline, Review & Tests, Courses, Settings, and other major workspaces use the full canvas unless they introduce their own genuinely useful contextual navigation. Implement this through `src/features/workspace/contextual-shell.js`, not scattered per-view hiding. Global actions belong in the top shell, section actions belong inside their workspace, and route-local navigation must not be restored as permanent global chrome.
+
 Timeline adapts rather than compresses its desktop calendar. On phones, Month view presents a compact date grid with event counts and opens Day view for detail; Week view may scroll horizontally only inside its calendar container. Responsive changes must preserve 44-pixel primary touch targets and must not introduce document-level horizontal overflow.
 
 ## Encrypted backup and Sutra Cloud
@@ -470,6 +472,8 @@ A student should be able to quickly capture an assignment, test, note, reminder,
 ### Navigation and progressive disclosure
 
 - Keep the default navigation small and literal.
+- Keep the Notes page tree contextual to Notes and give other major sections the full workspace unless they have meaningful section-specific navigation.
+- Keep globally relevant controls in the application shell and section-specific controls in the active section.
 - Preserve advanced features behind packs, settings, sub-tabs, modals, command-palette actions, or contextual links.
 - Do not hide essential daily features so deeply that normal students cannot discover them.
 - Do not use progressive disclosure as an excuse to duplicate a feature in multiple places.

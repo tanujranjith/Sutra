@@ -64,6 +64,64 @@ test('desktop navigation keeps the daily loop direct and groups advanced packs i
   await expect(more).toHaveAttribute('aria-label', /current section Business/);
 });
 
+test('desktop shell keeps Notes contextual and gives major workspaces the full canvas', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+
+  const sidebar = page.locator('#sidebar');
+  const sidebarToggle = page.locator('#sidebarToggle');
+  const main = page.locator('.main-content');
+  const topNav = page.locator('.top-nav');
+
+  for (const view of ['today', 'homework', 'timeline', 'settings']) {
+    const directTab = page.locator(`.view-tabs > .view-tab[data-view="${view}"]`);
+    if (await directTab.isVisible()) {
+      await directTab.click();
+    } else {
+      await page.evaluate((targetView) => window.setActiveView(targetView), view);
+    }
+    await expect(page.locator('body')).toHaveAttribute('data-view', view);
+    if (view === 'homework' && await page.locator('#hwSetupOverlay').isVisible()) {
+      await page.locator('#hwSetupOverlay').getByRole('button', { name: 'Cancel for now' }).click();
+    }
+    await expect(page.locator('body')).toHaveAttribute('data-context-sidebar', 'none');
+    await expect(sidebar).toBeHidden();
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(sidebarToggle).toBeHidden();
+    expect(Math.round((await main.boundingBox()).x)).toBe(0);
+  }
+
+  expect(await page.evaluate(() => ({
+    review: window.SutraContextualShell.sidebarFor('apstudy'),
+    courses: window.SutraContextualShell.sidebarFor('courses'),
+    custom: window.SutraContextualShell.sidebarFor('custom-student-dashboard')
+  }))).toEqual({ review: 'none', courses: 'none', custom: 'none' });
+
+  await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
+  await expect(page.locator('body')).toHaveAttribute('data-context-sidebar', 'notes');
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar).toHaveAttribute('aria-hidden', 'false');
+  await expect(sidebar).not.toHaveAttribute('inert', '');
+  await expect(page.locator('.notes-toolbar-overflow')).toBeVisible();
+
+  const geometry = await page.evaluate(() => {
+    const nav = document.querySelector('.top-nav').getBoundingClientRect();
+    const sidebarRect = document.querySelector('#sidebar').getBoundingClientRect();
+    const mainRect = document.querySelector('.main-content').getBoundingClientRect();
+    return {
+      navLeft: Math.round(nav.left),
+      navWidth: Math.round(nav.width),
+      viewportWidth: document.documentElement.clientWidth,
+      sidebarWidth: Math.round(sidebarRect.width),
+      mainLeft: Math.round(mainRect.left)
+    };
+  });
+  expect(geometry.navLeft).toBe(0);
+  expect(geometry.navWidth).toBe(geometry.viewportWidth);
+  expect(geometry.mainLeft).toBe(geometry.sidebarWidth);
+  await expect(topNav).toBeVisible();
+});
+
 test('overflowed custom dashboards remain reachable through My dashboards', async ({ page }) => {
   await openApp(page, 1060);
   await page.waitForFunction(() => !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs);

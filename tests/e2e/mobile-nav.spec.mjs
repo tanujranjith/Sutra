@@ -90,7 +90,7 @@ test('More opens a focus-trapped all-sections sheet and reaches advanced views',
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('dialog', { name: 'All sections' })).toBeVisible();
   await expect(page.locator('body')).toHaveClass(/mobile-more-open/);
-  await expect(sheet.locator('[data-mobile-more-action="pages"]')).toBeVisible();
+  await expect(sheet.locator('[data-mobile-more-action="pages"]')).toBeHidden();
   await expect(sheet.locator('[data-mobile-more-action="new-dashboard"]')).toBeVisible();
   await expect(sheet.locator('[data-mobile-more-action="notifications"]')).toBeVisible();
   await expect(sheet.locator('[data-mobile-more-view]')).toHaveCount(await page.locator('.view-tab[data-view]:not([hidden])').evaluateAll((nodes) => new Set(nodes.map((node) => node.dataset.view)).size));

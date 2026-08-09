@@ -1,3 +1,72 @@
+# Contextual UI Redesign — Design QA
+
+## Result
+
+**PASS** — no open P0, P1, or P2 findings.
+
+The supplied mockups are treated as visual direction. Sutra's real local workspace data, enabled packs, empty states, and established serif display treatment intentionally remain authoritative.
+
+## Source and implementation evidence
+
+| Surface | Source | Source size | Implementation evidence | Test viewport |
+| --- | --- | ---: | --- | ---: |
+| Today | `C:/Users/tanuj.DESKTOP-BOL1R68.000/Downloads/ChatGPT Image Aug 7, 2026, 09_49_30 PM (2).png` | 1672 × 941 | `.tmp/ui-redesign/implementation-today-1440.png` | 1440 × 900 |
+| Homework | `C:/Users/tanuj.DESKTOP-BOL1R68.000/Downloads/ChatGPT Image Aug 7, 2026, 09_49_31 PM (3).png` | 1672 × 941 | `.tmp/ui-redesign/implementation-homework-1440.png` | 1440 × 900 |
+| Timeline | `C:/Users/tanuj.DESKTOP-BOL1R68.000/Downloads/ChatGPT Image Aug 7, 2026, 09_49_33 PM (4).png` | 1672 × 941 | `.tmp/ui-redesign/implementation-timeline-1440-final.png` | 1440 × 900 |
+| Notes | `C:/Users/tanuj.DESKTOP-BOL1R68.000/Downloads/ChatGPT Image Aug 7, 2026, 09_49_30 PM (1).png` | 1672 × 941 | `.tmp/ui-redesign/implementation-notes-1440-v3.png` | 1440 × 900 |
+| Dark theme | Current Sutra theme system | n/a | `.tmp/ui-redesign/implementation-timeline-dark-1440-final.png` | 1440 × 900 |
+| Phone Notes | Existing responsive contract | n/a | `.tmp/playwright-results` focused mobile run | 390 × 844 |
+
+Combined comparison inputs were opened and reviewed together:
+
+- `.tmp/ui-redesign/compare-today.png`
+- `.tmp/ui-redesign/compare-homework.png`
+- `.tmp/ui-redesign/compare-timeline.png`
+- `.tmp/ui-redesign/compare-notes.png`
+
+## Comparison history
+
+### Pass 1
+
+- P1 theme fidelity: body-scoped Dark used dark legacy palette variables, but the new semantic aliases still resolved against the light root palette. Fixed by rebinding the semantic aliases at `body` scope in `styles/views/contextual-shell.css`.
+- P2 Timeline density: 64-pixel desktop hour rows showed only the first half of the day, unlike the source direction. Fixed with 48-pixel desktop/laptop hours while retaining 64-pixel phone rows for touch readability.
+- P2 responsive shell: compact legacy rules offset the supposedly global top navigation by 8 pixels and exposed the Notes toggle outside Notes. Fixed with authoritative shell geometry and a context-scoped toggle rule.
+- P2 Notes accessibility: legacy sidebar synchronization could leave the visible Notes tree inert. Fixed with settled view synchronization and explicit `aria-hidden`/`inert` restoration.
+- P2 Notes overflow: the first progressive-disclosure menu was clipped by the horizontally scrolling toolbar. Fixed by portaling the menu to the document body and anchoring it to the summary control.
+
+### Pass 2
+
+- Layout and spacing: the persistent header is stable; Notes uses a 300-pixel contextual rail; Today, Homework, Timeline, Review & Tests, Courses, Settings, and custom workspaces receive the full canvas.
+- Typography and hierarchy: existing Sutra display/body typography is preserved; page headings, section actions, filters, and empty states follow the mockups' hierarchy without fabricated metrics.
+- Surfaces and color: existing tokens drive borders, soft surfaces, active states, and shadows. Light and body-scoped Dark both pass visual inspection.
+- Responsive behavior: inspected at 1440 × 900, 1280 × 800, 1024 × 768, 768 × 900, and 390 × 844. No document-level horizontal overflow was observed.
+- Accessibility: Notes drawer semantics, focus restoration, Escape behavior, 44-pixel phone controls, visible active states, `inert`, `aria-hidden`, reduced-motion rules, and forced-colors borders remain covered.
+- Icons and imagery: existing Sutra iconography and brand assets are reused. No placeholder imagery, CSS art, handwritten SVG, or decorative fake metrics were introduced.
+
+## Primary interaction checks
+
+- Global brand routes through the canonical Today tab.
+- Top navigation stays fixed and does not change height between major sections.
+- Notes page tree opens, collapses, restores focus, and remains editable.
+- Notes overflow exposes split screen, page layout, find/replace, outline, comments, version history, document statistics, and zoom.
+- Homework Add Assignment opens; the optional class setup can be dismissed; list/search/filter/sort controls remain present.
+- Timeline Day/Week/Month switching works; Add Block opens; week navigation remains usable; the desktop grid shows through 8 PM at 1440 × 900.
+- Phone All sections keeps Pages contextual to Notes and preserves modal/history behavior.
+- Today, Homework, Timeline, Review & Tests, and Settings hide and inert the Notes rail.
+- Browser console after the final interaction pass: zero warnings or errors.
+
+## Accepted intentional differences
+
+- Mockup sample assignments, exams, analytics, streaks, and recent notes were not fabricated. Empty-state evidence reflects the local test workspace.
+- Sutra's existing serif display typography and optional global integrations remain part of the product identity.
+- Phone Timeline retains taller hour rows for touch target and event readability.
+
+---
+
+# Preserved Focus Session Design QA
+
+The following record predates the contextual UI redesign and is retained unchanged for historical evidence.
+
 **Findings**
 
 - No actionable P0, P1, or P2 differences remain. The supplied screen's timer-first hierarchy, corner controls, centered progress, primary play action, secondary actions, and atmosphere picker remain recognizable while the requested glass workspace and stronger presets are implemented.
