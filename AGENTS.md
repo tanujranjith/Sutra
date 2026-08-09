@@ -400,7 +400,9 @@ These systems were built to turn isolated assignments and dates into a connected
 
 ## Today and Custom Tabs
 
-Today has evolved into a command-center surface with Next Up/Next Step, schedule context, deadline counts, an upcoming radar, and a plan for the day. Custom Tabs allow user-composed dashboards with imported data widgets and self-contained interactive widgets. These capabilities should support personalization without making the default navigation more complicated.
+Today has evolved into a command-center surface with Next Up/Next Step, schedule context, deadline counts, an upcoming radar, a visible Focus Timer entry point, and a plan for the day. Custom Tabs allow user-composed dashboards with imported data widgets and self-contained interactive widgets. These capabilities should support personalization without making the default navigation more complicated.
+
+The Today Focus Timer card is a presentation and control surface for the canonical timer in `src/core/app.js`; it is not a second timer implementation. Its controller lives in [`src/features/workspace/today-focus-timer.js`](src/features/workspace/today-focus-timer.js) with scoped styles in [`styles/views/today-focus-timer.css`](styles/views/today-focus-timer.css). Start, pause, reset, preset, and duration-edit actions must use the `sutra:focus-timer-command` bridge, and timer updates must render from `sutra:focus-timer-updated`. Notes, Today, and full-screen Focus mode must remain synchronized, and duration edits must preserve the existing persisted timer behavior. Keep the Today controls visible, keyboard/touch accessible, and responsive without duplicating timer state or storage.
 
 ## Sutra Assistant and Sutra Intelligence
 

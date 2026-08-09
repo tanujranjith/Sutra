@@ -1,6 +1,6 @@
 // Startup-chime default + persistence (Section 19).
 //
-// New workspaces default the chime ON (bridged to localStorage so startup-intro.js
+// New workspaces default the chime OFF (bridged to localStorage so startup-intro.js
 // can read it before app hydration). A returning user who turns it OFF stays silent
 // across reloads. Actual audio is suppressed under automation (navigator.webdriver),
 // so these tests assert the preference/bridge contract, not real playback.
@@ -28,11 +28,11 @@ async function openApp(page) {
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }
 
-test('a brand-new workspace defaults the startup chime ON and bridges it for next load', async ({ page }) => {
+test('a brand-new workspace defaults the startup chime OFF and bridges it for next load', async ({ page }) => {
   await openApp(page);
   // The app.js bridge writes the flag startup-intro.js reads on the next load.
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
-  await expect(page.locator('[data-pref-path="startup.playSound"]')).toBeChecked();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('0');
+  await expect(page.locator('[data-pref-path="startup.playSound"]')).not.toBeChecked();
   await expect(page.locator('#testStartupSoundBtn')).toHaveCount(1); // preview chime control present
 });
 

@@ -17,7 +17,7 @@
    ────────────────────────────────────────────────────────
    Session key : 'sutra_intro_played'  in sessionStorage
    Sound flag  : 'sutra_startup_sound' in localStorage
-                 absent / '1' = on   '0' = off
+                 absent / '0' = off   '1' = on
    ================================================================ */
 
 (function () {
@@ -54,7 +54,7 @@
    * applied (applyWorkspacePreferences), so the flag is available immediately
    * on the next page load — before app.js finishes async initialization.
    *
-   *   Key absent  →  brand-new workspace  →  default ON (Section 19)
+   *   Key absent  →  brand-new workspace  →  default OFF
    *   Key = '1'   →  explicitly enabled
    *   Key = '0'   →  explicitly disabled (returning user opted out)
    *
@@ -68,9 +68,9 @@
       // Never auto-play during automated runs (Playwright/WebDriver) — keeps the
       // e2e suite silent while the preference itself stays testable.
       if (typeof navigator !== 'undefined' && navigator.webdriver) return false;
-      return localStorage.getItem('sutra_startup_sound') !== '0';
+      return localStorage.getItem('sutra_startup_sound') === '1';
     } catch (_) {}
-    return true;
+    return false;
   }
 
   /* ── audio synthesis ────────────────────────────────────────── */

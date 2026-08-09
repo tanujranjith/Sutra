@@ -581,10 +581,51 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primar
     outline-offset: 2px;
 }
 
+#view-today.today-redesign .tac-inline-action {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent-strong, #7b6244);
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 #view-today.today-redesign .today-info-grid .tac-empty {
     font-size: 0.78rem;
     color: var(--text-muted);
     padding: 10px 0;
+}
+
+/* A blank workspace needs one clear next action, not seven repeated empty
+   cards. Keep Tasks (for a newly captured undated item) and the trust signal;
+   the Next Up hero remains the primary capture entry point. */
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #tccPlanCard,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #tccAttentionAssignments,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #tccAttentionCalendar,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #todayReviewCard,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #tccUpcomingTests,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > #tccTonightPlan,
+#view-today.today-redesign.today-no-actionable-work .today-info-grid > .today-plan-section {
+    display: none !important;
+}
+
+.atelier-onboarding-explore-first {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--sutra-color-border, rgba(22, 30, 45, 0.12));
+}
+.atelier-onboarding-explore-first p {
+    margin: 0;
+    color: var(--sutra-color-text-muted, #64748b);
+    font-size: 0.8rem;
+}
+@media (max-width: 640px) {
+    .atelier-onboarding-explore-first { align-items: flex-start; flex-direction: column; }
 }
 
 /* Assignment actions can be rendered by the homework bridge with different

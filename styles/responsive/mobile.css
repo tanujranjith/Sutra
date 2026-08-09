@@ -2474,8 +2474,18 @@
         min-width: 0 !important;
         flex-wrap: nowrap !important;
         overflow-x: auto !important;
+        overflow-y: hidden !important;
         overscroll-behavior-x: contain;
         -webkit-overflow-scrolling: touch;
+    }
+    body[data-view="notes"] #view-notes .toolbar > .toolbar-btn,
+    body[data-view="notes"] #view-notes .toolbar > .toolbar-field,
+    body[data-view="notes"] #view-notes .toolbar > .toolbar-size-stepper {
+        flex: 0 0 auto !important;
+    }
+    body[data-view="notes"] #view-notes .notes-toolbar-overflow {
+        order: 20;
+        margin-left: auto;
     }
     body[data-view="notes"] #view-notes .editor-container,
     body[data-view="notes"] #notesEditorContainer {
@@ -2491,5 +2501,43 @@
     #view-life.active {
         padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5rem) !important;
         scroll-padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5.5rem);
+    }
+}
+
+/* Homework row actions must stay inside the reachable phone viewport. The
+   assignment list can scroll behind the fixed shell, so an absolute menu at
+   the end of a row is not a usable mobile control. */
+@media (max-width: 640px) {
+    #view-homework .hw-assignment-menu-wrap .hw-task-menu {
+        position: fixed !important;
+        left: 12px !important;
+        right: 12px !important;
+        top: auto !important;
+        bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+        width: auto !important;
+        max-height: min(55vh, 360px) !important;
+        overflow-y: auto !important;
+        z-index: 3000 !important;
+    }
+}
+
+/* Keep the fixed save bar and phone navigation from covering the last
+   Timeline row on short screens. */
+@media (max-width: 640px) {
+    #view-timeline.active {
+        padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 7rem + env(safe-area-inset-bottom, 0px)) !important;
+        scroll-padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + 7rem + env(safe-area-inset-bottom, 0px));
+    }
+    #view-timeline .timeline-event-title {
+        overflow-wrap: anywhere;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+    }
+    #view-timeline .timeline-event-source {
+        white-space: normal;
+        overflow-wrap: anywhere;
     }
 }

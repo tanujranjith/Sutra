@@ -2,6 +2,86 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## 2026-08 - Student command center, Sync Beta, and workspace safety
+
+This release window covers the GitHub changes from 2026-07-10 through
+2026-08-09. The largest change is the shift from a feature-heavy shell toward
+a calmer, connected student workspace while keeping advanced tools available
+through deliberate entry points.
+
+- **Unified the daily student loop.** Today is the command center for Next
+  Step, Daily Thread, Deadline Radar, schedule context, review debt, tracker
+  signals, and saved/backup confidence. Quick Capture accepts assignments,
+  homework, notes, reminders, study sessions, and Timeline blocks from one
+  intake path. Today widgets now have calm, study, everything, and custom
+  presets with durable reorder, hide, and size preferences.
+- **Clarified navigation and settings.** The default student shell keeps
+  Today, Homework, Notes, Timeline, Review, Focus, and data safety close at
+  hand. Desktop overflow and the phone All sections sheet derive from the
+  canonical tab controls; Notes owns the contextual page tree while other
+  workspaces receive the full canvas. Settings was reorganized into a control
+  center with safe draft/apply/revert behavior, feature packs, and advanced
+  controls that do not delete hidden data.
+- **Improved mobile and responsive behavior.** Added unified phone navigation,
+  accessible sheets and back handling, safe-area spacing, contained Timeline
+  calendars, stable Notes editing, a usable Assistant composer/chat list,
+  mobile Focus duration parity, cleaner Life/Assistant chrome, notification
+  layering, and narrow-screen onboarding/import flows. Desktop workspace
+  navigation and toast notifications were also polished.
+- **Launched optional Sutra Sync Beta.** Sync is off by default, makes no
+  requests until explicit setup, remains separate from encrypted backups, and
+  starts with an encrypted recovery backup. End-to-end encrypted operations,
+  snapshots, conflict review, offline outbox replay, content-addressed
+  attachments, account-scoped device state, stale-session recovery, durable
+  disablement, and revoke-and-wipe safeguards are included. Cloud Backup and
+  Sync now share one clearly separated entry flow without stacking sheets or
+  conflating replication with point-in-time backups.
+- **Expanded backup and export safety.** Added an explicit optional
+  unencrypted `.sutra` export for recovery/interchange, kept encrypted export
+  as the recommended full backup, prevented Assistant chats from entering
+  unencrypted exports unless explicitly opted in, preserved imported document
+  content, and kept Help & Docs reconstruction deterministic after restore and
+  remote apply. Supabase failed-index rollback remains bound to the attempted
+  upload only.
+- **Upgraded Notes visual workspaces.** Canvas now has a structured workbench
+  with pan/zoom, minimap, selection, drawing, shapes, sticky notes, connectors,
+  groups, tables, locking, layout tools, safe local export, and reviewed
+  Assistant actions. Slides is a native local-first Notes surface with themes,
+  layouts, speaker notes, presentation/printing, local images, thumbnails,
+  experimental PPTX packaging, and reviewed Assistant edits; both persist
+  through canonical page saves, backups, and Sync.
+- **Strengthened Assistant and Intelligence.** Added audited OpenAI-compatible
+  providers for NVIDIA NIM, Mistral AI, Together AI, DeepSeek, xAI, and
+  Perplexity plus validated device-local endpoints. Assistant plans now apply
+  as reviewable, undoable batches, and Canvas/Slides mutations use bounded
+  typed operations with explicit approval. Diagnostics, retry/deadline
+  handling, usage normalization, receipts, and local Help remain provider-
+  optional and privacy-visible.
+- **Made planning and school imports safer.** Added responsive Month/Week/Day
+  Timeline calendars, keyboard calendar controls, atomic Push time with undo,
+  safe local iCalendar preview/import, source-scoped re-import, imported-event
+  backlog limits, and no reminder generation for imported calendars. Overdue
+  Timeline blocks can be completed from recovery surfaces. Homework portal and
+  Canvas/LMS paste import gained previews, course correction, size preflight,
+  resumable onboarding, and preservation after canceled imports.
+- **Added privacy and personal-safety controls.** Locked notes can optionally
+  configure a separate duress PIN that permanently removes the protected page
+  tree from the active workspace, Trash, and local snapshots; normal lock
+  authorization, review-derived content cleanup, and backup limitations remain
+  explicit. The app explains the irreversible and offline-device limits rather
+  than implying physical secure erasure.
+- **Expanded customization and workspaces.** Added signature theme presets,
+  the cinematic Dune theme, customizable workspace quotes with local source
+  handling, Focus Mode atmospheres, a calmer Business operating workspace, and
+  updated feature-pack behavior so College, Life, Business, and academic tools
+  stay discoverable without crowding the daily loop.
+- **Expanded verification and documentation.** Added or strengthened tests for
+  navigation, Today defaults/customization, onboarding lifecycle, Help & Docs,
+  local endpoint privacy, Sync data boundaries/parity, Canvas/Slides, Timeline,
+  mobile flows, duress deletion, cloud entry behavior, and release packaging.
+  The in-app Help & Docs page, offline Product Knowledge/Local Help registry,
+  Guidebook, and feature documentation are kept aligned with these contracts.
+
 ## 2026-08 - Sutra Sync Beta opt-in readiness
 
 - Labeled Sutra Sync as an optional beta in Settings and setup, with an honest

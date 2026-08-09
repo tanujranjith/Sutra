@@ -81,7 +81,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260808-assistantfab1"></script>
+    <script src="src/config/feature-manifest.js?v=20260809-helpdocs2"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -89,8 +89,8 @@
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
     <script src="src/core/student-date-parser.js?v=20260709-studentdate1"></script>
-    <script src="src/components/icons/icon-paths.js?v=20260709-icons-comments" defer></script>
-    <script src="src/components/icons/index.js?v=20260709-icons-comments" defer></script>
+    <script src="src/components/icons/icon-paths.js?v=20260809-audit-icons1" defer></script>
+    <script src="src/components/icons/index.js?v=20260809-audit-icons1" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
          Captured very early; AtelierCustomization.isSafeMode() reads this flag.
          ?sutraSafeMode=1 is canonical; ?atelierSafeMode=1 stays supported for legacy links. -->
@@ -116,7 +116,7 @@
         .view.active { display: block; }
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
-    <script src="src/boot/startup-intro.js?v=20260614-storage1" defer></script>
+    <script src="src/boot/startup-intro.js?v=20260809-audit2" defer></script>
     <script src="src/ui/select-enhancer.js?v=20260708-toolbar-compact" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
@@ -590,6 +590,42 @@
                             <div id="upcomingRadarMount" class="radar-mount"></div>
                         </section>
                     </div>
+
+                    <!-- Canonical focus timer controls — a visible Today entry point
+                         that reuses the same timer as the Notes sidebar and Focus mode. -->
+                    <section class="today-focus-timer-card glass-card" id="todayFocusTimerCard" aria-labelledby="todayFocusTimerHeading">
+                        <div class="today-focus-timer-copy">
+                            <div class="today-focus-timer-eyebrow"><i class="fas fa-clock" aria-hidden="true"></i> Focus timer</div>
+                            <h3 id="todayFocusTimerHeading">Work in one clear block</h3>
+                            <p id="todayFocusTimerStatus" aria-live="polite">Ready when you are.</p>
+                        </div>
+                        <div class="today-focus-timer-clock" aria-live="off">
+                            <span id="todayFocusTimerDisplay">25:00</span>
+                            <span id="todayFocusTimerFinishAt" class="today-focus-timer-finish" hidden></span>
+                        </div>
+                        <div class="today-focus-timer-actions" role="group" aria-label="Focus timer controls">
+                            <button type="button" class="today-focus-timer-primary" id="todayFocusTimerStartBtn"><i class="fas fa-play" aria-hidden="true"></i><span>Start</span></button>
+                            <button type="button" class="today-focus-timer-secondary" id="todayFocusTimerPauseBtn" hidden><i class="fas fa-pause" aria-hidden="true"></i><span>Pause</span></button>
+                            <button type="button" class="today-focus-timer-secondary" id="todayFocusTimerResetBtn"><i class="fas fa-rotate-left" aria-hidden="true"></i><span>Reset</span></button>
+                            <button type="button" class="today-focus-timer-secondary" id="todayFocusTimerEditBtn" aria-expanded="false" aria-controls="todayFocusTimerSettings"><i class="fas fa-sliders" aria-hidden="true"></i><span>Edit timer</span></button>
+                            <button type="button" class="today-focus-timer-secondary" id="todayFocusTimerFullscreenBtn"><i class="fas fa-expand-alt" aria-hidden="true"></i><span>Focus mode</span></button>
+                        </div>
+                        <div class="today-focus-timer-settings" id="todayFocusTimerSettings" hidden>
+                            <div class="today-focus-timer-presets" role="group" aria-label="Timer presets">
+                                <span>Quick set</span>
+                                <button type="button" data-today-timer-preset="15">15m</button>
+                                <button type="button" data-today-timer-preset="25">25m</button>
+                                <button type="button" data-today-timer-preset="50">50m</button>
+                            </div>
+                            <div class="today-focus-timer-custom">
+                                <label><span>Hours</span><input id="todayFocusTimerHours" type="number" min="0" max="99" value="0" inputmode="numeric"></label>
+                                <label><span>Minutes</span><input id="todayFocusTimerMinutes" type="number" min="0" max="59" value="25" inputmode="numeric"></label>
+                                <label><span>Seconds</span><input id="todayFocusTimerSeconds" type="number" min="0" max="59" value="0" inputmode="numeric"></label>
+                                <button type="button" class="today-focus-timer-apply" id="todayFocusTimerApplyBtn">Apply duration</button>
+                            </div>
+                            <p class="today-focus-timer-help">Editing pauses the timer and starts the new duration from the beginning.</p>
+                        </div>
+                    </section>
 
                     <!-- ── 2. TODAY INFO GRID ── -->
                     <section class="today-attention-section" aria-label="Today at a glance">
@@ -3049,7 +3085,7 @@
             <div class="cc-page-header-meta">
                 <div class="cc-status" id="settingsStatusPill" data-state="saved" role="status" aria-live="polite">
                     <span class="cc-status-dot" aria-hidden="true"></span>
-                    <span class="cc-status-text">Saved</span>
+                    <span class="cc-status-text">Saved locally</span>
                 </div>
                 <p class="cc-last-applied">Last applied <span id="settingsLastAppliedLabel">in this session</span></p>
                 <div class="cc-page-header-actions">
@@ -4478,7 +4514,7 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Launch experience</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Startup sound</span><span class="cc-row-help">On by default for new workspaces. Play a soft chime when Sutra opens. Audio must be allowed by your browser.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">Startup sound</span><span class="cc-row-help">Off by default. Opt in to a soft chime when Sutra opens. Audio must be allowed by your browser.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="startup.playSound"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <label class="cc-row" data-setting-item>
@@ -5290,7 +5326,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260807-cohesion2"></script>
+                <script src="src/features/study/homework.js?v=20260809-audit1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5743,16 +5779,16 @@
                     <div class="preset-name">Botanical</div>
                 </div>
 
-                <div class="preset-card" onclick="applyPresetTheme('editorial')" data-theme="editorial">
+                <div class="preset-card" onclick="applyPresetTheme('heritage')" data-theme="heritage">
                     <div class="preset-preview">
-                        <div class="preset-color" style="background: #fdfbf7"></div>
-                        <div class="preset-color" style="background: #f4efe7"></div>
-                        <div class="preset-color" style="background: #9d6c3b"></div>
+                        <div class="preset-color" style="background: #fbf6ed"></div>
+                        <div class="preset-color" style="background: #e9dcc9"></div>
+                        <div class="preset-color" style="background: #a96f3f"></div>
                     </div>
-                    <div class="preset-name">Editorial</div>
+                    <div class="preset-name">Heritage</div>
                 </div>
 
-                <div class="preset-card" onclick="applyPresetTheme('luxury')" data-theme="luxury">
+                <div class="preset-card" onclick="applyPresetTheme('luxury')" data-theme="luxury" hidden>
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #fbf7ef"></div>
                         <div class="preset-color" style="background: #f2eadb"></div>
@@ -5761,7 +5797,7 @@
                     <div class="preset-name">Luxury</div>
                 </div>
 
-                <div class="preset-card" onclick="applyPresetTheme('sepia')" data-theme="sepia">
+                <div class="preset-card" onclick="applyPresetTheme('sepia')" data-theme="sepia" hidden>
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f7f1e6"></div>
                         <div class="preset-color" style="background: #eee3cf"></div>
@@ -6177,7 +6213,7 @@
         </span>
         <div class="taskbar-save-status saved" id="taskbarSaveStatus">
             <i class="fas fa-check-circle"></i>
-            <span>Saved</span>
+            <span>Saved locally</span>
         </div>
         <div class="taskbar-divider"></div>
         <button class="storage-btn primary" id="saveLocalBtn" onclick="saveToLocal()" title="Save to browser storage">
@@ -7717,7 +7753,12 @@
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
-<script src="src/core/app.js?v=20260808-documentimport1"></script>
+<script src="src/features/workspace/startup-default-bridge.js?v=20260809-audit3"></script>
+    <script src="src/core/app.js?v=20260809-helpdocs1"></script>
+    <script src="src/features/workspace/theme-presets-refresh.js?v=20260809-theme-cohesion1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20260809-helpdocs1"></script>
+    <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
+    <script src="src/features/workspace/audit-fixes.js?v=20260809-audit7"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
@@ -7726,7 +7767,9 @@
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
     <script src="src/features/workspace/slides.js?v=20260807-slidesworkbench1"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
-    <script src="src/ui/student-loop-actions.js?v=20260808-focusunified1"></script>
+    <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
+    <!-- Today timer controls reuse the canonical Focus timer bridge. -->
+    <script src="src/features/workspace/today-focus-timer.js?v=20260809-todaytimer1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
@@ -8125,7 +8168,7 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260808-lifeclearance1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260809-audit-mobile1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260807-settings15b">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
@@ -8139,13 +8182,15 @@
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260807-cloud26">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260807-todaywidgets1">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260809-audit-today1">
+    <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
     <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260808-contextual-ui19">
+    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260809-theme-cohesion1">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

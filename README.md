@@ -160,7 +160,7 @@ The default landing experience — your daily command center.
 
 ### Timeline
 
-A calendar planner with **Month**, **Planner**, **Week**, **Day**, and **Year** views; a time-block modal (name, start/end, category, color, recurrence, reference URL); a live *Current Block* card; a time-of-day surface tint; and ICS export/import. *Schedule this* actions across the app drop blocks here without retyping.
+A calendar planner with **Month**, **Planner**, **Week**, and **Day** views; a time-block modal (name, start/end, category, color, recurrence, reference URL); a live *Current Block* card; a time-of-day surface tint; safe local ICS export/import; and atomic **Push time** with preview and undo. *Schedule this* actions across the app drop blocks here without retyping.
 
 ### Notes
 
@@ -173,6 +173,7 @@ Sutra's writing surface.
 - **Handwriting** — insert a handwriting block to write, sketch, or annotate with mouse, trackpad, touch, or stylus (pen, highlighter, eraser; blank / lined / grid / dotted paper). Strokes are stored as vectors and round-trip through backups. Full guide: [`docs/features/HANDWRITING_AND_DRAWING.md`](docs/features/HANDWRITING_AND_DRAWING.md).
 - **Split view** — a second pane beside the current note, with split presets (Note + Assignment, Note + AP Unit, Essay + Research, Today Plan + Notes, Calendar + Note) and swap/close controls.
 - **Locked pages** — PIN-protect any page (4–8 digits, stored as a salted SHA-256 hash, never as the raw PIN), with auto-lock options.
+- **Canvas & Slides** — first-class local visual Notes surfaces. Canvas adds pan/zoom, a minimap, drawing, shapes, connectors, groups, tables, layout tools, locking, and local export. Slides adds themes, layouts, speaker notes, presentation/printing, local images, and experimental PPTX packaging. Both use the owning page's save/backup/Sync path.
 
 ### Homework
 
@@ -239,7 +240,7 @@ A compact **Focus Timer** in the sidebar (quick presets, custom durations, ringt
 | Mode | Primary emphasis |
 | --- | --- |
 | **All Tools** | Everything visible. |
-| Student | Today, Timeline, Notes, Homework, AP Study, College, Life. |
+| Student | Today, Homework, Notes, Timeline, Review, Focus, and Data; advanced packs stay available from Settings. |
 | AP Crunch | Today, AP Study, Homework, Timeline, Notes. |
 | College Apps | Today, College, Notes, Timeline, Homework. |
 | Writing | Notes, Today, Timeline. |
@@ -267,6 +268,9 @@ AI requests go **directly from your browser to the provider you choose** — Sut
 - Google Gemini
 - Groq
 - OpenRouter
+- NVIDIA NIM
+- Mistral AI
+- Together AI
 - DeepSeek
 - xAI (Grok)
 - Perplexity (Sonar)
@@ -427,7 +431,7 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 - Storage is **local-first** on this device: IndexedDB holds the workspace; localStorage holds settings, health state, and a few caches.
 - There is **no Sutra-operated server**. Fresh startup, manual encrypted `.sutra` backup, and JSON backup are designed to make **zero third-party requests**.
-- Optional outbound calls happen only when you trigger them: Google Drive OAuth/sync, Sutra Assistant provider requests, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, configurable localhost/127.0.0.1 AI endpoints, and secondary document import/export libraries when a browser-native fallback is not enough.
+- Optional outbound calls happen only when you trigger them: Sutra Cloud/Google Drive OAuth and backup, opt-in Sutra Sync, Sutra Assistant provider requests, approved feedback-form embeds, approved media embeds (YouTube, Vimeo, Spotify, SoundCloud, CodePen, Figma, and YouTube thumbnails), AP Classroom resource links, AI-console help links, ChatGPT/Spotify launch shortcuts, configurable localhost/127.0.0.1 AI endpoints, and secondary document import/export libraries when a browser-native fallback is not enough.
 - **API keys are session-only.** They are never persisted, exported, or synced.
 - New `.sutra` exports are password-encrypted. JSON exports and document exports are not encrypted. Locked-page PINs protect a page within the browser UI (hashed credentials travel in backups), which is not full-disk encryption.
 - Clearing browser storage without a backup will lose your local data.
@@ -443,7 +447,7 @@ A long-form written tutorial lives in the [Sutra Guidebook](SUTRA_GUIDE.md).
 
 ## Limitations
 
-- **Cloud sync is optional and foreground-only.** Google Drive sync runs while Sutra is open, online, unlocked, and authorized. It does not sync after the browser is fully closed, and direct `file://` launch may not support Google OAuth.
+- **Cloud services are optional and foreground-only.** Sutra Cloud/Google Drive backup and Sutra Sync run only after explicit setup while Sutra is open, online, unlocked, and authorized. They do not run after the browser is fully closed, and direct `file://` launch may not support OAuth.
 - **Browser storage caps.** IndexedDB and localStorage quotas vary by browser; very large, media-rich workspaces can hit limits. Export `.sutra` regularly.
 - **Document export is native and offline.** PDF uses the browser print pipeline (opens a print-ready view — choose *Save as PDF*); **Word (.docx)** creates a local OOXML package and **Word 97-2003 (.doc)** remains available for legacy workflows. HTML, Markdown, RTF, and TXT are produced locally with no third-party library. PDF can render slightly differently across browsers. See [Document Export](docs/features/DOCUMENT_EXPORT.md).
 - **External media embeds** depend on the source's CORS / iframe policy and the approved-origin CSP list.

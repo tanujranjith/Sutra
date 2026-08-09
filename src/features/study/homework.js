@@ -1039,7 +1039,7 @@
         <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
           <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
           <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
-          <button type="button" data-task-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
+          <button type="button" data-task-menu-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
           <button type="button" data-task-pin-countdown="${escHtml(task.id)}" role="menuitem">Pin as countdown&hellip;</button>
           ${!task.done ? `<button type="button" data-task-snooze="${escHtml(task.id)}" role="menuitem">Snooze 1 day</button>` : ''}
           ${recurrence !== 'none' ? `<button type="button" data-task-stop-recurring="${escHtml(task.id)}" role="menuitem">Stop recurring</button>` : ''}
@@ -1650,7 +1650,7 @@
       const color = getCourseColor(course.id);
       return `<li class="hw-empty-class-row"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></li>`;
     }).join('');
-    return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul></div>`;
+    return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul><div class="hw-empty-actions"><button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-plus" aria-hidden="true"></i> Add an assignment</button><button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-book-open" aria-hidden="true"></i> Add a class</button></div></div>`;
   }
 
   function renderHomeworkAssignmentsPanel() {
@@ -1661,6 +1661,10 @@
 
     if (!tasks.length && !courses.length) {
       content = renderEmptyStateRedesign('No homework yet.');
+    } else if (!tasks.length && courses.length) {
+      // A class list with zero assignments is a real empty state, not an
+      // impossible filter result. Keep the next action visible on every tab.
+      content = renderEmptyClassState();
     } else if (!filteredTasks.length && homeworkViewState.tab === 'class' && !hasActiveHomeworkTaskFilters()) {
       content = renderEmptyClassState();
     } else if (!filteredTasks.length) {
@@ -2124,6 +2128,11 @@
       menu.hidden = false;
       if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
       activeTaskMenuId = taskId;
+      // On phones the menu is a viewport-level sheet. Move focus into it so
+      // keyboard and switch-control users never lose the action list below a
+      // scrolling assignment table.
+      const firstAction = menu.querySelector('[role="menuitem"]');
+      if (firstAction) setTimeout(() => { try { firstAction.focus({ preventScroll: true }); } catch (_) { firstAction.focus(); } }, 0);
     }
   }
 
@@ -2164,7 +2173,7 @@
             <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
               <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
               <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
-              <button type="button" data-task-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
+              <button type="button" data-task-menu-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
               ${recurrence !== 'none' ? `<button type="button" data-task-stop-recurring="${escHtml(task.id)}" role="menuitem">Stop recurring</button>` : ''}
               ${task.courseId ? `<button type="button" data-task-dashboard="${escHtml(task.id)}" role="menuitem">Open class dashboard</button>` : ''}
               <button type="button" data-task-schedule="${escHtml(task.id)}" role="menuitem">Schedule this</button>
@@ -2786,10 +2795,10 @@
       });
     });
 
-    board.querySelectorAll('[data-task-toggle]').forEach(button => {
+    board.querySelectorAll('[data-task-toggle], [data-task-menu-toggle]').forEach(button => {
       button.addEventListener('click', () => {
         closeTaskContextMenus();
-        toggleTaskDone(button.getAttribute('data-task-toggle'));
+        toggleTaskDone(button.getAttribute('data-task-toggle') || button.getAttribute('data-task-menu-toggle'));
       });
     });
 

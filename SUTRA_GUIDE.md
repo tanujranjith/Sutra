@@ -68,6 +68,7 @@ Skip any step with the **Skip** button. Close and return later from **Continue l
 - **Daily Thread** - a summary card showing overdue / today / tomorrow / this-week counts, plus one **Next Step**: the single most useful thing to do right now, computed from your own data. You can run it directly.
 - **Shape My Day** - sequences the priorities you've committed against your calendar. Open the *Recommended sequence* disclosure to see the plan, and apply it to the Timeline if you like it.
 - **Deadline Radar** - opens a modal that gathers *every* deadline (tasks, homework, AP exams, college, timeline blocks, work) grouped by *overdue / today / tomorrow / this week / later*. Each row has **Open** and **Schedule this**.
+- **Today customization** - use the Today toolbar or More actions to choose a calm, study, everything, or custom preset. Custom presets can reorder, hide, or resize existing cards; the compact phone shell remains optimized for small screens.
 - **Weekly Review** - one screen for the week just ended and the week ahead: done / missed / overdue counts, **Grades** with per-course risk badges, week-over-week movement (▲/▼) and *"N missing - log scores?"* prompts, **Plan health** (a deterministic scan of the next 7 days for overlaps, missing buffers, overloaded days, and unscheduled priorities, with a **Repair my week** button), heavy days, and **Estimates vs reality** - once you log *"took about how long?"* after homework, it shows where your estimates run long or short per class. Sutra nudges you toward it on Sunday/Monday; you can also open it any time from Today or the Command Palette.
 
 Add your first task right here: click **+ Task**, fill in a title (and optionally a due date, priority, and a linked note), and save. Commit a couple of priorities with one click, and the bar at the top of the panel reflects what you've committed.
@@ -163,7 +164,7 @@ A *Review due* card will start appearing on **Today** whenever cards are waiting
 
 ## 8. Plan time on the Timeline
 
-Open **Timeline** and pick a view - **Month**, **Planner**, **Week**, **Day**, or **Year**.
+Open **Timeline** and pick a view - **Month**, **Planner**, **Week**, or **Day**.
 
 1. Click an empty slot (or **+ Block**) to open the block modal.
 2. Fill in name, start/end, category, color, recurrence (none / daily / weekdays / weekly / monthly), and an optional reference URL.
@@ -171,7 +172,7 @@ Open **Timeline** and pick a view - **Month**, **Planner**, **Week**, **Day**, o
 
 Active blocks light up the **Current Block** card with live progress, and the time-of-day surface tint shifts for morning / afternoon / evening / night.
 
-You don't have to build the day by hand: nearly every dated row across Sutra - homework, AP prep, college deadlines, Deadline Radar items - has a **Schedule this** action that drops a Timeline block for you. To bring in an outside calendar, use ICS import from `Settings -> Advanced`.
+You don't have to build the day by hand: nearly every dated row across Sutra - homework, AP prep, college deadlines, Deadline Radar items - has a **Schedule this** action that drops a Timeline block for you. **More -> Push time** can shift the schedule atomically with one-session undo. To bring in an outside calendar, use the local-preview ICS import from `More` or `Settings -> Packs & advanced -> Calendar data files`; imported events do not create Sutra reminders and older imported history stays out of deadline-driven surfaces.
 
 ---
 
@@ -192,9 +193,9 @@ The **Sutra Assistant** is the assistant icon button at the bottom-right. Its lo
 ### Connect a provider
 
 1. Click the Sutra Assistant icon to open the panel.
-2. Pick a provider: OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter, or a Custom OpenAI-Compatible Endpoint.
+2. Pick a provider: OpenAI, Anthropic Claude, Google Gemini, Groq, OpenRouter, NVIDIA NIM, Mistral AI, Together AI, DeepSeek, xAI, Perplexity, or a Custom OpenAI-Compatible Endpoint.
 3. Enter the **exact Model ID** for that provider (a wrong ID fails at the provider, not in Sutra).
-4. Open `Settings -> Assistant` (or the setup wizard), paste your key, and save. **Session-only storage is the default.** You may optionally remember it in a user-secret-protected encrypted vault; neither raw keys nor vault envelopes are exported.
+4. Open `Settings -> Assistant` (or the setup wizard), paste your key, and save. **Session-only storage is the default.** Local endpoint URLs are validated and device-local; neither raw keys nor endpoint settings are exported or synced.
 
 ### What it knows, and what it can do
 
@@ -252,7 +253,7 @@ If a snippet or plugin ever misbehaves, load **Safe Mode** - add `?sutraSafeMode
 
 This is the single most important habit. Optional Google Drive sync can keep an encrypted cloud snapshot, but a `.sutra` backup you control is still your safety net.
 
-`Settings -> Data` -> **Encrypted Workspace Backup (.sutra)**. Sutra asks for a backup password, then downloads a file named like `sutra_workspace_2026-06-05_21-18-42.sutra` (your local date and time) containing your notes, tasks, timeline, settings, themes, homework, AP, college, life, and work data - including document backgrounds and inline images. You can also export plain **Workspace JSON** for raw interchange; JSON is unencrypted.
+`Settings -> Data` -> **Encrypted Workspace Backup (.sutra)**. Sutra asks for a backup password, then downloads a file named like `sutra_workspace_2026-06-05_21-18-42.sutra` (your local date and time) containing your notes, tasks, timeline, settings, themes, homework, AP, college, life, and work data - including document backgrounds and inline images. You can also choose the explicit optional **unencrypted .sutra export** or plain **Workspace JSON** for raw interchange; both are readable formats, and Assistant chats stay out of the unencrypted .sutra path unless you opt in.
 
 To restore, import the file from the same screen. Sutra always writes a **pre-import safety snapshot** first, so if an import looks wrong you can roll back from `Settings -> Data -> Storage Health`.
 
@@ -261,7 +262,7 @@ A few things to know:
 - Old unencrypted **`.sutra`** and **`.atelier`** backups still import - nothing is broken.
 - **API keys are never in the backup.** Re-enter them after restoring on a new device.
 - Sutra cannot recover a forgotten `.sutra` password.
-- Optional Google Drive sync lives under **Settings -> Data -> Google Drive Sync**. It is off by default, uses only Drive app-data access, and syncs only while Sutra is open, online, unlocked, and authorized.
+- Optional Sutra Cloud/Google Drive backup lives under the save bar and **Settings -> Data & Backup**. It is off by default and uploads only encrypted snapshots. **Sutra Sync Beta** is a separate opt-in multi-device replication system; keep an encrypted .sutra backup even when Sync is enabled.
 
 > Make a backup now, while your workspace is small. Then make one before any big change.
 ---
@@ -274,6 +275,8 @@ As your workspace fills up, four surfaces keep it manageable:
 - **Course Hub** gives each class a dashboard (assignments, files, linked notes, linked decks, schedule, grade forecast) with a deterministic **"Do this next"** card.
 - **Review Generator** turns a note (or an assignment) into review cards: it pulls candidates from your headings, *term: definition* lines, and bold terms, then shows an **editable preview** before anything saves. Find it in a note's menu (*Generate review cards*), in Assignment Studio, on an All Due row, or via the Assistant.
 - **Starter Packs** set up a whole workspace in one step for a goal (AP season, college apps, SAT/ACT, robotics, senior year, research, freelancing, a personal life system). **Preview** what a pack creates, apply all or just the parts you want, and **undo** the whole batch if you change your mind. Open from `Settings → Integrations → Starter Packs` or the All Due empty state.
+
+Canvas and Slides are first-class local Notes surfaces. Canvas supports visual boards, selection, drawing, shapes, connectors, groups, tables, layout tools, locking, and local export. Slides supports themes, layouts, speaker notes, presentation/printing, local images, and an experimental PPTX package. Both save through the owning note page and round-trip through encrypted backups and Sync; Assistant edits are previewed and undoable.
 
 Big assignments can also expand into an **Assignment Studio** (milestones, subtasks, rubric, linked work) — its *Make focus plan* and *Make review cards* buttons tie straight into Timeline and Review.
 

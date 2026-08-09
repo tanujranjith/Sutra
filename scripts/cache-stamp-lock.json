@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/startup-intro.js": {
-    "stamp": "20260614-storage1",
-    "hash": "c5eef02954e85a75"
+    "stamp": "20260809-audit2",
+    "hash": "9992e7d41c8b7d0f"
   },
   "src/boot/sw-register.js": {
     "stamp": "20260709-safeupdate1",
@@ -20,23 +20,23 @@
     "hash": "bdaba42ae73dc103"
   },
   "src/components/icons/icon-paths.js": {
-    "stamp": "20260709-icons-comments",
-    "hash": "aa1b11877e044baa"
+    "stamp": "20260809-audit-icons1",
+    "hash": "81aa2bcc5ca9751f"
   },
   "src/components/icons/index.js": {
-    "stamp": "20260709-icons-comments",
+    "stamp": "20260809-audit-icons1",
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260808-assistantfab1",
-    "hash": "f560f3d3eb0e079c"
+    "stamp": "20260809-helpdocs2",
+    "hash": "fcbefffbf5dcc0c9"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260808-documentimport1",
+    "stamp": "20260809-helpdocs1",
     "hash": "3575cb5114a9fdb2"
   },
   "src/core/dom-safety.js": {
@@ -196,12 +196,12 @@
     "hash": "1554da3db2165bd0"
   },
   "src/features/assistant/sutra-local-help.js": {
-    "stamp": "20260714-assistant-trust1",
-    "hash": "fa165252a929f97d"
+    "stamp": "20260809-helpdocs1",
+    "hash": "0744a4b299271a9c"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260714-assistant-trust1",
-    "hash": "1c85baef910dc3c7"
+    "stamp": "20260809-helpdocs1",
+    "hash": "dc776cdf93ee9f3f"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260602-sutra1",
@@ -228,8 +228,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260807-cohesion2",
-    "hash": "fced22c221585e0b"
+    "stamp": "20260809-audit1",
+    "hash": "a6fcba1774235889"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -243,6 +243,10 @@
     "stamp": "20260702-activation1",
     "hash": "987666d734d79136"
   },
+  "src/features/workspace/audit-fixes.js": {
+    "stamp": "20260809-audit7",
+    "hash": "4ad159c7056bbdca"
+  },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260712-bc1",
     "hash": "0f1060b20127996f"
@@ -250,6 +254,14 @@
   "src/features/workspace/business-workspace.js": {
     "stamp": "20260807-opsqueue1",
     "hash": "eb4ce1fb3fbf3725"
+  },
+  "src/features/workspace/canvas-pen-input-guard.js": {
+    "stamp": "20260808-peninput1",
+    "hash": "cec246479f2c88bb"
+  },
+  "src/features/workspace/canvas-shape-picker.js": {
+    "stamp": "20260808-canvaspicker1",
+    "hash": "9b935bf6ce9bdab7"
   },
   "src/features/workspace/canvas-workbench.js": {
     "stamp": "20260807-canvas2",
@@ -270,6 +282,10 @@
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
     "hash": "b2a6953df38f74cb"
+  },
+  "src/features/workspace/help-docs-refresh.js": {
+    "stamp": "20260809-helpdocs1",
+    "hash": "e2be76a04daa0c0f"
   },
   "src/features/workspace/mobile-nav.js": {
     "stamp": "20260808-contextual-ui1",
@@ -295,9 +311,17 @@
     "stamp": "20260619-packs1",
     "hash": "4f806de479b221c8"
   },
+  "src/features/workspace/startup-default-bridge.js": {
+    "stamp": "20260809-audit3",
+    "hash": "25eacf60dcd98947"
+  },
   "src/features/workspace/surface-assistant-actions.js": {
     "stamp": "20260807-surfaces2",
     "hash": "0bdf44d3dad8df1a"
+  },
+  "src/features/workspace/theme-presets-refresh.js": {
+    "stamp": "20260809-theme-cohesion1",
+    "hash": "320020ca0b7d3053"
   },
   "src/features/workspace/timeline-calendar.js": {
     "stamp": "20260808-contextual-ui1",
@@ -314,6 +338,10 @@
   "src/features/workspace/today-dashboard.js": {
     "stamp": "20260807-todaywidgets1",
     "hash": "db4294be16ce2bb9"
+  },
+  "src/features/workspace/today-focus-timer.js": {
+    "stamp": "20260809-todaytimer1",
+    "hash": "5c735de71c6c5c96"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20260728-entity1",
@@ -380,8 +408,8 @@
     "hash": "ee757d8dfff9958a"
   },
   "src/ui/student-loop-actions.js": {
-    "stamp": "20260808-focusunified1",
-    "hash": "6a4f46ea7312247c"
+    "stamp": "20260809-audit1",
+    "hash": "45186a4c913b046f"
   },
   "styles/base/contracts.css": {
     "stamp": "20260723-layercontract1",
@@ -488,8 +516,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260808-lifeclearance1",
-    "hash": "3297d36c47fd0fcf"
+    "stamp": "20260809-audit-mobile1",
+    "hash": "2ac8fe5b4963dc93"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -510,6 +538,10 @@
   "styles/themes/sutra-pro.css": {
     "stamp": "20260807-agentplans1",
     "hash": "3208734a65002e8c"
+  },
+  "styles/themes/theme-cohesion.css": {
+    "stamp": "20260809-theme-cohesion1",
+    "hash": "89b3c42bf00b0453"
   },
   "styles/views/assistant-view.css": {
     "stamp": "20260808-assistantfab1",
@@ -535,8 +567,12 @@
     "stamp": "20260808-mobileday1",
     "hash": "d711e1fd39e74488"
   },
+  "styles/views/today-focus-timer.css": {
+    "stamp": "20260809-todaytimer1",
+    "hash": "097303c40f531be5"
+  },
   "styles/views/today-redesign.css": {
-    "stamp": "20260807-todaywidgets1",
-    "hash": "f6feb928ecbefd57"
+    "stamp": "20260809-audit-today1",
+    "hash": "2b116a839761639b"
   }
 }

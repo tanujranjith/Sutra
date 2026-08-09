@@ -21,7 +21,7 @@
 (function () {
     'use strict';
 
-    const VERSION = '1.0.0';
+    const VERSION = '1.1.0';
 
     // Canonical view keys the navigate action accepts (kept in sync with the
     // assistant action catalog / app router). Used to validate nav targets.
@@ -64,11 +64,13 @@
             title: 'What can Sutra do? (feature tour)',
             category: 'overview',
             availability: 'available',
-            summary: 'Notes & Canvas, planner Tasks, Homework, Course Hub, Timeline, All Due, Review/flashcards, Cram Hub, AP Study, Assignment Studio, Grade Planner, College/Life/Business, Themes, Search, and Sutra Assistant.',
+            summary: 'Today, Capture, Notes, Canvas, Slides, planner Tasks, Homework, Course Hub, Timeline, All Due, Review/flashcards, Cram Hub, AP Study, Assignment Studio, Grade Planner, College/Life/Business, Themes, Search, Sutra Assistant, and optional Sutra Sync.',
             body: [
                 'Sutra\'s main areas:',
                 '- **Notes** — rich pages, templates, tags, folders, a freeform **Canvas**, and locked (password-protected) notes.',
+                '- **Canvas & Slides** — local visual workspaces that save through the owning note page, with reviewed Assistant edits and encrypted backup/Sync parity.',
                 '- **Today & Planner** — daily view, planner tasks, notifications, and a Timeline calendar.',
+                '- **Capture & navigation** — one intake path for schoolwork, notes, reminders, study sessions, and time blocks, with calm desktop overflow and a phone All sections sheet.',
                 '- **Homework** — assignments by course, with due dates, difficulty, and countdowns.',
                 '- **Course Hub** — courses with linked notes, resources, assignments, and class dashboards.',
                 '- **All Due** — one command center for every upcoming deadline across the workspace.',
@@ -78,12 +80,61 @@
                 '- **Grade Planner** — categories, weights, and deterministic local grade math / what-ifs.',
                 '- **College, Life, Business** — applications/essays, life tracking, and professional/business workspaces.',
                 '- **Themes** — presets, a custom 6-token theme builder, and AI theme generation.',
-                '- **Sutra Assistant** — a contextual AI assistant with Local Help that needs no API key.'
+                '- **Sutra Assistant** — a contextual AI assistant with Local Help that needs no API key.',
+                '- **Sutra Sync Beta** — optional, end-to-end encrypted multi-device replication that is separate from backups and off by default.'
             ],
             keywords: ['features', 'what can sutra do', 'capabilities', 'tour', 'everything', 'list features', 'overview'],
             nav: { view: 'today' },
             relatedActions: [],
             related: ['what-is-sutra', 'notes-pages', 'homework-vs-coursehub', 'review-flashcards']
+        },
+        {
+            id: 'daily-loop-navigation',
+            title: 'Today, Capture & adaptive navigation',
+            category: 'overview',
+            availability: 'available',
+            summary: 'Today is the student command center; Capture accepts several kinds of work, while desktop More and mobile All sections preserve access to advanced surfaces.',
+            body: [
+                '**Today** brings together what is due, what to do next, schedule context, review debt, trackers, and save/backup confidence. **Quick Capture** previews the destination before it creates canonical data.',
+                'The default student shell keeps Today, Homework, Notes, Timeline, Review, Focus, and Data close at hand. Advanced packs stay available in Settings. Notes owns the contextual page tree; other sections use the full workspace by default.',
+                'On phones, the unified bottom bar and **All sections** sheet route through the same canonical tabs as desktop overflow.'
+            ],
+            keywords: ['today', 'capture', 'quick capture', 'navigation', 'all sections', 'more menu', 'mobile navigation', 'daily loop'],
+            nav: { view: 'today' },
+            relatedActions: ['navigate'],
+            related: ['what-is-sutra', 'feature-tour', 'timeline']
+        },
+        {
+            id: 'canvas-slides',
+            title: 'Canvas & Slides',
+            category: 'notes',
+            availability: 'available',
+            summary: 'Canvas and Slides are local-first visual Notes surfaces that save through the owning page and support reviewed Assistant edits.',
+            body: [
+                '**Canvas** provides pan/zoom, a minimap, selection, drawing, shapes, sticky notes, connectors, groups, tables, locking, layout tools, and local export.',
+                '**Slides** stores a deck on `page.slides` with themes, layouts, text, shapes, charts, local images, speaker notes, presentation mode, printing, and an experimental PPTX package export.',
+                'Both use canonical page saves and participate in encrypted `.sutra` backup/import and Sutra Sync. Assistant mutations are bounded, approval-based, and undoable; locked content and remote image fetches are not supported.'
+            ],
+            keywords: ['canvas', 'slides', 'visual workspace', 'presentation', 'speaker notes', 'PPTX', 'board', 'minimap'],
+            nav: { view: 'notes' },
+            relatedActions: ['navigate'],
+            related: ['notes-pages', 'assistant-providers', 'export-import']
+        },
+        {
+            id: 'sync-beta',
+            title: 'Sutra Sync Beta',
+            category: 'backup',
+            availability: 'requires_setup',
+            summary: 'Optional end-to-end encrypted multi-device replication that is off by default and separate from point-in-time backups.',
+            body: [
+                'Sutra Sync is **off by default**. The availability notice, sign-in, reload, and restore do not enable it; only explicit setup and **Turn on sync** do.',
+                'Sync encrypts operations, snapshots, conflicts, and required attachment bytes on the device. It supports offline outbox replay, deterministic conflict review, account-scoped device state, and revoke-and-wipe on a verified next connection.',
+                'Keep an encrypted `.sutra` backup. Sync replicates changes, including mistakes; it is not a replacement for point-in-time backup. The passphrase and recovery kit are required to recover synced data.'
+            ],
+            keywords: ['sutra sync', 'sync beta', 'multi-device', 'encrypted sync', 'conflicts', 'revoke wipe', 'sync passphrase'],
+            nav: { view: 'settings', section: 'backup' },
+            relatedActions: ['navigate'],
+            related: ['cloud-backup', 'encrypted-backup', 'privacy-local-first']
         },
         {
             id: 'intelligence-vs-assistant',
@@ -130,6 +181,7 @@
                 '- **Templates** give you starting points (lecture notes, study session, exam prep, project, and more).',
                 '- **Tags & folders** organize pages; links connect a note to tasks, homework, decks, courses, and timeline blocks.',
                 '- **Canvas** is a freeform board for sticky notes and cards; you can turn a selection into a note or task.',
+                '- **Slides** is a local presentation surface on a normal note page. Decks keep themes, layouts, speaker notes, local images, and presentation state in `page.slides` and use the normal backup path.',
                 '- **Locked notes** are protected by a password; their contents are never read by the assistant or included in AI prompts or exports in readable form.'
             ],
             keywords: ['notes', 'pages', 'note', 'templates', 'tags', 'canvas', 'sticky', 'folders', 'locked notes', 'write', 'editor', 'markdown'],
@@ -225,8 +277,8 @@
             availability: 'available',
             summary: 'The Timeline is your calendar of time blocks. Schedule study and work sessions, link them to tasks, and let Sutra detect conflicts.',
             body: [
-                'The **Timeline** is a calendar of **time blocks**. Each block has a date, start, and end, and can be linked to a task or homework item.',
-                'You can schedule existing work onto the Timeline, and Sutra detects **overlaps** and unrealistic back-to-back blocks locally. Deleting or editing a block always asks for explicit confirmation when the assistant proposes it.'
+                'The **Timeline** is a calendar of **time blocks**. Each block has a date, start, and end, and can be linked to a task or homework item. Month, Week, and Day views adapt to phone screens; Month uses event counts on narrow devices.',
+                'You can schedule existing work onto the Timeline, and Sutra detects **overlaps** and unrealistic back-to-back blocks locally. **Push time** shifts blocks atomically with undo, and local `.ics` import uses a preview, source-scoped re-import, backlog limits, and no reminder generation.'
             ],
             keywords: ['timeline', 'calendar', 'schedule', 'time block', 'blocks', 'plan time', 'conflicts', 'overlap'],
             nav: { view: 'timeline' },
@@ -404,10 +456,11 @@
             title: 'Sutra Assistant: providers, API keys & models',
             category: 'assistant',
             availability: 'requires_provider',
-            summary: 'Connect an AI provider (OpenAI, Anthropic, Gemini, Groq, OpenRouter, DeepSeek, xAI, Perplexity, or a local endpoint) by adding its API key in Settings, then pick a model.',
+            summary: 'Connect an AI provider (OpenAI, Anthropic, Gemini, Groq, OpenRouter, NVIDIA NIM, Mistral, Together, DeepSeek, xAI, Perplexity, or a local endpoint) by adding its API key in Settings, then pick a model.',
             body: [
-                'Sutra Assistant can use the AI provider **you** choose. Supported providers include **OpenAI, Anthropic, Gemini, Groq, OpenRouter, DeepSeek, xAI, Perplexity**, and **local / OpenAI-compatible endpoints** (e.g. Ollama, LM Studio).',
+                'Sutra Assistant can use the AI provider **you** choose. Supported providers include **OpenAI, Anthropic, Gemini, Groq, OpenRouter, NVIDIA NIM, Mistral AI, Together AI, DeepSeek, xAI, Perplexity**, and **local / OpenAI-compatible endpoints** (e.g. Ollama, LM Studio).',
                 'To enable AI chat: open **Settings ▸ Integrations**, paste the provider\'s **API key**, then choose a **model**. Keys are kept for the session only and are never exported, logged, or put into prompts.',
+                'Local endpoint URLs are validated and remain device-local. Sutra sends a request only after you choose that provider and model; the endpoint is not included in workspace backups or Sync.',
                 'You do **not** need a key for product help, Local Help, navigation, deterministic answers, or Memory — those run locally.'
             ],
             keywords: ['provider', 'providers', 'api key', 'openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'deepseek', 'xai', 'perplexity', 'ollama', 'local model', 'connect ai', 'enable ai'],
@@ -607,10 +660,10 @@
             title: 'Cloud backup (optional, consent-first)',
             category: 'backup',
             availability: 'requires_setup',
-            summary: 'You can optionally sync encrypted .sutra snapshots to Google Drive, OneDrive, Dropbox, or Supabase. It is opt-in and the snapshot is encrypted before it leaves your device.',
+            summary: 'You can optionally store encrypted .sutra snapshots with Google Drive, OneDrive, Dropbox, Supabase, or other configured Sutra Cloud providers. It is opt-in and separate from Sutra Sync.',
             body: [
-                'Cloud backup is **optional and consent-first**. If you connect a provider — **Google Drive, OneDrive, Dropbox, or Supabase** — Sutra can store encrypted `.sutra` snapshots there.',
-                'The snapshot is encrypted **on your device** before upload, and provider credentials stay device-local — they are never written into a `.sutra` file. By default Sutra makes no cloud calls; nothing syncs until you set it up.'
+                'Cloud backup is **optional and consent-first**. If you connect a provider — **Google Drive, OneDrive, Dropbox, Supabase**, or another supported Sutra Cloud destination — Sutra can store encrypted `.sutra` snapshots there.',
+                'The snapshot is encrypted **on your device** before upload, and provider credentials stay device-local — they are never written into a `.sutra` file. By default Sutra makes no cloud calls; nothing uploads until you set it up. **Sutra Sync** is a separate, incremental, end-to-end encrypted system for multi-device replication.'
             ],
             keywords: ['cloud', 'cloud backup', 'google drive', 'onedrive', 'dropbox', 'supabase', 'sync', 'cloud sync'],
             nav: { view: 'settings', section: 'backup' },
@@ -638,7 +691,8 @@
             availability: 'available',
             summary: 'Sutra adapts to phones and tablets with a mobile navigation bar and a "right now" focused layout.',
             body: [
-                'Sutra is responsive: on phones and tablets it switches to a mobile navigation bar and a focused layout so the most relevant work is front and center.'
+                'Sutra is responsive: on phones it uses a unified bottom navigation bar and **All sections** sheet, while Today, Timeline, Notes, Homework, Review, Focus, and Assistant keep their primary actions reachable.',
+                'Sheets manage focus, browser Back, Escape, safe-area spacing, background scroll, and restoration. Timeline Month uses counts and opens Day for detail; Week remains contained inside its calendar region. The phone shell keeps the composer and touch targets usable with the software keyboard.'
             ],
             keywords: ['mobile', 'phone', 'tablet', 'ipad', 'android', 'iphone', 'responsive', 'touch'],
             nav: null,
