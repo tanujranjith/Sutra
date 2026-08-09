@@ -688,6 +688,12 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   width: min(100%, var(--sutra-content-max));
   margin-inline: auto;
 }
+/* The school-schedule prompt is a focused setup action, not dashboard
+   content. Keep it readable on an otherwise deliberately wide workspace. */
+#view-today #sutraSchoolDayStrip {
+  width: min(100%, 1320px);
+  margin-inline: auto;
+}
 #view-today .today-hero-header {
   align-items: center;
   margin-bottom: 22px;
@@ -712,6 +718,21 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 }
 #view-today .today-attention-grid { gap: 16px; }
 #view-today .today-section-title { letter-spacing: -0.01em; }
+
+/* Today overflow actions must inherit the current preset's surfaces. The
+   legacy redesign authored a light backdrop, which leaked into dark/custom
+   themes because its dark override only matched one theme attribute. */
+#view-today.today-redesign .today-hero-menu {
+  background: color-mix(in srgb, var(--sutra-color-elevated) 94%, transparent);
+  border-color: var(--sutra-color-border);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--sutra-color-text) 18%, transparent);
+}
+#view-today.today-redesign .today-hero-menu-item:hover {
+  background: color-mix(in srgb, var(--sutra-color-text) 6%, transparent);
+}
+#view-today.today-redesign .today-hero-menu-toggle {
+  border-top-color: color-mix(in srgb, var(--sutra-color-border) 82%, transparent);
+}
 
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 1440px) and (min-width: 981px) {
