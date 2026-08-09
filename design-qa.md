@@ -6,6 +6,14 @@
 
 The supplied mockups are treated as visual direction. Sutra's real local workspace data, enabled packs, empty states, and established serif display treatment intentionally remain authoritative.
 
+### Navigation alignment follow-up — 2026-08-08
+
+- Source: `C:/Users/TANUJD~1.000/AppData/Local/Temp/codex-clipboard-7166ce94-d493-4822-b619-a8874429c0a2.png` at 1718 × 71.
+- The updated 1718-pixel render places the visible destination group at x=577–1141, with its center at x=859 — exactly the viewport center. The clock begins at x=1434 inside the right-side utility group, followed by Theme and Notifications.
+- Laptop and tablet geometry passed at 1280, 768, and the 641-pixel top-navigation boundary. The 641-pixel pass retains a five-pixel gap between navigation and utilities; phone width keeps the desktop header hidden and the established bottom navigation visible.
+- No document-level horizontal overflow, browser warnings, or browser errors were observed. Notes and Today navigation remained functional after the layout change.
+- Final result: passed.
+
 ## Source and implementation evidence
 
 | Surface | Source | Source size | Implementation evidence | Test viewport |

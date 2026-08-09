@@ -108,16 +108,33 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
     const nav = document.querySelector('.top-nav').getBoundingClientRect();
     const sidebarRect = document.querySelector('#sidebar').getBoundingClientRect();
     const mainRect = document.querySelector('.main-content').getBoundingClientRect();
+    const isVisible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const primaryControls = Array.from(document.querySelectorAll('.view-tabs > .view-tab')).filter(isVisible);
+    const more = document.querySelector('.view-tabs > .view-more');
+    if (more && isVisible(more)) primaryControls.push(more);
+    const primaryRects = primaryControls.map((control) => control.getBoundingClientRect());
+    const primaryLeft = Math.min(...primaryRects.map((rect) => rect.left));
+    const primaryRight = Math.max(...primaryRects.map((rect) => rect.right));
+    const utilityRect = document.querySelector('.nav-utility-group').getBoundingClientRect();
     return {
       navLeft: Math.round(nav.left),
       navWidth: Math.round(nav.width),
       viewportWidth: document.documentElement.clientWidth,
       sidebarWidth: Math.round(sidebarRect.width),
-      mainLeft: Math.round(mainRect.left)
+      mainLeft: Math.round(mainRect.left),
+      primaryCenter: Math.round((primaryLeft + primaryRight) / 2),
+      primaryRight: Math.round(primaryRight),
+      utilityLeft: Math.round(utilityRect.left)
     };
   });
   expect(geometry.navLeft).toBe(0);
   expect(geometry.navWidth).toBe(geometry.viewportWidth);
+  expect(Math.abs(geometry.primaryCenter - Math.round(geometry.viewportWidth / 2))).toBeLessThanOrEqual(2);
+  expect(geometry.utilityLeft).toBeGreaterThan(geometry.primaryRight);
   expect(geometry.mainLeft).toBe(geometry.sidebarWidth);
   await expect(topNav).toBeVisible();
 });
