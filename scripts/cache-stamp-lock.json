@@ -255,6 +255,10 @@
     "stamp": "20260807-canvas2",
     "hash": "447a04ed9cb49a41"
   },
+  "src/features/workspace/contextual-shell.js": {
+    "stamp": "20260808-contextual-ui10",
+    "hash": "838a9ef90334af9c"
+  },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260807-customquotes1",
     "hash": "f0aa49dfd964b4ff"
@@ -268,8 +272,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260807-nav16d",
-    "hash": "5513961d16964f01"
+    "stamp": "20260808-contextual-ui1",
+    "hash": "4167227b3a9ba643"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260807-icsnotifications1",
@@ -296,8 +300,8 @@
     "hash": "0bdf44d3dad8df1a"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260808-mobileday1",
-    "hash": "952c87438d22dbc9"
+    "stamp": "20260808-contextual-ui1",
+    "hash": "ff560793703c6a9c"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
@@ -510,6 +514,10 @@
   "styles/views/assistant-view.css": {
     "stamp": "20260808-assistantfab1",
     "hash": "db216eb4138f5552"
+  },
+  "styles/views/contextual-shell.css": {
+    "stamp": "20260808-contextual-ui10",
+    "hash": "0c11d652d77c2a43"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",

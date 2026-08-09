@@ -209,17 +209,12 @@
         <div class="sidebar" id="sidebar" role="navigation" aria-label="Pages and workspace tools">
             <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
             <div class="sidebar-header">
-                <div class="app-title-block">
-                    <div class="app-title" data-sutra-component="brand-mark">
-                        <img class="app-title-icon app-title-mark"
-                             src="assets/brand/sutra/generated/sutra-icon-64.png"
-                             alt=""
-                             aria-hidden="true"
-                             width="26" height="26"
-                             style="border-radius:8px;flex:0 0 auto;display:block;">
-                        <span class="app-title-wordmark">Sutra</span>
-                    </div>
-                    <div class="app-title-sub">Private workspace</div>
+                <div class="sidebar-context-heading">
+                    <span class="sidebar-context-icon" aria-hidden="true"><i class="fas fa-pen-to-square"></i></span>
+                    <span class="sidebar-context-copy">
+                        <strong>Notes</strong>
+                        <span>Pages &amp; notebooks</span>
+                    </span>
                 </div>
             </div>
 
@@ -371,6 +366,14 @@
         <div class="main-content" id="mainContent" role="main" aria-labelledby="appWorkspaceTitle" tabindex="-1">
             <h1 id="appWorkspaceTitle" class="sr-only">Sutra workspace</h1>
             <div class="top-nav glass-panel" role="navigation" aria-label="Primary workspace views">
+                <button class="app-brand global-app-brand" type="button" data-sutra-component="brand-mark" data-view-target="today" aria-label="Open Today">
+                    <img class="app-title-icon app-title-mark"
+                         src="assets/brand/sutra/generated/sutra-icon-64.png"
+                         alt=""
+                         aria-hidden="true"
+                         width="30" height="30">
+                    <span class="app-title-wordmark">Sutra</span>
+                </button>
                 <div class="window-chrome" aria-hidden="true">
                     <span class="window-dot window-dot-close"></span>
                     <span class="window-dot window-dot-min"></span>
@@ -7711,6 +7714,7 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
+    <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
 <script src="src/core/app.js?v=20260808-focusunified2"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
@@ -7734,7 +7738,7 @@
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260807-nav16d"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260808-contextual-ui1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260807-customquotes1"></script>
@@ -7744,7 +7748,7 @@
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
     <script src="src/features/workspace/timeline-drag.js?v=20260730-pushTime1"></script>
-    <script src="src/features/workspace/timeline-calendar.js?v=20260808-mobileday1"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20260808-contextual-ui1"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
@@ -8139,6 +8143,7 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260808-contextual-ui10">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

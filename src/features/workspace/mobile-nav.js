@@ -193,7 +193,9 @@
   function renderMoreActions() {
     if (!moreActions) return;
     moreActions.replaceChildren();
-    moreActions.appendChild(utilityButton('pages', 'fa-bars', 'Pages'));
+    if (activeView() === 'notes') {
+      moreActions.appendChild(utilityButton('pages', 'fa-bars', 'Pages'));
+    }
     if (document.getElementById('customTabAddBtn')) {
       moreActions.appendChild(utilityButton('new-dashboard', 'fa-plus', 'New dashboard'));
     }
