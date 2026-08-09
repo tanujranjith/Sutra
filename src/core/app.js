@@ -60161,11 +60161,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function createImportedPage(title, contentHtml, icon = PAGE_ICONS.IMPORT, options = {}) {
             const targetSpaceId = String((options && options.spaceId) || activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default').trim() || 'default';
             ensureHierarchyParentsForTitle(title, targetSpaceId);
+            // Persist the same safe document representation that the editor will
+            // render. Otherwise an imported document briefly exists as raw HTML,
+            // then a delayed editor save can replace it with a different (or empty)
+            // mirror after the note first appears.
+            const safeContent = sanitizeEditorHtml(contentHtml);
             const page = {
                 id: generateId(),
                 title,
                 type: PAGE_TYPES.NOTE,
-                content: contentHtml,
+                content: safeContent || '<p>(No readable content found)</p>',
                 blocks: [],
                 icon: normalizePageIcon(icon),
                 collapsed: false,
@@ -62962,8 +62967,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
 
             const importedPage = createImportedPage(importedTitle, contentHtml, icon);
+            // createImportedPage has already selected and rendered this note. Do
+            // not load it again: a second load immediately snapshots the editor
+            // mirror, which can race rich imported markup during editor hydration.
             if (importedPage && importedPage.id) {
-                loadPage(importedPage.id);
+                await flushAppSaveNow('document-import');
             }
             showToast(`Imported "${file.name}" into a new page`);
             return importedPage;
