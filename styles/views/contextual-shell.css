@@ -209,6 +209,62 @@ body[data-context-sidebar="none"] #sidebarToggle {
   box-shadow: none;
 }
 
+/* Settings owns an internal category rail, but it still belongs inside the
+   global workspace shell. The older settings-anchored mode turned the shared
+   header back into a margined, relative element, creating a blank band above
+   Settings alone. Keep the stable app bar and give the control center the
+   complete contextual canvas instead. */
+body.settings-anchored-mode .top-nav {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: var(--sutra-global-nav-height) !important;
+  min-height: var(--sutra-global-nav-height) !important;
+  margin: 0 !important;
+  padding: 0 clamp(18px, 2vw, 32px) !important;
+  background: color-mix(in srgb, var(--sutra-color-canvas) 92%, transparent) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--sutra-color-border) 55%, transparent),
+              0 10px 28px color-mix(in srgb, #0d1628 5%, transparent) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+}
+
+body.settings-anchored-mode .main-content {
+  scroll-padding-top: var(--sutra-global-nav-height) !important;
+}
+
+body.settings-anchored-mode #view-settings.view-settings {
+  flex: 1 1 auto;
+  width: 100%;
+  height: calc(100dvh - var(--sutra-global-nav-height));
+  min-height: 0;
+}
+
+body.settings-anchored-mode #view-settings .cc-page {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  padding-inline: var(--sutra-workspace-gutter);
+}
+
+@media (min-width: 1025px) and (max-height: 720px) {
+  body.settings-anchored-mode #view-settings.view-settings {
+    display: block;
+    height: auto;
+    min-height: calc(100dvh - var(--sutra-global-nav-height));
+    overflow: visible;
+  }
+
+  body.settings-anchored-mode #view-settings .cc-page {
+    height: auto;
+    min-height: calc(100dvh - var(--sutra-global-nav-height));
+  }
+}
+
 .sidebar {
   height: 100%;
   min-height: 0;
@@ -658,6 +714,11 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 #view-today .today-section-title { letter-spacing: -0.01em; }
 
 /* Responsive ------------------------------------------------------------- */
+@media (max-width: 1440px) and (min-width: 981px) {
+  :root { --sutra-nav-side-reserve: 182px; }
+  .top-nav .integrations-dock { display: none !important; }
+}
+
 @media (max-width: 1220px) {
   :root { --sutra-nav-side-reserve: 160px; }
   .top-nav { gap: 12px; padding-inline: 16px !important; }

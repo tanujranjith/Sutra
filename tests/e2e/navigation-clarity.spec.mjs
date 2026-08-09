@@ -89,6 +89,27 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
     await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
     await expect(sidebarToggle).toBeHidden();
     expect(Math.round((await main.boundingBox()).x)).toBe(0);
+    if (view === 'settings') {
+      const settingsGeometry = await page.evaluate(() => {
+        const nav = document.querySelector('.top-nav').getBoundingClientRect();
+        const settings = document.querySelector('#view-settings').getBoundingClientRect();
+        const page = document.querySelector('#view-settings .cc-page').getBoundingClientRect();
+        return {
+          viewportWidth: document.documentElement.clientWidth,
+          navTop: Math.round(nav.top),
+          navBottom: Math.round(nav.bottom),
+          settingsTop: Math.round(settings.top),
+          settingsLeft: Math.round(settings.left),
+          settingsWidth: Math.round(settings.width),
+          pageWidth: Math.round(page.width)
+        };
+      });
+      expect(settingsGeometry.navTop).toBe(0);
+      expect(settingsGeometry.settingsTop).toBe(settingsGeometry.navBottom);
+      expect(settingsGeometry.settingsLeft).toBe(0);
+      expect(settingsGeometry.settingsWidth).toBe(settingsGeometry.viewportWidth);
+      expect(settingsGeometry.pageWidth).toBeGreaterThanOrEqual(settingsGeometry.viewportWidth - 16);
+    }
   }
 
   expect(await page.evaluate(() => ({

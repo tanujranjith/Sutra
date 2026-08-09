@@ -14,6 +14,13 @@ The supplied mockups are treated as visual direction. Sutra's real local workspa
 - No document-level horizontal overflow, browser warnings, or browser errors were observed. Notes and Today navigation remained functional after the layout change.
 - Final result: passed.
 
+### Settings full-canvas follow-up — 2026-08-08
+
+- Source: `C:/Users/TANUJD~1.000/AppData/Local/Temp/codex-clipboard-abb7adf0-5403-4870-ac5e-ec3cfa2fc8b9.png`.
+- At 1718 × 900, Settings now uses the shared top bar at y=0–72 and the Settings workspace spans x=0–1718 below it. The control-center page occupies 1708 pixels of that canvas, while its category rail, main controls, and live preview use the available width.
+- At 1280 × 720, the established page-scroll fallback keeps the Settings controls readable instead of forcing the preview rail over the main panel. Neither viewport produced horizontal overflow.
+- Final result: passed.
+
 ## Source and implementation evidence
 
 | Surface | Source | Source size | Implementation evidence | Test viewport |
