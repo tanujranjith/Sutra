@@ -741,6 +741,14 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   border-top-color: color-mix(in srgb, var(--sutra-color-border) 82%, transparent);
 }
 
+/* Keep transient feedback clear of the desktop's lower floating controls. */
+@media (min-width: 601px) {
+  .toast,
+  #notifToastContainer {
+    bottom: clamp(84px, 10dvh, 120px);
+  }
+}
+
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 1440px) and (min-width: 981px) {
   :root { --sutra-nav-side-reserve: 182px; }
