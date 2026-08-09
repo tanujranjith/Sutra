@@ -693,6 +693,13 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 #view-today #sutraSchoolDayStrip {
   width: min(100%, 1320px);
   margin-inline: auto;
+  min-height: 0 !important;
+  height: auto !important;
+  padding-block: 8px;
+}
+#view-today #sutraSchoolDayStrip .ssched-strip-row {
+  min-height: 42px;
+  align-content: center;
 }
 #view-today .today-hero-header {
   align-items: center;
