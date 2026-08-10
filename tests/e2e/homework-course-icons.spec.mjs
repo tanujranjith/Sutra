@@ -54,3 +54,22 @@ test('an extracurricular icon can be chosen and survives reload', async ({ page 
   await openHomework(page);
   await expect(page.locator('[data-course-icon="icon-robotics"] i')).toHaveClass(/fa-robot/);
 });
+
+test('the extracurricular panel shows every activity', async ({ page }) => {
+  await openHomework(page);
+  await page.evaluate(() => {
+    const snapshot = window.SutraHomeworkStore.getSnapshot();
+    const activities = Array.from({ length: 6 }, (_, index) => ({
+      id: `activity-${index + 1}`,
+      name: `Activity ${index + 1}`,
+      type: 'misc'
+    }));
+    window.SutraHomeworkStore.replace({
+      ...snapshot,
+      courses: snapshot.courses.concat(activities)
+    }, { reason: 'all-activities-panel-test' });
+    window.dispatchEvent(new CustomEvent('homework:updated'));
+  });
+
+  await expect(page.locator('.hw-extracurricular-panel .hw-activity-row')).toHaveCount(6);
+});

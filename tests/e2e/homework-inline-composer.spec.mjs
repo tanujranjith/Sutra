@@ -81,3 +81,21 @@ test('Homework workspace summaries, search, filters, and completion use live tas
   await page.locator('[data-homework-tab="completed"]').click();
   await expect(page.locator('.hw-assignment-row')).toHaveCount(1);
 });
+
+test('Homework assignment actions provide a dedicated edit form', async ({ page }) => {
+  await openHomework(page);
+
+  const row = page.locator('.hw-assignment-row').first();
+  await row.locator('[data-task-menu-trigger]').click();
+  await row.getByRole('menuitem', { name: 'Edit assignment' }).click();
+
+  const modal = page.locator('#hwGlobalAddModal');
+  await expect(modal).toBeVisible();
+  await expect(modal.locator('#hwGlobalAddTitle')).toHaveText('Edit Assignment');
+  await modal.locator('[data-field="title"]').fill('Renamed assignment');
+  await modal.locator('[data-field="dueDate"]').fill('2026-08-31');
+  await modal.locator('button[type="submit"]').click();
+
+  await expect(page.locator('.hw-assignment-title-btn')).toHaveText('Renamed assignment');
+  await expect(page.locator('.hw-assignment-row .hw-due-cell')).toContainText('Aug 31');
+});

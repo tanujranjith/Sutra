@@ -32,6 +32,7 @@
   let courses = [];
   let tasks = [];
   let activeTaskMenuId = null;
+  let editingTaskId = null;
   let setupDismissedForSession = false;
   let courseQuickModalState = { type: 'class', onCreated: null };
   const homeworkViewState = {
@@ -1037,6 +1038,7 @@
           <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
         </button>
         <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
+          <button type="button" data-task-edit="${escHtml(task.id)}" role="menuitem">Edit assignment</button>
           <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
           <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
           <button type="button" data-task-menu-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
@@ -1694,8 +1696,7 @@
 
   function renderExtracurricularPanel() {
     const activities = courses.filter(course => course.type === 'misc');
-    const visible = activities.slice(0, 4);
-    const rows = visible.map(course => {
+    const rows = activities.map(course => {
       const activityTasks = tasks.filter(task => String(task.courseId) === String(course.id));
       const openTasks = activityTasks.filter(task => !task.done).sort(compareHomeworkTasks);
       const nearest = openTasks[0] || null;
@@ -1726,7 +1727,7 @@
 
     return `
       <section class="hw-side-panel hw-extracurricular-panel" aria-labelledby="hwActivitiesTitle">
-        <div class="hw-side-heading"><h3 id="hwActivitiesTitle">Extracurriculars</h3>${activities.length > 4 ? '<button type="button" data-view-activities>View all</button>' : ''}</div>
+        <div class="hw-side-heading"><h3 id="hwActivitiesTitle">Extracurriculars</h3></div>
         <div class="hw-activity-list">${rows || '<div class="hw-side-empty"><p>No activities yet.</p><span>Track clubs, teams, and commitments here.</span></div>'}</div>
         <button type="button" class="hw-side-add" data-course-add="misc"><i class="fas fa-plus" aria-hidden="true"></i>Add activity</button>
       </section>`;
@@ -2231,7 +2232,7 @@
           <div class="hw-global-add-card" role="dialog" aria-modal="true" aria-labelledby="hwGlobalAddTitle">
             <div class="hw-global-add-head">
               <h3 id="hwGlobalAddTitle" class="hw-global-add-title">Add Assignment</h3>
-              <button type="button" class="hw-global-close" id="hwCloseAddAssignment" aria-label="Close add assignment">&times;</button>
+              <button type="button" class="hw-global-close" id="hwCloseAddAssignment" aria-label="Close assignment form">&times;</button>
             </div>
 
             <div class="hw-add-step" data-step="lane">
@@ -2269,6 +2270,11 @@
                     <option value="daily">Repeats daily</option>
                     <option value="weekly">Repeats weekly</option>
                     <option value="monthly">Repeats monthly</option>
+                  </select>
+                  <select data-field="priority" aria-label="Priority">
+                    <option value="high">High priority</option>
+                    <option value="medium" selected>Medium priority</option>
+                    <option value="low">Low priority</option>
                   </select>
                   <button type="submit">Add</button>
                 </div>
@@ -2625,6 +2631,9 @@
       const dueTimeInput = $('[data-field="dueTime"]', globalAddForm);
       const difficultySelect = $('[data-field="difficulty"]', globalAddForm);
       const recurrenceSelect = $('[data-field="recurrence"]', globalAddForm);
+      const prioritySelect = $('[data-field="priority"]', globalAddForm);
+      const modalTitle = $('#hwGlobalAddTitle');
+      const submitButton = $('button[type="submit"]', globalAddForm);
       const stepLane = addModal.querySelector('[data-step="lane"]');
       const stepDetails = addModal.querySelector('[data-step="details"]');
       const courseLabel = addModal.querySelector('[data-course-label]');
@@ -2671,8 +2680,27 @@
           }, 40);
         };
 
+        const resetForm = () => {
+          titleInput.value = '';
+          dueDateInput.value = '';
+          dueTimeInput.value = '';
+          difficultySelect.value = 'medium';
+          if (recurrenceSelect) recurrenceSelect.value = 'none';
+          if (prioritySelect) prioritySelect.value = 'medium';
+        };
+
+        const setFormMode = (mode) => {
+          const isEdit = mode === 'edit';
+          if (modalTitle) modalTitle.textContent = isEdit ? 'Edit Assignment' : 'Add Assignment';
+          if (submitButton) submitButton.textContent = isEdit ? 'Save changes' : 'Add';
+          if (backBtn) backBtn.hidden = isEdit;
+        };
+
         const openModal = (courseId = '') => {
           const selectedCourseId = String(courseId || '').trim();
+          editingTaskId = null;
+          setFormMode('add');
+          resetForm();
           addModal.hidden = false;
           if (selectedCourseId) {
             const selectedCourse = courses.find(course => String(course.id) === selectedCourseId);
@@ -2683,8 +2711,27 @@
           }
         };
 
+        const openEditModal = (taskId) => {
+          const task = getTaskByIdInternal(taskId);
+          if (!task) return;
+          const selectedCourse = courses.find(course => String(course.id) === String(task.courseId));
+          editingTaskId = String(task.id);
+          setFormMode('edit');
+          addModal.hidden = false;
+          enterDetailsStep(selectedCourse && selectedCourse.type === 'misc' ? 'misc' : 'class', task.courseId);
+          titleInput.value = task.title || task.text || '';
+          dueDateInput.value = normalizeDueDate(task.dueDate);
+          dueTimeInput.value = normalizeDueTime(task.dueTime);
+          difficultySelect.value = normalizeDifficulty(task.difficulty);
+          if (recurrenceSelect) recurrenceSelect.value = normalizeRecurrence(task.recurrence);
+          if (prioritySelect) prioritySelect.value = normalizePriority(task.priority);
+          setTimeout(() => titleInput.focus(), 40);
+        };
+
         const closeModal = () => {
           addModal.hidden = true;
+          editingTaskId = null;
+          setFormMode('add');
         };
 
         if (openAddBtn) openAddBtn.onclick = () => openModal();
@@ -2710,8 +2757,21 @@
           });
         });
 
+        board.querySelectorAll('[data-task-edit]').forEach(button => {
+          button.addEventListener('click', () => {
+            closeTaskContextMenus();
+            openEditModal(button.getAttribute('data-task-edit'));
+          });
+        });
+
         globalAddForm.addEventListener('submit', async event => {
           event.preventDefault();
+          const title = String(titleInput.value || '').trim();
+          if (!title) {
+            await showHomeworkAlert('Enter an assignment title.', { title: 'Assignment title' });
+            titleInput.focus();
+            return;
+          }
           const selectedCourseId = String(courseSelect.value || '').trim();
           if (!selectedCourseId) {
             await showHomeworkAlert(currentLane === 'misc'
@@ -2720,20 +2780,34 @@
             return;
           }
 
-          const created = addTaskToCourse(selectedCourseId, {
-            title: titleInput.value,
-            dueDate: dueDateInput.value,
-            dueTime: dueTimeInput.value,
-            difficulty: difficultySelect.value,
-            recurrence: recurrenceSelect ? recurrenceSelect.value : 'none'
-          });
-          if (!created) return;
-
-          titleInput.value = '';
-          dueDateInput.value = '';
-          dueTimeInput.value = '';
-          difficultySelect.value = 'medium';
-          if (recurrenceSelect) recurrenceSelect.value = 'none';
+          if (editingTaskId) {
+            const task = getTaskByIdInternal(editingTaskId);
+            if (!task) {
+              closeModal();
+              return;
+            }
+            task.courseId = selectedCourseId;
+            task.title = title;
+            task.text = title;
+            task.dueDate = normalizeDueDate(dueDateInput.value);
+            task.dueTime = normalizeDueTime(dueTimeInput.value);
+            task.priority = normalizePriority(prioritySelect ? prioritySelect.value : task.priority);
+            task.difficulty = normalizeDifficulty(difficultySelect.value);
+            task.recurrence = normalizeRecurrence(recurrenceSelect ? recurrenceSelect.value : task.recurrence);
+            task.updatedAt = new Date().toISOString();
+            save();
+            showHomeworkToast('Assignment updated.');
+          } else {
+            const created = addTaskToCourse(selectedCourseId, {
+              title,
+              dueDate: dueDateInput.value,
+              dueTime: dueTimeInput.value,
+              priority: prioritySelect ? prioritySelect.value : 'medium',
+              difficulty: difficultySelect.value,
+              recurrence: recurrenceSelect ? recurrenceSelect.value : 'none'
+            });
+            if (!created) return;
+          }
           closeModal();
           render();
         });
