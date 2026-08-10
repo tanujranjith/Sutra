@@ -4556,35 +4556,7 @@
     };
 
     function injectViewFlowRows() {
-        try {
-            Object.keys(VIEW_FLOW_ROWS).forEach(viewId => {
-                const section = document.getElementById(`view-${viewId}`);
-                if (!section) return;
-                if (section.querySelector('.view-flow-row')) return;
-                if (getPref('assistant.enabled', true) === false) return;
-                const row = document.createElement('div');
-                row.className = 'view-flow-row';
-                row.setAttribute('data-flow-injected-for', viewId);
-                row.setAttribute('aria-label', 'Ask Sutra');
-                row.innerHTML = VIEW_FLOW_ROWS[viewId].map(item =>
-                    `<button type="button" class="view-flow-btn" data-flow-ask="${esc(item.prompt)}">${esc(item.label)}</button>`
-                ).join('');
-                // Insert at the top of the view, before existing content.
-                if (section.firstChild) section.insertBefore(row, section.firstChild);
-                else section.appendChild(row);
-                // The Notes toolbar-clearance resync (app.js syncNotesEditorTopPadding,
-                // exposed on window) can run before this row exists — e.g. it fires
-                // off the view-switch's requestAnimationFrame while this injection
-                // happens on a separate pass — and nothing re-triggers it afterward,
-                // leaving the chips' static CSS clearance margin unverified against
-                // the fixed toolbar's real position (theme-dependent chrome height
-                // can shrink that margin to zero). Force a fresh measurement now
-                // that the row is actually in the DOM.
-                if (viewId === 'notes' && typeof window.syncNotesEditorTopPadding === 'function') {
-                    try { window.syncNotesEditorTopPadding(); } catch (err) { /* non-critical */ }
-                }
-            });
-        } catch (e) { console.warn('Sutra Assistant injectViewFlowRows failed:', e); }
+        document.querySelectorAll('.view-flow-row[data-flow-injected-for]').forEach(row => row.remove());
     }
 
     function ensurePanelChrome() {

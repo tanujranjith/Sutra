@@ -28,8 +28,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260809-helpdocs2",
-    "hash": "fcbefffbf5dcc0c9"
+    "stamp": "20260810-remove-view-actions1",
+    "hash": "70da95e52c27567d"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -168,8 +168,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "4ed417516c42ba85"
+    "stamp": "20260810-remove-view-actions1",
+    "hash": "38a1ec199f84edc1"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",

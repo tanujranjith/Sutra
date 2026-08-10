@@ -22,6 +22,7 @@ async function openApp(page) {
 
 test('grounded local note search shares sources across dock and full view and supports exclusions', async ({ page }) => {
   await openApp(page);
+  await expect(page.locator('#view-notes .view-flow-row')).toHaveCount(0);
   await page.evaluate(() => {
     const note = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace(
       'Heliotrope research',

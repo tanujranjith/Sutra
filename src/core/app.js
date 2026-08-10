@@ -48772,16 +48772,18 @@ function getActiveEditor() {
             // Auto-lock the outgoing page when navigating away
             if (currentPageId && currentPageId !== pageId) {
                 const outgoing = pages.find(p => p.id === currentPageId);
-                if (outgoing && outgoing.isLocked && outgoing.lockHash && unlockedPageIds.has(currentPageId)) {
-                    const setting = outgoing.lockAutoLock || 'navigation';
-                    if (setting === 'navigation') {
-                        unlockedPageIds.delete(currentPageId);
-                    }
-                }
+                // Keep the outgoing locked page authorized until savePage() has
+                // captured the editor. Revoking this marker first makes the
+                // privacy guard skip the pending editor snapshot.
+                const autoLockOnNavigation = !!(outgoing && outgoing.isLocked && outgoing.lockHash
+                    && unlockedPageIds.has(currentPageId)
+                    && (outgoing.lockAutoLock || 'navigation') === 'navigation');
                 clearAutoLockTimer(currentPageId);
+                if (currentPageId) savePage(); // Save before revoking authorization
+                if (autoLockOnNavigation) unlockedPageIds.delete(currentPageId);
             }
 
-            if (currentPageId) savePage(); // Save current page before switching
+            if (currentPageId && currentPageId === pageId) savePage();
 
             const page = pages.find(p => p.id === pageId);
             if (page && isFolderPage(page)) {
