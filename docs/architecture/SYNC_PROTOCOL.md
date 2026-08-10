@@ -97,9 +97,10 @@ separate plaintext-recovery preference. Determinism rules:
 | `workspaceMeta`, `ui`, `splitPaneContexts` | excluded | device-local save coordination and browser UI state |
 
 `c/pages/<id>` owns every durable page surface. This includes Notepad content,
-Canvas state, and the versioned `page.slides` deck (slide order, elements,
+Canvas state, the versioned `page.slides` deck (slide order, elements,
 speaker notes, and bounded inline local image data). Adding, editing, reordering,
-or removing a nested slide produces an upsert for its owning page; deleting the
+or removing a nested slide, or any versioned `page.spreadsheet` workbook change,
+produces an upsert for its owning page; deleting the
 page produces the normal page-record tombstone. Snapshot and incremental paths
 therefore project the same Slides and Canvas state without editor-specific
 stores or operations.

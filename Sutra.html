@@ -6712,6 +6712,10 @@
                                 <i class="fas fa-chalkboard" aria-hidden="true"></i>
                                 Slides
                             </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_sheets" data-type="sheets" onclick="SutraSheets.createFromNewPageDialog()" aria-pressed="false">
+                                <i class="fas fa-table" aria-hidden="true"></i>
+                                Sheets
+                            </button>
                             <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
                                 <i class="fas fa-folder" aria-hidden="true"></i>
                                 Folder
@@ -7775,6 +7779,8 @@
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
     <script src="src/features/workspace/slides.js?v=20260807-slidesworkbench1"></script>
+    <script src="src/features/workspace/sheets-engine.js?v=20260810-sheets1"></script>
+    <script src="src/features/workspace/sheets.js?v=20260810-sheets1"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
@@ -8186,6 +8192,7 @@
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260807-cohesion2">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260807-slidesworkbench1">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20260810-sheets1">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
