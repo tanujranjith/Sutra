@@ -2542,6 +2542,14 @@
             margin: 0 7px;
         }
 
+        .page-item.folder-page {
+            font-weight: 600;
+        }
+
+        .page-item.folder-page .page-icon {
+            color: var(--accent, var(--text-primary));
+        }
+
         /* Visual drop indicators for drag-and-drop reordering */
         .page-item.drop-before::before {
             content: '';
@@ -34805,6 +34813,30 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
+}
+
+.new-folder-btn {
+    flex: 0 1 auto;
+    min-width: 78px;
+    padding: 10px 12px;
+    background: var(--button-bg, var(--surface-bg));
+    border: 1px dashed var(--button-border, var(--surface-border-strong));
+    color: var(--button-text, var(--text-secondary));
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: all 0.3s ease;
+}
+
+.new-folder-btn:hover {
+    border-color: var(--button-border, var(--surface-border-strong));
+    color: var(--button-text, var(--text-primary));
+    background: var(--button-bg-hover, var(--surface-bg-hover));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .quick-new-page-btn {

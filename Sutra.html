@@ -316,6 +316,10 @@
                         <i class="fas fa-plus" aria-hidden="true"></i>
                         <span class="btn-text">New Page</span>
                     </button>
+                    <button class="new-folder-btn" onclick="createNewFolder()" aria-label="Create new folder" title="New Folder">
+                        <i class="fas fa-folder-plus" aria-hidden="true"></i>
+                        <span class="btn-text">Folder</span>
+                    </button>
                     <button class="quick-new-page-btn" onclick="createQuickUntitledPage()" aria-label="Create blank Untitled page instantly" title="Quick page (blank Untitled)">
                         <i class="fas fa-bolt" aria-hidden="true"></i>
                     </button>
@@ -6708,10 +6712,14 @@
                                 <i class="fas fa-chalkboard" aria-hidden="true"></i>
                                 Slides
                             </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
+                                <i class="fas fa-folder" aria-hidden="true"></i>
+                                Folder
+                            </button>
                         </div>
 
                         <div class="new-page-name-field">
-                            <label class="new-page-field-label" for="newPageName">Page title</label>
+                            <label class="new-page-field-label" id="newPageNameLabel" for="newPageName">Page title</label>
                             <div class="new-page-name-row">
                                 <input type="text" class="modal-input" id="newPageName" placeholder="Enter page title..." />
                                 <button type="button" class="btn btn-secondary template-suggest-btn" id="templateUseNameBtn" onclick="applyTemplateSuggestedName()">Use suggested title</button>
@@ -6840,6 +6848,7 @@
                         <select id="newPageType" aria-hidden="true" style="display:none">
                             <option value="note">Standard note</option>
                             <option value="canvas">Canvas</option>
+                            <option value="folder">Folder</option>
                             <option value="slides">Slides</option>
                         </select>
 
@@ -6884,7 +6893,7 @@
             </div>
             <div class="modal-footer new-page-modal-footer">
                 <button class="btn btn-secondary" id="newPageSecondaryActionBtn" type="button" onclick="handleNewPageSecondaryAction()">Cancel</button>
-                <button class="btn btn-primary" type="button" onclick="confirmNewPage()">Create page</button>
+                <button class="btn btn-primary" id="newPageConfirmBtn" type="button" onclick="confirmNewPage()">Create page</button>
             </div>
         </div>
     </div>

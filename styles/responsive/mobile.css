@@ -1670,6 +1670,15 @@
         min-height: 46px;
         font-size: 14px !important;
     }
+    .sidebar-new-page-row .new-page-btn {
+        width: auto !important;
+        flex: 1 1 auto;
+    }
+    .sidebar-new-page-row .new-folder-btn {
+        min-width: 0;
+        min-height: 46px;
+        padding-inline: 10px;
+    }
     /* Sidebar shortcuts header — keep the add-button visible */
     .sidebar-shortcuts-header .sidebar-shortcut-add {
         min-width: 36px;

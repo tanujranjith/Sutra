@@ -113,7 +113,8 @@ const PAGE_ICONS = Object.freeze({
 
 const PAGE_TYPES = Object.freeze({
     NOTE: 'note',
-    CANVAS: 'canvas'
+    CANVAS: 'canvas',
+    FOLDER: 'folder'
 });
 
 const HELP_PAGE_SYSTEM_ROLE = 'help-docs';
@@ -325,7 +326,12 @@ function normalizeOptionalIsoTimestamp(value) {
 
 function normalizePageType(value) {
     const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === PAGE_TYPES.FOLDER) return PAGE_TYPES.FOLDER;
     return normalized === PAGE_TYPES.CANVAS ? PAGE_TYPES.CANVAS : PAGE_TYPES.NOTE;
+}
+
+function isFolderPage(page) {
+    return !!page && normalizePageType(page.type) === PAGE_TYPES.FOLDER;
 }
 
 function getHelpPageIdForSpace(spaceId) {
@@ -38541,7 +38547,7 @@ function buildOnboardingPlanPreview() {
             const id = String(space && space.id || 'default');
             const spacePages = pages.filter(page => page && (page.spaceId || 'default') === id);
             return {
-                noteCount: spacePages.filter(page => normalizePageType(page.type) !== PAGE_TYPES.CANVAS).length,
+                noteCount: spacePages.filter(page => normalizePageType(page.type) !== PAGE_TYPES.CANVAS && !isFolderPage(page)).length,
                 canvasCount: spacePages.filter(page => normalizePageType(page.type) === PAGE_TYPES.CANVAS).length,
                 updatedAt: spacePages.reduce((latest, page) => {
                     const t = new Date(page.updatedAt || page.createdAt || 0).getTime();
@@ -45287,7 +45293,7 @@ function getActiveEditor() {
         }
 
         function getAvailableSplitPages() {
-            return pages.filter(page => page && !isHelpDocsPage(page) && normalizePageType(page.type) !== PAGE_TYPES.CANVAS);
+            return pages.filter(page => page && !isHelpDocsPage(page) && normalizePageType(page.type) !== PAGE_TYPES.CANVAS && !isFolderPage(page));
         }
 
         function getFallbackSecondaryPageId() {
@@ -45993,11 +45999,13 @@ function getActiveEditor() {
             try { document.body.classList.add('modal-open'); } catch (err) { /* non-critical */ }
             const templateSelect = document.getElementById('newPageTemplate');
             const desiredTemplate = (prefill && prefill.templateId) || (templateSelect ? templateSelect.value : 'blank') || 'blank';
+            const desiredType = (prefill && prefill.type) || (isCanvasTemplateId(desiredTemplate) ? PAGE_TYPES.CANVAS : PAGE_TYPES.NOTE);
             const ctx = (prefill && prefill.context) || getActiveCreationContext();
             setTemplateCategoryFilter('all', { skipRender: true });
             const typeSelect = document.getElementById('newPageType');
-            if (typeSelect) typeSelect.value = isCanvasTemplateId(desiredTemplate) ? PAGE_TYPES.CANVAS : PAGE_TYPES.NOTE;
+            if (typeSelect) typeSelect.value = desiredType;
             // Cache the active context so confirmNewPage can record it on the page.
+            modal.dataset.creationKind = desiredType === PAGE_TYPES.FOLDER ? 'folder' : 'page';
             modal.dataset.creationContextKind = ctx.kind || 'general';
             modal.dataset.creationContextCourseId = ctx.courseId || '';
             modal.dataset.creationContextCourseName = ctx.courseName || '';
@@ -46005,7 +46013,11 @@ function getActiveEditor() {
             modal.dataset.creationContextApSubjectName = ctx.apSubjectName || '';
             renderTemplatePickerCards(ctx);
             setNewPageTemplateSelection(desiredTemplate, { fireChange: true, focusCard: true });
+            // Restore an explicit Folder selection after the legacy template listener runs.
+            if (typeSelect) typeSelect.value = desiredType;
             populateNewPageParentPicker();
+            const parentSelect = document.getElementById('newPageParentPage');
+            if (parentSelect && prefill && prefill.parentId) parentSelect.value = String(prefill.parentId);
             applyNewPageTypeUi();
             populateContextClassPicker(ctx);
             updateNewPageTemporaryPreview();
@@ -46016,6 +46028,14 @@ function getActiveEditor() {
                     try { nameInput.focus({ preventScroll: true }); } catch (err) { /* non-critical */ }
                 }, 30);
             }
+        }
+
+        function createNewFolder(options = {}) {
+            createNewPage({
+                type: PAGE_TYPES.FOLDER,
+                templateId: 'blank',
+                parentId: options.parentId || ''
+            });
         }
 
         // Skips the template picker entirely: pushes a blank "Untitled" note and
@@ -46344,16 +46364,20 @@ function getActiveEditor() {
             if (nameInput) clearInlineFieldError(nameInput);
 
             if (!name) {
-                if (template.id === 'blank') {
+                if (pageType === PAGE_TYPES.FOLDER) {
+                    name = getUniqueGeneratedPageTitle('New folder');
+                    if (nameInput) nameInput.value = name;
+                } else if (template.id === 'blank') {
                     showToast('Please enter a page name');
                     if (nameInput) {
                         setInlineFieldError(nameInput, 'Enter a page name before creating a blank page.');
                         nameInput.focus();
                     }
                     return;
+                } else {
+                    name = getUniqueGeneratedPageTitle(template.suggestedTitle || template.name);
+                    if (nameInput) nameInput.value = name;
                 }
-                name = getUniqueGeneratedPageTitle(template.suggestedTitle || template.name);
-                if (nameInput) nameInput.value = name;
             }
 
             const parentSelect = document.getElementById('newPageParentPage');
@@ -46361,6 +46385,28 @@ function getActiveEditor() {
             const parentPage = parentId ? pages.find(page => page && page.id === parentId && (page.spaceId || 'default') === (activeSpaceId || 'default')) : null;
             if (parentPage && !String(name || '').includes('::')) {
                 name = `${parentPage.title}::${name}`;
+            }
+
+            if (pageType === PAGE_TYPES.FOLDER) {
+                const folderPage = normalizePagesCollection([{
+                    id: generateId(),
+                    title: name,
+                    type: PAGE_TYPES.FOLDER,
+                    content: '',
+                    blocks: [],
+                    icon: PAGE_ICONS.FOLDER,
+                    collapsed: false,
+                    createdAt,
+                    updatedAt: createdAt,
+                    theme: globalTheme,
+                    spaceId: activeSpaceId || 'default'
+                }])[0];
+                pages.push(folderPage);
+                savePagesToLocal();
+                renderPagesList();
+                closeModal('newPageModal');
+                showToast('Folder created');
+                return folderPage;
             }
 
             if (pageType === PAGE_TYPES.CANVAS) {
@@ -48738,6 +48784,10 @@ function getActiveEditor() {
             if (currentPageId) savePage(); // Save current page before switching
 
             const page = pages.find(p => p.id === pageId);
+            if (page && isFolderPage(page)) {
+                toggleCollapse(page.id);
+                return;
+            }
             if (page) {
                 currentPageId = pageId;
                 try { updateSplitPaneContext('left', { selectedNoteId: pageId }); } catch (err) { /* non-critical */ }
@@ -48945,7 +48995,7 @@ function getActiveEditor() {
         }
 
         function goToFirstPage() {
-            const firstPage = pages.find(p => !isHelpDocsPage(p));
+            const firstPage = pages.find(p => !isHelpDocsPage(p) && !isFolderPage(p));
             if (firstPage) loadPage(firstPage.id);
         }
 
@@ -49644,7 +49694,7 @@ function getActiveEditor() {
                 const page = pages.find(p => p.id === defaultPageId);
                 if (page) return page.id;
             }
-            const firstPage = pages.find(p => !isHelpDocsPage(p));
+            const firstPage = pages.find(p => !isHelpDocsPage(p) && !isFolderPage(p));
             return firstPage ? firstPage.id : (ensureHelpPageForSpace(activeSpaceId || 'default') || {}).id || null;
         }
 
@@ -51602,32 +51652,49 @@ function getActiveEditor() {
 
         function applyNewPageTypeUi() {
             const pageType = getNewPageTypeSelection();
+            const isFolder = pageType === PAGE_TYPES.FOLDER;
             const templateSelect = document.getElementById('newPageTemplate');
             const taskOptions = document.getElementById('templateTaskOptions');
             const temporaryPanel = document.getElementById('temporaryPagePanel');
-            if (templateSelect && pageType === PAGE_TYPES.CANVAS && !isCanvasTemplateId(templateSelect.value)) {
-                templateSelect.value = 'canvas_blank';
-                updateTemplatePreview('canvas_blank');
+            if (templateSelect && (isFolder || (pageType === PAGE_TYPES.CANVAS && !isCanvasTemplateId(templateSelect.value)))) {
+                templateSelect.value = isFolder ? 'blank' : 'canvas_blank';
+                updateTemplatePreview(isFolder ? 'blank' : 'canvas_blank');
             } else if (templateSelect && pageType === PAGE_TYPES.NOTE && isCanvasTemplateId(templateSelect.value)) {
                 templateSelect.value = 'blank';
                 updateTemplatePreview('blank');
             }
-            if (taskOptions) taskOptions.hidden = pageType === PAGE_TYPES.CANVAS;
-            if (temporaryPanel) temporaryPanel.hidden = pageType === PAGE_TYPES.CANVAS;
+            if (taskOptions) taskOptions.hidden = pageType === PAGE_TYPES.CANVAS || isFolder;
+            if (temporaryPanel) temporaryPanel.hidden = pageType === PAGE_TYPES.CANVAS || isFolder;
+            const templateColumn = document.querySelector('.new-page-template-column');
+            if (templateColumn) templateColumn.hidden = isFolder;
+            const contextClassRow = document.getElementById('newPageContextRow_class');
+            if (contextClassRow) contextClassRow.hidden = isFolder;
+            const previewPanel = document.getElementById('templatePreviewPanel');
+            if (previewPanel) previewPanel.hidden = isFolder;
+            const nameLabel = document.getElementById('newPageNameLabel');
+            if (nameLabel) nameLabel.textContent = isFolder ? 'Folder name' : 'Page title';
+            const confirmButton = document.getElementById('newPageConfirmBtn');
+            if (confirmButton) confirmButton.textContent = isFolder ? 'Create folder' : 'Create page';
+            const subtitle = document.getElementById('newPageModalSubtitle');
+            if (subtitle) subtitle.textContent = isFolder ? 'Group related pages together and collapse them when you are done.' : 'Start blank or choose a student workflow template.';
+            syncPageTypeToggleState(pageType);
             renderTemplatePickerCards(getActiveCreationContext());
         }
 
         function syncPageTypeToggleState(type) {
             const noteBtn = document.getElementById('newPageTypeBtn_note');
             const canvasBtn = document.getElementById('newPageTypeBtn_canvas');
-            if (!noteBtn || !canvasBtn) return;
+            const folderBtn = document.getElementById('newPageTypeBtn_folder');
+            if (!noteBtn || !canvasBtn || !folderBtn) return;
             const isCanvas = type === PAGE_TYPES.CANVAS;
-            noteBtn.classList.toggle('nptt-active', !isCanvas);
-            noteBtn.setAttribute('aria-pressed', String(!isCanvas));
+            const isFolder = type === PAGE_TYPES.FOLDER;
+            noteBtn.classList.toggle('nptt-active', !isCanvas && !isFolder);
+            noteBtn.setAttribute('aria-pressed', String(!isCanvas && !isFolder));
             canvasBtn.classList.toggle('nptt-active', isCanvas);
             canvasBtn.setAttribute('aria-pressed', String(isCanvas));
+            folderBtn.classList.toggle('nptt-active', isFolder);
+            folderBtn.setAttribute('aria-pressed', String(isFolder));
         }
-
         function handleNewPageTypeToggle(type) {
             const typeSelect = document.getElementById('newPageType');
             if (typeSelect) typeSelect.value = type;
@@ -51710,7 +51777,7 @@ function getActiveEditor() {
                     row.className = `notes-pinned-row${page.id === currentPageId ? ' active' : ''}`;
                     row.dataset.pageId = page.id;
                     row.innerHTML = `
-                        <span class="page-icon">${escapeHtml(normalizePageIcon(page.icon) || (normalizePageType(page.type) === PAGE_TYPES.CANVAS ? PAGE_ICONS.CANVAS : PAGE_ICONS.DOC))}</span>
+                        <span class="page-icon">${escapeHtml(normalizePageIcon(page.icon) || (isFolderPage(page) ? PAGE_ICONS.FOLDER : (normalizePageType(page.type) === PAGE_TYPES.CANVAS ? PAGE_ICONS.CANVAS : PAGE_ICONS.DOC)))}</span>
                         <span class="page-title-text">${escapeHtml(displayTitle)}</span>
                         <span class="notes-pinned-unpin" role="img" aria-label="Pinned"><i class="fas fa-thumbtack" aria-hidden="true"></i></span>
                     `;
@@ -51759,8 +51826,9 @@ function getActiveEditor() {
                 pageItem.classList.toggle('active', page.id === currentPageId);
                 pageItem.classList.toggle('system-page', isSystemPage);
                 pageItem.classList.toggle('canvas-page', normalizePageType(page.type) === PAGE_TYPES.CANVAS);
+                pageItem.classList.toggle('folder-page', isFolderPage(page));
                 pageItem.style.paddingLeft = (12 + depth * 20) + 'px';
-                pageItem.onclick = () => loadPage(page.id);
+                pageItem.onclick = () => isFolderPage(page) ? toggleCollapse(page.id) : loadPage(page.id);
                 pageItem.draggable = !isSystemPage;
                 // Drag events
                 pageItem.addEventListener('dragstart', function(e) {
@@ -51825,7 +51893,7 @@ function getActiveEditor() {
                     pageItem.appendChild(collapseIcon);
                 }
 
-                const iconDisplay = normalizePageIcon(page.icon) || (normalizePageType(page.type) === PAGE_TYPES.CANVAS ? PAGE_ICONS.CANVAS : PAGE_ICONS.DOC);
+                const iconDisplay = normalizePageIcon(page.icon) || (isFolderPage(page) ? PAGE_ICONS.FOLDER : (normalizePageType(page.type) === PAGE_TYPES.CANVAS ? PAGE_ICONS.CANVAS : PAGE_ICONS.DOC));
                 const pageIcon = document.createElement('span');
                 pageIcon.className = 'page-icon';
                 pageIcon.title = isSystemPage ? 'Built-in page' : 'Click to change icon';
@@ -51883,7 +51951,18 @@ function getActiveEditor() {
                         : [{ className: 'fas fa-unlock', title: 'Unlock page', onClick: () => { loadPage(page.id); setActiveView('notes'); } }])
                     : [{ className: 'fas fa-lock', title: 'Lock with PIN', onClick: () => openSetLockModal(page.id) }];
 
-                const actionItems = [
+                const actionItems = isFolderPage(page) ? [
+                    {
+                        className: 'fas fa-pencil-alt',
+                        title: 'Rename folder',
+                        onClick: () => showRenameModal(page.id)
+                    },
+                    {
+                        className: 'fas fa-trash',
+                        title: 'Delete folder',
+                        onClick: () => deletePage(page.id)
+                    }
+                ] : [
                     {
                         className: `fas fa-thumbtack${isNotePagePinned(page.id, _spaceId) ? ' starred' : ''}`,
                         title: isNotePagePinned(page.id, _spaceId) ? 'Unpin page' : 'Pin page',
@@ -51913,7 +51992,6 @@ function getActiveEditor() {
                     }
                     ])
                 ];
-
                 actionItems.forEach((action) => {
                     iconsWrap.appendChild(makeActionIcon(action.className, action.title, action.onClick));
                 });
@@ -68471,6 +68549,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
                 const typeSelect = document.getElementById('newPageType');
                 if (typeSelect) typeSelect.value = PAGE_TYPES.NOTE;
+                const modalKind = document.getElementById('newPageModal');
+                if (modalKind) delete modalKind.dataset.creationKind;
+                const templateColumn = document.querySelector('.new-page-template-column');
+                if (templateColumn) templateColumn.hidden = false;
+                const contextClassRow = document.getElementById('newPageContextRow_class');
+                if (contextClassRow) contextClassRow.hidden = false;
+                const previewPanel = document.getElementById('templatePreviewPanel');
+                if (previewPanel) previewPanel.hidden = false;
+                const nameLabel = document.getElementById('newPageNameLabel');
+                if (nameLabel) nameLabel.textContent = 'Page title';
+                const confirmButton = document.getElementById('newPageConfirmBtn');
+                if (confirmButton) confirmButton.textContent = 'Create page';
+                const subtitle = document.getElementById('newPageModalSubtitle');
+                if (subtitle) subtitle.textContent = 'Start blank or choose a student workflow template.';
+                syncPageTypeToggleState(PAGE_TYPES.NOTE);
                 const parentSelect = document.getElementById('newPageParentPage');
                 if (parentSelect) parentSelect.value = '';
                 const advanced = document.getElementById('newPageAdvancedOptions');

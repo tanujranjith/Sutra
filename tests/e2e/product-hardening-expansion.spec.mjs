@@ -172,6 +172,51 @@ test('pinned note pages survive rename, hierarchy move, deletion cleanup, and ro
   expect(result.pinnedAfterDelete).toBe(false);
 });
 
+test('folders group note pages, collapse their children, and round-trip', async ({ page }) => {
+  await openApp(page);
+  const folderName = 'QA Folder';
+  await page.evaluate(() => window.createNewFolder());
+  await page.locator('#newPageName').fill(folderName);
+  await page.locator('#newPageConfirmBtn').click();
+
+  const result = await page.evaluate((name) => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const folder = hooks.getPagesForSpace(hooks.getActiveSpaceId()).find(item => item.title === name);
+    const first = hooks.createNoteInActiveSpace(`${name}::Chapter 1`, '<p>First page</p>');
+    const second = hooks.createNoteInActiveSpace(`${name}::Chapter 2`, '<p>Second page</p>');
+    const folderRow = document.querySelector(`#pagesList > .page-item[data-page-id="${folder.id}"]`);
+    const childRowsBefore = [first, second].map(item => document.querySelector(`.page-item[data-page-id="${item.id}"]`)).filter(Boolean).length;
+    folderRow.click();
+    const collapsed = hooks.getPagesForSpace(hooks.getActiveSpaceId()).find(item => item.id === folder.id).collapsed === true;
+    const childRowsCollapsed = [first, second].filter(item => document.querySelector(`.page-item[data-page-id="${item.id}"]`)).length;
+    folderRow.click();
+    const expanded = [first, second].every(item => !!document.querySelector(`.page-item[data-page-id="${item.id}"]`));
+    const snapshot = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    window.deserializeWorkspace(snapshot);
+    const restored = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const restoredFolder = restored.pages.find(item => item.id === folder.id);
+    return {
+      folderType: folder.type,
+      childRowsBefore,
+      collapsed,
+      childRowsCollapsed,
+      expanded,
+      restoredType: restoredFolder && restoredFolder.type,
+      restoredCollapsed: restoredFolder && restoredFolder.collapsed,
+      childTitles: restored.pages.filter(item => item.title.startsWith(`${name}::`)).map(item => item.title)
+    };
+  }, folderName);
+
+  expect(result.folderType).toBe('folder');
+  expect(result.childRowsBefore).toBe(2);
+  expect(result.collapsed).toBe(true);
+  expect(result.childRowsCollapsed).toBe(0);
+  expect(result.expanded).toBe(true);
+  expect(result.restoredType).toBe('folder');
+  expect(result.restoredCollapsed).toBe(false);
+  expect(result.childTitles).toEqual(expect.arrayContaining([`${folderName}::Chapter 1`, `${folderName}::Chapter 2`]));
+});
+
 test('Canvas pages are space-scoped, editable, searchable, assistant-bounded, and persistent', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(async () => {
