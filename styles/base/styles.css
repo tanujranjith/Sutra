@@ -20300,7 +20300,7 @@ body.icon-fallback-active .quick-app-btn i[class*="fa-"] {
 }
 
 .hw-global-meta-row-2 {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 
 .hw-meta-recurrence i {
