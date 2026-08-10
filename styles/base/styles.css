@@ -34880,9 +34880,9 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
     gap: 10px;
     max-width: min(520px, calc(100vw - 32px));
     padding: 12px 14px;
-    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
     border-radius: 12px;
-    background: var(--surface, #fff);
+    background: var(--bg-elevated, var(--bg-primary, #fff));
     color: var(--text-primary, #1f2937);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
     font-size: 0.88rem;
@@ -34903,7 +34903,7 @@ body:not([data-theme]) .tok-keyword { color: #0000c0; }
     color: #fff;
 }
 .sutra-update-dismiss {
-    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.35));
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
     background: transparent;
     color: inherit;
 }

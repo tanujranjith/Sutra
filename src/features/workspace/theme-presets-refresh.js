@@ -41,7 +41,7 @@
     function installHeritagePreset() {
         if (typeof themes !== 'object' || !themes || themes.heritage) return;
         themes.heritage = {
-            name: 'Heritage',
+            name: 'Peach',
             mode: 'light',
             accent: '#a96f3f',
             sidebar: '#e9dcc9',
