@@ -251,6 +251,53 @@ test('radar consolidates linked Homework deadline, due marker, and focus block',
   await expect(chip.locator('.radar-chip-meta')).toContainText('Scheduled');
 });
 
+test('Deadline Radar can mark tasks, Homework, and Timeline items done', async ({ page }) => {
+  await openApp(page);
+
+  const ids = await page.evaluate(() => {
+    const fa = window.flowAtelier;
+    const due = new Date();
+    due.setDate(due.getDate() + 1);
+    const dueDate = due.getFullYear() + '-' + String(due.getMonth() + 1).padStart(2, '0') + '-' + String(due.getDate()).padStart(2, '0');
+    const taskId = 'qa-radar-complete-task';
+    const homeworkId = 'qa-radar-complete-homework';
+    const blockId = 'qa-radar-complete-block';
+    fa.tasks.push({ id: taskId, title: 'Radar task to complete', dueDate, dueTime: '', completed: false, isActive: true, scheduleType: 'once' });
+    const homeworkStore = window.SutraHomeworkStore;
+    const homeworkSnapshot = homeworkStore.getSnapshot();
+    homeworkStore.replace({
+      ...homeworkSnapshot,
+      courses: [...(homeworkSnapshot.courses || []), { id: 'qa-radar-complete-course', name: 'Radar Class' }],
+      tasks: [...(homeworkSnapshot.tasks || []), {
+        id: homeworkId, courseId: 'qa-radar-complete-course', title: 'Radar homework to complete',
+        dueDate, dueTime: '', done: false, priority: 'medium', difficulty: 'medium'
+      }]
+    }, { reason: 'today-radar-completion-regression' });
+    fa.timeBlocks.push({ id: blockId, date: dueDate, start: '15:00', end: '15:30', name: 'Radar block to complete', source: 'manual' });
+    fa.renderTaskViews();
+    window.openDeadlineRadar();
+    return { taskId, homeworkId, blockId };
+  });
+
+  const radar = page.locator('#deadlineRadarModal');
+  for (const title of ['Radar task to complete', 'Radar homework to complete', 'Radar block to complete']) {
+    await expect(radar.locator('.deadline-radar-item', { hasText: title }).locator('[data-deadline-done]')).toBeVisible();
+  }
+
+  await radar.locator('.deadline-radar-item', { hasText: 'Radar task to complete' }).locator('[data-deadline-done]').click();
+  await expect(radar.locator('.deadline-radar-item', { hasText: 'Radar task to complete' })).toHaveCount(0);
+  await radar.locator('.deadline-radar-item', { hasText: 'Radar homework to complete' }).locator('[data-deadline-done]').click();
+  await expect(radar.locator('.deadline-radar-item', { hasText: 'Radar homework to complete' })).toHaveCount(0);
+  await radar.locator('.deadline-radar-item', { hasText: 'Radar block to complete' }).locator('[data-deadline-done]').click();
+  await expect(radar.locator('.deadline-radar-item', { hasText: 'Radar block to complete' })).toHaveCount(0);
+
+  await expect.poll(() => page.evaluate(({ taskId, homeworkId, blockId }) => ({
+    task: window.flowAtelier.tasks.find((task) => task.id === taskId)?.completed === true,
+    homework: window.SutraHomeworkStore.getSnapshot().tasks.find((task) => task.id === homeworkId)?.done === true,
+    block: window.flowAtelier.timeBlocks.find((block) => block.id === blockId)?.completed === true
+  }), ids)).toEqual({ task: true, homework: true, block: true });
+});
+
 test('Next Up card, footer counts, and empty states use live data', async ({ page }) => {
   await openApp(page);
 

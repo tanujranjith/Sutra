@@ -25134,6 +25134,9 @@ function populateProgressDashboard() {
                                     const extraAction = i.source === 'homework' && i.sourceCourseId
                                         ? `<button type="button" class="neumo-btn deadline-radar-secondary-btn" data-deadline-open-class="${escapeHtml(i.id)}" title="Open class dashboard">Class</button>`
                                         : '';
+                                    const doneAction = typeof recoveryCanMarkDone === 'function' && recoveryCanMarkDone(i)
+                                        ? `<button type="button" class="neumo-btn deadline-radar-done-btn active" data-deadline-done="${escapeHtml(i.id)}" title="Mark done">Done</button>`
+                                        : '';
                                     return `<li class="deadline-radar-item" data-deadline-id="${escapeHtml(i.id)}">
                                         <div class="deadline-radar-item-main">
                                             <div class="deadline-radar-item-title">${escapeHtml(i.title)}</div>
@@ -25141,6 +25144,7 @@ function populateProgressDashboard() {
                                         </div>
                                         <div class="deadline-radar-item-actions">
                                             ${extraAction}
+                                            ${doneAction}
                                             <button type="button" class="neumo-btn deadline-radar-schedule-btn" data-deadline-schedule="${escapeHtml(i.id)}" title="Schedule a prep block">Schedule</button>
                                         </div>
                                     </li>`;
@@ -25160,8 +25164,8 @@ function populateProgressDashboard() {
                     ].filter(Boolean).join('');
                 body.querySelectorAll('.deadline-radar-item').forEach(li => {
                     li.addEventListener('click', (e) => {
-                        // Schedule button clicks should not also route to source.
-                        if (e.target && e.target.closest && e.target.closest('.deadline-radar-schedule-btn')) return;
+                        // Action button clicks should not also route to source.
+                        if (e.target && e.target.closest && e.target.closest('.deadline-radar-schedule-btn, .deadline-radar-done-btn, .deadline-radar-secondary-btn')) return;
                         const id = li.getAttribute('data-deadline-id');
                         const target = items.find(i => i.id === id);
                         if (target) {
@@ -25178,6 +25182,21 @@ function populateProgressDashboard() {
                         if (target && typeof scheduleDeadlineItemAsBlock === 'function') {
                             scheduleDeadlineItemAsBlock(target);
                             // Refresh radar view.
+                            try { openDeadlineRadar(); } catch (err) { /* non-critical */ }
+                        }
+                    });
+                });
+                body.querySelectorAll('[data-deadline-done]').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const id = btn.getAttribute('data-deadline-done');
+                        const target = items.find(i => i.id === id);
+                        if (target && typeof mutateDeadlineRecord === 'function' && mutateDeadlineRecord(target, { done: true })) {
+                            if (typeof showToast === 'function') showToast('Marked done.');
+                            // The collector memoizes within a render frame; clear it
+                            // so the completed item disappears from the refreshed radar.
+                            __workspaceDeadlineCache = null;
+                            try { renderTodayDailyBrief && renderTodayDailyBrief(); } catch (err) { /* non-critical */ }
                             try { openDeadlineRadar(); } catch (err) { /* non-critical */ }
                         }
                     });
