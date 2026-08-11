@@ -114,6 +114,13 @@ test('full student flow: select student intent, add classes, advance through all
   // Verify overlay closed and view is Today
   const overlay = page.locator('#studentOnboardingOverlay');
   await expect(overlay).not.toBeVisible({ timeout: 5000 });
+
+  // Completion must survive a real startup/hydrate cycle. This catches the
+  // onboarding-state replacement bug where the final flag was only live in
+  // memory and the wizard returned after reload.
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await expect(overlay).not.toBeVisible({ timeout: 5000 });
 });
 
 test('skip path: select "Just exploring", lands on Today immediately', async ({ page }) => {

@@ -30,6 +30,16 @@ test('onboarding opens through the unified controller and can be re-run', () => 
   assert.ok(setup.body.includes("jumpTo: 'welcome'"), 're-running setup returns to the welcome step');
 });
 
+test('onboarding normalization completes its migration boundary', () => {
+  const normalize = extractFunction(app, 'normalizeOnboardingState');
+  assert.ok(normalize, 'normalizeOnboardingState is a top-level declaration');
+  assert.match(
+    normalize.body,
+    /out\.migratedFromLegacy\s*=\s*true;[\s\S]*return out;/,
+    'normalized onboarding state must be marked migrated so repeated reads keep object identity'
+  );
+});
+
 test('onboarding screens offer deferral and point students at the daily loop', () => {
   const protect = extractFunction(app, 'renderProtectStep');
   assert.ok(protect, 'renderProtectStep is a top-level declaration');

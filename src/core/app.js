@@ -7492,6 +7492,10 @@ function populateProgressDashboard() {
             let readFailed = false;
             try {
                 stored = await readAppData();
+                if (!stored) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    stored = await readAppData();
+                }
             } catch (error) {
                 readFailed = true;
                 persistenceWritesBlocked = true;
@@ -26054,6 +26058,7 @@ function populateProgressDashboard() {
 
             if (ONBOARDING_RETIRED_STEP_MAP[out.currentStep]) out.currentStep = ONBOARDING_RETIRED_STEP_MAP[out.currentStep];
             if (!ONBOARDING_STEPS.includes(out.currentStep)) out.currentStep = 'welcome';
+            out.migratedFromLegacy = true;
             return out;
         }
 
