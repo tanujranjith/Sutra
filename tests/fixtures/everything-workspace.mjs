@@ -111,6 +111,20 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         id: 'slide-parity', layout: 'title', title: 'Parity Slides', speakerNotes: 'Slide note sentinel.',
         elements: [{ id: 'slide-text-parity', type: 'text', x: 10, y: 10, width: 70, height: 12, text: 'Unique slide evidence.' }]
       }] },
+      spreadsheet: {
+        version: 1, title: 'Parity workbook', namedRanges: { total: 'Sheet1!B1' },
+        styles: { bold: { fontWeight: '700' } },
+        sheets: [{
+          id: 'sheet-parity', name: 'Sheet1',
+          rows: [{ id: 'row-parity-1', height: 28 }],
+          columns: [{ id: 'col-parity-a', width: 120 }, { id: 'col-parity-b', width: 120 }],
+          cells: {
+            'row-parity-1:col-parity-a': { value: 7, formula: '', styleId: 'bold', note: 'Spreadsheet parity sentinel.', validation: null },
+            'row-parity-1:col-parity-b': { value: '', formula: '=A1*2', styleId: '', note: '', validation: null }
+          },
+          merges: [], frozen: { rows: 1, columns: 0 }, filters: []
+        }]
+      },
       isSystemPage: false,
       builtInId: '', systemRole: '', pageMode: { enabled: false },
       documentBackground: { enabled: false }, formatting: {},

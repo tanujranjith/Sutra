@@ -66,7 +66,7 @@
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
     <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
-    <script src="src/persistence/workspace-db.js?v=20260729-idb-close-retry1"></script>
+    <script src="src/persistence/workspace-db.js?v=20260811-storage-cas1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
     <script src="src/persistence/revocation-wipe.js?v=20260716-syncwipe1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
@@ -5330,7 +5330,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260809-audit1"></script>
+                <script src="src/features/study/homework.js?v=20260811-cache1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7767,7 +7767,7 @@
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
 <script src="src/features/workspace/startup-default-bridge.js?v=20260809-audit3"></script>
-    <script src="src/core/app.js?v=20260809-helpdocs1"></script>
+    <script src="src/core/app.js?v=20260811-storage-cas3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20260809-helpdocs1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
@@ -8183,7 +8183,7 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260809-audit-mobile1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260811-cache1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260807-settings15b">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">

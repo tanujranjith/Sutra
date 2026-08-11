@@ -124,12 +124,79 @@
         tx.onabort = function () { reject(tx.error || new Error('IndexedDB transaction aborted')); };
       });
     }
+
+    // Atomically read the current record and write `value` only when the
+    // synchronous predicate accepts it. Keeping the comparison and put in one
+    // readwrite transaction prevents a stale tab from replacing a newer full-
+    // workspace snapshot between a separate read and write.
+    async function writeIf(key, value, predicate, retryCount) {
+      if (typeof predicate !== 'function') {
+        throw new TypeError('IndexedDB conditional write requires a predicate.');
+      }
+      var db = await open();
+      var tx;
+      var getRequest;
+      var current = null;
+      var written = false;
+      var predicateError = null;
+      try {
+        tx = db.transaction(storeName, 'readwrite');
+        getRequest = tx.objectStore(storeName).get(key);
+      } catch (error) {
+        if (!retryCount && isClosingConnectionError(error)) {
+          forget(db);
+          return writeIf(key, value, predicate, 1);
+        }
+        throw error;
+      }
+      return new Promise(function (resolve, reject) {
+        var settled = false;
+        function fail(error) {
+          if (settled) return;
+          settled = true;
+          reject(error || new Error('IndexedDB conditional write failed'));
+        }
+        getRequest.onsuccess = function () {
+          current = getRequest.result === undefined ? null : getRequest.result;
+          var accepted = false;
+          try { accepted = predicate(current) === true; }
+          catch (error) {
+            predicateError = error;
+            try { tx.abort(); } catch (abortError) { /* fail below */ }
+            fail(error);
+            return;
+          }
+          if (!accepted) return;
+          var putRequest;
+          try { putRequest = tx.objectStore(storeName).put(value, key); }
+          catch (error) { fail(error); return; }
+          written = true;
+          putRequest.onerror = function () {
+            fail(putRequest.error || tx.error || new Error('IndexedDB conditional write request failed'));
+          };
+        };
+        getRequest.onerror = function () {
+          fail(getRequest.error || tx.error || new Error('IndexedDB conditional read request failed'));
+        };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve({ written: written, current: current });
+        };
+        tx.onerror = function () {
+          fail(predicateError || tx.error || new Error('IndexedDB conditional write transaction failed'));
+        };
+        tx.onabort = function () {
+          fail(predicateError || tx.error || new Error('IndexedDB conditional write transaction aborted'));
+        };
+      });
+    }
     function close() {
       var db = liveDb;
       forget(db);
       if (db) { try { db.close(); } catch (error) {} }
     }
-    return { open: open, read: read, write: write, close: close };
+    return { open: open, read: read, write: write, writeIf: writeIf, close: close };
   }
   var api = { create: create };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

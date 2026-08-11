@@ -94,7 +94,21 @@ test('ordinary autosave verifies and never shows the save-failure banner', async
 test('autosave reopens a connection that starts closing before its transaction', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(async () => {
-    const rows = new Map();
+    // Preserve the canonical record while swapping the factory. The production
+    // save path now rejects an empty/replaced database as a stale base instead
+    // of treating it as permission to overwrite the whole workspace.
+    const canonical = await new Promise((resolve, reject) => {
+      const request = window.indexedDB.open('noteflow_atelier_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('workspace', 'readonly');
+        const getRequest = tx.objectStore('workspace').get('root');
+        getRequest.onerror = () => reject(getRequest.error || tx.error);
+        getRequest.onsuccess = () => resolve(getRequest.result);
+      };
+    });
+    const rows = new Map([['root', canonical]]);
     let openCalls = 0;
     let closeFirstConnection = true;
     const fakeFactory = {

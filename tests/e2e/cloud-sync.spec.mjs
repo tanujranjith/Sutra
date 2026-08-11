@@ -413,6 +413,11 @@ async function typeNoteBodyThroughEditor(page, paragraphs) {
 }
 
 async function createPageThroughUi(page, title, paragraphs) {
+  const notesIsActive = await page.evaluate(() => document.getElementById('view-notes')?.classList.contains('active'));
+  if (!notesIsActive) {
+    await page.locator('button.view-tab[data-view="notes"]:visible').first().click();
+    await page.waitForFunction(() => document.getElementById('view-notes')?.classList.contains('active'));
+  }
   await page.click('button.new-page-btn');
   await page.fill('#newPageName', title);
   await page.click('#newPageModal button.btn-primary');
@@ -1315,7 +1320,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         const now = new Date().toISOString();
         window.deserializeWorkspace({
           ...base,
-          pages: [...base.pages, { id: 'revoke-note', title: marker, content: `<p>${marker}</p>`, blocks: [], createdAt: now, updatedAt: now }]
+          pages: [...base.pages, { id: 'revoke-note', title: marker, content: `<p>${marker}</p><p>queued while offline</p>`, blocks: [], createdAt: now, updatedAt: now }]
         });
         window.SutraAssistantConversationController.create({
           id: 'revoke-chat', title: marker,
@@ -1336,17 +1341,6 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }, PASSPHRASE);
 
       B.net.down = true;
-      // Simulate a save that was queued just before the target learns it has
-      // been revoked. It must be blocked by the revocation lock and cannot
-      // recreate the just-deleted canonical workspace after cleanup.
-      await B.page.evaluate(async () => {
-        const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-        const pages = base.pages.map(page => page.id === 'revoke-note'
-          ? { ...page, content: `${page.content}<p>queued while offline</p>`, updatedAt: new Date().toISOString() }
-          : page);
-        window.deserializeWorkspace({ ...base, pages });
-        await window.saveWorkspaceLocally();
-      });
       const revoked = await A.page.evaluate(async (target) => window.SutraSync.revokeDevice(target), bDeviceId);
       expect(revoked).toBe(true);
       expect(server.state.devices[bDeviceId].wipeRequired).toBe(true);

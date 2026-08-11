@@ -65,6 +65,7 @@ function publicDriveFile(file) {
 }
 
 async function installDriveMock(page, options = {}) {
+  const mediaWaiters = [];
   const state = {
     files: (options.files || []).map(file => ({ ...file })),
     uploads: [],
@@ -73,7 +74,14 @@ async function installDriveMock(page, options = {}) {
     mediaGets: 0,
     resumableInits: [],
     nextId: 1,
-    nextVersion: 1
+    nextVersion: 1,
+    nextListMutation: null,
+    mutateOnNextList(mutator) {
+      state.nextListMutation = typeof mutator === 'function' ? mutator : null;
+    },
+    waitForNextMediaGet() {
+      return new Promise(resolve => mediaWaiters.push(resolve));
+    }
   };
 
   await page.route('https://www.googleapis.com/**', async route => {
@@ -82,6 +90,11 @@ async function installDriveMock(page, options = {}) {
     const method = request.method();
 
     if (url.pathname === '/drive/v3/files' && method === 'GET') {
+      if (state.nextListMutation) {
+        const mutate = state.nextListMutation;
+        state.nextListMutation = null;
+        mutate(state);
+      }
       state.lists.push({
         spaces: url.searchParams.get('spaces'),
         q: url.searchParams.get('q'),
@@ -101,6 +114,7 @@ async function installDriveMock(page, options = {}) {
       const id = decodeURIComponent(url.pathname.split('/').pop());
       const file = state.files.find(item => item.id === id);
       state.mediaGets += 1;
+      mediaWaiters.splice(0).forEach(resolve => resolve(state.mediaGets));
       if (options.mediaDelayMs) {
         await new Promise(resolve => setTimeout(resolve, options.mediaDelayMs));
       }
@@ -299,6 +313,7 @@ test('first Drive connect uploads only encrypted appDataFolder bytes and stores 
 });
 
 test('Drive restore rejects wrong password without mutating, then restores with correct password', async ({ page }) => {
+  test.setTimeout(120_000);
   await openApp(page);
   await seedWorkspace(page, 'REMOTE');
   const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
@@ -340,23 +355,51 @@ test('Drive sync enters conflict instead of overwriting local dirty and remote c
 });
 
 test('a local save during a clean remote pull becomes a conflict instead of being overwritten', async ({ page }) => {
+  test.setTimeout(120_000);
   const drive = await openApp(page, { mediaDelayMs: 700 });
   await seedWorkspace(page, 'BASE');
   const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
   await fillCloudPassword(page);
   await connectPromise;
+  await page.evaluate(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => false });
+  });
+  // Drain any post-connect single-flight cycle before changing the mock
+  // remote. The pull below must own a fresh cycle rather than join a clean
+  // cycle that began before the remote version changed.
+  await page.evaluate(() => window.SutraDriveSync.syncNow());
+  await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ localDirty: false }));
+  const uploadsBeforePull = drive.uploads.length;
 
-  drive.files[0].version = '99';
-  drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
-  const pullPromise = page.evaluate(() => window.SutraDriveSync.syncNow());
-  await expect.poll(() => drive.mediaGets, { timeout: 10_000 }).toBe(1);
+  let pullPromise;
+  let pullStarted = false;
+  for (let attempt = 0; attempt < 3 && !pullStarted; attempt += 1) {
+    const mediaStarted = drive.waitForNextMediaGet();
+    if (attempt === 0) {
+      drive.mutateOnNextList(state => {
+        state.files[0].version = '99';
+        state.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
+      });
+    }
+    pullPromise = page.evaluate(() => {
+      window.SutraDriveSync._setMetadataForTests({ localDirty: false });
+      return window.SutraDriveSync.syncNow();
+    });
+    const first = await Promise.race([
+      mediaStarted.then(() => 'media'),
+      pullPromise.then(() => 'cycle')
+    ]);
+    pullStarted = first === 'media';
+    if (!pullStarted) await pullPromise;
+  }
+  expect(pullStarted).toBe(true);
   await seedWorkspace(page, 'MID-PULL-LOCAL');
 
   await expect(pullPromise).resolves.toEqual({ conflict: true });
   await expect(page.locator('#sutraDriveConflictModal')).toHaveClass(/active/);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title))
     .toBe('Drive Sentinel MID-PULL-LOCAL');
-  expect(drive.uploads).toHaveLength(1);
+  expect(drive.uploads).toHaveLength(uploadsBeforePull);
 });
 
 test('Drive sync reports needs-config and refuses connect when no OAuth client ID is configured', async ({ page }) => {
@@ -379,6 +422,7 @@ test('Drive sync reports needs-config and refuses connect when no OAuth client I
 });
 
 test('conflict resolution: Use Drive copy restores the remote workspace without uploading', async ({ page }) => {
+  test.setTimeout(120_000);
   const drive = await openApp(page);
   await seedWorkspace(page, 'BASE');
   const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));

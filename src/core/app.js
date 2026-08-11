@@ -2822,6 +2822,16 @@ function populateProgressDashboard() {
         });
         let appData = null;
         let pendingAppSave = null;
+        // Hash of the exact canonical workspace record this tab last loaded or
+        // successfully wrote. Every full-workspace write compares against this
+        // base atomically inside IndexedDB so a stale tab cannot overwrite a
+        // newer tab's confirmed save.
+        let canonicalWorkspaceHash = null;
+        // Monotonic, tab-local signal raised as soon as a local mutation asks
+        // for persistence (before its asynchronous IndexedDB commit finishes).
+        // Whole-workspace remote restores use this to close the narrow window
+        // where an in-flight save has not yet advanced cloud metadata.
+        let localWorkspaceSaveRequestRevision = 0;
         // True while importWorkspacePayload hydrates a whole workspace
         // (file import, restore, or a Sutra Sync remote apply): savePage()
         // must not write stale editor state back over imported content.
@@ -2954,6 +2964,11 @@ function populateProgressDashboard() {
             return (hash >>> 0).toString(16).padStart(8, '0');
         }
 
+        function hashCanonicalWorkspaceRecord(value) {
+            if (value === null || value === undefined) return null;
+            return hashPersistenceString(JSON.stringify(value));
+        }
+
         function formatByteCount(bytes) {
             const value = Number(bytes) || 0;
             if (value < 1024) return `${value} B`;
@@ -3014,6 +3029,7 @@ function populateProgressDashboard() {
             if (context.kind) return context.kind;
             if (error && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) return 'quota';
             if (error && error.name === 'PartialWriteError') return 'partial-write';
+            if (error && error.name === 'WorkspaceConflictError') return 'conflict';
             if (text.includes('quota') || text.includes('exceeded') || text.includes('disk') || text.includes('storage')) return 'quota';
             if (text.includes('partial') || text.includes('readback')) return 'partial-write';
             if (text.includes('circular') || text.includes('serialize') || text.includes('json')) return 'serialization';
@@ -7005,7 +7021,19 @@ function populateProgressDashboard() {
                 const snapshot = JSON.parse(serialized);
                 const summary = buildPersistenceSummary(serialized);
                 await workspaceCoordinator.runExclusive(async () => {
-                    await writeAppData(snapshot);
+                    if (!workspaceDb || typeof workspaceDb.writeIf !== 'function') {
+                        const skewError = new Error('Sutra cannot safely save because its IndexedDB component is out of date. Reload before continuing.');
+                        skewError.name = 'WorkspaceConflictError';
+                        throw skewError;
+                    }
+                    const conditional = await workspaceDb.writeIf(APP_DB_KEY, snapshot, (current) => {
+                        return hashCanonicalWorkspaceRecord(current) === canonicalWorkspaceHash;
+                    });
+                    if (!conditional || conditional.written !== true) {
+                        const conflictError = new Error('A newer workspace was saved in another tab. This stale tab was prevented from overwriting it. Export this tab if it has unique edits, then reload before saving again.');
+                        conflictError.name = 'WorkspaceConflictError';
+                        throw conflictError;
+                    }
                     if (options.verifyReadback !== false) {
                         const stored = await readAppData();
                         const storedText = JSON.stringify(stored);
@@ -7015,6 +7043,7 @@ function populateProgressDashboard() {
                             throw partialError;
                         }
                     }
+                    canonicalWorkspaceHash = summary.hash;
                 });
                 // Only the most recent commit may clear/advance shared health state.
                 // (Commits are serialized, so opId === seq normally holds; the guard
@@ -7042,6 +7071,9 @@ function populateProgressDashboard() {
 
         function scheduleAppSave() {
             if (persistenceWritesBlocked) return;
+            if (!workspaceImportInProgress) {
+                localWorkspaceSaveRequestRevision += 1;
+            }
             if (pendingAppSave) return;
             pendingAppSave = setTimeout(async () => {
                 pendingAppSave = null;
@@ -7503,6 +7535,7 @@ function populateProgressDashboard() {
                 console.warn('Unable to read IndexedDB workspace; starting from an in-memory safety state.', error);
                 recordPersistenceFailure(error, { reason: 'startup-read', phase: 'startup-read', kind: 'indexeddb' });
             }
+            canonicalWorkspaceHash = hashCanonicalWorkspaceRecord(stored);
             if (stored && isStaleMigrationAssetSkew()) {
                 // The service worker served a cached migrations.js older than
                 // this app shell, so we cannot migrate the stored workspace up
@@ -53696,24 +53729,42 @@ function getActiveEditor() {
                 // decision is stale. Never let that stale decision overwrite the
                 // just-saved workspace; preserve both copies through the normal
                 // Drive conflict chooser instead.
-                if (options.abortOnLocalMutation === true) {
+                const abortForLocalMutation = () => {
+                    if (options.abortOnLocalMutation !== true) return false;
                     const latestMeta = loadSutraDriveSyncMetadata();
                     const expectedRevision = Math.max(0, Number(options.expectedLocalRevision || 0));
+                    const expectedSaveRequestRevision = Math.max(0, Number(options.expectedLocalSaveRequestRevision || 0));
                     if (latestMeta.localDirty
-                        || Math.max(0, Number(latestMeta.localMutationRevision || 0)) !== expectedRevision) {
-                        return enterSutraDriveConflict(remoteFile, { openModal: true });
+                        || Math.max(0, Number(latestMeta.localMutationRevision || 0)) !== expectedRevision
+                        || localWorkspaceSaveRequestRevision !== expectedSaveRequestRevision) {
+                        enterSutraDriveConflict(remoteFile, { openModal: true });
+                        return true;
                     }
-                }
+                    return false;
+                };
+                if (abortForLocalMutation()) return { conflict: true };
                 const applied = await applyValidatedWorkspaceImport(imported.workspacePayload, {
                     source: 'drive-sync',
                     legacyUnencrypted: false,
                     skipConflictCheck: options.skipConflictCheck === true,
                     backupTimestamp: String(remoteFile.modifiedTime || ''),
-                    backupLabel: 'Drive backup'
+                    backupLabel: 'Drive backup',
+                    // The snapshot download itself is still created, but its
+                    // health timestamp must not masquerade as a user mutation
+                    // while the final pre-apply barrier is watching for edits.
+                    recordSafetySnapshotHealth: false,
+                    beforeApply: async () => {
+                        await persistenceCommitQueue;
+                        return !abortForLocalMutation();
+                    },
+                    canApplyNow: () => !abortForLocalMutation()
                 });
                 // Cancelled at the conflict chooser: leave sync metadata alone so
                 // the remote still reads as "changed" — nothing was applied.
-                if (applied === false) return { cancelled: true };
+                if (applied === false) {
+                    if (sutraDriveSyncRuntime.conflictRemote) return { conflict: true };
+                    return { cancelled: true };
+                }
                 meta.remoteFileId = String(remoteFile.id || '');
                 meta.lastKnownDriveVersion = String(remoteFile.version || '');
                 meta.lastRemoteModifiedTime = String(remoteFile.modifiedTime || '');
@@ -53802,7 +53853,8 @@ function getActiveEditor() {
                 return applySutraDriveRemoteSnapshot(remote, {
                     skipConflictCheck: true,
                     abortOnLocalMutation: true,
-                    expectedLocalRevision: meta.localMutationRevision
+                    expectedLocalRevision: meta.localMutationRevision,
+                    expectedLocalSaveRequestRevision: localWorkspaceSaveRequestRevision
                 });
             }
             markSutraDriveClean(remote);
@@ -63081,7 +63133,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return importedPage;
         }
 
-        async function createPreImportSafetySnapshot() {
+        async function createPreImportSafetySnapshot(options = {}) {
             try {
                 // Warm the course-attachment cache so the safety backup taken before
                 // an import carries every stored file's binary content.
@@ -63091,7 +63143,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const blob = new Blob([dataStr], { type: 'application/json' });
                 const datePart = new Date().toISOString().replace(/[:.]/g, '-');
                 triggerBlobDownload(blob, `sutra_pre_import_snapshot_UNENCRYPTED_${datePart}.json`);
-                recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
+                if (options.recordHealth !== false) {
+                    recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
+                }
                 return true;
             } catch (err) {
                 console.warn('Pre-import safety snapshot failed', err);
@@ -63342,7 +63396,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
             }
             showToast('Creating safety snapshot before import...', { durationMs: 1400 });
-            const snapshotOk = await createPreImportSafetySnapshot();
+            const snapshotOk = await createPreImportSafetySnapshot({
+                recordHealth: options.recordSafetySnapshotHealth !== false
+            });
             // Never silently replace the workspace with no fallback. If the
             // automatic pre-import snapshot could not be created, block the
             // destructive import unless the student explicitly opts to continue.
@@ -63354,6 +63410,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
                     return false;
                 }
+            }
+            // Remote snapshot pulls may have spent seconds downloading,
+            // decrypting, and preparing this import. Give them one last atomic
+            // guard immediately before the synchronous replacement so a local
+            // save requested during that work cannot be overwritten.
+            if (typeof options.beforeApply === 'function') {
+                const ready = await options.beforeApply();
+                if (ready === false) return false;
+            }
+            if (typeof options.canApplyNow === 'function' && options.canApplyNow() === false) {
+                return false;
             }
             importWorkspacePayload(workspacePayload);
             // Durability gate: block on the imported attachment blob writes so we

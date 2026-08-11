@@ -20,24 +20,29 @@ function makeIndexedDb() {
         transaction(_name, mode) {
           if (closing) throw new DOMException('The database connection is closing.', 'InvalidStateError');
           const tx = { error: null };
+          let pending = 0;
+          const request = (work) => {
+            const req = {};
+            pending += 1;
+            queueMicrotask(() => {
+              work(req);
+              pending -= 1;
+              if (pending === 0) queueMicrotask(() => { if (pending === 0) tx.oncomplete?.(); });
+            });
+            return req;
+          };
           tx.objectStore = () => ({
             get(key) {
-              const req = {};
-              queueMicrotask(() => {
+              return request((req) => {
                 req.result = rows.get(key);
                 req.onsuccess?.();
-                tx.oncomplete?.();
               });
-              return req;
             },
             put(value, key) {
-              const req = {};
-              queueMicrotask(() => {
+              return request((req) => {
                 rows.set(key, value);
                 req.onsuccess?.();
-                tx.oncomplete?.();
               });
-              return req;
             }
           });
           assert.ok(mode === 'readonly' || mode === 'readwrite');
@@ -87,6 +92,21 @@ test('workspace DB reuses one connection and resolves reads on transaction compl
   assert.equal(fake.state.openCalls, 1);
   db.close();
   assert.equal(fake.state.closeCalls, 1);
+});
+
+test('conditional writes atomically reject a stale workspace base', async () => {
+  const fake = makeIndexedDb();
+  const first = create({ indexedDB: fake.factory, dbName: 'qa', storeName: 'workspace' });
+  const stale = create({ indexedDB: fake.factory, dbName: 'qa', storeName: 'workspace' });
+  await first.write('root', { title: 'base' });
+
+  const accepted = await first.writeIf('root', { title: 'newer' }, current => current?.title === 'base');
+  assert.equal(accepted.written, true);
+
+  const rejected = await stale.writeIf('root', { title: 'stale overwrite' }, current => current?.title === 'base');
+  assert.equal(rejected.written, false);
+  assert.deepEqual(rejected.current, { title: 'newer' });
+  assert.deepEqual(await first.read('root'), { title: 'newer' });
 });
 
 test('versionchange closes the stale connection and the next operation reopens', async () => {
