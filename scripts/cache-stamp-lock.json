@@ -295,6 +295,10 @@
     "stamp": "20260807-icsnotifications1",
     "hash": "c3b9273c2a3e5c3e"
   },
+  "src/features/workspace/primary-nav-visibility.js": {
+    "stamp": "20260812-primarynav3",
+    "hash": "5df68eb2abb8212c"
+  },
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",
     "hash": "76654a6d7b2c8d91"
