@@ -16,7 +16,7 @@
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
     "./src/core/app.js?v=20260811-storage-cas3",
     "./src/core/dom-safety.js?v=20260613-harden1",
-    "./src/core/error-reporter.js?v=20260613-harden1",
+    "./src/core/error-reporter.js?v=20260812-error1",
     "./src/core/feature-guard.js?v=20260613-harden1",
     "./src/core/issue-prompt.js?v=20260617-issue1",
     "./src/core/migrations.js?v=20260716-syncwipe1",

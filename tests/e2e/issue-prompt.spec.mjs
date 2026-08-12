@@ -104,3 +104,28 @@ test('warnings and already-handled errors do not nudge', async ({ page }) => {
   expect(visible).toBe(false);
   await expect(page.locator('#feedbackFabBtn')).not.toHaveClass(/issue-attention/);
 });
+
+test('browser ResizeObserver layout notices do not appear as app failures', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    window.SutraDiagnostics.clear();
+    [
+      'ResizeObserver loop completed with undelivered notifications.',
+      'ResizeObserver loop limit exceeded'
+    ].forEach((message) => {
+      window.dispatchEvent(new ErrorEvent('error', { message }));
+    });
+    return window.SutraDiagnostics.getEntries();
+  });
+
+  expect(result).toHaveLength(2);
+  result.forEach((entry) => {
+    expect(entry).toMatchObject({
+      severity: 'debug',
+      context: { where: 'window.onerror', benignBrowserLayoutNotice: true }
+    });
+  });
+  await expect(page.locator('#sutraIssuePrompt')).toBeHidden();
+  await expect(page.locator('#feedbackFabBtn')).not.toHaveClass(/issue-attention/);
+});

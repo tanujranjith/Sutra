@@ -44,8 +44,8 @@
     "hash": "3298453c79e87b74"
   },
   "src/core/error-reporter.js": {
-    "stamp": "20260613-harden1",
-    "hash": "6756bb3890cf398f"
+    "stamp": "20260812-error1",
+    "hash": "ca17d5ce335801c7"
   },
   "src/core/feature-guard.js": {
     "stamp": "20260613-harden1",

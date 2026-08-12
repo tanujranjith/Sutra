@@ -99,6 +99,17 @@
     return { message: message, name: name, stack: stack };
   }
 
+  // Chromium and Safari can surface these ResizeObserver delivery notices as
+  // window error events while a complex layout settles. They do not identify a
+  // thrown application exception, and treating them as one creates a false
+  // "Something went wrong" prompt over otherwise usable editor screens.
+  // Keep the match deliberately exact so real errors still reach diagnostics.
+  function isBenignBrowserLayoutNotice(message) {
+    var normalized = String(message || '').trim().replace(/\.$/, '').toLowerCase();
+    return normalized === 'resizeobserver loop limit exceeded'
+      || normalized === 'resizeobserver loop completed with undelivered notifications';
+  }
+
   function normalizeContext(context) {
     if (!context) return {};
     if (typeof context === 'string') return { where: context };
@@ -272,12 +283,20 @@
     window.addEventListener('error', function (ev) {
       // Resource load errors (img/script) surface as Event with no .error.
       if (ev && ev.message) {
-        reportError(ev.error || ev.message, {
+        var context = {
           where: 'window.onerror',
           source: ev.filename,
           line: ev.lineno,
           col: ev.colno
-        }, 'error');
+        };
+        if (isBenignBrowserLayoutNotice(ev.message)) {
+          // Preserve a development breadcrumb without showing the user an
+          // issue prompt for a browser layout-delivery notification.
+          context.benignBrowserLayoutNotice = true;
+          reportError(ev.error || ev.message, context, 'debug');
+          return;
+        }
+        reportError(ev.error || ev.message, context, 'error');
       }
     });
     window.addEventListener('unhandledrejection', function (ev) {
