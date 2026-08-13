@@ -19759,6 +19759,9 @@ body.icon-fallback-active .quick-app-btn i[class*="fa-"] {
 }
 
 .sidebar.collapsed .sidebar-header .app-title span,
+.sidebar.collapsed .sidebar-context-copy,
+.sidebar.collapsed .sidebar-spaces-row,
+.sidebar.collapsed .sidebar-search-feedback,
 .sidebar.collapsed .sidebar-search,
 .sidebar.collapsed .sidebar-shortcuts,
 .sidebar.collapsed .sidebar-tags-filter,
@@ -19795,6 +19798,16 @@ body.icon-fallback-active .quick-app-btn i[class*="fa-"] {
     line-height: 1;
 }
 
+/* A collapsed sidebar is an icon rail, not a squeezed version of the full
+   page tree. Keep only the primary new-page action and page icons available. */
+.sidebar.collapsed .sidebar-new-page .new-folder-btn,
+.sidebar.collapsed .sidebar-new-page .quick-new-page-btn,
+.sidebar.collapsed .notes-pinned-section,
+.sidebar.collapsed .page-item-actions-toggle,
+.sidebar.collapsed .page-lock-indicator {
+    display: none !important;
+}
+
 .sidebar.collapsed .pages-list {
     padding: 8px 6px;
 }
@@ -19803,6 +19816,7 @@ body.icon-fallback-active .quick-app-btn i[class*="fa-"] {
     justify-content: center;
     gap: 0;
     padding: 10px 0 !important;
+    padding-inline: 0 !important;
     border-radius: 12px;
 }
 

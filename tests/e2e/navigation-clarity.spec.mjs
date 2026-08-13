@@ -160,6 +160,26 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
   await expect(topNav).toBeVisible();
 });
 
+test('collapsed Notes sidebar remains a clean icon rail', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
+
+  const sidebar = page.locator('#sidebar');
+  await page.locator('#sidebarToggle').click();
+  await expect(sidebar).toHaveClass(/collapsed/);
+  await expect(sidebar.locator('.sidebar-context-copy')).toBeHidden();
+  await expect(sidebar.locator('.sidebar-spaces-row')).toBeHidden();
+  await expect(sidebar.locator('#sidebarSearchFeedback')).toBeHidden();
+  await expect(sidebar.locator('.new-folder-btn')).toBeHidden();
+  await expect(sidebar.locator('.quick-new-page-btn')).toBeHidden();
+
+  const pageItem = sidebar.locator('.page-item').first();
+  await expect(pageItem.locator('.page-icon')).toBeVisible();
+  await expect(pageItem.locator('.page-title-text')).toBeHidden();
+  await expect(pageItem.locator('.page-item-actions-toggle')).toBeHidden();
+  expect(await pageItem.evaluate((node) => Math.round(parseFloat(getComputedStyle(node).paddingLeft)))).toBe(0);
+});
+
 test('overflowed custom dashboards remain reachable through My dashboards', async ({ page }) => {
   await openApp(page, 1060);
   await page.waitForFunction(() => !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs);
