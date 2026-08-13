@@ -66,6 +66,7 @@
     "./src/features/workspace/help-docs-refresh.js?v=20260809-helpdocs1",
     "./src/features/workspace/mobile-nav.js?v=20260808-contextual-ui1",
     "./src/features/workspace/notifications.js?v=20260807-icsnotifications1",
+    "./src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3",
     "./src/features/workspace/share-target.js?v=20260712-share1",
     "./src/features/workspace/sheets-engine.js?v=20260810-sheets1",
     "./src/features/workspace/sheets.js?v=20260810-sheets1",

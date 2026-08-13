@@ -48,6 +48,87 @@ async function capture(name) {
   await downscaleAndSave(buf, `${SS}/${name}.png`);
 }
 
+async function hideCaptureNotifications(targetPage) {
+  await targetPage.evaluate(() => {
+    const container = document.getElementById('notifToastContainer');
+    if (!container) return;
+    container.replaceChildren();
+    container.style.display = 'none';
+  });
+}
+
+// Marketing captures must never depend on a provider key or persist synthetic
+// conversation data. These helpers stage a small, representative exchange in
+// the throwaway browser DOM only.
+async function stageDockedConversation() {
+  await page.evaluate(() => {
+    const host = document.getElementById('chatbotMessages');
+    if (!host) return;
+    host.replaceChildren();
+    const append = (role, text) => {
+      const message = document.createElement('div');
+      message.className = `chatbot-msg ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      const paragraph = document.createElement('p');
+      paragraph.textContent = text;
+      bubble.appendChild(paragraph);
+      message.appendChild(bubble);
+      host.appendChild(message);
+    };
+    append('user', 'I have a Calc quiz and APUSH reading tomorrow. What should I do first?');
+    append('assistant', 'Start with the Calc quiz: it is due sooner and needs focused practice. Then spend 25 minutes outlining the APUSH reading.');
+    const subtitle = document.getElementById('chatbotSubtitle');
+    if (subtitle) subtitle.textContent = 'Today · Study plan';
+    host.scrollTop = host.scrollHeight;
+  });
+}
+
+async function stageFullAssistantConversation() {
+  await page.evaluate(() => {
+    const hero = document.getElementById('asstHero');
+    if (hero) hero.hidden = true;
+    const chips = document.getElementById('asstChips');
+    if (chips) chips.replaceChildren();
+    const host = document.getElementById('asstMessages');
+    if (!host) return;
+    host.replaceChildren();
+    const append = (role, text) => {
+      const message = document.createElement('div');
+      message.className = `asst-msg ${role}`;
+      const avatar = document.createElement('div');
+      avatar.className = `asst-msg-avatar${role === 'assistant' ? ' asst-msg-avatar-logo' : ''}`;
+      if (role === 'assistant') {
+        const image = document.createElement('img');
+        image.src = 'assets/brand/sutra/generated/sutra-assistant-icon-64.png';
+        image.alt = '';
+        avatar.appendChild(image);
+      } else {
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-user';
+        icon.setAttribute('aria-hidden', 'true');
+        avatar.appendChild(icon);
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'asst-msg-wrap';
+      const bubble = document.createElement('div');
+      bubble.className = 'asst-msg-bubble';
+      const paragraph = document.createElement('p');
+      paragraph.textContent = text;
+      bubble.appendChild(paragraph);
+      wrap.appendChild(bubble);
+      message.append(avatar, wrap);
+      host.appendChild(message);
+    };
+    append('user', 'Make me a calm plan for my Calc quiz and APUSH reading tomorrow.');
+    append('assistant', 'Start with one focused Calc block now: review series convergence, then solve three mixed problems. After a short break, outline the APUSH reading. I kept the plan to two clear steps so you can begin without overthinking.');
+    const title = document.getElementById('asstTopbarTitle');
+    if (title) title.textContent = 'Plan for tomorrow';
+    const body = document.getElementById('asstBody');
+    if (body) body.scrollTop = body.scrollHeight;
+  });
+}
+
 async function boot(p) {
   await p.goto(`${BASE}/Sutra.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#storageOptions', { state: 'attached' });
@@ -75,6 +156,7 @@ await boot(page);
 const seedRes = await page.evaluate(SEED_SRC);
 console.log('Seeded:', JSON.stringify(seedRes));
 await page.waitForTimeout(700);
+await hideCaptureNotifications(page);
 await theme('default');
 
 // Today
@@ -135,6 +217,8 @@ await page.evaluate(() => { try { window.closeDeadlineRadar && window.closeDeadl
 
 // Settings — appearance + themes (customization)
 await go('settings');
+await page.evaluate(() => { try { window.toggleThemePanel && window.toggleThemePanel(); } catch (e) {} });
+await page.waitForTimeout(450);
 await capture('themes-customization');
 
 // Sutra Assistant — panel open over Today, AI onboarding skipped to reveal pulse
@@ -143,8 +227,20 @@ await page.evaluate(() => { const b = document.getElementById('chatbotBtn'); if 
 await page.waitForTimeout(500);
 await page.evaluate(() => { const s = document.querySelector('[data-flow-skip-ai]'); if (s) s.click(); });
 await page.waitForTimeout(700);
+await stageDockedConversation();
 await capture('assistant');
-await page.evaluate(() => { const b = document.getElementById('chatbotBtn'); if (b) b.click(); });
+await page.evaluate(() => {
+  const panel = document.getElementById('chatbotPanel');
+  if (panel) {
+    panel.style.display = 'none';
+    panel.setAttribute('aria-hidden', 'true');
+  }
+  try { window.setActiveView('assistantview'); } catch (e) {}
+});
+await page.waitForTimeout(700);
+await stageFullAssistantConversation();
+await page.waitForTimeout(250);
+await capture('assistant-full');
 await page.close();
 
 // Mobile — Today (responsive preview)
@@ -161,6 +257,7 @@ await mobile.evaluate(() => {
 await mobile.waitForFunction(() => !!window.flowAssistant && !!window.courseHub);
 await mobile.evaluate(SEED_SRC);
 await mobile.waitForTimeout(800);
+await hideCaptureNotifications(mobile);
 await mobile.evaluate(() => { document.body.setAttribute('data-theme', 'default'); document.documentElement.setAttribute('data-theme', 'default'); try { window.setActiveView('today'); } catch (e) {} });
 await mobile.waitForTimeout(700);
 {

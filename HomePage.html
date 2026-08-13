@@ -1526,6 +1526,12 @@
       cursor: zoom-in;
     }
 
+    .img-modal-close:focus-visible,
+    .img-zoomable:focus-visible {
+      outline: 3px solid #9bb8ff;
+      outline-offset: 4px;
+    }
+
     @media (max-width: 768px) {
       .carousel-track {
         animation-duration: 26s;
@@ -1988,10 +1994,17 @@
       text-align: left;
     }
     .assistant-fullshot {
-      width: min(1440px, calc(100vw - 48px));
+      width: 100%;
+      max-width: 1100px;
       margin: 52px auto 0;
     }
     .assistant-fullshot figure { margin: 0; }
+    .assistant-shot-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 36px;
+    }
+    .assistant-shot-grid figure { min-width: 0; }
     .assistant-fullshot img {
       display: block;
       width: 100%;
@@ -2006,9 +2019,16 @@
       color: var(--text-muted);
       text-align: center;
     }
+    .assistant-shot-note {
+      margin: 24px 0 0;
+      color: var(--text-muted);
+      font-size: 0.86rem;
+      text-align: center;
+    }
     @media (max-width: 768px) {
       .assistant-trust-points { grid-template-columns: 1fr; gap: 10px; max-width: 320px; }
       .assistant-fullshot { width: min(100%, calc(100vw - 32px)); margin-top: 40px; }
+      .assistant-shot-grid { grid-template-columns: 1fr; gap: 20px; }
       .assistant-fullshot img { border-radius: var(--radius-md); }
     }
 
@@ -2231,8 +2251,8 @@
     }
     .tour {
       display: grid;
-      grid-template-columns: 1fr 1.2fr;
-      gap: 56px;
+      grid-template-columns: minmax(16rem, 0.58fr) minmax(0, 1.62fr);
+      gap: 32px;
       align-items: start;
     }
     .tour-step {
@@ -2265,7 +2285,7 @@
     .tour-visual {
       position: sticky;
       top: 96px;
-      height: calc(100vh - 150px);
+      height: min(72vh, 600px);
       border-radius: var(--radius-lg);
       overflow: hidden;
       border: 1px solid var(--border-light);
@@ -2280,7 +2300,7 @@
       transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
       display: grid;
       place-items: center;
-      padding: 18px;
+      padding: 12px;
     }
     .tour-frame.is-active { opacity: 1; transform: scale(1); }
     .tour-frame img { width: 100%; height: 100%; object-fit: contain; border-radius: 12px; }
@@ -2534,6 +2554,7 @@
             <div class="carousel-card"><span class="carousel-label">Testing Hub</span><img src="assets/screenshots/testing-hub.png" alt="Testing Hub — exams, review, and study progress in one dashboard" class="carousel-slide"></div>
             <div class="carousel-card"><span class="carousel-label">Review</span><img src="assets/screenshots/testing-hub-review.png" alt="Spaced-repetition review — study sets and cards due today" class="carousel-slide"></div>
             <div class="carousel-card"><span class="carousel-label">Assistant</span><img src="assets/screenshots/assistant.png" alt="Sutra Assistant — a workspace pulse and reviewable suggestions beside the Today view" class="carousel-slide"></div>
+            <div class="carousel-card"><span class="carousel-label">Assistant Workspace</span><img src="assets/screenshots/assistant-full.png" alt="Full-screen Sutra Assistant workspace with a focused study-planning conversation" class="carousel-slide"></div>
             <div class="carousel-card"><span class="carousel-label">Themes</span><img src="assets/screenshots/themes-customization.png" alt="Workspace settings — appearance, density, and theme controls with a live preview" class="carousel-slide"></div>
             <div class="carousel-card"><span class="carousel-label">Deadline Radar</span><img src="assets/screenshots/deadline-radar.png" alt="Deadline Radar — every upcoming deadline grouped by timeframe" class="carousel-slide"></div>
             <div class="carousel-card"><span class="carousel-label">Weekly View</span><img src="assets/screenshots/timeline-weekly.png" alt="Timeline week view — the full week of classes and work at a glance" class="carousel-slide"></div>
@@ -2545,6 +2566,7 @@
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Testing Hub</span><img src="assets/screenshots/testing-hub.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Review</span><img src="assets/screenshots/testing-hub-review.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Assistant</span><img src="assets/screenshots/assistant.png" alt="" class="carousel-slide"></div>
+            <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Assistant Workspace</span><img src="assets/screenshots/assistant-full.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Themes</span><img src="assets/screenshots/themes-customization.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Deadline Radar</span><img src="assets/screenshots/deadline-radar.png" alt="" class="carousel-slide"></div>
             <div class="carousel-card" aria-hidden="true"><span class="carousel-label">Weekly View</span><img src="assets/screenshots/timeline-weekly.png" alt="" class="carousel-slide"></div>
@@ -2667,13 +2689,13 @@
             </div>
           </article>
         </div>
-        <div class="tour-visual" aria-hidden="true">
-          <div class="tour-frame is-active" data-tour-frame="0"><img src="assets/screenshots/today.png" alt="" loading="lazy" decoding="async"></div>
-          <div class="tour-frame" data-tour-frame="1"><img src="assets/screenshots/notes-editor.png" alt="" loading="lazy" decoding="async"></div>
-          <div class="tour-frame" data-tour-frame="2"><img src="assets/screenshots/timeline-daily.png" alt="" loading="lazy" decoding="async"></div>
-          <div class="tour-frame" data-tour-frame="3"><img src="assets/screenshots/homework.png" alt="" loading="lazy" decoding="async"></div>
-          <div class="tour-frame" data-tour-frame="4"><img src="assets/screenshots/testing-hub.png" alt="" loading="lazy" decoding="async"></div>
-          <div class="tour-frame" data-tour-frame="5"><img src="assets/screenshots/testing-hub-review.png" alt="" loading="lazy" decoding="async"></div>
+        <div class="tour-visual">
+          <div class="tour-frame is-active" data-tour-frame="0"><img src="assets/screenshots/today.png" alt="Today dashboard" loading="lazy" decoding="async"></div>
+          <div class="tour-frame" data-tour-frame="1"><img src="assets/screenshots/notes-editor.png" alt="Rich notes editor" loading="lazy" decoding="async"></div>
+          <div class="tour-frame" data-tour-frame="2"><img src="assets/screenshots/timeline-daily.png" alt="Timeline daily view" loading="lazy" decoding="async"></div>
+          <div class="tour-frame" data-tour-frame="3"><img src="assets/screenshots/homework.png" alt="Homework planner" loading="lazy" decoding="async"></div>
+          <div class="tour-frame" data-tour-frame="4"><img src="assets/screenshots/testing-hub.png" alt="Testing Hub" loading="lazy" decoding="async"></div>
+          <div class="tour-frame" data-tour-frame="5"><img src="assets/screenshots/testing-hub-review.png" alt="Review session" loading="lazy" decoding="async"></div>
           <div class="tour-frame tour-frame-cram" data-tour-frame="6">
             <div class="tour-cram-visual big" role="img" aria-label="Cram mode focused study sequence">
               <div class="cram-head"><span class="cram-dot"></span> Cram · AP Physics · 90 min</div>
@@ -2854,12 +2876,19 @@
             </ul>
           </div>
 
-          <!-- Full workspace view: the Assistant is shown in its real Today context. -->
+          <!-- The Assistant is shown in both its docked and full-workspace forms. -->
           <div class="assistant-fullshot reveal">
-            <figure>
-              <img src="assets/screenshots/assistant.png" alt="The Sutra Assistant panel open beside the Today view, showing a workspace pulse — one overdue assignment, an overloaded day, and an unscheduled high-priority task — with quick actions you apply or decline." width="1600" height="1000" loading="lazy" decoding="async">
-              <figcaption>AI is optional — Sutra works fully without it.</figcaption>
-            </figure>
+            <div class="assistant-shot-grid">
+              <figure>
+                <img src="assets/screenshots/assistant.png" alt="The Sutra Assistant docked beside Today, showing a short study-planning conversation." width="1600" height="1000" loading="lazy" decoding="async">
+                <figcaption>Quick help stays in the flow of your day.</figcaption>
+              </figure>
+              <figure>
+                <img src="assets/screenshots/assistant-full.png" alt="The full-screen Sutra Assistant workspace with a focused study-planning conversation." width="1600" height="1000" loading="lazy" decoding="async">
+                <figcaption>Open a calm, full-screen space when you want to think it through.</figcaption>
+              </figure>
+            </div>
+            <p class="assistant-shot-note">AI is optional — Sutra works fully without it.</p>
           </div>
 
         </div>
@@ -2996,7 +3025,7 @@
     </section>
   </main>
 
-  <div id="imgModal" class="img-modal" role="dialog" aria-modal="true" aria-label="Image preview">
+  <div id="imgModal" class="img-modal" role="dialog" aria-modal="true" aria-label="Image preview" aria-hidden="true" tabindex="-1">
     <button class="img-modal-close" aria-label="Close">&times;</button>
     <img class="img-modal-img" src="" alt="">
   </div>
@@ -3546,7 +3575,11 @@
       const frames = Array.from(document.querySelectorAll('.tour-frame'));
       function setActive(i) {
         steps.forEach((s, idx) => s.classList.toggle('is-active', idx === i));
-        frames.forEach((f, idx) => f.classList.toggle('is-active', idx === i));
+        frames.forEach((f, idx) => {
+          const active = idx === i;
+          f.classList.toggle('is-active', active);
+          f.querySelectorAll('img.img-zoomable').forEach((img) => { img.tabIndex = active ? 0 : -1; });
+        });
       }
       const tourEl = document.querySelector('.tour');
       if (steps.length) {
@@ -3704,24 +3737,40 @@
       const modalImg = modal.querySelector('.img-modal-img');
       const closeBtn = modal.querySelector('.img-modal-close');
 
-      function openModal(src, alt) {
+      let lastTrigger = null;
+
+      function openModal(src, alt, trigger) {
+        lastTrigger = trigger || document.activeElement;
         modalImg.src = src;
         modalImg.alt = alt || '';
         modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
+        closeBtn.focus();
       }
 
       function closeModal() {
         modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
         document.body.style.overflow = '';
+        if (lastTrigger && typeof lastTrigger.focus === 'function') lastTrigger.focus();
+        lastTrigger = null;
       }
 
       // Wire up all zoomable images
-      document.querySelectorAll('.carousel-slide, .workflow-visual img').forEach(function (img) {
+      document.querySelectorAll('.carousel-slide, .workflow-visual img, .assistant-fullshot img, .tour-frame img').forEach(function (img) {
         img.classList.add('img-zoomable');
+        img.tabIndex = img.closest('.tour-frame') && !img.closest('.tour-frame').classList.contains('is-active') ? -1 : 0;
+        img.setAttribute('role', 'button');
+        img.setAttribute('aria-label', 'Open full-size image: ' + (img.alt || 'Sutra workspace'));
         img.addEventListener('click', function (e) {
           e.stopPropagation();
-          openModal(img.src, img.alt);
+          openModal(img.src, img.alt, img);
+        });
+        img.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          openModal(img.src, img.alt, img);
         });
       });
 
@@ -3731,6 +3780,10 @@
       });
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') closeModal();
+        if (e.key === 'Tab' && modal.classList.contains('open')) {
+          e.preventDefault();
+          closeBtn.focus();
+        }
       });
     })();
 
