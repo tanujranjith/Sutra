@@ -53,7 +53,7 @@
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
-    <script src="src/core/migrations.js?v=20260716-syncwipe1"></script>
+    <script src="src/core/migrations.js?v=20260813-pdf2"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
@@ -73,7 +73,7 @@
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
-    <script src="src/sync/sync-protocol.js?v=20260807-localendpoint1"></script>
+    <script src="src/sync/sync-protocol.js?v=20260813-pdf1"></script>
     <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-projection.js?v=20260807-localendpoint1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
@@ -81,7 +81,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260810-remove-view-actions1"></script>
+    <script src="src/config/feature-manifest.js?v=20260813-pdf1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -3558,6 +3558,13 @@
                             </span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="layout.courseHubEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
+                        <label class="cc-row cc-row-toggle" data-setting-item>
+                            <span class="cc-row-text">
+                                <span class="cc-row-name">Native PDF workspace</span>
+                                <span class="cc-row-help">Open attached PDFs in Sutra for offline reading, forms, annotations, page organization, and verified export. The exact original always stays unchanged.</span>
+                            </span>
+                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="workspace.pdfWorkspaceEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
+                        </label>
                     </div>
                 </section>
 
@@ -5330,7 +5337,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260811-cache1"></script>
+                <script src="src/features/study/homework.js?v=20260813-pdf1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7729,7 +7736,7 @@
          appData, backups, and import normalization. -->
     <script src="src/features/academic/school-schedule.js?v=20260807-ics1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
-    <script src="src/features/academic/assignment-studio.js?v=20260707-batch1"></script>
+    <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
     <script src="src/features/academic/semester-setup.js?v=20260807-ics1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
@@ -7767,10 +7774,18 @@
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
 <script src="src/features/workspace/startup-default-bridge.js?v=20260809-audit3"></script>
-    <script src="src/core/app.js?v=20260811-storage-cas3"></script>
+    <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
+         PDF form worker path is also kept on the stable same-thread adapter.
+         Other served/PWA browsers use the smaller module + real worker path. -->
+    <script src="src/features/workspace/pdf-runtime-loader.js?v=20260813-pdf1"></script>
+    <!-- PDF records normalize before core hydration. Rendering and export stay
+         fully local through the pinned vendored runtimes below. -->
+    <script src="src/features/workspace/pdf-engine.js?v=20260813-pdf3"></script>
+    <script src="src/core/app.js?v=20260813-pdf7"></script>
+    <script src="src/features/workspace/pdf-workspace.js?v=20260813-pdf16"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20260809-helpdocs1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20260813-pdf1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260809-audit7"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7920,7 +7935,7 @@
                 var placeholder = document.getElementById('googleFeedbackPlaceholder');
                 if (!placeholder) return;
                 placeholder.hidden = false;
-                placeholder.innerHTML = '';
+                placeholder.replaceChildren();
 
                 var text = document.createElement('div');
                 text.className = 'google-feedback-placeholder-text';
@@ -8194,6 +8209,7 @@
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260807-slidesworkbench1">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260810-sheets1">
+    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260813-pdf4">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

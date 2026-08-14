@@ -1025,6 +1025,39 @@
     return tasks.find(task => String(task.id) === String(id)) || null;
   }
 
+  function chooseHomeworkAttachments(taskId) {
+    if (!taskId || !window.SutraAttachments || typeof window.SutraAttachments.addFiles !== 'function') {
+      showHomeworkAlert('Attachment storage is unavailable.', { title: 'Homework Attachments' });
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'application/pdf,.pdf,image/png,image/jpeg';
+    input.hidden = true;
+    input.addEventListener('change', async () => {
+      try {
+        const added = await window.SutraAttachments.addFiles(input.files, { entityType: 'homework', entityId: String(taskId), source: 'homework_upload' });
+        showHomeworkAlert(added.length === 1 ? 'Attachment saved for this homework item.' : `${added.length} attachments saved for this homework item.`, { title: 'Homework Attachments' });
+      } catch (error) {
+        showHomeworkAlert(error && error.message ? error.message : 'The attachment could not be stored.', { title: 'Homework Attachments' });
+      } finally {
+        input.remove();
+      }
+    }, { once: true });
+    input.addEventListener('cancel', () => input.remove(), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  async function removeHomeworkAttachments(taskId) {
+    if (!window.SutraAttachments || typeof window.SutraAttachments.listForEntity !== 'function') return;
+    const files = window.SutraAttachments.listForEntity('homework', String(taskId));
+    for (const file of files) {
+      window.SutraAttachments.remove(file.id, { entityType: 'homework', entityId: String(taskId), confirmed: true });
+    }
+  }
+
   // ---- shared task-menu + compact card (reused across every layout) -----
 
   function renderTaskMenu(task) {
@@ -1041,6 +1074,7 @@
           <button type="button" data-task-edit="${escHtml(task.id)}" role="menuitem">Edit assignment</button>
           <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
           <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
+          <button type="button" data-task-attach="${escHtml(task.id)}" role="menuitem">Attach PDF or file&hellip;</button>
           <button type="button" data-task-menu-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
           <button type="button" data-task-pin-countdown="${escHtml(task.id)}" role="menuitem">Pin as countdown&hellip;</button>
           ${!task.done ? `<button type="button" data-task-snooze="${escHtml(task.id)}" role="menuitem">Snooze 1 day</button>` : ''}
@@ -2174,6 +2208,7 @@
             <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
               <button type="button" data-task-open="${escHtml(task.id)}" role="menuitem">Open details</button>
               <button type="button" data-studio-open="${escHtml(task.id)}" role="menuitem">${task.studio ? 'Open Studio' : 'Expand into Studio'}</button>
+              <button type="button" data-task-attach="${escHtml(task.id)}" role="menuitem">Attach PDF or file&hellip;</button>
               <button type="button" data-task-menu-toggle="${escHtml(task.id)}" role="menuitem">${escHtml(toggleLabel)}</button>
               ${recurrence !== 'none' ? `<button type="button" data-task-stop-recurring="${escHtml(task.id)}" role="menuitem">Stop recurring</button>` : ''}
               ${task.courseId ? `<button type="button" data-task-dashboard="${escHtml(task.id)}" role="menuitem">Open class dashboard</button>` : ''}
@@ -2893,7 +2928,16 @@
         });
         if (!confirmed) return;
         closeTaskContextMenus();
-        deleteTask(button.getAttribute('data-task-delete'));
+        const taskId = button.getAttribute('data-task-delete');
+        await removeHomeworkAttachments(taskId);
+        deleteTask(taskId);
+      });
+    });
+
+    board.querySelectorAll('[data-task-attach]').forEach(button => {
+      button.addEventListener('click', () => {
+        closeTaskContextMenus();
+        chooseHomeworkAttachments(button.getAttribute('data-task-attach'));
       });
     });
 

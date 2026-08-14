@@ -15,10 +15,10 @@
    Bump CACHE_VERSION to invalidate old caches on the next activate.
    ========================================================================== */
 
-importScripts('./src/config/asset-manifest.generated.js?v=20260811-storage-cas3');
+importScripts('./src/config/asset-manifest.generated.js?v=20260813-pdf1');
 
 const CACHE_FAMILY = 'sutra-cache-';
-const CACHE_VERSION = `${CACHE_FAMILY}v5-20260811-storage-cas3`;
+const CACHE_VERSION = `${CACHE_FAMILY}v6-20260813-pdf1`;
 const ASSET_MANIFEST = self.SUTRA_ASSET_MANIFEST;
 if (!ASSET_MANIFEST || !Array.isArray(ASSET_MANIFEST.critical) || !ASSET_MANIFEST.shell) {
     throw new Error('Sutra service worker asset manifest is missing or invalid.');
@@ -26,7 +26,7 @@ if (!ASSET_MANIFEST || !Array.isArray(ASSET_MANIFEST.critical) || !ASSET_MANIFES
 const CRITICAL_ASSETS = ASSET_MANIFEST.critical;
 const OPTIONAL_ASSETS = Array.isArray(ASSET_MANIFEST.optional) ? ASSET_MANIFEST.optional : [];
 
-const STATIC_ASSET_PATH = /\.(?:js|css|html|webmanifest|ico|png|svg|woff2?|ttf)$/i;
+const STATIC_ASSET_PATH = /\.(?:m?js|css|html|webmanifest|ico|png|svg|woff2?|ttf|pfb|bcmap)$/i;
 const SHARE_DB_NAME = 'sutra_share_target_db';
 const SHARE_DB_VERSION = 1;
 const SHARE_STORE_NAME = 'pendingShares';

@@ -9,6 +9,14 @@ This release window covers the GitHub changes from 2026-07-10 through
 a calmer, connected student workspace while keeping advanced tools available
 through deliberate entry points.
 
+- **Added the default-on native PDF workspace with a Settings opt-out.** PDFs remain
+  contextual attachments rather than a new top-level section. The offline
+  reader supports text/search/outlines/forms, Sutra-owned annotations, page
+  organization, image/PDF assembly, immutable originals, and verified
+  original/clean/annotated export choices. One attachment can link to several
+  workspace contexts and its required bytes participate in encrypted backups
+  and content-addressed Sync.
+
 - **Unified the daily student loop.** Today is the command center for Next
   Step, Daily Thread, Deadline Radar, schedule context, review debt, tracker
   signals, and saved/backup confidence. Quick Capture accepts assignments,

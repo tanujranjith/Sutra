@@ -9,9 +9,9 @@ const fixture = (name) => JSON.parse(readFileSync(new URL(`../fixtures/${name}`,
 const NOW = '2026-07-09T12:00:00.000Z';
 
 for (const [name, from, expected] of [
-  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']],
-  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']],
-  ['workspace-v3.json', 3, ['v3->v4', 'v4->v5', 'v5->v6', 'v6->v7']]
+  ['workspace-v1.json', 1, ['v1->v2', 'v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7', 'v7->v8']],
+  ['workspace-v2.json', 2, ['v2->v3', 'v3->v4', 'v4->v5', 'v5->v6', 'v6->v7', 'v7->v8']],
+  ['workspace-v3.json', 3, ['v3->v4', 'v4->v5', 'v5->v6', 'v6->v7', 'v7->v8']]
 ]) {
   test(`${name} migrates sequentially to the current schema`, () => {
     const source = fixture(name);
@@ -79,7 +79,7 @@ test('current migrations are idempotent and future workspaces are preserved', ()
   assert.equal(future.workspace.custom, true);
 });
 
-test('v5 through v7 add Sutra contracts, sync containers, and canonical Assistant history without dropping plugin-owned fields', () => {
+test('v5 through v8 add Sutra contracts, sync containers, canonical Assistant history, and PDF records without dropping plugin-owned fields', () => {
   const source = fixture('workspace-v3.json');
   const result = migrations.migrateWorkspace(source, { now: NOW }).workspace;
   assert.equal(result.version, migrations.CURRENT_VERSION);
@@ -91,6 +91,9 @@ test('v5 through v7 add Sutra contracts, sync containers, and canonical Assistan
   assert.deepEqual(result.collegeAppWorkspace.activities, []);
   assert.deepEqual(result.privateDocuments, []);
   assert.deepEqual(result.syncAuditLog, []);
+  assert.deepEqual(result.attachmentLinks, []);
+  assert.deepEqual(result.pdfDocuments, []);
+  assert.deepEqual(result.pdfAnnotations, []);
   assert.deepEqual(result.assistantChatHistory, {
     version: 1,
     currentChatId: '',
@@ -101,6 +104,21 @@ test('v5 through v7 add Sutra contracts, sync containers, and canonical Assistan
   assert.equal(typeof result.migrationDiagnostics, 'object');
   assert.equal(typeof result.compatibility, 'object');
   assert.equal(result.pluginData.unknownSafeField, 'keep');
+});
+
+test('v8 backfills canonical attachment links from legacy file mirrors', () => {
+  const source = {
+    version: 7,
+    pages: [],
+    courseWorkspace: {
+      files: [{ id: 'file-1', courseId: 'course-1', linkedEntityType: 'note', linkedEntityId: 'note-1', createdAt: NOW }]
+    }
+  };
+  const result = migrations.migrateWorkspace(source, { now: NOW }).workspace;
+  assert.deepEqual(result.attachmentLinks.map(link => [link.fileId, link.entityType, link.entityId]), [
+    ['file-1', 'course', 'course-1'],
+    ['file-1', 'note', 'note-1']
+  ]);
 });
 
 test('recursive and non-serializable imports fail validation before migration', () => {

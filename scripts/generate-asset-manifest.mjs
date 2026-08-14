@@ -6,7 +6,7 @@
  * means the HTML entry point remains the load-order authority while the
  * service worker and deploy verifier consume the same deterministic list.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
 
@@ -41,6 +41,26 @@ function collectReferences() {
       optional.add(reference);
     }
   }
+  // The native PDF workspace dynamically imports PDF.js and requests its
+  // worker, character maps, and standard fonts at runtime. They do not appear
+  // as HTML tags, so enumerate the pinned local runtime explicitly to make a
+  // fresh installed PWA fully PDF-capable while offline.
+  const pdfRuntimeRoots = [
+    'assets/vendor/pdfjs/build',
+    'assets/vendor/pdfjs/cmaps',
+    'assets/vendor/pdfjs/standard_fonts'
+  ];
+  pdfRuntimeRoots.forEach((directory) => {
+    readdirSync(resolve(root, directory), { withFileTypes: true }).forEach((entry) => {
+      if (!entry.isFile() || !/\.(?:m?js|bcmap|pfb|ttf)$/i.test(entry.name)) return;
+      critical.add(`./${directory}/${entry.name}`);
+    });
+  });
+  // pdf-lib and fontkit are intentionally loaded only when page assembly or
+  // export is requested, but installed PWAs still need them available before
+  // the device goes offline.
+  critical.add('./assets/vendor/pdf-lib/pdf-lib.min.js?v=1.17.1');
+  critical.add('./assets/vendor/pdf-fontkit/fontkit.umd.min.js?v=1.1.1');
   for (const item of critical) optional.delete(item);
   const featureSource = readFileSync(resolve(root, 'src/config/feature-manifest.js'), 'utf8');
   const sandbox = {};

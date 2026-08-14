@@ -32,7 +32,7 @@
       styles: [
         './styles/features/sutra-assistant-help.css?v=20260729-providerwiz1',
         './styles/features/sutra-intelligence.css?v=20260610-intel1',
-        './styles/views/assistant-view.css?v=20260808-assistantfab1'
+        './styles/views/assistant-view.css?v=20260813-cache1'
       ],
       initialization: 'sutraAssistant.init', teardown: 'sutraAssistant.teardown',
       navigationEntries: ['assistantview'], persistenceNamespace: 'assistantChatHistory',

@@ -26,7 +26,7 @@ async function projected(workspace) {
 function identity(deviceId, start = 0) {
   let lamport = start;
   return {
-    deviceId, schemaVersion: 7, clientTime: '2026-07-16T14:00:00.000Z',
+    deviceId, schemaVersion: 8, clientTime: '2026-07-16T14:00:00.000Z',
     nextLamport() { lamport += 1; return lamport; }
   };
 }
@@ -48,7 +48,7 @@ async function protocolTransfer(sourceWorkspace, targetWorkspace, deviceId) {
 test('everything fixture survives actual diff, merge, and projection bootstrap', async () => {
   const deviceA = createEverythingWorkspace({});
   const deviceB = await protocolTransfer(deviceA, {
-    version: 7,
+    version: 8,
     workspaceMeta: { revision: 2, lastWriterTabId: 'device-b' },
     ui: { lastActiveView: 'today' },
     splitPaneContexts: { primary: { pageId: 'device-b-page' } },
@@ -101,6 +101,12 @@ test('everything fixture covers every portable top-level and named nested contra
     'assistantChatHistory.conversations[].messages[]':
       Object.assign({}, ...fixture.assistantChatHistory.conversations[0].messages.map(row => row)),
     'courseWorkspace.files[]': fixture.courseWorkspace.files[0],
+    'attachmentLinks[]': fixture.attachmentLinks[0],
+    'pdfDocuments[]': fixture.pdfDocuments[0],
+    'pdfDocuments[].pages[]': fixture.pdfDocuments[0].pages[0],
+    'pdfDocuments[].bookmarks[]': fixture.pdfDocuments[0].bookmarks[0],
+    'pdfDocuments[].checkpoints[]': fixture.pdfDocuments[0].checkpoints[0],
+    'pdfAnnotations[]': fixture.pdfAnnotations[0],
     'settings.preferences': fixture.settings.preferences,
     'settings.preferences.assistant': fixture.settings.preferences.assistant,
     'settings.preferences.assistant.localEndpoint': fixture.settings.preferences.assistant.localEndpoint,

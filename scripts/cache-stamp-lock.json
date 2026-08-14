@@ -28,16 +28,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260810-remove-view-actions1",
-    "hash": "70da95e52c27567d"
+    "stamp": "20260813-pdf1",
+    "hash": "0e6fa13756047261"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260811-storage-cas3",
-    "hash": "6088b3ae8eea7dde"
+    "stamp": "20260813-pdf7",
+    "hash": "a66ef1155f004f79"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -56,8 +56,8 @@
     "hash": "0cd88826ae6aeb3c"
   },
   "src/core/migrations.js": {
-    "stamp": "20260716-syncwipe1",
-    "hash": "898a0a043241c0c3"
+    "stamp": "20260813-pdf2",
+    "hash": "ef85c157317a6b60"
   },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",
@@ -132,8 +132,8 @@
     "hash": "3ca5d5895240861e"
   },
   "src/features/academic/assignment-studio.js": {
-    "stamp": "20260707-batch1",
-    "hash": "2a6c35fd4ecbbd78"
+    "stamp": "20260813-pdf1",
+    "hash": "34bb20ea96d93ba9"
   },
   "src/features/academic/command-center.js": {
     "stamp": "20260613-cc1",
@@ -228,8 +228,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260811-cache1",
-    "hash": "61ad8058a29094c3"
+    "stamp": "20260813-pdf1",
+    "hash": "22125a5181376a53"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -284,8 +284,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20260809-helpdocs1",
-    "hash": "e2be76a04daa0c0f"
+    "stamp": "20260813-pdf1",
+    "hash": "e4fe6220af6e94a3"
   },
   "src/features/workspace/mobile-nav.js": {
     "stamp": "20260808-contextual-ui1",
@@ -294,6 +294,18 @@
   "src/features/workspace/notifications.js": {
     "stamp": "20260807-icsnotifications1",
     "hash": "c3b9273c2a3e5c3e"
+  },
+  "src/features/workspace/pdf-engine.js": {
+    "stamp": "20260813-pdf3",
+    "hash": "8b312b16d37a9f98"
+  },
+  "src/features/workspace/pdf-runtime-loader.js": {
+    "stamp": "20260813-pdf1",
+    "hash": "b071d76dfdbb4537"
+  },
+  "src/features/workspace/pdf-workspace.js": {
+    "stamp": "20260813-pdf16",
+    "hash": "bc3b3065099bc8c1"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -400,8 +412,8 @@
     "hash": "74dd8dc00c148b8f"
   },
   "src/sync/sync-protocol.js": {
-    "stamp": "20260807-localendpoint1",
-    "hash": "8df18d685b313364"
+    "stamp": "20260813-pdf1",
+    "hash": "1e63b0dfec3f4e3a"
   },
   "src/sync/sync-store.js": {
     "stamp": "20260805-device-session1",
@@ -483,6 +495,10 @@
     "stamp": "20260723-mobilemodal2",
     "hash": "9ab16713e512d32f"
   },
+  "styles/features/pdf-workspace.css": {
+    "stamp": "20260813-pdf4",
+    "hash": "f3ffa1fb01f9beab"
+  },
   "styles/features/sheets.css": {
     "stamp": "20260810-sheets1",
     "hash": "cc306097cec702b9"
@@ -560,8 +576,8 @@
     "hash": "89b3c42bf00b0453"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260808-assistantfab1",
-    "hash": "db216eb4138f5552"
+    "stamp": "20260813-cache1",
+    "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20260808-contextual-ui19",
