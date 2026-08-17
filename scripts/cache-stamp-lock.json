@@ -7,6 +7,10 @@
     "stamp": "3.10.1",
     "hash": "acc7e41455a80765"
   },
+  "src/boot/legacy-workspace-migration.js": {
+    "stamp": "20260817-storage-recovery4",
+    "hash": "34bb121089d40bef"
+  },
   "src/boot/startup-intro.js": {
     "stamp": "20260809-audit2",
     "hash": "9992e7d41c8b7d0f"

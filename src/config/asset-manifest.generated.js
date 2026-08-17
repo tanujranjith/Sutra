@@ -7,6 +7,7 @@
     "./assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5",
     "./assets/vendor/jszip/jszip.min.js?v=3.10.1",
     "./manifest.webmanifest",
+    "./src/boot/legacy-workspace-migration.js?v=20260817-storage-recovery4",
     "./src/boot/startup-intro.js?v=20260809-audit2",
     "./src/boot/sw-register.js?v=20260709-safeupdate1",
     "./src/compat/legacy-homework.js?v=20260709-compat1",
