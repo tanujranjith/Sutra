@@ -214,6 +214,9 @@
   },
   "otherStorageClassifications": {
     "noteflow_atelier_db.workspace.root": { "category": "reconstructed", "reason": "Canonical local working copy; portable descendants are projected according to workspaceFieldClassifications." },
+    "noteflow_atelier_db.workspace.workspace-last-meaningful": { "category": "deviceLocal", "reason": "One-generation local recovery journal written atomically beside the canonical root; never exported or synchronized separately." },
+    "noteflow_atelier_db.workspace.workspace-empty-before-recovery": { "category": "deviceLocal", "reason": "Diagnostic copy of an empty/default root preserved before automatic recovery promotes a richer local candidate." },
+    "noteflow_atelier_db.workspace.workspace-confirmed-root": { "category": "deviceLocal", "reason": "Compact data-presence marker written atomically with canonical commits so a deliberate empty workspace is never mistaken for an unexplained reset." },
     "noteflow_attachments_db.blobs": { "category": "asset", "reason": "Required referenced bytes use assetContracts.courseAttachmentBytes." },
     "sutra_sync_db": { "category": "deviceLocal", "reason": "Account-scoped outboxes, baselines, cursors, tombstones, dedicated conflict-review records/resolved tombstones, device registration state, wrapped keys, and refresh tokens are sync operations, not workspace payload. The browser never opens one account namespace through another account's sync runtime. Conflict resolutions themselves synchronize as encrypted syncAuditLog records." },
     "sutra-drive-sync-keys": { "category": "secret", "reason": "Device-local wrapped/derived Google Drive backup key material." },

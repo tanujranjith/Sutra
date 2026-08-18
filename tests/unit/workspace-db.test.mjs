@@ -109,6 +109,45 @@ test('conditional writes atomically reject a stale workspace base', async () => 
   assert.deepEqual(await first.read('root'), { title: 'newer' });
 });
 
+test('conditional writes journal the last accepted meaningful record atomically', async () => {
+  const fake = makeIndexedDb();
+  const db = create({
+    indexedDB: fake.factory,
+    dbName: 'qa',
+    storeName: 'workspace',
+    backupKey: 'workspace-last-meaningful',
+    shouldBackup: current => Array.isArray(current?.pages) && current.pages.length > 0
+  });
+  const meaningful = { pages: [{ id: 'keep-me' }], tasks: [] };
+  await db.write('root', meaningful);
+
+  const emptied = await db.writeIf('root', { pages: [], tasks: [] }, current => current === meaningful);
+  assert.equal(emptied.written, true);
+  assert.deepEqual(await db.read('workspace-last-meaningful'), meaningful);
+  assert.deepEqual(await db.read('root'), { pages: [], tasks: [] });
+
+  const restored = await db.writeIf('root', { pages: [{ id: 'restored' }], tasks: [] }, current => current?.pages?.length === 0);
+  assert.equal(restored.written, true);
+  assert.deepEqual(await db.read('workspace-last-meaningful'), meaningful, 'an empty current root must not erase the recovery journal');
+});
+
+test('conditional writes persist a compact confirmation marker with the replacement', async () => {
+  const fake = makeIndexedDb();
+  const db = create({
+    indexedDB: fake.factory,
+    dbName: 'qa',
+    storeName: 'workspace',
+    commitKey: 'workspace-confirmed-root',
+    buildCommit: (_current, next, key) => ({ key, empty: next.pages.length === 0 })
+  });
+  await db.write('root', { pages: [{ id: 'before' }] });
+
+  const result = await db.writeIf('root', { pages: [] }, () => true);
+  assert.equal(result.written, true);
+  assert.deepEqual(await db.read('root'), { pages: [] });
+  assert.deepEqual(await db.read('workspace-confirmed-root'), { key: 'root', empty: true });
+});
+
 test('versionchange closes the stale connection and the next operation reopens', async () => {
   const fake = makeIndexedDb();
   const db = create({ indexedDB: fake.factory, dbName: 'qa', storeName: 'workspace' });
