@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260817-storage-recovery4",
-    "hash": "34bb121089d40bef"
+    "stamp": "20260818-storage-journal6",
+    "hash": "b4115bed50da8751"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260809-audit2",
@@ -32,8 +32,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260810-remove-view-actions1",
-    "hash": "70da95e52c27567d"
+    "stamp": "20260818-cache-refresh1",
+    "hash": "3a84766ba0357058"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -376,8 +376,8 @@
     "hash": "d6fd15f6450e378b"
   },
   "src/persistence/workspace-db.js": {
-    "stamp": "20260811-storage-cas1",
-    "hash": "0bc31c7668272482"
+    "stamp": "20260818-storage-journal4",
+    "hash": "b1f32b92bdbc29e1"
   },
   "src/state/workspace-normalizers.js": {
     "stamp": "20260616-state1",
@@ -436,8 +436,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260810-updatebanner1",
-    "hash": "e4e98bd1ca90fd8b"
+    "stamp": "20260818-cache-refresh1",
+    "hash": "3ce195b7714c5540"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -564,8 +564,8 @@
     "hash": "89b3c42bf00b0453"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260808-assistantfab1",
-    "hash": "db216eb4138f5552"
+    "stamp": "20260818-cache-refresh1",
+    "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20260808-contextual-ui19",
