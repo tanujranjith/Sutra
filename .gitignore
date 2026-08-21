@@ -68,6 +68,7 @@ security-artifacts/
 # Marketing / investor material (not part of the app or the GitHub Pages deploy)
 pitch-decks/
 product-documentation/
+docs/review/
 
 # Launch film: large rendered media (frames/MP4s/WAVs ~2GB) + generated artifacts.
 # Marketing output, not part of the app. Sources stay on disk under launch-film/.

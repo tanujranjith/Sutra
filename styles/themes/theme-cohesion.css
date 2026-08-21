@@ -307,6 +307,142 @@ body[data-theme="heritage"][data-theme-key="heritage"] :is(.view-tab.active, .to
     border-top: 1px solid var(--surface-border, #d7dce5);
 }
 
+/* -------------------------------------------------------------------------
+   Glass desktop continuity
+   The contextual shell owns the normal Notes toolbar flow, but the Glass
+   theme uses a floating Liquid Glass chrome layer. Keep this late override
+   scoped to Glass so other themes retain their contextual-shell behavior.
+   ------------------------------------------------------------------------- */
+@media (min-width: 1025px) {
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-wrapper {
+        position: fixed !important;
+        top: calc(var(--top-nav-height, var(--sutra-global-nav-height, 72px)) + 10px) !important;
+        left: calc(var(--sidebar-width) + 28px) !important;
+        right: 28px !important;
+        width: auto !important;
+        max-width: none !important;
+        min-height: 52px !important;
+        height: 52px !important;
+        margin: 0 !important;
+        padding: 5px 9px !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: flex-start !important;
+        border: 1px solid rgba(255, 255, 255, 0.58) !important;
+        border-radius: 18px !important;
+        background:
+            linear-gradient(135deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.38)) !important;
+        -webkit-backdrop-filter: blur(24px) saturate(175%) !important;
+        backdrop-filter: blur(24px) saturate(175%) !important;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+            0 10px 26px rgba(36, 54, 88, 0.12) !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]):has(.sidebar.collapsed) #view-notes .toolbar-wrapper,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) .sidebar.collapsed ~ .main-content #view-notes .toolbar-wrapper {
+        left: calc(var(--sidebar-collapsed-width) + 28px) !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar {
+        width: 100% !important;
+        min-width: 0;
+        margin: 0 !important;
+        padding: 0 3px !important;
+        justify-content: flex-start !important;
+        align-items: center;
+        gap: 7px;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-field,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .nf-select-trigger {
+        color: #3f4652;
+        border-color: rgba(87, 102, 128, 0.12) !important;
+        background: rgba(255, 255, 255, 0.32) !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn:hover,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-field:hover,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .nf-select-trigger:hover {
+        color: #1d1d1f;
+        background: rgba(255, 255, 255, 0.64) !important;
+        border-color: rgba(10, 132, 255, 0.24) !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn.active,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn[aria-pressed="true"] {
+        color: #0069d9 !important;
+        background: rgba(10, 132, 255, 0.14) !important;
+        border-color: rgba(10, 132, 255, 0.28) !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-separator {
+        background: rgba(72, 88, 116, 0.22) !important;
+    }
+}
+
+/* Brand lockup: the existing raster mark is deliberately framed once, while
+   the wordmark stays crisp and optically aligned with it. */
+body:is([data-theme="glass"], [data-theme="liquidglass"]) .global-app-brand {
+    gap: 10px;
+    min-width: 140px;
+    border-radius: 14px;
+}
+
+body:is([data-theme="glass"], [data-theme="liquidglass"]) .global-app-brand .app-title-mark {
+    display: block;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    padding: 4px;
+    object-fit: contain;
+    background: rgba(255, 255, 255, 0.78) !important;
+    background-image: none !important;
+    background-clip: border-box !important;
+    -webkit-background-clip: border-box !important;
+    -webkit-text-fill-color: initial !important;
+    border: 1px solid rgba(10, 132, 255, 0.24) !important;
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.92),
+        0 5px 14px rgba(10, 92, 190, 0.16) !important;
+    mix-blend-mode: normal;
+}
+
+body:is([data-theme="glass"], [data-theme="liquidglass"]) .global-app-brand .app-title-wordmark {
+    color: #1d1d1f !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI", sans-serif;
+    font-size: 1.18rem;
+    font-weight: 720;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    text-shadow: none;
+}
+
+/* Editor surface: retain a clean writing canvas, but give it the same lit
+   edge and depth as the surrounding glass chrome. */
+body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .editor-container {
+    background: rgba(255, 255, 255, 0.93) !important;
+    border: 1px solid rgba(255, 255, 255, 0.76) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.96),
+        0 10px 30px rgba(35, 55, 90, 0.10),
+        0 1px 4px rgba(35, 55, 90, 0.08) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-wrapper,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) .top-nav,
+    body:is([data-theme="glass"], [data-theme="liquidglass"]) .sidebar {
+        background: #eef3fb !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+    }
+}
+
 @media (max-width: 640px) {
     #customThemeSetupModal .custom-theme-setup-modal-content {
         width: calc(100vw - 16px);
