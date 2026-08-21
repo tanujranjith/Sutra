@@ -149,11 +149,15 @@
         display: none !important;
     }
 
-    /* Sidebar overlay scrim — keep below the sidebar but above page chrome */
+    /* Sidebar overlay scrim — keep below the sidebar but above page chrome.
+       Do not blur the backdrop here: iOS Safari can composite a fixed
+       backdrop-filter across the sidebar layer too, making the entire open
+       drawer look blurred. The translucent scrim still separates the drawer
+       from the page without obscuring the drawer's contents. */
     .sidebar-overlay {
         background: rgba(0, 0, 0, 0.5) !important;
-        -webkit-backdrop-filter: blur(2px);
-        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
     }
 
     /* Toggle button — make it a clear FAB-style anchor on the left.
