@@ -197,3 +197,61 @@ test('opening the phone notes sidebar keeps the drawer contents sharp', async ({
   expect(styles.sidebar.filter || '').not.toMatch(/blur/i);
   expect(`${styles.sidebar.backdropFilter || ''} ${styles.sidebar.webkitBackdropFilter || ''}`).not.toMatch(/blur/i);
 });
+
+test('phone notes and folder rows remain clickable above the sidebar scrim', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const now = new Date().toISOString();
+    window.deserializeWorkspace({
+      ...base,
+      pages: [
+        ...base.pages,
+        {
+          id: 'mobile-click-folder',
+          title: 'Mobile Click Folder',
+          type: 'folder',
+          content: '',
+          icon: '📁',
+          isSystemPage: false,
+          builtInId: '',
+          systemRole: '',
+          createdAt: now,
+          updatedAt: now,
+          collapsed: true
+        },
+        {
+          id: 'mobile-click-note',
+          title: 'Mobile Click Folder::Mobile Click Note',
+          type: 'note',
+          content: '<p>Mobile sidebar click target.</p>',
+          icon: '📄',
+          isSystemPage: false,
+          builtInId: '',
+          systemRole: '',
+          createdAt: now,
+          updatedAt: now
+        }
+      ]
+    });
+  });
+  await page.locator('#sutraBottomNav [data-bn-view="notes"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('notes');
+
+  const sidebar = page.locator('#sidebar');
+  const toggle = page.locator('#sidebarToggle');
+  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) {
+    await page.evaluate(() => document.getElementById('sidebarToggle').click());
+  }
+  await toggle.click();
+  await expect(page.locator('#sidebarOverlay')).toHaveClass(/active/);
+
+  const folder = page.locator('.page-item[data-page-id="mobile-click-folder"]');
+  const note = page.locator('.page-item[data-page-id="mobile-click-note"]');
+  await expect(folder).toBeVisible();
+  await expect(note).toBeHidden();
+  await folder.click();
+  await expect(note).toBeVisible();
+  await note.click();
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.currentPageId)).toBe('mobile-click-note');
+});
