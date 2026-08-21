@@ -809,7 +809,10 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   :root { --sutra-global-nav-height: 0px; }
   .app-container { height: 100dvh; padding-top: 0; }
   .top-nav { display: none !important; }
-  .sidebar { height: 100dvh; }
+  /* The mobile drawer must sit above the full-screen scrim. This file loads
+     after the responsive stylesheet, so keep the phone z-index here too;
+     otherwise the scrim receives every tap on notes and folders. */
+  .sidebar { height: 100dvh; z-index: 4900 !important; }
   .sidebar-header { min-height: 62px; padding-right: 58px !important; }
   .sidebar-toggle-btn { top: 12px !important; }
   #view-notes .toolbar-wrapper { min-height: 56px; padding-inline: 4px; }
