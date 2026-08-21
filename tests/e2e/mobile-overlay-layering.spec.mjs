@@ -161,3 +161,39 @@ test('blocking dialogs and sheets remain above fixed mobile navigation', async (
     });
   }
 });
+
+test('opening the phone notes sidebar keeps the drawer contents sharp', async ({ page }) => {
+  await openApp(page);
+  await page.locator('#sutraBottomNav [data-bn-view="notes"]').click();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.view)).toBe('notes');
+
+  const sidebar = page.locator('#sidebar');
+  const toggle = page.locator('#sidebarToggle');
+  if (!(await sidebar.evaluate((node) => node.classList.contains('collapsed')))) {
+    await page.evaluate(() => document.getElementById('sidebarToggle').click());
+  }
+  await toggle.click();
+  await expect(page.locator('#sidebarOverlay')).toHaveClass(/active/);
+
+  const styles = await page.evaluate(() => ({
+    overlay: (() => {
+      const style = getComputedStyle(document.getElementById('sidebarOverlay'));
+      return {
+        backdropFilter: style.getPropertyValue('backdrop-filter'),
+        webkitBackdropFilter: style.getPropertyValue('-webkit-backdrop-filter')
+      };
+    })(),
+    sidebar: (() => {
+      const style = getComputedStyle(document.getElementById('sidebar'));
+      return {
+        filter: style.getPropertyValue('filter'),
+        backdropFilter: style.getPropertyValue('backdrop-filter'),
+        webkitBackdropFilter: style.getPropertyValue('-webkit-backdrop-filter')
+      };
+    })()
+  }));
+
+  expect(`${styles.overlay.backdropFilter || ''} ${styles.overlay.webkitBackdropFilter || ''}`).not.toMatch(/blur/i);
+  expect(styles.sidebar.filter || '').not.toMatch(/blur/i);
+  expect(`${styles.sidebar.backdropFilter || ''} ${styles.sidebar.webkitBackdropFilter || ''}`).not.toMatch(/blur/i);
+});
