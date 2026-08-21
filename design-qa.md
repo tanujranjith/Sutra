@@ -141,3 +141,72 @@ The following record predates the contextual UI redesign and is retained unchang
 - Optional P3: future presets could add user-selected local audio, but no network media or additional persistence was introduced for this visual backlog item.
 
 final result: passed
+
+## Recheck — 2026-08-20
+
+- Rendered `Sutra.html` at 1752×994 in Chrome with the Glass theme and Notes view active.
+- Toolbar passes the placement check: it is fixed below the global navigation, begins at the left content edge, retains its glass treatment, and exposes horizontal overflow through the existing toolbar affordance.
+- Shell passes the overflow check: document scroll width matches the viewport width (1752px); no horizontal page overflow was introduced.
+- Runtime passes the browser-error check: no page errors or console errors were captured during the check.
+- `[P1]` The Sutra wordmark still renders with a visibly green initial “S” beside dark “utra” in the focused brand crop. Computed styles report a uniform dark color and no gradient, so the previous CSS reset removed the source gradient leak but did not resolve the rendered brand artifact.
+
+final result: blocked
+
+---
+
+# Glass Notes Shell Follow-up — 2026-08-20
+
+## Source visual truth
+
+- Source mockup: `C:\\Users\\tanuj.DESKTOP-BOL1R68.000\\.codex\\generated_images\\01a0201c-51dd-7121-a01c-93e4141ff597\\exec-b57f7750-f39e-4c3a-a769-57ab1d2625fc.png`
+- Implementation screenshot: `C:\\Users\\tanuj.DESKTOP-BOL1R68.000\\Desktop\\Sutra\\.codex\\qa-notes-glass-implemented.png`
+- Viewport: 1752 × 994 CSS pixels, device scale factor 1
+- State: Notes view, Glass theme, startup onboarding hidden for capture only
+- Content note: the fresh local workspace uses the built-in Help & Docs page, while the source mockup shows a user note. QA is limited to the shared shell, toolbar, branding, and editor-surface regions.
+
+## Comparison evidence
+
+- Full view: the implementation retains the light blue/lavender glass canvas, translucent top shell/sidebar, white writing surface, floating controls, and high-contrast editor treatment.
+- Toolbar focus: the wrapper renders at `x=328`, `y≈92`, width `1396`, with `position: fixed`; the toolbar content begins at `x=338` and uses `justify-content: flex-start`. This removes the right-shifted toolbar offset.
+- Brand focus: the lockup renders as a single 32px raster mark plus readable Sutra wordmark. The image no longer inherits the generic gradient-text properties from `.app-title-icon`.
+
+## Findings
+
+- No actionable P0/P1/P2 visual findings remain for the requested toolbar, logo, or Glass theme fixes.
+- P3 follow-up: the implementation screenshot contains a transient “Applied 1 change” toast caused by the fresh workspace startup flow; it is unrelated to the theme changes.
+
+## Comparison history
+
+1. Initial implementation check found the contextual shell’s sticky toolbar override winning over the Glass desktop anchoring. Fixed with a late Glass-only desktop override.
+2. Second implementation check found the raster logo inheriting `background-clip: text` and transparent text-fill styles from `.app-title-icon`. Fixed by resetting those properties on the Glass brand mark.
+3. Final implementation screenshot confirmed fixed toolbar geometry and corrected logo image styling.
+
+## Fresh recheck — 2026-08-20
+
+- Source target: `C:\Users\TANUJD~1.000\AppData\Local\Temp\codex-clipboard-764e07d1-49fd-4835-bdee-48426b19b471.png`; implementation: `.codex/qa-check-again-full.png`, with focused crops `.codex/qa-check-again-toolbar.png` and `.codex/qa-check-again-brand.png`.
+- Viewport and normalization: source and implementation reviewed at the 1752×994 CSS-pixel desktop state; implementation used 1752×994 image pixels at device scale 1.
+- State: Notes/Create view, Glass theme, startup overlay hidden for capture only.
+- Full-view evidence: the translucent shell, left sidebar, centered editor surface, floating controls, and fixed toolbar render without document-level horizontal overflow.
+- Focused toolbar evidence: wrapper `x=328`, `y≈92`, `1396×52`, `position: fixed`, `justify-content: flex-start`; toolbar content is `1376×40` with a `1651px` scroll width and no page overflow.
+- Focused brand evidence: the icon remains a valid raster Sutra mark, but the wordmark visibly renders a green “S” beside dark “utra”. Computed styles are uniformly dark with no background gradient, so this remains an actionable rendered brand defect.
+- Browser evidence: no page errors or console errors captured. `check:shell`, `check:responsive`, `check:brand`, and `check:cache-stamps` all passed.
+
+## Latest findings
+
+- `[P1]` Brand wordmark color/raster artifact remains unresolved. Fix by isolating or replacing the wordmark rendering so every glyph is rendered from one clean, single-color brand treatment; then recapture the focused brand crop.
+
+final result: blocked
+
+## Prior implementation result
+
+Historical implementation result: passed
+
+## Traffic-light removal recheck — 2026-08-20
+
+- Change verified: removed the standalone `.window-chrome` block containing the three decorative traffic-light dots from `Sutra.html`.
+- Implementation evidence: `.codex/qa-traffic-lights-removed-full.png` and `.codex/qa-traffic-lights-removed-brand.png` at 1752×994 CSS pixels, device scale 1, Glass theme, Notes/Create view.
+- Brand focus: the Sutra raster mark and dark single-color wordmark remain aligned at the same `x=33` brand position; the previous green initial artifact is no longer visible.
+- Structural evidence: `.window-chrome` is absent, document and body scroll widths remain 1752px, and no page or console errors were captured.
+- Checks: `check:shell`, `check:responsive`, and `check:brand` passed; `git diff --check` passed.
+
+final result: passed
