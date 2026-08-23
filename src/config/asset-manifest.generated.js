@@ -13,7 +13,7 @@
     "./src/compat/legacy-homework.js?v=20260709-compat1",
     "./src/components/icons/icon-paths.js?v=20260810-folder-plus1",
     "./src/components/icons/index.js?v=20260809-audit-icons1",
-    "./src/config/feature-manifest.js?v=20260816-home-create2",
+    "./src/config/feature-manifest.js?v=20260823-combined1",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
     "./src/core/app.js?v=20260822-connected5",
     "./src/core/dom-safety.js?v=20260613-harden1",
@@ -107,7 +107,7 @@
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260723-layercontract1",
     "./styles/base/microinteractions.css?v=20260807-cohesion1",
-    "./styles/base/styles.css?v=20260810-updatebanner1",
+    "./styles/base/styles.css?v=20260818-cache-refresh1",
     "./styles/base/tokens.css?v=20260807-themefocus1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
@@ -172,6 +172,6 @@
     "./src/features/workspace/business-workspace.js?v=20260807-opsqueue1",
     "./styles/features/sutra-assistant-help.css?v=20260729-providerwiz1",
     "./styles/features/sutra-intelligence.css?v=20260610-intel1",
-    "./styles/views/assistant-view.css?v=20260816-home-create1"
+    "./styles/views/assistant-view.css?v=20260818-cache-refresh1"
   ]
 }); })(typeof self !== 'undefined' ? self : globalThis);
