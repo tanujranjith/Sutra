@@ -257,6 +257,29 @@ test('Supabase session credentials are tab-session only and legacy durable token
   expect(await page.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
 });
 
+test('remembered Supabase session survives a new page in the same browser profile', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });
+  await page.locator('#storageOptions').hover();
+  await page.locator('#sutraCloudOpenBtn').click();
+  await expect(page.locator('#sutraCloudRememberSessionInput')).toBeVisible();
+  await page.check('#sutraCloudRememberSessionInput');
+  await page.evaluate(async ({ email }) => {
+    await window.SutraCloudSync.verifyCode(email, '123456');
+  }, { email: EMAIL });
+  expect(await page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+
+  const context = page.context();
+  await page.close();
+  const reopened = await context.newPage();
+  await openApp(reopened);
+  await reopened.evaluate(() => window.SutraCloudSync.open());
+  expect(await reopened.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+  expect(await reopened.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
+  expect(await reopened.evaluate(() => sessionStorage.getItem('sutra:supabaseSession:v1'))).toContain('"refreshToken":"r1"');
+  await context.close();
+});
+
 test('Supabase upload failure skips metadata, rollback, and success state', async ({ page }) => {
   const supa = await openApp(page);
   await seedWorkspace(page, 'UPLOAD-FAIL');

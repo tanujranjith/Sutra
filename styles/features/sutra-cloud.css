@@ -140,6 +140,21 @@
     font-size: 14px;
 }
 
+.sutra-cloud-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.sutra-cloud-remember input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
 .sutra-cloud-backups {
     display: flex;
     flex-direction: column;

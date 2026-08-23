@@ -351,20 +351,24 @@ confirmed local-save seam as workspace edits.
   temporary diagnostics, hidden prompts/reasoning, raw provider payloads, and
   uncommitted messages never enter backups or sync.
 
-### API keys are session-only
+### API keys are session-only by default
 
-Provider **API keys live in this browser session only**
-(`sessionStorage`). This is the safest mode. Session-only keys are:
+Provider **API keys live in this browser session only by default**
+(`sessionStorage`). This is the safest mode. You can explicitly choose
+“Remember API keys on this device” in Settings ▸ Assistant; remembered keys are
+encrypted in the device-local credential vault. In both modes, keys are:
 
-- **never written to long-term storage** (not in localStorage, not in IndexedDB),
+- **never written to workspace storage** (they are not in localStorage or the
+  workspace IndexedDB; remembered keys use a separate encrypted vault),
 - **never included in Google Drive sync snapshots** and never uploaded as Sutra
   workspace data,
 - **never included in any export** (`.sutra` or JSON) or Sutra Sync operation,
   snapshot, asset, diagnostic, or recovery kit.
 
-Because keys are session-scoped, you re-enter your key when you start a new
-session or after importing a workspace on a new device. The provider and model
-**choices** come back automatically; only the secret needs re-entry.
+Because keys are session-scoped by default, you re-enter your key when you start
+a new session or after importing a workspace on a new device. If you opt in to
+remembering them, Sutra restores them on that device only. The provider and
+model **choices** come back automatically in either mode.
 
 ---
 
@@ -530,7 +534,8 @@ never enter the workspace projection.
 - **Sutra Intelligence runs locally** and calls no server.
 - **AI requests go browser → the provider you chose**, and nowhere else. Sutra
   operates no model servers and no relay.
-- **API keys never leave the session** and are never exported.
+- **API keys never enter workspace data** and are never exported; they remain
+  session-only unless you explicitly enable encrypted device-local remembering.
 - **Visible conversation history** is saved locally when enabled, included in
   encrypted backups by default, and included in plaintext recovery only by
   explicit opt-in.

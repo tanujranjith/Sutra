@@ -230,14 +230,16 @@
     "noteflow_atelier_db.workspace.workspace-empty-before-recovery": { "category": "deviceLocal", "reason": "Diagnostic copy of an empty/default root preserved before automatic recovery promotes a richer local candidate." },
     "noteflow_atelier_db.workspace.workspace-confirmed-root": { "category": "deviceLocal", "reason": "Compact data-presence marker written atomically with canonical commits so a deliberate empty workspace is never mistaken for an unexplained reset." },
     "noteflow_attachments_db.blobs": { "category": "asset", "reason": "Required referenced bytes use assetContracts.courseAttachmentBytes." },
+    "sutra_credentials_db": { "category": "secret", "reason": "Optional device-local credential vault. Remembered Assistant API keys and Sutra Cloud refresh tokens are AES-GCM encrypted, account/backend scoped where applicable, never exported or synchronized, and removed by verified origin wipe." },
     "sutra_sync_db": { "category": "deviceLocal", "reason": "Account-scoped outboxes, baselines, cursors, tombstones, dedicated conflict-review records/resolved tombstones, device registration state, wrapped keys, and refresh tokens are sync operations, not workspace payload. The browser never opens one account namespace through another account's sync runtime. Conflict resolutions themselves synchronize as encrypted syncAuditLog records." },
     "sutra-drive-sync-keys": { "category": "secret", "reason": "Device-local wrapped/derived Google Drive backup key material." },
     "sutra-fs-config": { "category": "deviceLocal", "reason": "File-system backup directory handle." },
     "sutra_share_target_db": { "category": "ephemeral", "reason": "Temporary incoming share payload." },
-    "sessionStorage": { "category": "ephemeral", "reason": "In-flight chat context, API keys, UI scroll restoration, Safe Mode, and a bounded same-tab immediate-reload journal for unlocked notes never enter sync. PIN-locked note plaintext is excluded from that journal." }
+    "sessionStorage": { "category": "ephemeral", "reason": "In-flight chat context, session-only API keys, UI scroll restoration, Safe Mode, and a bounded same-tab immediate-reload journal for unlocked notes never enter sync. PIN-locked note plaintext is excluded from that journal. Remembered credentials use the encrypted device-local credential vault instead." }
   },
   "deliberateExclusions": [
     "AI provider API keys and model secrets",
+    "Optional remembered AI provider keys and Sutra Cloud refresh tokens",
     "OAuth credentials and raw access, refresh, and ID tokens",
     "Supabase sessions and the publishable client configuration",
     "passwords and backup or sync passphrases",

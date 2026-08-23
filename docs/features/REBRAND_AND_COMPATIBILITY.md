@@ -52,7 +52,7 @@ Renaming these would have orphaned every existing user's data, so they were deli
 
 **Legacy unencrypted `.sutra` and `.atelier` backups still import.** The import validator accepts **both** the new `sutra-workspace` manifest and the legacy `noteflow_atelier_project` manifest, and the import dispatcher routes both `.sutra` and `.atelier` files to the same package importer. **Old backups are never broken.** You can keep restoring any `.atelier` file you exported under the old name.
 
-**Never exported, in any format:** API keys, provider credentials, tokens, backup passwords, cloud sync passwords, OAuth tokens, and derived keys. API keys are session-only. Drive access tokens and derived sync keys are memory-only. The assistant activity log is not a secret and does travel in backups.
+**Never exported, in any format:** API keys, provider credentials, tokens, backup passwords, cloud sync passwords, OAuth tokens, and derived keys. API keys are session-only by default; explicitly remembered credentials remain encrypted and device-local. Drive access tokens and derived sync keys are memory-only. The assistant activity log is not a secret and does travel in backups.
 
 ---
 

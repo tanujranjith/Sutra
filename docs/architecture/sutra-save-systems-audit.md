@@ -82,8 +82,10 @@ persistence inventory.
   `appData.homeworkWorkspace` at save time and restored to localStorage on import.
 - **Standalone localStorage preferences:** a curated allow-list
   `ATELIER_RAW_LOCALSTORAGE_KEYS` (app.js:35831) is embedded in exports.
-- **Secrets:** AI provider API keys use **sessionStorage only**
-  (`readSensitiveValue`/`writeSensitiveValue`) and are never persisted or exported.
+- **Secrets:** AI provider API keys use **sessionStorage only by default**
+  (`readSensitiveValue`/`writeSensitiveValue`). An explicit “Remember API keys on
+  this device” opt-in stores them encrypted in `sutra_credentials_db`; they are
+  never included in workspace persistence, exports, or sync.
 
 ### Export / import
 - **Serializer:** `buildWorkspaceExportPayload({mode, includeSensitiveSettings})`
@@ -181,7 +183,7 @@ Legend: **R** = survives refresh / IndexedDB reload · **X** = in export payload
 | Sutra Assistant | provider/model choices | localStorage `chat_provider`/`chat_model_by_provider`/`chat_custom_model_by_provider` | ✓ | ✓ | ✓ | PASS |
 | Sutra Assistant | activity log | localStorage `flow:activityLog:v1` | ✓ | ✓ | ✓ | PASS |
 | Sutra Assistant–created items | notes/tasks/timeline/homework/review decks | flow into the normal stores above | ✓ | ✓ | ✓ | PASS |
-| AI secrets | provider API keys | sessionStorage only | ✗ | ✗ (by design) | ✗ | INTENTIONALLY EXCLUDED FROM EXPORT/SYNC |
+| AI secrets | provider API keys | sessionStorage by default; encrypted `sutra_credentials_db` when remembered | ✗ | ✗ (by design) | ✗ | INTENTIONALLY EXCLUDED FROM EXPORT/SYNC |
 | Chat history | visible conversations | managed localStorage store + session compatibility copy | ✓ | encrypted `.sutra` default; plaintext recovery opt-in | ✓ | PASS |
 | Caches | `chat_models_cache_<provider>`, `hwSchemaVersion` | localStorage | ✓ | ✗ (regenerable) | n/a | INTENTIONALLY EXCLUDED |
 | UI scroll restore | scroll positions | sessionStorage | ✗ (session) | ✗ | ✗ | INTENTIONALLY EXCLUDED |
@@ -280,8 +282,10 @@ snapshot is restored (app.js:37920) so links reconcile against final state. Page
 `spaceId`s pointing at missing spaces are remapped to `default` (app.js:37910).
 
 ## 14. Security & secrets handling
-- AI provider API keys are **session-only** and migrated out of any legacy raw
-  localStorage location on read (`readSensitiveValue`). They are never exported.
+- AI provider API keys are **session-only by default** and migrated out of any
+  legacy raw localStorage location on read (`readSensitiveValue`). When the user
+  opts in, the credential vault stores only encrypted values in
+  `sutra_credentials_db`; they are never exported.
 - Both export paths call `buildWorkspaceExportPayload({includeSensitiveSettings:false})`,
   which runs `stripSensitiveSettingFields` to redact any nested
   `apikey/token/secret/password/...` value and records the redacted paths in
@@ -361,8 +365,9 @@ File: `scripts/sutra-persistence-qa.js` (new)
 - Reusable in-browser round-trip harness (see §16).
 
 ## 20. Intentionally excluded data
-- **AI provider API keys / secrets** — sessionStorage only and excluded for
-  privacy. (Provider/model **choices** are exported.)
+- **AI provider API keys / secrets** — sessionStorage by default, or encrypted
+  device-local vault storage after explicit opt-in; excluded for privacy.
+  (Provider/model **choices** are exported.)
 - **Chat history** — optional managed local conversations are included in
   encrypted backups by default; plaintext recovery is opt-in.
 - **Regenerable caches** — `chat_models_cache_<provider>`, `hwSchemaVersion`.

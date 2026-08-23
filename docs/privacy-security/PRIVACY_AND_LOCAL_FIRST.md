@@ -46,9 +46,9 @@ Some things are deliberately kept out of every backup file:
 
 - **AI provider API keys / credentials / tokens.** These live in
   **`sessionStorage` by default**. If you explicitly enable remembered
-  credentials, only an AES-GCM encrypted envelope is written to localStorage;
-  its local secret remains in memory and is never saved. Raw keys and encrypted
-  credential envelopes are **never included in any export** - `.sutra` or JSON.
+  credentials, they are stored as AES-GCM encrypted records in the separate
+  device-local `sutra_credentials_db` vault. Raw keys and encrypted credential
+  records are **never included in any export** - `.sutra` or JSON.
   When you export your workspace, the exporter actively **redacts** any nested
   secret-shaped field (keys, tokens, passwords) so credentials cannot ride along
   by accident.
@@ -58,8 +58,10 @@ Some things are deliberately kept out of every backup file:
   default, excluded from plaintext JSON recovery unless you explicitly opt in,
   and can be disabled or cleared in Assistant settings. API keys, provider
   credentials, hidden reasoning, and backup passwords are never included.
-- **Backup passwords, Google Drive sync passwords, OAuth access tokens, refresh
-  tokens, client secrets, and derived encryption keys** are never exported.
+- **Backup passwords, Google Drive sync passwords, OAuth access tokens, client
+  secrets, and derived encryption keys** are never exported. A remembered
+  Sutra Cloud session stores only its encrypted refresh token in the credential
+  vault; it is never exported or synchronized.
 - **Google Drive sync metadata** (`sutra:googleDriveSync:v1`) and **Sutra Cloud
   metadata** (`sutra:supabaseCloud:v1`) are device-local operational state and are
   deliberately excluded from workspace backups.
@@ -83,6 +85,9 @@ Sutra uses your browser's local storage facilities:
   state needed to warn you after a reload if IndexedDB could not confirm a save.
 - **sessionStorage** holds session-scoped items — principally default-mode AI
   API keys and a compatibility copy of the current chat while the tab is open.
+- **`sutra_credentials_db`** holds only explicitly remembered credentials in
+  encrypted device-local records; it is not workspace data and is never exported
+  or synchronized.
 
 Some of these stores carry **legacy-named compatibility identifiers** - for
 example the workspace database is named `noteflow_atelier_db` and the
@@ -255,7 +260,7 @@ recovery includes them only by explicit opt-in.
 | Does Sutra track me / send telemetry? | No. |
 | Where does my workspace live? | Locally - IndexedDB + localStorage in your browser. |
 | Do AI requests go through Sutra? | No. Browser -> the provider you choose. Sutra runs no model servers. |
-| Are my API keys saved or exported? | No. Provider keys are session-only and are never persisted, exported, or synced. |
+| Are my API keys saved or exported? | By default they are session-only. If you opt in to remembering them, they are encrypted on this device only; they are never exported or synced. |
 | Does the local Intelligence layer call a server? | No. It computes signals on-device. |
 | Can I take my data with me? | Yes - export encrypted `.sutra` or JSON; legacy `.atelier` still imports. |
 | Can I delete everything? | Yes - clear this site's storage; nothing remains on any server. |

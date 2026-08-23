@@ -157,13 +157,13 @@
             title: 'Does Sutra send my data to a server?',
             category: 'privacy',
             availability: 'available',
-            summary: 'No. Sutra is local-first with no backend. Data leaves your device only when you send an AI request to a provider you configured, or opt in to encrypted cloud backup. API keys are session-only and never exported.',
+            summary: 'No. Sutra is local-first with no backend. Data leaves your device only when you send an AI request to a provider you configured, or opt in to encrypted cloud backup. API keys are session-only by default, or encrypted in the optional device-local vault, and never exported.',
             body: [
                 '**Sutra itself makes no server calls and has no backend.** Your workspace stays in your browser on your device.',
                 'Data leaves your device only in two cases, both under your control:',
                 '1. **You send an AI request.** Sutra Assistant sends your message (plus the workspace context allowed by your Workspace Access setting) to the AI provider *you* chose and entered a key for. Locked-note contents and your API keys are never included.',
                 '2. **You opt in to cloud backup.** Encrypted `.sutra` snapshots can be synced to a provider you connect (Google Drive, OneDrive, Dropbox, or Supabase). They are encrypted on your device first.',
-                'Local Help, Product Knowledge, Assistant Memory, and deterministic calculations all work fully **offline with no API key**. API keys are kept for the session only — they are never written to `.sutra` exports, Activity logs, Memory, diagnostics, or any prompt.'
+                'Local Help, Product Knowledge, Assistant Memory, and deterministic calculations all work fully **offline with no API key**. API keys are session-only by default; if you opt in to remembering them, Sutra keeps only encrypted device-local vault records. Keys are never written to `.sutra` exports, Activity logs, Memory, diagnostics, or any prompt.'
             ],
             keywords: ['privacy', 'server', 'data', 'upload', 'cloud', 'send my data', 'tracking', 'telemetry', 'offline', 'local', 'secure', 'safe', 'api key'],
             nav: { view: 'settings', section: 'assistant' },

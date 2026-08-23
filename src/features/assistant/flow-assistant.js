@@ -7631,7 +7631,7 @@
             save.disabled = true;
             status.textContent = provider.id === 'local'
                 ? 'Configure the local base URL in Advanced settings, then test its health and discover models.'
-                : 'The API key stays in sessionStorage and is never exported.';
+                : 'The API key stays in sessionStorage by default and is never exported. Enable encrypted device-local remembering in Settings ▸ Assistant if desired.';
         };
         providerSelect.addEventListener('change', updateProvider);
         configure.addEventListener('click', () => meta.openKeySettings(providerSelect.value));
@@ -7677,7 +7677,7 @@
             try {
                 if (!keyLabel.hidden && keyInput.value.trim()) meta.saveSessionKey(providerSelect.value, keyInput.value.trim());
                 meta.selectModel(providerSelect.value, modelSelect.value);
-                status.textContent = 'Ready. The session-only key will clear when this browser session ends. Sutra will show the exact context and privacy disclosure before the first remote send.';
+                status.textContent = 'Ready. The key is session-only by default; Settings ▸ Assistant can remember it in the encrypted device-local vault. Sutra will show the exact context and privacy disclosure before the first remote send.';
                 showToast('Assistant provider connected.');
             } catch (error) {
                 status.textContent = 'Could not save provider: ' + (error && error.message ? error.message : 'unknown error');

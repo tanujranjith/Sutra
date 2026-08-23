@@ -37,7 +37,10 @@ Full provider matrix, setup, security model, and troubleshooting live in:
 - Every provider receives **ciphertext only** — the controller encrypts once and
   hands adapters an opaque `.sutra` AES-GCM blob. Adapters never see plaintext or
   the passphrase.
-- Cloud passwords / derived keys stay **in memory** (session) only.
+- Cloud backup passwords / derived keys stay **in memory** (session) only. The
+  Supabase refresh token is session-only by default; the explicit “Remember me
+  on this device” option stores it encrypted in the device-local credential
+  vault and never exports or syncs it.
 - Secrets, API keys, OAuth tokens, backup passwords, and conversation history are
   **never** included in an export.
 - Supabase object upload and metadata indexing are treated as one result. A

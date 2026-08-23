@@ -81,7 +81,7 @@ fixtures by `npm run check:migrations`.
 - A curated allow-list of standalone **localStorage preferences** is embedded in
   exports (focus-timer state, streak settings, AI provider/model **choices**, the
   Assistant Activity log, and a couple of feature flags).
-- **Secrets** (AI provider API keys) use **`sessionStorage` only** and are never persisted or exported. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
+- **Secrets** (AI provider API keys) use **`sessionStorage` by default** and are never exported. If the user explicitly enables “Remember API keys on this device,” Sutra stores them as AES-GCM encrypted records in `sutra_credentials_db`; the vault is device-local and excluded from exports and Sync. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
 
 ---
 
@@ -476,7 +476,7 @@ one-way door that discards your prior state with no recourse.
 
 **Excluded by design:**
 
-- **AI provider API keys / secrets** — session-only and excluded from every export and sync snapshot.
+- **AI provider API keys / secrets** — session-only by default, or encrypted in the optional device-local credential vault; excluded from every export and sync snapshot.
 - **Backup passwords, Google Drive sync passwords, OAuth access tokens, refresh
   tokens, client secrets, and derived encryption keys** — never exported.
 - **Google Drive sync operational metadata** (`sutra:googleDriveSync:v1`) —
@@ -536,7 +536,7 @@ round-trip in a browser.
 | `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |
 | `sutra:googleDriveSync:v1` | localStorage | Non-secret Drive sync metadata | Device-local only; not exported |
-| API keys | sessionStorage (default) | Provider credentials | Never exported |
+| API keys | sessionStorage (default), encrypted `sutra_credentials_db` when remembered | Provider credentials | Never exported |
 | `appData.assistantChatHistory` | canonical IndexedDB workspace | Optional visible conversations, ids/order/citations/receipts | Encrypted sync and encrypted backup by default; plaintext recovery opt-in |
 | Managed Assistant chat localStorage keys | localStorage compatibility mirror | One-time legacy import, then canonical-to-mirror only | Never authoritative after migration; stale/empty values cannot erase canonical history |
 

@@ -80,3 +80,48 @@ test('a fresh browser context (new tab/window) does NOT inherit the session key'
   await ctxA.close();
   await ctxB.close();
 });
+
+test('remembered API keys survive a new page in the same browser profile without entering localStorage', async ({ browser }) => {
+  const context = await browser.newContext();
+  const first = await context.newPage();
+  await openApp(first);
+  const KEY = 'sk-groq-remembered-device-test-abc123';
+
+  await first.evaluate((key) => {
+    const input = document.getElementById('groqApiKeyInput');
+    input.value = key;
+    document.getElementById('assistantRememberKeysInput').checked = true;
+    document.getElementById('saveChatKeysBtn').click();
+  }, KEY);
+  await expect.poll(() => first.evaluate(() => sessionStorage.getItem('groq_api_key'))).toBe(KEY);
+  await expect.poll(() => first.evaluate(async () => {
+    const pref = await window.SutraCredentialVault.getPreference('assistantRemember', false);
+    return pref;
+  })).toBe(true);
+  await first.waitForTimeout(250);
+  await first.close();
+
+  const second = await context.newPage();
+  await openApp(second);
+  await expect.poll(() => second.evaluate(() => sessionStorage.getItem('groq_api_key'))).toBe(KEY);
+  expect(await second.evaluate(() => localStorage.getItem('groq_api_key'))).toBeNull();
+  expect(await second.evaluate(() => document.getElementById('groqApiKeyInput').value)).toBe(KEY);
+
+  const vaultText = await second.evaluate(async () => {
+    const request = indexedDB.open('sutra_credentials_db');
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction('credentials', 'readonly');
+    const rows = await new Promise((resolve, reject) => {
+      const get = tx.objectStore('credentials').getAll();
+      get.onsuccess = () => resolve(get.result);
+      get.onerror = () => reject(get.error);
+    });
+    db.close();
+    return JSON.stringify(rows);
+  });
+  expect(vaultText).not.toContain(KEY);
+  await context.close();
+});

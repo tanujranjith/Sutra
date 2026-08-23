@@ -60,6 +60,7 @@
     <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
     <script src="src/core/migrations.js?v=20260813-pdf2"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
+    <script src="src/core/credential-vault.js?v=20260823-credential-vault1"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
     <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
@@ -4432,7 +4433,8 @@
                     </div>
                     <div class="cc-group cc-group-stacked" data-setting-item id="settings-flow-keys">
                         <div class="cc-group-head"><span class="cc-group-title">API keys</span><span class="cc-tag cc-tag-info">Applies immediately</span></div>
-                        <p class="cc-foot-help">Paste a key for each provider you want to use. Keys are kept only in this browser session (sessionStorage), never exported, and never included in Drive sync snapshots. Assistant requests send the key only to the provider you selected.</p>
+                        <p class="cc-foot-help">Paste a key for each provider you want to use. Keys are session-only by default. You can opt to remember them encrypted on this device; they are never exported or included in Drive sync snapshots. Assistant requests send the key only to the provider you selected.</p>
+                        <label class="cc-foot-help" for="assistantRememberKeysInput"><input type="checkbox" id="assistantRememberKeysInput"> Remember API keys on this device (encrypted; anyone using this browser profile may use them)</label>
                         <div class="chat-keys-grid">
                             <div class="chat-key-item">
                                 <label for="groqApiKeyInput">Groq</label>
@@ -7752,7 +7754,7 @@
             <li><a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">Anthropic</a> — paid (add credit)</li>
         </ol>
         <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">New here? <strong>Groq</strong> or <strong>Gemini</strong> are free and take about two minutes: create an account, open the provider's API-keys page, create a key, then paste it in <strong>Settings ▸ Assistant</strong> and pick a Model ID. Full step-by-step for every provider is in the in-app Sutra Assistant guide.</p>
-        <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">API keys are stored only in this browser session (sessionStorage) on this device. We do not upload or store your keys.</p>
+        <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">API keys are session-only by default. If you choose “Remember on this device,” Sutra stores them encrypted in this browser’s private credential vault; they are never uploaded, exported, or synced.</p>
         <div style="display:flex;justify-content:flex-end;margin-top:8px;"><button onclick="closeChatInfo()">Got it</button></div>
     </div>
 
@@ -7864,6 +7866,7 @@
          fully local through the pinned vendored runtimes below. -->
     <script src="src/features/workspace/pdf-engine.js?v=20260823-pdf4"></script>
     <script src="src/core/app.js?v=20260823-storage6"></script>
+    <script src="src/core/credential-vault-bridge.js?v=20260823-credential-bridge1"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>

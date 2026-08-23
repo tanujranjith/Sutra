@@ -127,9 +127,13 @@ note-content seam, but Sutra does not claim Google Docs-style live co-editing.
   and other Sutra origin storage, then acknowledges completion. Unsynchronized
   work on that device is lost. A browser that stays offline or powered off cannot
   be remotely erased; downloaded backups/external files are not browser data.
-- Deliberate deviation from backups: sync persists the Supabase **refresh
-  token** in its own IndexedDB (device-local, never exported) so sync survives
-  browser restarts; the vault still requires your passphrase each session.
+- Sync persists the Supabase **refresh token** in its own account-scoped
+  IndexedDB (device-local, never exported) so sync survives browser restarts;
+  the vault still requires your passphrase each session. Backup-only Cloud
+  sign-in remains session-only by default, but its setup offers an explicit
+  “Remember me on this device” option that stores the refresh token encrypted
+  in the separate `sutra_credentials_db` vault. Neither path places credentials
+  in workspace backups or Sync payloads.
   Its device-local queue, baseline, device ID, wrapped key, assets, conflicts,
   and refresh token are namespace-scoped to the authenticated account. If a
   browser profile signs in as a different account, the persisted enable flag

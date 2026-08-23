@@ -6,6 +6,7 @@
   var DATABASES = Object.freeze([
     'noteflow_atelier_db',
     'noteflow_attachments_db',
+    'sutra_credentials_db',
     'sutra_sync_db',
     'sutra-drive-sync-keys',
     'sutra-fs-config',

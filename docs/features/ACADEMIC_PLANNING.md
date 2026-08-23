@@ -93,7 +93,8 @@ Because the engines are deterministic and tested in isolation, the academic
   (`window.SutraIntelligenceBridge.extractStructured` →
   `performIntelligenceRequest`), and triggers the same explicit send-disclosure
   modal as every other AI feature. The provider is the one the user already
-  configured; API keys are session-only and are never persisted or exported.
+  configured; API keys are session-only by default, or encrypted in the optional
+  device-local credential vault, and are never exported.
 - **No silent writes.** Nothing reaches the workspace until the user approves it
   on the review screen. Applied imports are logged to Assistant Activity.
 - **Deterministic stays separate from interpretation.** Grades are computed by
