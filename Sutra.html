@@ -7404,7 +7404,7 @@
                         <i class="fas fa-file-import" aria-hidden="true"></i>
                         <div class="import-drop-title">Drag and drop your file here</div>
                         <div class="import-drop-subtitle">Supports Sutra (.sutra), legacy Atelier (.atelier), JSON, PDF, DOCX, DOC, XLSX, PPTX, EPUB, Markdown, and more.</div>
-                    <div class="import-drop-help">Document imports create a new note in your local workspace. Workspace and JSON imports replace the current workspace.</div>
+                    <div class="import-drop-help">PDF imports attach the original and open the native PDF workspace. Other document imports create a new note. Workspace and JSON imports replace the current workspace.</div>
                     <div class="import-drop-actions">
                         <button type="button" class="btn btn-primary" id="importDropBrowseBtn">Choose File</button>
                     </div>
@@ -7780,9 +7780,9 @@
     <script src="src/features/workspace/pdf-runtime-loader.js?v=20260813-pdf1"></script>
     <!-- PDF records normalize before core hydration. Rendering and export stay
          fully local through the pinned vendored runtimes below. -->
-    <script src="src/features/workspace/pdf-engine.js?v=20260813-pdf3"></script>
-    <script src="src/core/app.js?v=20260813-pdf7"></script>
-    <script src="src/features/workspace/pdf-workspace.js?v=20260813-pdf16"></script>
+    <script src="src/features/workspace/pdf-engine.js?v=20260823-pdf4"></script>
+    <script src="src/core/app.js?v=20260815-pdf11"></script>
+    <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20260813-pdf1"></script>
@@ -8209,7 +8209,7 @@
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260807-slidesworkbench1">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260810-sheets1">
-    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260813-pdf4">
+    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260815-pdf7">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

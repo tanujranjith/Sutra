@@ -49145,6 +49145,34 @@ function getActiveEditor() {
         }
         installSutraCanvasApi();
 
+        function linkedPdfIdForNotePage(page) {
+            const match = String(page && page.content || '').match(/data-sutra-pdf-card=["']([^"']+)["']/);
+            return match ? String(match[1]) : '';
+        }
+
+        function reopenLinkedPdfForNotePage(page) {
+            if (!page || document.body.getAttribute('data-view') !== 'notes') return;
+            if (!window.SutraPdfWorkspace || typeof window.SutraPdfWorkspace.open !== 'function') return;
+            const fileId = linkedPdfIdForNotePage(page);
+            if (!fileId) return;
+            const active = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
+            if (active && String(active.fileId) === fileId && String(active.pageId || '')) return;
+            window.setTimeout(() => {
+                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes') return;
+                const current = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
+                if (current && String(current.fileId) === fileId) return;
+                window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: page.id }).catch(error => {
+                    console.warn('Linked PDF surface could not be restored.', error);
+                });
+            }, 0);
+        }
+
+        window.addEventListener('sutra:pdf-workspace-ready', () => {
+            if (document.body.getAttribute('data-view') !== 'notes') return;
+            const page = pages.find(item => item && item.id === currentPageId);
+            reopenLinkedPdfForNotePage(page);
+        });
+
         function loadPage(pageId) {
             purgeExpiredTemporaryPages({ silent: true });
 
@@ -49239,6 +49267,7 @@ function getActiveEditor() {
                         setSplitViewEnabled(false);
                     }
                 }
+                reopenLinkedPdfForNotePage(page);
             }
         }
 
@@ -60652,7 +60681,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // mirror after the note first appears.
             const safeContent = sanitizeEditorHtml(contentHtml);
             const page = {
-                id: generateId(),
+                id: String(options && options.id || generateId()),
                 title,
                 type: PAGE_TYPES.NOTE,
                 content: safeContent || '<p>(No readable content found)</p>',
@@ -63274,18 +63303,27 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const added = await addWorkspaceAttachmentFromBlob(file, { source: context.source || 'notes_upload' });
             if (!added) throw new Error('The PDF could not be attached.');
             const title = String(context.title || '').trim().slice(0, 200) || `PDF::${getBaseFileName(file.name)}`;
-            const page = createImportedPage(title, '<p>Preparing linked PDF…</p>', PAGE_ICONS.PDF);
-            linkWorkspaceAttachment(added.id, 'note', page.id);
+            const pageId = generateId();
             const sourceParts = [];
             if (context.url) sourceParts.push(`<p><strong>Source URL:</strong> ${escapeHtml(String(context.url).slice(0, 8000))}</p>`);
             if (context.text) sourceParts.push(`<blockquote>${normalizeTextToHtml(String(context.text).slice(0, 80000))}</blockquote>`);
-            page.content = sanitizeEditorHtml(sourceParts.join('') + buildLinkedPdfCardHtml(added, page.id));
+            const page = createImportedPage(title, sourceParts.join('') + buildLinkedPdfCardHtml(added, pageId), PAGE_ICONS.PDF, { id: pageId });
+            linkWorkspaceAttachment(added.id, 'note', page.id);
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
-            await flushAppSaveNow('pdf-note-attachment');
             renderPagesList();
             loadPage(page.id);
-            showToast(`Attached "${file.name}" to a new note`);
+            await flushAppSaveNow('pdf-note-attachment');
+            if (context.openWorkspace === true && window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') {
+                try {
+                    await window.SutraPdfWorkspace.open(added.id, { entityType: 'note', entityId: page.id });
+                } catch (error) {
+                    console.warn('Native PDF workspace failed after import; keeping the PDF in Notes.', error);
+                    showToast('The PDF was saved to Notes, but the native workspace could not open it.');
+                }
+            } else {
+                showToast(`Attached "${file.name}" to a new note`);
+            }
             return page;
         }
 
@@ -63313,7 +63351,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const pageId = control.getAttribute('data-page-id');
             try {
                 if (control.getAttribute('data-sutra-pdf-action') === 'convert') await convertLinkedPdfToNote(fileId, pageId);
-                else if (window.SutraPdfWorkspace && window.SutraPdfWorkspace.isEnabled()) await window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: pageId });
+                else if (window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') await window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: pageId });
                 else await openCourseFile(fileId);
             } catch (error) {
                 console.warn('Linked PDF action failed', error);
@@ -63890,7 +63928,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         }
                     }
                 } else if (kind === 'document') {
-                    if (getFileExtension(file.name) === 'pdf') await attachPdfIntoNewNote(file, { source: 'notes_upload' });
+                    if (getFileExtension(file.name) === 'pdf') await attachPdfIntoNewNote(file, { source: 'notes_upload', openWorkspace: true });
                     else await importDocumentIntoNewPage(file);
                 } else {
                     throw new Error('Unsupported file type. Choose a .sutra backup, legacy .atelier backup, JSON workspace, or a supported document file.');

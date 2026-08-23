@@ -67,10 +67,36 @@ test('attachment link normalization deduplicates many-to-many relationships', ()
   const links = pdf.normalizeAttachmentLinks([
     { id: 'a', fileId: 'file', entityType: 'note', entityId: 'note', createdAt: '2026-01-01' },
     { id: 'b', fileId: 'file', entityType: 'note', entityId: 'note', createdAt: '2026-01-02' },
-    { id: 'c', fileId: 'file', entityType: 'unsupported', entityId: 'x' }
+    { id: 'c', fileId: 'file', entityType: 'unsupported entity', entityId: 'x' }
   ]);
   assert.equal(links.length, 1);
   assert.equal(links[0].id, 'a');
+});
+
+test('normalizers preserve future fields and schema versions', () => {
+  const document = pdf.normalizeDocument({
+    id: 'document', fileId: 'file', schemaVersion: 3, futureDocumentField: { retained: true },
+    pages: [{ id: 'page', sourceFileId: 'file', sourcePageIndex: 0, futurePageField: 'retained' }],
+    bookmarks: [{ id: 'bookmark', pageId: 'page', title: 'Saved', futureBookmarkField: 1 }],
+    checkpoints: [{ id: 'checkpoint', label: 'Saved', pages: [], futureCheckpointField: 2 }]
+  });
+  const annotation = pdf.normalizeAnnotation({
+    id: 'annotation', documentId: 'document', pageId: 'page', type: 'comment',
+    geometry: { x: 0.1, y: 0.2, width: 0.3, height: 0.1, futureGeometryField: 3 },
+    style: { color: '#123456', futureStyleField: 4 }, futureAnnotationField: 5
+  });
+  const [link] = pdf.normalizeAttachmentLinks([{ id: 'link', fileId: 'file', entityType: 'future_entity', entityId: 'future', futureLinkField: 6 }]);
+
+  assert.equal(document.schemaVersion, 3);
+  assert.deepEqual(document.futureDocumentField, { retained: true });
+  assert.equal(document.pages[0].futurePageField, 'retained');
+  assert.equal(document.bookmarks[0].futureBookmarkField, 1);
+  assert.equal(document.checkpoints[0].futureCheckpointField, 2);
+  assert.equal(annotation.futureAnnotationField, 5);
+  assert.equal(annotation.geometry.futureGeometryField, 3);
+  assert.equal(annotation.style.futureStyleField, 4);
+  assert.equal(link.entityType, 'future_entity');
+  assert.equal(link.futureLinkField, 6);
 });
 
 test('export defaults choose annotated only when annotations exist', () => {

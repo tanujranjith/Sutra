@@ -41,6 +41,7 @@ test('native PDF workspace stores once, renders locally, persists annotations, a
   });
 
   await expect(page.locator('.pdfw-root')).toBeVisible();
+  await expect(page.locator('[data-action="close"]')).toHaveText('Close');
   await expect(page.locator('.pdfw-page canvas')).toHaveCount(1);
   await expect(page.locator('.pdfw-text-layer')).toContainText('Sutra PDF workspace fixture');
   await expect(page.locator('.pdfw-form-field[name="student.name"]')).toHaveValue('Ada');
@@ -97,18 +98,21 @@ test('PDF page organizer keeps source bytes and requires references to be remove
   await loadFixturePdfLib(page);
   const result = await page.evaluate(async () => {
     const documentRecord = await window.PDFLib.PDFDocument.create();
-    documentRecord.addPage([300, 400]); documentRecord.addPage([300, 400]);
+    const rotatedPage = documentRecord.addPage([300, 400]);
+    rotatedPage.setRotation(window.PDFLib.degrees(90));
+    documentRecord.addPage([300, 400]);
     const file = new File([await documentRecord.save()], 'organizer.pdf', { type: 'application/pdf' });
     const [meta] = await window.SutraAttachments.addFiles([file], { entityType: 'assignment', entityId: 'assignment-pdf-e2e' });
     await window.SutraPdfWorkspace.open(meta.id, { entityType: 'assignment', entityId: 'assignment-pdf-e2e' });
     const pdfRecord = window.SutraPdfData.findByFile(meta.id);
-    return { fileId: meta.id, documentId: pdfRecord.id, firstPageId: pdfRecord.pages[0].id };
+    return { fileId: meta.id, documentId: pdfRecord.id, firstPageId: pdfRecord.pages[0].id, sourceRotation: pdfRecord.pages[0].rotation };
   });
+  expect(result.sourceRotation).toBe(90);
   await page.locator('[data-action="organizer"]').click();
   await page.locator('.pdfw-organizer-row').first().locator('[data-action="rotate"]').click();
   await expect(page.locator('.pdfw-page canvas')).toHaveCount(2);
   const durable = await page.evaluate(documentId => window.SutraPdfData.getDocument(documentId), result.documentId);
-  expect(durable.pages[0].rotation).toBe(90);
+  expect(durable.pages[0].rotation).toBe(180);
   const refused = await page.evaluate(fileId => window.SutraAttachments.remove(fileId), result.fileId);
   expect(refused.removed).toBe(false);
   expect(refused.reason).toBe('referenced');

@@ -23,7 +23,7 @@
     var y = clamp(source.y, 0, 1);
     var width = clamp(source.width, 0, 1 - x);
     var height = clamp(source.height, 0, 1 - y);
-    return { x: x, y: y, width: width, height: height };
+    return Object.assign({}, source, { x: x, y: y, width: width, height: height });
   }
   function normalizeGeometry(raw) {
     var source = raw && typeof raw === 'object' ? raw : {};
@@ -35,12 +35,12 @@
   function normalizeStyle(raw) {
     var source = raw && typeof raw === 'object' ? raw : {};
     var color = /^#[0-9a-f]{6}$/i.test(text(source.color)) ? text(source.color) : '#facc15';
-    return {
+    return Object.assign({}, source, {
       color: color,
       opacity: clamp(source.opacity == null ? 0.42 : source.opacity, 0.05, 1),
       width: clamp(source.width == null ? 0.004 : source.width, 0.001, 0.08),
       fontSize: clamp(source.fontSize == null ? 0.025 : source.fontSize, 0.008, 0.15)
-    };
+    });
   }
   function normalizeInkPaths(raw) {
     return (Array.isArray(raw) ? raw : []).map(function (path) {
@@ -53,7 +53,7 @@
     if (!raw || typeof raw !== 'object') return null;
     var type = ANNOTATION_TYPES.indexOf(text(raw.type)) >= 0 ? text(raw.type) : 'comment';
     var now = new Date().toISOString();
-    return {
+    return Object.assign({}, raw, {
       id: text(raw.id || id('pdfann_')),
       documentId: text(raw.documentId),
       pageId: text(raw.pageId),
@@ -66,13 +66,13 @@
       value: raw.value == null ? '' : clone(raw.value, ''),
       createdAt: iso(raw.createdAt || now),
       updatedAt: iso(raw.updatedAt || now)
-    };
+    });
   }
   function normalizePage(raw, index, fileId) {
     var source = raw && typeof raw === 'object' ? raw : {};
     var rotation = Math.round(number(source.rotation, 0) / 90) * 90;
     rotation = ((rotation % 360) + 360) % 360;
-    return {
+    return Object.assign({}, source, {
       id: text(source.id || id('pdfpage_')),
       sourceFileId: text(source.sourceFileId || fileId),
       sourcePageIndex: Math.max(0, Math.floor(number(source.sourcePageIndex, index))),
@@ -81,11 +81,11 @@
       width: Math.max(1, number(source.width, 612)),
       height: Math.max(1, number(source.height, 792)),
       removed: source.removed === true
-    };
+    });
   }
   function normalizeBookmark(raw) {
     if (!raw || typeof raw !== 'object') return null;
-    return { id: text(raw.id || id('pdfbm_')), pageId: text(raw.pageId), title: text(raw.title || 'Bookmark').slice(0, 300), createdAt: iso(raw.createdAt) };
+    return Object.assign({}, raw, { id: text(raw.id || id('pdfbm_')), pageId: text(raw.pageId), title: text(raw.title || 'Bookmark').slice(0, 300), createdAt: iso(raw.createdAt) });
   }
   function normalizeDocument(raw) {
     if (!raw || typeof raw !== 'object') return null;
@@ -94,32 +94,32 @@
     var pages = (Array.isArray(raw.pages) ? raw.pages : []).map(function (page, index) { return normalizePage(page, index, fileId); });
     pages.sort(function (a, b) { return a.order - b.order || a.sourcePageIndex - b.sourcePageIndex; });
     pages.forEach(function (page, index) { page.order = index; });
-    return {
+    return Object.assign({}, raw, {
       id: text(raw.id || id('pdfdoc_')),
       fileId: fileId,
-      schemaVersion: 1,
+      schemaVersion: Math.max(1, Math.floor(number(raw.schemaVersion, 1))),
       pages: pages,
       bookmarks: (Array.isArray(raw.bookmarks) ? raw.bookmarks : []).map(normalizeBookmark).filter(Boolean),
       checkpoints: (Array.isArray(raw.checkpoints) ? raw.checkpoints : []).map(function (checkpoint) {
         if (!checkpoint || typeof checkpoint !== 'object') return null;
-        return {
+        return Object.assign({}, checkpoint, {
           id: text(checkpoint.id || id('pdfcheckpoint_')),
           label: text(checkpoint.label || 'Checkpoint').slice(0, 200),
           pages: (Array.isArray(checkpoint.pages) ? checkpoint.pages : []).map(function (page, index) { return normalizePage(page, index, fileId); }),
           createdAt: iso(checkpoint.createdAt)
-        };
+        });
       }).filter(Boolean).slice(-10),
       createdAt: iso(raw.createdAt || now),
       updatedAt: iso(raw.updatedAt || now)
-    };
+    });
   }
   function normalizeAttachmentLink(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var entityType = text(raw.entityType);
-    if (ENTITY_TYPES.indexOf(entityType) < 0) return null;
+    if (!/^[a-z][a-z0-9_:-]{0,63}$/i.test(entityType)) return null;
     var fileId = text(raw.fileId); var entityId = text(raw.entityId);
     if (!fileId || !entityId) return null;
-    return { id: text(raw.id || id('attlink_')), fileId: fileId, entityType: entityType, entityId: entityId, createdAt: iso(raw.createdAt) };
+    return Object.assign({}, raw, { id: text(raw.id || id('attlink_')), fileId: fileId, entityType: entityType, entityId: entityId, createdAt: iso(raw.createdAt) });
   }
   function dedupeLinks(raw) {
     var seen = Object.create(null);

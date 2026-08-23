@@ -89,11 +89,12 @@
     }
     return unicodeFontBytesPromise;
   }
-  async function getPdfDocument(bytes) {
+  async function getPdfDocument(bytes, options) {
     var lib = await loadPdfJs();
+    options = options || {};
     var task = lib.getDocument({
       data: bytes.slice(),
-      disableWorker: location.protocol === 'file:',
+      disableWorker: location.protocol === 'file:' || options.disableWorker === true,
       isEvalSupported: false,
       enableXfa: false,
       useSystemFonts: false,
@@ -106,7 +107,13 @@
       var password = global.prompt(promptText, '');
       if (password == null) task.destroy(); else updatePassword(password);
     };
-    return task.promise;
+    var timeout = new Promise(function (_, reject) { setTimeout(function () { reject(new Error('PDF worker timed out.')); }, 12000); });
+    try { return await Promise.race([task.promise, timeout]); }
+    catch (error) {
+      try { if (typeof task.destroy === 'function') await task.destroy(); } catch (_) {}
+      if (!options.disableWorker && location.protocol !== 'file:') return getPdfDocument(bytes, { disableWorker: true });
+      throw error;
+    }
   }
   async function releasePdf(pdf) {
     if (!pdf) return;
@@ -115,6 +122,14 @@
   }
   function close() {
     if (!state) return;
+    var wasEmbedded = !!state.embedded;
+    var notesToolbarWrapper = state.notesToolbarWrapper;
+    var notesToolbar = state.notesToolbar;
+    if (notesToolbarWrapper) {
+      (state.pdfToolbarNodes || []).forEach(function (node) { if (node && node.parentNode === notesToolbarWrapper) node.remove(); });
+      notesToolbarWrapper.classList.remove('pdf-toolbar-active');
+    }
+    if (notesToolbar) notesToolbar.classList.remove('pdf-notes-toolbar-hidden');
     try { if (state.observer) state.observer.disconnect(); } catch (_) {}
     try { if (state.thumbnailObserver) state.thumbnailObserver.disconnect(); } catch (_) {}
     try { state.sourceUrls.forEach(function (url) { URL.revokeObjectURL(url); }); } catch (_) {}
@@ -122,6 +137,7 @@
     state = null;
     if (root) root.remove();
     document.documentElement.classList.remove('pdf-workspace-open');
+    if (wasEmbedded) document.body.classList.remove('pdf-page-active');
   }
   function getContext() {
     if (!state) return null;
@@ -225,7 +241,7 @@
     if (!state) return;
     var panel = state.inspectorContent;
     panel.replaceChildren();
-    var inspectorTop = el('div', 'pdfw-inspector-top'); inspectorTop.appendChild(el('h3', '', 'Document')); inspectorTop.appendChild(button('Close', 'close-inspector')); panel.appendChild(inspectorTop);
+    var inspectorTop = el('div', 'pdfw-inspector-top'); inspectorTop.appendChild(el('h3', '', 'Document')); panel.appendChild(inspectorTop);
     var outlineHeading = el('h3', '', 'Outline'); panel.appendChild(outlineHeading);
     if (!state.outline.length) panel.appendChild(el('p', 'pdfw-muted', 'No document outline.'));
     state.outline.forEach(function (item) {
@@ -297,16 +313,28 @@
     var shell = currentState.pageNodes[pageRecord.id]; if (!shell) return;
     var job = (async function () {
       var source = await ensureSource(pageRecord.sourceFileId); var pdfPage = await source.pdf.getPage(pageRecord.sourcePageIndex + 1);
+      var needsSourceMetadata = currentState.sourceMetadataPending instanceof Set && currentState.sourceMetadataPending.has(pageRecord.id);
+      if (needsSourceMetadata) pageRecord.rotation = Number(pdfPage.rotate || 0);
       var viewport = pdfPage.getViewport({ scale: currentState.zoom, rotation: pageRecord.rotation });
       pageRecord.width = viewport.width / currentState.zoom; pageRecord.height = viewport.height / currentState.zoom;
+      if (needsSourceMetadata) {
+        currentState.documentRecord = persistDocument(currentState.documentRecord);
+        currentState.sourceMetadataPending.delete(pageRecord.id);
+      }
       shell.style.width = viewport.width + 'px'; shell.style.height = viewport.height + 'px'; shell.dataset.pageId = pageRecord.id;
       var canvas = shell.querySelector('canvas'); canvas.width = Math.ceil(viewport.width * devicePixelRatio); canvas.height = Math.ceil(viewport.height * devicePixelRatio);
       canvas.style.width = viewport.width + 'px'; canvas.style.height = viewport.height + 'px';
       var context = canvas.getContext('2d', { alpha: false }); context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      await pdfPage.render({ canvasContext: context, viewport: viewport, intent: 'display' }).promise;
+      var renderTask = pdfPage.render({ canvasContext: context, viewport: viewport, intent: 'display' });
+      var renderTimeout = new Promise(function (_, reject) { setTimeout(function () { reject(new Error('PDF page rendering timed out.')); }, 20000); });
+      try { await Promise.race([renderTask.promise, renderTimeout]); } catch (renderError) { try { if (typeof renderTask.cancel === 'function') renderTask.cancel(); } catch (_) {} throw renderError; }
       if (state !== currentState || currentState.renderGeneration !== generation) return;
-      await renderTextLayer(pdfPage, viewport, shell, pageRecord); await renderForms(pdfPage, viewport, shell, pageRecord);
-      renderAnnotations(pageRecord.id); currentState.rendered[key] = true; renderInspector();
+      currentState.rendered[key] = true;
+      message('Page ' + (currentState.documentRecord.pages.indexOf(pageRecord) + 1) + ' ready.');
+      renderAnnotations(pageRecord.id); renderInspector();
+      Promise.all([renderTextLayer(pdfPage, viewport, shell, pageRecord), renderForms(pdfPage, viewport, shell, pageRecord)])
+        .then(function () { if (state === currentState && currentState.renderGeneration === generation) renderInspector(); })
+        .catch(function (error) { report(error, 'pdf-page-text-layer'); });
     }());
     currentState.rendered[key] = job;
     try { await job; } catch (error) { if (currentState.rendered[key] === job) delete currentState.rendered[key]; throw error; }
@@ -368,7 +396,12 @@
     var page = owner && owner.closest ? owner.closest('.pdfw-page') : null; if (!page) return null;
     var geometry = selectionGeometry(page); var selectedText = selection.toString().trim(); if (!geometry || !selectedText) return null;
     state.selectionDraft = { pageId: page.dataset.pageId, geometry: storedGeometry(page.dataset.pageId, geometry), text: selectedText.slice(0, 50000) };
+    setSelectionActionsVisible(true);
     return state.selectionDraft;
+  }
+  function setSelectionActionsVisible(visible) {
+    if (!state || !state.selectionActions) return;
+    state.selectionActions.hidden = !visible;
   }
   function saveAnnotation(annotation) {
     var normalized = global.SutraPdfData.upsertAnnotation(annotation);
@@ -376,17 +409,51 @@
     if (index >= 0) state.annotations[index] = normalized; else state.annotations.push(normalized);
     renderAnnotations(normalized.pageId); renderInspector(); return normalized;
   }
+  function showInputDialog(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      if (!state || !state.root) { resolve(null); return; }
+      var previous = document.activeElement;
+      var dialog = el('dialog', 'pdfw-input-dialog');
+      var title = el('h2', '', options.title || 'Add to PDF');
+      var titleId = 'pdfw-input-title-' + String(Date.now()); title.id = titleId;
+      var form = el('form'); form.method = 'dialog'; form.appendChild(title);
+      if (options.help) form.appendChild(el('p', 'pdfw-input-help', options.help));
+      var label = el('label', 'pdfw-input-label', options.label || 'Text');
+      var field = document.createElement(options.multiline ? 'textarea' : 'input');
+      field.className = 'pdfw-input-field'; field.name = 'value'; field.autocomplete = 'off';
+      field.value = options.defaultValue || ''; field.placeholder = options.placeholder || '';
+      if (options.multiline) { field.rows = 4; field.maxLength = 5000; } else { field.type = options.type || 'text'; field.maxLength = 5000; }
+      label.appendChild(field); form.appendChild(label);
+      var actions = el('div', 'pdfw-dialog-actions'); actions.appendChild(button('Cancel', 'cancel-input')); actions.appendChild(button(options.confirmLabel || 'Insert', 'confirm-input')); form.appendChild(actions);
+      dialog.appendChild(form); dialog.setAttribute('aria-labelledby', titleId); dialog.setAttribute('aria-modal', 'true'); state.root.appendChild(dialog);
+      var settled = false;
+      function finish(value) {
+        if (settled) return; settled = true; dialog.close(); dialog.remove();
+        if (previous && typeof previous.focus === 'function') { try { previous.focus(); } catch (_) {} }
+        resolve(value);
+      }
+      form.addEventListener('submit', function (event) { event.preventDefault(); finish(String(field.value || '').trim()); });
+      dialog.addEventListener('close', function () { if (!settled) finish(null); });
+      dialog.addEventListener('cancel', function (event) { event.preventDefault(); finish(null); });
+      dialog.addEventListener('click', function (event) {
+        var action = event.target.closest('[data-action]'); if (!action) return;
+        event.preventDefault(); finish(action.dataset.action === 'confirm-input' ? String(field.value || '').trim() : null);
+      });
+      dialog.showModal(); setTimeout(function () { field.focus(); if (field.select) field.select(); }, 0);
+    });
+  }
   function addSelectionAnnotation(type) {
     var draft = captureSelectionDraft() || state.selectionDraft; if (!draft) return false;
     pushUndo('Add ' + type); saveAnnotation({ documentId: state.documentRecord.id, pageId: draft.pageId, type: type, geometry: draft.geometry, text: draft.text, style: { color: state.color } });
     var selection = global.getSelection(); if (selection) selection.removeAllRanges(); return true;
   }
-  function addPointAnnotation(event, page, type) {
+  async function addPointAnnotation(event, page, type) {
     var point = normalizedPoint(event, page); var text = '';
-    if (type === 'text') text = global.prompt('Text box content:', '') || '';
-    if (type === 'comment') text = global.prompt('Comment:', '') || '';
-    if (type === 'stamp') text = global.prompt('Stamp text:', 'APPROVED') || 'APPROVED';
-    if (!text && type !== 'comment') return;
+    if (type === 'text') text = await showInputDialog({ title: 'Add text to PDF', label: 'Text box content', multiline: true, placeholder: 'Type the text you want to place on the page.' });
+    if (type === 'comment') text = await showInputDialog({ title: 'Add comment', label: 'Comment', multiline: true, placeholder: 'Leave a note about this page.' });
+    if (type === 'stamp') text = await showInputDialog({ title: 'Add stamp', label: 'Stamp text', defaultValue: 'APPROVED', placeholder: 'APPROVED' });
+    if (!text) return;
     pushUndo('Add ' + type); saveAnnotation({ documentId: state.documentRecord.id, pageId: page.dataset.pageId, type: type, geometry: storedGeometry(page.dataset.pageId, { x: point.x, y: point.y, width: type === 'comment' ? 0.035 : 0.24, height: type === 'comment' ? 0.035 : 0.06 }), text: text, style: { color: state.color, opacity: 0.9 } });
   }
   function bindPageInput() {
@@ -398,7 +465,7 @@
         if (existing) renderAnnotations(existing.pageId); renderInspector(); return;
       }
       var page = event.target.closest('.pdfw-page'); if (!page) return;
-      if (['text', 'comment', 'stamp'].includes(state.tool)) { event.preventDefault(); addPointAnnotation(event, page, state.tool); return; }
+      if (['text', 'comment', 'stamp'].includes(state.tool)) { event.preventDefault(); addPointAnnotation(event, page, state.tool).catch(function (error) { report(error, 'pdf-annotation-dialog'); }); return; }
       if (!['ink', 'signature'].includes(state.tool)) return;
       event.preventDefault(); page.setPointerCapture(event.pointerId); var path = [normalizedPoint(event, page)];
       function move(moveEvent) { path.push(normalizedPoint(moveEvent, page)); }
@@ -597,25 +664,45 @@
     }); dialog.showModal();
   }
   function buildUi() {
-    var root = el('section', 'pdfw-root'); root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Sutra PDF workspace');
-    var topbar = el('header', 'pdfw-topbar'); topbar.appendChild(button('← Close', 'close')); var title = el('strong', 'pdfw-title', state.file.name || 'PDF'); topbar.appendChild(title);
+    var root = el('section', 'pdfw-root' + (state.embedded ? ' pdfw-root-embedded' : ''));
+    root.setAttribute('role', state.embedded ? 'region' : 'dialog');
+    if (!state.embedded) root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-label', 'Sutra PDF workspace');
+    var topbar = el('header', 'pdfw-topbar'); var title = el('strong', 'pdfw-title', state.file.name || 'PDF'); topbar.appendChild(title);
     var search = el('input', 'pdfw-search'); search.type = 'search'; search.placeholder = 'Search PDF'; search.setAttribute('aria-label', 'Search PDF'); topbar.appendChild(search);
     topbar.appendChild(button('−', 'zoom-out', 'Zoom out')); var zoom = el('output', 'pdfw-zoom', '100%'); topbar.appendChild(zoom); topbar.appendChild(button('+', 'zoom-in', 'Zoom in'));
-    topbar.appendChild(button('Print', 'print')); topbar.appendChild(button('Pages', 'organizer')); topbar.appendChild(button('Export', 'export')); root.appendChild(topbar);
+    topbar.appendChild(button('Print', 'print')); topbar.appendChild(button('Pages', 'organizer')); topbar.appendChild(button('Export', 'export')); topbar.appendChild(button(state.embedded ? 'Back to note' : 'Close', 'close'));
     var tools = el('nav', 'pdfw-toolbar'); tools.setAttribute('aria-label', 'PDF annotation tools');
-    [['select', 'Select'], ['highlight', 'Highlight'], ['underline', 'Underline'], ['strikeout', 'Strike'], ['ink', 'Ink'], ['signature', 'Signature'], ['erase', 'Erase'], ['text', 'Text'], ['comment', 'Comment'], ['stamp', 'Stamp']].forEach(function (entry) { tools.appendChild(button(entry[1], 'tool-' + entry[0])); });
-    tools.appendChild(button('Bookmark', 'bookmark')); tools.appendChild(button('Comments', 'inspector')); tools.appendChild(button('Undo', 'undo')); tools.appendChild(button('Redo', 'redo'));
-    tools.appendChild(button('Copy selection', 'selection-copy')); tools.appendChild(button('Highlight selection', 'selection-highlight'));
-    tools.appendChild(button('Comment selection', 'selection-comment')); tools.appendChild(button('Send to Note', 'selection-note'));
-    tools.appendChild(button('Create Review Card', 'selection-review')); tools.appendChild(button('Ask Assistant', 'selection-assistant'));
-    var color = el('input', 'pdfw-color'); color.type = 'color'; color.value = state.color; color.setAttribute('aria-label', 'Annotation color'); tools.appendChild(color); root.appendChild(tools);
+    function group(label, className) { var node = el('div', 'pdfw-tool-group' + (className ? ' ' + className : '')); node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); return node; }
+    var primary = group('Markup tools', 'pdfw-tool-group-primary');
+    [['select', 'Select'], ['highlight', 'Highlight'], ['underline', 'Underline'], ['strikeout', 'Strike'], ['ink', 'Ink'], ['text', 'Text'], ['comment', 'Comment'], ['erase', 'Erase']].forEach(function (entry) { primary.appendChild(button(entry[1], 'tool-' + entry[0])); });
+    tools.appendChild(primary);
+    var documentTools = group('Document tools', 'pdfw-tool-group-secondary');
+    [['signature', 'Signature'], ['stamp', 'Stamp'], ['bookmark', 'Bookmark'], ['inspector', 'Comments'], ['undo', 'Undo'], ['redo', 'Redo']].forEach(function (entry) { documentTools.appendChild(button(entry[1], entry[0] === 'signature' || entry[0] === 'stamp' ? 'tool-' + entry[0] : entry[0])); });
+    tools.appendChild(documentTools);
+    tools.appendChild(el('span', 'pdfw-toolbar-divider'));
+    var selectionActions = group('Actions for selected text', 'pdfw-tool-group-selection'); selectionActions.hidden = true;
+    [['Copy selection', 'selection-copy'], ['Highlight selection', 'selection-highlight'], ['Comment selection', 'selection-comment'], ['Send to Note', 'selection-note'], ['Review card', 'selection-review'], ['Ask Assistant', 'selection-assistant']].forEach(function (entry) { selectionActions.appendChild(button(entry[0], entry[1])); });
+    tools.appendChild(selectionActions);
+    var colorGroup = group('Markup color', 'pdfw-tool-group-color'); var color = el('input', 'pdfw-color'); color.type = 'color'; color.value = state.color; color.setAttribute('aria-label', 'Annotation color'); colorGroup.appendChild(color); tools.appendChild(colorGroup);
+    var toolbarWrapper = state.embedded && document.querySelector('#view-notes .toolbar-wrapper');
+    var notesToolbar = toolbarWrapper && toolbarWrapper.querySelector('.toolbar');
+    if (toolbarWrapper && notesToolbar) {
+      notesToolbar.classList.add('pdf-notes-toolbar-hidden');
+      toolbarWrapper.classList.add('pdf-toolbar-active');
+      toolbarWrapper.appendChild(topbar); toolbarWrapper.appendChild(tools);
+    } else { root.appendChild(topbar); root.appendChild(tools); }
     var body = el('div', 'pdfw-body'); var thumbs = el('aside', 'pdfw-thumbnails'); thumbs.setAttribute('aria-label', 'Page thumbnails'); body.appendChild(thumbs);
     var reader = el('main', 'pdfw-reader'); reader.tabIndex = 0; body.appendChild(reader);
     var inspector = el('aside', 'pdfw-inspector'); inspector.setAttribute('aria-label', 'PDF outline, bookmarks, comments, and reading text'); var inspectorContent = el('div'); inspector.appendChild(inspectorContent); body.appendChild(inspector); root.appendChild(body);
-    var status = el('div', 'pdfw-status', 'Loading PDF…'); status.setAttribute('role', 'status'); root.appendChild(status);
+    var status = el('div', 'pdfw-status', 'Opening PDF…'); status.setAttribute('role', 'status'); root.appendChild(status);
     var organizer = el('section', 'pdfw-sheet pdfw-organizer'); organizer.hidden = true; organizer.setAttribute('role', 'dialog'); organizer.setAttribute('aria-label', 'Page organizer'); root.appendChild(organizer);
-    Object.assign(state, { root: root, thumbnails: thumbs, reader: reader, inspector: inspector, inspectorContent: inspectorContent, status: status, organizer: organizer, zoomOutput: zoom, searchInput: search });
-    document.body.appendChild(root); document.documentElement.classList.add('pdf-workspace-open'); bindUi(); bindPageInput();
+    Object.assign(state, { root: root, thumbnails: thumbs, reader: reader, inspector: inspector, inspectorContent: inspectorContent, status: status, organizer: organizer, zoomOutput: zoom, searchInput: search, colorInput: color, selectionActions: selectionActions, notesToolbarWrapper: toolbarWrapper, notesToolbar: notesToolbar, pdfToolbarNodes: toolbarWrapper ? [topbar, tools] : [] });
+    var mount = state.embedded && document.getElementById('notesPrimaryPane');
+    (mount || document.body).appendChild(root);
+    document.documentElement.classList.add('pdf-workspace-open');
+    if (state.embedded) document.body.classList.add('pdf-page-active');
+    bindUi(); bindPageInput();
   }
   function updateToolButtons() { state.root.querySelectorAll('[data-action^="tool-"]').forEach(function (node) { node.setAttribute('aria-pressed', node.dataset.action === 'tool-' + state.tool ? 'true' : 'false'); }); }
   function bindUi() {
@@ -630,7 +717,7 @@
         if (!draft) { message('Select PDF text first.', 'error'); return; }
         if (action === 'selection-copy') { await navigator.clipboard.writeText(draft.text); message('Selection copied.', 'success'); }
         else if (action === 'selection-highlight') addSelectionAnnotation('highlight');
-        else if (action === 'selection-comment') { var comment = global.prompt('Comment on this selection:', '') || ''; if (comment) { pushUndo('Comment on selection'); var firstRect = draft.geometry.rects[0] || draft.geometry; saveAnnotation({ documentId: state.documentRecord.id, pageId: draft.pageId, type: 'comment', geometry: { x: firstRect.x + firstRect.width, y: firstRect.y, width: 0.035, height: 0.035 }, text: comment, style: { color: state.color, opacity: 1 } }); } }
+        else if (action === 'selection-comment') { var comment = await showInputDialog({ title: 'Comment on selection', label: 'Comment', multiline: true, help: 'This comment will stay anchored to the selected PDF text.' }); if (comment) { pushUndo('Comment on selection'); var firstRect = draft.geometry.rects[0] || draft.geometry; saveAnnotation({ documentId: state.documentRecord.id, pageId: draft.pageId, type: 'comment', geometry: { x: firstRect.x + firstRect.width, y: firstRect.y, width: 0.035, height: 0.035 }, text: comment, style: { color: state.color, opacity: 1 } }); } }
         else if (action === 'selection-note') { var noteText = draft.text; close(); if (global.flowAtelier && global.flowAtelier.openQuickCaptureModal) global.flowAtelier.openQuickCaptureModal('note: ' + noteText); }
         else if (action === 'selection-review') { var reviewText = draft.text; close(); if (global.flowAtelier && global.flowAtelier.openQuickCaptureModal) global.flowAtelier.openQuickCaptureModal('review: ' + reviewText + ' | '); }
         else if (action === 'selection-assistant') { var assistantText = draft.text; close(); if (global.flowAssistant && typeof global.flowAssistant.askFlow === 'function') global.flowAssistant.askFlow('Help me understand this PDF selection:\n\n' + assistantText, { send: false }); }
@@ -638,8 +725,7 @@
       else if (action === 'print') { var url = URL.createObjectURL(new Blob([state.bytes], { type: 'application/pdf' })); state.sourceUrls.push(url); var opened = global.open(url, '_blank', 'noopener,noreferrer'); if (!opened) message('Your browser blocked the print preview.', 'error'); }
       else if (action === 'organizer') { renderOrganizer(); state.organizer.hidden = false; }
       else if (action === 'close-organizer') state.organizer.hidden = true;
-      else if (action === 'inspector') state.inspector.classList.add('pdfw-inspector-open');
-      else if (action === 'close-inspector') state.inspector.classList.remove('pdfw-inspector-open');
+      else if (action === 'inspector') state.inspector.classList.toggle('pdfw-inspector-open');
       else if (action === 'insert-files') { var picker = state.organizer.querySelector('.pdfw-file-input'); if (picker) picker.click(); }
       else if (action === 'page' || action === 'jump-annotation') goToPage(control.dataset.pageId);
       else if (action === 'outline') { try { await goToOutline(JSON.parse(control.dataset.dest || 'null')); } catch (error) { report(error, 'pdf-outline'); } }
@@ -647,9 +733,9 @@
       else if (action === 'rotate') await applyPageCommand('rotate', control.dataset.pageId, { degrees: 90 });
       else if (action === 'remove-page' && global.confirm('Remove this page from the edited arrangement? The original stays unchanged.')) await applyPageCommand('remove', control.dataset.pageId);
       else if (action === 'split-after') { control.disabled = true; try { await splitAfter(control.dataset.pageId); } catch (error) { report(error, 'pdf-split'); message(error.message || 'PDF split failed.', 'error'); } finally { control.disabled = false; } }
-      else if (action === 'bookmark') { var id = state.activePageId || (state.documentRecord.pages[0] && state.documentRecord.pages[0].id); if (id) { pushUndo('Add bookmark'); state.documentRecord.bookmarks.push({ id: global.SutraPdfEngine.id('pdfbm_'), pageId: id, title: global.prompt('Bookmark title:', 'Bookmark') || 'Bookmark', createdAt: new Date().toISOString() }); state.documentRecord = persistDocument(state.documentRecord); renderInspector(); } }
+      else if (action === 'bookmark') { var id = state.activePageId || (state.documentRecord.pages[0] && state.documentRecord.pages[0].id); if (id) { var bookmarkTitle = await showInputDialog({ title: 'Add bookmark', label: 'Bookmark title', defaultValue: 'Bookmark' }); if (!bookmarkTitle) return; pushUndo('Add bookmark'); state.documentRecord.bookmarks.push({ id: global.SutraPdfEngine.id('pdfbm_'), pageId: id, title: bookmarkTitle, createdAt: new Date().toISOString() }); state.documentRecord = persistDocument(state.documentRecord); renderInspector(); } }
     });
-    state.root.querySelector('.pdfw-color').addEventListener('input', function (event) { state.color = event.target.value; });
+    state.colorInput.addEventListener('input', function (event) { state.color = event.target.value; });
     state.searchInput.addEventListener('input', function () {
       var query = state.searchInput.value.trim().toLowerCase(); state.root.querySelectorAll('.pdfw-page-wrap').forEach(function (wrap) { wrap.classList.toggle('pdfw-search-match', !!query && String(state.textByPage[wrap.dataset.pageId] || '').toLowerCase().includes(query)); });
       if (query) { var first = state.documentRecord.pages.find(function (page) { return String(state.textByPage[page.id] || '').toLowerCase().includes(query); }); if (first) goToPage(first.id); }
@@ -657,14 +743,14 @@
     state.root.addEventListener('keydown', function (event) { if (event.key === 'Escape' && state.organizer.hidden) close(); else if (event.key === 'Escape') state.organizer.hidden = true; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); } });
     updateToolButtons();
   }
-  async function createRecord(fileId, pdf) {
+  document.addEventListener('click', function (event) {
+    if (!state || !state.embedded || !event.target || !event.target.closest) return;
+    var pageItem = event.target.closest('.page-item[data-page-id]');
+    if (pageItem && !state.root.contains(pageItem)) close();
+  });
+  async function createRecord(fileId, pdf, candidate) {
     var record = global.SutraPdfData.findByFile(fileId);
-    var created = !record;
-    if (created) record = global.SutraPdfEngine.makeDocument(fileId, pdf.numPages);
-    for (var index = 0; index < record.pages.length; index += 1) {
-      var page = await pdf.getPage(record.pages[index].sourcePageIndex + 1); var viewport = page.getViewport({ scale: 1, rotation: 0 }); record.pages[index].width = viewport.width; record.pages[index].height = viewport.height;
-      if (created) record.pages[index].rotation = Number(page.rotate || 0);
-    }
+    if (!record || !Array.isArray(record.pages) || !record.pages.length) record = candidate && Array.isArray(candidate.pages) && candidate.pages.length ? candidate : global.SutraPdfEngine.makeDocument(fileId, pdf.numPages);
     return persistDocument(record);
   }
   async function open(fileId, context) {
@@ -673,10 +759,34 @@
     var bytes = await global.SutraAttachments.readBytes(fileId); if (!bytes) throw new Error('The PDF bytes are unavailable on this device.');
     var security = global.SutraPdfEngine.detectDocumentSecurity(bytes); var pdf;
     try { pdf = await getPdfDocument(bytes); } catch (error) { report(error, 'pdf-open'); throw error; }
-    state = { file: file, bytes: bytes, security: security, sources: {}, sourceUrls: [], documentRecord: null, annotations: [], outline: [], pageNodes: {}, rendered: {}, renderGeneration: 0, textByPage: {}, activePageId: '', tool: 'select', color: '#facc15', zoom: innerWidth < 700 ? 0.75 : 1.15, undo: [], redo: [], context: context || {}, observer: null, thumbnailObserver: null, selectionDraft: null };
-    state.sources[fileId] = { file: file, bytes: bytes, pdf: pdf }; state.documentRecord = await createRecord(fileId, pdf); state.annotations = global.SutraPdfData.listAnnotations(state.documentRecord.id);
-    try { state.outline = await pdf.getOutline() || []; } catch (_) { state.outline = []; }
-    buildUi(); await rebuildPages(); state.zoomOutput.textContent = Math.round(state.zoom * 100) + '%'; message(security.signed ? 'Signed source detected. The exact original remains preserved.' : 'Saved locally. Original PDF is unchanged.', security.signed ? 'warning' : 'success'); state.root.querySelector('[data-action="close"]').focus(); return getContext();
+    var fromNotesSurface = document.body && document.body.getAttribute('data-view') === 'notes';
+    var existingDocument = global.SutraPdfData.findByFile(fileId);
+    state = { file: file, bytes: bytes, security: security, sources: {}, sourceUrls: [], documentRecord: existingDocument || global.SutraPdfEngine.makeDocument(fileId, pdf.numPages), sourceMetadataPending: !existingDocument, annotations: [], outline: [], pageNodes: {}, rendered: {}, renderGeneration: 0, textByPage: {}, activePageId: '', tool: 'select', color: '#facc15', zoom: innerWidth < 700 ? 0.75 : 1.15, undo: [], redo: [], context: context || {}, embedded: fromNotesSurface, observer: null, thumbnailObserver: null, selectionDraft: null };
+    state.sources[fileId] = { file: file, bytes: bytes, pdf: pdf }; state.annotations = global.SutraPdfData.listAnnotations(state.documentRecord.id);
+    buildUi(); message('Preparing the first page…');
+    var renderReady = true;
+    try {
+      state.documentRecord = await createRecord(fileId, pdf, state.documentRecord);
+      if (state.sourceMetadataPending === true) state.sourceMetadataPending = new Set(state.documentRecord.pages.map(function (page) { return page.id; }));
+      await rebuildPages();
+    } catch (error) {
+      report(error, 'pdf-open-render');
+      message('The first render needs a local retry…');
+      try {
+        if (state.sources[fileId] && state.sources[fileId].pdf) await releasePdf(state.sources[fileId].pdf);
+        var localPdf = await getPdfDocument(bytes, { disableWorker: true });
+        state.sources[fileId].pdf = localPdf;
+        await rebuildPages();
+      } catch (fallbackError) {
+        report(fallbackError, 'pdf-open-render-fallback');
+        renderReady = false;
+        message('PDF saved to Sutra, but this browser could not render its first page.', 'error');
+        var errorPanel = el('div', 'pdfw-render-error'); errorPanel.appendChild(el('strong', '', 'This PDF is saved safely.')); errorPanel.appendChild(el('p', '', 'Try reloading the page or opening it again from the Notes list. The original bytes are unchanged.')); state.reader.replaceChildren(errorPanel);
+      }
+    }
+    if (!renderReady) { renderInspector(); var errorFocus = state.root.querySelector('[data-action="tool-select"]'); if (errorFocus) errorFocus.focus(); return getContext(); }
+    try { state.outline = await Promise.race([pdf.getOutline(), new Promise(function (resolve) { setTimeout(function () { resolve([]); }, 1500); })]) || []; } catch (_) { state.outline = []; }
+    renderInspector(); state.zoomOutput.textContent = Math.round(state.zoom * 100) + '%'; message(security.signed ? 'Signed source detected. Saved to Sutra; cloud sync follows Sync settings. Original PDF is unchanged.' : 'Saved to Sutra. Device copy is ready; cloud sync follows Sync settings. Original PDF is unchanged.', security.signed ? 'warning' : 'success'); var initialFocus = state.root.querySelector('[data-action="tool-select"]'); if (initialFocus) initialFocus.focus(); return getContext();
   }
   async function extractText(input) {
     var bytes = input instanceof Uint8Array ? input : new Uint8Array(input || []); var pdf = await getPdfDocument(bytes); var parts = [];
@@ -698,4 +808,5 @@
   }
   global.SutraPdfAdapter = { load: getPdfDocument, extractText: extractText };
   global.SutraPdfWorkspace = { open: open, createFromFiles: createFromFiles, export: exportPdf, getContext: getContext, close: close, isEnabled: enabled };
+  try { global.dispatchEvent(new CustomEvent('sutra:pdf-workspace-ready')); } catch (_) {}
 }(typeof window !== 'undefined' ? window : globalThis));

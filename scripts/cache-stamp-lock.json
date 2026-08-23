@@ -36,8 +36,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260813-pdf7",
-    "hash": "a66ef1155f004f79"
+    "stamp": "20260815-pdf11",
+    "hash": "5ae562c857421aa2"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -296,16 +296,16 @@
     "hash": "c3b9273c2a3e5c3e"
   },
   "src/features/workspace/pdf-engine.js": {
-    "stamp": "20260813-pdf3",
-    "hash": "8b312b16d37a9f98"
+    "stamp": "20260823-pdf4",
+    "hash": "33ed7028fb3a2223"
   },
   "src/features/workspace/pdf-runtime-loader.js": {
     "stamp": "20260813-pdf1",
     "hash": "b071d76dfdbb4537"
   },
   "src/features/workspace/pdf-workspace.js": {
-    "stamp": "20260813-pdf16",
-    "hash": "bc3b3065099bc8c1"
+    "stamp": "20260815-pdf26",
+    "hash": "5040bd4d9450eaae"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -496,8 +496,8 @@
     "hash": "9ab16713e512d32f"
   },
   "styles/features/pdf-workspace.css": {
-    "stamp": "20260813-pdf4",
-    "hash": "f3ffa1fb01f9beab"
+    "stamp": "20260815-pdf7",
+    "hash": "18271099686c5736"
   },
   "styles/features/sheets.css": {
     "stamp": "20260810-sheets1",
