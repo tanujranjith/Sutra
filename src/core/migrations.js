@@ -2,7 +2,7 @@
 (function (global) {
   'use strict';
 
-  var CURRENT_VERSION = 7;
+  var CURRENT_VERSION = 8;
   var registry = Object.create(null);
 
   function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
@@ -212,6 +212,53 @@
     next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 7 });
     return next;
   }, { description: 'Make Assistant conversations canonical workspace data with one-time legacy mirror migration.' });
+
+  register(7, function migrateV7ToV8(workspace) {
+    var next = workspace;
+    next.attachmentLinks = Array.isArray(next.attachmentLinks) ? next.attachmentLinks : [];
+    next.pdfDocuments = Array.isArray(next.pdfDocuments) ? next.pdfDocuments : [];
+    next.pdfAnnotations = Array.isArray(next.pdfAnnotations) ? next.pdfAnnotations : [];
+    var seen = Object.create(null);
+    next.attachmentLinks.forEach(function (link) {
+      if (!link || !link.fileId || !link.entityType || !link.entityId) return;
+      seen[String(link.fileId) + '\n' + String(link.entityType) + '\n' + String(link.entityId)] = true;
+    });
+    var files = next.courseWorkspace && Array.isArray(next.courseWorkspace.files) ? next.courseWorkspace.files : [];
+    files.forEach(function (file) {
+      if (!file || !file.id) return;
+      var pairs = [];
+      if (file.courseId && String(file.courseId) !== '__private_vault__') pairs.push(['course', String(file.courseId)]);
+      if (file.linkedEntityType && file.linkedEntityId) pairs.push([String(file.linkedEntityType), String(file.linkedEntityId)]);
+      pairs.forEach(function (pair) {
+        var key = String(file.id) + '\n' + pair[0] + '\n' + pair[1];
+        if (seen[key]) return;
+        next.attachmentLinks.push({
+          id: 'alink_' + String(file.id) + '_' + pair[0] + '_' + pair[1],
+          fileId: String(file.id), entityType: pair[0], entityId: pair[1],
+          createdAt: file.createdAt || new Date(0).toISOString()
+        });
+        seen[key] = true;
+      });
+    });
+    (Array.isArray(next.privateDocuments) ? next.privateDocuments : []).forEach(function (documentRecord) {
+      if (!documentRecord || !documentRecord.id || !documentRecord.fileId) return;
+      var key = String(documentRecord.fileId) + '\nprivate_document\n' + String(documentRecord.id);
+      if (seen[key]) return;
+      next.attachmentLinks.push({ id: 'alink_' + documentRecord.fileId + '_private_' + documentRecord.id, fileId: String(documentRecord.fileId), entityType: 'private_document', entityId: String(documentRecord.id), createdAt: documentRecord.createdAt || new Date(0).toISOString() });
+      seen[key] = true;
+    });
+    next.pdfDocuments.forEach(function (documentRecord) {
+      (documentRecord && Array.isArray(documentRecord.pages) ? documentRecord.pages : []).forEach(function (page) {
+        if (!page || !page.id || !page.sourceFileId) return;
+        var key = String(page.sourceFileId) + '\npdf_page_source\n' + String(page.id);
+        if (seen[key]) return;
+        next.attachmentLinks.push({ id: 'alink_' + page.sourceFileId + '_pdf_page_' + page.id, fileId: String(page.sourceFileId), entityType: 'pdf_page_source', entityId: String(page.id), createdAt: documentRecord.createdAt || new Date(0).toISOString() });
+        seen[key] = true;
+      });
+    });
+    next.schema = Object.assign({}, next.schema, { name: 'sutra-workspace', version: 8 });
+    return next;
+  }, { description: 'Add canonical attachment links and normalized native PDF workspace records.' });
 
   function plan(input, targetVersion) {
     var target = normalizeVersion(targetVersion || CURRENT_VERSION);

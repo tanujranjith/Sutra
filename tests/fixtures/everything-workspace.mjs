@@ -3,6 +3,7 @@
 export const EVERYTHING_STAMP = '2026-07-16T12:34:56.000Z';
 export const EVERYTHING_INLINE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/2W8XWQAAAABJRU5ErkJggg==';
 export const EVERYTHING_ATTACHMENT = 'data:text/plain;base64,U3ludGhldGljIFN1dHJhIHBhcml0eSBhdHRhY2htZW50Lg==';
+export const EVERYTHING_PDF = 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjEgMCBvYmoKPDwgL1R5cGUgL0NhdGFsb2cgL1BhZ2VzIDIgMCBSID4+CmVuZG9iago=';
 
 const clone = value => JSON.parse(JSON.stringify(value ?? {}));
 const atomic = (base, key, extra = {}) => ({
@@ -93,11 +94,12 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
   const preferences = settings.preferences && typeof settings.preferences === 'object' ? settings.preferences : {};
   return {
     ...base,
-    version: 7,
-    schema: { name: 'sutra-workspace', version: 7, paritySentinel: 'schema-parity' },
+    version: 8,
+    schema: { name: 'sutra-workspace', version: 8, paritySentinel: 'schema-parity' },
     migrationHistory: [
       { id: 'v5->v6', from: 5, to: 6, appliedAt: EVERYTHING_STAMP, paritySentinel: 'migration-parity' },
-      { id: 'v6->v7', from: 6, to: 7, appliedAt: EVERYTHING_STAMP, paritySentinel: 'assistant-history-parity' }
+      { id: 'v6->v7', from: 6, to: 7, appliedAt: EVERYTHING_STAMP, paritySentinel: 'assistant-history-parity' },
+      { id: 'v7->v8', from: 7, to: 8, appliedAt: EVERYTHING_STAMP, paritySentinel: 'pdf-workspace-parity' }
     ],
     pages: [{
       id: 'page-parent', title: 'Parity Parent', type: 'note',
@@ -280,11 +282,35 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
         url: '',
         description: 'Attachment sentinel', summary: 'Synthetic attachment summary',
         _exportBlob: EVERYTHING_ATTACHMENT
+      }, {
+        id: 'file-pdf-parity', courseId: 'course-parity', linkedEntityType: 'note',
+        linkedEntityId: 'page-child', name: 'synthetic-reader.pdf', originalName: 'synthetic-reader.pdf',
+        mimeType: 'application/pdf', sizeBytes: 88, kind: 'pdf', tags: ['parity'],
+        createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP, source: 'upload',
+        storageType: 'indexeddb', blobKey: 'blob-pdf-parity', url: '', description: 'PDF parity source',
+        summary: '', _exportBlob: EVERYTHING_PDF
       }],
       resourceLinks: [{ id: 'resource-parity', courseId: 'course-parity', title: 'Synthetic resource', url: 'https://example.invalid/resource' }],
       relationships: [{ id: 'relationship-parity', courseId: 'course-parity', entityType: 'note', entityId: 'page-child' }],
       settings: { activeCourseId: 'course-parity', courseFilter: 'all', allDueFilter: 'all', studentInboxFilter: 'all', studentInboxSort: 'smart', allDueCourseFilter: 'course-parity' }
     },
+    attachmentLinks: [
+      { id: 'alink-pdf-course', fileId: 'file-pdf-parity', entityType: 'course', entityId: 'course-parity', createdAt: EVERYTHING_STAMP },
+      { id: 'alink-pdf-note', fileId: 'file-pdf-parity', entityType: 'note', entityId: 'page-child', createdAt: EVERYTHING_STAMP }
+    ],
+    pdfDocuments: [{
+      id: 'pdfdoc-parity', fileId: 'file-pdf-parity', schemaVersion: 1,
+      pages: [{ id: 'pdfpage-parity', sourceFileId: 'file-pdf-parity', sourcePageIndex: 0, order: 0, rotation: 90, width: 612, height: 792, removed: false }],
+      bookmarks: [{ id: 'pdfbookmark-parity', pageId: 'pdfpage-parity', title: 'Synthetic bookmark', createdAt: EVERYTHING_STAMP }],
+      checkpoints: [{ id: 'pdfcheckpoint-parity', label: 'Before parity rotation', pages: [{ id: 'pdfpage-parity', sourceFileId: 'file-pdf-parity', sourcePageIndex: 0, order: 0, rotation: 0, width: 612, height: 792, removed: false }], createdAt: EVERYTHING_STAMP }],
+      createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP
+    }],
+    pdfAnnotations: [{
+      id: 'pdfann-parity', documentId: 'pdfdoc-parity', pageId: 'pdfpage-parity', type: 'highlight',
+      geometry: { x: 0.1, y: 0.2, width: 0.4, height: 0.04, rects: [{ x: 0.1, y: 0.2, width: 0.4, height: 0.04 }] },
+      style: { color: '#facc15', opacity: 0.42, width: 0.004, fontSize: 0.025 }, text: 'PDF parity highlight',
+      inkPaths: [], fieldKey: '', value: '', createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP
+    }],
     schoolSchedule: atomic(base, 'schoolSchedule', { periods: [{ id: 'period-parity', name: 'Synthetic Period', startTime: '08:00', endTime: '08:50' }] }),
     gradePlanner: atomic(base, 'gradePlanner', { courses: [{ id: 'grade-course-parity', name: 'Synthetic Course', currentGrade: 94, categories: [{ id: 'grade-category-parity', name: 'Tests', weight: 60 }] }] }),
     semesterSetup: atomic(base, 'semesterSetup', { semesters: [{ id: 'semester-parity', name: 'Fall Synthetic', courseIds: ['course-parity'] }], completed: true }),

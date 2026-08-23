@@ -44,6 +44,17 @@ fixtures by `npm run check:migrations`.
   `noteflow_attachments_db`, store `blobs`, keyed per file.
 - Only the **bytes** live here. Each file's **metadata** lives in the workspace
   (`appData.courseWorkspace.files[]`).
+- Canonical `attachmentLinks[]` records connect one stored file to any number
+  of courses, notes, homework items, assignments, private documents, or PDF
+  page sources. Removing a file from one context removes that link only.
+- Native PDF page plans (`pdfDocuments[]`) and Sutra-owned marks/form values
+  (`pdfAnnotations[]`) are workspace records. The exact source bytes remain
+  immutable. Source bytes may be deleted only after all links and PDF page
+  source references have been removed.
+- Required PDF/image sources use the same attachment completeness checks,
+  encrypted backup packaging, content-addressed Sync assets, and restore
+  verification as other canonical attachments. A backup is not reported as
+  complete when a required source is missing.
 
 ### Homework — localStorage mirror
 

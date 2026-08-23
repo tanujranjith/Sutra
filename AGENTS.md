@@ -425,6 +425,19 @@ Slides invariants:
 - Slides V2 remains static and intentionally has no animation model. The current PPTX package is experimental rather than standards-complete and must not be described as a substitute for an encrypted workspace backup.
 - Legacy slide images remain local-only bounded data URLs inside `page.slides`. They currently round-trip with the page and Sync, but this can grow the workspace; migration to the attachment database is required before encouraging image-heavy decks. Never introduce external image URLs or automatic network fetches.
 
+## Native PDF workspace
+
+PDFs open as a contextual workspace, never a new top-level Files section. The
+canonical metadata and byte stores remain `courseWorkspace.files` and
+`noteflow_attachments_db`; `attachmentLinks`, `pdfDocuments`, and
+`pdfAnnotations` are the durable relationship, page-plan, and Sutra-owned edit
+records. Original bytes are immutable, page/annotation coordinates are stable
+and normalized, and deletion must preserve every remaining context or PDF page
+source reference. PDF.js and pdf-lib are pinned and vendored for offline use;
+core PDF behavior must make no runtime CDN request. Exact-original export stays
+byte-identical, while modified copies are explicitly assembled and verified.
+The complete behavioral boundary is [`docs/features/PDF_WORKSPACE.md`](docs/features/PDF_WORKSPACE.md).
+
 ## Verification and release system
 
 The project has static checks for syntax, app-shell integrity, migrations, round-trip parity, versions, compatibility, CSP, production headers, workflows, persistence, accessibility, network policy, encoding, responsive behavior, assets, document backgrounds, academic engines, Intelligence, service workers, startup health, DOM integrity, links, and guardrails. It also has unit tests, Playwright coverage, deploy-artifact checks, live smoke checks, and benchmarks.

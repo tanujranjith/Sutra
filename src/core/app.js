@@ -2826,7 +2826,7 @@ function populateProgressDashboard() {
         const APP_DB_NAME = 'noteflow_atelier_db';
         const APP_DB_STORE = 'workspace';
         const APP_DB_KEY = 'root';
-        const APP_SCHEMA_VERSION = 7;
+        const APP_SCHEMA_VERSION = 8;
         const workspaceDb = window.SutraWorkspaceDB.create({
             dbName: APP_DB_NAME,
             storeName: APP_DB_STORE,
@@ -3113,6 +3113,7 @@ function populateProgressDashboard() {
                 const raw = localStorage.getItem(SUTRA_PERSISTENCE_HEALTH_KEY);
                 if (!raw) return;
                 sutraPersistenceState = normalizePersistenceState(JSON.parse(raw));
+                persistenceFailureRequiresExplicitRecovery = !!sutraPersistenceState.lastFailure;
             } catch (error) {
                 sutraPersistenceState = normalizePersistenceState(sutraPersistenceState);
             }
@@ -3162,6 +3163,7 @@ function populateProgressDashboard() {
         // the only signal that the last session's changes may have been lost, so
         // only an explicit user action (Retry / manual save) may clear it.
         let persistenceFailureRecordedThisSession = false;
+        let persistenceFailureRequiresExplicitRecovery = false;
         const SUTRA_EXPORT_FAILURE_PHASES = new Set(['attachment-export', 'cache-warming', 'sutra-export', 'emergency-export']);
 
         function shouldClearPersistenceFailureOnSuccess(reason) {
@@ -3171,9 +3173,9 @@ function populateProgressDashboard() {
             // failures visible until a complete encrypted export succeeds.
             if (SUTRA_EXPORT_FAILURE_PHASES.has(failurePhase)) return false;
             const normalized = String(reason || '').toLowerCase();
-            if (['retry', 'manual', 'save-local', 'wrapper-save'].includes(normalized)) return true;
-            if (['autosave', 'initial-migration'].includes(normalized)) {
-                return persistenceFailureRecordedThisSession;
+            if (['retry', 'manual-recovery', 'save-local'].includes(normalized)) return true;
+            if (['autosave', 'initial-migration', 'wrapper-save'].includes(normalized)) {
+                return persistenceFailureRecordedThisSession && !persistenceFailureRequiresExplicitRecovery;
             }
             return false;
         }
@@ -3188,6 +3190,7 @@ function populateProgressDashboard() {
                 retryCount: 0
             });
             persistenceFailureRecordedThisSession = false;
+            persistenceFailureRequiresExplicitRecovery = false;
             applyPersistenceSummaryToDataHealth(null, {
                 lastSaveFailureAt: null,
                 lastSaveFailureKind: null,
@@ -3201,6 +3204,10 @@ function populateProgressDashboard() {
         function recordPersistenceSuccess(summary = {}, options = {}) {
             const confirmedAt = getIsoTimestamp();
             const clearFailure = options.clearFailure !== false;
+            if (clearFailure) {
+                persistenceFailureRecordedThisSession = false;
+                persistenceFailureRequiresExplicitRecovery = false;
+            }
             sutraPersistenceState = normalizePersistenceState({
                 ...sutraPersistenceState,
                 lastConfirmedSaveAt: confirmedAt,
@@ -3927,7 +3934,8 @@ function populateProgressDashboard() {
                 },
                 workspace: {
                     mode: 'standard',
-                    profile: 'undecided'
+                    profile: 'undecided',
+                    pdfWorkspaceEnabled: true
                 },
                 // Sutra Sync (incremental encrypted multi-device sync). OFF by
                 // default; device-local — the projection strips this section so
@@ -4194,7 +4202,8 @@ function populateProgressDashboard() {
                 },
                 workspace: {
                     mode: normalizeSettingChoice(workspaceSource.mode, ['standard', 'student', 'ap_crunch', 'college_apps', 'writing', 'life', 'business'], defaults.workspace.mode),
-                    profile: normalizeSettingChoice(workspaceSource.profile, ['student', 'adult', 'undecided'], defaults.workspace.profile)
+                    profile: normalizeSettingChoice(workspaceSource.profile, ['student', 'adult', 'undecided'], defaults.workspace.profile),
+                    pdfWorkspaceEnabled: workspaceSource.pdfWorkspaceEnabled !== false
                 },
                 sync: {
                     enabled: syncSource.enabled === true,
@@ -6779,6 +6788,24 @@ function populateProgressDashboard() {
             return (raw && typeof raw === 'object') ? raw : getDefaultSemesterSetupSafe();
         }
 
+        function normalizePdfDocumentsSafe(raw) {
+            const engine = typeof window !== 'undefined' ? window.SutraPdfEngine : null;
+            return (Array.isArray(raw) ? raw : []).map(item => engine && typeof engine.normalizeDocument === 'function'
+                ? engine.normalizeDocument(item) : item).filter(Boolean);
+        }
+
+        function normalizePdfAnnotationsSafe(raw) {
+            const engine = typeof window !== 'undefined' ? window.SutraPdfEngine : null;
+            return (Array.isArray(raw) ? raw : []).map(item => engine && typeof engine.normalizeAnnotation === 'function'
+                ? engine.normalizeAnnotation(item) : item).filter(Boolean);
+        }
+
+        function normalizeAttachmentLinksSafe(raw) {
+            const engine = typeof window !== 'undefined' ? window.SutraPdfEngine : null;
+            if (engine && typeof engine.normalizeAttachmentLinks === 'function') return engine.normalizeAttachmentLinks(raw);
+            return Array.isArray(raw) ? raw.filter(Boolean) : [];
+        }
+
         function getDefaultAppData() {
             return {
                 version: APP_SCHEMA_VERSION,
@@ -6809,6 +6836,9 @@ function populateProgressDashboard() {
                 migrationDiagnostics: {},
                 compatibility: {},
                 privateDocuments: [],
+                attachmentLinks: [],
+                pdfDocuments: [],
+                pdfAnnotations: [],
                 sharedStudySessions: [],
                 operatingManual: { version: 1, preferredStudyTimes: [], reminderStyle: 'calm', planningStyle: 'balanced', accessibility: {}, notes: '' },
                 portfolioWorkspace: { version: 1, entries: [], settings: {} },
@@ -7172,6 +7202,8 @@ function populateProgressDashboard() {
                     lastFailureAt: null,
                     retryCount: 0
                 });
+                persistenceFailureRecordedThisSession = false;
+                persistenceFailureRequiresExplicitRecovery = false;
                 persistSutraPersistenceState();
                 try { updateSutraPersistenceHealthUi(); } catch (uiError) { /* non-critical */ }
             } catch (error) { /* clearing is best-effort */ }
@@ -7327,6 +7359,9 @@ function populateProgressDashboard() {
                 : null;
             merged.reviewWorkspace = normalizeReviewWorkspace(stored && stored.reviewWorkspace ? stored.reviewWorkspace : defaults.reviewWorkspace);
             merged.courseWorkspace = normalizeCourseWorkspace(stored && stored.courseWorkspace ? stored.courseWorkspace : defaults.courseWorkspace);
+            merged.attachmentLinks = normalizeAttachmentLinksSafe(stored && stored.attachmentLinks ? stored.attachmentLinks : defaults.attachmentLinks);
+            merged.pdfDocuments = normalizePdfDocumentsSafe(stored && stored.pdfDocuments ? stored.pdfDocuments : defaults.pdfDocuments);
+            merged.pdfAnnotations = normalizePdfAnnotationsSafe(stored && stored.pdfAnnotations ? stored.pdfAnnotations : defaults.pdfAnnotations);
             merged.schoolSchedule = normalizeSchoolScheduleSafe(stored && stored.schoolSchedule ? stored.schoolSchedule : defaults.schoolSchedule);
             merged.gradePlanner = normalizeGradePlannerSafe(stored && stored.gradePlanner ? stored.gradePlanner : defaults.gradePlanner);
             merged.semesterSetup = normalizeSemesterSetupSafe(stored && stored.semesterSetup ? stored.semesterSetup : defaults.semesterSetup);
@@ -8744,6 +8779,9 @@ function populateProgressDashboard() {
             appData.homeworkWorkspace = readHomeworkWorkspaceSnapshot();
             appData.reviewWorkspace = normalizeReviewWorkspace(reviewWorkspace);
             appData.courseWorkspace = normalizeCourseWorkspace(courseWorkspace);
+            appData.attachmentLinks = normalizeAttachmentLinksSafe(appData.attachmentLinks);
+            appData.pdfDocuments = normalizePdfDocumentsSafe(appData.pdfDocuments);
+            appData.pdfAnnotations = normalizePdfAnnotationsSafe(appData.pdfAnnotations);
             appData.schoolSchedule = normalizeSchoolScheduleSafe(schoolSchedule);
             appData.gradePlanner = normalizeGradePlannerSafe(gradePlanner);
             appData.semesterSetup = normalizeSemesterSetupSafe(semesterSetup);
@@ -9119,12 +9157,19 @@ function populateProgressDashboard() {
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
                     };
-                    if (!Array.isArray(courseWorkspace.files)) courseWorkspace.files = [];
-                    if (!Array.isArray(appData.privateDocuments)) appData.privateDocuments = [];
-                    courseWorkspace.files.push(fileMeta);
-                    appData.privateDocuments.push(documentMeta);
-                    persistAppData();
-                    return { changedIds: [documentId, fileId], warnings: ['Private document bytes are excluded from plain JSON exports and assistant context by default.'], undo: { removePrivateDocumentIds: [documentId], removeCourseFileIds: [fileId], removeBlobKeys: [blobKey] }, persistenceStatus: 'scheduled', document: cloneSerializable(documentMeta, {}) };
+                    try {
+                        if (!Array.isArray(courseWorkspace.files)) courseWorkspace.files = [];
+                        if (!Array.isArray(appData.privateDocuments)) appData.privateDocuments = [];
+                        courseWorkspace.files.push(fileMeta);
+                        appData.privateDocuments.push(documentMeta);
+                        linkWorkspaceAttachment(fileId, 'private_document', documentId);
+                        return { changedIds: [documentId, fileId], warnings: ['Private document bytes are excluded from plain JSON exports and assistant context by default.'], undo: { removePrivateDocumentIds: [documentId], removeCourseFileIds: [fileId], removeBlobKeys: [blobKey] }, persistenceStatus: 'scheduled', document: cloneSerializable(documentMeta, {}) };
+                    } catch (error) {
+                        appData.privateDocuments = (appData.privateDocuments || []).filter(row => String(row && row.id) !== documentId);
+                        courseWorkspace.files = (courseWorkspace.files || []).filter(row => String(row && row.id) !== fileId);
+                        try { await cwDeleteBlob(blobKey); } catch (cleanupError) { console.warn('Private document rollback failed', cleanupError); }
+                        throw error;
+                    }
                 },
                 async readDocument(documentId, options = {}) {
                     if (options.explicit !== true) throw new Error('Reading a private document requires explicit permission.');
@@ -9142,11 +9187,14 @@ function populateProgressDashboard() {
                     if (index < 0) return { changedIds: [], warnings: ['Private document was already absent.'], undo: null, persistenceStatus: 'unchanged' };
                     const before = cloneSerializable(appData.privateDocuments[index], {});
                     const file = (courseWorkspace.files || []).find(row => String(row && row.id) === String(before.fileId) && row.linkedEntityType === 'private_document');
-                    if (file && file.blobKey) await cwDeleteBlob(file.blobKey);
                     appData.privateDocuments.splice(index, 1);
-                    courseWorkspace.files = (courseWorkspace.files || []).filter(row => String(row && row.id) !== String(before.fileId));
+                    unlinkWorkspaceAttachment(before.fileId, 'private_document', documentId);
+                    const references = attachmentReferenceSummary(before.fileId);
+                    const removedBytes = !references.links.length && !references.pageSources.length
+                        ? removeAttachmentMetadataAndBytes(before.fileId)
+                        : false;
                     persistAppData();
-                    return { changedIds: [String(documentId), String(before.fileId || '')].filter(Boolean), warnings: [], undo: { privateDocumentBefore: before, fileBefore: cloneSerializable(file, null) }, persistenceStatus: 'scheduled' };
+                    return { changedIds: [String(documentId)].concat(removedBytes ? [String(before.fileId)] : []), warnings: removedBytes ? [] : ['The source file remains stored because another workspace link or PDF page still uses it.'], undo: { privateDocumentBefore: before, fileBefore: cloneSerializable(file, null) }, persistenceStatus: 'scheduled' };
                 }
             };
         }
@@ -28648,43 +28696,161 @@ function buildOnboardingPlanPreview() {
             });
         }
 
-        async function addCourseFileFromBlob(courseId, file) {
-            const id = String(courseId || '');
-            if (!id || !file) return null;
+        function ensurePdfWorkspaceCollections() {
+            if (!appData) appData = getDefaultAppData();
+            appData.attachmentLinks = normalizeAttachmentLinksSafe(appData.attachmentLinks);
+            appData.pdfDocuments = normalizePdfDocumentsSafe(appData.pdfDocuments);
+            appData.pdfAnnotations = normalizePdfAnnotationsSafe(appData.pdfAnnotations);
+            return appData;
+        }
+
+        function attachmentLinkId(fileId, entityType, entityId) {
+            return 'alink_' + String(fileId || '') + '_' + String(entityType || '') + '_' + String(entityId || '');
+        }
+
+        function dispatchAttachmentLinksChanged(fileId) {
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:attachment-links-changed', { detail: { fileId: String(fileId || '') } }));
+            } catch (error) { /* non-critical */ }
+        }
+
+        function linkWorkspaceAttachment(fileId, entityType, entityId, options = {}) {
+            ensurePdfWorkspaceCollections();
+            const fid = String(fileId || '').trim();
+            const type = String(entityType || '').trim();
+            const eid = String(entityId || '').trim();
+            const file = (courseWorkspace.files || []).find(item => String(item && item.id) === fid);
+            if (!file || !fid || !type || !eid) return null;
+            const existing = appData.attachmentLinks.find(link => link.fileId === fid && link.entityType === type && link.entityId === eid);
+            if (existing) return existing;
+            const link = window.SutraPdfEngine && typeof window.SutraPdfEngine.normalizeAttachmentLink === 'function'
+                ? window.SutraPdfEngine.normalizeAttachmentLink({ id: attachmentLinkId(fid, type, eid), fileId: fid, entityType: type, entityId: eid, createdAt: new Date().toISOString() })
+                : { id: attachmentLinkId(fid, type, eid), fileId: fid, entityType: type, entityId: eid, createdAt: new Date().toISOString() };
+            if (!link) return null;
+            appData.attachmentLinks.push(link);
+            if (type === 'course') file.courseId = eid;
+            if (options.updateLegacy !== false && type !== 'course') {
+                file.linkedEntityType = type;
+                file.linkedEntityId = eid;
+            }
+            persistAppData();
+            dispatchAttachmentLinksChanged(fid);
+            return link;
+        }
+
+        function unlinkWorkspaceAttachment(fileId, entityType, entityId) {
+            ensurePdfWorkspaceCollections();
+            const fid = String(fileId || '');
+            const type = String(entityType || '');
+            const eid = String(entityId || '');
+            const before = appData.attachmentLinks.length;
+            appData.attachmentLinks = appData.attachmentLinks.filter(link => !(link.fileId === fid && link.entityType === type && link.entityId === eid));
+            if (before === appData.attachmentLinks.length) return false;
+            const file = (courseWorkspace.files || []).find(item => String(item && item.id) === fid);
+            if (file && type === 'course' && String(file.courseId || '') === eid) file.courseId = '';
+            if (file && String(file.linkedEntityType || '') === type && String(file.linkedEntityId || '') === eid) {
+                file.linkedEntityType = '';
+                file.linkedEntityId = '';
+            }
+            persistAppData();
+            dispatchAttachmentLinksChanged(fid);
+            return true;
+        }
+
+        function backfillWorkspaceAttachmentLinks() {
+            ensurePdfWorkspaceCollections();
+            let changed = false;
+            (courseWorkspace.files || []).forEach(file => {
+                const pairs = [];
+                if (file && file.courseId && String(file.courseId) !== '__private_vault__') pairs.push(['course', String(file.courseId)]);
+                if (file && file.linkedEntityType && file.linkedEntityId) pairs.push([String(file.linkedEntityType), String(file.linkedEntityId)]);
+                pairs.forEach(([type, id]) => {
+                    if (appData.attachmentLinks.some(link => link.fileId === String(file.id) && link.entityType === type && link.entityId === id)) return;
+                    const link = window.SutraPdfEngine && typeof window.SutraPdfEngine.normalizeAttachmentLink === 'function'
+                        ? window.SutraPdfEngine.normalizeAttachmentLink({ id: attachmentLinkId(file.id, type, id), fileId: file.id, entityType: type, entityId: id, createdAt: file.createdAt || new Date().toISOString() })
+                        : { id: attachmentLinkId(file.id, type, id), fileId: String(file.id), entityType: type, entityId: id, createdAt: file.createdAt || new Date().toISOString() };
+                    if (link) { appData.attachmentLinks.push(link); changed = true; }
+                });
+            });
+            (appData.privateDocuments || []).forEach(documentRecord => {
+                if (!documentRecord || !documentRecord.fileId || !documentRecord.id) return;
+                const fileId = String(documentRecord.fileId);
+                const entityId = String(documentRecord.id);
+                if (appData.attachmentLinks.some(link => link.fileId === fileId && link.entityType === 'private_document' && link.entityId === entityId)) return;
+                const link = window.SutraPdfEngine && typeof window.SutraPdfEngine.normalizeAttachmentLink === 'function'
+                    ? window.SutraPdfEngine.normalizeAttachmentLink({ id: attachmentLinkId(fileId, 'private_document', entityId), fileId, entityType: 'private_document', entityId, createdAt: documentRecord.createdAt || new Date().toISOString() })
+                    : { id: attachmentLinkId(fileId, 'private_document', entityId), fileId, entityType: 'private_document', entityId, createdAt: documentRecord.createdAt || new Date().toISOString() };
+                if (link) { appData.attachmentLinks.push(link); changed = true; }
+            });
+            (appData.pdfDocuments || []).forEach(documentRecord => {
+                (documentRecord && Array.isArray(documentRecord.pages) ? documentRecord.pages : []).forEach(page => {
+                    if (!page || !page.sourceFileId || !page.id) return;
+                    const fileId = String(page.sourceFileId);
+                    const entityId = String(page.id);
+                    if (appData.attachmentLinks.some(link => link.fileId === fileId && link.entityType === 'pdf_page_source' && link.entityId === entityId)) return;
+                    const link = window.SutraPdfEngine && typeof window.SutraPdfEngine.normalizeAttachmentLink === 'function'
+                        ? window.SutraPdfEngine.normalizeAttachmentLink({ id: attachmentLinkId(fileId, 'pdf_page_source', entityId), fileId, entityType: 'pdf_page_source', entityId, createdAt: documentRecord.createdAt || new Date().toISOString() })
+                        : { id: attachmentLinkId(fileId, 'pdf_page_source', entityId), fileId, entityType: 'pdf_page_source', entityId, createdAt: documentRecord.createdAt || new Date().toISOString() };
+                    if (link) { appData.attachmentLinks.push(link); changed = true; }
+                });
+            });
+            return changed;
+        }
+
+        function dataUrlToBytes(dataUrl) {
+            const match = /^data:[^,]*;base64,([a-z0-9+/=\s]+)$/i.exec(String(dataUrl || ''));
+            if (!match) throw new Error('Attachment bytes are not a supported data URL.');
+            const binary = atob(match[1].replace(/\s+/g, ''));
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+            return bytes;
+        }
+
+        async function addWorkspaceAttachmentFromBlob(file, options = {}) {
+            if (!file) return null;
             if (file.size > COURSE_FILE_INLINE_NOTE_BYTES) {
                 showToast(`"${file.name}" is too large (over 100MB) to store locally.`);
                 return null;
             }
-            if (file.size > COURSE_FILE_WARN_BYTES) {
-                showToast(`Heads up: "${file.name}" is large and may slow exports.`);
+            if (file.size > COURSE_FILE_WARN_BYTES) showToast(`Heads up: "${file.name}" is large and may slow exports.`);
+            const dataUrl = await cwReadFileAsDataUrl(file);
+            const kind = cwInferFileKind(file.type, file.name);
+            if (kind === 'pdf' && window.SutraPdfEngine && typeof window.SutraPdfEngine.validatePdfBytes === 'function') {
+                const validation = window.SutraPdfEngine.validatePdfBytes(dataUrlToBytes(dataUrl));
+                if (!validation.ok) throw new Error('The selected file is not a valid PDF.');
             }
             const blobKey = cwId('blob');
-            let storageType = 'indexeddb';
-            let stored = false;
-            try {
-                const dataUrl = await cwReadFileAsDataUrl(file);
-                stored = await cwPutBlob(blobKey, dataUrl);
-            } catch (e) {
-                console.warn('addCourseFileFromBlob read/store failed', e);
-            }
-            if (!stored) storageType = 'none';
+            const stored = await cwPutBlob(blobKey, dataUrl);
+            if (!stored) throw new Error('Sutra could not confirm that the attachment bytes were stored.');
+            const entityType = String(options.entityType || '').trim();
+            const entityId = String(options.entityId || '').trim();
+            const courseId = entityType === 'course' ? entityId : String(options.courseId || '');
             const meta = normalizeCourseFile({
-                id: cwId('file'),
-                courseId: id,
-                name: file.name,
-                originalName: file.name,
-                mimeType: file.type || '',
-                sizeBytes: file.size || 0,
-                kind: cwInferFileKind(file.type, file.name),
-                source: 'upload',
-                storageType,
-                blobKey: storageType === 'indexeddb' ? blobKey : '',
-                missingBlob: !stored
+                id: cwId('file'), courseId, name: file.name, originalName: file.name,
+                mimeType: file.type || (kind === 'pdf' ? 'application/pdf' : ''), sizeBytes: file.size || 0,
+                kind, source: options.source || 'upload', storageType: 'indexeddb', blobKey, missingBlob: false,
+                linkedEntityType: entityType && entityType !== 'course' ? entityType : '',
+                linkedEntityId: entityType && entityType !== 'course' ? entityId : ''
             });
-            if (!courseWorkspace.files) courseWorkspace.files = [];
-            courseWorkspace.files.push(meta);
-            persistAppData();
-            return meta;
+            try {
+                if (!courseWorkspace.files) courseWorkspace.files = [];
+                courseWorkspace.files.push(meta);
+                ensurePdfWorkspaceCollections();
+                if (entityType && entityId) linkWorkspaceAttachment(meta.id, entityType, entityId);
+                else persistAppData();
+                try { window.dispatchEvent(new CustomEvent('sutra:attachment-added', { detail: { fileId: meta.id, entityType, entityId } })); } catch (error) { /* non-critical */ }
+                return meta;
+            } catch (error) {
+                courseWorkspace.files = (courseWorkspace.files || []).filter(item => String(item && item.id) !== String(meta.id));
+                try { await cwDeleteBlob(blobKey); } catch (cleanupError) { console.warn('Attachment rollback failed', cleanupError); }
+                throw error;
+            }
+        }
+
+        async function addCourseFileFromBlob(courseId, file) {
+            const id = String(courseId || '');
+            if (!id || !file) return null;
+            return addWorkspaceAttachmentFromBlob(file, { entityType: 'course', entityId: id });
         }
 
         function addCourseResourceLink(courseId, payload = {}) {
@@ -28720,13 +28886,39 @@ function buildOnboardingPlanPreview() {
             return f;
         }
 
+        function attachmentReferenceSummary(fileId) {
+            ensurePdfWorkspaceCollections();
+            const fid = String(fileId || '');
+            const links = appData.attachmentLinks.filter(link => link.fileId === fid);
+            const pageSources = [];
+            appData.pdfDocuments.forEach(documentRecord => {
+                (documentRecord.pages || []).forEach(page => {
+                    if (String(page.sourceFileId || '') === fid) pageSources.push({ documentId: documentRecord.id, pageId: page.id });
+                });
+            });
+            return { links, pageSources };
+        }
+
+        function removeAttachmentMetadataAndBytes(fileId) {
+            const f = (courseWorkspace.files || []).find(x => String(x.id) === String(fileId));
+            if (!f) return false;
+            if (f.blobKey) Promise.resolve().then(() => cwDeleteBlob(f.blobKey)).catch(error => console.warn('Attachment byte cleanup failed', error));
+            courseWorkspace.files = courseWorkspace.files.filter(x => String(x.id) !== String(fileId));
+            ensurePdfWorkspaceCollections();
+            appData.attachmentLinks = appData.attachmentLinks.filter(link => link.fileId !== String(fileId));
+            persistAppData();
+            dispatchAttachmentLinksChanged(fileId);
+            return true;
+        }
+
         function deleteCourseFile(fileId) {
             const f = (courseWorkspace.files || []).find(x => String(x.id) === String(fileId));
             if (!f) return false;
-            if (f.blobKey) { Promise.resolve().then(() => cwDeleteBlob(f.blobKey)).catch(() => {}); }
-            courseWorkspace.files = courseWorkspace.files.filter(x => String(x.id) !== String(fileId));
-            persistAppData();
-            return true;
+            const courseId = String(f.courseId || '');
+            if (courseId) unlinkWorkspaceAttachment(fileId, 'course', courseId);
+            const references = attachmentReferenceSummary(fileId);
+            if (references.links.length || references.pageSources.length) return true;
+            return removeAttachmentMetadataAndBytes(fileId);
         }
 
         async function openCourseFile(fileId) {
@@ -28735,6 +28927,12 @@ function buildOnboardingPlanPreview() {
             if (f.storageType === 'link' && f.url) {
                 window.open(f.url, '_blank', 'noopener');
                 return;
+            }
+            if (f.kind === 'pdf' && appSettings && appSettings.preferences && appSettings.preferences.workspace
+                && appSettings.preferences.workspace.pdfWorkspaceEnabled === true
+                && window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') {
+                try { await window.SutraPdfWorkspace.open(f.id, { entityType: 'course', entityId: f.courseId || '' }); return; }
+                catch (error) { console.warn('Native PDF workspace failed; using safe browser preview.', error); }
             }
             if (f.blobKey) {
                 const dataUrl = await cwGetBlob(f.blobKey);
@@ -28798,6 +28996,130 @@ function buildOnboardingPlanPreview() {
             document.body.appendChild(a);
             a.click();
             a.remove();
+        }
+
+        try {
+            window.SutraAttachments = {
+                addFiles: async (files, options = {}) => {
+                    const added = [];
+                    try {
+                        for (const file of Array.from(files || [])) {
+                            const stored = await addWorkspaceAttachmentFromBlob(file, options);
+                            if (stored) added.push(stored);
+                        }
+                        return added;
+                    } catch (error) {
+                        for (const stored of added) removeAttachmentMetadataAndBytes(stored.id);
+                        throw error;
+                    }
+                },
+                readDataUrl: async fileId => {
+                    const file = (courseWorkspace.files || []).find(item => String(item && item.id) === String(fileId));
+                    return file && file.blobKey ? cwGetBlob(file.blobKey) : null;
+                },
+                readBytes: async fileId => {
+                    const dataUrl = await window.SutraAttachments.readDataUrl(fileId);
+                    return dataUrl ? dataUrlToBytes(dataUrl) : null;
+                },
+                link: (fileId, entityType, entityId) => linkWorkspaceAttachment(fileId, entityType, entityId),
+                unlink: (fileId, entityType, entityId) => unlinkWorkspaceAttachment(fileId, entityType, entityId),
+                listForEntity: (entityType, entityId) => {
+                    ensurePdfWorkspaceCollections();
+                    const ids = new Set(appData.attachmentLinks.filter(link => link.entityType === String(entityType) && link.entityId === String(entityId)).map(link => link.fileId));
+                    return (courseWorkspace.files || []).filter(file => ids.has(String(file.id))).map(file => cloneSerializable(file, {}));
+                },
+                list: () => (courseWorkspace.files || []).map(file => cloneSerializable(file, {})),
+                get: fileId => cloneSerializable((courseWorkspace.files || []).find(file => String(file.id) === String(fileId)) || null, null),
+                download: fileId => downloadCourseFile(fileId),
+                remove: (fileId, options = {}) => {
+                    if (options.entityType && options.entityId) unlinkWorkspaceAttachment(fileId, options.entityType, options.entityId);
+                    const references = attachmentReferenceSummary(fileId);
+                    if (references.links.length || references.pageSources.length) return { removed: false, reason: 'referenced', references };
+                    if (options.confirmed !== true) return { removed: false, reason: 'confirmation_required', references };
+                    return { removed: removeAttachmentMetadataAndBytes(fileId), reason: '' };
+                },
+                validate: async file => {
+                    if (!file || file.size > COURSE_FILE_INLINE_NOTE_BYTES) return { ok: false, reason: 'size' };
+                    if (cwInferFileKind(file.type, file.name) !== 'pdf') return { ok: true, kind: cwInferFileKind(file.type, file.name) };
+                    const bytes = dataUrlToBytes(await cwReadFileAsDataUrl(file));
+                    return window.SutraPdfEngine ? window.SutraPdfEngine.validatePdfBytes(bytes) : { ok: bytes.length >= 5 };
+                }
+            };
+            window.SutraPdfData = {
+                isEnabled: () => !!(appSettings && appSettings.preferences && appSettings.preferences.workspace && appSettings.preferences.workspace.pdfWorkspaceEnabled === true),
+                snapshot: () => {
+                    ensurePdfWorkspaceCollections();
+                    return cloneSerializable({ documents: appData.pdfDocuments, annotations: appData.pdfAnnotations, links: appData.attachmentLinks }, { documents: [], annotations: [], links: [] });
+                },
+                getDocument: documentId => {
+                    ensurePdfWorkspaceCollections();
+                    return cloneSerializable(appData.pdfDocuments.find(record => record.id === String(documentId)) || null, null);
+                },
+                findByFile: fileId => {
+                    ensurePdfWorkspaceCollections();
+                    return cloneSerializable(appData.pdfDocuments.find(record => record.fileId === String(fileId)) || null, null);
+                },
+                upsertDocument: record => {
+                    ensurePdfWorkspaceCollections();
+                    const normalized = window.SutraPdfEngine.normalizeDocument(record);
+                    const index = appData.pdfDocuments.findIndex(item => item.id === normalized.id);
+                    const previous = index >= 0 ? appData.pdfDocuments[index] : null;
+                    const nextSources = new Set((normalized.pages || []).map(page => String(page.sourceFileId) + '\n' + String(page.id)));
+                    if (previous) {
+                        const priorSources = new Set((previous.pages || []).map(page => String(page.sourceFileId) + '\n' + String(page.id)));
+                        appData.attachmentLinks = appData.attachmentLinks.filter(link => link.entityType !== 'pdf_page_source' || !priorSources.has(String(link.fileId) + '\n' + String(link.entityId)) || nextSources.has(String(link.fileId) + '\n' + String(link.entityId)));
+                    }
+                    (normalized.pages || []).forEach(page => {
+                        const fileId = String(page.sourceFileId || '');
+                        const entityId = String(page.id || '');
+                        if (!fileId || !entityId || appData.attachmentLinks.some(link => link.fileId === fileId && link.entityType === 'pdf_page_source' && link.entityId === entityId)) return;
+                        const link = window.SutraPdfEngine.normalizeAttachmentLink({ id: attachmentLinkId(fileId, 'pdf_page_source', entityId), fileId, entityType: 'pdf_page_source', entityId, createdAt: normalized.createdAt || new Date().toISOString() });
+                        if (link) appData.attachmentLinks.push(link);
+                    });
+                    if (index >= 0) appData.pdfDocuments[index] = normalized; else appData.pdfDocuments.push(normalized);
+                    persistAppData();
+                    try { window.dispatchEvent(new CustomEvent('sutra:pdf-saved', { detail: { documentId: normalized.id, kind: 'document' } })); } catch (error) { /* non-critical */ }
+                    return cloneSerializable(normalized, {});
+                },
+                listAnnotations: documentId => {
+                    ensurePdfWorkspaceCollections();
+                    return cloneSerializable(appData.pdfAnnotations.filter(record => record.documentId === String(documentId)), []);
+                },
+                upsertAnnotation: record => {
+                    ensurePdfWorkspaceCollections();
+                    const normalized = window.SutraPdfEngine.normalizeAnnotation(record);
+                    if (!normalized) throw new Error('Invalid PDF annotation.');
+                    const index = appData.pdfAnnotations.findIndex(item => item.id === normalized.id);
+                    if (index >= 0) appData.pdfAnnotations[index] = normalized; else appData.pdfAnnotations.push(normalized);
+                    persistAppData();
+                    try { window.dispatchEvent(new CustomEvent('sutra:pdf-saved', { detail: { documentId: normalized.documentId, annotationId: normalized.id, kind: 'annotation' } })); } catch (error) { /* non-critical */ }
+                    return cloneSerializable(normalized, {});
+                },
+                removeAnnotation: annotationId => {
+                    ensurePdfWorkspaceCollections();
+                    const existing = appData.pdfAnnotations.find(record => record.id === String(annotationId));
+                    appData.pdfAnnotations = appData.pdfAnnotations.filter(record => record.id !== String(annotationId));
+                    if (!existing) return false;
+                    persistAppData();
+                    try { window.dispatchEvent(new CustomEvent('sutra:pdf-saved', { detail: { documentId: existing.documentId, annotationId: existing.id, kind: 'annotation-removed' } })); } catch (error) { /* non-critical */ }
+                    return true;
+                },
+                checkpoint: (documentId, label) => {
+                    ensurePdfWorkspaceCollections();
+                    const record = appData.pdfDocuments.find(item => item.id === String(documentId));
+                    if (!record) return null;
+                    record.checkpoints = Array.isArray(record.checkpoints) ? record.checkpoints : [];
+                    record.checkpoints.push({ id: cwId('pdfcheckpoint'), label: String(label || 'Checkpoint'), pages: cloneSerializable(record.pages, []), createdAt: new Date().toISOString() });
+                    record.checkpoints = record.checkpoints.slice(-10);
+                    record.updatedAt = new Date().toISOString();
+                    persistAppData();
+                    return cloneSerializable(record.checkpoints[record.checkpoints.length - 1], {});
+                },
+                flush: async () => { persistAppData(); return saveWorkspaceLocally(); }
+            };
+            backfillWorkspaceAttachmentLinks();
+        } catch (error) {
+            console.warn('PDF attachment bridge failed to initialize', error);
         }
 
         // ---- Note linking ---------------------------------------------------
@@ -29947,7 +30269,7 @@ function buildOnboardingPlanPreview() {
 
         async function cwDeleteFile(fileId) {
             const ok = await (window.showCustomConfirmDialog ? window.showCustomConfirmDialog({
-                title: 'Delete file?', message: 'This removes the file and its stored content.', confirmText: 'Delete', cancelText: 'Keep', confirmVariant: 'danger'
+                title: 'Remove file from course?', message: 'This unlinks the file from this course. Stored bytes are deleted only when no other link or PDF page still uses them.', confirmText: 'Remove', cancelText: 'Keep', confirmVariant: 'danger'
             }) : Promise.resolve(true));
             if (!ok) return;
             deleteCourseFile(fileId);
@@ -48912,6 +49234,34 @@ function getActiveEditor() {
         }
         installSutraCanvasApi();
 
+        function linkedPdfIdForNotePage(page) {
+            const match = String(page && page.content || '').match(/data-sutra-pdf-card=["']([^"']+)["']/);
+            return match ? String(match[1]) : '';
+        }
+
+        function reopenLinkedPdfForNotePage(page) {
+            if (!page || document.body.getAttribute('data-view') !== 'notes') return;
+            if (!window.SutraPdfWorkspace || typeof window.SutraPdfWorkspace.open !== 'function') return;
+            const fileId = linkedPdfIdForNotePage(page);
+            if (!fileId) return;
+            const active = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
+            if (active && String(active.fileId) === fileId && String(active.pageId || '')) return;
+            window.setTimeout(() => {
+                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes') return;
+                const current = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
+                if (current && String(current.fileId) === fileId) return;
+                window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: page.id }).catch(error => {
+                    console.warn('Linked PDF surface could not be restored.', error);
+                });
+            }, 0);
+        }
+
+        window.addEventListener('sutra:pdf-workspace-ready', () => {
+            if (document.body.getAttribute('data-view') !== 'notes') return;
+            const page = pages.find(item => item && item.id === currentPageId);
+            reopenLinkedPdfForNotePage(page);
+        });
+
         function loadPage(pageId) {
             purgeExpiredTemporaryPages({ silent: true });
 
@@ -49006,6 +49356,7 @@ function getActiveEditor() {
                         setSplitViewEnabled(false);
                     }
                 }
+                reopenLinkedPdfForNotePage(page);
             }
         }
 
@@ -52358,7 +52709,7 @@ function getActiveEditor() {
             savePage();
             savePagesToLocal();
             try {
-                await flushAppSaveNow('manual');
+                await flushAppSaveNow('manual-recovery');
                 const stamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
                 updateSaveStatus('saved', `Saved ${stamp}`);
                 showToast('Saved locally to this browser.');
@@ -55228,6 +55579,9 @@ function getActiveEditor() {
                     includePrivate: mode !== 'json',
                     includeBlobs: !syncMode
                 }),
+                attachmentLinks: normalizeAttachmentLinksSafe(appData && appData.attachmentLinks),
+                pdfDocuments: normalizePdfDocumentsSafe(appData && appData.pdfDocuments),
+                pdfAnnotations: normalizePdfAnnotationsSafe(appData && appData.pdfAnnotations),
                 // Academic planning — school schedule (rotations, periods,
                 // subscriptions), grade planner (categories, scores, GPA meta),
                 // and Semester Setup drafts all travel in full backups.
@@ -55299,6 +55653,9 @@ function getActiveEditor() {
                     homeworkWorkspace: payload.homeworkWorkspace,
                     reviewWorkspace: payload.reviewWorkspace,
                     courseWorkspace: payload.courseWorkspace,
+                    attachmentLinks: payload.attachmentLinks,
+                    pdfDocuments: payload.pdfDocuments,
+                    pdfAnnotations: payload.pdfAnnotations,
                     schoolSchedule: payload.schoolSchedule,
                     gradePlanner: payload.gradePlanner,
                     semesterSetup: payload.semesterSetup,
@@ -60180,7 +60537,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const arrayFields = [
                 'spaces', 'tasks', 'taskOrder', 'timeBlocks', 'focusTemplates', 'cramSessions', 'trash', 'focusSessions',
                 'protectedTime', 'taskDependencies', 'studySessions', 'masteryRecords', 'confidenceObservations',
-                'syncAuditLog', 'privateDocuments', 'sharedStudySessions'
+                'syncAuditLog', 'privateDocuments', 'sharedStudySessions',
+                'attachmentLinks', 'pdfDocuments', 'pdfAnnotations'
             ];
             arrayFields.forEach(field => {
                 const value = Object.prototype.hasOwnProperty.call(data, field) ? data[field] : (workspace && workspace[field]);
@@ -60413,7 +60771,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // mirror after the note first appears.
             const safeContent = sanitizeEditorHtml(contentHtml);
             const page = {
-                id: generateId(),
+                id: String(options && options.id || generateId()),
                 title,
                 type: PAGE_TYPES.NOTE,
                 content: safeContent || '<p>(No readable content found)</p>',
@@ -60524,6 +60882,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const importedHomeworkWorkspace = importedField('homeworkWorkspace');
             const importedReviewWorkspace = importedField('reviewWorkspace');
             const importedCourseWorkspace = importedField('courseWorkspace');
+            const importedAttachmentLinks = importedField('attachmentLinks');
+            const importedPdfDocuments = importedField('pdfDocuments');
+            const importedPdfAnnotations = importedField('pdfAnnotations');
             const importedSchoolSchedule = importedField('schoolSchedule');
             const importedGradePlanner = importedField('gradePlanner');
             const importedSemesterSetup = importedField('semesterSetup');
@@ -60564,6 +60925,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 'confidenceObservations', 'studentDecisionState', 'assistantPermissions', 'assistantMemory',
                 'syncAuditLog', 'workspaceMeta', 'privateDocuments', 'sharedStudySessions',
                 'operatingManual', 'portfolioWorkspace', 'schema', 'migrationHistory',
+                'attachmentLinks', 'pdfDocuments', 'pdfAnnotations',
                 // Migration-managed recovery buckets — restored so quarantined /
                 // recovered data survives a cross-device backup round-trip.
                 'migrationDiagnostics', 'compatibility'
@@ -60647,6 +61009,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 : (importedApStudyWorkspace || {});
             reviewWorkspace = normalizeReviewWorkspace(importedReviewWorkspace);
             courseWorkspace = normalizeCourseWorkspace(importedCourseWorkspace);
+            importedSutra2Fields.attachmentLinks = normalizeAttachmentLinksSafe(importedAttachmentLinks);
+            importedSutra2Fields.pdfDocuments = normalizePdfDocumentsSafe(importedPdfDocuments);
+            importedSutra2Fields.pdfAnnotations = normalizePdfAnnotationsSafe(importedPdfAnnotations);
             // Restore attachment blobs that travelled inside the imported course
             // workspace (base64). The Homework<->Course bridge runs LATER, after
             // the imported homework snapshot is restored, so it reconciles the
@@ -60968,7 +61333,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     'streaks', 'habitTracker', 'collegeTracker', 'academicWorkspace',
                     'collegeAppWorkspace', 'lifeWorkspace', 'businessWorkspace',
                     'apStudyWorkspace', 'homeworkWorkspace', 'reviewWorkspace',
-                    'courseWorkspace', 'schoolSchedule', 'gradePlanner', 'semesterSetup',
+                    'courseWorkspace', 'attachmentLinks', 'pdfDocuments', 'pdfAnnotations',
+                    'schoolSchedule', 'gradePlanner', 'semesterSetup',
                     'cramSessions', 'trash', 'focusSessions', 'testingHub', 'focusTemplates',
                     'customTabs', 'splitPaneContexts', 'pinnedPages', 'notificationsState',
                     'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions',
@@ -63003,19 +63369,85 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         } catch (err) { /* non-critical */ }
 
         async function importPdfFile(file) {
-            const pdfjsLib = await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            const arrayBuffer = await readFileAsArrayBuffer(file);
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const pageTexts = [];
-            for (let p = 1; p <= pdf.numPages; p += 1) {
-                const page = await pdf.getPage(p);
-                const textContent = await page.getTextContent();
-                const text = textContent.items.map(item => item.str).join(' ').trim();
-                pageTexts.push(`Page ${p}\n${text}`);
+            if (!window.SutraPdfAdapter || typeof window.SutraPdfAdapter.extractText !== 'function') {
+                throw new Error('The local PDF text extractor is unavailable.');
             }
-            return normalizeTextToHtml(pageTexts.join('\n\n'));
+            const arrayBuffer = await readFileAsArrayBuffer(file);
+            const extracted = await window.SutraPdfAdapter.extractText(new Uint8Array(arrayBuffer));
+            return normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)');
         }
+
+        function buildLinkedPdfCardHtml(fileMeta, pageId) {
+            const fileId = escapeHtml(String(fileMeta && fileMeta.id || ''));
+            const linkedPageId = escapeHtml(String(pageId || ''));
+            const name = escapeHtml(String(fileMeta && (fileMeta.originalName || fileMeta.name) || 'PDF'));
+            return `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${fileId}">
+                <p><strong>Linked PDF:</strong> ${name}</p>
+                <p>This note keeps the exact original attached. Open it in the PDF workspace or explicitly convert its searchable text into the note.</p>
+                <p><button type="button" data-sutra-pdf-action="open" data-file-id="${fileId}" data-page-id="${linkedPageId}">Open PDF</button>
+                <button type="button" data-sutra-pdf-action="convert" data-file-id="${fileId}" data-page-id="${linkedPageId}">Convert to Note</button></p>
+            </aside>`;
+        }
+
+        async function attachPdfIntoNewNote(file, context = {}) {
+            const added = await addWorkspaceAttachmentFromBlob(file, { source: context.source || 'notes_upload' });
+            if (!added) throw new Error('The PDF could not be attached.');
+            const title = String(context.title || '').trim().slice(0, 200) || `PDF::${getBaseFileName(file.name)}`;
+            const pageId = generateId();
+            const sourceParts = [];
+            if (context.url) sourceParts.push(`<p><strong>Source URL:</strong> ${escapeHtml(String(context.url).slice(0, 8000))}</p>`);
+            if (context.text) sourceParts.push(`<blockquote>${normalizeTextToHtml(String(context.text).slice(0, 80000))}</blockquote>`);
+            const page = createImportedPage(title, sourceParts.join('') + buildLinkedPdfCardHtml(added, pageId), PAGE_ICONS.PDF, { id: pageId });
+            linkWorkspaceAttachment(added.id, 'note', page.id);
+            page.updatedAt = new Date().toISOString();
+            savePagesToLocal();
+            renderPagesList();
+            loadPage(page.id);
+            await flushAppSaveNow('pdf-note-attachment');
+            if (context.openWorkspace === true && window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') {
+                try {
+                    await window.SutraPdfWorkspace.open(added.id, { entityType: 'note', entityId: page.id });
+                } catch (error) {
+                    console.warn('Native PDF workspace failed after import; keeping the PDF in Notes.', error);
+                    showToast('The PDF was saved to Notes, but the native workspace could not open it.');
+                }
+            } else {
+                showToast(`Attached "${file.name}" to a new note`);
+            }
+            return page;
+        }
+
+        async function convertLinkedPdfToNote(fileId, pageId) {
+            const bytes = await window.SutraAttachments.readBytes(fileId);
+            const fileMeta = window.SutraAttachments.get(fileId);
+            const page = pages.find(item => String(item && item.id) === String(pageId));
+            if (!bytes || !fileMeta || !page) throw new Error('The linked PDF is unavailable.');
+            const extracted = await window.SutraPdfAdapter.extractText(bytes);
+            const card = buildLinkedPdfCardHtml(fileMeta, page.id);
+            page.content = sanitizeEditorHtml(card + '<hr>' + normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)'));
+            page.updatedAt = new Date().toISOString();
+            savePagesToLocal();
+            await flushAppSaveNow('pdf-convert-to-note');
+            if (String(currentPageId) === String(page.id)) loadPage(page.id);
+            showToast('PDF text converted into the note. The original remains attached.');
+            return page;
+        }
+
+        document.addEventListener('click', async event => {
+            const control = event.target && event.target.closest ? event.target.closest('[data-sutra-pdf-action]') : null;
+            if (!control) return;
+            event.preventDefault();
+            const fileId = control.getAttribute('data-file-id');
+            const pageId = control.getAttribute('data-page-id');
+            try {
+                if (control.getAttribute('data-sutra-pdf-action') === 'convert') await convertLinkedPdfToNote(fileId, pageId);
+                else if (window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') await window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: pageId });
+                else await openCourseFile(fileId);
+            } catch (error) {
+                console.warn('Linked PDF action failed', error);
+                showToast(error.message || 'The linked PDF action failed.');
+            }
+        });
 
         async function importDocxFile(file) {
             const mammoth = await loadExternalScript('https://unpkg.com/mammoth/mammoth.browser.min.js', 'mammoth');
@@ -63586,7 +64018,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         }
                     }
                 } else if (kind === 'document') {
-                    await importDocumentIntoNewPage(file);
+                    if (getFileExtension(file.name) === 'pdf') await attachPdfIntoNewNote(file, { source: 'notes_upload', openWorkspace: true });
+                    else await importDocumentIntoNewPage(file);
                 } else {
                     throw new Error('Unsupported file type. Choose a .sutra backup, legacy .atelier backup, JSON workspace, or a supported document file.');
                 }
@@ -63610,14 +64043,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (kind !== 'document') {
                     throw new Error('Share Target accepts supported documents and images, not workspace backups.');
                 }
-                const page = await importDocumentIntoNewPage(file);
+                const isPdf = getFileExtension(file.name) === 'pdf';
+                const page = isPdf
+                    ? await attachPdfIntoNewNote(file, { title: candidates.length === 1 ? context.title : '', text: context.text, url: context.url, source: 'share_target' })
+                    : await importDocumentIntoNewPage(file);
                 if (!page) throw new Error(`Could not import "${String(file.name || 'shared file')}".`);
                 const sourceParts = [];
                 if (context.title) sourceParts.push(`<p><strong>Shared title:</strong> ${escapeHtml(String(context.title).slice(0, 1000))}</p>`);
                 if (context.url) sourceParts.push(`<p><strong>Source URL:</strong> ${escapeHtml(String(context.url).slice(0, 8000))}</p>`);
                 if (context.text) sourceParts.push(`<blockquote>${normalizeTextToHtml(String(context.text).slice(0, 80000))}</blockquote>`);
-                if (sourceParts.length) page.content = sanitizeEditorHtml(sourceParts.join('') + String(page.content || ''));
-                if (candidates.length === 1 && context.title) page.title = String(context.title).trim().slice(0, 200) || page.title;
+                if (!isPdf && sourceParts.length) page.content = sanitizeEditorHtml(sourceParts.join('') + String(page.content || ''));
+                if (!isPdf && candidates.length === 1 && context.title) page.title = String(context.title).trim().slice(0, 200) || page.title;
                 page.updatedAt = new Date().toISOString();
                 importedPages.push(page);
             }

@@ -18,7 +18,7 @@ map only.
 | `base/` | `styles.css` (the large core), `microinteractions.css` | Design tokens, components, layout, and interaction polish. The foundation everything else layers over. |
 | `themes/` | `sutra-pro.css`, `glass.css`, `macos26-redesign.css`, `dune.css`, `signature-presets.css` | The "pro" surface plus authored glass, platform-inspired, cinematic, and signature preset theme layers. |
 | `views/` | `focus-session.css`, `settings-redesign.css` | View-specific styling extracted from the app shell. |
-| `features/` | `sutra-intelligence.css`, `customization.css`, `command-center.css`, `academic-command-center.css`, `academic-planning.css`, `notifications.css`, `startup-intro.css` | Per-feature styling. |
+| `features/` | `sutra-intelligence.css`, `customization.css`, `command-center.css`, `academic-command-center.css`, `academic-planning.css`, `notifications.css`, `pdf-workspace.css`, `startup-intro.css` | Per-feature styling, including the responsive contextual PDF canvas and sheets. |
 | `responsive/` | `mobile.css` | Mobile / tablet overrides. Loads late on purpose. |
 | `legacy/` | `app-shell-base.css`, `workspace-overrides.css`, `mobile-global.css`, `ui-refresh.css`, `refinement.css`, `responsive-hardening.css` | Large blocks **extracted from inline `<style>` in `Sutra.html`**. Loaded by a `<link>` at the same cascade position they occupied inline, so the result is identical. Split these down incrementally; do not grow them. |
 

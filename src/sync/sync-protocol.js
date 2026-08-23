@@ -127,7 +127,10 @@
       { field: 'trash', collection: 'trash' },
       { field: 'privateDocuments', collection: 'privateDocuments' },
       { field: 'syncAuditLog', collection: 'syncAuditLog' },
-      { field: 'migrationHistory', collection: 'migrationHistory' }
+      { field: 'migrationHistory', collection: 'migrationHistory' },
+      { field: 'attachmentLinks', collection: 'attachmentLinks' },
+      { field: 'pdfDocuments', collection: 'pdfDocuments' },
+      { field: 'pdfAnnotations', collection: 'pdfAnnotations' }
     ],
     // Sections whose id-keyed collections live under named keys; leftover
     // keys travel as a/<field>.__rest.
@@ -188,6 +191,8 @@
     //    homework store's per-device revision counter).
     recordFieldPolicies: {
       'c/pages': { hashVolatile: ['updatedAt'] },
+      'c/pdfDocuments': { hashVolatile: ['updatedAt'] },
+      'c/pdfAnnotations': { hashVolatile: ['updatedAt'] },
       // The homework store bumps revision/updatedAt/lastMutation on every
       // local mutation INCLUDING a sync apply — pure per-device bookkeeping.
       'a/homeworkWorkspace.__rest': { localOnly: ['revision', 'updatedAt', 'lastMutation'] },

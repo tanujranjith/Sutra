@@ -36,6 +36,10 @@ const TEXT_EXT = new Set([
 const SKIP_FILES = new Set([
   'assets/vendor/jszip/jszip.min.js', // vendored minified third-party lib
   'assets/vendor/editor/sutra-editor.min.js', // vendored minified TipTap engine (embeds a literal U+001F ProseMirror leaf separator)
+  'assets/vendor/pdf-fontkit/fontkit.umd.min.js', // vendored minified font parser embeds binary lookup tables
+  'assets/vendor/pdf-lib/pdf-lib.min.js', // vendored minified PDF writer embeds PDF encoding tables
+  'assets/vendor/pdfjs/build/pdf.worker.min.mjs', // vendored PDF.js worker embeds font/character tables
+  'assets/vendor/pdfjs/build/pdf.worker.sutra.min.js', // local classic build of the same pinned PDF.js worker tables
 ]);
 const SKIP_PREFIXES = [
   'scripts/_',              // local throwaway analysis helpers, never committed

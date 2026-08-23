@@ -89,6 +89,9 @@ separate plaintext-recovery preference. Determinism rules:
 | `customTabs` | collection | `c/customTabs/<id>` + `o/customTabs` |
 | `trash` | collection | `c/trash/<id>` + `o/trash` |
 | `privateDocuments` | collection | `c/privateDocuments/<id>` + `o/privateDocuments` |
+| `attachmentLinks` | collection | `c/attachmentLinks/<id>` + `o/attachmentLinks` |
+| `pdfDocuments` | collection | `c/pdfDocuments/<id>` + `o/pdfDocuments` |
+| `pdfAnnotations` | collection | `c/pdfAnnotations/<id>` + `o/pdfAnnotations` |
 | `syncAuditLog` | collection | `c/syncAuditLog/<id>` + `o/syncAuditLog` |
 | `migrationHistory` | collection | `c/migrationHistory/<id>` + `o/migrationHistory` |
 | `spaces`, `streaks`, `habitTracker`, `collegeTracker`, `academicWorkspace`, `collegeAppWorkspace`, `lifeWorkspace`, `businessWorkspace`, `apStudyWorkspace`, `courseWorkspace`, `schoolSchedule`, `gradePlanner`, `semesterSetup`, `cramSessions`, `focusSessions`, `focusTemplates`, `testingHub`, `pinnedPages`, `notificationsState`, `energyProfile`, `protectedTime`, `taskDependencies`, `studySessions`, `masteryRecords`, `confidenceObservations`, `studentDecisionState`, `assistantPermissions`, `assistantMemory`, `sharedStudySessions`, `operatingManual`, `portfolioWorkspace`, `settings`, `globalTheme`, `migrationDiagnostics`, `compatibility`, `localStorageSnapshot`, `schema`, `unknownWorkspaceFields` | atomic | `a/<field>` |
@@ -162,6 +165,13 @@ Course-file records sync metadata through the workspace projection, but
 only through the encrypted content-addressed asset channel. A newly referenced
 remote file is marked missing until its bytes decrypt and pass the SHA-256
 integrity check.
+
+Native PDF state follows the same projection rules. Attachment relationships,
+page plans, bookmarks, and annotations/form answers are independent stable-ID
+records. PDF document and annotation `updatedAt` fields are hash-volatile.
+Every `sourceFileId` referenced by a page plan is a required attachment asset;
+the receiver must not report the PDF workspace complete until each source byte
+object decrypts and verifies against its content hash.
 
 Inline note images, document backgrounds, and embedded handwriting bytes travel
 inside the encrypted page record/snapshot rather than the external asset

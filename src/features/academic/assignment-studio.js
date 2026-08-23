@@ -431,6 +431,13 @@
             if (btn) handleAction(btn);
         });
         modal.addEventListener('change', function (e) {
+            if (e.target && e.target.dataset && e.target.dataset.studioUpload !== undefined) {
+                uploadAssignmentFiles(e.target.files).catch(function (error) {
+                    toast(error && error.message ? error.message : 'The attachment could not be stored.');
+                });
+                e.target.value = '';
+                return;
+            }
             var field = e.target && e.target.dataset ? e.target.dataset.studioField : '';
             if (field) handleFieldChange(e.target, field);
         });
@@ -449,6 +456,7 @@
             updateTaskStudio(taskId, function () { /* initialize empty studio */ });
             task = getTask(taskId);
         }
+        ensureStudioAttachmentLinks(task);
         var modal = ensureModal();
         renderBody(task);
         modal.__sutraReturnFocus = document.activeElement;
@@ -499,12 +507,49 @@
     }
 
     function filesForTask(task) {
+        var found = [];
         try {
             if (task.courseId && global.courseHub && typeof global.courseHub.getFilesForCourse === 'function') {
-                return global.courseHub.getFilesForCourse(task.courseId) || [];
+                found = found.concat(global.courseHub.getFilesForCourse(task.courseId) || []);
             }
         } catch (e) { /* non-critical */ }
-        return [];
+        try {
+            if (global.SutraAttachments && typeof global.SutraAttachments.listForEntity === 'function') {
+                found = found.concat(global.SutraAttachments.listForEntity('assignment', task.id) || []);
+            }
+        } catch (e) { /* non-critical */ }
+        var seen = {};
+        return found.filter(function (file) {
+            var id = String(file && file.id || '');
+            if (!id || seen[id]) return false;
+            seen[id] = true;
+            return true;
+        });
+    }
+
+    function ensureStudioAttachmentLinks(task) {
+        if (!task || !task.studio || !global.SutraAttachments || typeof global.SutraAttachments.link !== 'function') return;
+        var studio = normalizeStudio(task.studio);
+        if (!studio) return;
+        studio.linkedFileIds.forEach(function (fileId) {
+            try { global.SutraAttachments.link(fileId, 'assignment', task.id); } catch (e) { /* compatibility backfill is best effort */ }
+        });
+    }
+
+    async function uploadAssignmentFiles(fileList) {
+        if (!activeTaskId || !global.SutraAttachments || typeof global.SutraAttachments.addFiles !== 'function') {
+            throw new Error('Attachment storage is unavailable.');
+        }
+        var files = Array.from(fileList || []);
+        if (!files.length) return;
+        var added = await global.SutraAttachments.addFiles(files, { entityType: 'assignment', entityId: activeTaskId, source: 'assignment_studio_upload' });
+        updateTaskStudio(activeTaskId, function (studio) {
+            added.forEach(function (file) {
+                if (studio.linkedFileIds.indexOf(String(file.id)) === -1) studio.linkedFileIds.push(String(file.id));
+            });
+        });
+        toast(added.length === 1 ? 'Attachment saved for this assignment.' : added.length + ' attachments saved for this assignment.');
+        rerender();
     }
 
     function renderBody(task) {
@@ -568,7 +613,10 @@
             var file = fileById[fid];
             return '<div class="studio-link-row" data-file-link="' + esc(fid) + '">'
                 + '<span>📎 ' + (file ? esc(file.name) : 'Missing file (' + esc(fid) + ')') + '</span>'
+                + '<span class="studio-link-actions">'
+                + (file ? '<button type="button" class="studio-mini-btn" data-studio-action="open-file" data-file-id="' + esc(fid) + '">Open</button>' : '')
                 + '<button type="button" class="studio-mini-btn danger" data-studio-action="unlink-file" data-file-id="' + esc(fid) + '" aria-label="Unlink file">&times;</button>'
+                + '</span>'
                 + '</div>';
         }).join('');
 
@@ -645,6 +693,8 @@
             + '<div class="studio-add-row">'
             + '<select data-studio-field="link-note" aria-label="Link a note">' + pageOptions + '</select>'
             + (files.length ? '<select data-studio-field="link-file" aria-label="Link a course file">' + fileOptions + '</select>' : '')
+            + '<input type="file" data-studio-upload multiple accept="application/pdf,.pdf,image/png,image/jpeg" hidden>'
+            + '<button type="button" class="studio-mini-btn" data-studio-action="upload-file">Attach PDF or image</button>'
             + '</div></section></div>'
 
             + '<div class="studio-tab-panel" data-studio-panel="effort"' + (activeStudioTab === 'effort' ? '' : ' hidden') + '>'
@@ -726,6 +776,7 @@
                 if (studio.linkedPageIds.indexOf(el.value) === -1) studio.linkedPageIds.push(el.value);
             } else if (field === 'link-file' && el.value) {
                 if (studio.linkedFileIds.indexOf(el.value) === -1) studio.linkedFileIds.push(el.value);
+                if (global.SutraAttachments && typeof global.SutraAttachments.link === 'function') global.SutraAttachments.link(el.value, 'assignment', activeTaskId);
             } else if (field.indexOf('ms-') === 0) {
                 row = el.closest('.studio-ms-row');
                 if (!row) return;
@@ -856,10 +907,21 @@
             });
             rerender();
         } else if (action === 'unlink-file') {
+            if (global.SutraAttachments && typeof global.SutraAttachments.unlink === 'function') global.SutraAttachments.unlink(btn.dataset.fileId, 'assignment', activeTaskId);
             updateTaskStudio(activeTaskId, function (studio) {
                 studio.linkedFileIds = studio.linkedFileIds.filter(function (id) { return id !== btn.dataset.fileId; });
             });
             rerender();
+        } else if (action === 'open-file') {
+            var linked = global.SutraAttachments && global.SutraAttachments.get ? global.SutraAttachments.get(btn.dataset.fileId) : null;
+            if (linked && linked.kind === 'pdf' && global.SutraPdfWorkspace && global.SutraPdfWorkspace.isEnabled()) {
+                var assignmentId = activeTaskId;
+                close();
+                global.SutraPdfWorkspace.open(linked.id, { entityType: 'assignment', entityId: assignmentId }).catch(function (error) { toast(error.message || 'The PDF could not be opened.'); });
+            } else if (global.SutraAttachments && typeof global.SutraAttachments.download === 'function') global.SutraAttachments.download(btn.dataset.fileId);
+        } else if (action === 'upload-file') {
+            var picker = document.querySelector('#assignmentStudioBody [data-studio-upload]');
+            if (picker) picker.click();
         } else if (action === 'log-25') {
             updateTaskStudio(activeTaskId, function (studio) {
                 studio.effort.loggedMinutes += 25;
