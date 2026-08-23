@@ -234,7 +234,7 @@
     "sutra-drive-sync-keys": { "category": "secret", "reason": "Device-local wrapped/derived Google Drive backup key material." },
     "sutra-fs-config": { "category": "deviceLocal", "reason": "File-system backup directory handle." },
     "sutra_share_target_db": { "category": "ephemeral", "reason": "Temporary incoming share payload." },
-    "sessionStorage": { "category": "ephemeral", "reason": "In-flight chat context, API keys, UI scroll restoration, Safe Mode, and current-session state never enter sync." }
+    "sessionStorage": { "category": "ephemeral", "reason": "In-flight chat context, API keys, UI scroll restoration, Safe Mode, and a bounded same-tab immediate-reload journal for unlocked notes never enter sync. PIN-locked note plaintext is excluded from that journal." }
   },
   "deliberateExclusions": [
     "AI provider API keys and model secrets",

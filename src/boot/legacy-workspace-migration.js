@@ -14,6 +14,15 @@
     const LAST_MEANINGFUL_KEY = 'workspace-last-meaningful';
     const EMPTY_BEFORE_RECOVERY_KEY = 'workspace-empty-before-recovery';
     const CONFIRMED_ROOT_KEY = 'workspace-confirmed-root';
+    // Keep the boot-time recovery adapter on the same IndexedDB version as the
+    // canonical runtime. Opening an existing v8 database with the old hard-coded
+    // v7 request throws VersionError and silently skips empty-root recovery.
+    // The migration registry loads before this bridge and is the shared schema
+    // source of truth; the fallback supports defensive standalone loading.
+    const CANONICAL_DB_VERSION = Math.max(
+        1,
+        Number(global.SutraMigrations && global.SutraMigrations.CURRENT_VERSION) || 8
+    );
     const KNOWN_WORKSPACE_FIELDS = new Set([
         'version', 'schema', 'migrationHistory', 'pages', 'spaces', 'tasks', 'taskOrder', 'timeBlocks',
         'streaks', 'habitTracker', 'collegeTracker', 'academicWorkspace', 'collegeAppWorkspace',
@@ -177,12 +186,31 @@
             + 1;
     }
 
+    function hasLegacySetupMetadata(workspace) {
+        if (!workspace || typeof workspace !== 'object') return false;
+        const settings = workspace.settings && typeof workspace.settings === 'object'
+            ? workspace.settings
+            : {};
+        return settings.studentOnboardingCompleted === true
+            || settings.featureSelectionCompleted === true
+            || settings.userModeSetupCompleted === true
+            || settings.tutorialSeen === true
+            || settings.tutorialCompleted === true
+            || typeof settings.userMode === 'string' && settings.userMode.trim().length > 0;
+    }
+
     function chooseRecoveryCandidate(journal, legacy) {
         // The journal is the immediately previous confirmed canonical root.
         // A legacy localStorage copy can be much older, so record count must
         // never let it outrank the journal.
         if (hasMeaningfulData(journal)) return { source: 'journal', workspace: journal };
-        if (hasMeaningfulData(legacy)) return { source: 'legacy-local-storage', workspace: legacy };
+        // A few early builds stored setup-completion flags in the monolithic
+        // localStorage record before the user created any notes. Preserve that
+        // metadata too, otherwise an existing user can be treated as brand new
+        // solely because their legacy record contains no content yet.
+        if (hasMeaningfulData(legacy) || hasLegacySetupMetadata(legacy)) {
+            return { source: 'legacy-local-storage', workspace: legacy };
+        }
         return null;
     }
 
@@ -223,7 +251,7 @@
     const migrationAdapter = originalCreate.call(originalApi, {
         dbName: DB_NAME,
         storeName: STORE_NAME,
-        version: 7
+        version: CANONICAL_DB_VERSION
     });
     migrationPromise = Promise.all([
         migrationAdapter.read(ROOT_KEY),

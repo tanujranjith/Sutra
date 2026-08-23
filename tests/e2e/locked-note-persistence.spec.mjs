@@ -5,18 +5,34 @@ const PIN = '2468';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await page.evaluate(() => {
-    try { window.markStudentOnboardingCompleted?.(true); } catch (error) {}
+  await page.waitForFunction(() =>
+    !!window.__sutraPublicBetaTestHooks &&
+    !!window.flowAtelier &&
+    typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // Production keeps the startup overlay above the app until canonical
+  // hydration is ready. Establish that baseline before touching onboarding.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
+  const completedOnboarding = await page.evaluate(() => {
     const overlay = document.getElementById('studentOnboardingOverlay');
-    if (overlay) {
+    const visible = !!overlay && !overlay.hidden && getComputedStyle(overlay).display !== 'none';
+    if (visible) {
+      try { window.markStudentOnboardingCompleted?.(true); } catch (error) {}
       overlay.classList.remove('active');
       overlay.hidden = true;
       overlay.setAttribute('aria-hidden', 'true');
       overlay.style.setProperty('display', 'none', 'important');
       overlay.style.setProperty('pointer-events', 'none', 'important');
     }
+    return visible;
   });
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks);
+  if (completedOnboarding) {
+    await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-onboarding-ready'));
+  }
+  // Some startup bridges intentionally request the ordinary 250 ms autosave.
+  // Let that debounce become visible, then drain it before this test treats the
+  // tab's canonical hash as a deliberate cross-tab baseline.
+  await page.waitForTimeout(350);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-startup-settled'));
 }
 
 test('edits made in a locked note survive navigation auto-lock', async ({ page }) => {
@@ -82,6 +98,47 @@ test('edits made in a locked note survive navigation auto-lock', async ({ page }
   expect(result.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
 });
 
+test('lifecycle recovery never copies unlocked PIN-note plaintext into session storage', async ({ page }) => {
+  await openApp(page);
+
+  const journal = await page.evaluate(async ({ pin }) => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const lockedId = 'locked-note-journal-privacy-qa';
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    payload.pages = [
+      ...payload.pages,
+      { id: lockedId, title: 'Locked journal privacy QA', content: '<p>before</p>', blocks: [] }
+    ];
+    window.deserializeWorkspace(payload);
+    await hooks.lockPageWithPin(lockedId, pin);
+    window.loadPage(lockedId);
+
+    const input = document.getElementById('lockScreenPinInput');
+    input.value = pin;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('lockScreenForm').requestSubmit();
+    await new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const waitForUnlock = () => {
+        if (document.getElementById('lockedPageScreen')?.hidden) return resolve();
+        if (Date.now() - startedAt > 5000) return reject(new Error('Timed out waiting for note unlock.'));
+        setTimeout(waitForUnlock, 25);
+      };
+      waitForUnlock();
+    });
+
+    const sentinel = 'PIN note plaintext must never enter the lifecycle journal.';
+    const editor = document.getElementById('editor');
+    editor.innerHTML = `<p>${sentinel}</p>`;
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'x' }));
+    window.dispatchEvent(new Event('pagehide'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return sessionStorage.getItem('sutra:lifecycle-note-journal:v1');
+  }, { pin: PIN });
+
+  expect(journal).toBeNull();
+});
+
 test('a stale second tab cannot overwrite a paste saved in a locked note', async ({ page, context }) => {
   await openApp(page);
 
@@ -105,13 +162,18 @@ test('a stale second tab cannot overwrite a paste saved in a locked note', async
     return { lockedId, otherId };
   }, { pin: PIN });
 
+  // Stop the seeding tab before the second tab establishes its baseline. Boot
+  // normalization/onboarding saves are valid canonical writes; leaving both
+  // tabs active here makes the test race before the intentional stale-write
+  // step and does not model the scenario under test.
+  await page.goto('/HomePage.html');
+
   // This tab hydrates the pre-paste workspace and deliberately stays stale.
   const stalePage = await context.newPage();
   await openApp(stalePage);
   await stalePage.waitForFunction((lockedId) => {
     return window.flowAtelier?.pages?.find(entry => entry.id === lockedId)?.content === '<p>before</p>';
   }, ids.lockedId);
-  await stalePage.evaluate(() => window.flowAtelier.flushAppSaveNow('stale-tab-baseline'));
 
   // Start the editing tab from that exact confirmed base. The second tab now
   // holds the same base in memory but will not hydrate the later paste.

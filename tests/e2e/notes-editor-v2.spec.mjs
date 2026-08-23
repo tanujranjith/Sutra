@@ -31,17 +31,27 @@ async function completeOnboarding(page) {
       overlay.style.setProperty('pointer-events', 'none', 'important');
     }
   });
-  await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+  await page.waitForFunction(() => {
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    return !overlay || overlay.hidden || getComputedStyle(overlay).display === 'none';
+  });
 }
 
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
-  await completeOnboarding(page);
   await page.waitForFunction(() =>
     !!window.SutraNotesEditorV2 &&
+    !!window.flowAtelier &&
+    typeof window.flowAtelier.flushAppSaveNow === 'function' &&
     typeof window.setWorkspacePreference === 'function' &&
     typeof window.applyWorkspacePreferences === 'function');
+  // The static shell and v2 module exist before the async canonical workspace
+  // hydrate completes. Wait through the public durability seam so tests never
+  // simulate typing into boot defaults that a real user cannot reach beneath
+  // the startup overlay.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
+  await completeOnboarding(page);
 }
 
 async function enableEditorV2(page) {
@@ -133,11 +143,12 @@ test('content saves in classic storage format and reloads into v2', async ({ pag
   await page.keyboard.type('1. first item');
   await page.keyboard.press('Enter');
   await page.keyboard.type('second item');
+  await expect(page.locator('#taskbarSaveStatus')).toContainText(/Saving/i);
 
-  // Force the save path (mirror flush + savePage) and capture what persisted.
-  const savedContent = await page.evaluate(() => {
+  // Force the readback-verified save path and capture what persisted.
+  const savedContent = await page.evaluate(async () => {
     window.SutraNotesEditorV2.flushToMirror();
-    window.savePage();
+    await window.saveWorkspaceLocally();
     const title = document.getElementById('pageTitle').value;
     const mirror = document.getElementById('editor');
     return { title, mirrorHtml: mirror.innerHTML };
@@ -145,11 +156,7 @@ test('content saves in classic storage format and reloads into v2', async ({ pag
   expect(savedContent.mirrorHtml).toContain('<ol>');
   expect(savedContent.mirrorHtml).toContain('first item');
   expect(savedContent.mirrorHtml).not.toContain('1. first');
-
-  // persistAppData writes asynchronously — give it time to commit before the
-  // reload, or the content save is lost mid-flight (test-only hazard; the app
-  // autosaves continuously).
-  await page.waitForTimeout(2000);
+  await expect(page.locator('#taskbarSaveStatus')).toContainText(/Saved/i);
 
   // Reload the app: the flag persists, v2 remounts, content restores.
   await page.reload();
@@ -170,6 +177,36 @@ test('content saves in classic storage format and reloads into v2', async ({ pag
   expect(restored.title).toBe('v2 roundtrip');
   expect(restored.text).toContain('first item');
   expect(restored.text).toContain('second item');
+});
+
+test('an immediate reload flushes the latest note before the editor debounce', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'immediate reload trust');
+
+  const sentinel = 'Latest sentence survives an immediate reload.';
+  await page.click(PM_SELECTOR);
+  await page.keyboard.type(sentinel);
+  await expect(page.locator('#taskbarSaveStatus')).toContainText(/Saving/i);
+
+  // Do not call savePage/saveWorkspaceLocally or wait for the editor debounce.
+  // The lifecycle flush must synchronously snapshot the editor and start the
+  // canonical write/readback or the bounded lifecycle recovery journal before
+  // navigation completes.
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await page.waitForFunction(() =>
+    !!window.flowAtelier && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-journal-promotion'));
+  await page.waitForFunction(() => window.SutraNotesEditorV2 && window.SutraNotesEditorV2.isMounted());
+  await openNotesView(page);
+  await page.waitForFunction(({ selector, text }) => {
+    const editor = document.querySelector(selector);
+    return editor && editor.textContent.includes(text);
+  }, { selector: PM_SELECTOR, text: sentinel });
+  expect(await page.evaluate(() => sessionStorage.getItem('sutra:lifecycle-note-journal:v1'))).toBeNull();
 });
 
 test('assistant context reads latest v2 note content and visible selection', async ({ page }) => {

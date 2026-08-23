@@ -20,7 +20,7 @@ async function returnToApp(page) {
 
 async function writeWorkspaceRecord(page, key, value) {
   await page.evaluate(({ key, value }) => new Promise((resolve, reject) => {
-    const request = indexedDB.open('noteflow_atelier_db', 7);
+    const request = indexedDB.open('noteflow_atelier_db');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
@@ -35,7 +35,7 @@ async function writeWorkspaceRecord(page, key, value) {
 
 async function readWorkspaceRecord(page, key) {
   return page.evaluate(keyToRead => new Promise((resolve, reject) => {
-    const request = indexedDB.open('noteflow_atelier_db', 7);
+    const request = indexedDB.open('noteflow_atelier_db');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
@@ -50,7 +50,7 @@ async function readWorkspaceRecord(page, key) {
 
 async function deleteWorkspaceRecord(page, key) {
   await page.evaluate(keyToDelete => new Promise((resolve, reject) => {
-    const request = indexedDB.open('noteflow_atelier_db', 7);
+    const request = indexedDB.open('noteflow_atelier_db');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
@@ -115,7 +115,7 @@ test('present-but-empty canonical root recovers the richer legacy workspace', as
   const result = await page.evaluate(async () => {
     const live = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     const preservedEmpty = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('noteflow_atelier_db', 7);
+      const request = indexedDB.open('noteflow_atelier_db');
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const db = request.result;
@@ -232,7 +232,7 @@ test('a canonically confirmed empty workspace does not resurrect its journal', a
     const db = window.SutraWorkspaceDB.create({
       dbName: 'noteflow_atelier_db',
       storeName: 'workspace',
-      version: 7
+      version: Number(window.SutraMigrations?.CURRENT_VERSION) || 8
     });
     try {
       return await db.writeIf('root', next, current => Array.isArray(current?.pages)

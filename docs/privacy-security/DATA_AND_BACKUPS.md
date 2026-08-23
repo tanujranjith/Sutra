@@ -24,8 +24,11 @@ fixtures by `npm run check:migrations`.
 - Your entire workspace is a single `appData` object held in **IndexedDB**.
 - **Database:** `noteflow_atelier_db` · **store:** `workspace` · **key:** `root`.
 - It is hydrated through one merge/normalize path on load and written through one
-  debounced save path, with a synchronous flush on page-hide / unload so
-  in-progress edits are not lost.
+  debounced save path. Page-hide / unload synchronously snapshots the active
+  unlocked note into a bounded same-tab recovery journal while starting the
+  normal verified IndexedDB flush; the journal is removed only after matching
+  content is confirmed in IndexedDB. PIN-locked note plaintext is never copied
+  into this session journal.
 - Every accepted full-workspace replacement atomically keeps the previous
   meaningful root at `workspace-last-meaningful`. If startup finds that the
   canonical `root` is present but empty/default, it restores the local journal

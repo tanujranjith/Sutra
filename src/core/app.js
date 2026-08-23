@@ -2827,6 +2827,12 @@ function populateProgressDashboard() {
         const APP_DB_STORE = 'workspace';
         const APP_DB_KEY = 'root';
         const APP_SCHEMA_VERSION = 8;
+        // A page navigation cannot wait for an IndexedDB transaction. Keep one
+        // bounded, tab-scoped recovery record for the active unlocked note so an
+        // immediate reload cannot discard the last editor snapshot. This is not a
+        // second canonical store: it is removed only after verified IDB readback.
+        const LIFECYCLE_NOTE_JOURNAL_KEY = 'sutra:lifecycle-note-journal:v1';
+        const LIFECYCLE_NOTE_JOURNAL_MAX_BYTES = 1500000;
         const workspaceDb = window.SutraWorkspaceDB.create({
             dbName: APP_DB_NAME,
             storeName: APP_DB_STORE,
@@ -2850,6 +2856,16 @@ function populateProgressDashboard() {
         });
         let appData = null;
         let pendingAppSave = null;
+        // DOMContentLoaded listeners registered earlier in this classic-script
+        // runtime can request persistence while the canonical IndexedDB read is
+        // still in flight. Never let those boot-time requests write the default
+        // in-memory workspace over a user's real root.
+        let workspaceHydrationComplete = false;
+        let saveRequestedBeforeHydration = false;
+        let resolveWorkspaceHydrationReady;
+        const workspaceHydrationReady = new Promise(resolve => {
+            resolveWorkspaceHydrationReady = resolve;
+        });
         // Hash of the exact canonical workspace record this tab last loaded or
         // successfully wrote. Every full-workspace write compares against this
         // base atomically inside IndexedDB so a stale tab cannot overwrite a
@@ -3224,6 +3240,13 @@ function populateProgressDashboard() {
             });
             applyPersistenceSummaryToDataHealth(summary, { lastConfirmedSaveAt: confirmedAt });
             persistSutraPersistenceState();
+            // "Saved" is a durability claim. Only show it after the canonical
+            // IndexedDB transaction completed and its readback hash matched. A
+            // newer editor debounce or workspace timeout means more local state
+            // is still waiting to enter that verified snapshot.
+            if (!primarySaveDebounceTimer && !splitSecondaryDebounceTimer && !pendingAppSave) {
+                try { updateSaveStatus('saved'); } catch (error) { /* UI is non-critical */ }
+            }
             try { updateSutraPersistenceHealthUi(); } catch (error) { /* non-critical */ }
         }
 
@@ -7034,6 +7057,129 @@ function populateProgressDashboard() {
             });
         }
 
+        function readLifecycleNoteJournal() {
+            const safeStorage = window.SutraSafeStorage;
+            if (!safeStorage || typeof safeStorage.sessionGet !== 'function') return null;
+            const raw = safeStorage.sessionGet(LIFECYCLE_NOTE_JOURNAL_KEY, { fallback: null });
+            if (typeof raw !== 'string' || !raw || raw.length > LIFECYCLE_NOTE_JOURNAL_MAX_BYTES) {
+                if (raw && typeof safeStorage.sessionRemove === 'function') {
+                    safeStorage.sessionRemove(LIFECYCLE_NOTE_JOURNAL_KEY);
+                }
+                return null;
+            }
+            try {
+                const journal = JSON.parse(raw);
+                if (!journal || journal.version !== 1 || typeof journal.pageId !== 'string'
+                    || !journal.pageId || journal.pageId.length > 256
+                    || (journal.baseWorkspaceHash !== undefined
+                        && (typeof journal.baseWorkspaceHash !== 'string' || journal.baseWorkspaceHash.length > 128))
+                    || !journal.state || typeof journal.state !== 'object'
+                    || typeof journal.state.title !== 'string'
+                    || typeof journal.state.content !== 'string') {
+                    throw new Error('Invalid lifecycle note journal');
+                }
+                const recordedAt = Date.parse(journal.recordedAt || '');
+                if (!Number.isFinite(recordedAt)) throw new Error('Invalid lifecycle note timestamp');
+                const normalizedSnapshot = normalizePageVersionSnapshot({
+                    label: 'Immediate reload recovery',
+                    savedAt: journal.recordedAt,
+                    state: journal.state
+                });
+                if (!normalizedSnapshot) throw new Error('Invalid lifecycle note state');
+                journal.state = normalizedSnapshot.state;
+                return journal;
+            } catch (error) {
+                if (typeof safeStorage.sessionRemove === 'function') {
+                    safeStorage.sessionRemove(LIFECYCLE_NOTE_JOURNAL_KEY);
+                }
+                return null;
+            }
+        }
+
+        function removeLifecycleNoteJournal() {
+            const safeStorage = window.SutraSafeStorage;
+            if (safeStorage && typeof safeStorage.sessionRemove === 'function') {
+                safeStorage.sessionRemove(LIFECYCLE_NOTE_JOURNAL_KEY);
+            }
+        }
+
+        function journalCurrentNoteForLifecycle() {
+            const page = currentPageId && pages.find(entry => entry && entry.id === currentPageId);
+            // Session storage is same-origin but plaintext. Never copy protected
+            // note content into it, even while that note is unlocked in memory.
+            if (!page || page.isLocked || page.lockHash || normalizePageType(page.type) !== PAGE_TYPES.NOTE) {
+                removeLifecycleNoteJournal();
+                return false;
+            }
+            try {
+                const journal = {
+                    version: 1,
+                    pageId: String(page.id),
+                    recordedAt: new Date().toISOString(),
+                    updatedAt: typeof page.updatedAt === 'string' ? page.updatedAt : '',
+                    baseWorkspaceHash: typeof canonicalWorkspaceHash === 'string' ? canonicalWorkspaceHash : '',
+                    state: buildPageVersionStateFromPage(page)
+                };
+                const serialized = JSON.stringify(journal);
+                if (!serialized || serialized.length > LIFECYCLE_NOTE_JOURNAL_MAX_BYTES) return false;
+                const safeStorage = window.SutraSafeStorage;
+                if (!safeStorage || typeof safeStorage.session !== 'function') return false;
+                return safeStorage.session(LIFECYCLE_NOTE_JOURNAL_KEY, serialized).ok === true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function pageMatchesLifecycleNoteJournal(page, journal) {
+            if (!page || !journal || !journal.state || typeof journal.state !== 'object') return false;
+            const pageState = buildPageVersionStateFromPage(page);
+            return Object.keys(journal.state).every(field => (
+                stableVersionStringify(pageState[field]) === stableVersionStringify(journal.state[field])
+            ));
+        }
+
+        function restoreLifecycleNoteJournal() {
+            const journal = readLifecycleNoteJournal();
+            if (!journal) return false;
+            const page = pages.find(entry => entry && String(entry.id) === journal.pageId);
+            if (!page || page.isLocked || page.lockHash || normalizePageType(page.type) !== PAGE_TYPES.NOTE) {
+                removeLifecycleNoteJournal();
+                return false;
+            }
+            if (pageMatchesLifecycleNoteJournal(page, journal)) {
+                removeLifecycleNoteJournal();
+                return false;
+            }
+            const canonicalUpdatedAt = Date.parse(page.updatedAt || '');
+            const journalRecordedAt = Date.parse(journal.recordedAt || '');
+            const journalMatchesLoadedBase = !!journal.baseWorkspaceHash
+                && journal.baseWorkspaceHash === canonicalWorkspaceHash;
+            if (!journalMatchesLoadedBase && Number.isFinite(canonicalUpdatedAt)
+                && journalRecordedAt <= canonicalUpdatedAt) {
+                removeLifecycleNoteJournal();
+                return false;
+            }
+            restorePageFromVersionSnapshot(page, {
+                label: 'Immediate reload recovery',
+                savedAt: journal.recordedAt,
+                state: journal.state
+            }, {
+                now: (typeof journal.updatedAt === 'string' && journal.updatedAt) || journal.recordedAt
+            });
+            return true;
+        }
+
+        function clearLifecycleNoteJournalAfterConfirmedSnapshot(snapshot) {
+            const journal = readLifecycleNoteJournal();
+            if (!journal) return;
+            const savedPages = snapshot && Array.isArray(snapshot.pages) ? snapshot.pages : [];
+            const savedPage = savedPages.find(entry => entry && String(entry.id) === journal.pageId);
+            if (!savedPage || savedPage.isLocked || savedPage.lockHash
+                || pageMatchesLifecycleNoteJournal(savedPage, journal)) {
+                removeLifecycleNoteJournal();
+            }
+        }
+
         function commitAppDataWithHealth(reason = 'autosave', options = {}) {
             // Run every commit through a single FIFO queue so the write + readback
             // pair is never interleaved with another commit on the shared key. The
@@ -7103,6 +7249,7 @@ function populateProgressDashboard() {
                     }
                     canonicalWorkspaceHash = summary.hash;
                 });
+                clearLifecycleNoteJournalAfterConfirmedSnapshot(snapshot);
                 // Only the most recent commit may clear/advance shared health state.
                 // (Commits are serialized, so opId === seq normally holds; the guard
                 // is defence-in-depth against any future concurrent caller.)
@@ -7129,6 +7276,10 @@ function populateProgressDashboard() {
 
         function scheduleAppSave() {
             if (persistenceWritesBlocked) return;
+            if (!workspaceHydrationComplete) {
+                saveRequestedBeforeHydration = true;
+                return;
+            }
             if (!workspaceImportInProgress) {
                 localWorkspaceSaveRequestRevision += 1;
             }
@@ -7144,6 +7295,10 @@ function populateProgressDashboard() {
         }
 
         async function flushAppSaveNow(reason = 'manual') {
+            if (!workspaceHydrationComplete) {
+                saveRequestedBeforeHydration = true;
+                await workspaceHydrationReady;
+            }
             if (pendingAppSave) {
                 clearTimeout(pendingAppSave);
                 pendingAppSave = null;
@@ -7157,6 +7312,7 @@ function populateProgressDashboard() {
             lifecycleSaveFlushScheduled = true;
             try {
                 savePage();
+                journalCurrentNoteForLifecycle();
             } catch (error) {
                 console.warn(`Lifecycle save snapshot failed (${reason})`, error);
             }
@@ -7649,6 +7805,10 @@ function populateProgressDashboard() {
         function hydrateStateFromAppData() {
             if (!appData) appData = getDefaultAppData();
             pages = normalizePagesCollection(appData.pages);
+            if (restoreLifecycleNoteJournal()) {
+                appData.pages = pages;
+                saveRequestedBeforeHydration = true;
+            }
             // Spaces (Section 6)
             spaces = normalizeSpacesCollection(appData.spaces);
             pages.forEach(p => { if (!p.spaceId) p.spaceId = 'default'; });
@@ -8734,6 +8894,14 @@ function populateProgressDashboard() {
 
         function persistAppData() {
             if (!appData) return;
+            // persistAppData serializes live bindings back into appData before it
+            // schedules IndexedDB. During hydrate those bindings still contain
+            // boot defaults, so even a blocked write could corrupt the freshly
+            // loaded in-memory root before hydration reads its settings.
+            if (!workspaceHydrationComplete) {
+                saveRequestedBeforeHydration = true;
+                return;
+            }
             syncHabitTrackersAcrossViews();
             // Mirror runtime theme-targeting state into appSettings before save so
             // selectedPagesForTheme and themeApplyMode survive a refresh and travel
@@ -9623,6 +9791,11 @@ function populateProgressDashboard() {
         let focusModeFullscreenLinked = false;
         let splitSecondaryDebounceTimer = null;
         let primarySaveDebounceTimer = null;
+        // Periodic autosave must never rewrite an untouched note. In a second
+        // tab, that churn can advance the full-workspace hash and reject the tab
+        // where the student is actively typing.
+        let primaryEditorDirty = false;
+        let secondaryEditorDirty = false;
         let primaryScrollPersistTimer = null;
         let settingsControlCenterBound = false;
         let activeSettingsCategory = 'appearance';
@@ -26309,6 +26482,13 @@ function populateProgressDashboard() {
             } else {
                 state.completed = true;
                 state.completedAt = new Date().toISOString();
+            }
+            // Commit compatibility flags before any close transition. The
+            // close observer is only a fallback, but if it runs it must never
+            // snapshot the pre-completion state.
+            syncLegacyOnboardingFlags(state);
+            persistOnboardingState();
+            if (completed !== false) {
                 // If the wizard overlay is currently open (e.g. completion was
                 // triggered programmatically or by a restored workspace), close
                 // it through the controller so body.onboarding-open is removed.
@@ -26322,8 +26502,6 @@ function populateProgressDashboard() {
                     }
                 } catch (err) { /* non-critical cleanup */ }
             }
-            syncLegacyOnboardingFlags(state);
-            persistOnboardingState();
         }
 
         function isFeatureSetupPending() {
@@ -26364,6 +26542,7 @@ function populateProgressDashboard() {
             let keydownHandler = null;
             let isOpen = false;
             let pendingTourLaunch = false;
+            let durableCloseInFlight = false;
             // Theme active when the wizard opened, so a previewed-but-not-kept
             // theme can be reverted on dismiss (Escape / ×).
             let themeAtOpen = null;
@@ -26502,11 +26681,45 @@ function populateProgressDashboard() {
                 }
             }
 
-            function handleAction(target, e) {
+            async function flushBeforeClose(reason) {
+                if (durableCloseInFlight) return false;
+                durableCloseInFlight = true;
+                const root = el();
+                const controls = root ? Array.from(root.querySelectorAll('[data-onboarding-action]')) : [];
+                if (root) root.setAttribute('aria-busy', 'true');
+                controls.forEach(control => { control.disabled = true; });
+                try {
+                    // The overlay itself is the user's durability acknowledgement:
+                    // once it disappears, every setup mutation must already have
+                    // survived an IndexedDB write and readback verification.
+                    await flushAppSaveNow(reason || 'onboarding-close');
+                    return true;
+                } catch (error) {
+                    try {
+                        if (typeof window.SutraReportError === 'function') {
+                            window.SutraReportError(error, { where: 'onboarding.durable-close' }, 'error');
+                        }
+                    } catch (reportError) { /* persistence health already records the failure */ }
+                    showToast('Sutra could not confirm this setup save. Setup is still open so you can retry.');
+                    return false;
+                } finally {
+                    durableCloseInFlight = false;
+                    if (root) root.removeAttribute('aria-busy');
+                    controls.forEach(control => { control.disabled = false; });
+                }
+            }
+
+            async function closeDurably(options, reason) {
+                if (!(await flushBeforeClose(reason))) return false;
+                close(options);
+                return true;
+            }
+
+            async function handleAction(target, e) {
                 const action = target.getAttribute('data-onboarding-action');
                 if (action === 'close') {
                     e.preventDefault();
-                    dismiss();
+                    await dismiss();
                 } else if (action === 'dismiss-backdrop') {
                     // The mockups intentionally keep the modal modal: clicking
                     // the backdrop does not dismiss. Ignore.
@@ -26515,13 +26728,13 @@ function populateProgressDashboard() {
                     goBack();
                 } else if (action === 'skip') {
                     e.preventDefault();
-                    skip();
+                    await skip();
                 } else if (action === 'continue') {
                     e.preventDefault();
-                    goContinue();
+                    await goContinue();
                 } else if (action === 'finish') {
                     e.preventDefault();
-                    finish();
+                    await finish();
                 } else if (action === 'import') {
                     e.preventDefault();
                     finishWithImport();
@@ -26547,7 +26760,9 @@ function populateProgressDashboard() {
                 root.addEventListener('click', (e) => {
                     const target = e.target.closest('[data-onboarding-action]');
                     if (!target) return;
-                    handleAction(target, e);
+                    handleAction(target, e).catch(error => {
+                        try { if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'onboarding.action' }, 'error'); } catch (reportError) { /* non-critical */ }
+                    });
                 });
                 // Rail steps are focusable list items, not buttons — activate
                 // them with Enter/Space so backward jumps work from the keyboard.
@@ -26555,7 +26770,9 @@ function populateProgressDashboard() {
                     if (e.key !== 'Enter' && e.key !== ' ') return;
                     const target = e.target.closest('[data-onboarding-action="jump"]');
                     if (!target) return;
-                    handleAction(target, e);
+                    handleAction(target, e).catch(error => {
+                        try { if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'onboarding.keyboard-action' }, 'error'); } catch (reportError) { /* non-critical */ }
+                    });
                 });
             }
 
@@ -26568,7 +26785,9 @@ function populateProgressDashboard() {
                         // accidental Escape doesn't permanently hide setup from a new
                         // user. The explicit "Skip setup" button is the permanent path.
                         e.preventDefault();
-                        dismiss();
+                        dismiss().catch(error => {
+                            try { if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'onboarding.escape' }, 'error'); } catch (reportError) { /* non-critical */ }
+                        });
                     } else if (e.key === 'Tab') {
                         trapFocus(e);
                     }
@@ -27132,7 +27351,7 @@ function buildOnboardingPlanPreview() {
                 render();
             }
 
-            function goContinue() {
+            async function goContinue() {
                 const draftRef = getDraft();
                 const step = currentStepKey();
                 if (step === 'welcome' && !draftRef.userIntent) {
@@ -27143,7 +27362,7 @@ function buildOnboardingPlanPreview() {
                     // "Just Sutra" promised no setup — finish immediately with
                     // defaults instead of walking the remaining steps.
                     commitOnboardingCompletion();
-                    close({ startTour: false });
+                    if (!(await closeDurably({ startTour: false }, 'onboarding-finish-defaults'))) return;
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
                     showToast('Sutra is ready. Rerun setup any time from Settings.');
                     return;
@@ -27155,7 +27374,7 @@ function buildOnboardingPlanPreview() {
                 commitDraftToState();
                 const idx = currentStepIndex();
                 if (idx >= ONBOARDING_STEPS.length - 1) {
-                    finish();
+                    await finish();
                 } else {
                     // Fetch the live state AFTER commitDraftToState — that
                     // function calls getOnboardingState() internally, and we
@@ -27256,7 +27475,7 @@ function buildOnboardingPlanPreview() {
                 persistOnboardingState();
             }
 
-            function skip() {
+            async function skip() {
                 // commit + applyChoices may re-normalize and REPLACE appSettings.onboarding,
                 // so fetch the live state object AFTER them and set the completion flags
                 // last — otherwise the flags land on an orphaned object and never persist.
@@ -27267,14 +27486,14 @@ function buildOnboardingPlanPreview() {
                 state.completed = false;
                 syncLegacyOnboardingFlags(state);
                 persistOnboardingState();
-                close({ startTour: false });
+                if (!(await closeDurably({ startTour: false }, 'onboarding-skip'))) return;
                 showToast('Setup skipped. You can rerun it any time from Settings.');
             }
 
             // Soft dismiss (Escape / × button): close the wizard WITHOUT marking it
             // skipped, so it reopens on the next launch. Entries made so far are
             // kept; a theme that was only previewed is reverted.
-            function dismiss() {
+            async function dismiss() {
                 const d = getDraft();
                 commitDraftToState();
                 try {
@@ -27285,7 +27504,7 @@ function buildOnboardingPlanPreview() {
                         persistOnboardingState();
                     }
                 } catch (err) { /* non-critical */ }
-                close({ startTour: false });
+                if (!(await closeDurably({ startTour: false }, 'onboarding-continue-later'))) return;
                 showToast('Setup closed — it will reopen next launch. Choose “Skip setup” to dismiss it for good.');
             }
 
@@ -27308,15 +27527,16 @@ function buildOnboardingPlanPreview() {
                 const pasteText = String(getDraft().pastedImportText || '').trim();
                 launchAuxiliaryModal((onCancel) => openHomeworkPasteImport(pasteText, {
                     onCancel,
-                    onImported: () => {
+                    onImported: async () => {
                         commitOnboardingCompletion();
+                        if (!(await flushBeforeClose('onboarding-finish-import'))) return;
                         try { setActiveView('today'); } catch (err) { /* non-critical */ }
                         showToast('Setup complete. Your assignments are ready in Homework and Today.');
                     }
                 }));
             }
 
-            function finish() {
+            async function finish() {
                 const draftRef = getDraft();
                 const chosenAction = draftRef.tourChoice;
                 const pasteText = String(draftRef.pastedImportText || '').trim();
@@ -27325,8 +27545,8 @@ function buildOnboardingPlanPreview() {
                     return;
                 }
                 commitOnboardingCompletion();
+                if (!(await closeDurably({ startTour: false }, 'onboarding-finish'))) return;
                 if (chosenAction === 'today') {
-                    close({ startTour: false });
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
                     if (pasteText) {
                         showToast('Setup complete. Review your assignments on Home.');
@@ -27334,7 +27554,6 @@ function buildOnboardingPlanPreview() {
                         showToast('Setup complete. Welcome to Sutra. Capture your first item with Ctrl+K.');
                     }
                 } else if (chosenAction === 'capture') {
-                    close({ startTour: false });
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
                     try {
                         setTimeout(function() {
@@ -27343,7 +27562,6 @@ function buildOnboardingPlanPreview() {
                     } catch (err) { /* non-critical */ }
                     showToast('Setup complete. What do you want to capture?');
                 } else {
-                    close({ startTour: false });
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
                     showToast('Setup complete. Welcome to Sutra.');
                 }
@@ -27477,6 +27695,7 @@ function buildOnboardingPlanPreview() {
                 goContinue,
                 skip,
                 finish,
+                dismiss,
                 isOpen: () => isOpen,
                 isPending: isOnboardingPending,
                 getState: getOnboardingState
@@ -27486,9 +27705,9 @@ function buildOnboardingPlanPreview() {
         // Legacy compatibility wrappers. Each routes into the unified
         // controller and never opens a separate overlay.
         function showStudentOnboarding() { AtelierOnboardingController.show(); }
-        function hideStudentOnboarding() { AtelierOnboardingController.close(); }
+        function hideStudentOnboarding() { AtelierOnboardingController.dismiss().catch(() => {}); }
         function showUserModeSetup() { AtelierOnboardingController.show({ jumpTo: 'welcome' }); }
-        function closeUserModeSetup() { AtelierOnboardingController.close(); }
+        function closeUserModeSetup() { AtelierOnboardingController.dismiss().catch(() => {}); }
         function selectUserMode(mode) {
             const state = getOnboardingState();
             state.userIntent = String(mode || 'skip');
@@ -27622,10 +27841,21 @@ function buildOnboardingPlanPreview() {
             }
         }
 
+        let onboardingStartTimer = null;
         function maybeStartUnifiedOnboarding() {
             if (!appSettings || !appData) return;
             const state = getOnboardingState();
-            if (state.completed || state.skipped) return;
+            if (state.completed || state.skipped) {
+                if (onboardingStartTimer) {
+                    clearTimeout(onboardingStartTimer);
+                    onboardingStartTimer = null;
+                }
+                // An early DOMContentLoaded listener can open the default-state
+                // wizard while IndexedDB is still hydrating. Reconcile the UI to
+                // the canonical restored state instead of leaving a stale modal.
+                if (AtelierOnboardingController.isOpen()) AtelierOnboardingController.close();
+                return;
+            }
             // Avoid prompting older users who already have meaningful state.
             if (Array.isArray(pages) && pages.length > 2 && (appSettings.studentOnboardingCompleted === true || appSettings.featureSelectionCompleted === true || appSettings.userModeSetupCompleted === true)) {
                 state.completed = true;
@@ -27633,15 +27863,24 @@ function buildOnboardingPlanPreview() {
                 state.migratedFromLegacy = true;
                 syncLegacyOnboardingFlags(state);
                 persistOnboardingState();
+                if (AtelierOnboardingController.isOpen()) AtelierOnboardingController.close();
                 return;
             }
-            setTimeout(() => {
+            if (AtelierOnboardingController.isOpen()) {
+                // Hydration replaced appSettings after the wizard opened. Reclone
+                // its draft so saved classes and the saved step appear immediately.
+                AtelierOnboardingController.show();
+                return;
+            }
+            if (onboardingStartTimer) return;
+            onboardingStartTimer = setTimeout(() => {
+                onboardingStartTimer = null;
                 // Re-check at fire time: onboarding may have been completed or
                 // skipped during the delay (workspace import, programmatic
                 // completion, a fast user). Showing the wizard then would
                 // re-add body.onboarding-open and dead-lock the app chrome.
                 const latest = getOnboardingState();
-                if (latest.completed || latest.skipped) return;
+                if (latest.completed || latest.skipped || AtelierOnboardingController.isOpen()) return;
                 AtelierOnboardingController.show();
             }, 600);
         }
@@ -29793,18 +30032,44 @@ function buildOnboardingPlanPreview() {
         function cwOpenAttachDb() {
             if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB unavailable'));
             if (_cwAttachDbPromise) return _cwAttachDbPromise;
-            _cwAttachDbPromise = new Promise((resolve, reject) => {
+            const opening = new Promise((resolve, reject) => {
                 let req;
+                let settled = false;
+                const fail = error => {
+                    if (settled) return;
+                    settled = true;
+                    reject(error || new Error('Attachment IndexedDB open failed'));
+                };
                 try { req = indexedDB.open(COURSE_ATTACH_DB, 1); }
-                catch (e) { reject(e); return; }
+                catch (e) { fail(e); return; }
                 req.onupgradeneeded = () => {
                     const db = req.result;
                     if (!db.objectStoreNames.contains(COURSE_ATTACH_STORE)) db.createObjectStore(COURSE_ATTACH_STORE);
                 };
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
+                req.onblocked = () => fail(new Error('Attachment database upgrade is blocked by another Sutra tab.'));
+                req.onsuccess = () => {
+                    const db = req.result;
+                    if (settled) {
+                        try { db.close(); } catch (error) { /* already failed */ }
+                        return;
+                    }
+                    settled = true;
+                    db.onversionchange = () => {
+                        try { db.close(); } catch (error) { /* best-effort close */ }
+                        if (_cwAttachDbPromise === opening) _cwAttachDbPromise = null;
+                    };
+                    resolve(db);
+                };
+                req.onerror = () => fail(req.error);
             });
-            return _cwAttachDbPromise;
+            _cwAttachDbPromise = opening;
+            // A transient open failure must not poison all attachment reads and
+            // writes until reload. Clear only this failed attempt so a later user
+            // retry can open the recovered browser storage normally.
+            opening.catch(() => {
+                if (_cwAttachDbPromise === opening) _cwAttachDbPromise = null;
+            });
+            return opening;
         }
 
         async function cwPutBlob(key, dataUrl) {
@@ -45771,7 +46036,7 @@ function getActiveEditor() {
 
         function saveSecondaryPageNow() {
             const editor = getSecondaryEditor();
-            if (!editor || !secondaryPageId) return false;
+            if (!editor || !secondaryPageId || !secondaryEditorDirty) return false;
             if (!(appSettings && appSettings.notesSplitViewEnabled)) return false;
             const page = pages.find(p => p.id === secondaryPageId);
             if (!page) return false;
@@ -45780,18 +46045,19 @@ function getActiveEditor() {
             // primary editor: snapshot the pre-edit state before overwriting it.
             try { if (typeof autoCreateVersionSnapshot === 'function') autoCreateVersionSnapshot(page); } catch (e) { /* non-critical */ }
             persistEditorSnapshotToPage(editor, page);
+            secondaryEditorDirty = false;
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             return true;
         }
 
         function queueSaveSecondaryPage() {
+            secondaryEditorDirty = true;
+            updateSaveStatus('saving');
             if (splitSecondaryDebounceTimer) clearTimeout(splitSecondaryDebounceTimer);
             splitSecondaryDebounceTimer = setTimeout(() => {
                 splitSecondaryDebounceTimer = null;
-                if (saveSecondaryPageNow()) {
-                    updateSaveStatus('saved');
-                }
+                saveSecondaryPageNow();
             }, 800);
         }
 
@@ -45803,6 +46069,8 @@ function getActiveEditor() {
         }
 
         function queueSavePrimaryPage() {
+            primaryEditorDirty = true;
+            updateSaveStatus('saving');
             if (primarySaveDebounceTimer) clearTimeout(primarySaveDebounceTimer);
             primarySaveDebounceTimer = setTimeout(() => {
                 primarySaveDebounceTimer = null;
@@ -47285,7 +47553,6 @@ function getActiveEditor() {
             page.updatedAt = new Date().toISOString();
             if (options.persist !== false) {
                 savePagesToLocal();
-                updateSaveStatus('saved');
             }
             if (typeof window !== 'undefined' && window.SutraNotifications && typeof window.SutraNotifications.refresh === 'function') {
                 try { window.SutraNotifications.refresh(); } catch (err) { /* non-critical */ }
@@ -49505,16 +49772,14 @@ function getActiveEditor() {
             // stale editor DOM back over freshly imported page content.
             if (workspaceImportInProgress) return;
 
-            updateSaveStatus('saving');
-            
             const page = pages.find(p => p.id === currentPageId);
             if (page) {
                 // Locked plaintext is absent from the editor DOM. Never copy the
                 // cleared privacy surface back over canonical page content.
                 if (!isPageContentAuthorized(page)) {
-                    updateSaveStatus('saved');
                     return;
                 }
+                updateSaveStatus('saving');
                 // Section 17 — capture a recoverable PRE-EDIT checkpoint BEFORE we
                 // overwrite the live page's title/content below. Throttled + de-duped,
                 // so sustained typing yields periodic checkpoints, not one per keystroke,
@@ -49535,6 +49800,7 @@ function getActiveEditor() {
                     const primaryEditor = getPrimaryEditor();
                     if (primaryEditor) {
                     persistEditorSnapshotToPage(primaryEditor, page);
+                    primaryEditorDirty = false;
                     if (activeView === 'notes') {
                         saveStoredPageScrollTop(currentPageId, getCurrentPrimaryNotesScrollTop(primaryEditor));
                     }
@@ -49556,7 +49822,6 @@ function getActiveEditor() {
                 if (pageTitleSpan) pageTitleSpan.textContent = titleInput;
                 
                 renderSplitNoteSelect();
-                setTimeout(() => updateSaveStatus('saved'), 800);
             }
         }
 
@@ -52753,7 +53018,11 @@ function getActiveEditor() {
         }
 
         function autoSave() {
-            savePage();
+            if (primaryEditorDirty) {
+                savePage();
+            } else if (secondaryEditorDirty) {
+                saveSecondaryPageNow();
+            }
         }
 
         // Export/Import Functions
@@ -69766,7 +70035,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Canonical workspace load keeps its own failure pipeline (the core
             // IndexedDB save-failure UI), so it is intentionally not guarded here.
             await initAppData();
-            guard('workspace-state', hydrateStateFromAppData, { label: 'Workspace data', severity: 'critical' });
+            guard('workspace-state', () => {
+                hydrateStateFromAppData();
+                workspaceHydrationComplete = true;
+                if (typeof resolveWorkspaceHydrationReady === 'function') {
+                    resolveWorkspaceHydrationReady();
+                    resolveWorkspaceHydrationReady = null;
+                }
+                if (saveRequestedBeforeHydration) {
+                    saveRequestedBeforeHydration = false;
+                    scheduleAppSave();
+                }
+            }, { label: 'Workspace data', severity: 'critical' });
             guard('persistence-health-ui', bindSutraPersistenceHealthUi, { label: 'Save health', badge: false });
             guard('backup-folder', initSutraBackupFolder, { label: 'Backup folder', badge: false }); // folder restore must never block startup
             guard('modal-manager', () => SutraModalManager.init(), { label: 'Dialogs' });
@@ -69800,6 +70080,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Unified onboarding runs first. The tutorial only auto-fires
             // when the user opted in from the final onboarding step (which
             // the controller launches itself, bypassing maybeStart…).
+            guard('onboarding-reconcile', maybeStartUnifiedOnboarding, { label: 'Onboarding', badge: false });
             guard('onboarding-status', syncOnboardingStatusUi, { label: 'Onboarding', badge: false });
             guard('tutorial', maybeStartInteractiveTutorial, { label: 'Tutorial', badge: false });
             // Inspirational quote rotation (Sections 25 + user request)

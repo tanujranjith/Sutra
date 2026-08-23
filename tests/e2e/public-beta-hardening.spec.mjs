@@ -64,6 +64,10 @@ test('quota failure shows persistent banner and retry recovery clears it', async
   });
   await expect(page.locator('#sutraSaveFailureBanner')).toBeVisible();
   await expect(page.locator('#sutraSaveFailureMessage')).toContainText('quota');
+  // A stale editor timer must never overwrite a verified failure with a false
+  // "Saved" claim after the canonical write/readback path has rejected.
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#taskbarSaveStatus')).toContainText(/Save failed/i);
 
   await page.reload();
   await page.waitForSelector('#storageOptions', { state: 'attached' });

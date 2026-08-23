@@ -109,6 +109,48 @@ test('SafeStorage: a non-serializable value is classified as a serialize failure
   await expect(page.locator('#sutraSaveFailureBanner')).toBeHidden();
 });
 
+test('Attachments: a transient IndexedDB open failure can recover without reloading', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const realIndexedDb = window.indexedDB;
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      value: { open() { throw new DOMException('Transient attachment open failure', 'InvalidStateError'); } }
+    });
+    let firstFailed = false;
+    try {
+      await window.SutraAttachments.addFiles([
+        new File(['first attempt'], 'first-attempt.txt', { type: 'text/plain' })
+      ], { source: 'storage-retry-test' });
+    } catch (error) {
+      firstFailed = true;
+    }
+
+    Object.defineProperty(window, 'indexedDB', { configurable: true, value: realIndexedDb });
+    const added = await window.SutraAttachments.addFiles([
+      new File(['durable retry'], 'durable-retry.txt', { type: 'text/plain' })
+    ], { source: 'storage-retry-test' });
+    await window.saveWorkspaceLocally();
+    const file = added[0] || null;
+    return {
+      firstFailed,
+      fileId: file && file.id,
+      dataUrl: file ? await window.SutraAttachments.readDataUrl(file.id) : null
+    };
+  });
+
+  expect(result.firstFailed).toBe(true);
+  expect(result.fileId).toBeTruthy();
+  expect(result.dataUrl).toContain('data:text/plain;base64,');
+  await expect(page.locator('#sutraSaveFailureBanner')).toBeHidden();
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  const restored = await page.evaluate(fileId => window.SutraAttachments.readDataUrl(fileId), result.fileId);
+  expect(restored).toBe(result.dataUrl);
+});
+
 // --- Homework integration --------------------------------------------------
 
 async function gotoHomework(page) {
