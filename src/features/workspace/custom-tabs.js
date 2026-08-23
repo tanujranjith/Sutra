@@ -570,7 +570,7 @@
         var habits = [];
         try { habits = bridge.getHabitsToday() || []; } catch (e) { habits = []; }
         if (!habits.length) {
-            body.appendChild(emptyMsg('No habits yet — add some on the Today tab.'));
+            body.appendChild(emptyMsg('No habits yet — add some on the Home tab.'));
             return;
         }
         var list = el('ul', 'ctab-list');

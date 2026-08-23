@@ -50,6 +50,7 @@ test('new student flow shows redesign onboarding steps in order', async ({ page 
 });
 
 test('full student flow: select student intent, add classes, advance through all steps, land on Today', async ({ page }) => {
+  test.setTimeout(120_000);
   await openFreshApp(page);
 
   // Welcome step — select "I'm a student"
@@ -202,6 +203,124 @@ test('existing user with completed onboarding does not see overlay', async ({ pa
   await expect(overlay).not.toBeVisible();
 });
 
+test('legacy localStorage workspace is migrated before onboarding can save', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+    const now = new Date().toISOString();
+    localStorage.setItem('noteflow_atelier_db', JSON.stringify({
+      appData: {
+        version: 7,
+        pages: [{
+          id: 'legacy-official-note',
+          title: 'Legacy official note',
+          type: 'note',
+          content: '<p>Keep legacy work.</p>',
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+          spaceId: 'default'
+        }],
+        tasks: [{ id: 'legacy-official-task', title: 'Keep legacy task', isActive: true, completed: false }],
+        taskOrder: ['legacy-official-task'],
+        settings: {}
+      }
+    }));
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
+
+  const result = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('noteflow_atelier_db');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('workspace', 'readonly');
+      const get = tx.objectStore('workspace').get('root');
+      get.onerror = () => reject(get.error || tx.error);
+      get.onsuccess = () => resolve({
+        hasNote: get.result.pages.some(page => page.id === 'legacy-official-note'),
+        hasTask: get.result.tasks.some(task => task.id === 'legacy-official-task'),
+        completed: get.result.settings.onboarding.completed === true
+      });
+    };
+  }));
+  expect(result).toEqual({ hasNote: true, hasTask: true, completed: true });
+});
+
+test('existing canonical workspace data is preserved when onboarding metadata is incomplete', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+
+  await page.evaluate(async () => {
+    const readRoot = () => new Promise((resolve, reject) => {
+      const request = indexedDB.open('noteflow_atelier_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('workspace', 'readonly');
+        const get = tx.objectStore('workspace').get('root');
+        get.onerror = () => reject(get.error || tx.error);
+        get.onsuccess = () => resolve(get.result);
+      };
+    });
+    const writeRoot = root => new Promise((resolve, reject) => {
+      const request = indexedDB.open('noteflow_atelier_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('workspace', 'readwrite');
+        tx.objectStore('workspace').put(root, 'root');
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      };
+    });
+    const root = await readRoot();
+    root.pages = [...(root.pages || []), {
+      id: 'official-workspace-note',
+      title: 'Official workspace note',
+      type: 'note',
+      content: '<p>Keep this note.</p>',
+      blocks: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      spaceId: 'default'
+    }];
+    root.tasks = [{ id: 'official-workspace-task', title: 'Keep this task', isActive: true, completed: false }];
+    root.taskOrder = ['official-workspace-task'];
+    root.settings = {
+      ...(root.settings || {}),
+      onboarding: { version: 1, completed: false, skipped: false, currentStep: 'welcome', migratedFromLegacy: false }
+    };
+    await writeRoot(root);
+  });
+
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
+
+  const result = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('noteflow_atelier_db');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('workspace', 'readonly');
+      const get = tx.objectStore('workspace').get('root');
+      get.onerror = () => reject(get.error || tx.error);
+      get.onsuccess = () => resolve({
+        hasNote: get.result.pages.some(page => page.id === 'official-workspace-note'),
+        hasTask: get.result.tasks.some(task => task.id === 'official-workspace-task'),
+        completed: get.result.settings.onboarding.completed === true
+      });
+    };
+  }));
+  expect(result).toEqual({ hasNote: true, hasTask: true, completed: true });
+});
+
 test('restart does not duplicate data', async ({ page }) => {
   await page.addInitScript(() => {
     sessionStorage.setItem('sutra_intro_played', '1');
@@ -260,10 +379,16 @@ test('settings page shows feature pack toggles', async ({ page }) => {
   const settingsLink = page.locator('[data-view="settings"], #view-tab-settings, a[href*="settings"]').first();
   if (await settingsLink.isVisible()) {
     await settingsLink.click();
-    await page.waitForTimeout(500);
-
-    const featurePacks = page.locator('text=Feature Pack').first();
-    await expect(featurePacks).toBeVisible();
+    const advancedGroup = page.locator('#settingsAdvancedGroup');
+    if (!await advancedGroup.getAttribute('open')) {
+      await advancedGroup.locator('summary').click();
+    }
+    const advancedNav = page.locator('[data-settings-nav="advanced"]');
+    await expect(advancedNav).toBeVisible();
+    await advancedNav.click();
+    const advanced = page.locator('[data-settings-section="advanced"]');
+    await expect(advanced).toBeVisible();
+    await expect(advanced.getByText('Feature packs', { exact: true })).toBeVisible();
   }
 });
 

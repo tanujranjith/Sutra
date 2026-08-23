@@ -2,7 +2,7 @@
    Sutra — Startup Intro  (src/boot/startup-intro.js)
 
    Shows a brief branded overlay once per browser session.
-   Dismissed by: clicking, tapping, Escape, or Enter.
+   Dismissed by: clicking, tapping, Escape, Enter, or the visible skip button.
    Auto-dismisses after TOTAL_MS milliseconds.
 
    Audio: synthesized via Web Audio API (no file required).
@@ -201,7 +201,7 @@
 
       overlay.removeEventListener('click',      onSkipClick);
       overlay.removeEventListener('touchstart', onSkipTouch);
-      document.removeEventListener('keydown',   onKeySkip, true);
+      window.removeEventListener('keydown',     onKeySkip, true);
 
       var dur = fast ? 100 : EXIT_MS;
       overlay.style.transition = 'opacity ' + (dur / 1000).toFixed(2) +
@@ -253,7 +253,7 @@
 
     overlay.addEventListener('click',      onSkipClick);
     overlay.addEventListener('touchstart', onSkipTouch, { passive: true });
-    document.addEventListener('keydown',   onKeySkip, true);
+    window.addEventListener('keydown',     onKeySkip, true);
 
     exitTimer = setTimeout(function () { dismiss(false); }, totalMs);
   }

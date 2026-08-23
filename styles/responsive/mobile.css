@@ -2067,7 +2067,9 @@
         display: flex !important;
     }
     .main-content {
-        padding-top: 0 !important;
+        /* The desktop top navigation is hidden on phones. Keep the first
+           workspace row below iOS's translucent status/Dynamic Island area. */
+        padding-top: max(16px, env(safe-area-inset-top, 0px)) !important;
     }
     .toolbar-wrapper {
         top: calc(env(safe-area-inset-top, 0px) + 8px) !important;

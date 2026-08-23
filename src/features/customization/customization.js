@@ -290,8 +290,8 @@
             },
             {
                 id: 'minimal-today',
-                name: 'Minimal Today View',
-                description: 'Flatter, quieter Today panels — no controls hidden.',
+                name: 'Minimal Home View',
+                description: 'Flatter, quieter Home panels — no controls hidden.',
                 css: [
                     '/* Minimal Today View — removes card chrome; every control stays clickable. */',
                     '#view-today .today-panel {',

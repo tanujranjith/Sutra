@@ -56,7 +56,7 @@
         },
         everything: {
             label: 'Everything',
-            description: 'Show every Today widget and advanced section.',
+            description: 'Show every Home widget and advanced section.',
             order: WIDGET_IDS.slice(),
             hidden: [],
             sizes: { priorities: 'wide' }
@@ -381,7 +381,7 @@
                 var moveButton = event.target && event.target.closest ? event.target.closest('[data-widget-move]') : null;
                 if (moveButton) moveWidget(moveButton.getAttribute('data-widget-move'), Number(moveButton.getAttribute('data-direction')) || 0);
                 var resetButton = event.target && event.target.closest ? event.target.closest('[data-reset-today-dashboard]') : null;
-                if (resetButton) persist(getDefaultPreferences(), 'Today reset to the calm layout.');
+                if (resetButton) persist(getDefaultPreferences(), 'Home reset to the calm layout.');
             });
         }
     }

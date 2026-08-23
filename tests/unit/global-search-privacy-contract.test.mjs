@@ -63,7 +63,8 @@ test('open notes surface short bounded snippets, never full content', () => {
 
 test('the search body derivation is explicit about locked pages', () => {
   const extract = extractFunction(app, 'globalSearchAll');
-  assert.ok(extract.body.includes("const body = pageIsLocked ? '' : stripHtml(page.content).toLowerCase()"), 'locked pages produce an empty search body');
+  assert.ok(extract.body.includes("const body = pageIsLocked ? ''"), 'locked pages produce an empty search body');
+  assert.ok(extract.body.includes('getHtmlDocumentSearchText(page).toLowerCase()'), 'authorized HTML Pages contribute safe searchable text');
   assert.ok(extract.body.includes("context: pageIsLocked ? 'Locked page' : body.slice(0, 80)"), 'results distinguish locked from snippet contexts');
   assert.ok(extract.body.includes('MAX = 10'), 'results are bounded per category');
 });

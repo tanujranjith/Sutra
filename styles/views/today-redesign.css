@@ -598,6 +598,51 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .tnu-actions .tnu-primar
     padding: 10px 0;
 }
 
+#view-today.today-redesign .home-quick-task {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+    margin-top: 2px;
+}
+
+#view-today.today-redesign .home-quick-task input {
+    min-width: 0;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid var(--sutra-color-border, var(--border));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--sutra-color-surface, var(--bg-secondary)) 78%, transparent);
+    color: var(--sutra-color-text, var(--text-primary));
+    font: inherit;
+    font-size: 0.78rem;
+}
+
+#view-today.today-redesign .home-quick-task input:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--sutra-color-accent, var(--accent)) 60%, transparent);
+    outline-offset: 1px;
+}
+
+#view-today.today-redesign .home-quick-task button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid color-mix(in srgb, var(--sutra-color-accent, var(--accent)) 34%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--sutra-color-accent, var(--accent)) 12%, transparent);
+    color: var(--sutra-color-text, var(--text-primary));
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#view-today.today-redesign .home-quick-task button:hover {
+    background: color-mix(in srgb, var(--sutra-color-accent, var(--accent)) 20%, transparent);
+}
+
 /* A blank workspace needs one clear next action, not seven repeated empty
    cards. Keep Tasks (for a newly captured undated item) and the trust signal;
    the Next Up hero remains the primary capture entry point. */

@@ -1,16 +1,16 @@
 # Slides mode
 
-Slides is a local Notes surface for building short class presentations without
+Slides is a local Create surface for building short class presentations without
 leaving Sutra. A Slides deck belongs to one normal Note page and is selected
 from the New Page dialog. The deck lives at `page.slides`, which deliberately
 keeps ordinary note content and unknown page fields intact.
 
 ## Durable model
 
-`page.slides` is versioned (`version: 1`) and contains the deck-wide `theme`,
+`page.slides` normalizes to version 2 while retaining V1 and unknown-field compatibility. It contains the deck-wide `theme`,
 `size`, and ordered `slides` list. Every slide and element has a stable local
 ID. Elements use normalized percentage geometry and support text, basic shapes,
-inline local images, and simple charts. Speaker notes are stored on the slide.
+tables, inline local images, and simple charts. Speaker notes are stored on the slide.
 
 The current interaction state—selected slide, selected element, inspector
 visibility, and presenter position—is session-only. It is never persisted, so
@@ -19,11 +19,13 @@ opening a deck does not cause Sync churn.
 ## Workbench editing
 
 The editor includes session-scoped undo/redo, direct drag and resize for text,
-shapes, charts, and local images, plus a selection inspector for text size,
-weight, text color, fill, layer order, copy, duplicate, and delete. Arrow keys
+shapes, tables, charts, and local images, plus a selection inspector for text size,
+weight, text alignment, image fit/crop-to-fill, text color, fill, layer order, copy, duplicate, and delete. Arrow keys
 nudge the selected object; Shift increases the movement. `Ctrl/Cmd+C`, `V`,
 `D`, `Z`, and `Y` copy, paste, duplicate, undo, and redo. Page Up/Down and the
-toolbar reorder the active slide.
+toolbar reorder the active slide. Objects snap to slide edges and centers while
+dragging, and the inspector can align a selected object to any slide edge or
+center line. Table cells edit directly on the slide.
 
 These interactions mutate only the owning `page.slides` record through the
 canonical workspace bridge. Undo and clipboard data remain editor-session state
@@ -58,15 +60,22 @@ The Design inspector opens browser printing for PDF output; it preserves slide
 order and sets a landscape page size. The presenter uses the full viewport,
 speaker notes, arrow/space navigation, and Escape to exit.
 
-The V1 PPTX command creates a local ZIP-based deck package for future
-interoperability work. It is intentionally labeled as an experimental export:
-it is not yet a standards-complete PowerPoint file and should not be relied on
-as the only backup. Use encrypted `.sutra` export for a complete backup.
+The PPTX command creates a standards-shaped, local PowerPoint package with a
+presentation part, slide master and layout, theme, slide relationships, DrawingML
+text and shapes, local image media, table content, and rendered chart bars. Sutra
+also stores a private lossless deck part in the package so a PPTX exported by
+Sutra can be re-imported without flattening its editable objects. Standard PPTX
+files import text and basic positioning; complex themes, SmartArt, transitions,
+animations, and unsupported PowerPoint objects are listed in an import warning
+instead of being silently discarded. No PPTX path makes a network request.
+
+PPTX remains an interoperability format rather than a backup. Use encrypted
+`.sutra` export when the complete workspace and its history must be preserved.
 
 ## Public bridge
 
 `window.SutraSlides` is the namespaced integration seam. It provides page
-creation, current-deck lookup, add-slide, presenter launch, and local export
+creation, current-deck lookup, add-slide, presenter launch, and local import/export
 commands. No remote API or unscoped global is introduced.
 
 The bridge also exposes the reviewed Assistant seam. `slides_create_deck`

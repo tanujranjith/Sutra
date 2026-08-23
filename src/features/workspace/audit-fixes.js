@@ -83,7 +83,7 @@
         var icon = document.createElement('i');
         icon.className = 'fas fa-sun';
         icon.setAttribute('aria-hidden', 'true');
-        button.append(icon, document.createTextNode(' Explore Today first'));
+        button.append(icon, document.createTextNode(' Explore Home first'));
         button.addEventListener('click', function () {
             try {
                 if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true);

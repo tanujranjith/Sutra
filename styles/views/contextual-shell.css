@@ -232,6 +232,63 @@ body.settings-anchored-mode .top-nav {
   backdrop-filter: blur(20px) saturate(150%) !important;
 }
 
+/* Create keeps the global navigation visually connected to the document.
+   The page becomes the desktop scroll surface so note content can pass beneath
+   the fixed bar, while the bar remains readable through a theme-aware frost. */
+@media (min-width: 1025px) {
+  body[data-view="notes"] .top-nav {
+    /* Preserve the blur while letting more of the scrolling document show
+       through the Create tab bar. */
+    background: color-mix(in srgb, var(--sutra-color-canvas) 46%, transparent) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(155%) !important;
+    backdrop-filter: blur(18px) saturate(155%) !important;
+  }
+
+  body[data-view="notes"]:not(.notes-split-active) #view-notes {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    /* Reserve the fixed tab bar plus formatting toolbar at rest. The document
+       can still pass beneath both layers once the user scrolls. */
+    padding-top: calc(var(--sutra-global-nav-height) + 72px) !important;
+  }
+
+  body[data-view="notes"]:not(.notes-split-active) .main-content {
+    /* The app shell normally reserves a solid row for the fixed nav. In
+       Create, make that reserved row scrollable canvas instead: note text
+       starts below the nav at rest, then moves behind it while scrolling. */
+    height: 100dvh;
+    margin-top: calc(-1 * var(--sutra-global-nav-height));
+    padding-top: 0;
+    scroll-padding-top: calc(var(--sutra-global-nav-height) + 88px) !important;
+  }
+
+  /* The Create toolbar is an editor control surface, not document content.
+     Keep it fixed below the global tabs so it remains reachable at every
+     scroll position. Split view has independent panes and retains its sticky
+     behavior instead. Page-mode editors hide this wrapper with their own
+     display rules, which this deliberately does not override. */
+  body[data-view="notes"]:not(.notes-split-active) #view-notes .toolbar-wrapper {
+    position: fixed !important;
+    top: var(--sutra-global-nav-height) !important;
+  }
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  body[data-view="notes"] .top-nav {
+    background: var(--sutra-color-canvas) !important;
+  }
+}
+
+@media (forced-colors: active) {
+  body[data-view="notes"] .top-nav {
+    background: Canvas !important;
+    border-bottom-color: CanvasText !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 body.settings-anchored-mode .main-content {
   scroll-padding-top: var(--sutra-global-nav-height) !important;
 }
@@ -404,7 +461,11 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 
 #view-notes .toolbar-wrapper {
   position: sticky !important;
-  top: 0 !important;
+  /* The global tab bar is fixed above the Create scroll surface. Keeping the
+     toolbar at zero put it directly underneath that bar once note content was
+     allowed to scroll behind it, which made the toolbar look as though it had
+     disappeared. Pin it immediately below the global navigation instead. */
+  top: var(--sutra-global-nav-height) !important;
   z-index: var(--z-sticky) !important;
   min-height: 62px;
   padding: 8px 10px;

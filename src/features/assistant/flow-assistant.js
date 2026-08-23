@@ -3859,7 +3859,7 @@
             const reg = (typeof window !== 'undefined') ? window.SutraCapabilityRegistry : null;
             const meta = reg && typeof reg.get === 'function' ? reg.get(type) : null;
             const DOMAIN_VIEWS = {
-                tasks: { label: 'Open Today', view: 'today' },
+                tasks: { label: 'Open Home', view: 'today' },
                 homework: { label: 'Open Homework', view: 'homework' },
                 timeline: { label: 'Open Timeline', view: 'timeline' },
                 review: { label: 'Open Review', view: 'review' },
@@ -3868,9 +3868,9 @@
                 grades: { label: 'Open Classes', view: 'courses' },
                 courses: { label: 'Open Classes', view: 'courses' },
                 college: { label: 'Open College', view: 'collegeapp' },
-                notes: { label: 'Open Notes', view: 'notes' },
+                notes: { label: 'Open Create', view: 'notes' },
                 planning: { label: 'Open Timeline', view: 'timeline' },
-                focus: { label: 'Open Today', view: 'today' }
+                focus: { label: 'Open Home', view: 'today' }
             };
             const dest = meta && meta.domain ? DOMAIN_VIEWS[meta.domain] : null;
             if (!dest) return null;

@@ -29,7 +29,7 @@ There is also dedicated handling for **short landscape** phones (e.g. `max-width
 ## Global behaviors
 
 - **Navigation collapse.** The horizontal view tabs become a **mobile view menu** at
-  the primary breakpoint; the same destinations (Today, Timeline, Notes, Homework,
+  the primary breakpoint; the same destinations (Home, Timeline, Create, Homework,
   AP Study, Testing Hub, Review, College, Life, Projects & Work, Settings) remain
   reachable, including overflow items via the "More" menu.
 - **Touch targets.** Primary controls target **≥44px**; controls in constrained rows
@@ -57,16 +57,16 @@ workspace controls) becomes an overlay/menu rather than a fixed column; opening 
 does not shift the main content under it on small screens. All primary destinations,
 including those behind the "More" overflow, stay reachable.
 
-### Today / Focused Today
+### Home / Focused Home
 
-Today uses a dedicated **mobile essentials shell** (`#todayMobileShell`) rather than
+Home uses a dedicated **mobile essentials shell** (`#todayMobileShell`) rather than
 compressing the desktop dashboard. The phone hierarchy is: compact Sutra header and
 notifications, greeting/date, one canonical Next Up action, up to three chronological
-Today rows, Review, and local save/backup confidence. The desktop hero, card grid,
+Home rows, Review, and local save/backup confidence. The desktop hero, card grid,
 top tab strip, floating utility buttons, and storage taskbar are hidden while this
 shell is active; their destinations remain reachable through the bottom navigation,
 the notification button, and the save-confidence link. Quick Capture stays in the
-fixed bottom navigation. Focused Today keeps the same single-column priority on
+fixed bottom navigation. Focused Home keeps the same single-column priority on
 small screens.
 
 ### Timeline
@@ -75,7 +75,7 @@ The timeline reflows to a single column on phones; entries remain tappable and t
 day/section structure stays legible. Horizontal density is reduced rather than
 introducing a horizontal scroll of the whole view.
 
-### Notes
+### Create
 
 The notes list/tree and editor stack on mobile rather than sitting side by side. The
 **editor is always full-width of the note**, so typed text, tables, images, and
@@ -262,10 +262,10 @@ Run through the following at each width — **1440, 1280, 1024, 900, 768, 640, 4
 - [ ] **No horizontal page scroll** at any width.
 - [ ] **Navigation** collapses to the mobile view menu ≤768px; every destination
       (including "More" overflow) is reachable.
-- [ ] **Today** shows the mobile essentials shell with one Next Up action, a bounded
+- [ ] **Home** shows the mobile essentials shell with one Next Up action, a bounded
       agenda, Review, and save confidence; desktop dashboard chrome is not duplicated.
 - [ ] **Timeline** is single-column and legible; entries tappable.
-- [ ] **Notes editor** is full-width-of-note; toolbar scrolls horizontally; no text,
+- [ ] **Create editor** is full-width-of-note; toolbar scrolls horizontally; no text,
       table, image, or drawing overflows the page.
 - [ ] **Page Mode** pages fit the width (no horizontal scroll); breaks/headers/footers
       render.

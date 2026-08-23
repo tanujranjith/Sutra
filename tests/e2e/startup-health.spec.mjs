@@ -17,6 +17,30 @@ async function openApp(page) {
   await page.waitForFunction(() => !!window.SutraStartupHealth);
 }
 
+test('startup intro can be skipped immediately with Escape', async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.removeItem('sutra_intro_played'));
+  await page.goto('/Sutra.html', { waitUntil: 'commit' });
+  const intro = page.locator('#sutraStartupIntro');
+  await expect(intro).toBeAttached();
+  await page.keyboard.press('Escape');
+  await expect(intro).toBeHidden({ timeout: 2_000 });
+});
+
+test('startup fallback stops intercepting keys after the normal intro closes', async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.removeItem('sutra_intro_played'));
+  await page.goto('/Sutra.html');
+  const intro = page.locator('#sutraStartupIntro');
+  await expect(intro).toBeHidden({ timeout: 5_000 });
+  await page.evaluate(() => {
+    window.__sutraPostIntroKey = null;
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') window.__sutraPostIntroKey = { defaultPrevented: event.defaultPrevented };
+    }, { once: true });
+  });
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__sutraPostIntroKey)).toEqual({ defaultPrevented: false });
+});
+
 test('the health layer exposes a testable surface and the documented checks', async ({ page }) => {
   await openApp(page);
   const api = await page.evaluate(() => Object.keys(window.SutraStartupHealth || {}).sort());

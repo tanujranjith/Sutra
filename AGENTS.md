@@ -72,7 +72,7 @@ Students usually split their academic life across a learning-management system, 
 
 ### One connected workspace
 
-- Data should flow between capture, Homework, Today, All Due, Timeline, Notes, Assignment Studio, Review, AP Study, Course Hub, reminders, and the Assistant where appropriate.
+- Data should flow between Capture, Homework, Home, All Due, Timeline, Create pages, Assignment Studio, Review, AP Study, Course Hub, reminders, and the Assistant where appropriate.
 - Reuse canonical data and ranking engines. Do not create competing sources of truth for the same concept.
 - A feature is stronger when it creates useful connections, not when it merely adds another isolated dashboard.
 
@@ -93,7 +93,7 @@ Students usually split their academic life across a learning-management system, 
 ### Accessible, responsive, and understandable
 
 - Primary workflows must work with keyboard, touch, narrow mobile viewports, zoom, reduced motion, and assistive technology.
-- Interface text should use literal student language such as Today, Notes, Homework, Timeline, Review, and Focus.
+- Interface text should use literal student language such as Home, Create, Homework, Timeline, Review, and Focus. Preserve temporal phrases such as “due today” and content terms such as “note.”
 - Prefer a visible next action over a dense wall of metrics.
 
 ---
@@ -332,7 +332,7 @@ This section is a high-level foundation map, not an exhaustive feature list.
 
 ## Core student workspace
 
-Sutra already includes Notes, Homework, Today, All Due, Timeline, Review, AP Study, Testing Hub, Course Hub, Focus, college planning, life tracking, project/work tools, settings, customization, backups, and onboarding. The purpose of the next phase is not to prove that Sutra can contain more features. It is to make the existing system feel coherent and obvious to ordinary students.
+Sutra already includes Create (pages and notes), Homework, Home, All Due, Timeline, Review, AP Study, Testing Hub, Course Hub, Focus, college planning, life tracking, project/work tools, settings, customization, backups, and onboarding. The purpose of the next phase is not to prove that Sutra can contain more features. It is to make the existing system feel coherent and obvious to ordinary students.
 
 ## Rebrand and compatibility
 
@@ -360,9 +360,9 @@ These systems exist because a local-first app must make data loss visible and re
 
 ## Mobile shell and responsive navigation
 
-Sutra's phone shell keeps the daily loop immediately available while preserving advanced surfaces through an accessible **All sections** sheet. The sheet is derived from enabled canonical top-level tabs and delegates navigation to their existing handlers; it is not a separate navigation source of truth. Mobile overlays, including the Notes drawer, must retain dialog semantics, focus containment and restoration, Escape and browser-Back behavior where applicable, background scroll locking, safe-area spacing, and reduced-motion support.
+Sutra's phone shell keeps the daily loop immediately available while preserving advanced surfaces through an accessible **All sections** sheet. The sheet is derived from enabled canonical top-level tabs and delegates navigation to their existing handlers; it is not a separate navigation source of truth. Mobile overlays, including the Create pages drawer, must retain dialog semantics, focus containment and restoration, Escape and browser-Back behavior where applicable, background scroll locking, safe-area spacing, and reduced-motion support.
 
-Desktop navigation follows the same single-shell rule. The top navigation is global and visually stable, while secondary navigation is section-owned. The Notes page tree is contextual to Notes; Today, Homework, Timeline, Review & Tests, Courses, Settings, and other major workspaces use the full canvas unless they introduce their own genuinely useful contextual navigation. Implement this through `src/features/workspace/contextual-shell.js`, not scattered per-view hiding. Global actions belong in the top shell, section actions belong inside their workspace, and route-local navigation must not be restored as permanent global chrome.
+Desktop navigation follows the same single-shell rule. The top navigation is global and visually stable, while secondary navigation is section-owned. The Create page tree is contextual to Create; Home, Homework, Timeline, Review & Tests, Courses, Settings, and other major workspaces use the full canvas unless they introduce their own genuinely useful contextual navigation. Implement this through `src/features/workspace/contextual-shell.js`, not scattered per-view hiding. Global actions belong in the top shell, section actions belong inside their workspace, and route-local navigation must not be restored as permanent global chrome.
 
 Timeline adapts rather than compresses its desktop calendar. On phones, Month view presents a compact date grid with event counts and opens Day view for detail; Week view may scroll horizontally only inside its calendar container. Responsive changes must preserve 44-pixel primary touch targets and must not introduce document-level horizontal overflow.
 
@@ -398,11 +398,11 @@ The academic foundation includes:
 
 These systems were built to turn isolated assignments and dates into a connected plan.
 
-## Today and Custom Tabs
+## Home and Custom Tabs
 
-Today has evolved into a command-center surface with Next Up/Next Step, schedule context, deadline counts, an upcoming radar, a visible Focus Timer entry point, and a plan for the day. Custom Tabs allow user-composed dashboards with imported data widgets and self-contained interactive widgets. These capabilities should support personalization without making the default navigation more complicated.
+Home has evolved into a command-center surface with Next Up/Next Step, schedule context, deadline counts, an upcoming radar, a visible Focus Timer entry point, and a plan for the day. Custom Tabs allow user-composed dashboards with imported data widgets and self-contained interactive widgets. These capabilities should support personalization without making the default navigation more complicated.
 
-The Today Focus Timer card is a presentation and control surface for the canonical timer in `src/core/app.js`; it is not a second timer implementation. Its controller lives in [`src/features/workspace/today-focus-timer.js`](src/features/workspace/today-focus-timer.js) with scoped styles in [`styles/views/today-focus-timer.css`](styles/views/today-focus-timer.css). Start, pause, reset, preset, and duration-edit actions must use the `sutra:focus-timer-command` bridge, and timer updates must render from `sutra:focus-timer-updated`. Notes, Today, and full-screen Focus mode must remain synchronized, and duration edits must preserve the existing persisted timer behavior. Keep the Today controls visible, keyboard/touch accessible, and responsive without duplicating timer state or storage.
+The Home Focus Timer card is a presentation and control surface for the canonical timer in `src/core/app.js`; it is not a second timer implementation. Its controller retains the compatibility path [`src/features/workspace/today-focus-timer.js`](src/features/workspace/today-focus-timer.js) with scoped styles in [`styles/views/today-focus-timer.css`](styles/views/today-focus-timer.css). Start, pause, reset, preset, and duration-edit actions must use the `sutra:focus-timer-command` bridge, and timer updates must render from `sutra:focus-timer-updated`. Create, Home, and full-screen Focus mode must remain synchronized, and duration edits must preserve the existing persisted timer behavior. Keep the Home controls visible, keyboard/touch accessible, and responsive without duplicating timer state or storage.
 
 ## Sutra Assistant and Sutra Intelligence
 
@@ -410,9 +410,9 @@ The Assistant includes provider-backed chat, contextual actions, approval cards,
 
 The governing rule remains: the Assistant proposes and explains; users approve consequential changes.
 
-## Notes evolution
+## Create and notes evolution
 
-The established Notes system supports hierarchical pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, linked content, Canvas, and Slides. A newer vendored Notes Editor v2 exists behind an `editor.editorV2Enabled` feature flag. Treat flagged editor work as an incremental migration path, not permission to break the stable editor or stored note content.
+The established Create system supports hierarchical note pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, linked content, Canvas, Slides, Sheets, and HTML Pages. A newer vendored Notes Editor v2 exists behind an `editor.editorV2Enabled` feature flag. Treat flagged editor work as an incremental migration path, not permission to break the stable editor or stored note content.
 
 Slides is a third native Notes surface beside Notepad and Canvas. A deck belongs to a normal Note page and is stored in the versioned `page.slides` record; ordinary note content and unknown page fields must remain intact. The runtime lives in `src/features/workspace/slides.js`, its scoped styles live in `styles/features/slides.css`, and its full behavioral contract is documented in [`docs/features/SLIDES.md`](docs/features/SLIDES.md).
 
@@ -422,8 +422,8 @@ Slides invariants:
 - `window.SutraSlides` is the registered integration seam. Keep Assistant context bounded, exclude locked decks, and do not add a second remote API or Slides-specific storage source.
 - Notepad, Canvas, and Slides are mutually exclusive visual surfaces. Leaving a deck must hide the Slides root with `hidden`, `inert`, and `aria-hidden`; `.slides-editor[hidden]` must remain an author-level `display: none` backstop so Slides cannot bleed beneath another editor.
 - Slide design colors remain deck-owned. Sutra theme changes apply to editor chrome, controls, rails, and inspectors without rewriting the saved slide artwork.
-- V1 is static and intentionally has no animation model or PPTX import. The current PPTX package is experimental rather than standards-complete and must not be described as a substitute for an encrypted workspace backup.
-- V1 slide images are local-only bounded data URLs inside `page.slides`. They currently round-trip with the page and Sync, but this can grow the workspace; migration to the attachment database is required before encouraging image-heavy decks. Never introduce external image URLs or automatic network fetches.
+- Slides V2 remains static and intentionally has no animation model. The current PPTX package is experimental rather than standards-complete and must not be described as a substitute for an encrypted workspace backup.
+- Legacy slide images remain local-only bounded data URLs inside `page.slides`. They currently round-trip with the page and Sync, but this can grow the workspace; migration to the attachment database is required before encouraging image-heavy decks. Never introduce external image URLs or automatic network fetches.
 
 ## Verification and release system
 
@@ -441,10 +441,10 @@ Make Sutra feel like a simple, powerful student command center rather than a ver
 
 The default experience should revolve around:
 
-- **Today** as the command center;
+- **Home** as the command center;
 - **Capture** as the universal intake path;
 - **Homework** as the canonical schoolwork list;
-- **Notes** as the canonical knowledge and writing surface;
+- **Create** as the canonical pages, knowledge, and writing surface;
 - **Timeline** as the canonical schedule;
 - **Review** as the canonical active-recall surface;
 - **Focus** as the execution surface;
@@ -454,9 +454,9 @@ Advanced systems should remain available through deliberate entry points such as
 
 ## What the default student experience should do
 
-### Today
+### Home
 
-Today should answer, in order:
+Home should answer, in order:
 
 1. What needs attention now?
 2. What is the single best next step?
@@ -474,7 +474,7 @@ A student should be able to quickly capture an assignment, test, note, reminder,
 ### Navigation and progressive disclosure
 
 - Keep the default navigation small and literal.
-- Keep the Notes page tree contextual to Notes and give other major sections the full workspace unless they have meaningful section-specific navigation.
+- Keep the Create page tree contextual to Create and give other major sections the full workspace unless they have meaningful section-specific navigation.
 - Keep globally relevant controls in the application shell and section-specific controls in the active section.
 - Preserve advanced features behind packs, settings, sub-tabs, modals, command-palette actions, or contextual links.
 - Do not hide essential daily features so deeply that normal students cannot discover them.
@@ -491,7 +491,7 @@ Students should understand whether their latest work saved, when the last confir
 ## Current priority order
 
 1. Simplify onboarding, modes/packs, navigation, and default information hierarchy.
-2. Make Today, Capture, Homework, Notes, Timeline, Review, and Focus operate as one daily loop.
+2. Make Home, Capture, Homework, Create, Timeline, Review, and Focus operate as one daily loop.
 3. Reduce duplicate concepts and competing summaries while preserving advanced capability.
 4. Improve backup confidence, restore clarity, and export completeness.
 5. Polish mobile, keyboard, accessibility, performance, and empty states.

@@ -64,6 +64,7 @@ scripts/_*.js
 
 # Generated local audit artifacts (not app files)
 security-artifacts/
+/design-qa-*.png
 
 # Marketing / investor material (not part of the app or the GitHub Pages deploy)
 pitch-decks/

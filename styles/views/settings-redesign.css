@@ -1186,6 +1186,24 @@ body {
 }
 .cc-data-health-row span:first-child { color: var(--cc-text-secondary); }
 .cc-data-health-row span:last-child { color: var(--cc-text-primary); font-weight: 600; }
+.cc-custom-timeout {
+    display: grid;
+    gap: 7px;
+    padding: 10px 12px;
+    border: 1px solid var(--cc-border-quiet);
+    border-radius: 10px;
+    background: var(--cc-surface-quiet);
+}
+.cc-custom-timeout > label {
+    color: var(--cc-text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.cc-custom-timeout > label span { font-weight: 400; opacity: 0.82; }
+.cc-custom-timeout-controls { display: flex; align-items: center; gap: 8px; }
+.cc-custom-timeout-controls input { min-width: 0; flex: 1; }
+.cc-custom-timeout-controls .cc-btn { flex: 0 0 auto; }
+.cc-custom-timeout [role="alert"] { min-height: 0; color: var(--cc-danger, #a74343); }
 
 /* Feature toggle grid (Advanced) */
 .cc-feature-grid {

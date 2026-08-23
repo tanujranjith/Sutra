@@ -96,7 +96,7 @@
             summary: 'Today is the student command center; Capture accepts several kinds of work, while desktop More and mobile All sections preserve access to advanced surfaces.',
             body: [
                 '**Today** brings together what is due, what to do next, schedule context, review debt, trackers, and save/backup confidence. **Quick Capture** previews the destination before it creates canonical data.',
-                'The default student shell keeps Today, Homework, Notes, Timeline, Review, Focus, and Data close at hand. Advanced packs stay available in Settings. Notes owns the contextual page tree; other sections use the full workspace by default.',
+                'The default student shell keeps Home, Homework, Create, Timeline, Review, Focus, and Data close at hand. Advanced packs stay available in Settings. Create owns the contextual page tree; other sections use the full workspace by default.',
                 'On phones, the unified bottom bar and **All sections** sheet route through the same canonical tabs as desktop overflow.'
             ],
             keywords: ['today', 'capture', 'quick capture', 'navigation', 'all sections', 'more menu', 'mobile navigation', 'daily loop'],
@@ -109,7 +109,7 @@
             title: 'Canvas & Slides',
             category: 'notes',
             availability: 'available',
-            summary: 'Canvas and Slides are local-first visual Notes surfaces that save through the owning page and support reviewed Assistant edits.',
+            summary: 'Canvas and Slides are local-first visual Create surfaces that save through the owning page and support reviewed Assistant edits.',
             body: [
                 '**Canvas** provides pan/zoom, a minimap, selection, drawing, shapes, sticky notes, connectors, groups, tables, locking, layout tools, and local export.',
                 '**Slides** stores a deck on `page.slides` with themes, layouts, text, shapes, charts, local images, speaker notes, presentation mode, printing, and an experimental PPTX package export.',
@@ -209,7 +209,7 @@
             title: 'Today, planner tasks & notifications',
             category: 'planner',
             availability: 'available',
-            summary: 'The planner holds your tasks with due dates, priority, and categories. Today shows what matters now; notifications remind you of deadlines.',
+            summary: 'The planner holds your tasks with due dates, priority, and categories. Home shows what matters now; notifications remind you of deadlines.',
             body: [
                 '**Today** is your daily home: it surfaces what is due and what to work on now.',
                 '**Planner tasks** have a title, optional due date and time, priority, category, and links to notes or courses. You can complete, reopen, reschedule, reprioritize, or archive them.',

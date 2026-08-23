@@ -812,7 +812,7 @@
             + '</div></section>'
 
             + '<section class="ssched-section"><h4>Display</h4>'
-            + '<label class="ssched-enable-row"><input type="checkbox" data-ss-field="show-strip"' + (ws.settings.showTodayStrip ? ' checked' : '') + '><span>Show school-day strip on Today</span></label>'
+            + '<label class="ssched-enable-row"><input type="checkbox" data-ss-field="show-strip"' + (ws.settings.showTodayStrip ? ' checked' : '') + '><span>Show school-day strip on Home</span></label>'
             + '<label class="ssched-enable-row"><input type="checkbox" data-ss-field="class-reminders"' + (ws.settings.classReminders ? ' checked' : '') + '><span>Class reminders (' + ws.settings.classReminderLeadMinutes + ' min before each period)</span></label>'
             + '</section>';
     }

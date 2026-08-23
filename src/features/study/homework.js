@@ -34,6 +34,7 @@
   let activeTaskMenuId = null;
   let editingTaskId = null;
   let setupDismissedForSession = false;
+  let homeworkStoreUnsubscribe = null;
   let courseQuickModalState = { type: 'class', onCreated: null };
   const homeworkViewState = {
     query: '',
@@ -378,6 +379,21 @@
     } catch (error) {
       // no-op
     }
+  }
+
+  function bindCanonicalHomeworkStore() {
+    const store = window.SutraHomeworkStore;
+    if (!store || typeof store.subscribe !== 'function' || homeworkStoreUnsubscribe) return;
+    homeworkStoreUnsubscribe = store.subscribe((snapshot, meta) => {
+      // Homework's own save() already emits homework:updated. External writes
+      // (including a completion from Home) need the same refresh signal so
+      // this module never keeps a stale in-memory assignment list.
+      if (meta && meta.reason === 'homework-ui') return;
+      load();
+      renderPins();
+      if (isHomeworkViewActive()) render();
+      notifyHomeworkUpdated();
+    });
   }
 
   function save() {
@@ -2582,6 +2598,23 @@
     return true;
   }
 
+  // Explicit completion state for connected surfaces such as Home. This keeps
+  // Homework's in-memory list, canonical workspace store, and update event in
+  // lockstep instead of asking another surface to write the backing record.
+  function setTaskDone(taskId, done) {
+    const task = tasks.find(row => String(row.id) === String(taskId));
+    const nextDone = !!done;
+    if (!task || task.done === nextDone) return false;
+
+    task.done = nextDone;
+    if (nextDone) task.completedAt = new Date().toISOString();
+    else delete task.completedAt;
+    task.updatedAt = new Date().toISOString();
+    save();
+    render();
+    return true;
+  }
+
   function deleteTask(taskId) {
     const target = tasks.find(task => String(task.id) === String(taskId));
     // Deletes are recoverable: the row goes to the shared workspace Trash
@@ -3266,6 +3299,7 @@
 
   function init() {
     load();
+    bindCanonicalHomeworkStore();
 
     setupChipInput('#hwClassChips', '#hwClassInput');
     setupChipInput('#hwMiscChips', '#hwMiscInput');
@@ -3447,6 +3481,7 @@
       calibratedEstimateMinutes: (task) => calibratedEstimateMinutes(task),
       logActualMinutes,
       markDone: markTaskDone,
+      setDone: setTaskDone,
       render
     });
     window.SutraCountdown = window.SutraCountdown || {};

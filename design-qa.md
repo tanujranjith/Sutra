@@ -142,6 +142,49 @@ The following record predates the contextual UI redesign and is retained unchang
 
 final result: passed
 
+---
+
+# HTML Page Full-Canvas Follow-up — 2026-08-21
+
+## Source visual truth
+
+- Source mockup: user-provided HTML Page design reference (local QA capture; excluded from the repository).
+- Implementation screenshot: local `design-qa-html-page.png` QA capture (ignored by Git and excluded from deployment).
+- Viewport: 1752 × 995 CSS pixels, device scale factor 1; source and implementation were captured at matching pixel dimensions.
+- State: Create view, HTML Page selected, full-canvas Preview mode, source editor closed, local sandbox content rendered.
+
+## Comparison evidence
+
+- Full view: the HTML site now occupies the entire Create note canvas beneath a slim HTML Page toolbar; the split code/preview layout is gone from the default state.
+- Focused toolbar: the implementation exposes `Edit source`, `Refresh preview`, and `Local preview` without competing with the embedded site.
+- Focused interaction: `Edit source` opens the source editor over the canvas and focuses the textarea; closing it returns to the full preview. Mobile Code/Preview state controls remain available.
+
+## Required fidelity surfaces
+
+- Fonts and typography: Sutra shell typography remains inherited from the existing product; authored HTML typography remains inside the isolated preview and is not rewritten by the host.
+- Spacing and layout rhythm: the preview iframe stretches to the available workspace width and height; toolbar and status rows remain compact and bounded.
+- Colors and visual tokens: host controls use existing Sutra theme tokens, with a restrained local-preview accent indicator and no new dark-only surface.
+- Image quality and asset fidelity: no new image assets were introduced; the existing Sutra shell and embedded local HTML render without placeholder artwork.
+- Copy and content: the toolbar uses the mockup language `HTML Page`, `Edit source`, `Refresh preview`, and `Local preview`.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual findings remain for the requested HTML Page canvas change.
+- P3: a transient application toast can appear during a fresh workspace capture; it is outside the HTML Page component and does not persist in the page layout.
+
+## Comparison history
+
+1. Initial implementation rendered Code and Preview side by side. Changed the HTML Page workspace to make Preview the default full-canvas surface.
+2. Added a secondary source mode with focus management, import access, and mobile Code/Preview controls. Re-captured at the source viewport and confirmed the preview/source transitions.
+
+## Verification
+
+- Focused Playwright HTML Page tests passed: desktop preview-first rendering, source toggle, local script execution, import, persistence, locked-page clearing, and mobile Code/Preview switching.
+- Full unit suite passed outside the sandbox (515 tests), including the iOS safe-area contract.
+- `node --check src/features/workspace/html-pages.js`, `npm run check:shell`, `npm run assets:check`, and `git diff --check` passed.
+
+final result: passed
+
 ## Recheck — 2026-08-20
 
 - Rendered `Sutra.html` at 1752×994 in Chrome with the Glass theme and Notes view active.
@@ -208,5 +251,13 @@ Historical implementation result: passed
 - Brand focus: the Sutra raster mark and dark single-color wordmark remain aligned at the same `x=33` brand position; the previous green initial artifact is no longer visible.
 - Structural evidence: `.window-chrome` is absent, document and body scroll widths remain 1752px, and no page or console errors were captured.
 - Checks: `check:shell`, `check:responsive`, and `check:brand` passed; `git diff --check` passed.
+
+final result: passed
+
+## Latest HTML Page recheck — 2026-08-21
+
+- Reopened the implementation at the matching 1752 × 995 desktop viewport after the source-mode interaction test.
+- Confirmed the default state is preview-first, the iframe fills the available Create workspace, and `data-source-open="false"` is set until the user chooses Edit source.
+- Confirmed source mode restores the editor without changing the durable HTML document model or sandbox policy.
 
 final result: passed

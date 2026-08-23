@@ -554,7 +554,7 @@
                 + '<div class="notif-empty-icon"><i class="fas fa-bell" aria-hidden="true"></i></div>'
                 + '<div class="notif-empty-title">All clear</div>'
                 + '<div class="notif-empty-sub">No upcoming deadlines or alerts right now.</div>'
-                + '<button class="notif-empty-action" type="button" onclick="if(typeof setActiveView===\'function\') setActiveView(\'today\')">Open Today →</button>'
+                + '<button class="notif-empty-action" type="button" onclick="if(typeof setActiveView===\'function\') setActiveView(\'today\')">Open Home →</button>'
                 + '</div>';
         } else {
             var missed = toShow.filter(function (n) { return n.missedWhileAway && !n.read; });

@@ -7,9 +7,13 @@
     "stamp": "3.10.1",
     "hash": "acc7e41455a80765"
   },
+  "src/boot/legacy-workspace-migration.js": {
+    "stamp": "20260818-storage-journal6",
+    "hash": "b4115bed50da8751"
+  },
   "src/boot/startup-intro.js": {
-    "stamp": "20260809-audit2",
-    "hash": "9992e7d41c8b7d0f"
+    "stamp": "20260821-skipfallback1",
+    "hash": "1a3239d510beb520"
   },
   "src/boot/sw-register.js": {
     "stamp": "20260709-safeupdate1",
@@ -28,16 +32,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260810-remove-view-actions1",
-    "hash": "70da95e52c27567d"
+    "stamp": "20260816-home-create2",
+    "hash": "a74c96632ddef273"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260811-storage-cas3",
-    "hash": "6088b3ae8eea7dde"
+    "stamp": "20260822-connected5",
+    "hash": "614fd787dde39fd5"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -78,6 +82,10 @@
   "src/core/time-utils.js": {
     "stamp": "20260712-timeu1",
     "hash": "0b7582713b3b44e3"
+  },
+  "src/core/workspace-lock.js": {
+    "stamp": "20260821-lock5",
+    "hash": "59f24828481eeeca"
   },
   "src/data/daily-lock-in-quotes.js": {
     "stamp": "20260605-quotes1",
@@ -148,8 +156,8 @@
     "hash": "c0069d1ff403727b"
   },
   "src/features/academic/school-schedule.js": {
-    "stamp": "20260807-ics1",
-    "hash": "dc27185df3807bc9"
+    "stamp": "20260816-home-labels1",
+    "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
     "stamp": "20260807-ics1",
@@ -168,8 +176,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260810-remove-view-actions1",
-    "hash": "38a1ec199f84edc1"
+    "stamp": "20260816-home-create1",
+    "hash": "d025e13a608a8ff2"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
@@ -196,16 +204,16 @@
     "hash": "1554da3db2165bd0"
   },
   "src/features/assistant/sutra-local-help.js": {
-    "stamp": "20260809-helpdocs1",
-    "hash": "0744a4b299271a9c"
+    "stamp": "20260816-home-create1",
+    "hash": "985bc2dccc287616"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260809-helpdocs1",
-    "hash": "dc776cdf93ee9f3f"
+    "stamp": "20260816-home-create1",
+    "hash": "beacd57acb51484d"
   },
   "src/features/customization/customization.js": {
-    "stamp": "20260602-sutra1",
-    "hash": "d97dd9a8fb4420d8"
+    "stamp": "20260816-home-labels1",
+    "hash": "aa47919cbc00fe63"
   },
   "src/features/customization/plugin-system.js": {
     "stamp": "20260601-plugins",
@@ -228,8 +236,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260811-cache1",
-    "hash": "61ad8058a29094c3"
+    "stamp": "20260821-cache2",
+    "hash": "5b7e1e0a15304fef"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -244,8 +252,8 @@
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20260809-audit7",
-    "hash": "4ad159c7056bbdca"
+    "stamp": "20260816-home-labels1",
+    "hash": "fd67377074ba20ae"
   },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260712-bc1",
@@ -272,8 +280,8 @@
     "hash": "838a9ef90334af9c"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20260807-customquotes1",
-    "hash": "f0aa49dfd964b4ff"
+    "stamp": "20260816-home-labels1",
+    "hash": "1bf6440c0e3f0ae5"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260807-customquotes2",
@@ -284,16 +292,28 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20260809-helpdocs1",
-    "hash": "e2be76a04daa0c0f"
+    "stamp": "20260816-home-create1",
+    "hash": "123d9c9048dbfcb8"
+  },
+  "src/features/workspace/html-pages.js": {
+    "stamp": "20260822-htmlpages4",
+    "hash": "4e4cee38bb7257c8"
+  },
+  "src/features/workspace/ios-install-guide.js": {
+    "stamp": "20260821-iosinstall1",
+    "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
     "stamp": "20260808-contextual-ui1",
     "hash": "4167227b3a9ba643"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260807-icsnotifications1",
-    "hash": "c3b9273c2a3e5c3e"
+    "stamp": "20260816-home-labels1",
+    "hash": "925c55e54b23026a"
+  },
+  "src/features/workspace/office-interoperability.js": {
+    "stamp": "20260822-office4",
+    "hash": "cacfc19acb61fc54"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -304,16 +324,16 @@
     "hash": "76654a6d7b2c8d91"
   },
   "src/features/workspace/sheets-engine.js": {
-    "stamp": "20260810-sheets1",
-    "hash": "4c9719efaa66acab"
+    "stamp": "20260822-sheets-v2-3",
+    "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20260810-sheets1",
-    "hash": "c29145d8a95d2db5"
+    "stamp": "20260821-sheets-v2-2",
+    "hash": "48328140fac653fa"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260807-slidesworkbench1",
-    "hash": "55fd658d86e2cc50"
+    "stamp": "20260821-slides-v2-2",
+    "hash": "f54b889b239fc9d3"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -348,8 +368,8 @@
     "hash": "9000432533f4d577"
   },
   "src/features/workspace/today-dashboard.js": {
-    "stamp": "20260807-todaywidgets1",
-    "hash": "db4294be16ce2bb9"
+    "stamp": "20260816-home-labels1",
+    "hash": "b8326873db0f25e2"
   },
   "src/features/workspace/today-focus-timer.js": {
     "stamp": "20260809-todaytimer1",
@@ -372,8 +392,8 @@
     "hash": "d6fd15f6450e378b"
   },
   "src/persistence/workspace-db.js": {
-    "stamp": "20260811-storage-cas1",
-    "hash": "0bc31c7668272482"
+    "stamp": "20260818-storage-journal4",
+    "hash": "b1f32b92bdbc29e1"
   },
   "src/state/workspace-normalizers.js": {
     "stamp": "20260616-state1",
@@ -467,6 +487,14 @@
     "stamp": "20260807-cohesion2",
     "hash": "9a3783cbf7c875c1"
   },
+  "styles/features/html-pages.css": {
+    "stamp": "20260821-htmlpages3",
+    "hash": "3d02270fdbca2fb5"
+  },
+  "styles/features/ios-install-guide.css": {
+    "stamp": "20260821-iosinstall2",
+    "hash": "e4a52d383aa68baf"
+  },
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",
     "hash": "3e852556c6ccee3b"
@@ -484,16 +512,16 @@
     "hash": "9ab16713e512d32f"
   },
   "styles/features/sheets.css": {
-    "stamp": "20260810-sheets1",
-    "hash": "cc306097cec702b9"
+    "stamp": "20260821-sheets2",
+    "hash": "05ea749ecf9ffd3d"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260807-slidesworkbench1",
-    "hash": "092dd11fd8c243b0"
+    "stamp": "20260821-slidesworkbench2",
+    "hash": "73b09e0e561d9eac"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
@@ -506,6 +534,10 @@
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
     "hash": "7ff9f8c5515f34db"
+  },
+  "styles/features/workspace-lock.css": {
+    "stamp": "20260816-lock2",
+    "hash": "980ff43561f79838"
   },
   "styles/legacy/app-shell-base.css": {
     "stamp": "20260616-cssextract1",
@@ -532,8 +564,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260811-cache1",
-    "hash": "d1d90d4c54a27479"
+    "stamp": "20260821-iossafe1",
+    "hash": "05fb6a4f98a57889"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -560,12 +592,12 @@
     "hash": "36dc993f217c64a4"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20260808-assistantfab1",
-    "hash": "db216eb4138f5552"
+    "stamp": "20260816-home-create1",
+    "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260808-contextual-ui19",
-    "hash": "0c6a67041e05a4d4"
+    "stamp": "20260821-create-glass4",
+    "hash": "60463958302a60d9"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",
@@ -576,8 +608,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20260807-settings15b",
-    "hash": "6e47e2793964e87f"
+    "stamp": "20260821-settings16",
+    "hash": "220440ec48d87134"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20260808-mobileday1",
@@ -588,7 +620,7 @@
     "hash": "097303c40f531be5"
   },
   "styles/views/today-redesign.css": {
-    "stamp": "20260809-audit-today1",
-    "hash": "2b116a839761639b"
+    "stamp": "20260816-home-quick-task1",
+    "hash": "f9966d763806dff1"
   }
 }

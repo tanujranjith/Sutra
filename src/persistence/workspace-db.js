@@ -13,6 +13,24 @@
     var dbName = String(config.dbName || 'sutra_workspace_db');
     var version = Math.max(1, Math.floor(Number(config.version) || 1));
     var storeName = String(config.storeName || 'workspace');
+    // Optional one-generation journal for callers that store a complete record
+    // under one key. The backup and replacement are written in the SAME
+    // transaction, so a crash can never leave a half-updated journal pair.
+    var backupKey = config.backupKey === null || config.backupKey === undefined
+      ? ''
+      : String(config.backupKey);
+    var shouldBackup = typeof config.shouldBackup === 'function'
+      ? config.shouldBackup
+      : function (current) { return current !== null && current !== undefined; };
+    // Optional compact marker written in the same transaction as the root.
+    // It lets callers distinguish an accepted canonical write from a later
+    // out-of-band overwrite without storing a second copy of the new record.
+    var commitKey = config.commitKey === null || config.commitKey === undefined
+      ? ''
+      : String(config.commitKey);
+    var buildCommit = typeof config.buildCommit === 'function'
+      ? config.buildCommit
+      : function () { return undefined; };
     var liveFactory = null;
     var liveDb = null;
     var opening = null;
@@ -167,8 +185,45 @@
             return;
           }
           if (!accepted) return;
+          var store = tx.objectStore(storeName);
+          if (backupKey && backupKey !== String(key)) {
+            var keepCurrent = false;
+            try { keepCurrent = shouldBackup(current, value, key) === true; }
+            catch (error) {
+              predicateError = error;
+              try { tx.abort(); } catch (abortError) { /* fail below */ }
+              fail(error);
+              return;
+            }
+            if (keepCurrent) {
+              var backupRequest;
+              try { backupRequest = store.put(current, backupKey); }
+              catch (error) { fail(error); return; }
+              backupRequest.onerror = function () {
+                fail(backupRequest.error || tx.error || new Error('IndexedDB recovery journal write failed'));
+              };
+            }
+          }
+          if (commitKey && commitKey !== String(key)) {
+            var commitValue;
+            try { commitValue = buildCommit(current, value, key); }
+            catch (error) {
+              predicateError = error;
+              try { tx.abort(); } catch (abortError) { /* fail below */ }
+              fail(error);
+              return;
+            }
+            if (commitValue !== undefined) {
+              var commitRequest;
+              try { commitRequest = store.put(commitValue, commitKey); }
+              catch (error) { fail(error); return; }
+              commitRequest.onerror = function () {
+                fail(commitRequest.error || tx.error || new Error('IndexedDB commit marker write failed'));
+              };
+            }
+          }
           var putRequest;
-          try { putRequest = tx.objectStore(storeName).put(value, key); }
+          try { putRequest = store.put(value, key); }
           catch (error) { fail(error); return; }
           written = true;
           putRequest.onerror = function () {

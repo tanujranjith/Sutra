@@ -699,7 +699,7 @@ const PAGE_VERSION_STATE_FIELDS = Object.freeze([
     'title', 'content', 'icon', 'tags',
     'pageMode', 'formatting', 'documentLayout',
     'comments', 'suggestions', 'footnotes', 'citations',
-    'blocks'
+    'blocks', 'htmlDocument'
 ]);
 
 // Bounded history. Raising this is acceptable but increases per-note storage;
@@ -901,6 +901,10 @@ function normalizePagesCollection(rawPages) {
             // Spaces (Section 6) — pages without spaceId default to 'default' space
             spaceId: typeof page.spaceId === 'string' && page.spaceId ? page.spaceId : 'default',
             canvas: pageType === PAGE_TYPES.CANVAS ? normalizeCanvasModel(page.canvas) : null,
+            // Dedicated HTML Pages keep only their authored source document.
+            // Preview DOM, selection, scroll position, and script runtime state
+            // are deliberately session-only and never enter the workspace.
+            htmlDocument: normalizeHtmlDocument(page.htmlDocument),
             isSystemPage: page.isSystemPage === true || page.systemRole === HELP_PAGE_SYSTEM_ROLE || page.builtInId === HELP_PAGE_SYSTEM_ROLE,
             builtInId: typeof page.builtInId === 'string' && page.builtInId ? page.builtInId : (page.systemRole === HELP_PAGE_SYSTEM_ROLE ? HELP_PAGE_SYSTEM_ROLE : ''),
             systemRole: typeof page.systemRole === 'string' && page.systemRole ? page.systemRole : (page.builtInId === HELP_PAGE_SYSTEM_ROLE ? HELP_PAGE_SYSTEM_ROLE : ''),
@@ -931,6 +935,30 @@ function normalizePagesCollection(rawPages) {
         });
         return acc;
     }, []);
+}
+
+function normalizeHtmlDocument(rawDocument) {
+    if (!rawDocument || typeof rawDocument !== 'object') return null;
+    const now = new Date().toISOString();
+    const createdAt = normalizeOptionalIsoTimestamp(rawDocument.createdAt) || now;
+    return {
+        ...rawDocument,
+        version: 1,
+        source: typeof rawDocument.source === 'string' ? rawDocument.source : String(rawDocument.source || ''),
+        createdAt,
+        updatedAt: normalizeOptionalIsoTimestamp(rawDocument.updatedAt) || createdAt
+    };
+}
+
+function getHtmlDocumentSearchText(page) {
+    const source = page && page.htmlDocument && typeof page.htmlDocument.source === 'string'
+        ? page.htmlDocument.source
+        : '';
+    return source.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function normalizePageModeMeta(raw) {
@@ -8120,7 +8148,7 @@ function populateProgressDashboard() {
                         { value: summary.dueToday, label: 'today' },
                         { value: summary.dueThisWeek, label: 'this week' }
                     ] : [],
-                    actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }]
+                    actions: [{ label: 'Open Home', action: 'open_view', payload: { view: 'today' } }]
                 };
             }
 
@@ -8166,7 +8194,7 @@ function populateProgressDashboard() {
                     action: 'open_task',
                     payload: { id: String(task.id || '') }
                 }));
-                return { list: rows, empty: rows.length ? '' : 'No active tasks.', actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }] };
+                return { list: rows, empty: rows.length ? '' : 'No active tasks.', actions: [{ label: 'Open Home', action: 'open_view', payload: { view: 'today' } }] };
             }
 
             if (importedType === 'imp_review_card' || importedType === 'imp_review_load') {
@@ -8207,7 +8235,7 @@ function populateProgressDashboard() {
                         { value: stats.notesPages || 0, label: 'notes' },
                         { value: (stats.apStudyStats && stats.apStudyStats.weakAreas) || 0, label: 'weak areas' }
                     ],
-                    actions: [{ label: 'Open Today', action: 'open_view', payload: { view: 'today' } }]
+                    actions: [{ label: 'Open Home', action: 'open_view', payload: { view: 'today' } }]
                 };
             }
 
@@ -19943,10 +19971,7 @@ function populateProgressDashboard() {
         function isTaskVisibleForCurrentPreferences(task, options = {}) {
             if (!task || task.isActive === false) return false;
             const context = String(options.context || 'tasks');
-            const includeHomework = getWorkspacePreference('tasks.includeHomework', true) !== false;
             const includeApStudy = getWorkspacePreference('tasks.includeApStudy', true) !== false;
-
-            if (!includeHomework && task.origin === 'homework') return false;
             if (!includeApStudy && task.origin === 'ap_study') return false;
 
             if (context === 'planner') {
@@ -21684,22 +21709,6 @@ function populateProgressDashboard() {
         }
 
         function syncHomeworkTasksIntoTaskStore() {
-            const includeHomeworkTasks = getWorkspacePreference('tasks.includeHomework', true) !== false;
-            if (!includeHomeworkTasks) {
-                const existingHomeworkTasks = (Array.isArray(tasks) ? tasks : []).filter(task => task && task.origin === 'homework');
-                if (existingHomeworkTasks.length > 0) {
-                    const idsToRemove = new Set(existingHomeworkTasks.map(task => String(task.id)));
-                    taskOrder = (Array.isArray(taskOrder) ? taskOrder : []).filter(id => !idsToRemove.has(String(id)));
-                    existingHomeworkTasks.forEach(task => {
-                        delete taskStreaks[task.id];
-                        removeTaskReferencesFromDayStates(task.id);
-                    });
-                    tasks = (Array.isArray(tasks) ? tasks : []).filter(task => !(task && task.origin === 'homework'));
-                    persistAppData();
-                }
-                return;
-            }
-
             const snapshot = getHomeworkSnapshotForSync();
             const desiredMap = new Map(snapshot.map(item => [`hw_${item.source}_${item.sourceId}`, item]));
             const existingHomeworkTasks = tasks.filter(task => task.origin === 'homework');
@@ -23325,6 +23334,89 @@ function populateProgressDashboard() {
             modal.classList.add('active');
         }
 
+        function createCanonicalTask(input = {}, options = {}) {
+            const title = String(input.title || '').trim().slice(0, 180);
+            if (!title) return { ok: false, code: 'title-required' };
+            const scheduleType = ['once', 'daily', 'weekly'].includes(String(input.scheduleType || ''))
+                ? String(input.scheduleType)
+                : 'once';
+            const weeklyDays = scheduleType === 'weekly' && Array.isArray(input.weeklyDays)
+                ? input.weeklyDays.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+                : [];
+            const noteId = input.noteId ? String(input.noteId) : null;
+            const task = {
+                id: generateId(),
+                title,
+                notes: String(input.notes || '').trim(),
+                scheduleType,
+                weeklyDays,
+                category: typeof input.category === 'string' && input.category ? input.category : 'none',
+                priority: normalizePriorityValue(input.priority || 'medium'),
+                difficulty: normalizeDifficultyValue(input.difficulty || 'medium'),
+                estimate: Number.isFinite(Number(input.estimate)) ? Math.max(0, Number(input.estimate)) : 0,
+                dueDate: input.dueDate ? String(input.dueDate) : null,
+                noteId,
+                referenceUrl: normalizeExternalUrl(input.referenceUrl || ''),
+                createdAt: new Date().toISOString(),
+                isActive: input.isActive !== false,
+                origin: typeof input.origin === 'string' && input.origin
+                    ? input.origin
+                    : (noteId ? 'note' : 'streak')
+            };
+            tasks.unshift(task);
+            taskOrder.unshift(task.id);
+            let persistence = null;
+            if (options.persist !== false) {
+                persistAppData();
+                if (options.confirmPersistence === true && typeof flushAppSaveNow === 'function') {
+                    persistence = flushAppSaveNow(options.saveReason || 'task-create');
+                }
+            }
+            if (options.render !== false) renderTaskViews();
+            return { ok: true, task, persistence };
+        }
+
+        function bindHomeQuickTaskForm() {
+            const form = document.getElementById('homeQuickTaskForm');
+            const input = document.getElementById('homeQuickTaskInput');
+            const status = document.getElementById('homeQuickTaskStatus');
+            if (!form || !input || form.dataset.bound === 'true') return;
+            form.dataset.bound = 'true';
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                const submittedTitle = input.value.trim();
+                const result = createCanonicalTask({
+                    title: submittedTitle,
+                    scheduleType: 'once',
+                    dueDate: today(),
+                    priority: 'medium',
+                    difficulty: 'medium'
+                }, { confirmPersistence: true, saveReason: 'home-quick-task' });
+                if (!result.ok) {
+                    if (status) status.textContent = 'Enter a task title.';
+                    input.focus();
+                    return;
+                }
+                if (status) status.textContent = `Saving ${submittedTitle}…`;
+                showToast('Task added for today');
+                if (result.persistence && typeof result.persistence.then === 'function') {
+                    result.persistence.then(() => {
+                        if (input.value.trim() === submittedTitle) input.value = '';
+                        if (status) status.textContent = `Added ${submittedTitle} for today.`;
+                    }).catch(() => {
+                        // Keep the submitted text available for copy/retry if the
+                        // confirmed IndexedDB write fails.
+                        if (!input.value.trim()) input.value = submittedTitle;
+                        if (status) status.textContent = 'Could not save. Your task text is still here.';
+                        input.focus();
+                    });
+                } else {
+                    input.value = '';
+                    if (status) status.textContent = `Added ${submittedTitle} for today.`;
+                }
+            });
+        }
+
         function closeTaskModal() {
             const modal = document.getElementById('taskModal');
             if (modal) modal.classList.remove('active');
@@ -23381,15 +23473,11 @@ function populateProgressDashboard() {
                     Object.assign(task, taskData);
                 }
             } else {
-                const newTask = {
-                    id: generateId(),
-                    ...taskData,
-                    createdAt: new Date().toISOString(),
-                    isActive: true,
-                    origin: taskData.noteId ? 'note' : 'streak'
-                };
-                tasks.unshift(newTask);
-                taskOrder.unshift(newTask.id);
+                const created = createCanonicalTask(taskData, { persist: false, render: false });
+                if (!created.ok) {
+                    showToast('Task title required');
+                    return;
+                }
             }
 
             // Persist and ensure the today view reflects the new task immediately.
@@ -24717,7 +24805,7 @@ function populateProgressDashboard() {
                 <header class="today-mobile-appbar">
                     <div class="today-mobile-brand">
                         <img src="assets/brand/sutra/generated/sutra-mark-transparent.png" alt="" width="32" height="32">
-                        <span>Today</span>
+                        <span>Home</span>
                     </div>
                     <button type="button" class="today-mobile-notifications" data-mobile-action="notifications" aria-label="Open notifications">
                         <i class="far fa-bell" aria-hidden="true"></i>
@@ -24734,7 +24822,7 @@ function populateProgressDashboard() {
 
                 <section class="today-mobile-agenda" aria-labelledby="todayMobileAgendaTitle">
                     <div class="today-mobile-section-heading">
-                        <h2 id="todayMobileAgendaTitle">Today</h2>
+                        <h2 id="todayMobileAgendaTitle">Home</h2>
                         <button type="button" data-mobile-action="open-timeline">Timeline</button>
                     </div>
                     <div class="today-mobile-agenda-list">${agendaHtml}</div>
@@ -25955,10 +26043,10 @@ function populateProgressDashboard() {
         // Core daily-loop surfaces introduced during onboarding so students
         // understand what each one does before they see the navigation.
         const ONBOARDING_CORE_SURFACES = [
-            { view: 'today',    title: 'Today',     icon: 'fa-sun',           description: 'Your command center: what is due, what to do next, and your plan for the day.' },
+            { view: 'today',    title: 'Home',      icon: 'fa-house',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
             { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — Ctrl+K or + to instantly add assignments, notes, or tasks.' },
             { view: 'homework', title: 'Homework',  icon: 'fa-book-open',     description: 'All your classes and assignments in one place.' },
-            { view: 'notes',    title: 'Notes',     icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
+            { view: 'notes',    title: 'Create',    icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
             { view: 'timeline', title: 'Timeline',  icon: 'fa-calendar-days', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
             { view: 'review',   title: 'Review',    icon: 'fa-layer-group',   description: 'Active recall with flashcards, learn, write, and test modes.' },
             { view: 'focus',    title: 'Focus',     icon: 'fa-clock',         description: 'Pomodoro timer and distraction-free writing mode.' },
@@ -25966,9 +26054,9 @@ function populateProgressDashboard() {
         ];
 
         const ONBOARDING_FEATURE_VIEWS = [
-            { view: 'today',      title: 'Today',        icon: 'fa-sun',           description: 'Daily Thread, streaks, and quick focus.' },
+            { view: 'today',      title: 'Home',         icon: 'fa-house',         description: 'Daily Thread, streaks, and quick focus.' },
             { view: 'timeline',   title: 'Timeline',     icon: 'fa-calendar-days', description: 'Plan blocks, track events, review by date.' },
-            { view: 'notes',      title: 'Notes',        icon: 'fa-note-sticky',   description: 'Rich editor, pages, and workspace docs.' },
+            { view: 'notes',      title: 'Create',       icon: 'fa-note-sticky',   description: 'Rich editor, pages, and workspace docs.' },
             { view: 'homework',   title: 'Homework',     icon: 'fa-book-open',     description: 'Classes, assignments, school planning.' },
             { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-graduation-cap', description: 'AP exam prep, units, practice logs.' },
             { view: 'collegeapp', title: 'College',      icon: 'fa-university',    description: 'Schools, deadlines, essays, scholarships.' },
@@ -25998,7 +26086,7 @@ function populateProgressDashboard() {
 
         // Finish choices — simplified end-of-setup options.
         const ONBOARDING_FINISH_CHOICES = [
-            { key: 'today',   title: 'Open Today',             description: 'Land on Today and see your next step.' },
+            { key: 'today',   title: 'Open Home',              description: 'Land on Home and see your next step.' },
             { key: 'capture', title: 'Capture your first item', description: 'Open Quick Capture to add an assignment, note, or task.' },
             { key: 'explore', title: 'Start exploring',         description: 'Close setup and explore on your own.' }
         ];
@@ -26215,7 +26303,7 @@ function populateProgressDashboard() {
             appSettings.enabledViews = normalizeEnabledViews(appSettings.enabledViews);
             if (getEnabledOptionalFeatureCount(appSettings.enabledViews) <= 0) {
                 appSettings.enabledViews.notes = true;
-                showToast('Select at least one feature tab. Notes was enabled for you.');
+                showToast('Select at least one feature tab. Create was enabled for you.');
             }
             appSettings.featureSelectionCompleted = true;
             applyFeatureTabVisibility();
@@ -26768,7 +26856,7 @@ function populateProgressDashboard() {
                     todayNote = 'From your pasted list &mdash; you will review them right after setup.';
                 } else {
                     todayTitle = 'Capture your first assignment';
-                    todayNote = 'Type something like &ldquo;math pset fri&rdquo; on Today &mdash; Sutra dates it and files it to the right class.';
+                    todayNote = 'Type something like &ldquo;math pset fri&rdquo; on Home &mdash; Sutra dates it and files it to the right class.';
                 }
                 const headline = hasWork
                     ? 'I found ' + plan.weekN + ' thing' + (plan.weekN === 1 ? '' : 's') + ' due this week.'
@@ -26782,7 +26870,7 @@ function populateProgressDashboard() {
                     </header>
                     <section class="atelier-onboarding-preview" aria-label="Your starting plan">
                         <div class="atelier-onboarding-preview-card">
-                            <div class="atelier-onboarding-preview-eyebrow">Today</div>
+                            <div class="atelier-onboarding-preview-eyebrow">Home</div>
                             <div class="atelier-onboarding-preview-title">${todayTitle}</div>
                             <div class="atelier-onboarding-card-desc">${todayNote}</div>
                         </div>
@@ -27193,7 +27281,7 @@ function buildOnboardingPlanPreview() {
                     close({ startTour: false });
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
                     if (pasteText) {
-                        showToast('Setup complete. Review your assignments on Today.');
+                        showToast('Setup complete. Review your assignments on Home.');
                     } else {
                         showToast('Setup complete. Welcome to Sutra. Capture your first item with Ctrl+K.');
                     }
@@ -33446,12 +33534,12 @@ function buildOnboardingPlanPreview() {
                 { selector: '#todayReviewCard',
                   before: () => safeRunTutorial(() => setActiveView('today')),
                   title: 'Today: Review-due card',
-                  body: 'When review cards are due, Today shows a deck-aware shortcut so you can jump straight into a flashcards / learn / write / test / match session — no tab switching.' },
+                  body: 'When review cards are due, Home shows a deck-aware shortcut so you can jump straight into a flashcards / learn / write / test / match session — no tab switching.' },
 
                 { selector: '#todayTrackerSummary',
                   before: () => safeRunTutorial(() => setActiveView('today')),
                   title: 'Today: Tracker summary',
-                  body: 'A small digest of habits done, active goals, current reading, and review cards due. Life trackers feed Today instead of hiding in separate tabs.' },
+                  body: 'A small digest of habits done, active goals, current reading, and review cards due. Life trackers feed Home instead of hiding in separate tabs.' },
 
                 { selector: '#todayAcademicCollapsible',
                   before: () => safeRunTutorial(() => setActiveView('today')),
@@ -33510,8 +33598,8 @@ function buildOnboardingPlanPreview() {
 
                 { selector: '#todayMobileShell',
                   before: () => safeRunTutorial(() => setActiveView('today')),
-                  title: 'Mobile Today mode',
-                  body: 'On narrow viewports Today swaps to a simplified shell — status card, quick actions, due today, review chip, focus chip, and a one-line capture. Force it on or off in Settings → Appearance.' },
+                  title: 'Mobile Home mode',
+                  body: 'On narrow viewports Home swaps to a simplified shell — status card, quick actions, due today, review chip, focus chip, and a one-line capture. Force it on or off in Settings → Appearance.' },
 
                 /* ---------- 16-21 Sidebar & pages ---------- */
                 { selector: '#sidebarToggle',
@@ -33596,7 +33684,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#splitNotesPresetsBtn',
                   before: () => { safeRunTutorial(() => setActiveView('notes')); ensureTutorialPageLoaded(); },
                   title: 'Split-screen Workflows',
-                  body: 'Presets pair the current note with a contextual second pane: Note + Assignment, Note + AP Unit, Essay + Research, Today Plan + Notes, or Calendar + Note. Tap the grid icon next to the split toggle.',
+                  body: 'Presets pair the current note with a contextual second pane: Note + Assignment, Note + AP Unit, Essay + Research, Home Plan + Note, or Calendar + Note. Tap the grid icon next to the split toggle.',
                   actionLabel: 'Open presets',
                   autoAction: false,
                   action: () => safeRunTutorial(() => openNotesSplitPresetsPicker()) },
@@ -33752,7 +33840,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#lifeDashboard',
                   before: () => tutorialRevealView('life'),
                   title: 'Life trackers',
-                  body: 'Goals (SMART), Habits, Skills, Fitness, Books, Spending, and Journal live here. Each is a focused mini-tracker that surfaces a tiny summary back on Today so nothing gets buried.' },
+                  body: 'Goals (SMART), Habits, Skills, Fitness, Books, Spending, and Journal live here. Each is a focused mini-tracker that surfaces a tiny summary back on Home so nothing gets buried.' },
 
                 /* ---------- 52 Business ---------- */
                 { selector: '#businessDashboardRoot',
@@ -33824,7 +33912,7 @@ function buildOnboardingPlanPreview() {
 
                 /* ---------- 66 Closing ---------- */
                 { title: 'You\'re ready to fly',
-                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Notes has templates and split-screen, Tasks + Homework feed Today, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. This tour lives in Settings → Data & backups if you want to revisit it.' }
+                  body: 'That\'s the full tour. To recap: Daily Thread and Deadline Radar drive your day, Quick Capture + Command Palette + Search Everywhere are the keyboard fast-path, Create has templates and split-screen, Tasks + Homework feed Home, Calendar plans your time, Testing Hub handles exams and review, College / Life / Business cover the rest, Sutra Assistant adds AI suggestions, and encrypted .sutra backups keep everything portable. Press Finish to close. This tour lives in Settings → Data & backups if you want to revisit it.' }
             ];
 
             // Essentials path: a ~5-step "just the things that matter" tour for the
@@ -33836,7 +33924,7 @@ function buildOnboardingPlanPreview() {
 
                 { selector: '#view-today',
                   before: () => safeRunTutorial(() => setActiveView('today')),
-                  title: '1 · Today is your home base',
+                  title: '1 · Home is your home base',
                   body: 'Today shows your next move, what\'s due, and today\'s schedule in one place. Open the app here every day and it tells you what to do next.' },
 
                 { selector: '#todayDailyBrief',
@@ -33855,7 +33943,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#view-apstudy, .view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('apstudy')),
                   title: '4 · Review what\'s due',
-                  body: 'Turn notes into flashcards and Sutra schedules them so you review at the right time. Today surfaces a shortcut whenever cards are due.' },
+                  body: 'Turn notes into flashcards and Sutra schedules them so you review at the right time. Home surfaces a shortcut whenever cards are due.' },
 
                 { selector: '#view-settings, .view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('settings')),
@@ -34369,6 +34457,7 @@ function buildOnboardingPlanPreview() {
 
             const addTaskBtn = document.getElementById('addTaskBtn');
             if (addTaskBtn) addTaskBtn.addEventListener('click', () => openTaskModal());
+            bindHomeQuickTaskForm();
 
             const addNoteBtn = document.getElementById('addNoteBtn');
             if (addNoteBtn) addNoteBtn.addEventListener('click', () => createNewPage());
@@ -43849,8 +43938,8 @@ function buildOnboardingPlanPreview() {
   <li>Open or rerun <strong>Sutra Setup</strong> from Settings if this is a fresh workspace.</li>
   <li>Add your classes in Homework, then link AP subjects and any college deadlines you already know.</li>
   <li>Create one main note page for the week and use <strong>Quick Capture</strong> for everything else.</li>
-  <li>Open <strong>Today</strong> to review the Daily Thread and the new <em>Review due</em> + <em>Tracker summary</em> cards, then schedule real work blocks into Timeline.</li>
-  <li>Open the <strong>Review</strong> tab and create one deck (e.g. "AP Bio · Unit 3") plus a couple of cards. They will show up on Today as soon as they are due.</li>
+  <li>Open <strong>Home</strong> to review the Daily Thread and the new <em>Review due</em> + <em>Tracker summary</em> cards, then schedule real work blocks into Timeline.</li>
+  <li>Open the <strong>Review</strong> tab and create one deck (e.g. "AP Bio · Unit 3") plus a couple of cards. They will show up on Home as soon as they are due.</li>
   <li>Pick a <strong>focus template</strong> from the timer (Deep Work, AP Review, Homework Sprint, Reading Block, Project Build, Review Focus) to start work fast.</li>
   <li>Export an encrypted <code>.sutra</code> backup from Settings once the workspace feels right.</li>
 </ol>
@@ -43888,7 +43977,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Daily Thread</strong> surfaces overdue, today, tomorrow, and this-week counts plus one deterministic next step.</li>
   <li><strong>Deadline Radar</strong> groups tasks, homework, AP exams, college items, timeline blocks, and business deadlines by timeframe.</li>
   <li>Use <strong>Open</strong> to jump to the source, <strong>Schedule</strong> to make a prep block, and class shortcuts when homework is involved.</li>
-  <li>Today now also surfaces a <strong>Review due</strong> card whenever spaced-repetition cards are waiting, and a <strong>Tracker summary</strong> card with habit, goal, reading, and review-card counts so trackers feed Today instead of hiding in their own tabs.</li>
+  <li>Home now also surfaces a <strong>Review due</strong> card whenever spaced-repetition cards are waiting, and a <strong>Tracker summary</strong> card with habit, goal, reading, and review-card counts so trackers feed Today instead of hiding in their own tabs.</li>
 </ul>
                     `
                 },
@@ -43922,7 +44011,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Review (Spaced Repetition And Active Recall)',
                     body: `
 <ul>
-  <li>The <strong>Review</strong> tab is Sutra's spaced-repetition center. Notes capture, AP organizes, Today prioritizes, Focus protects time — and Review keeps the knowledge from leaking out.</li>
+  <li>The <strong>Review</strong> tab is Sutra's spaced-repetition center. Create captures notes, AP organizes, Home prioritizes, Focus protects time — and Review keeps the knowledge from leaking out.</li>
   <li>Decks group cards by topic, class, project, or note. Each card has a prompt, optional answer, tags, and an optional source (note, AP class, or homework class). Filter the deck library by <strong>All / Starred / Archived</strong> to keep the view manageable.</li>
   <li><strong>Five study modes</strong> are available from each deck:
     <ul>
@@ -43936,7 +44025,7 @@ function buildOnboardingPlanPreview() {
   <li>Scheduling uses a local SM-2-lite algorithm: <code>intervalDays</code>, <code>ease</code>, <code>repetitions</code>, and <code>lapses</code> all live with each card and survive export/import. No backend, no AI required.</li>
   <li>The dashboard cards show <strong>Due today</strong>, <strong>Overdue</strong>, <strong>Reviewed this week</strong>, <strong>Weak cards</strong> (high-lapse), and <strong>Active decks</strong>. The history panel keeps the last sessions and the cards you keep getting wrong.</li>
   <li>Settings — <code>dailyLimit</code>, <code>newItemsPerDay</code>, <code>interleaveDecks</code>, <code>showAnswerMode</code> — live inside <code>reviewWorkspace.settings</code> and travel with your encrypted <code>.sutra</code> backup.</li>
-  <li>Common shortcuts: <strong>Open Review</strong> from the Command Palette (Ctrl/⌘+K), <strong>Start review session</strong> for a one-click study run, or click <strong>Start session</strong> on the Today card.</li>
+  <li>Common shortcuts: <strong>Open Review</strong> from the Command Palette (Ctrl/⌘+K), <strong>Start review session</strong> for a one-click study run, or click <strong>Start session</strong> on the Home card.</li>
 </ul>
                     `
                 },
@@ -43948,7 +44037,7 @@ function buildOnboardingPlanPreview() {
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
-  <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Today + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
+  <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Home + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
   <li>On phones, Split View degrades gracefully into stacked panes — the desktop Notes split is the only layout where both panes are visible side by side today.</li>
   <li>Notes linked to a class expose a class chip near the breadcrumb trail so you can reopen the Class Dashboard quickly.</li>
   <li>The Class Dashboard drawer can also create or link notes for a class without duplicating dashboards.</li>
@@ -43986,10 +44075,10 @@ function buildOnboardingPlanPreview() {
 <ul>
   <li><strong>Help &amp; Docs is built in.</strong> Every space gets exactly one protected Help &amp; Docs page. New spaces open it first; Sutra no longer creates an Untitled note unless you ask for one.</li>
   <li><strong>Manage Spaces</strong> is a visual manager for creating, opening, renaming, duplicating, deleting, and exporting spaces. It shows note count, Canvas count, active-space state, and recent timestamps.</li>
-  <li><strong>Pinned pages</strong> appear in the Pinned section at the top of the Notes tree while staying in their original hierarchy. Pin or unpin from the page row actions. Pins are scoped per space and survive rename, move, refresh, export, and restore.</li>
+  <li><strong>Pinned pages</strong> appear in the Pinned section at the top of the Create tree while staying in their original hierarchy. Pin or unpin from the page row actions. Pins are scoped per space and survive rename, move, refresh, export, and restore.</li>
   <li><strong>Compact search</strong> starts as a search icon in Notes. Click to expand it; Escape clears or collapses it. Search covers note titles, tags, note content, and Canvas text where practical.</li>
   <li><strong>Resizable tables</strong> in standard notes expose column and row handles. Drag to size, then autosave, refresh, switch spaces, export, or restore without losing dimensions.</li>
-  <li><strong>Canvas pages</strong> are first-class Notes pages. Create one from New Page &rarr; Canvas, pin it, move it, duplicate it, search it, or back it up like any other page.</li>
+  <li><strong>Canvas pages</strong> are first-class Create pages. Create one from New Page &rarr; Canvas, pin it, move it, duplicate it, search it, or back it up like any other page.</li>
   <li>Canvas supports selection, pan/zoom, freehand drawing, text, sticky notes, shapes, connectors, groups, tables, linked Sutra notes, and selected-content conversion into notes or tasks.</li>
   <li>Canvas content stays local-first in the page model: objects, positions, sizes, viewport, background, groups, connectors, links, and attachments all travel inside <code>.sutra</code> backups.</li>
 </ul>
@@ -44114,12 +44203,12 @@ function buildOnboardingPlanPreview() {
                 },
                 {
                     id: 'mobile-today',
-                    title: 'Mobile Today Mode',
+                    title: 'Mobile Home Mode',
                     body: `
 <ul>
-  <li>On narrow viewports Today switches to a simplified mobile layout that asks one question: <em>what do I need to do right now?</em></li>
+  <li>On narrow viewports Home switches to a simplified mobile layout that asks one question: <em>what do I need to do right now?</em></li>
   <li>You see a top status card (date · due count · habits done · review cards), a quick actions row (+ Task / + Note / Focus / Review), a due-today list, a review chip when cards are waiting, a focus template chip, and a one-line quick-capture form.</li>
-  <li>The desktop Today view is unchanged — only narrow layouts get the simplified shell.</li>
+  <li>The desktop Home view is unchanged — only narrow layouts get the simplified shell.</li>
   <li>Behavior is controlled by <code>settings.mobileTodayMode</code>: <code>auto</code> (default — based on viewport), <code>on</code> (always simplified), <code>off</code> (always show the desktop layout). The setting persists through every backup path.</li>
 </ul>
                     `
@@ -44155,7 +44244,7 @@ function buildOnboardingPlanPreview() {
 <ul>
   <li>Life now keeps the primary student tools up front: Habits, Sleep, Spending, Journal, and Goals.</li>
   <li>Secondary tools such as Calories, Calculator, Books, Fitness, and Skills live under <strong>More Life Tools</strong>.</li>
-  <li><strong>Trackers feed Today.</strong> Habits, goals, and reading items appear in the Today tracker-summary card and inside Global Search under <em>Trackers</em>. Goals and reading items can be linked to a Review deck so the same topic shows up in Today, Search, and Review.</li>
+  <li><strong>Trackers feed Home.</strong> Habits, goals, and reading items appear in the Home tracker-summary card and inside Global Search under <em>Trackers</em>. Goals and reading items can be linked to a Review deck so the same topic shows up in Today, Search, and Review.</li>
   <li>Business remains available, but student-focused modes keep it quieter unless you switch into Business mode or already have Business data.</li>
 </ul>
                     `
@@ -47015,7 +47104,7 @@ function getActiveEditor() {
             if (normalizePageType(page.type) === PAGE_TYPES.CANVAS) {
                 return `${normalizeCanvasModel(page.canvas).objects.length} canvas objects`;
             }
-            return String(page.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+            return (page.htmlDocument ? getHtmlDocumentSearchText(page) : String(page.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 160);
         }
 
         function renderCanvasConnections(page) {
@@ -48952,13 +49041,13 @@ function getActiveEditor() {
             if (!pageId || !Array.isArray(pages)) return [];
             const page = pages.find(p => p.id === pageId);
             if (!page || !isPageContentAuthorized(page)) return [];
-            const myTokens = new Set(tokenizeForRelated((page.title || '') + ' ' + (page.content || '')));
+            const myTokens = new Set(tokenizeForRelated((page.title || '') + ' ' + (page.htmlDocument ? getHtmlDocumentSearchText(page) : (page.content || ''))));
             if (myTokens.size < 2) return [];
             const backIds = new Set(getBacklinksForPage(pageId).map(b => b.id));
             const scored = [];
             pages.forEach(p => {
                 if (!p || p.id === pageId || isHelpDocsPage(p) || backIds.has(p.id) || !isPageContentAuthorized(p)) return;
-                const toks = tokenizeForRelated((p.title || '') + ' ' + (p.content || ''));
+                const toks = tokenizeForRelated((p.title || '') + ' ' + (p.htmlDocument ? getHtmlDocumentSearchText(p) : (p.content || '')));
                 let shared = 0;
                 const seen = new Set();
                 toks.forEach(t => { if (!seen.has(t) && myTokens.has(t)) { shared += 1; seen.add(t); } });
@@ -50915,7 +51004,7 @@ function getActiveEditor() {
                 suggestedTitle: () => `Tasks - ${formatTemplateDate()}`,
                 starterTasks: [
                     { title: 'Pick top 3 must-do items', dueOffsetDays: 0, priority: 'high', difficulty: 'easy', category: 'none' },
-                    { title: 'Run daily task triage', scheduleType: 'daily', priority: 'medium', difficulty: 'easy', category: 'none', notes: 'Move stale tasks and keep Today realistic.' },
+                    { title: 'Run daily task triage', scheduleType: 'daily', priority: 'medium', difficulty: 'easy', category: 'none', notes: 'Move stale tasks and keep Home realistic.' },
                     { title: 'Weekly backlog cleanup', scheduleType: 'weekly', weeklyDays: [0], priority: 'low', difficulty: 'easy', category: 'none' }
                 ],
                 content: () => `<h2>Task Control Board</h2>
@@ -51784,7 +51873,8 @@ function getActiveEditor() {
                     const _locked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
                     const contentText = _locked ? '' : (normalizePageType(page.type) === PAGE_TYPES.CANVAS
                         ? getCanvasSearchText(page).toLowerCase()
-                        : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : ''));
+                        : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
+                            : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : '')));
                     if (!(title.includes(query) || contentText.includes(query))) return;
 
                     const parts = String(page.title || '').split('::').map(part => part.trim()).filter(Boolean);
@@ -68843,7 +68933,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const pageIsLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
                 const contentText = pageIsLocked ? '' : (normalizePageType(page.type) === PAGE_TYPES.CANVAS
                     ? getCanvasSearchText(page).toLowerCase()
-                    : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : ''));
+                    : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
+                        : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : '')));
                 return (title.includes(query) || contentText.includes(query)) && !renderedPageIds.has(page.id);
             });
             if (hasMissingRenderedMatch) {
@@ -68866,7 +68957,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const pageIsLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
                 const contentText = pageIsLocked ? '' : (normalizePageType(page.type) === PAGE_TYPES.CANVAS
                     ? getCanvasSearchText(page).toLowerCase()
-                    : (page.content ? page.content.replace(/<[^>]*>/g, '').toLowerCase() : ''));
+                    : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
+                        : (page.content ? page.content.replace(/<[^>]*>/g, '').toLowerCase() : '')));
 
                 if (title.includes(query) || contentText.includes(query)) {
                     item.style.display = 'flex';
@@ -76976,6 +77068,8 @@ ${cspMeta}
                 startFocusSession: (taskId, opts) => (_origStartFocus ? (_origStartFocus(taskId, opts), true) : undefined),
                 openGlobalSearchPanel: (q) => (_origGlobalSearch ? (_origGlobalSearch(q), true) : undefined),
                 openTaskModal: (taskId, preset) => (_origOpenTaskModal ? (_origOpenTaskModal(taskId, preset), true) : undefined),
+                createTask: (input, options) => createCanonicalTask(input, options),
+                flushAppSaveNow: (reason) => flushAppSaveNow(reason || 'bridge-save'),
                 exportWorkspaceAsAtelier: () => (_origExportAtelier ? (_origExportAtelier(), true) : undefined)
             };
             // Signal that the flow bridge (window.flowAtelier) is fully installed, so
@@ -78527,7 +78621,7 @@ ${cspMeta}
             }
             if (!text) {
                 const tmp = document.createElement('div');
-                tmp.innerHTML = String(page.html || page.content || ''); // sutra-allow-html: offscreen scratch node for text extraction only, never inserted into the document
+                tmp.innerHTML = String(page.htmlDocument && page.htmlDocument.source || page.html || page.content || ''); // sutra-allow-html: offscreen scratch node for authorized text extraction only, never inserted into the document
                 text = (tmp.textContent || '').trim();
             }
             const id = 'note-' + page.id;
@@ -81996,7 +82090,9 @@ function globalSearchAll(query) {
             if (results.notes.length >= MAX) return;
             const pageIsLocked = page.isLocked && page.lockHash && !_unlocked.has(page.id);
             const title = String(page.title || '').toLowerCase();
-            const body = pageIsLocked ? '' : stripHtml(page.content).toLowerCase();
+            const body = pageIsLocked ? '' : (page.htmlDocument
+                ? getHtmlDocumentSearchText(page).toLowerCase()
+                : stripHtml(page.content).toLowerCase());
             // Title matching is fuzzy (subsequence-tolerant); body stays substring.
             if (sutraFuzzyScore(title, q) > 0 || body.includes(q)) {
                 results.notes.push({
@@ -82158,7 +82254,7 @@ function globalSearchAll(query) {
                 results.trackers.push({
                     id: habit.id,
                     title: `Habit: ${habit.name || 'Untitled'}`,
-                    context: 'Open Today to mark complete',
+                    context: 'Open Home to mark complete',
                     action: () => { try { setActiveView('today'); } catch (err) {} }
                 });
             }
@@ -82258,9 +82354,9 @@ function getCommandPaletteCommands() {
     const modeHides = (view) => (typeof shouldShowViewForWorkspaceMode === 'function') ? !shouldShowViewForWorkspaceMode(view) : false;
 
     const commands = [
-        { id: 'open-today', label: 'Open Today', hint: 'Go to the Today dashboard', run: () => setActiveView('today') },
+        { id: 'open-today', label: 'Open Home', hint: 'Go to the Home dashboard', run: () => setActiveView('today') },
         { id: 'open-timeline', label: 'Open Timeline / Calendar', hint: 'Timeline view', hidden: modeHides('timeline'), run: () => setActiveView('timeline') },
-        { id: 'open-notes', label: 'Open Notes', hint: 'Notes workspace', hidden: modeHides('notes'), run: () => setActiveView('notes') },
+        { id: 'open-notes', label: 'Open Create', hint: 'Create workspace', hidden: modeHides('notes'), run: () => setActiveView('notes') },
         { id: 'open-homework', label: 'Open Homework', hint: 'Homework organizer', hidden: modeHides('homework'), run: () => setActiveView('homework') },
         { id: 'open-apstudy', label: 'Open Testing Hub', hint: 'Dashboard, exams, review, cram', hidden: modeHides('apstudy'), run: () => setActiveView('apstudy') },
         { id: 'open-testing-dashboard', label: 'Testing Hub: Dashboard', hint: 'Next step + KPIs', hidden: modeHides('apstudy'), run: () => { try { setActiveView('apstudy'); if (typeof switchTestingHubSection === 'function') switchTestingHubSection('dashboard'); } catch (err) {} } },
@@ -83791,7 +83887,7 @@ const NOTES_SPLIT_PRESETS = [
     { id: 'note-assignment', label: 'Note + Assignment', description: 'Write notes alongside an open homework assignment.' },
     { id: 'note-ap-unit', label: 'Note + AP Unit', description: 'Draft study notes beside AP unit context.' },
     { id: 'essay-research', label: 'Essay + Research', description: 'Edit an essay while a research note stays open.' },
-    { id: 'today-note', label: 'Today Plan + Notes', description: 'Quick daily-plan notes next to your current page.' },
+    { id: 'today-note', label: 'Home Plan + Note', description: 'Quick daily-plan notes next to your current page.' },
     { id: 'calendar-note', label: 'Calendar + Note', description: 'A loose schedule sketch alongside your current note.' }
 ];
 

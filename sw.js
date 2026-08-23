@@ -15,10 +15,10 @@
    Bump CACHE_VERSION to invalidate old caches on the next activate.
    ========================================================================== */
 
-importScripts('./src/config/asset-manifest.generated.js?v=20260811-storage-cas3');
+importScripts('./src/config/asset-manifest.generated.js?v=20260822-branch-review1');
 
 const CACHE_FAMILY = 'sutra-cache-';
-const CACHE_VERSION = `${CACHE_FAMILY}v5-20260811-storage-cas3`;
+const CACHE_VERSION = `${CACHE_FAMILY}v7-20260822-branch-review1`;
 const ASSET_MANIFEST = self.SUTRA_ASSET_MANIFEST;
 if (!ASSET_MANIFEST || !Array.isArray(ASSET_MANIFEST.critical) || !ASSET_MANIFEST.shell) {
     throw new Error('Sutra service worker asset manifest is missing or invalid.');

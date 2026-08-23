@@ -37,6 +37,10 @@
 
     <!-- External web fonts are intentionally not requested on startup. Users can still choose font stacks; unavailable hosted families fall back locally. -->
 
+    <!-- Device-local privacy gate. Its critical stylesheet and script load
+         before the body so an enabled lock suppresses workspace paint. -->
+    <link rel="stylesheet" href="styles/features/workspace-lock.css?v=20260816-lock2">
+
     
     <!-- Atelier offline icon system (replaces Font Awesome CDN). -->
     <script src="assets/vendor/jszip/jszip.min.js?v=3.10.1"></script>
@@ -44,6 +48,7 @@
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
     <script src="src/core/safe-storage.js?v=20260716-syncparity1"></script>
+    <script src="src/core/workspace-lock.js?v=20260821-lock5"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
          first render and can capture boot-time failures.
@@ -66,7 +71,8 @@
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
     <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
-    <script src="src/persistence/workspace-db.js?v=20260811-storage-cas1"></script>
+    <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
+    <script src="src/boot/legacy-workspace-migration.js?v=20260818-storage-journal6"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
     <script src="src/persistence/revocation-wipe.js?v=20260716-syncwipe1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
@@ -81,7 +87,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260810-remove-view-actions1"></script>
+    <script src="src/config/feature-manifest.js?v=20260816-home-create2"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
@@ -109,6 +115,7 @@
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/base/styles.css?v=20260810-updatebanner1">
+    <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260821-iosinstall2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260808-mobileday1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
@@ -116,7 +123,7 @@
         .view.active { display: block; }
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
-    <script src="src/boot/startup-intro.js?v=20260809-audit2" defer></script>
+    <script src="src/boot/startup-intro.js?v=20260821-skipfallback1" defer></script>
     <script src="src/ui/select-enhancer.js?v=20260708-toolbar-compact" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
@@ -132,6 +139,21 @@
          the user explicitly consents. -->
 </head>
 <body class="no-parallax">
+    <section id="sutraWorkspaceLockScreen" class="sutra-workspace-lock-screen" role="dialog" aria-modal="true" aria-labelledby="sutraWorkspaceLockTitle" aria-hidden="true">
+        <div class="sutra-workspace-lock-card">
+            <img src="assets/brand/sutra/generated/sutra-icon-96.png" alt="" width="64" height="64" aria-hidden="true">
+            <p class="sutra-workspace-lock-eyebrow">Private workspace</p>
+            <h1 id="sutraWorkspaceLockTitle">Unlock Sutra</h1>
+            <p>Your workspace is hidden on this device until you enter its PIN.</p>
+            <form id="sutraWorkspaceUnlockForm" novalidate>
+                <label for="sutraWorkspaceUnlockPin">4–8 digit PIN</label>
+                <input id="sutraWorkspaceUnlockPin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" autocomplete="off" required>
+                <button type="submit">Unlock workspace</button>
+            </form>
+            <p id="sutraWorkspaceUnlockError" class="sutra-workspace-lock-error" role="alert" aria-live="assertive"></p>
+            <p class="sutra-workspace-lock-disclosure">This is a privacy screen, not encryption at rest. It helps stop casual access while your browser data remains on this device.</p>
+        </div>
+    </section>
     <a class="skip-link" href="#mainContent">Skip to workspace</a>
 
     <!-- ═══════════════════════════════════════════════════════════
@@ -184,15 +206,56 @@
         <div class="intro-wordmark" aria-hidden="true">Sutra</div>
         <div class="intro-tagline"  aria-hidden="true">Powered by Sutra Intelligence</div>
       </div>
-      <div class="intro-skip-hint" aria-hidden="true">Click or press Esc to skip</div>
+      <button id="sutraStartupIntroSkip" class="intro-skip-hint" type="button">Skip loading <span aria-hidden="true">· Esc</span></button>
     </div>
     <script>
-      /* Hide immediately if this session already played the intro */
+      /*
+       * Critical startup fallback. This runs as soon as the overlay is parsed,
+       * before the deferred intro module and the rest of the shell finish
+       * booting, so Escape and the visible button remain available if startup
+       * is slow or a cached script is unavailable.
+       */
       (function () {
-        if (sessionStorage.getItem('sutra_intro_played')) {
-          var el = document.getElementById('sutraStartupIntro');
-          if (el) el.style.display = 'none';
+        var el = document.getElementById('sutraStartupIntro');
+        if (!el) return;
+        var storage = window.SutraSafeStorage;
+        var key = 'sutra_intro_played';
+        var played = false;
+        try { played = !!(storage && storage.sessionGet && storage.sessionGet(key)); } catch (_) { played = false; }
+        if (played) {
+          el.style.display = 'none';
+          el.setAttribute('aria-hidden', 'true');
+          return;
         }
+
+        var dismissed = false;
+        function dismiss() {
+          if (dismissed) return;
+          dismissed = true;
+          try { if (storage && storage.session) storage.session(key, '1'); } catch (_) {}
+          el.style.display = 'none';
+          el.setAttribute('aria-hidden', 'true');
+          window.removeEventListener('keydown', onKey, true);
+        }
+        function onKey(event) {
+          // The deferred intro module normally hides the overlay first. Do not
+          // let this last-resort listener swallow app keyboard input afterward.
+          if (el.style.display === 'none' || el.getAttribute('aria-hidden') === 'true') {
+            window.removeEventListener('keydown', onKey, true);
+            return;
+          }
+          if (event.key === 'Escape' || event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            dismiss();
+          }
+        }
+        window.addEventListener('keydown', onKey, true);
+        var skip = document.getElementById('sutraStartupIntroSkip');
+        if (skip) skip.addEventListener('click', dismiss);
+        // Last-resort visual escape hatch if a deferred startup script never
+        // executes. The normal intro timer dismisses much sooner.
+        window.setTimeout(dismiss, 8000);
       })();
     </script>
 
@@ -212,7 +275,7 @@
                 <div class="sidebar-context-heading">
                     <span class="sidebar-context-icon" aria-hidden="true"><i class="fas fa-pen-to-square"></i></span>
                     <span class="sidebar-context-copy">
-                        <strong>Notes</strong>
+                        <strong>Create</strong>
                         <span>Pages &amp; notebooks</span>
                     </span>
                 </div>
@@ -223,7 +286,7 @@
                 <div class="spaces-switcher" id="spacesSwitcher">
                     <div class="spaces-current" id="spacesCurrentBtn" onclick="toggleSpacesDropdown()" role="button" tabindex="0">
                         <span class="spaces-current-icon" id="spacesCurrentIcon">📝</span>
-                        <span class="spaces-current-name" id="spacesCurrentName">Notes</span>
+                        <span class="spaces-current-name" id="spacesCurrentName">Create</span>
                         <span class="spaces-current-caret"><i class="fas fa-chevron-down"></i></span>
                     </div>
                     <div class="spaces-dropdown" id="spacesDropdown" style="display: none;"></div>
@@ -370,7 +433,7 @@
         <div class="main-content" id="mainContent" role="main" aria-labelledby="appWorkspaceTitle" tabindex="-1">
             <h1 id="appWorkspaceTitle" class="sr-only">Sutra workspace</h1>
             <div class="top-nav glass-panel" role="navigation" aria-label="Primary workspace views">
-                <button class="app-brand global-app-brand" type="button" data-sutra-component="brand-mark" data-view-target="today" aria-label="Open Today">
+                <button class="app-brand global-app-brand" type="button" data-sutra-component="brand-mark" data-view-target="today" aria-label="Open Home">
                     <img class="app-title-icon app-title-mark"
                          src="assets/brand/sutra/generated/sutra-icon-64.png"
                          alt=""
@@ -381,9 +444,9 @@
                 <div class="nav-left">
                                         <div class="tabs-shell">
                                             <div class="view-tabs" role="group" aria-label="Workspace navigation and utilities">
-                                                    <button class="view-tab active" data-view="today">Today</button>
+                                                    <button class="view-tab active" data-view="today">Home</button>
                                                     <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
-                                                    <button class="view-tab" data-view="notes">Notes</button>
+                                                    <button class="view-tab" data-view="notes">Create</button>
                                                     <button class="view-tab" data-view="timeline">Timeline</button>
                                                     <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
                                                     <!-- Review and Cram Hub consolidated into Testing Hub. Buttons hidden but kept for backward-compat click handlers -->
@@ -408,9 +471,9 @@
                                                         <div class="view-more-menu" id="moreViewsMenu" role="menu" aria-label="All workspace sections">
                                                             <div class="view-more-group" data-nav-group="daily" role="group" aria-labelledby="moreViewsDailyLabel">
                                                                 <span class="view-more-group-label" id="moreViewsDailyLabel">Daily loop</span>
-                                                                <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Today</span></button>
+                                                                <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Home</span></button>
                                                                 <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>Homework</span></button>
-                                                                <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Notes</span></button>
+                                                                <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Create</span></button>
                                                                 <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-calendar-days" aria-hidden="true"></i><span>Timeline</span></button>
                                                             </div>
                                                             <div class="view-more-group" data-nav-group="learning" role="group" aria-labelledby="moreViewsLearningLabel">
@@ -502,7 +565,7 @@
                                             </div>
                                             <!-- Mobile toggle: shows current tab and expands the tab list when tapped -->
                                             <button class="view-tabs-toggle" aria-expanded="false" aria-label="Toggle views" title="Toggle views">
-                                                <span class="view-tabs-current">Today</span>
+                                                <span class="view-tabs-current">Home</span>
                                                 <i class="fas fa-chevron-down" aria-hidden="true" style="margin-left:8px"></i>
                                             </button>
                                         </div>
@@ -528,7 +591,7 @@
                                 <button type="button" role="menuitem" class="today-hero-menu-item" onclick="bindCommandPaletteInput(); openCommandPalette('')"><i class="fas fa-terminal"></i><span>Command palette (Ctrl/⌘+K)</span></button>
                                 <button type="button" role="menuitem" id="todayPasteImportBtn" class="today-hero-menu-item"><i class="fas fa-file-import"></i><span>Paste assignments / syllabus</span></button>
                                 <button type="button" role="menuitem" id="todayWeeklyReviewBtn" class="today-hero-menu-item"><i class="fas fa-calendar-check"></i><span>Weekly review</span></button>
-                                <button type="button" role="menuitem" class="today-hero-menu-item" data-open-today-dashboard><i class="fas fa-sliders" aria-hidden="true"></i><span>Customize Today</span></button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" data-open-today-dashboard><i class="fas fa-sliders" aria-hidden="true"></i><span>Customize Home</span></button>
                                 <button type="button" role="menuitem" id="applyPlanTimelineBtn" class="today-hero-menu-item"><i class="fas fa-calendar-plus"></i><span>Apply plan to calendar</span></button>
                                 <button type="button" role="menuitem" id="autoBlockEventsBtn" class="today-hero-menu-item"><i class="fas fa-bolt"></i><span>Auto-block events now</span></button>
                                 <label class="today-hero-menu-toggle">
@@ -540,12 +603,12 @@
                     </div>
                 </div>
 
-                <div id="todayMobileShell" class="today-mobile-shell" aria-label="Today essentials"></div>
+                <div id="todayMobileShell" class="today-mobile-shell" aria-label="Home essentials"></div>
 
                 <!-- School-day strip — rendered by src/features/academic/school-schedule.js -->
                 <section id="sutraSchoolDayStrip" class="glass-card ssched-strip" aria-label="School day" hidden></section>
 
-                <div class="today-dashboard-toolbar" aria-label="Today dashboard layout">
+                <div class="today-dashboard-toolbar" aria-label="Home dashboard layout">
                     <div>
                         <span class="today-dashboard-toolbar-label">Dashboard</span>
                         <span id="todayDashboardSummary" class="today-dashboard-summary">Calm layout</span>
@@ -627,7 +690,7 @@
                     </section>
 
                     <!-- ── 2. TODAY INFO GRID ── -->
-                    <section class="today-attention-section" aria-label="Today at a glance">
+                    <section class="today-attention-section" aria-label="Home at a glance">
                         <div class="today-attention-grid today-info-grid">
                             <!-- Today's Plan (chronological agenda — rendered by renderTodayScheduleSnapshot) -->
                             <div class="today-attention-card glass-card today-schedule-snapshot" id="tccPlanCard">
@@ -671,6 +734,12 @@
                                 <div class="tac-items" id="tccTasksList">
                                     <div class="tac-empty">All clear</div>
                                 </div>
+                                <form class="home-quick-task" id="homeQuickTaskForm" novalidate>
+                                    <label class="sr-only" for="homeQuickTaskInput">Add a task due today</label>
+                                    <input id="homeQuickTaskInput" type="text" maxlength="180" autocomplete="off" placeholder="Add a task for today…" />
+                                    <button id="homeQuickTaskAddBtn" type="submit" aria-label="Add task due today"><i class="fas fa-plus" aria-hidden="true"></i><span>Add</span></button>
+                                </form>
+                                <span class="home-quick-task-status sr-only" id="homeQuickTaskStatus" role="status" aria-live="polite"></span>
                                 <button class="tac-footer-link" type="button" id="tccTasksViewAllBtn">View all tasks →</button>
                             </div>
                             <!-- Review (populated by renderTodayReviewCard) -->
@@ -851,7 +920,7 @@
                                     <span class="student-hub-metric-note" id="studentHubApNote">No AP study data yet</span>
                                 </article>
                                 <article class="student-hub-metric">
-                                    <span class="student-hub-metric-label">Notes</span>
+                                    <span class="student-hub-metric-label">Create pages</span>
                                     <strong class="student-hub-metric-value" id="studentHubNotesPages">0</strong>
                                     <span class="student-hub-metric-note" id="studentHubLinkedTasks">0 linked tasks</span>
                                 </article>
@@ -875,7 +944,7 @@
                                 <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> Homework</button>
                                 <button class="neumo-btn" type="button" data-hub-view="apstudy"><i class="fas fa-graduation-cap"></i> Review &amp; Tests</button>
                                 <button class="neumo-btn" type="button" data-hub-view="timeline"><i class="fas fa-calendar-days"></i> Calendar</button>
-                                <button class="neumo-btn" type="button" data-hub-view="notes"><i class="fas fa-note-sticky"></i> Notes</button>
+                                <button class="neumo-btn" type="button" data-hub-view="notes"><i class="fas fa-note-sticky"></i> Create</button>
                                 <button class="neumo-btn" type="button" data-hub-view="collegeapp"><i class="fas fa-university"></i> College</button>
                                 <button class="neumo-btn" type="button" data-hub-view="life"><i class="fas fa-seedling"></i> Life</button>
                                 <button class="neumo-btn" type="button" data-hub-action="plan"><i class="fas fa-wand-magic-sparkles"></i> Plan Day</button>
@@ -1165,21 +1234,21 @@
                 <div class="today-dashboard-dialog modal-content" role="dialog" aria-modal="true" aria-labelledby="todayDashboardTitle" aria-describedby="todayDashboardDescription" tabindex="-1">
                     <div class="today-dashboard-modal-header">
                         <div>
-                            <div class="eyebrow">Today dashboard</div>
-                            <h2 id="todayDashboardTitle">Make Today yours</h2>
+                            <div class="eyebrow">Home dashboard</div>
+                            <h2 id="todayDashboardTitle">Make Home yours</h2>
                             <p id="todayDashboardDescription">Choose a starting layout, then show, arrange, and resize the widgets that help you plan your day.</p>
                         </div>
-                        <button class="today-dashboard-close" type="button" data-close-today-dashboard data-modal-close aria-label="Close Today customization"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                        <button class="today-dashboard-close" type="button" data-close-today-dashboard data-modal-close aria-label="Close Home customization"><i class="fas fa-xmark" aria-hidden="true"></i></button>
                     </div>
                     <div class="today-dashboard-preset-section">
                         <h3>Starting layout</h3>
-                        <div class="today-dashboard-presets" role="group" aria-label="Today layout presets">
+                        <div class="today-dashboard-presets" role="group" aria-label="Home layout presets">
                             <button type="button" data-today-dashboard-preset="calm" aria-pressed="true"><strong>Calm</strong><span>Daily essentials first</span></button>
                             <button type="button" data-today-dashboard-preset="study" aria-pressed="false"><strong>Study</strong><span>Coursework and review</span></button>
                             <button type="button" data-today-dashboard-preset="everything" aria-pressed="false"><strong>Everything</strong><span>All available widgets</span></button>
                         </div>
                     </div>
-                    <div id="todayDashboardWidgetList" class="today-dashboard-widget-list" aria-label="Today widgets"></div>
+                    <div id="todayDashboardWidgetList" class="today-dashboard-widget-list" aria-label="Home widgets"></div>
                     <div id="todayDashboardLive" class="sr-only" aria-live="polite"></div>
                     <div class="today-dashboard-modal-footer">
                         <button class="neumo-btn" type="button" data-reset-today-dashboard>Reset to Calm</button>
@@ -3477,9 +3546,9 @@
                             </div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="layout.defaultStartView">
-                                    <option value="today">Today</option>
+                                    <option value="today">Home</option>
                                     <option value="timeline">Timeline</option>
-                                    <option value="notes">Notes</option>
+                                    <option value="notes">Create</option>
                                     <option value="homework">Homework</option>
                                     <option value="apstudy">AP Study</option>
                                     <option value="collegeapp">College</option>
@@ -3854,7 +3923,7 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Today &amp; focus</span>
                         <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Today prioritizes</span><span class="cc-row-help">Which group leads the Today view.</span></div>
+                            <div class="cc-row-text"><span class="cc-row-name">Home prioritizes</span><span class="cc-row-help">Which group leads the Home view.</span></div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="today.priorityFocus">
                                     <option value="balanced">Balanced</option>
@@ -3877,10 +3946,6 @@
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text"><span class="cc-row-name">Show completed tasks</span><span class="cc-row-help">Keep finished items in the list.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="tasks.showCompleted"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
-                        </label>
-                        <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Include homework tasks</span><span class="cc-row-help">Surface assignments in unified task views.</span></span>
-                            <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="tasks.includeHomework"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text"><span class="cc-row-name">Include AP Study tasks</span><span class="cc-row-help">Surface AP sessions in task views.</span></span>
@@ -4531,6 +4596,24 @@
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="data">Reset</button>
                     </header>
+                    <div class="cc-group cc-group-stacked" id="sutraWorkspaceLockSettings">
+                        <div class="cc-group-head"><span class="cc-group-title">Workspace privacy lock</span><span class="cc-tag" id="sutraWorkspaceLockStatus">Off</span></div>
+                        <p class="cc-foot-help">Require a device-local 4–8 digit PIN after every refresh and after inactivity. This hides the interface from casual access; it does not encrypt IndexedDB or replace encrypted backups.</p>
+                        <div class="cc-data-health atelier-data-health-card">
+                            <label class="cc-data-health-row" for="sutraWorkspaceLockTimeout"><span>Lock after inactivity</span><select class="modal-input cc-select" id="sutraWorkspaceLockTimeout"><option value="1">1 minute</option><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option><option value="480">8 hours</option><option value="720">12 hours</option><option value="1440">1 day</option><option value="0">Never this session</option><option value="custom">Custom…</option></select></label>
+                            <div class="cc-custom-timeout" id="sutraWorkspaceLockCustomWrap" hidden>
+                                <label for="sutraWorkspaceLockCustomMinutes">Custom duration <span>(1–1,440 minutes)</span></label>
+                                <div class="cc-custom-timeout-controls"><input class="modal-input" id="sutraWorkspaceLockCustomMinutes" type="number" min="1" max="1440" step="1" inputmode="numeric" value="90" aria-describedby="sutraWorkspaceLockCustomError"><button class="cc-btn cc-btn-ghost" type="button" id="sutraWorkspaceLockCustomApply">Apply</button></div>
+                                <p class="cc-foot-help" id="sutraWorkspaceLockCustomError" role="alert" aria-live="polite"></p>
+                            </div>
+                            <div class="cc-stacked-actions">
+                                <button class="cc-btn cc-btn-ghost" type="button" id="sutraWorkspaceLockEnableBtn">Set up PIN</button>
+                                <button class="cc-btn cc-btn-ghost" type="button" id="sutraWorkspaceLockNowBtn" hidden>Lock now</button>
+                                <button class="cc-btn cc-btn-ghost" type="button" id="sutraWorkspaceLockChangePinBtn" hidden>Change PIN</button>
+                                <button class="cc-btn cc-btn-ghost cc-btn-danger" type="button" id="sutraWorkspaceLockDisableBtn" hidden>Disable lock</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Backups</span></div>
                         <div class="cc-stacked-actions">
@@ -4706,9 +4789,9 @@
                         <div class="cc-group-head"><span class="cc-group-title">Feature packs</span></div>
                         <p class="cc-foot-help">Your Student Setup keeps Today, Capture, Homework, Notes, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
                         <div class="cc-feature-grid" id="featureToggleListSettings">
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="today"><span>Today</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="today"><span>Home</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="timeline"><span>Timeline</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="notes"><span>Notes</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="notes"><span>Create</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>Homework</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="apstudy"><span>Academic Pack: Review &amp; Tests</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="collegeapp"><span>College Pack</span></label>
@@ -4847,7 +4930,7 @@
                     <div class="cc-preview-stats">
                         <div class="cc-preview-stat">
                             <span>Default view</span>
-                            <strong id="settingsPreviewView">Today</strong>
+                            <strong id="settingsPreviewView">Home</strong>
                         </div>
                         <div class="cc-preview-stat">
                             <span>Timeline density</span>
@@ -5325,7 +5408,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260811-cache1"></script>
+                <script src="src/features/study/homework.js?v=20260821-cache2"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5355,10 +5438,10 @@
             <p>Select the features you want to use right now. You can change this any time in Settings.</p>
             <div class="feature-toggle-list feature-toggle-list-onboarding" id="featureToggleListOnboarding">
                 <label class="feature-toggle-item feature-toggle-card" data-feature-card="today">
-                    <input type="checkbox" class="feature-toggle-input" data-feature-view="today" aria-label="Enable Today tab for startup">
+                    <input type="checkbox" class="feature-toggle-input" data-feature-view="today" aria-label="Enable Home tab for startup">
                     <span class="feature-toggle-icon"><i class="fas fa-sun" aria-hidden="true"></i></span>
                     <span class="feature-toggle-copy">
-                        <span class="feature-toggle-title">Today</span>
+                        <span class="feature-toggle-title">Home</span>
                         <span class="feature-toggle-description">Daily tasks, streaks, and quick focus view.</span>
                     </span>
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
@@ -5373,10 +5456,10 @@
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
                 <label class="feature-toggle-item feature-toggle-card" data-feature-card="notes">
-                    <input type="checkbox" class="feature-toggle-input" data-feature-view="notes" aria-label="Enable Notes tab for startup">
+                    <input type="checkbox" class="feature-toggle-input" data-feature-view="notes" aria-label="Enable Create tab for startup">
                     <span class="feature-toggle-icon"><i class="fas fa-note-sticky" aria-hidden="true"></i></span>
                     <span class="feature-toggle-copy">
-                        <span class="feature-toggle-title">Notes</span>
+                        <span class="feature-toggle-title">Create</span>
                         <span class="feature-toggle-description">Rich editor, pages, and workspace docs.</span>
                     </span>
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
@@ -6711,6 +6794,10 @@
                                 <i class="fas fa-table" aria-hidden="true"></i>
                                 Sheets
                             </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_html" data-type="html" onclick="SutraHTMLPages.createFromNewPageDialog()" aria-pressed="false">
+                                <i class="fas fa-code" aria-hidden="true"></i>
+                                HTML Page
+                            </button>
                             <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
                                 <i class="fas fa-folder" aria-hidden="true"></i>
                                 Folder
@@ -6757,7 +6844,7 @@
                                     <span class="template-preview-label">Create starter tasks</span>
                                     <span class="template-task-summary" id="templateTaskSummary">No linked tasks for this template.</span>
                                 </div>
-                                <label class="toggle-switch" title="Create linked tasks in Today view">
+                                <label class="toggle-switch" title="Create linked tasks in Home">
                                     <input type="checkbox" id="newPageCreateTasks">
                                     <span class="toggle-slider"></span>
                                 </label>
@@ -7717,12 +7804,12 @@
     <!-- Mods & handwriting engines: pure, dependency-free modules exposed on window.
          Loaded BEFORE app.js so the core can wire blocks / settings into them. -->
     <script src="src/features/workspace/handwriting.js?v=20260601-handwriting"></script>
-    <script src="src/features/customization/customization.js?v=20260602-sutra1"></script>
+    <script src="src/features/customization/customization.js?v=20260816-home-labels1"></script>
     <script src="src/features/customization/plugin-system.js?v=20260601-plugins"></script>
     <!-- Academic planning modules (engines + getDefault/normalize factories).
          Loaded BEFORE app.js so the core registers their workspaces in
          appData, backups, and import normalization. -->
-    <script src="src/features/academic/school-schedule.js?v=20260807-ics1"></script>
+    <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260707-batch1"></script>
     <script src="src/features/academic/semester-setup.js?v=20260807-ics1"></script>
@@ -7750,7 +7837,7 @@
     <!-- Today dashboard composition — pure preference normalization + accessible
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
-    <script src="src/features/workspace/today-dashboard.js?v=20260807-todaywidgets1"></script>
+    <script src="src/features/workspace/today-dashboard.js?v=20260816-home-labels1"></script>
     <script src="src/features/workspace/canvas-workbench.js?v=20260807-canvas2"></script>
     <script src="src/features/workspace/surface-assistant-actions.js?v=20260807-surfaces2"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
@@ -7762,21 +7849,23 @@
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
 <script src="src/features/workspace/startup-default-bridge.js?v=20260809-audit3"></script>
-    <script src="src/core/app.js?v=20260811-storage-cas3"></script>
+    <script src="src/core/app.js?v=20260822-connected5"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20260809-helpdocs1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20260816-home-create1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
-    <script src="src/features/workspace/audit-fixes.js?v=20260809-audit7"></script>
+    <script src="src/features/workspace/audit-fixes.js?v=20260816-home-labels1"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
-    <script src="src/features/workspace/slides.js?v=20260807-slidesworkbench1"></script>
-    <script src="src/features/workspace/sheets-engine.js?v=20260810-sheets1"></script>
-    <script src="src/features/workspace/sheets.js?v=20260810-sheets1"></script>
+    <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
+    <script src="src/features/workspace/slides.js?v=20260821-slides-v2-2"></script>
+    <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
+    <script src="src/features/workspace/sheets.js?v=20260821-sheets-v2-2"></script>
+    <script src="src/features/workspace/html-pages.js?v=20260822-htmlpages4"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
@@ -7784,20 +7873,21 @@
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
+    <script src="src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1"></script>
     <script src="src/features/study/ap-study.js?v=20260707-batch1"></script>
     <script src="src/features/study/review.js?v=20260807-purge1"></script>
     <script src="src/features/study/math-render.js?v=20260620-math1"></script>
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260807-customquotes2"></script>
-    <script src="src/features/workspace/notifications.js?v=20260807-icsnotifications1"></script>
+    <script src="src/features/workspace/notifications.js?v=20260816-home-labels1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
     <script src="src/features/workspace/mobile-nav.js?v=20260808-contextual-ui1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260807-customquotes1"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260816-home-labels1"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
@@ -8179,29 +8269,30 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260811-cache1">
-    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260807-settings15b">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260821-iossafe1">
+    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260807-cohesion2">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20260807-slidesworkbench1">
-    <link rel="stylesheet" href="styles/features/sheets.css?v=20260810-sheets1">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20260821-slidesworkbench2">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20260821-sheets2">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20260821-htmlpages3">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
     <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260807-cloud26">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
-    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260809-audit-today1">
+    <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260808-contextual-ui19">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260821-create-glass4">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260820-liquidglass-toolbar2">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.

@@ -82,6 +82,41 @@ test('Homework workspace summaries, search, filters, and completion use live tas
   await expect(page.locator('.hw-assignment-row')).toHaveCount(1);
 });
 
+test('marking Homework done on Home immediately updates the Homework board', async ({ page }) => {
+  await openHomework(page);
+
+  await page.evaluate(() => window.setActiveView('today'));
+  await page.evaluate(() => {
+    window.flowAtelier.renderTaskViews();
+    const mirror = window.flowAtelier.tasks.find((task) => task.origin === 'homework' && task.title.includes('Existing task'));
+    window.toggleComplete(mirror.id);
+  });
+
+  await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
+    .find((task) => task.title === 'Existing task')?.done)).toBe(true);
+
+  await page.evaluate(() => window.setActiveView('homework'));
+  const row = page.locator('.hw-assignment-row', { hasText: 'Existing task' });
+  await expect(row).toHaveClass(/is-completed/);
+  await expect(row.locator('.hw-work-status')).toContainText('Completed');
+
+  await row.locator('[data-task-toggle]').click();
+  await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
+    .find((task) => task.title === 'Existing task')?.done)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.tasks
+    .find((task) => task.origin === 'homework' && task.title.includes('Existing task'))?.isActive)).toBe(true);
+});
+
+test('each Homework assignment immediately has exactly one connected Todo task', async ({ page }) => {
+  await openHomework(page);
+
+  const homeworkId = await page.evaluate(() => window.SutraHomework.getTasks()
+    .find((task) => task.title === 'Existing task')?.id);
+
+  await expect.poll(() => page.evaluate((sourceId) => window.flowAtelier.tasks
+    .filter((task) => task.origin === 'homework' && task.homeworkSourceId === sourceId).length, homeworkId)).toBe(1);
+});
+
 test('Homework assignment actions provide a dedicated edit form', async ({ page }) => {
   await openHomework(page);
 
@@ -98,4 +133,8 @@ test('Homework assignment actions provide a dedicated edit form', async ({ page 
 
   await expect(page.locator('.hw-assignment-title-btn')).toHaveText('Renamed assignment');
   await expect(page.locator('.hw-assignment-row .hw-due-cell')).toContainText('Aug 31');
+  await expect.poll(() => page.evaluate(() => {
+    const mirrors = window.flowAtelier.tasks.filter((task) => task.origin === 'homework' && task.title.includes('Renamed assignment'));
+    return { count: mirrors.length, dueDate: mirrors[0]?.dueDate };
+  })).toEqual({ count: 1, dueDate: '2026-08-31' });
 });

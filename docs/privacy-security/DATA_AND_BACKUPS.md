@@ -26,6 +26,17 @@ fixtures by `npm run check:migrations`.
 - It is hydrated through one merge/normalize path on load and written through one
   debounced save path, with a synchronous flush on page-hide / unload so
   in-progress edits are not lost.
+- Every accepted full-workspace replacement atomically keeps the previous
+  meaningful root at `workspace-last-meaningful`. If startup finds that the
+  canonical `root` is present but empty/default, it restores the local journal
+  before the application can save. A legacy pre-IndexedDB workspace is used only
+  when no meaningful journal exists; record count never outranks recency.
+  The displaced empty root is retained at `workspace-empty-before-recovery` for
+  diagnostics. Each accepted canonical commit also writes a compact
+  `workspace-confirmed-root` data-presence marker in the same transaction, so a
+  deliberately emptied and successfully saved workspace is never replaced by
+  older data.
+  These device-local recovery records are not separate cloud or portable backups.
 
 ### Attachments — binary files (IndexedDB)
 
@@ -506,6 +517,7 @@ round-trip in a browser.
 | Store | Type | Holds | Note |
 |---|---|---|---|
 | `noteflow_atelier_db` (store `workspace`, key `root`) | IndexedDB | The whole `appData` workspace | Legacy-named compatibility identifier |
+| `noteflow_atelier_db` recovery keys | IndexedDB | Last meaningful root, displaced empty candidate, and confirmed-root marker | Device-local recovery journal and commit marker; not exported separately |
 | `noteflow_attachments_db` (store `blobs`) | IndexedDB | Course-file binaries | Legacy-named compatibility identifier |
 | `hwCourses:v2`, `hwTasks:v2` | localStorage | Homework (source of truth) | Mirrored into `appData.homeworkWorkspace` |
 | Curated preference keys | localStorage | Focus timer, streak settings, provider/model choices, Assistant Activity | Embedded in exports |

@@ -20,19 +20,19 @@
         './src/features/assistant/assistant-safety.js?v=20260714-intel1',
         './src/features/assistant/model-capabilities.js?v=20260807-providers1',
         './src/features/assistant/intelligence-diagnostics.js?v=20260714-intel1',
-        './src/features/assistant/sutra-product-knowledge.js?v=20260809-helpdocs1',
+        './src/features/assistant/sutra-product-knowledge.js?v=20260816-home-create1',
         './src/features/assistant/sutra-capability-registry.js?v=20260807-surfaces2',
         './src/features/assistant/action-system.js?v=20260807-agentplans2',
         './src/features/assistant/note-patch-system.js?v=20260711-note-patch1',
         './src/features/assistant/flow-intelligence.js?v=20260614-storage1',
-        './src/features/assistant/flow-assistant.js?v=20260810-remove-view-actions1',
+        './src/features/assistant/flow-assistant.js?v=20260816-home-create1',
         './src/features/assistant/sutra-assistant-memory.js?v=20260716-syncwipe1',
-        './src/features/assistant/sutra-local-help.js?v=20260809-helpdocs1'
+        './src/features/assistant/sutra-local-help.js?v=20260816-home-create1'
       ],
       styles: [
         './styles/features/sutra-assistant-help.css?v=20260729-providerwiz1',
         './styles/features/sutra-intelligence.css?v=20260610-intel1',
-        './styles/views/assistant-view.css?v=20260808-assistantfab1'
+        './styles/views/assistant-view.css?v=20260816-home-create1'
       ],
       initialization: 'sutraAssistant.init', teardown: 'sutraAssistant.teardown',
       navigationEntries: ['assistantview'], persistenceNamespace: 'assistantChatHistory',

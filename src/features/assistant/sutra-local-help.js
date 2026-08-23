@@ -256,12 +256,12 @@
             category: 'guided',
             local: true,
             answer: [
-                '**Notes** supports folders, spaces, tags, and full-text search — everything you need to organize by class or project, entirely on this device.',
+                '**Create** supports note pages, folders, spaces, tags, and full-text search — everything you need to organize by class or project, entirely on this device.',
                 'Want Sutra to suggest a structure for you? That uses AI generation; connect a provider.'
             ].join('\n\n'),
             nav: { view: 'notes' },
             extraChoices: [
-                { label: 'Open Notes', nav: { view: 'notes' }, close: true }
+                { label: 'Open Create', nav: { view: 'notes' }, close: true }
             ],
             provider: 'Suggest a clean folder and tag structure for my classes.',
             followups: ['next-step', 'whats-due'],
@@ -278,7 +278,7 @@
             ].join('\n\n'),
             nav: { view: 'today' },
             extraChoices: [
-                { label: 'Open Today', nav: { view: 'today' }, close: true }
+                { label: 'Open Home', nav: { view: 'today' }, close: true }
             ],
             provider: 'Draft a weekly review note from what I finished, what slipped, and what is due next week.',
             followups: ['next-step', 'plan-day'],
@@ -317,7 +317,7 @@
                 { label: 'Browse local study tools', to: 'assistant-capabilities' },
                 { label: 'Open Review', nav: { view: 'review' }, close: true },
                 { label: 'Open Testing Hub', nav: { view: 'testing' }, close: true },
-                { label: 'Open Notes', nav: { view: 'notes' }, close: true },
+                { label: 'Open Create', nav: { view: 'notes' }, close: true },
                 { label: 'Back', to: 'root' }
             ],
             source: 'sutra-local-help'

@@ -1,6 +1,6 @@
-# Customizable Today dashboard
+# Customizable Home dashboard
 
-Today composes existing canonical workspace cards; it does not copy task,
+Home composes existing canonical workspace cards; it does not copy task,
 calendar, review, homework, habit, or backup data into a separate dashboard
 store. `src/features/workspace/today-dashboard.js` owns only presentation
 preferences and reorders the existing DOM nodes after their normal renderers run.
@@ -18,7 +18,7 @@ contract is:
 
 The calm preset keeps the daily loop and save confidence visible while tucking
 secondary signals and advanced planners away. Desktop users can customize from
-the Today toolbar or More actions menu. The dedicated phone Today shell remains
+the Home toolbar or More actions menu. The dedicated phone Home shell remains
 the canonical compact mobile experience and is not rearranged by desktop widget
 preferences.
 
