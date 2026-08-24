@@ -254,7 +254,7 @@ test('radar consolidates linked Homework deadline, due marker, and focus block',
 test('Deadline Radar can mark tasks, Homework, and Timeline items done', async ({ page }) => {
   await openApp(page);
 
-  const ids = await page.evaluate(() => {
+  const ids = await page.evaluate(async () => {
     const fa = window.flowAtelier;
     const due = new Date();
     due.setDate(due.getDate() + 1);
@@ -274,6 +274,10 @@ test('Deadline Radar can mark tasks, Homework, and Timeline items done', async (
       }]
     }, { reason: 'today-radar-completion-regression' });
     fa.timeBlocks.push({ id: blockId, date: dueDate, start: '15:00', end: '15:30', name: 'Radar block to complete', source: 'manual' });
+    // Homework replacement renders connected surfaces synchronously. Let the
+    // frame-scoped deadline cache clear before collecting the Timeline block
+    // added immediately afterward in this synthetic multi-store setup.
+    await Promise.resolve();
     fa.renderTaskViews();
     window.openDeadlineRadar();
     return { taskId, homeworkId, blockId };
