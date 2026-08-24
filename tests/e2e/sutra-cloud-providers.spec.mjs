@@ -46,6 +46,7 @@ async function installSupabaseMock(page) {
     settingsHits: 0,
     failNextUpload: false,
     failNextIndex: false,
+    failNextLogout: false,
     deleteFailureStatus: 0,
     deleteNotFound: false
   };
@@ -56,7 +57,13 @@ async function installSupabaseMock(page) {
     if (path === '/auth/v1/verify' && method === 'POST') { const b = JSON.parse(req.postData() || '{}'); return json(200, { access_token: 'a1', token_type: 'bearer', expires_in: 3600, refresh_token: 'r1', user: { id: USER_ID, email: b.email || EMAIL } }); }
     if (path === '/auth/v1/token' && method === 'POST') return json(200, { access_token: 'a2', expires_in: 3600, refresh_token: 'r1', user: { id: USER_ID, email: EMAIL } });
     if (path === '/auth/v1/settings') { state.settingsHits += 1; return json(200, {}); }
-    if (path === '/auth/v1/logout') return route.fulfill({ status: 204, body: '' });
+    if (path === '/auth/v1/logout') {
+      if (state.failNextLogout) {
+        state.failNextLogout = false;
+        return route.abort('failed');
+      }
+      return route.fulfill({ status: 204, body: '' });
+    }
     if (path.startsWith('/storage/v1/object/authenticated/backups/') && method === 'GET') {
       const key = decodeURIComponent(path.replace('/storage/v1/object/authenticated/backups/', ''));
       const bytes = state.objects.get(key);
@@ -277,6 +284,97 @@ test('remembered Supabase session survives a new page in the same browser profil
   expect(await reopened.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
   expect(await reopened.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
   expect(await reopened.evaluate(() => sessionStorage.getItem('sutra:supabaseSession:v1'))).toContain('"refreshToken":"r1"');
+  await context.close();
+});
+
+test('visible Cloud sign-out removes the remembered session even when remote logout fails', async ({ page }) => {
+  const supa = await openApp(page);
+  await page.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });
+  await page.locator('#storageOptions').hover();
+  await page.locator('#sutraCloudOpenBtn').click();
+  await expect(page.locator('#sutraCloudRememberSessionInput')).toBeVisible();
+  await page.check('#sutraCloudRememberSessionInput');
+  await page.evaluate(async ({ email }) => {
+    await window.SutraCloudSync.verifyCode(email, '123456');
+    await window.SutraCloudSync.open();
+  }, { email: EMAIL });
+
+  await expect.poll(() => page.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).not.toBeNull();
+  supa.failNextLogout = true;
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).toBeNull();
+
+  const context = page.context();
+  await page.close();
+  const reopened = await context.newPage();
+  await openApp(reopened);
+  await reopened.evaluate(() => window.SutraCloudSync.open());
+  expect(await reopened.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(false);
+  expect(await reopened.evaluate(() => sessionStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
+  await context.close();
+});
+
+test('Cloud sign-out wins over an already in-flight remembered-session write', async ({ page }) => {
+  const supa = await openApp(page);
+  await page.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });
+  await page.locator('#storageOptions').hover();
+  await page.locator('#sutraCloudOpenBtn').click();
+  await expect(page.locator('#sutraCloudRememberSessionInput')).toBeVisible();
+  await page.check('#sutraCloudRememberSessionInput');
+
+  await page.evaluate(({ email }) => {
+    const originalSetGuarded = window.SutraCredentialVault.setGuarded;
+    let releaseWrite;
+    let markWriteStarted;
+    let delayed = false;
+    window.__sutraVaultWriteStarted = new Promise(resolve => { markWriteStarted = resolve; });
+    window.__sutraReleaseVaultWrite = () => releaseWrite();
+    const release = new Promise(resolve => { releaseWrite = resolve; });
+    window.SutraCredentialVault.setGuarded = function (name, value, generation) {
+      if (name === 'cloud:supabaseSession:v1' && !delayed) {
+        delayed = true;
+        markWriteStarted();
+        return release.then(() => originalSetGuarded.call(this, name, value, generation));
+      }
+      return originalSetGuarded.call(this, name, value, generation);
+    };
+    window.__sutraPendingVerify = window.SutraCloudSync.verifyCode(email, '123456');
+  }, { email: EMAIL });
+
+  await page.evaluate(() => window.__sutraVaultWriteStarted);
+  supa.failNextLogout = true;
+  await page.evaluate(() => window.SutraCloudSync.signOut());
+  await page.evaluate(async () => {
+    window.__sutraReleaseVaultWrite();
+    await window.__sutraPendingVerify;
+  });
+
+  await expect.poll(() => page.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).toBeNull();
+});
+
+test('Cloud sign-out blocks a stale tab from re-capturing its old session', async ({ browser }) => {
+  const context = await browser.newContext();
+  const first = await context.newPage();
+  await openApp(first);
+  await first.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });
+  await first.locator('#storageOptions').hover();
+  await first.locator('#sutraCloudOpenBtn').click();
+  await first.check('#sutraCloudRememberSessionInput');
+  await first.evaluate(async ({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
+  await expect.poll(() => first.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).not.toBeNull();
+
+  const stale = await context.newPage();
+  await openApp(stale);
+  await stale.evaluate(() => window.SutraCloudSync.open());
+  await expect.poll(() => stale.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+
+  await first.evaluate(() => window.SutraCloudSync.signOut());
+  await expect.poll(() => first.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).toBeNull();
+  await stale.evaluate(() => window.SutraCloudSync.listBackups());
+  expect(await stale.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+  await expect.poll(() => stale.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).toBeNull();
+
   await context.close();
 });
 

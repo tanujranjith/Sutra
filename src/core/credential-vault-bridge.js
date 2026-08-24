@@ -11,6 +11,7 @@
   var ASSISTANT_VAULT_PREFIX = 'assistant:';
   var assistantRemember = false;
   var cloudRemember = false;
+  var cloudWriteGeneration = null;
   var cloudHydration = null;
 
   function vault() {
@@ -21,6 +22,20 @@
 
   function safeStorage() {
     return global.SutraSafeStorage || null;
+  }
+
+  function reportCredentialFailure(error, where, userMessage) {
+    if (typeof global.SutraReportError === 'function') {
+      global.SutraReportError(error, {
+        where: where,
+        feature: 'credential-vault',
+        userMessage: userMessage,
+        toast: !!userMessage
+      }, 'warning');
+      return;
+    }
+    try { console.warn('Credential vault operation failed:', error); } catch (ignored) {}
+    if (userMessage && typeof global.showToast === 'function') global.showToast(userMessage);
   }
 
   function readSession(key) {
@@ -65,7 +80,7 @@
     var store = vault();
     if (!store) return;
     await Promise.all(ASSISTANT_PROVIDERS.map(function (provider) {
-      return store.remove(assistantVaultKey(provider)).catch(function () {});
+      return store.remove(assistantVaultKey(provider));
     }));
   }
 
@@ -98,20 +113,34 @@
   async function saveAssistantKeys() {
     var store = vault();
     if (!store) return false;
-    assistantRemember = !!(document.getElementById('assistantRememberKeysInput') || {}).checked;
-    await store.setPreference('assistantRemember', assistantRemember).catch(function () {});
-    if (!assistantRemember) {
+    var requested = !!(document.getElementById('assistantRememberKeysInput') || {}).checked;
+    await store.setPreference('assistantRemember', requested);
+    if (!requested) {
       await clearAssistantVault();
+      assistantRemember = false;
       return true;
     }
     for (var i = 0; i < ASSISTANT_PROVIDERS.length; i += 1) {
       var provider = ASSISTANT_PROVIDERS[i];
       var input = getInput(provider);
       var value = input ? String(input.value || '').trim() : '';
-      if (value) await store.set(assistantVaultKey(provider), value).catch(function () {});
-      else await store.remove(assistantVaultKey(provider)).catch(function () {});
+      if (value) await store.set(assistantVaultKey(provider), value);
+      else await store.remove(assistantVaultKey(provider));
     }
+    assistantRemember = true;
     return true;
+  }
+
+  function restoreAssistantRememberChoice(input, previous) {
+    assistantRemember = previous;
+    if (input) input.checked = previous;
+    var store = vault();
+    if (!store) return;
+    store.setPreference('assistantRemember', previous).then(function () {
+      if (!previous) return clearAssistantVault();
+    }).catch(function (error) {
+      reportCredentialFailure(error, 'credential-vault.assistant-rollback');
+    });
   }
 
   function cloudBackendUrl() {
@@ -132,7 +161,12 @@
     if (!store) return false;
     cloudHydration = (async function () {
       cloudRemember = await store.getPreference('cloudRemember', false).catch(function () { return false; });
-      if (!cloudRemember || readSession(CLOUD_SESSION_KEY)) return false;
+      if (!cloudRemember) return false;
+      if (typeof store.getWriteGuard !== 'function') throw new Error('Credential vault write guards are unavailable.');
+      var guard = await store.getWriteGuard(CLOUD_VAULT_KEY);
+      if (guard.blocked) return false;
+      cloudWriteGeneration = guard.generation;
+      if (readSession(CLOUD_SESSION_KEY)) return false;
       var saved = await store.get(CLOUD_VAULT_KEY).catch(function () { return null; });
       if (!saved || saved.version !== 1 || !saved.refreshToken || !saved.user || !saved.user.id
           || String(saved.backendUrl || '') !== cloudBackendUrl()) {
@@ -153,20 +187,36 @@
   async function captureCloudSession() {
     var store = vault();
     if (!store) return false;
-    if (!cloudRemember) {
-      await store.remove(CLOUD_VAULT_KEY).catch(function () {});
-      return false;
-    }
+    if (!cloudRemember) return false;
+    if (!Number.isSafeInteger(cloudWriteGeneration) || typeof store.setGuarded !== 'function') return false;
     var session = readSession(CLOUD_SESSION_KEY);
     if (!session || !session.refreshToken || !session.user || !session.user.id) return false;
-    await store.set(CLOUD_VAULT_KEY, {
+    return store.setGuarded(CLOUD_VAULT_KEY, {
       version: 1,
       backendUrl: cloudBackendUrl(),
       refreshToken: String(session.refreshToken),
       user: { id: String(session.user.id), email: String(session.user.email || '') },
       savedAt: new Date().toISOString()
-    }).catch(function () {});
-    return true;
+    }, cloudWriteGeneration);
+  }
+
+  async function authorizeFreshCloudSession() {
+    var store = vault();
+    if (!store || !cloudRemember || typeof store.unblock !== 'function') return false;
+    cloudWriteGeneration = await store.unblock(CLOUD_VAULT_KEY);
+    return captureCloudSession();
+  }
+
+  async function restoreCloudRememberChoice(store, input, previous) {
+    cloudRemember = previous;
+    input.checked = previous;
+    await store.setPreference('cloudRemember', previous);
+    // Never re-authorize writes during rollback: an explicit sign-out may have
+    // advanced and blocked the shared guard while this UI operation was failing.
+    cloudWriteGeneration = null;
+    if (!previous) {
+      await store.block(CLOUD_VAULT_KEY);
+    }
   }
 
   function cloudRememberInput() {
@@ -187,15 +237,37 @@
     label.appendChild(input);
     label.appendChild(copy);
     input.addEventListener('change', async function () {
-      cloudRemember = input.checked;
+      var previous = cloudRemember;
+      var requested = input.checked;
       var store = vault();
       if (!store) return;
-      await store.setPreference('cloudRemember', cloudRemember).catch(function () {});
-      if (cloudRemember) await captureCloudSession();
-      else await store.remove(CLOUD_VAULT_KEY).catch(function () {});
+      cloudRemember = requested;
+      try {
+        await store.setPreference('cloudRemember', requested);
+        if (requested) {
+          if (typeof store.unblock !== 'function') throw new Error('Credential vault write guards are unavailable.');
+          cloudWriteGeneration = await store.unblock(CLOUD_VAULT_KEY);
+          await captureCloudSession();
+        } else {
+          if (typeof store.block !== 'function') throw new Error('Credential vault write guards are unavailable.');
+          await store.block(CLOUD_VAULT_KEY);
+          cloudWriteGeneration = null;
+        }
+      } catch (error) {
+        restoreCloudRememberChoice(store, input, previous).catch(function (rollbackError) {
+          reportCredentialFailure(rollbackError, 'credential-vault.cloud-preference-rollback');
+        });
+        reportCredentialFailure(error, 'credential-vault.cloud-preference', 'Could not update remembered Sutra Cloud sign-in on this device.');
+      }
     });
     area.appendChild(label);
-    area.addEventListener('click', function () {
+    area.addEventListener('click', function (event) {
+      // The signed-in account row owns sign-out. Its canonical app boundary
+      // clears the remembered token after local session removal; starting a
+      // concurrent capture here could otherwise race and write the old token
+      // back after sign-out completes.
+      if (event && event.target && typeof event.target.closest === 'function'
+          && event.target.closest('.sutra-cloud-account-row')) return;
       settleCloudVaultAfterInteraction();
     });
   }
@@ -208,8 +280,6 @@
         captureCloudSession().catch(function () {});
         return;
       }
-      var store = vault();
-      if (store) store.remove(CLOUD_VAULT_KEY).catch(function () {});
       attempts += 1;
       if (attempts < 20) setTimeout(check, 100);
     }
@@ -228,29 +298,14 @@
       return result;
     };
 
-    var originalVerify = api.verifyCode;
-    if (typeof originalVerify === 'function') {
-      api.verifyCode = async function () {
-        var result = await originalVerify.apply(this, arguments);
-        await captureCloudSession();
-        return result;
-      };
-    }
-    var originalSignOut = api.signOut;
-    if (typeof originalSignOut === 'function') {
-      api.signOut = async function () {
-        var result = await originalSignOut.apply(this, arguments);
-        var store = vault();
-        if (store) await store.remove(CLOUD_VAULT_KEY).catch(function () {});
-        return result;
-      };
-    }
     ['backupNow', 'listBackups', 'refreshBackupList', 'restore', 'deleteBackup'].forEach(function (name) {
       var original = api[name];
       if (typeof original !== 'function') return;
       api[name] = async function () {
         var result = await original.apply(this, arguments);
-        await captureCloudSession();
+        await captureCloudSession().catch(function (error) {
+          reportCredentialFailure(error, 'credential-vault.cloud-refresh');
+        });
         return result;
       };
     });
@@ -264,11 +319,11 @@
         input.dataset.bound = 'true';
         input.addEventListener('change', function () {
           input.dataset.userChanged = 'true';
-          if (input.checked) {
-            saveAssistantKeys().catch(function () {});
-          } else {
-            saveAssistantKeys().catch(function () {});
-          }
+          var previous = assistantRemember;
+          saveAssistantKeys().catch(function (error) {
+            restoreAssistantRememberChoice(input, previous);
+            reportCredentialFailure(error, 'credential-vault.assistant-preference', 'Could not update remembered API keys on this device.');
+          });
         });
       }
     }
@@ -277,9 +332,13 @@
       save.dataset.vaultBound = 'true';
       save.addEventListener('click', function () {
         setTimeout(function () {
+          var previous = assistantRemember;
           saveAssistantKeys().then(function () {
             if (assistantRemember && typeof global.showToast === 'function') global.showToast('API keys saved on this device.');
-          }).catch(function () {});
+          }).catch(function (error) {
+            restoreAssistantRememberChoice(input, previous);
+            reportCredentialFailure(error, 'credential-vault.assistant-save', 'API keys were saved for this session, but could not be remembered on this device.');
+          });
         }, 0);
       });
     }
@@ -310,6 +369,16 @@
   function start() {
     initialize().catch(function (error) {
       try { console.warn('Device credential vault unavailable:', error); } catch (ignored) {}
+    });
+  }
+
+  if (global && typeof global.addEventListener === 'function') {
+    global.addEventListener('sutra:cloud-authenticated', function (event) {
+      var task = authorizeFreshCloudSession().catch(function (error) {
+        reportCredentialFailure(error, 'credential-vault.cloud-sign-in', 'Signed in, but Sutra could not remember this sign-in on the device.');
+      });
+      var pending = event && event.detail && event.detail.pending;
+      if (Array.isArray(pending)) pending.push(task);
     });
   }
 

@@ -1,10 +1,8 @@
 // API-key session persistence (Section 12).
 //
-// Locks in the correct (already-shipping) behavior: provider API keys live in
-// sessionStorage only, survive a SAME-TAB reload (so the user is not asked for the
-// key again), are re-hydrated into the masked input, and are never written to
-// localStorage / disk. The reported "asks for key again on reload" bug was an older
-// localStorage-era build; this guards against regressing back to it.
+// Provider API keys live in sessionStorage by default, survive a same-tab reload,
+// and never enter localStorage. Explicit device remembrance adds only encrypted
+// IndexedDB records and must remain reliable across pages sharing one profile.
 import { expect, test } from '@playwright/test';
 
 async function completeOnboarding(page) {
@@ -124,4 +122,48 @@ test('remembered API keys survive a new page in the same browser profile without
   });
   expect(vaultText).not.toContain(KEY);
   await context.close();
+});
+
+test('simultaneous first-use vault writes in two tabs share one decryptable encryption key', async ({ browser }) => {
+  const context = await browser.newContext();
+  const first = await context.newPage();
+  const second = await context.newPage();
+  await Promise.all([openApp(first), openApp(second)]);
+
+  await Promise.all([
+    first.evaluate(() => window.SutraCredentialVault.set('race:first', 'first-secret')),
+    second.evaluate(() => window.SutraCredentialVault.set('race:second', 'second-secret'))
+  ]);
+  await Promise.all([first.close(), second.close()]);
+
+  const verifier = await context.newPage();
+  await openApp(verifier);
+  await expect.poll(() => verifier.evaluate(async () => Promise.all([
+    window.SutraCredentialVault.get('race:first'),
+    window.SutraCredentialVault.get('race:second')
+  ]))).toEqual(['first-secret', 'second-secret']);
+
+  await context.close();
+});
+
+test('a failed remembered-key write reports failure and never claims device persistence', async ({ page }) => {
+  await openApp(page);
+  const KEY = 'sk-groq-vault-write-failure-test';
+
+  await page.evaluate((key) => {
+    const originalSet = window.SutraCredentialVault.set;
+    window.SutraCredentialVault.set = function (name, value) {
+      if (name === 'assistant:groq') return Promise.reject(new Error('simulated vault write failure'));
+      return originalSet.call(this, name, value);
+    };
+    document.getElementById('groqApiKeyInput').value = key;
+    document.getElementById('assistantRememberKeysInput').checked = true;
+    document.getElementById('saveChatKeysBtn').click();
+  }, KEY);
+
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('groq_api_key'))).toBe(KEY);
+  await expect(page.locator('#toastMessage')).toHaveText(/saved for this session, but could not be remembered/i);
+  await expect(page.locator('#assistantRememberKeysInput')).not.toBeChecked();
+  await expect.poll(() => page.evaluate(() => window.SutraCredentialVault.getPreference('assistantRemember', true))).toBe(false);
+  expect(await page.locator('#toastMessage').textContent()).not.toMatch(/saved on this device/i);
 });

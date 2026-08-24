@@ -7,6 +7,7 @@
   var META_STORE = 'meta';
   var CREDENTIAL_STORE = 'credentials';
   var KEY_NAME = 'encryptionKey';
+  var GUARD_PREFIX = 'writeGuard:';
   var liveDb = null;
   var liveFactory = null;
   var opening = null;
@@ -124,20 +125,65 @@
     return transactionDone(tx);
   }
 
+  async function readOrCreateKey(generated) {
+    var db = await open();
+    return new Promise(function (resolve, reject) {
+      var tx;
+      var selected = generated;
+      var settled = false;
+
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        reject(error || new Error('Credential vault key transaction failed.'));
+      }
+
+      try {
+        // A single readwrite transaction is serialized with the same operation
+        // in every other tab. That makes the first committed key authoritative
+        // and prevents two tabs from encrypting records with different keys.
+        tx = db.transaction(META_STORE, 'readwrite');
+        var store = tx.objectStore(META_STORE);
+        var request = store.get(KEY_NAME);
+        request.onerror = function () {
+          try { tx.abort(); } catch (error) {}
+          fail(request.error);
+        };
+        request.onsuccess = function () {
+          if (request.result) {
+            selected = request.result;
+            return;
+          }
+          try { store.add(generated, KEY_NAME); }
+          catch (error) {
+            try { tx.abort(); } catch (ignored) {}
+            fail(error);
+          }
+        };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve(selected);
+        };
+        tx.onerror = function () { fail(tx.error); };
+        tx.onabort = function () { fail(tx.error || new Error('Credential vault key transaction aborted.')); };
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
   async function ensureKey() {
     var cryptoApi = getCrypto();
     if (!cryptoApi) throw new Error('Web Crypto is unavailable.');
     if (keyPromise) return keyPromise;
     keyPromise = (async function () {
-      var existing = await read(META_STORE, KEY_NAME);
-      if (existing) return existing;
       var generated = await cryptoApi.subtle.generateKey(
         { name: 'AES-GCM', length: 256 },
         false,
         ['encrypt', 'decrypt']
       );
-      await write(META_STORE, KEY_NAME, generated);
-      return generated;
+      return readOrCreateKey(generated);
     })().catch(function (error) {
       keyPromise = null;
       throw error;
@@ -145,7 +191,19 @@
     return keyPromise;
   }
 
-  async function setValue(name, value) {
+  function normalizeGuard(value) {
+    var generation = value && Number(value.generation);
+    return {
+      generation: Number.isSafeInteger(generation) && generation >= 0 ? generation : 0,
+      blocked: !!(value && value.blocked)
+    };
+  }
+
+  function guardKey(name) {
+    return GUARD_PREFIX + String(name || '').trim();
+  }
+
+  async function encryptValue(name, value) {
     var cryptoApi = getCrypto();
     var encoder = getTextEncoder();
     if (!cryptoApi || !encoder) throw new Error('Web Crypto is unavailable.');
@@ -161,12 +219,123 @@
       key,
       plaintext
     );
-    await write(CREDENTIAL_STORE, keyName, {
-      version: 1,
-      iv: bytesToBase64(iv),
-      ciphertext: bytesToBase64(new Uint8Array(ciphertext))
-    });
+    return {
+      keyName: keyName,
+      record: {
+        version: 1,
+        iv: bytesToBase64(iv),
+        ciphertext: bytesToBase64(new Uint8Array(ciphertext))
+      }
+    };
+  }
+
+  async function setValue(name, value) {
+    var encrypted = await encryptValue(name, value);
+    await write(CREDENTIAL_STORE, encrypted.keyName, encrypted.record);
     return true;
+  }
+
+  async function getWriteGuard(name) {
+    var keyName = String(name || '').trim();
+    if (!keyName) throw new Error('Credential name is required.');
+    return normalizeGuard(await read(META_STORE, guardKey(keyName)));
+  }
+
+  async function setValueGuarded(name, value, expectedGeneration) {
+    var encrypted = await encryptValue(name, value);
+    var expected = Number(expectedGeneration);
+    if (!Number.isSafeInteger(expected) || expected < 0) throw new Error('Credential write generation is invalid.');
+    var db = await open();
+    return new Promise(function (resolve, reject) {
+      var tx;
+      var written = false;
+      var settled = false;
+
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        reject(error || new Error('Credential vault guarded write failed.'));
+      }
+
+      try {
+        tx = db.transaction([META_STORE, CREDENTIAL_STORE], 'readwrite');
+        var request = tx.objectStore(META_STORE).get(guardKey(encrypted.keyName));
+        request.onerror = function () {
+          try { tx.abort(); } catch (error) {}
+          fail(request.error);
+        };
+        request.onsuccess = function () {
+          var current = normalizeGuard(request.result);
+          if (current.blocked || current.generation !== expected) return;
+          tx.objectStore(CREDENTIAL_STORE).put(encrypted.record, encrypted.keyName);
+          written = true;
+        };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve(written);
+        };
+        tx.onerror = function () { fail(tx.error); };
+        tx.onabort = function () { fail(tx.error || new Error('Credential vault guarded write aborted.')); };
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
+  async function changeWriteGuard(name, blocked) {
+    var keyName = String(name || '').trim();
+    if (!keyName) throw new Error('Credential name is required.');
+    var db = await open();
+    return new Promise(function (resolve, reject) {
+      var tx;
+      var nextGeneration = 0;
+      var settled = false;
+
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        reject(error || new Error('Credential vault guard update failed.'));
+      }
+
+      try {
+        tx = db.transaction([META_STORE, CREDENTIAL_STORE], 'readwrite');
+        var meta = tx.objectStore(META_STORE);
+        var request = meta.get(guardKey(keyName));
+        request.onerror = function () {
+          try { tx.abort(); } catch (error) {}
+          fail(request.error);
+        };
+        request.onsuccess = function () {
+          var current = normalizeGuard(request.result);
+          if (current.generation >= Number.MAX_SAFE_INTEGER) {
+            try { tx.abort(); } catch (error) {}
+            fail(new Error('Credential vault write generation is exhausted.'));
+            return;
+          }
+          nextGeneration = current.generation + 1;
+          meta.put({ generation: nextGeneration, blocked: blocked === true }, guardKey(keyName));
+          if (blocked === true) tx.objectStore(CREDENTIAL_STORE).delete(keyName);
+        };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve(nextGeneration);
+        };
+        tx.onerror = function () { fail(tx.error); };
+        tx.onabort = function () { fail(tx.error || new Error('Credential vault guard update aborted.')); };
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
+  function blockValue(name) {
+    return changeWriteGuard(name, true);
+  }
+
+  function unblockValue(name) {
+    return changeWriteGuard(name, false);
   }
 
   async function getValue(name) {
@@ -229,8 +398,12 @@
 
   var api = {
     set: setValue,
+    setGuarded: setValueGuarded,
     get: getValue,
     remove: clearValue,
+    getWriteGuard: getWriteGuard,
+    block: blockValue,
+    unblock: unblockValue,
     clearAll: clearAll,
     setPreference: setPreference,
     getPreference: getPreference,

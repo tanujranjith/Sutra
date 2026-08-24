@@ -56866,7 +56866,13 @@ function getActiveEditor() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: 'email', email: address, token: code })
             });
-            return applySutraCloudAuthResponse(json);
+            const user = applySutraCloudAuthResponse(json);
+            const credentialTasks = [];
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:cloud-authenticated', { detail: { pending: credentialTasks } }));
+            } catch (error) { /* credential vault bridge is optional */ }
+            if (credentialTasks.length) await Promise.allSettled(credentialTasks);
+            return user;
         }
 
         async function sutraCloudSignOut() {
@@ -56887,6 +56893,27 @@ function getActiveEditor() {
                 console.warn('Could not clear the persisted Sutra Sync refresh token during sign-out', error);
             }
             clearSutraCloudSession();
+            // Sign-out is the canonical boundary for every Cloud entry point,
+            // including closure-scoped UI handlers that do not call the public
+            // SutraCloudSync wrapper. Remove the opt-in remembered token here so
+            // a reload cannot silently restore a session the user ended.
+            try {
+                if (window.SutraCredentialVault && typeof window.SutraCredentialVault.block === 'function') {
+                    await window.SutraCredentialVault.block('cloud:supabaseSession:v1');
+                } else if (window.SutraCredentialVault && typeof window.SutraCredentialVault.remove === 'function') {
+                    await window.SutraCredentialVault.remove('cloud:supabaseSession:v1');
+                }
+            } catch (error) {
+                if (typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(error, {
+                        where: 'sutra-cloud.sign-out-credential-vault',
+                        feature: 'sutra-cloud',
+                        userMessage: 'Signed out locally, but Sutra could not remove the remembered sign-in from this device.'
+                    }, 'warning');
+                } else {
+                    console.warn('Could not clear the remembered Sutra Cloud sign-in', error);
+                }
+            }
             updateSutraCloudUi();
         }
 
@@ -76270,7 +76297,7 @@ ${cspMeta}
             body.innerHTML = `
                 <p>Choose your AI provider and model carefully. Sutra Assistant uses the provider and model you select, so response quality, accuracy, speed, availability, and cost may vary. AI can make mistakes. Review suggestions before applying them to your workspace. You remain responsible for the model you choose and for decisions made using its responses.</p>
                 <p><strong>Remote providers:</strong> your message plus the enabled context summary is sent to the selected provider. <strong>Local endpoints:</strong> requests go only to the local URL you configure.</p>
-                <p>API keys are stored in this browser session only. Assistant chats are durable local browser data; if you enable Sutra Sync, sanitized visible history follows your workspace as ciphertext. Chats never include API keys, hidden prompts, provider reasoning, or raw provider payloads.</p>
+                <p>API keys are session-only by default. If you explicitly enable “Remember API keys on this device,” Sutra encrypts them in a device-local credential vault. Keys are never exported or synced. Assistant chats are durable local browser data; if you enable Sutra Sync, sanitized visible history follows your workspace as ciphertext. Chats never include API keys, hidden prompts, provider reasoning, or raw provider payloads.</p>
                 <p><em>Response quality depends on the provider and model you select. Review AI-generated suggestions before applying them.</em></p>`;
             openSutraModal({
                 titleText: 'AI disclosure',
@@ -76311,7 +76338,7 @@ ${cspMeta}
                 <h3>6. How context works</h3>
                 <p>Context depth controls what's sent: <strong>Minimal</strong> (view name only), <strong>Current view</strong>, or <strong>Workspace</strong> (bounded summaries). Use "View exact context" in the ⋯ menu to see the precise payload and a plain-English summary. Locked-note bodies and Course Hub file contents are never included unless you unlock or attach them. Stateless mode sends each message independently; stateful mode includes your last 3–25 messages.</p>
                 <h3>7. Privacy and security</h3>
-                <p>API keys live in session storage for this browser tab only — they are never exported, synced, logged, shown after saving, or placed in prompts. Workspace backups (.sutra and JSON) exclude keys and secret-shaped values. No telemetry, no analytics, no account.</p>
+                <p>API keys live in session storage by default. You can explicitly choose “Remember API keys on this device” to keep encrypted copies in Sutra’s device-local credential vault. In both modes, keys are never exported, synced, logged, shown after saving, or placed in prompts. Anyone using the same browser profile may still use remembered keys. Workspace backups (.sutra and JSON) exclude keys and secret-shaped values. No telemetry or analytics.</p>
                 <h3>8. Using Sutra Assistant effectively</h3>
                 <p>Ask "what's overdue?", then say "mark those as complete" or "move those to tomorrow" — references like "those" and "the first two" resolve against the items just listed. Try "what should I do today" for a local briefing, "make a recovery plan" when you're behind, or "can I still get an A in Chemistry?" for deterministic grade math. Every change shows a readable preview, is logged in Activity, and supports Undo where safe.</p>
                 <h3>9. Troubleshooting</h3>
@@ -76320,7 +76347,7 @@ ${cspMeta}
                     <li><strong>HTTP 429</strong> — the provider is rate-limiting; wait and retry, or switch models.</li>
                     <li><strong>"Failed to fetch"</strong> — network issue or provider CORS policy; try another provider or a local endpoint.</li>
                     <li><strong>Attachment blocked</strong> — the model can't read the file type; the chip explains why and suggests compatible models.</li>
-                    <li><strong>Key gone after restart</strong> — keys are session-only by design; paste it again.</li>
+                    <li><strong>Key gone after restart</strong> — enable “Remember API keys on this device,” then save again. If remembering fails, Sutra keeps the key for the current session and shows an error.</li>
                 </ul>`;
             openSutraModal({
                 titleText: 'Sutra Assistant guide',

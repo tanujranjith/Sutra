@@ -32,16 +32,24 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260823-combined1",
-    "hash": "1584833c2364c046"
+    "stamp": "20260823-combined2",
+    "hash": "eea044a1d78dcae7"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260823-storage6",
-    "hash": "6f9c4a28a30a3752"
+    "stamp": "20260823-storage8",
+    "hash": "38295beed9a719bc"
+  },
+  "src/core/credential-vault-bridge.js": {
+    "stamp": "20260823-credential-bridge4",
+    "hash": "75f9c663cd99393e"
+  },
+  "src/core/credential-vault.js": {
+    "stamp": "20260823-credential-vault4",
+    "hash": "5423f4aedd56c0d7"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -176,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260816-home-create1",
-    "hash": "d025e13a608a8ff2"
+    "stamp": "20260823-credential-vault1",
+    "hash": "e80c657a850b4d4e"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260614-storage1",
@@ -208,8 +216,8 @@
     "hash": "985bc2dccc287616"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260816-home-create1",
-    "hash": "beacd57acb51484d"
+    "stamp": "20260823-credential-vault1",
+    "hash": "491cfe8917ae3c89"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -392,8 +400,8 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260716-syncwipe1",
-    "hash": "f2532d4a82aa2e8e"
+    "stamp": "20260823-credential-vault1",
+    "hash": "7121f2feb1f71a97"
   },
   "src/persistence/storage-hygiene.js": {
     "stamp": "20260710-hygiene1",
@@ -544,8 +552,8 @@
     "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
-    "stamp": "20260807-cloud26",
-    "hash": "fea92b1e0290c875"
+    "stamp": "20260823-credential-vault1",
+    "hash": "6cd1c3908b2d3ebd"
   },
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
