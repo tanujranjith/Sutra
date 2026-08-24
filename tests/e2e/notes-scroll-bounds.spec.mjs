@@ -44,9 +44,27 @@ test('short pageless notes do not create a phantom vertical scroll range', async
   expect(geometry.viewScrollHeight).toBeLessThanOrEqual(geometry.viewClientHeight + 1);
 });
 
+test('fresh Untitled pages keep the same title position as existing notes', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openShortNote(page);
+  const existingTitleTop = await page.locator('#pageTitle').evaluate(element => Math.round(element.getBoundingClientRect().top));
+
+  const freshPageId = await page.evaluate(() => {
+    const freshPage = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('Untitled', '');
+    return freshPage.id;
+  });
+  await page.evaluate(pageId => window.loadPage(pageId), freshPageId);
+  await expect(page.locator('#pageTitle')).toHaveValue('Untitled');
+
+  const freshTitleTop = await page.locator('#pageTitle').evaluate(element => Math.round(element.getBoundingClientRect().top));
+  expect(freshTitleTop).toBeLessThan(200);
+  expect(Math.abs(freshTitleTop - existingTitleTop)).toBeLessThanOrEqual(1);
+});
+
 test('Pages mode owns one page minimum without nesting a second page height', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openShortNote(page);
+  await page.locator('.notes-toolbar-overflow-toggle').click();
   await page.locator('#pagesToggleBtn').click();
   await expect(page.locator('body')).toHaveClass(/notes-pages-mode/);
   const geometry = await page.evaluate(readPageGeometry);
@@ -59,6 +77,7 @@ test('Pages mode owns one page minimum without nesting a second page height', as
 test('Pages mode uses a viewport-sized minimum on phones', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openShortNote(page);
+  await page.locator('.notes-toolbar-overflow-toggle').click();
   await page.locator('#pagesToggleBtn').click();
   await expect(page.locator('body')).toHaveClass(/notes-pages-mode/);
   const geometry = await page.evaluate(readPageGeometry);

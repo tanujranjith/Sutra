@@ -272,6 +272,16 @@ body.settings-anchored-mode .top-nav {
     position: fixed !important;
     top: var(--sutra-global-nav-height) !important;
   }
+
+  /* The legacy toolbar synchronizer still reserves up to 90px inside the
+     editor container, while this shell already reserves the fixed nav and
+     toolbar on #view-notes. Cancel that second reservation so a fresh page at
+     scrollTop 0 starts at the same title position as an existing page whose
+     saved scroll position happens to hide the duplicate gap. Pages mode keeps
+     its document-card spacing; split view has its own pane layout. */
+  body[data-view="notes"]:not(.notes-split-active):not(.notes-pages-mode) #view-notes #notesEditorContainer {
+    margin-top: -90px !important;
+  }
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
