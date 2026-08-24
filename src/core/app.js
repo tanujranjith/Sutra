@@ -7234,10 +7234,20 @@ function populateProgressDashboard() {
                         return hashCanonicalWorkspaceRecord(current) === canonicalWorkspaceHash;
                     });
                     if (!conditional || conditional.written !== true) {
-                        const conflictError = new Error('A newer workspace was saved in another tab. This stale tab was prevented from overwriting it. Export this tab if it has unique edits, then reload before saving again.');
+                        const conflictError = new Error(sutraRemoteCommitPending
+                            ? 'A newer workspace was saved in another open Sutra page. This page was prevented from overwriting it. Export this page if it has unique edits, then reload before saving again.'
+                            : 'The stored workspace changed after this page\'s last confirmed save. Sutra prevented this page from overwriting it. Export this page if it has unique edits, then reload before saving again.');
                         conflictError.name = 'WorkspaceConflictError';
                         throw conflictError;
                     }
+                    // writeIf resolves only after the atomic root transaction has
+                    // committed. Advance this tab's base at that boundary, before
+                    // the separate verification read: if that read alone fails
+                    // transiently, the next save must recognize its own committed
+                    // root instead of misreporting it as a cross-page conflict.
+                    // A genuinely newer external write still hashes differently
+                    // and remains blocked by the next conditional transaction.
+                    canonicalWorkspaceHash = summary.hash;
                     if (options.verifyReadback !== false) {
                         const stored = await readAppData();
                         const storedText = JSON.stringify(stored);
@@ -7247,7 +7257,6 @@ function populateProgressDashboard() {
                             throw partialError;
                         }
                     }
-                    canonicalWorkspaceHash = summary.hash;
                 });
                 clearLifecycleNoteJournalAfterConfirmedSnapshot(snapshot);
                 // Only the most recent commit may clear/advance shared health state.

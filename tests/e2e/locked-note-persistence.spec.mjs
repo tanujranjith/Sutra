@@ -139,6 +139,90 @@ test('lifecycle recovery never copies unlocked PIN-note plaintext into session s
   expect(journal).toBeNull();
 });
 
+test('a committed save remains the local base when only its verification read fails', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const note = hooks.createNoteInActiveSpace('Readback recovery baseline', '<p>durable</p>');
+    await window.flowAtelier.flushAppSaveNow('readback-recovery-baseline');
+
+    const originalTransaction = IDBDatabase.prototype.transaction;
+    let rootWriteStarted = false;
+    IDBDatabase.prototype.transaction = function (...args) {
+      const mode = String(args[1] || 'readonly');
+      if (mode === 'readwrite') rootWriteStarted = true;
+      if (rootWriteStarted && mode === 'readonly') {
+        rootWriteStarted = false;
+        throw new DOMException('Injected verification read failure', 'UnknownError');
+      }
+      return originalTransaction.apply(this, args);
+    };
+
+    hooks.renamePage(note.id, 'Committed despite verification failure');
+    let firstError = null;
+    try {
+      await window.flowAtelier.flushAppSaveNow('readback-recovery-injected-failure');
+    } catch (error) {
+      firstError = { name: error?.name || '', message: error?.message || String(error) };
+    } finally {
+      IDBDatabase.prototype.transaction = originalTransaction;
+    }
+
+    let retryError = null;
+    try {
+      await window.flowAtelier.flushAppSaveNow('retry');
+    } catch (error) {
+      retryError = { name: error?.name || '', message: error?.message || String(error) };
+    }
+    const durable = await window.loadWorkspaceLocally();
+    return {
+      firstError,
+      retryError,
+      durableTitle: durable?.pages?.find(entry => entry.id === note.id)?.title || '',
+      failureBannerHidden: document.getElementById('sutraSaveFailureBanner')?.hidden === true
+    };
+  });
+
+  expect(result.firstError).toMatchObject({ name: 'UnknownError' });
+  expect(result.retryError).toBeNull();
+  expect(result.durableTitle).toBe('Committed despite verification failure');
+  expect(result.failureBannerHidden).toBe(true);
+});
+
+test('an unproven root change is not mislabeled as another open Sutra page', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const changed = await window.loadWorkspaceLocally();
+    changed.ui = { ...(changed.ui || {}), storageConflictProvenanceQa: Date.now() };
+    const db = window.SutraWorkspaceDB.create({
+      indexedDB,
+      dbName: 'noteflow_atelier_db',
+      storeName: 'workspace',
+      version: 8
+    });
+    await db.write('root', changed);
+    db.close();
+
+    let saveError = null;
+    try {
+      await window.flowAtelier.flushAppSaveNow('unknown-root-change-test');
+    } catch (error) {
+      saveError = { name: error?.name || '', message: error?.message || String(error) };
+    }
+    return {
+      saveError,
+      bannerMessage: document.getElementById('sutraSaveFailureMessage')?.textContent || ''
+    };
+  });
+
+  expect(result.saveError).toMatchObject({ name: 'WorkspaceConflictError' });
+  expect(result.saveError.message).toContain('stored workspace changed');
+  expect(result.bannerMessage).toContain('stored workspace changed');
+  expect(result.saveError.message).not.toMatch(/another (tab|open Sutra page)|stale tab/i);
+});
+
 test('a stale second tab cannot overwrite a paste saved in a locked note', async ({ page, context }) => {
   await openApp(page);
 
