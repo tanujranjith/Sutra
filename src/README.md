@@ -31,7 +31,7 @@ folders below are organized by **responsibility**, not by module boundaries.
 | App data model, persistence, export/import, notes, timeline, most views | `core/app.js` |
 | Workspace defaults / enabled-view + shortcut normalizers | `state/` (then `core/app.js` for the rest, still global-scoped) |
 | Safe storage, error reporting, DOM sanitization, feature isolation, migrations | `core/` safety layer |
-| A specific feature (assistant, academic, study, customization, workspace) | `features/<group>/` |
+| A specific feature (assistant, academic, study, search, customization, workspace) | `features/<group>/` |
 | A reusable input enhancer | `ui/` |
 | Runtime config / OAuth client id | `config/sutra-runtime-config.js` |
 

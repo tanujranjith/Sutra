@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260823-storage9",
-    "hash": "541982789f80b173"
+    "stamp": "20260824-globalsearch1",
+    "hash": "9d8ef4b473c163e2"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -234,6 +234,14 @@
   "src/features/notes/editor-v2.js": {
     "stamp": "20260807-pagelinks1",
     "hash": "b1d98ccd341fd3bb"
+  },
+  "src/features/search/global-search-engine.js": {
+    "stamp": "20260824-gsengine2",
+    "hash": "c0098dcf98c6c590"
+  },
+  "src/features/search/global-search-modal.js": {
+    "stamp": "20260824-gsmodal1",
+    "hash": "53cc6547682aaeb9"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -502,6 +510,10 @@
   "styles/features/daily-quotes.css": {
     "stamp": "20260807-customquotes1",
     "hash": "3bcf3e999e605556"
+  },
+  "styles/features/global-search.css": {
+    "stamp": "20260824-gsstyles1",
+    "hash": "4f99b10d694447f3"
   },
   "styles/features/homework-redesign.css": {
     "stamp": "20260807-cohesion2",

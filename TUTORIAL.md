@@ -1,4 +1,4 @@
-﻿# Sutra - User Tutorial
+# Sutra - User Tutorial
 
 A practical, step-by-step guide to using Sutra from your first launch through your first full week. This is the long-form companion to the in-app **Help & Docs** page and **Interactive Tutorial**.
 
@@ -65,7 +65,7 @@ You'll see three regions:
 
 The very bottom of the app has a **save bar** with quick *Save Locally*, *Export*, and *Import* buttons. Most workflows don't need it because the app autosaves continuously.
 
-Press **Ctrl/Cmd+K** at any time (outside an editor field) to open the **Command Palette** - your fastest way around the app.
+Press **Ctrl/Cmd+K** at any time (outside an editor field) to open **Global Search** - your fastest way to find anything. Press **Ctrl/Cmd+Shift+P** for the **Command Palette**.
 
 ---
 
@@ -241,7 +241,7 @@ The **AP Battle Plan card** at the top of the workspace auto-picks the soonest e
 - Log a regular **task**.
 - Schedule a **prep block** on Timeline.
 
-> On the AP Study view, `Ctrl/Cmd+K` is reserved for **Add subject** (it does not open the global Command Palette).
+> On the AP Study view, `Ctrl/Cmd+K` is reserved for **Add subject** (it does not open Global Search).
 
 ---
 
@@ -302,19 +302,14 @@ Highlights:
 
 These three shortcuts will save you the most time:
 
-### Command Palette - `Ctrl/Cmd+K`
+### Global Search - `Ctrl/Cmd+K`
 
-Opens a centered command list. Type to filter. Use it to:
+Opens a centered, workspace-wide search modal. Type to find **Pages**, **Notes** (note content), **Homework**, **Tasks**, **Timeline events**, and **Attachments** - with filter chips, contextual snippets, highlighted matches, and due dates. `Shift+Ctrl/Cmd+F` opens the same modal.
 
-- Jump to any view.
-- Run **Quick Capture**.
-- **Export `.sutra`** backup.
-- **Create a Weekly Review note** (templated 7-day summary).
-- **Rerun Student Setup**.
-- **Open a class dashboard** by typing the class name.
-- And many more workspace actions.
-
-> The AP Study view repurposes `Ctrl/Cmd+K` for **Add subject**, so the palette stays out of the way there.
+- **All** also covers Courses, **AP Study** subjects, **Review** decks and cards, **Trackers** (habits, goals, reading list), Assistant activity, and settings shortcuts.
+- `↑` / `↓` move the selection, `Enter` opens the result, `Esc` closes.
+- The empty state lists your **recent searches** - click any one to re-run it. Recent searches are stored in `settings.recentSearches` and travel through every backup path.
+- PIN-locked pages match by title only - their contents never appear in search until you unlock them.
 
 ### Quick Capture
 
@@ -328,13 +323,19 @@ Open from the Today header `Capture` button or the Command Palette. Examples:
 
 If you have multiple AP subjects, Quick Capture asks you to pick the destination subject before saving.
 
-### Global Search - `Shift+Ctrl/Cmd+F`
+### Command Palette - `Ctrl/Cmd+Shift+P`
 
-Opens a panel that groups results across **Notes**, **Tasks**, **Homework**, **AP Study**, **Review**, **Trackers**, **College**, and **Timeline**. Respects your active workspace mode.
+Opens a centered command list. Type to filter. Use it to:
 
-- The **Review** group covers deck names plus card prompts and answers.
-- The **Trackers** group covers habits, goals, and reading-list items.
-- The empty state lists your **recent searches** - click any one to re-run it. Recent searches are stored in `settings.recentSearches` and travel through every backup path.
+- Jump to any view.
+- Run **Quick Capture**.
+- **Export `.sutra`** backup.
+- **Create a Weekly Review note** (templated 7-day summary).
+- **Rerun Student Setup**.
+- **Open a class dashboard** by typing the class name.
+- And many more workspace actions.
+
+> The AP Study view repurposes `Ctrl/Cmd+K` for **Add subject**, so Global Search stays out of the way there.
 
 ---
 
@@ -345,7 +346,7 @@ Opens a panel that groups results across **Notes**, **Tasks**, **Homework**, **A
 ### Open Review
 
 - Click **Review** in the top tab bar.
-- Or press `Ctrl/Cmd+K` and run **Open Review** / **Start review session**.
+- Or press `Ctrl/Cmd+Shift+P` and run **Open Review** / **Start review session**.
 - Or click **Start session** on the Today *Review due* card.
 
 ### Make a deck and a few cards
@@ -506,7 +507,7 @@ Supported actions: `insert_text`, `replace_selection`, `create_task`, `create_ho
 
 ### Command Palette shortcuts
 
-`Ctrl/Cmd+K` opens the palette. Type `sutra` or `flow` to see:
+`Ctrl/Cmd+Shift+P` opens the palette. Type `sutra` or `flow` to see:
 
 - *Ask Sutra...*
 - *Ask Sutra about current note*
@@ -661,7 +662,7 @@ See [`docs/features/MODS_AND_CUSTOMIZATION.md`](docs/features/MODS_AND_CUSTOMIZA
 
 End-of-week ritual:
 
-1. Open the **Command Palette** with `Ctrl/Cmd+K`.
+1. Open the **Command Palette** with `Ctrl/Cmd+Shift+P`.
 2. Run **Create Weekly Review note**. Sutra creates a templated note summarizing the past 7 days (completed and missed) and next-week deadlines.
 3. Fill in wins / misses / what changes next week.
 4. Open **Deadline Radar** from Today and **Schedule this** on every prep item that needs a calendar slot.
@@ -678,7 +679,8 @@ Pair this with a Workspace Mode change if your priorities shift week to week (fo
 
 | Shortcut | What it does |
 | --- | --- |
-| `Ctrl/Cmd+K` | Command Palette (AP Study uses it for Add subject). |
+| `Ctrl/Cmd+K` | Global Search (AP Study uses it for Add subject). |
+| `Ctrl/Cmd+Shift+P` | Command Palette. |
 | `Shift+Ctrl/Cmd+F` | Global Search panel. |
 | `Alt+Shift+F` | Toggle Focus Mode. |
 | `Ctrl/Cmd+Shift+M` | Toggle markdown shortcut on selection. |

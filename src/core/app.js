@@ -34204,11 +34204,10 @@ function buildOnboardingPlanPreview() {
                   body: 'Toggle the sidebar to make room for writing. On mobile it slides in over the content; on desktop it docks to the left. The collapsed state is remembered per device.',
                   action: () => ensureSidebarExpandedForTutorial() },
 
-                { selector: '#searchInput',
+                { selector: '#sidebarSearchLauncher',
                   before: () => { safeRunTutorial(() => setActiveView('notes')); ensureSidebarExpandedForTutorial(); },
-                  title: 'Sidebar search',
-                  body: 'Filter the page tree by title or tag. PIN-locked pages\' contents are never searched, but their titles still show up so you can find them.',
-                  action: () => { setTutorialFieldValue('searchInput', 'welcome'); safeRunTutorial(filterPages); } },
+                  title: 'Search everything',
+                  body: 'Open workspace-wide search with Ctrl+K (⌘K on Mac) or by clicking Search in the sidebar. It finds pages, note content, homework, tasks, timeline events, and attachments. PIN-locked pages\' contents are never searched, but their titles still show up so you can find them.' },
 
                 { selector: '#sidebarTagsFilter',
                   before: () => { safeRunTutorial(() => setActiveView('notes')); ensureSidebarExpandedForTutorial(); },
@@ -34218,8 +34217,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#pagesList',
                   before: () => { safeRunTutorial(() => setActiveView('notes')); ensureSidebarExpandedForTutorial(); },
                   title: 'Page tree',
-                  body: 'Favorite, duplicate, rename, lock, delete, and drag/drop pages. Use `::` in a title (e.g. `Projects::Website::Launch`) to nest pages automatically — the tree builds itself.',
-                  action: () => { setTutorialFieldValue('searchInput', ''); safeRunTutorial(filterPages); } },
+                  body: 'Favorite, duplicate, rename, lock, delete, and drag/drop pages. Use `::` in a title (e.g. `Projects::Website::Launch`) to nest pages automatically — the tree builds itself.' },
 
                 { selector: '#pagesList',
                   before: () => { safeRunTutorial(() => setActiveView('notes')); ensureSidebarExpandedForTutorial(); },
@@ -83101,6 +83099,258 @@ function globalSearchAll(query) {
     return results;
 }
 
+// ---------- Global Search modal bridge ----------
+// Collects normalized search records from live canonical state for the pure
+// engine (src/features/search/global-search-engine.js). Locked pages
+// contribute title only — body text is withheld here AND ignored by the
+// engine, so locked content can never leak through search snippets.
+// Secondary surfaces (Review, Assistant activity, AP, College, trackers,
+// settings shortcuts) remain owned by globalSearchAll and are passed through
+// as prematched records so there is one owner per source.
+function globalSearchPageBreadcrumb(page) {
+    const parts = [];
+    const seen = new Set();
+    let current = page;
+    while (current && current.parentId && !seen.has(String(current.parentId)) && parts.length < 4) {
+        seen.add(String(current.id));
+        const parent = (Array.isArray(pages) ? pages : []).find(p => p && String(p.id) === String(current.parentId));
+        if (!parent) break;
+        parts.unshift(String(parent.title || '').split('::').pop().trim());
+        current = parent;
+    }
+    if (parts.length) return parts.filter(Boolean).join(' / ');
+    const titleParts = String(page && page.title || '').split('::');
+    return titleParts.length > 1 ? titleParts.slice(0, -1).map(s => s.trim()).filter(Boolean).join(' / ') : '';
+}
+
+function collectGlobalSearchRecords(query) {
+    const records = [];
+    const push = (record) => { if (record && record.title) records.push(record); };
+
+    // Pages (Create). Locked pages: title-only, empty body — never a snippet.
+    try {
+        const unlocked = typeof unlockedPageIds !== 'undefined' ? unlockedPageIds : new Set();
+        (Array.isArray(pages) ? pages : []).forEach(page => {
+            if (!page) return;
+            const locked = !!(page.isLocked && page.lockHash && !unlocked.has(page.id));
+            let body = '';
+            if (!locked) {
+                body = page.htmlDocument
+                    ? getHtmlDocumentSearchText(page)
+                    : (normalizePageType(page.type) === PAGE_TYPES.CANVAS
+                        ? getCanvasSearchText(page)
+                        : String(page.content || '').replace(/<[^>]*>/g, ' '));
+                body = String(body || '').replace(/\s+/g, ' ').trim().slice(0, 20000);
+            }
+            push({
+                sourceId: String(page.id),
+                type: 'page',
+                title: String(page.title || 'Untitled'),
+                body,
+                breadcrumb: globalSearchPageBreadcrumb(page),
+                metadata: { updatedAt: String(page.updatedAt || page.createdAt || ''), locked },
+                timestamp: Date.parse(page.updatedAt || page.createdAt || '') || 0,
+                locked,
+                action: () => { try { setActiveView('notes'); if (typeof loadPage === 'function') loadPage(page.id); } catch (err) {} }
+            });
+        });
+    } catch (err) {}
+
+    // Tasks (Home / Today).
+    try {
+        (Array.isArray(tasks) ? tasks : []).forEach(task => {
+            if (!task) return;
+            const title = String(task.title || '').trim();
+            if (!title) return;
+            const taskId = String(task.id || '');
+            push({
+                sourceId: taskId,
+                type: 'task',
+                title,
+                body: String(task.notes || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
+                breadcrumb: String(task.category || ''),
+                metadata: { due: String(task.dueDate || ''), completed: task.completed === true, priority: String(task.priority || ''), updatedAt: String(task.updatedAt || task.createdAt || '') },
+                timestamp: Date.parse(task.updatedAt || task.createdAt || '') || 0,
+                action: () => {
+                    try {
+                        setActiveView('today');
+                        setTimeout(() => {
+                            try {
+                                const row = document.querySelector('[data-task-id="' + taskId.replace(/"/g, '') + '"]');
+                                if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+                            } catch (err) {}
+                        }, 80);
+                    } catch (err) {}
+                }
+            });
+        });
+    } catch (err) {}
+
+    // Homework (canonical localStorage store, mirrored into appData).
+    try {
+        const hwTasks = readLocalArraySafe('hwTasks:v2');
+        const hwCourses = readLocalArraySafe('hwCourses:v2');
+        const courseNames = new Map((Array.isArray(hwCourses) ? hwCourses : []).map(c => [String(c && c.id), String(c && c.name || '')]));
+        (Array.isArray(hwTasks) ? hwTasks : []).forEach(hw => {
+            if (!hw) return;
+            const title = String(hw.title || hw.text || '').trim();
+            if (!title) return;
+            push({
+                sourceId: String(hw.id),
+                type: 'homework',
+                title,
+                body: String(hw.notes || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
+                breadcrumb: courseNames.get(String(hw.courseId || '')) || '',
+                metadata: { due: String(hw.dueDate || hw.due || ''), done: hw.done === true, updatedAt: String(hw.updatedAt || '') },
+                timestamp: Date.parse(hw.updatedAt || hw.createdAt || '') || 0,
+                action: () => { try { setActiveView('homework'); } catch (err) {} }
+            });
+        });
+    } catch (err) {}
+
+    // Timeline blocks. Opening a result focuses that date in the calendar.
+    try {
+        (Array.isArray(timeBlocks) ? timeBlocks : []).forEach(block => {
+            if (!block) return;
+            const name = String(block.name || block.title || '').trim();
+            if (!name) return;
+            const blockDate = String(block.date || '');
+            push({
+                sourceId: String(block.id),
+                type: 'timeline',
+                title: name,
+                body: String(block.notes || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
+                breadcrumb: [blockDate, block.start ? String(block.start) : ''].filter(Boolean).join(' · '),
+                metadata: { date: blockDate, start: String(block.start || ''), end: String(block.end || ''), category: String(block.category || ''), updatedAt: block.updatedAt ? new Date(Number(block.updatedAt)).toISOString() : '' },
+                timestamp: Number(block.updatedAt) || 0,
+                action: () => {
+                    try {
+                        setActiveView('timeline');
+                        if (blockDate && typeof normalizeBlockDate === 'function') {
+                            timelineViewDateKey = normalizeBlockDate(blockDate) || timelineViewDateKey;
+                            if (typeof persistTimelineViewPreferences === 'function') persistTimelineViewPreferences();
+                            if (typeof renderTimeline === 'function') renderTimeline();
+                        }
+                    } catch (err) {}
+                }
+            });
+        });
+    } catch (err) {}
+
+    // Course files / attachments. Metadata only — no OCR/text extraction
+    // exists in Sutra to reuse, and binaries stay in the attachment store.
+    try {
+        const cw = (typeof courseWorkspace !== 'undefined' && courseWorkspace) || {};
+        const courseNameById = new Map((Array.isArray(cw.courses) ? cw.courses : []).map(c => [String(c && c.id), String(c && c.name || '')]));
+        (Array.isArray(cw.files) ? cw.files : []).forEach(file => {
+            if (!file) return;
+            const name = String(file.name || file.originalName || '').trim();
+            if (!name) return;
+            const meta = { kind: String(file.kind || ''), mimeType: String(file.mimeType || ''), sizeBytes: Number(file.sizeBytes) || 0, updatedAt: String(file.updatedAt || file.createdAt || '') };
+            if (file.missingBlob === true) meta.missing = true;
+            push({
+                sourceId: String(file.id),
+                type: 'attachment',
+                title: name,
+                body: [file.description, file.summary, (Array.isArray(file.tags) ? file.tags : []).join(' ')].join(' ').replace(/\s+/g, ' ').trim().slice(0, 4000),
+                breadcrumb: [courseNameById.get(String(file.courseId || '')), 'Attachments'].filter(Boolean).join(' / '),
+                metadata: meta,
+                timestamp: Date.parse(file.updatedAt || file.createdAt || '') || 0,
+                action: () => { try { setActiveView('courses'); if (file.courseId && window.cwSelectCourse) window.cwSelectCourse(file.courseId); if (window.cwSetCourseTab) window.cwSetCourseTab('files'); } catch (err) {} }
+            });
+        });
+        // Courses themselves (secondary surface — All view only).
+        (Array.isArray(cw.courses) ? cw.courses : []).forEach(course => {
+            if (!course) return;
+            const name = String(course.name || '').trim();
+            if (!name) return;
+            push({
+                sourceId: String(course.id),
+                type: 'course',
+                title: name,
+                body: [course.shortName, course.teacherName, course.room, course.subjectArea, (Array.isArray(course.tags) ? course.tags : []).join(' ')].join(' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+                breadcrumb: 'Courses',
+                metadata: { updatedAt: String(course.updatedAt || ''), archived: course.archived === true },
+                timestamp: Date.parse(course.updatedAt || '') || 0,
+                action: () => { try { setActiveView('courses'); if (window.cwSelectCourse) window.cwSelectCourse(course.id); } catch (err) {} }
+            });
+        });
+    } catch (err) {}
+
+    // Secondary surfaces owned by globalSearchAll. They arrive pre-filtered
+    // by their owning modules; the engine ranks them but never drops them.
+    try {
+        if (String(query || '').trim() && typeof globalSearchAll === 'function') {
+            const secondary = globalSearchAll(query) || {};
+            [['apstudy', 'apstudy'], ['college', 'college'], ['review', 'review'], ['trackers', 'tracker'], ['assistant', 'assistant'], ['settings', 'setting']].forEach(pair => {
+                (Array.isArray(secondary[pair[0]]) ? secondary[pair[0]] : []).forEach(hit => {
+                    if (!hit) return;
+                    push({
+                        sourceId: String(hit.id || hit.title || pair[0]),
+                        type: pair[1],
+                        title: String(hit.title || ''),
+                        body: '',
+                        breadcrumb: '',
+                        metadata: { context: String(hit.context || '') },
+                        timestamp: 0,
+                        prematched: true,
+                        action: typeof hit.action === 'function' ? hit.action : null
+                    });
+                });
+            });
+        }
+    } catch (err) {}
+
+    return records;
+}
+
+function trackGlobalSearchRecent(query) {
+    try {
+        if (typeof appSettings !== 'object' || !appSettings) return;
+        const q = String(query || '').trim();
+        if (!q) return;
+        const list = Array.isArray(appSettings.recentSearches) ? appSettings.recentSearches : [];
+        const filtered = list.filter(entry => entry && entry.query && entry.query.toLowerCase() !== q.toLowerCase());
+        filtered.unshift({ query: q, at: new Date().toISOString() });
+        appSettings.recentSearches = filtered.slice(0, 25);
+        if (typeof persistAppData === 'function') persistAppData();
+    } catch (err) { /* non-critical */ }
+}
+
+function clearGlobalSearchRecents() {
+    try {
+        if (typeof appSettings !== 'object' || !appSettings) return;
+        appSettings.recentSearches = [];
+        if (typeof persistAppData === 'function') persistAppData();
+    } catch (err) { /* non-critical */ }
+}
+
+function configureGlobalSearchBridge() {
+    if (!window.SutraGlobalSearchModal || typeof window.SutraGlobalSearchModal.configure !== 'function') return false;
+    try {
+        return window.SutraGlobalSearchModal.configure({
+            collect: collectGlobalSearchRecords,
+            getRecents: () => ((typeof appSettings === 'object' && appSettings && Array.isArray(appSettings.recentSearches)) ? appSettings.recentSearches : []),
+            trackRecent: trackGlobalSearchRecent,
+            clearRecents: clearGlobalSearchRecents,
+            quickActions: [
+                { id: 'gs-new-note', label: 'New note', icon: 'fa-file-lines', run: () => { try { if (typeof createNewPage === 'function') createNewPage(); } catch (err) {} } },
+                { id: 'gs-new-task', label: 'New task', icon: 'fa-circle-check', run: () => { try { if (typeof openTaskModal === 'function') openTaskModal(); } catch (err) {} } },
+                { id: 'gs-start-focus', label: 'Start focus timer', icon: 'fa-stopwatch', run: () => { try { if (typeof startTimer === 'function') startTimer(); } catch (err) {} } },
+                { id: 'gs-export-backup', label: 'Export encrypted backup', icon: 'fa-shield-halved', run: () => { try { if (typeof exportWorkspaceAsAtelierPackage === 'function') exportWorkspaceAsAtelierPackage(); } catch (err) {} } }
+            ]
+        });
+    } catch (err) {
+        window.SutraReportError && window.SutraReportError(err, 'globalSearch:configure', 'warning');
+        return false;
+    }
+}
+
+// Activate the bridge as soon as the runtime evaluates. The modal module is
+// a shell script that loads before app.js, so the global exists here; if it
+// ever fails to load, openGlobalSearchPanel falls back to the palette.
+configureGlobalSearchBridge();
+
 // ---------- Command Palette ----------
 function getCommandPaletteCommands() {
     const mode = (typeof getActiveWorkspaceMode === 'function') ? getActiveWorkspaceMode() : 'standard';
@@ -83390,24 +83640,31 @@ function bindCommandPaletteInput() {
     if (backdrop) backdrop.addEventListener('click', closeCommandPalette);
 }
 
-// Global Cmd/Ctrl+K handler — opens palette everywhere except inside editor fields
-// and except on the AP Study view (which already uses Ctrl+K for add-subject).
+// Global Cmd/Ctrl+K handler — opens workspace-wide search everywhere except
+// inside editor fields and except on the AP Study view (which already uses
+// Ctrl+K for add-subject). Inside the Notes Editor V2, Ctrl/Cmd+K remains
+// Insert Link (that handler stops propagation before this one).
 document.addEventListener('keydown', (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
-    // Ctrl/Cmd+K (no Shift) is the canonical Command Palette shortcut. Ctrl/Cmd+Shift+P
-    // is an optional IDE-style alternate. Insert Link now lives on Ctrl/Cmd+Shift+K.
-    const isPaletteKey = (key === 'k' && !event.shiftKey) || (key === 'p' && event.shiftKey);
-    if (!isPaletteKey) return;
+    // Ctrl/Cmd+K (no Shift) opens Global Search. Ctrl/Cmd+Shift+P opens the
+    // Command Palette. Insert Link lives on Ctrl/Cmd+Shift+K.
+    const isSearchKey = key === 'k' && !event.shiftKey;
+    const isPaletteKey = key === 'p' && event.shiftKey;
+    if (!isSearchKey && !isPaletteKey) return;
     const target = event.target;
     // Don't hijack typing in real form fields, but DO allow the note editor
-    // (a contentEditable region) so the palette opens from inside note text.
+    // (a contentEditable region) so search opens from inside note text.
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
     const apStudyView = document.getElementById('view-apstudy');
     const apStudyActive = apStudyView && apStudyView.classList.contains('active');
     // When AP Study is active, Ctrl/Cmd+K is owned by its add-subject handler; do not double-trigger.
-    if (apStudyActive && key === 'k' && typeof window.openApStudyAddSubject === 'function') return;
+    if (apStudyActive && isSearchKey && typeof window.openApStudyAddSubject === 'function') return;
     event.preventDefault();
+    if (isSearchKey) {
+        try { openGlobalSearchPanel(''); } catch (err) { /* non-critical */ }
+        return;
+    }
     bindCommandPaletteInput();
     openCommandPalette('');
 });
@@ -84775,126 +85032,38 @@ function openNotesSplitPresetsPicker() {
 }
 
 // ================================================================
-// Global Search standalone panel
+// Global Search standalone panel — delegates to the workspace search
+// modal (src/features/search/global-search-modal.js) backed by the pure
+// engine (src/features/search/global-search-engine.js) and
+// collectGlobalSearchRecords. The legacy grouped renderer is retired;
+// the command palette still searches through globalSearchAll directly.
 // ================================================================
 function openGlobalSearchPanel(initialQuery) {
-    const modal = document.getElementById('globalSearchPanel');
-    if (!modal) return;
-    const input = modal.querySelector('#globalSearchInput');
-    const results = modal.querySelector('#globalSearchResults');
-    if (!input || !results) return;
-    input.value = String(initialQuery || '');
-
-    const render = () => {
-        const q = String(input.value || '').trim();
-        if (!q) {
-            const recent = (typeof appSettings === 'object' && appSettings && Array.isArray(appSettings.recentSearches))
-                ? appSettings.recentSearches.slice(0, 6)
-                : [];
-            const recentHtml = recent.length
-                ? `<section class="global-search-group"><h4>Recent</h4><ul>${recent.map((entry, idx) => `<li class="global-search-item" data-gs-recent="${idx}" tabindex="0"><div class="global-search-item-title">${escapeCommandHtml(entry.query)}</div></li>`).join('')}</ul></section>`
-                : '';
-            if (window.SutraDOMSafety && typeof window.SutraDOMSafety.setTrustedHTML === 'function') {
-                // Search labels are escaped before interpolation above.
-                window.SutraDOMSafety.setTrustedHTML(results, `<div class="global-search-empty">Type to search notes, tasks, homework, AP, Review, trackers, College, Timeline…</div>${recentHtml}`);
-            } else {
-                results.textContent = 'Type to search this workspace.';
-            }
-            results.querySelectorAll('[data-gs-recent]').forEach(node => {
-                node.addEventListener('click', () => {
-                    const idx = Number(node.getAttribute('data-gs-recent'));
-                    const entry = recent[idx];
-                    if (!entry) return;
-                    input.value = entry.query;
-                    render();
-                });
-            });
-            return;
-        }
-        const data = globalSearchAll(q);
-        const mode = (typeof getActiveWorkspaceMode === 'function') ? getActiveWorkspaceMode() : 'standard';
-        const modeAllows = (view) => (typeof shouldShowViewForWorkspaceMode === 'function') ? shouldShowViewForWorkspaceMode(view) : true;
-
-        const groups = [];
-        if (modeAllows('notes')) groups.push(['Notes', data.notes]);
-        groups.push(['Tasks', data.tasks]);
-        if (modeAllows('homework')) groups.push(['Homework', data.homework]);
-        if (modeAllows('courses')) groups.push(['Courses', data.courses]);
-        groups.push(['Resources', data.resources]);
-        if (modeAllows('apstudy')) groups.push(['AP Study', data.apstudy]);
-        if (modeAllows('review')) groups.push(['Review', data.review]);
-        groups.push(['Trackers', data.trackers]);
-        if (modeAllows('collegeapp')) groups.push(['College', data.college]);
-        if (modeAllows('timeline')) groups.push(['Timeline', data.timeline]);
-        groups.push(['Assistant', data.assistant]);
-        groups.push(['Settings', data.settings]);
-        // Persist a compact recent-search trail so command-palette/global-search
-        // can show recent queries when the input is empty.
+    if (window.SutraGlobalSearchModal && typeof window.SutraGlobalSearchModal.open === 'function') {
         try {
-            if (typeof appSettings === 'object' && appSettings) {
-                const list = Array.isArray(appSettings.recentSearches) ? appSettings.recentSearches : [];
-                const filtered = list.filter(entry => entry && entry.query && entry.query.toLowerCase() !== q);
-                filtered.unshift({ query: q, at: new Date().toISOString() });
-                appSettings.recentSearches = filtered.slice(0, 25);
-                if (typeof persistAppData === 'function') persistAppData();
-            }
-        } catch (err) { /* non-critical */ }
-
-        const hasAny = groups.some(([, arr]) => Array.isArray(arr) && arr.length);
-        if (!hasAny) {
-            results.innerHTML = '<div class="global-search-empty">No matches in this workspace.</div>'; // sutra-allow-html: static trusted markup
-            modal._searchResults = null;
-            return;
+            if (window.SutraGlobalSearchModal.open(initialQuery)) return true;
+        } catch (err) {
+            window.SutraReportError && window.SutraReportError(err, 'globalSearch:open', 'warning');
         }
-        const html = groups.map(([label, arr]) => {
-            if (!Array.isArray(arr) || !arr.length) return '';
-            const items = arr.map((r, i) => `
-                <li class="global-search-item" data-gs-group="${escapeCommandHtml(label)}" data-gs-idx="${i}" tabindex="0">
-                    <div class="global-search-item-title">${escapeCommandHtml(r.title || '')}</div>
-                    ${r.context ? `<div class="global-search-item-meta">${escapeCommandHtml(r.context)}</div>` : ''}
-                </li>`).join('');
-            return `<section class="global-search-group"><h4>${escapeCommandHtml(label)}</h4><ul>${items}</ul></section>`;
-        }).join('');
-        results.innerHTML = html; // sutra-allow-html: trusted markup; all dynamic values pass through escapeCommandHtml()
-        modal._searchResults = data;
-
-        results.querySelectorAll('.global-search-item').forEach(node => {
-            node.addEventListener('click', () => {
-                const group = node.getAttribute('data-gs-group');
-                const idx = Number(node.getAttribute('data-gs-idx'));
-                const current = modal._searchResults || {};
-                const map = {
-                    'Notes': 'notes',
-                    'Tasks': 'tasks',
-                    'Homework': 'homework',
-                    'Courses': 'courses',
-                    'Resources': 'resources',
-                    'AP Study': 'apstudy',
-                    'Review': 'review',
-                    'Trackers': 'trackers',
-                    'College': 'college',
-                    'Timeline': 'timeline',
-                    'Assistant': 'assistant',
-                    'Settings': 'settings'
-                };
-                const arr = current[map[group] || ''] || [];
-                const hit = arr[idx];
-                if (hit && typeof hit.action === 'function') {
-                    closeGlobalSearchPanel();
-                    try { hit.action(); } catch (err) { console.warn(err); }
-                }
-            });
-        });
-    };
-    input.oninput = render;
-    render();
-
-    modal.classList.add('active');
-    modal.setAttribute('aria-hidden', 'false');
-    setTimeout(() => { try { input.focus(); input.select(); } catch (err) {} }, 30);
+    }
+    // Fail over to the command palette (which searches via globalSearchAll)
+    // if the modal module is unavailable, so search is never a dead end.
+    try {
+        bindCommandPaletteInput();
+        openCommandPalette(String(initialQuery || ''));
+    } catch (err) { /* non-critical */ }
+    return false;
 }
 
 function closeGlobalSearchPanel() {
+    if (window.SutraGlobalSearchModal && typeof window.SutraGlobalSearchModal.close === 'function') {
+        try {
+            window.SutraGlobalSearchModal.close();
+            return;
+        } catch (err) {
+            window.SutraReportError && window.SutraReportError(err, 'globalSearch:close', 'warning');
+        }
+    }
     const modal = document.getElementById('globalSearchPanel');
     if (!modal) return;
     modal.classList.remove('active');

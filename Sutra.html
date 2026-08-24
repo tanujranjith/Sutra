@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -294,13 +294,13 @@
                 </div>
 
                 <div class="sidebar-search" id="sidebarSearch">
-                    <button type="button" class="sidebar-search-toggle" id="sidebarSearchToggle" onclick="toggleSidebarSearch(true)" title="Search notes" aria-label="Search notes">
+                    <button type="button" class="sidebar-search-launcher" id="sidebarSearchLauncher" onclick="openGlobalSearchPanel('')" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" title="Search the whole workspace (Ctrl+K)" aria-label="Search the whole workspace">
                         <i class="fas fa-search" aria-hidden="true"></i>
+                        <span class="sidebar-search-launcher-label">Search</span>
+                        <span class="global-search-kbd sidebar-search-kbd" id="sidebarSearchKbd" aria-hidden="true">Ctrl K</span>
                     </button>
-                    <input type="text" class="search-input neumo-input" id="searchInput" placeholder="Search pages..." aria-label="Search notes" onfocus="toggleSidebarSearch(true)" oninput="filterPages()" onkeydown="handleSidebarSearchKeydown(event)" onblur="handleSidebarSearchBlur()">
                 </div>
             </div>
-            <div class="sidebar-search-feedback" id="sidebarSearchFeedback" aria-live="polite">Showing all pages</div>
 
             <div class="sidebar-shortcuts" id="sidebarShortcuts">
                 <div class="sidebar-shortcuts-header">
@@ -5663,17 +5663,35 @@
     </div>
 
     <div id="globalSearchPanel" class="global-search-panel" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="globalSearchTitle">
-        <div class="global-search-backdrop" onclick="closeGlobalSearchPanel()"></div>
+        <div class="global-search-backdrop" data-modal-close onclick="closeGlobalSearchPanel()"></div>
         <div class="global-search-card glass-card">
-            <div class="global-search-head">
-                <div>
-                    <div class="eyebrow" id="globalSearchTitle">Search everywhere</div>
-                    <h3>Across notes, tasks, homework, AP Study, College, Timeline</h3>
-                </div>
-                <button type="button" class="neumo-btn" onclick="closeGlobalSearchPanel()" aria-label="Close">Close</button>
+            <h3 class="global-search-visually-hidden" id="globalSearchTitle">Search everywhere</h3>
+            <div class="global-search-inputrow">
+                <i class="fas fa-search global-search-input-icon" aria-hidden="true"></i>
+                <input id="globalSearchInput" type="text" class="global-search-field" placeholder="Search your workspace…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="globalSearchResults" aria-autocomplete="list" data-autofocus />
+                <button type="button" id="globalSearchClear" class="global-search-clear" aria-label="Clear search" hidden><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                <span class="global-search-kbd" id="globalSearchKbd" aria-hidden="true">Ctrl K</span>
+                <button type="button" class="global-search-close" aria-label="Close" onclick="closeGlobalSearchPanel()"><i class="fas fa-xmark" aria-hidden="true"></i></button>
             </div>
-            <input id="globalSearchInput" type="text" class="modal-input" placeholder="Search…" autocomplete="off" />
-            <div id="globalSearchResults" class="global-search-results" aria-live="polite"></div>
+            <p class="global-search-help">Search across pages, notes, homework, tasks, timeline, and attachments</p>
+            <div class="global-search-toolbar">
+                <div class="global-search-chips" role="group" aria-label="Search filters">
+                    <button type="button" class="global-search-chip is-active" data-gs-filter="all" aria-pressed="true">All</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="pages" aria-pressed="false">Pages</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="notes" aria-pressed="false">Notes</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="homework" aria-pressed="false">Homework</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="tasks" aria-pressed="false">Tasks</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="timeline" aria-pressed="false">Timeline</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="attachments" aria-pressed="false">Attachments</button>
+                </div>
+                <div class="global-search-count" id="globalSearchCount" aria-live="polite" hidden></div>
+            </div>
+            <div id="globalSearchResults" class="global-search-results" role="listbox" aria-label="Search results"></div>
+            <div class="global-search-footer">
+                <span class="global-search-footer-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                <span class="global-search-footer-hint"><kbd>Enter</kbd> open</span>
+                <span class="global-search-footer-hint"><kbd>Esc</kbd> close</span>
+            </div>
         </div>
     </div>
 
@@ -7865,7 +7883,12 @@
     <!-- PDF records normalize before core hydration. Rendering and export stay
          fully local through the pinned vendored runtimes below. -->
     <script src="src/features/workspace/pdf-engine.js?v=20260823-pdf4"></script>
-    <script src="src/core/app.js?v=20260823-storage9"></script>
+    <!-- Workspace-wide search: pure ranking engine + modal controller. Both are
+         shell scripts that must load before app.js, which wires live workspace
+         data through configureGlobalSearchBridge(). -->
+    <script src="src/features/search/global-search-engine.js?v=20260824-gsengine2"></script>
+    <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal1"></script>
+    <script src="src/core/app.js?v=20260824-globalsearch1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260823-credential-bridge4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
@@ -8287,6 +8310,7 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
+    <link rel="stylesheet" href="styles/features/global-search.css?v=20260824-gsstyles1">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260821-iossafe1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
