@@ -1,10 +1,23 @@
 #!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkCoreRuntime } from './lib/core-runtime-integrity.mjs';
+import { checkCoreRuntime, blessCoreRuntimeBudget, CORE_RUNTIME_BUDGET_PATH } from './lib/core-runtime-integrity.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const explicitPath = process.argv.find((arg) => arg.startsWith('--app='));
+
+if (process.argv.includes('--bless')) {
+  const blessPath = explicitPath
+    ? resolve(repoRoot, explicitPath.slice('--app='.length))
+    : resolve(repoRoot, 'src/core/app.js');
+  const budget = blessCoreRuntimeBudget({ appPath: blessPath });
+  const outPath = resolve(repoRoot, CORE_RUNTIME_BUDGET_PATH);
+  writeFileSync(outPath, `${JSON.stringify(budget, null, 2)}\n`, 'utf8');
+  console.log(`Core runtime budget blessed: ${budget.maxBytes} bytes / ${budget.maxLines} lines -> ${CORE_RUNTIME_BUDGET_PATH}`);
+  process.exit(0);
+}
+
 const appPath = explicitPath
   ? resolve(repoRoot, explicitPath.slice('--app='.length))
   : resolve(repoRoot, 'src/core/app.js');
