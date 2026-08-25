@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit re-bless (npm run core:budget); decomposition should lower this file.",
-  "blessedAt": "2026-08-25T06:32:25.683Z",
-  "maxBytes": 4869743,
-  "maxLines": 85695
+  "blessedAt": "2026-08-25T07:21:45.024Z",
+  "maxBytes": 4870314,
+  "maxLines": 85705
 }

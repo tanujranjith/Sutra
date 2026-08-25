@@ -49686,6 +49686,16 @@ function getActiveEditor() {
                     }
                 }
                 reopenLinkedPdfForNotePage(page);
+
+                // Canonical note-page lifecycle signal. Slides, Sheets, and HTML
+                // Pages subscribe to this instead of polling for the active page;
+                // it also fires when the same id is re-loaded (e.g. after an import)
+                // so surface editors re-sync their visibility.
+                try {
+                    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
+                        detail: { pageId: pageId }
+                    }));
+                } catch (err) { /* lifecycle signal is best-effort */ }
             }
         }
 
