@@ -183,19 +183,24 @@ test('open modal isolates background content with inert and releases it on close
   await expect(modal).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(1);
 
-  // While the modal is open, body-level background containers are inert.
+  // While the modal is open, the modal's ancestor path stays operable and
+  // every sibling branch containing background controls is isolated.
   const whileOpen = await page.evaluate(() => {
     const inertRoots = Array.from(document.querySelectorAll('[data-sutra-modal-inert]')).map(el => el.id || el.className || el.tagName);
-    const appBackground = document.querySelector('.app-container');
+    const modalRoot = document.getElementById('hwCourseQuickModal');
+    const isolatedControl = Array.from(document.querySelectorAll('[data-sutra-modal-inert]'))
+      .find(branch => branch.querySelector('button, input, select, textarea, a[href]'));
     return {
       inertCount: inertRoots.length,
-      appBackgroundInert: !appBackground || appBackground.inert === true,
-      modalInert: document.getElementById('hwCourseQuickModal').inert === false
+      modalHasInertAncestor: !!modalRoot?.closest('[data-sutra-modal-inert]'),
+      backgroundControlBranchInert: !!isolatedControl && isolatedControl.inert === true,
+      backgroundControlBranchHidden: isolatedControl?.getAttribute('aria-hidden') === 'true'
     };
   });
   expect(whileOpen.inertCount).toBeGreaterThan(0);
-  expect(whileOpen.appBackgroundInert).toBe(true);
-  expect(whileOpen.modalInert).toBe(true);
+  expect(whileOpen.modalHasInertAncestor).toBe(false);
+  expect(whileOpen.backgroundControlBranchInert).toBe(true);
+  expect(whileOpen.backgroundControlBranchHidden).toBe(true);
 
   // Focus cannot land on inert background content via keyboard.
   await page.keyboard.press('Tab');
@@ -215,4 +220,59 @@ test('open modal isolates background content with inert and releases it on close
       return !!el && el.hasAttribute('data-sutra-modal-inert') && el.inert === true;
     })()
   }))).toEqual({ active: 0, marked: 0, appBackgroundStillInert: false });
+});
+
+test('stacked modals isolate the lower dialog and restore focus when the top closes', async ({ page }) => {
+  await openApp(page);
+  const opened = await page.evaluate(async () => {
+    const makeModal = (id, label) => {
+      const root = document.createElement('div');
+      root.id = id;
+      root.className = 'modal active';
+      root.style.cssText = 'display:grid;position:fixed;inset:0;z-index:2147483000;';
+      const dialog = document.createElement('section');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-label', label);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      dialog.appendChild(button);
+      root.appendChild(dialog);
+      document.body.appendChild(root);
+      return { root, button };
+    };
+    const first = makeModal('sol1StackFirst', 'First dialog');
+    window.SutraModalManager.sync();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    first.button.focus();
+    const second = makeModal('sol1StackSecond', 'Second dialog');
+    window.SutraModalManager.sync();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    return {
+      active: window.SutraModalManager.getActiveCount(),
+      lowerIsolated: !!first.root.closest('[data-sutra-modal-inert]'),
+      topIsolated: !!second.root.closest('[data-sutra-modal-inert]'),
+      focusInTop: second.root.contains(document.activeElement)
+    };
+  });
+  expect(opened).toEqual({ active: 2, lowerIsolated: true, topIsolated: false, focusInTop: true });
+
+  const closed = await page.evaluate(async () => {
+    const first = document.getElementById('sol1StackFirst');
+    const second = document.getElementById('sol1StackSecond');
+    second.classList.remove('active');
+    window.SutraModalManager.sync();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    const outcome = {
+      active: window.SutraModalManager.getActiveCount(),
+      lowerIsolated: !!first.closest('[data-sutra-modal-inert]'),
+      focusInLower: first.contains(document.activeElement)
+    };
+    first.classList.remove('active');
+    window.SutraModalManager.sync();
+    first.remove();
+    second.remove();
+    return outcome;
+  });
+  expect(closed).toEqual({ active: 1, lowerIsolated: false, focusInLower: true });
 });

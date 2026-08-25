@@ -38933,42 +38933,45 @@ function buildOnboardingPlanPreview() {
                 document.body.classList.toggle('modal-open', state.active.length > 0 || !!document.querySelector('.modal.active'));
             }
 
-            // Background isolation (audit remediation): while any managed modal
-            // is open, everything else at body level becomes inert so pointer,
-            // keyboard, and screen-reader virtual-cursor navigation cannot reach
-            // background content (WCAG 2.4.3 / 2.1.2). Live regions (toasts,
-            // degraded-feature badges) stay reachable so status announcements
-            // survive. Browsers without `inert` fall back to the existing Tab
-            // trap alone. Modals nested inside view containers keep their whole
-            // ancestor container reachable rather than being trapped inert.
+            // Isolate every branch outside the top modal while preserving live
+            // regions and critical recovery dialogs. aria-hidden is the fallback
+            // for browsers without native inert support.
             const MODAL_INERT_MARKER = 'data-sutra-modal-inert';
-            function syncBackgroundInert() {
-                let supported = false;
-                try { supported = 'inert' in document.body; } catch (error) { supported = false; }
-                if (!supported) return;
-                if (!state.active.length) {
-                    document.querySelectorAll(`[${MODAL_INERT_MARKER}]`).forEach(el => {
-                        el.removeAttribute(MODAL_INERT_MARKER);
-                        el.inert = false;
-                    });
-                    return;
-                }
-                const belongsToOpenModal = el => state.active.some(root => root === el || root.contains(el));
-                Array.from(document.body.children).forEach(el => {
-                    if (!el || el.nodeType !== 1 || typeof el.inert !== 'boolean') return;
-                    if (belongsToOpenModal(el)) return;
-                    const role = el.getAttribute('role');
-                    if (role === 'status' || role === 'alert' || role === 'log') return;
-                    // Never isolate self-managed critical dialogs (e.g. the
-                    // save-failure banner): their recovery actions must stay
-                    // reachable even while an unrelated modal is open.
-                    if (el.getAttribute('aria-modal') === 'true' && !el.hasAttribute('data-sutra-modal-enhanced')) return;
-                    if (el.classList && el.classList.contains('sutra-save-failure-banner')) return;
-                    if (el.hasAttribute('aria-live')) return;
-                    if (el.hasAttribute(MODAL_INERT_MARKER)) return;
-                    el.setAttribute(MODAL_INERT_MARKER, '1');
-                    el.inert = true;
+            const MODAL_PREV_ARIA = 'data-sutra-modal-prev-aria';
+            const MODAL_PREV_INERT = 'data-sutra-modal-prev-inert';
+            function releaseBackgroundInert() {
+                document.querySelectorAll(`[${MODAL_INERT_MARKER}]`).forEach(el => {
+                    const priorAria = el.getAttribute(MODAL_PREV_ARIA);
+                    if (priorAria === '__missing__') el.removeAttribute('aria-hidden');
+                    else if (priorAria !== null) el.setAttribute('aria-hidden', priorAria);
+                    if ('inert' in el) el.inert = el.getAttribute(MODAL_PREV_INERT) === '1';
+                    el.removeAttribute(MODAL_INERT_MARKER);
+                    el.removeAttribute(MODAL_PREV_ARIA);
+                    el.removeAttribute(MODAL_PREV_INERT);
                 });
+            }
+            function isolateModalBranch(el) {
+                if (!el || el.nodeType !== 1) return;
+                el.setAttribute(MODAL_PREV_ARIA, el.hasAttribute('aria-hidden') ? el.getAttribute('aria-hidden') : '__missing__');
+                el.setAttribute(MODAL_PREV_INERT, el.inert === true ? '1' : '0');
+                el.setAttribute(MODAL_INERT_MARKER, '1');
+                el.setAttribute('aria-hidden', 'true');
+                if ('inert' in el) el.inert = true;
+            }
+            function syncBackgroundInert() {
+                releaseBackgroundInert();
+                if (!state.active.length) return;
+                const top = state.active[state.active.length - 1];
+                const protectedRoots = [top];
+                document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"], .sutra-save-failure-banner, [aria-modal="true"]:not([data-sutra-modal-enhanced])').forEach(el => {
+                    if (!state.active.some(root => root.contains(el))) protectedRoots.push(el);
+                });
+                const containsProtected = el => protectedRoots.some(root => root && root.isConnected && (el === root || el.contains(root)));
+                const walk = parent => Array.from(parent.children || []).forEach(el => {
+                    if (!containsProtected(el)) { isolateModalBranch(el); return; }
+                    if (!protectedRoots.includes(el)) walk(el);
+                });
+                walk(document.body);
             }
 
             function onOpen(root) {
@@ -38987,23 +38990,23 @@ function buildOnboardingPlanPreview() {
                 setTimeout(() => focusInitial(root), 0);
             }
 
-            // Single, deterministic focus-restoration owner. Restores immediately
-            // (as soon as the modal's open-signal is removed) and re-asserts on a
-            // short bounded schedule to survive close animations / late browser
-            // focus moves under load. Later retries only run when focus is still
-            // effectively lost, or trapped in the closing modal.
             function restoreFocusTo(previous, closedRoot = null) {
-                if (!(previous && previous.isConnected && typeof previous.focus === 'function')) return;
+                const underlying = state.active[state.active.length - 1] || null;
+                const target = underlying
+                    ? (previous && previous.isConnected && underlying.contains(previous) ? previous : (getFocusable(underlying)[0] || getDialogNode(underlying) || underlying))
+                    : previous;
+                if (!(target && target.isConnected && typeof target.focus === 'function')) return;
                 const apply = (force = false) => {
-                    if (state.active.length > 0) return;
+                    const currentUnderlying = state.active[state.active.length - 1] || null;
+                    if (currentUnderlying !== underlying) return;
                     if (!force) {
                         const active = document.activeElement;
                         const focusIsLost = !active || active === document.body || active === document.documentElement;
-                        const focusStillInClosingModal = !!(closedRoot && active && closedRoot.contains(active));
-                        if (active === previous) return;
-                        if (!focusIsLost && !focusStillInClosingModal) return;
+                        const focusStillClosing = !!(closedRoot && active && closedRoot.contains(active));
+                        if (active === target) return;
+                        if (!focusIsLost && !focusStillClosing && (!underlying || underlying.contains(active))) return;
                     }
-                    try { previous.focus({ preventScroll: true }); } catch (error) { try { previous.focus(); } catch (e) {} }
+                    try { target.focus({ preventScroll: true }); } catch (error) { try { target.focus(); } catch (e) {} }
                 };
                 apply(true);
                 if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => apply(false));
