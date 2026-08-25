@@ -28,9 +28,9 @@ artifact checks.
    2026-08 remediation is the cautionary example.
 2. **Same-origin only at runtime.** `script-src` no longer approves any CDN
    script origin; new libraries must be vendored like these.
-3. **Offline integrity.** Anything the daily loop or recovery needs must be
-   reachable offline: critical assets are enumerated in the generated asset
-   manifest; on-demand parsers are stamped and cached on first online use.
+3. **Offline integrity.** Anything the daily loop, document import, or recovery
+   needs must be reachable offline: critical assets, including the on-demand
+   Office parsers, are precached through the generated asset manifest.
 4. **Review the bytes.** Upgrades replace reviewed files — check the diff of
    the minified artifact, not just the version number, then bump its `?v=`
    stamp (see `scripts/cache-stamp-lock.json`).

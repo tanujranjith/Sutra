@@ -20,6 +20,8 @@ console.log('Service worker / PWA safety check');
 console.log('--------------------------------');
 
 const sw = read('sw.js');
+let assetManifest = null;
+try { assetManifest = JSON.parse(read('src/config/asset-manifest.generated.json') || 'null'); } catch (error) { /* assertions below report it */ }
 ok(!!sw, 'sw.js exists');
 if (sw) {
     ok(/CACHE_VERSION\s*=\s*(?:['"][^'"]+['"]|`[^`]+`)/.test(sw), 'sw uses a versioned cache name');
@@ -34,6 +36,9 @@ if (sw) {
     ok(!/ignoreSearch\s*:\s*true/.test(sw), 'versioned assets never use search-insensitive cache matching');
     ok(/cache\.match\(req,\s*\{\s*ignoreSearch:\s*false\s*\}\)/.test(sw), 'asset lookup is exact and scoped to the current cache');
     ok(/cache\.addAll\(CRITICAL_ASSETS\)/.test(sw), 'critical shell precache is atomic and failures reject install');
+    ok(assetManifest && assetManifest.critical.includes('./assets/vendor/office/mammoth.browser.min.js?v=1.8.0'), 'DOCX parser is precached for first-use offline import');
+    ok(assetManifest && assetManifest.critical.includes('./assets/vendor/office/xlsx.full.min.js?v=0.18.5'), 'XLSX parser is precached for first-use offline import');
+    ok(assetManifest && !assetManifest.lazy.some((asset) => /assets\/vendor\/office\//.test(asset)), 'Office parsers are not deferred until first online use');
     ok(/Promise\.allSettled\(OPTIONAL_ASSETS/.test(sw), 'only optional precache failures degrade gracefully');
     // Strip comments so the keyword-absence checks inspect executable code only.
     const swCode = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
