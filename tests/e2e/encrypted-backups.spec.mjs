@@ -435,6 +435,9 @@ test('pre-restore safety snapshot is encrypted and never a plaintext JSON side e
   test.setTimeout(120000);
   await openApp(page);
   await seedRichWorkspace(page, 'SNAP');
+  const healthBefore = await page.evaluate(() =>
+    window.serializeWorkspace().settings?.dataHealth?.lastPreImportSnapshotAt || null
+  );
   const { buffer, payload } = await createEncryptedBytes(page, 'SNAPTARGET');
   await page.setInputFiles('#fileInput', { name: 'SNAPTARGET.SUTRA', mimeType: 'application/octet-stream', buffer });
   await expect(page.locator('#sutraImportPasswordModal')).toHaveClass(/active/);
@@ -457,6 +460,10 @@ test('pre-restore safety snapshot is encrypted and never a plaintext JSON side e
   const bytes = readFileSync(await download.path());
   expect(bytes.subarray(0, 8).toString('latin1')).toBe('SUTRAENC');
   expect(bytes.toString('latin1')).not.toContain('Sentinel Note SNAP');
+  const healthAfterDownload = await page.evaluate(() =>
+    window.serializeWorkspace().settings?.dataHealth?.lastPreImportSnapshotAt || null
+  );
+  expect(healthAfterDownload).toBe(healthBefore, 'an unverified browser download must not update the verified safety-snapshot timestamp');
 
   await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel Note SNAPTARGET');

@@ -4671,13 +4671,13 @@
                             <div class="cc-data-health-row"><span>Backup state</span><span id="sutraHealthBackupState">No recent backup</span></div>
                             <div class="cc-data-health-row"><span>Last Backup</span><span id="atelierDataHealthExport">Never</span></div>
                             <div class="cc-data-health-row"><span>Last Restore</span><span id="atelierDataHealthImport">Never</span></div>
-                            <div class="cc-data-health-row"><span>Last safety snapshot</span><span id="atelierDataHealthSnapshot">Never</span></div>
+                            <div class="cc-data-health-row"><span>Last verified safety snapshot</span><span id="atelierDataHealthSnapshot">Never</span></div>
                             <div class="sutra-health-details" id="sutraHealthTechnicalDetails" tabindex="0" aria-label="Storage health technical details">No persistence warnings recorded.</div>
                             <div class="cc-stacked-actions">
                                 <button class="cc-btn cc-btn-ghost" id="atelierDataHealthExportBtn" type="button">Backup now</button>
                                 <button class="cc-btn cc-btn-ghost" id="atelierDataHealthSnapshotBtn" type="button">Download safety snapshot</button>
                             </div>
-                            <p class="cc-foot-help">A safety snapshot is also created automatically before any workspace import. Encrypted .sutra backups need your password to restore. JSON exports and safety snapshots are unencrypted recovery files.</p>
+                            <p class="cc-foot-help">Interactive restores first offer an encrypted .sutra safety snapshot; browser downloads must be confirmed by you, while backup-folder writes are verified by Sutra. The local recovery journal remains the always-on fallback. Advanced JSON exports are unencrypted.</p>
                         </div>
                     </div>
                     <div class="cc-group cc-group-stacked" id="sutraFullSyncSection">

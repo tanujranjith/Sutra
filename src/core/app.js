@@ -33372,10 +33372,11 @@ function buildOnboardingPlanPreview() {
                 atelierDataHealthSnapshotBtn.dataset.bound = 'true';
                 atelierDataHealthSnapshotBtn.addEventListener('click', async () => {
                     const snapshot = await createPreImportSafetySnapshot();
-                    showToast(
-                        snapshot && snapshot.ok ? 'Encrypted safety snapshot downloaded.'
+                    showToast(snapshot && snapshot.ok && snapshot.verified
+                        ? 'Encrypted safety snapshot saved to your backup folder.'
+                        : (snapshot && snapshot.ok ? 'Encrypted safety snapshot download started. Confirm it finishes before relying on it.'
                             : (snapshot && snapshot.declined ? 'Safety snapshot cancelled.' : 'Could not create safety snapshot.')
-                    );
+                        ));
                 });
             }
 
@@ -34481,7 +34482,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#atelierDataHealthExport, .atelier-data-health-card',
                   before: () => gotoTutorialSettingsSection('data'),
                   title: 'Local data health',
-                  body: 'See the last .atelier export, last import, and last safety snapshot at a glance. A safety snapshot is taken automatically before every import — so a bad import is never the end of your data. Aim to export at least weekly.' },
+                  body: 'See the last encrypted backup, last import, and last verified safety snapshot. Interactive restores offer an encrypted snapshot first; the local recovery journal remains the always-on fallback. Aim to export at least weekly.' },
 
                 { selector: '#featureToggleListSettings',
                   before: () => gotoTutorialSettingsSection('advanced'),
@@ -44929,7 +44930,7 @@ function buildOnboardingPlanPreview() {
   <li><code>.sutra</code> is the full-fidelity encrypted workspace backup format for local state, notes, settings, AP data, homework, college data, binary assets, and linked metadata. Older unencrypted <code>.sutra</code> and legacy <code>.atelier</code> files still import.</li>
   <li>The connected-productivity additions — <code>reviewWorkspace</code> (decks, items, sessions, settings), <code>focusTemplates</code>, <code>splitPaneContexts</code>, plus <code>settings.mobileTodayMode</code> and <code>settings.recentSearches</code> — all flow through the same save/export/import path. Round-trip tests verify 19 workspace fields stay in sync.</li>
   <li>Export from Settings before major changes and keep multiple dated copies. Sutra will ask for a backup password and cannot recover it if forgotten.</li>
-  <li>Import replaces the active workspace state, so Sutra creates a pre-import safety snapshot first.</li>
+  <li>Import replaces the active workspace state, so Sutra first offers an encrypted pre-import safety snapshot. Confirm browser downloads yourself; Sutra verifies configured backup-folder writes.</li>
   <li><strong>Optional Drive sync:</strong> Settings &rsaquo; Data can upload encrypted snapshots to your Google Drive app-data folder while Sutra is open, online, unlocked, and authorized. Manual encrypted <code>.sutra</code> backups remain independent of Drive.</li>
 </ul>
                     `
@@ -44966,7 +44967,7 @@ function buildOnboardingPlanPreview() {
 </ul>
 <h3>Restore warning</h3>
 <ul>
-  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and takes a pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
+  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and offers an encrypted pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
 </ul>
 <h3>Auto-backup</h3>
 <ul>
@@ -54763,7 +54764,7 @@ function getActiveEditor() {
             if (!remote) throw new Error('No Drive sync file is available.');
             const ok = options.skipConfirm === true || await showCustomConfirmDialog({
                 title: 'Restore from Drive?',
-                message: 'Sutra will create a local safety snapshot first, then replace this device with the encrypted Drive workspace.',
+                message: 'Sutra will offer an encrypted local safety snapshot first, then replace this device with the encrypted Drive workspace.',
                 confirmText: 'Restore from Drive',
                 cancelText: 'Cancel',
                 confirmVariant: 'danger'
@@ -58080,7 +58081,7 @@ function getActiveEditor() {
                 body.appendChild(warn);
             }
             const note = document.createElement('p');
-            note.textContent = 'A safety snapshot of this device is saved automatically before anything is replaced.';
+            note.textContent = 'Before replacement, Sutra asks you to create an encrypted safety snapshot. Browser downloads are not verifiable; the local recovery journal remains available.';
             note.setAttribute('style', 'margin:10px 0 0;font-size:0.8rem;opacity:0.7;');
             body.appendChild(note);
 
@@ -64061,19 +64062,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function createPreImportSafetySnapshot(options = {}) {
-            // Privacy model: a rollback copy taken before a destructive restore
-            // must never be a silently written plaintext JSON file — a user who
-            // otherwise relies on encrypted .sutra backups would end up with an
-            // unencrypted copy of their entire workspace on disk as a side
-            // effect of restoring. The always-on rollback guarantee is the
-            // canonical IndexedDB recovery journal (the previous root is written
-            // to the backup key inside the same transaction as every commit);
-            // this external file is therefore opt-in per restore and always uses
-            // the standard encrypted .sutra envelope.
-            //
-            // Returns { ok, declined?, destination? } instead of a bare boolean.
-            // Falsy `ok` keeps existing caller checks working; `declined` marks
-            // an explicit student cancellation (as opposed to a hard failure).
+            // External rollback copies are opt-in encrypted .sutra files; the
+            // IndexedDB recovery journal remains the always-on fallback.
             try {
                 const outcome = await openSutraBackupPassphraseModal({
                     title: 'Encrypt safety snapshot before restoring',
@@ -64093,7 +64083,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     // confirmed by the app, so it must not masquerade as one.
                     recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
                 }
-                return { ok: true, destination: outcome.destination, filename: outcome.filename };
+                return { ok: true, verified: outcome.destination === 'folder', destination: outcome.destination, filename: outcome.filename };
             } catch (err) {
                 console.warn('Pre-import safety snapshot failed', err);
                 if (window.SutraReportError && typeof window.SutraReportError === 'function') {
@@ -64345,16 +64335,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return false;
                 }
             }
-            // External safety snapshot policy: interactive restores offer an
-            // encrypted .sutra safety snapshot first. Cancelling that dialog
-            // cancels the whole import — a destructive replacement should never
-            // proceed because a privacy dialog was dismissed. Hard failures
-            // (crypto unavailable, missing attachment bytes) fall back to the
-            // explicit continue-anyway gate below; the canonical IndexedDB
-            // recovery journal still protects the previous root in every case.
-            // Background flows (e.g. Drive clean pulls) pass safetySnapshot:false
-            // and rely on the recovery journal alone — they must never spawn
-            // surprise file downloads.
+            // Interactive restores offer an encrypted file; cancellation stops
+            // replacement. Background restores rely on the recovery journal.
             if (options.safetySnapshot !== false) {
                 showToast('Preparing encrypted safety snapshot...', { durationMs: 1400 });
                 const snapshot = await createPreImportSafetySnapshot({

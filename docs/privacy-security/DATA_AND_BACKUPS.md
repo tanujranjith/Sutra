@@ -525,8 +525,10 @@ round-trip in a browser.
 
 - **Lost or corrupted workspace:** import your most recent `.sutra` (or JSON, or
   legacy `.atelier`) backup from Settings → Data.
-- **Unexpected import:** fall back to the **pre-import safety snapshot** taken
-  automatically before the import.
+- **Unexpected import:** fall back to the encrypted **pre-import safety
+  snapshot** you accepted before the import, or use Sutra's canonical local
+  recovery journal. A browser download request cannot be verified by the app;
+  confirm the file finished downloading before relying on it.
 - **App misbehaving (CSS/plugins), data intact:** load in **Safe Mode**
   (`?sutraSafeMode=1`, legacy `?atelierSafeMode=1`, or hold **Shift** on load),
   which skips custom CSS and plugins and **never deletes** anything.
