@@ -30,7 +30,9 @@ artifact checks.
    script origin; new libraries must be vendored like these.
 3. **Offline integrity.** Anything the daily loop, document import, or recovery
    needs must be reachable offline: critical assets, including the on-demand
-   Office parsers, are precached through the generated asset manifest.
+   Office parsers, are precached through the generated asset manifest. Advanced
+   parsers use the non-blocking install tier so they cannot prevent core offline
+   readiness when an individual parser response fails.
 4. **Review the bytes.** Upgrades replace reviewed files — check the diff of
    the minified artifact, not just the version number, then bump its `?v=`
    stamp (see `scripts/cache-stamp-lock.json`).
