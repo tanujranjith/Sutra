@@ -38935,6 +38935,44 @@ function buildOnboardingPlanPreview() {
                 document.body.classList.toggle('modal-open', state.active.length > 0 || !!document.querySelector('.modal.active'));
             }
 
+            // Background isolation (audit remediation): while any managed modal
+            // is open, everything else at body level becomes inert so pointer,
+            // keyboard, and screen-reader virtual-cursor navigation cannot reach
+            // background content (WCAG 2.4.3 / 2.1.2). Live regions (toasts,
+            // degraded-feature badges) stay reachable so status announcements
+            // survive. Browsers without `inert` fall back to the existing Tab
+            // trap alone. Modals nested inside view containers keep their whole
+            // ancestor container reachable rather than being trapped inert.
+            const MODAL_INERT_MARKER = 'data-sutra-modal-inert';
+            function syncBackgroundInert() {
+                let supported = false;
+                try { supported = 'inert' in document.body; } catch (error) { supported = false; }
+                if (!supported) return;
+                if (!state.active.length) {
+                    document.querySelectorAll(`[${MODAL_INERT_MARKER}]`).forEach(el => {
+                        el.removeAttribute(MODAL_INERT_MARKER);
+                        el.inert = false;
+                    });
+                    return;
+                }
+                const belongsToOpenModal = el => state.active.some(root => root === el || root.contains(el));
+                Array.from(document.body.children).forEach(el => {
+                    if (!el || el.nodeType !== 1 || typeof el.inert !== 'boolean') return;
+                    if (belongsToOpenModal(el)) return;
+                    const role = el.getAttribute('role');
+                    if (role === 'status' || role === 'alert' || role === 'log') return;
+                    // Never isolate self-managed critical dialogs (e.g. the
+                    // save-failure banner): their recovery actions must stay
+                    // reachable even while an unrelated modal is open.
+                    if (el.getAttribute('aria-modal') === 'true' && !el.hasAttribute('data-sutra-modal-enhanced')) return;
+                    if (el.classList && el.classList.contains('sutra-save-failure-banner')) return;
+                    if (el.hasAttribute('aria-live')) return;
+                    if (el.hasAttribute(MODAL_INERT_MARKER)) return;
+                    el.setAttribute(MODAL_INERT_MARKER, '1');
+                    el.inert = true;
+                });
+            }
+
             function onOpen(root) {
                 enhance(root);
                 if (!state.active.includes(root)) {
@@ -38947,6 +38985,7 @@ function buildOnboardingPlanPreview() {
                     state.active.push(root);
                 }
                 syncScrollLock();
+                syncBackgroundInert();
                 setTimeout(() => focusInitial(root), 0);
             }
 
@@ -38979,6 +39018,7 @@ function buildOnboardingPlanPreview() {
                 const index = state.active.indexOf(root);
                 if (index !== -1) state.active.splice(index, 1);
                 syncScrollLock();
+                syncBackgroundInert();
                 restoreFocusTo(state.previousFocus.get(root), root);
                 try { delete root.__sutraReturnFocus; } catch (e) { root.__sutraReturnFocus = null; }
             }

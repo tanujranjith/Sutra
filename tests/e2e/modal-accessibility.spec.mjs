@@ -167,3 +167,46 @@ test('Review confirm modal traps focus and closes on Escape', async ({ page }) =
   await page.keyboard.press('Escape');
   await expect(root.locator('.review-modal-card')).toHaveCount(0);
 });
+
+test('open modal isolates background content with inert and releases it on close', async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name === 'tablet',
+    'Same manager path as desktop; covered once per engine.'
+  );
+  await gotoHomework(page);
+  await openApp(page);
+  const trigger = page.locator('[data-course-add]').first();
+  await trigger.waitFor({ state: 'visible', timeout: 15000 });
+  await trigger.click();
+  const modal = page.locator('#hwCourseQuickModal');
+  await expect(modal).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(1);
+
+  // While the modal is open, body-level background containers are inert.
+  const whileOpen = await page.evaluate(() => {
+    const inertRoots = Array.from(document.querySelectorAll('[data-sutra-modal-inert]')).map(el => el.id || el.className || el.tagName);
+    const appBackground = document.querySelector('.app-container');
+    return {
+      inertCount: inertRoots.length,
+      appBackgroundInert: !appBackground || appBackground.inert === true,
+      modalInert: document.getElementById('hwCourseQuickModal').inert === false
+    };
+  });
+  expect(whileOpen.inertCount).toBeGreaterThan(0);
+  expect(whileOpen.appBackgroundInert).toBe(true);
+  expect(whileOpen.modalInert).toBe(true);
+
+  // Focus cannot land on inert background content via keyboard.
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.activeElement.closest('#hwCourseQuickModal'))).toBe(true);
+
+  // Closing the last modal fully releases every managed inert root.
+  await page.keyboard.press('Escape');
+  await expect(modal).toBeHidden();
+  await expect.poll(() => page.evaluate(() => ({
+    active: window.SutraModalManager.getActiveCount(),
+    marked: document.querySelectorAll('[data-sutra-modal-inert]').length,
+    anyInert: Array.from(document.body.children).some(el => el.inert === true && !el.hasAttribute('data-sutra-modal-enhanced'))
+  }))).toEqual({ active: 0, marked: 0, anyInert: false });
+});
