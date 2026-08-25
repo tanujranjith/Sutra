@@ -5528,6 +5528,14 @@
         }
 
         .preset-card {
+            /* Native <button> since the keyboard-accessibility remediation:
+               reset UA button chrome so the card visual is unchanged while
+               keyboard focus/activation semantics come for free. */
+            appearance: none;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            width: 100%;
             padding: 15px;
             border: 2px solid var(--border);
             border-radius: 8px;
