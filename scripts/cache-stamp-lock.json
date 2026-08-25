@@ -32,8 +32,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "7356efb325d49799"
+    "stamp": "20260825-sol2-1",
+    "hash": "59f5d013afa6cf78"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -100,8 +100,8 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "81319748a9bcd998"
+    "stamp": "20260825-sol2-1",
+    "hash": "cd6d317f94b67645"
   },
   "src/domain/homework-store.js": {
     "stamp": "20260825-sol1-1",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "525742ba443a6218"
+    "stamp": "20260825-sol2-1",
+    "hash": "1c6f6afc320a0839"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -456,8 +456,8 @@
     "hash": "5a176198efc28e8d"
   },
   "src/sync/sync-transport.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "b3e7993c7a912adb"
+    "stamp": "20260825-sol2-1",
+    "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
     "stamp": "20260708-toolbar-compact",
