@@ -18,6 +18,10 @@ const revokeWipeMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260716_device_revoke_wipe.sql'),
   'utf8'
 );
+const pruningMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260825_sync_pruning_durable_ack.sql'),
+  'utf8'
+);
 
 const tables = ['sync_ops', 'sync_devices', 'sync_vault_keys', 'sync_snapshots', 'sync_asset_index'];
 const exposedFunctions = [
@@ -26,7 +30,7 @@ const exposedFunctions = [
   'sync_put_snapshot', 'sync_put_asset', 'sync_has_asset',
   'sync_list_assets', 'sync_list_devices', 'sync_revoke_device',
   'sync_get_device_status', 'sync_acknowledge_device_wipe',
-  'sync_delete_vault'
+  'sync_prune_ops', 'sync_delete_vault'
 ];
 
 function applySyncAssetPolicyDdl(initial, source) {
@@ -188,7 +192,28 @@ test('op-log retention prunes only below the snapshot-and-devices floor', () => 
   // Retention is pinned by the SLOWEST active device, never the snapshot alone.
   assert.match(sql, /least\(v_snapshot_cursor, coalesce\(v_min_device_cursor, 0\)\)/);
   assert.match(sql, /revoked_at is null[\s\S]*?min\(last_seen_cursor\)/);
+  assert.match(sql, /sync_pull[\s\S]*?set last_seen_at = now\(\)[\s\S]*?sync_push/,
+    'pull delivery must not advance the durable device cursor');
+  assert.doesNotMatch(
+    sql.match(/create or replace function public\.sync_pull\([\s\S]*?\n\$\$;/)?.[0] || '',
+    /set last_seen_cursor/,
+    'pull must leave last_seen_cursor for the post-commit acknowledgement RPC'
+  );
+  assert.match(sql, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/,
+    'cursor acknowledgements cannot claim an unseen server position');
+  assert.ok((sql.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2,
+    'push and prune must share the account-scoped transaction lock');
+  assert.match(sql, /sync_push[\s\S]*?greatest\([\s\S]*?sync_snapshots/,
+    'the snapshot cursor preserves the logical head after covered ops are deleted');
   // Authenticated-only grant, like every other data-bearing RPC.
   assert.match(sql, /revoke all on function public\.sync_prune_ops\(text\) from public, anon;/);
   assert.match(sql, /grant execute on function public\.sync_prune_ops\(text\) to authenticated;/);
+  assert.match(pruningMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(pruningMigration, /create or replace function public\.sync_touch_device\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_pull\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_push\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_prune_ops\(/);
+  assert.match(pruningMigration, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/);
+  assert.ok((pruningMigration.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2);
+  assert.match(pruningMigration, /\bcommit;\s*$/i);
 });

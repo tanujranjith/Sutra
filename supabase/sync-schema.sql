@@ -277,16 +277,28 @@ language plpgsql
 security definer
 set search_path = pg_catalog, public
 as $$
-declare v_code text;
+declare
+  v_code text;
+  v_head bigint;
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
+  if sync_touch_device.cursor is not null
+     and (sync_touch_device.cursor < 0 or sync_touch_device.cursor > v_head) then
+    return jsonb_build_object('ok', false, 'code', 'bad-cursor');
+  end if;
   update public.sync_devices d
      set label = coalesce(sync_touch_device.label, d.label),
          last_seen_cursor = greatest(d.last_seen_cursor, coalesce(sync_touch_device.cursor, d.last_seen_cursor)),
          last_seen_at = now()
    where d.user_id = auth.uid() and d.device_id = "deviceId";
-  return jsonb_build_object('ok', true);
+  return jsonb_build_object('ok', true, 'cursor', coalesce(sync_touch_device.cursor, v_head));
 end;
 $$;
 
@@ -314,9 +326,11 @@ begin
       limit least(greatest(coalesce(max_rows, 500), 1), 1000)
     ) o;
 
+  -- Delivery is not durable incorporation. The client advances
+  -- last_seen_cursor through sync_touch_device only after its atomic local
+  -- baseline/outbox commit and workspace readback have succeeded.
   update public.sync_devices
-     set last_seen_cursor = greatest(last_seen_cursor, coalesce(v_last, sync_pull.cursor, 0)),
-         last_seen_at = now()
+     set last_seen_at = now()
    where user_id = auth.uid() and device_id = "deviceId";
 
   return jsonb_build_object('ok', true, 'ops', v_rows, 'cursor', coalesce(v_last, sync_pull.cursor, 0));
@@ -351,7 +365,12 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('sutra-sync-push:' || auth.uid()::text, 0));
-  select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
 
   for v_env in select * from jsonb_array_elements(coalesce(ops, '[]'::jsonb)) loop
     v_op_id := v_env #>> '{meta,opId}';
@@ -390,7 +409,7 @@ begin
         and o.op_id in (
           select e #>> '{meta,opId}' from jsonb_array_elements(coalesce(ops, '[]'::jsonb)) e
         );
-    update public.sync_devices set last_seen_cursor = greatest(last_seen_cursor, v_acked_max), last_seen_at = now()
+    update public.sync_devices set last_seen_at = now()
       where user_id = auth.uid() and device_id = "deviceId";
     return jsonb_build_object('ok', true, 'cursor', v_acked_max);
   end if;
@@ -417,7 +436,7 @@ begin
   end loop;
 
   select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
-  update public.sync_devices set last_seen_cursor = greatest(last_seen_cursor, v_head), last_seen_at = now()
+  update public.sync_devices set last_seen_at = now()
     where user_id = auth.uid() and device_id = "deviceId";
   return jsonb_build_object('ok', true, 'cursor', v_head);
 exception
@@ -524,7 +543,12 @@ declare
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
-  select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
   if snapshot is null
      or (snapshot->>'v') is distinct from '1'
      or (snapshot->>'alg') is distinct from 'A256GCM'
@@ -575,6 +599,10 @@ declare
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
+
+  -- Serialize with push so pruning cannot make the computed server head
+  -- transiently disappear between a push cursor check and its inserts.
+  perform pg_advisory_xact_lock(hashtextextended('sutra-sync-push:' || auth.uid()::text, 0));
 
   select max(cursor) into v_snapshot_cursor
     from public.sync_snapshots

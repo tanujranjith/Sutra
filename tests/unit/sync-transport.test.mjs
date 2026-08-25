@@ -108,12 +108,14 @@ test('vault-key writes are create-only or compare-and-swap rewraps with the same
   assert.equal(server.getVaultKey().wrapped.keyId, first.keyId);
 });
 
-test('memory transport binds a deviceId and passes calls through', async () => {
+test('memory transport binds a deviceId and registers only through explicit touch', async () => {
   const server = transportApi.createMemoryServer();
   const transport = transportApi.createMemoryTransport(server, { deviceId: 'dev-x' });
   await transport.ping();
   await transport.pull({ cursor: 0 });
-  assert.ok(server.state.devices['dev-x'], 'pull must register the device');
+  assert.equal(server.state.devices['dev-x'], undefined, 'delivery alone is not a durable acknowledgement');
+  await transport.touchDevice({ cursor: 0 });
+  assert.ok(server.state.devices['dev-x'], 'explicit touch binds and registers the device');
 });
 
 test('REST transport speaks the Supabase RPC surface via injected fetch', async () => {
@@ -417,4 +419,22 @@ test('REST transport classifies auth, quota, and missing-schema failures', async
     });
     await assert.rejects(() => transport.ping(), (e) => e.code === code);
   }
+});
+
+test('memory transport separates delivery from durable cursor acknowledgement', async () => {
+  const key = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const server = transportApi.createMemoryServer();
+  const deviceA = transportApi.createMemoryTransport(server, { deviceId: 'device-a' });
+  const deviceB = transportApi.createMemoryTransport(server, { deviceId: 'device-b' });
+  await deviceA.touchDevice({ cursor: 0 });
+  await deviceB.touchDevice({ cursor: 0 });
+  const pushed = await deviceA.push({ ops: [await makeEnvelope(key, 'device-a:1', 1, 'device-a')], cursor: 0 });
+  assert.equal(pushed.ok, true);
+  assert.equal(server.state.devices['device-a'].lastSeenCursor, 0, 'push response is not a durable local ack');
+  const pulled = await deviceB.pull({ cursor: 0 });
+  assert.equal(pulled.cursor, 1);
+  assert.equal(server.state.devices['device-b'].lastSeenCursor, 0, 'pull response is not a durable local ack');
+  assert.equal((await deviceB.touchDevice({ cursor: pulled.cursor })).ok, true);
+  assert.equal(server.state.devices['device-b'].lastSeenCursor, 1);
+  assert.equal((await deviceB.touchDevice({ cursor: 2 })).code, 'bad-cursor', 'a client cannot acknowledge beyond the server head');
 });
