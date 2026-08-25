@@ -165,7 +165,7 @@ async function completeSafetySnapshotDialog(page, pass = PASS) {
 }
 
 // Decline path: cancelling the snapshot passphrase must cancel the whole
-// import â€” the workspace stays exactly as it was.
+// import — the workspace stays exactly as it was.
 async function declineSafetySnapshotDialog(page) {
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });

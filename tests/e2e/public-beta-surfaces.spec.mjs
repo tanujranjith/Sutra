@@ -97,7 +97,7 @@ test('integration registry truthfully gates external services and Smart Import a
   await expect(page.locator('.smart-import-proposal')).toHaveCount(1);
 
   // Smart Import writes through the canonical SutraHomeworkStore (workspace/IndexedDB),
-  // not the legacy hwTasks:v2 localStorage key â€” read homework from the store.
+  // not the legacy hwTasks:v2 localStorage key — read homework from the store.
   const before = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).length);
   expect(before).toBe(0);
 
