@@ -7695,10 +7695,15 @@
         if (meta && typeof meta.hasAnyKey === 'function') {
             try { return meta.hasAnyKey(); } catch (e) { /* ignore */ }
         }
-        // Fallback: presence-only sessionStorage check (never reads into UI).
+        // Fallback: presence-only session check routed through the SAME
+        // safe-storage wrapper the credential bridge writes with — no direct
+        // sessionStorage access, and values are never read into UI.
         try {
             const keys = ['groq_api_key', 'openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'openrouter_api_key'];
-            if (keys.some(k => !!sessionStorage.getItem(k))) return true;
+            const storage = window.SutraSafeStorage;
+            if (keys.some(k => !!(storage && typeof storage.sessionGet === 'function'
+                ? storage.sessionGet(k, { fallback: null })
+                : null))) return true;
         } catch (e) { /* ignore */ }
         const local = getPref('assistant.localEndpoint', {});
         return !!(local && String(local.baseUrl || '').trim());
