@@ -67,6 +67,78 @@ test('SutraFeatureGuard.run preserves the return value on success and catches as
   expect(res.asyncDegraded).toBe(true);
 });
 
+test('SutraFeatureGuard async contract: fallback settlement, no detached rejection, explicit rethrow', async ({ page }) => {
+  await openApp(page);
+  const res = await page.evaluate(async () => {
+    const unhandled = [];
+    const onUnhandled = (event) => unhandled.push(String(event && event.reason && event.reason.message || event.reason));
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    let resolveSlow;
+    const slow = window.SutraFeatureGuard.run('guard-slow', () => new Promise((resolve) => { resolveSlow = resolve; }), { fallback: 'fb', label: 'Slow' });
+    let settledBeforeResolve = 'pending';
+    slow.then(() => { settledBeforeResolve = 'resolved-early'; }, () => { settledBeforeResolve = 'rejected-early'; });
+
+    // Rejected async feature: the derived promise must settle with the
+    // fallback (not reject), degrade the feature, and leave nothing detached.
+    const degradedOutcome = await window.SutraFeatureGuard.run(
+      'guard-reject',
+      () => Promise.reject(new Error('isolated boom')),
+      { fallback: 'safe', label: 'Rejecting' }
+    );
+
+    resolveSlow('late-value');
+    const slowValue = await slow;
+
+    // Explicit rethrow travels through the SAME returned promise and is
+    // observable by an awaiting caller.
+    let rethrownMessage = '';
+    try {
+      await window.SutraFeatureGuard.run(
+        'guard-rethrow',
+        () => Promise.reject(new Error('explicit rethrow')),
+        { label: 'Rethrow', rethrow: true }
+      );
+    } catch (error) {
+      rethrownMessage = error && error.message;
+    }
+
+    // An ignored rethrow-enabled rejection is the caller's choice; it must
+    // still be observable as a rejection of the returned promise only.
+    const ignored = window.SutraFeatureGuard.run(
+      'guard-ignored-rethrow',
+      () => Promise.reject(new Error('ignored on purpose')),
+      { label: 'Ignored', rethrow: true }
+    );
+    const ignoredRejected = await ignored.then(() => false, (error) => error instanceof Error);
+    ignored.catch(() {}); // silence our own observation copy
+
+    await new Promise((r) => setTimeout(r, 50));
+    window.removeEventListener('unhandledrejection', onUnhandled);
+    return {
+      degradedOutcome,
+      slowValue,
+      settledBeforeResolve,
+      rethrownMessage,
+      ignoredRejected,
+      unhandled,
+      degradedFlags: {
+        reject: window.SutraFeatureGuard.isDegraded('guard-reject'),
+        rethrow: window.SutraFeatureGuard.isDegraded('guard-rethrow'),
+        ignored: window.SutraFeatureGuard.isDegraded('guard-ignored-rethrow')
+      }
+    };
+  });
+
+  expect(res.degradedOutcome).toBe('safe');
+  expect(res.slowValue).toBe('late-value');
+  expect(res.settledBeforeResolve).toBe('pending');
+  expect(res.rethrownMessage).toBe('explicit rethrow');
+  expect(res.ignoredRejected).toBe(true);
+  expect(res.degradedFlags).toEqual({ reject: true, rethrow: true, ignored: true });
+  expect(res.unhandled).toEqual([]);
+});
+
 test('SutraReportError records structured, severity-tagged, de-duplicated diagnostics', async ({ page }) => {
   await openApp(page);
   const res = await page.evaluate(() => {
