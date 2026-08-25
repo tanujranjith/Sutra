@@ -76,8 +76,8 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
 
     let resolveSlow;
     const slow = window.SutraFeatureGuard.run('guard-slow', () => new Promise((resolve) => { resolveSlow = resolve; }), { fallback: 'fb', label: 'Slow' });
-    let settledBeforeResolve = 'pending';
-    slow.then(() => { settledBeforeResolve = 'resolved-early'; }, () => { settledBeforeResolve = 'rejected-early'; });
+    let settledEarly = false;
+    slow.then(() => { settledEarly = true; }, () => { settledEarly = true; });
 
     // Rejected async feature: the derived promise must settle with the
     // fallback (not reject), degrade the feature, and leave nothing detached.
@@ -87,6 +87,9 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
       { fallback: 'safe', label: 'Rejecting' }
     );
 
+    // Still pending immediately after the synchronous resolve() call — the
+    // derived chain has not been observed to settle ahead of time.
+    const settledBeforeMicrotasks = settledEarly;
     resolveSlow('late-value');
     const slowValue = await slow;
 
@@ -117,7 +120,7 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
     return {
       degradedOutcome,
       slowValue,
-      settledBeforeResolve,
+      settledBeforeMicrotasks,
       rethrownMessage,
       ignoredRejected,
       unhandled,
@@ -131,7 +134,7 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
 
   expect(res.degradedOutcome).toBe('safe');
   expect(res.slowValue).toBe('late-value');
-  expect(res.settledBeforeResolve).toBe('pending');
+  expect(res.settledBeforeMicrotasks).toBe(false);
   expect(res.rethrownMessage).toBe('explicit rethrow');
   expect(res.ignoredRejected).toBe(true);
   expect(res.degradedFlags).toEqual({ reject: true, rethrow: true, ignored: true });
