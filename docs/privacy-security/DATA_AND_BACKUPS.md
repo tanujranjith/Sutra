@@ -448,10 +448,21 @@ nor synchronized. See the exhaustive executable decision matrix in
 
 ## 6. Pre-import safety snapshot
 
-Importing replaces your current workspace, so before applying an import Sutra
-takes a **pre-import safety snapshot** of your existing data first. If an import
-is not what you expected, this snapshot is your fallback — the import is not a
-one-way door that discards your prior state with no recourse.
+Importing replaces your current workspace, so before applying a **manual** import
+or restore Sutra first offers to save an **encrypted `.sutra` safety snapshot**
+of your existing data (you choose the password). If an import is not what you
+expected, this snapshot is your fallback — the import is not a one-way door that
+discards your prior state with no recourse.
+
+Two deliberate details:
+
+- The safety snapshot is always **encrypted**. Restoring never silently writes
+  an unencrypted copy of your workspace to disk as a side effect.
+- Background restores (for example a Google Drive clean pull) do not download
+  files behind your back. Their rollback guarantee is the canonical workspace
+  database's built-in recovery journal: every confirmed write keeps the previous
+  root in the same transaction, so the prior workspace stays recoverable even
+  when no external file was created.
 
 ---
 

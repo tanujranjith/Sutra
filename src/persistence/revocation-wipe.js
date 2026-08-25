@@ -66,12 +66,20 @@
   }
 
   async function verifyDatabasesGone(factory, names) {
-    if (!factory || typeof factory.databases !== 'function') return true;
+    // Truthful verification (audit remediation): when this browser cannot
+    // enumerate IndexedDB databases (Firefox/Safari do not implement
+    // factory.databases()), deletion of every KNOWN database is still
+    // confirmed one-by-one by deleteDatabase() success, but the absence of
+    // any other origin database cannot be proven. Report that distinction
+    // instead of silently claiming full verification.
+    if (!factory || typeof factory.databases !== 'function') {
+      return { verified: false, reason: 'enumeration-unsupported' };
+    }
     var rows = await factory.databases();
     var remaining = new Set((rows || []).map(function (row) { return String(row && row.name || ''); }));
     var found = names.filter(function (name) { return remaining.has(name); });
     if (found.length) throw new Error('Local cleanup verification found remaining database(s): ' + found.join(', '));
-    return true;
+    return { verified: true, reason: '' };
   }
 
   function verifyStorageEmpty(storage, allowedKeys) {
@@ -91,6 +99,7 @@
     var factory = config.indexedDB || global.indexedDB;
     if (!local || !session || !factory) throw new Error('Required browser storage is unavailable.');
     writeGuard(local, 'cleaning');
+    var databaseVerification = null;
     try {
       local.clear(); // sutra-allow-storage: verified revocation deletes only this Sutra origin
       writeGuard(local, 'cleaning');
@@ -98,14 +107,16 @@
       for (var i = 0; i < names.length; i += 1) {
         await deleteDatabase(factory, names[i], config.timeoutMs);
       }
-      await verifyDatabasesGone(factory, names);
+      await verifyDatabasesGone(factory, names).then(function (verification) { databaseVerification = verification; });
       verifyStorageEmpty(local, [GUARD_KEY]);
+      var verified = !!(databaseVerification && databaseVerification.verified);
+      var unverifiedDetail = 'This browser cannot enumerate IndexedDB databases; every known Sutra database was deleted but completeness could not be verified.';
       if (config.preserveSessionUntilAcknowledged === true) {
-        return writeGuard(local, 'local-verified');
+        return writeGuard(local, verified ? 'local-verified' : 'local-unverified', verified ? '' : unverifiedDetail);
       }
       session.clear(); // sutra-allow-storage: verified revocation clears auth/provider session material
       verifyStorageEmpty(session, []);
-      return writeGuard(local, 'complete');
+      return writeGuard(local, verified ? 'complete' : 'complete-unverified', verified ? '' : unverifiedDetail);
     } catch (error) {
       try { writeGuard(local, 'cleanup-error', error && error.message ? error.message : 'Cleanup failed.'); } catch (guardError) {}
       throw error;
@@ -119,7 +130,12 @@
     session.clear(); // sutra-allow-storage: server acknowledgement completed; remove auth/provider session material
     verifyStorageEmpty(session, []);
     verifyStorageEmpty(local, [GUARD_KEY]);
-    return writeGuard(local, 'complete');
+    // Preserve the honesty of the underlying cleanup: if this browser could
+    // not enumerate databases, the acknowledged terminal state must keep
+    // saying so instead of upgrading to an unqualified "complete".
+    var current = readGuard(local);
+    var status = current && current.status === 'local-unverified' ? 'complete-unverified' : 'complete';
+    return writeGuard(local, status);
   }
 
   function clearGuard(storage) {

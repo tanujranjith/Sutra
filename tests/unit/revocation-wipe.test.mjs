@@ -21,7 +21,7 @@ function memoryStorage(seed = {}) {
 function fakeIndexedDb(options = {}) {
   const existing = new Set(wipeApi.DATABASES);
   const deleted = [];
-  return {
+  const factory = {
     deleted,
     deleteDatabase(name) {
       const request = {};
@@ -36,9 +36,12 @@ function fakeIndexedDb(options = {}) {
         request.onsuccess?.();
       });
       return request;
-    },
-    async databases() { return [...existing].map(name => ({ name })); }
+    }
   };
+  if (!options.noEnumerate) {
+    factory.databases = async () => [...existing].map(name => ({ name }));
+  }
+  return factory;
 }
 
 test('verified wipe deletes every Sutra database, preserves session until acknowledgement, then finalizes', async () => {
@@ -66,5 +69,30 @@ test('wipe is idempotent and a partial deletion remains fail-closed', async () =
   const retryDb = fakeIndexedDb();
   await wipeApi.wipe({ localStorage: local, sessionStorage: session, indexedDB: retryDb });
   assert.equal(wipeApi.readGuard(local).status, 'complete');
+  assert.equal(session.length, 0);
+});
+
+test('browsers without database enumeration report unverified cleanup instead of claiming completeness', async () => {
+  // Firefox/Safari path: no indexedDB.databases(). Every known database is
+  // still deleted and confirmed per-name, but the guard must say the
+  // completeness check could not run — never a plain "complete".
+  const local = memoryStorage({ workspaceMirror: 'private' });
+  const session = memoryStorage({ accessToken: 'private' });
+  const indexedDB = fakeIndexedDb({ noEnumerate: true });
+  const result = await wipeApi.wipe({ localStorage: local, sessionStorage: session, indexedDB, preserveSessionUntilAcknowledged: true });
+  assert.equal(result.status, 'local-unverified');
+  assert.ok(result.detail.includes('cannot enumerate'), 'guard detail discloses why verification was impossible');
+  assert.deepEqual(indexedDB.deleted.sort(), [...wipeApi.DATABASES].sort(), 'deletion of every known database was still attempted and confirmed');
+
+  const acknowledged = wipeApi.finalize({ localStorage: local, sessionStorage: session });
+  assert.equal(acknowledged.status, 'complete-unverified', 'server acknowledgement must not upgrade an unverifiable cleanup to complete');
+});
+
+test('immediate (non-deferred) wipe on enumeration-less browsers ends at complete-unverified', async () => {
+  const local = memoryStorage({});
+  const session = memoryStorage({ token: 'x' });
+  const indexedDB = fakeIndexedDb({ noEnumerate: true });
+  const result = await wipeApi.wipe({ localStorage: local, sessionStorage: session, indexedDB });
+  assert.equal(result.status, 'complete-unverified');
   assert.equal(session.length, 0);
 });

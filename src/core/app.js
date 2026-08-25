@@ -2897,6 +2897,14 @@ function populateProgressDashboard() {
             persistenceWriteBlockReason = 'This device was revoked. Sutra is locked while local user data is removed.';
         }
 
+        // Terminal revocation-cleanup statuses. 'complete-unverified' means
+        // every known Sutra database was deleted but this browser cannot
+        // enumerate IndexedDB to prove nothing else remains (Firefox/Safari);
+        // the device is reusable, with that limitation disclosed in UI copy.
+        function sutraRevocationCleanupFinished(status) {
+            return status === 'complete' || status === 'complete-unverified';
+        }
+
         function mountSutraRevokedScreen(message) {
             let screen = document.getElementById('sutraRevokedDeviceScreen');
             if (!screen) {
@@ -2924,8 +2932,8 @@ function populateProgressDashboard() {
                 action.id = 'sutraRevokedDeviceReuse';
                 action.textContent = 'Start with an empty local workspace';
                 action.addEventListener('click', () => {
-                    if (!window.SutraRevocationWipe || !window.SutraRevocationWipe.readGuard()
-                        || window.SutraRevocationWipe.readGuard().status !== 'complete') return;
+                    if (!window.SutraRevocationWipe || !window.SutraRevocationWipe.readGuard()) return;
+                    if (!sutraRevocationCleanupFinished(window.SutraRevocationWipe.readGuard().status)) return;
                     window.SutraRevocationWipe.clearGuard();
                     location.reload();
                 });
@@ -2945,7 +2953,7 @@ function populateProgressDashboard() {
             if (copy) copy.textContent = String(message || 'Local Sutra user data has been removed from this browser.');
             const guard = window.SutraRevocationWipe && window.SutraRevocationWipe.readGuard();
             const action = screen.querySelector('#sutraRevokedDeviceReuse');
-            if (action) action.hidden = !guard || guard.status !== 'complete';
+            if (action) action.hidden = !guard || !sutraRevocationCleanupFinished(guard.status);
             const retry = screen.querySelector('#sutraRevokedDeviceRetry');
             if (retry) retry.hidden = !guard || guard.status !== 'cleanup-error' || !sutraSyncRuntime || !sutraSyncRuntime.transport;
             try { screen.querySelector('h1').focus(); } catch (error) {}
@@ -7895,10 +7903,16 @@ function populateProgressDashboard() {
                     readLegacy: () => window.SutraLegacyHomework && window.SutraLegacyHomework.readSnapshot
                         ? window.SutraLegacyHomework.readSnapshot(localStorage)
                         : { courses: [], tasks: [], quarantine: [] },
-                    persist: () => queueMicrotask(() => {
-                        try { persistAppData(); }
-                        catch (error) { console.warn('Homework workspace save failed', error); }
-                    })
+                    // Durable persistence contract (audit remediation): the
+                    // store's commitDurably() awaits this promise and rolls
+                    // back on rejection, so it must resolve only after the
+                    // canonical workspace save has been committed and verified
+                    // (flushAppSaveNow -> commitAppDataWithHealth). It must
+                    // never be a detached fire-and-forget microtask. Callers
+                    // using the scheduled path (commit) observe rejections
+                    // themselves; failures stay visible through the workspace
+                    // persistence-health pipeline.
+                    persist: () => flushAppSaveNow('homework')
                 });
                 appData.homeworkWorkspace = window.SutraHomeworkStore.getSnapshot();
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (error) { /* non-critical */ }
@@ -33360,8 +33374,11 @@ function buildOnboardingPlanPreview() {
             if (atelierDataHealthSnapshotBtn && atelierDataHealthSnapshotBtn.dataset.bound !== 'true') {
                 atelierDataHealthSnapshotBtn.dataset.bound = 'true';
                 atelierDataHealthSnapshotBtn.addEventListener('click', async () => {
-                    const ok = await createPreImportSafetySnapshot();
-                    showToast(ok ? 'Local safety snapshot downloaded.' : 'Could not create safety snapshot.');
+                    const snapshot = await createPreImportSafetySnapshot();
+                    showToast(
+                        snapshot && snapshot.ok ? 'Encrypted safety snapshot downloaded.'
+                            : (snapshot && snapshot.declined ? 'Safety snapshot cancelled.' : 'Could not create safety snapshot.')
+                    );
                 });
             }
 
@@ -53227,7 +53244,13 @@ function getActiveEditor() {
                 showToast('Backup password dialog is unavailable.');
                 return Promise.resolve(false);
             }
-            if (title) title.textContent = options.emergency ? 'Encrypt Emergency Backup' : 'Encrypt Sutra Backup';
+            if (title) {
+                // Custom callers (e.g. the pre-restore safety snapshot) may name
+                // the dialog for their own purpose; the default titles describe
+                // the canonical manual export.
+                title.textContent = options.title
+                    || (options.emergency ? 'Encrypt Emergency Backup' : 'Encrypt Sutra Backup');
+            }
             passInput.value = '';
             confirmInput.value = '';
             if (showToggle) showToggle.checked = false;
@@ -53306,8 +53329,16 @@ function getActiveEditor() {
                     if (statusEl) statusEl.textContent = 'Encrypting backup... This can take a moment.';
                     if (errorEl) errorEl.textContent = '';
                     try {
-                        const result = await performEncryptedSutraWorkspaceExport({ ...options, passphrase });
-                        sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
+                        // options.perform lets a caller reuse this audited dialog
+                        // for a different encrypted artifact (e.g. the pre-restore
+                        // safety snapshot) without recording a manual-export
+                        // health stamp or re-prompting the password manager.
+                        const result = typeof options.perform === 'function'
+                            ? await options.perform(passphrase)
+                            : await performEncryptedSutraWorkspaceExport({ ...options, passphrase });
+                        if (typeof options.perform !== 'function') {
+                            sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
+                        }
                         if (statusEl) statusEl.textContent = 'Encrypted backup ready.';
                         finish(result || true);
                     } catch (error) {
@@ -54467,6 +54498,10 @@ function getActiveEditor() {
                     skipConflictCheck: options.skipConflictCheck === true,
                     backupTimestamp: String(remoteFile.modifiedTime || ''),
                     backupLabel: 'Drive backup',
+                    // A background clean pull must never spawn a surprise file
+                    // download; the canonical IndexedDB recovery journal is the
+                    // rollback guarantee here.
+                    safetySnapshot: false,
                     // The snapshot download itself is still created, but its
                     // health timestamp must not masquerade as a user mutation
                     // while the final pre-apply barrier is watching for edits.
@@ -62436,7 +62471,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
                     clearSutraRevokedInMemoryData();
                     try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
-                    mountSutraRevokedScreen('Local Sutra user data has been removed from this browser.');
+                    mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                        ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                        : 'Local Sutra user data has been removed from this browser.');
                     return true;
                 };
                 try {
@@ -62497,9 +62534,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                             try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'A tab could not clear its session data.'); } catch (guardError) {}
                         }
                         clearSutraRevokedInMemoryData();
-                        mountSutraRevokedScreen(followerCleanupComplete
-                            ? 'Local Sutra user data has been removed from this browser.'
-                            : 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.');
+                        const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
+                        mountSutraRevokedScreen(!followerCleanupComplete
+                            ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
+                            : (followerGuard && followerGuard.status === 'complete-unverified'
+                                ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                                : 'Local Sutra user data has been removed from this browser.'));
                     }
                 };
             } catch (error) {
@@ -63960,22 +64000,45 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function createPreImportSafetySnapshot(options = {}) {
+            // Privacy model: a rollback copy taken before a destructive restore
+            // must never be a silently written plaintext JSON file — a user who
+            // otherwise relies on encrypted .sutra backups would end up with an
+            // unencrypted copy of their entire workspace on disk as a side
+            // effect of restoring. The always-on rollback guarantee is the
+            // canonical IndexedDB recovery journal (the previous root is written
+            // to the backup key inside the same transaction as every commit);
+            // this external file is therefore opt-in per restore and always uses
+            // the standard encrypted .sutra envelope.
+            //
+            // Returns { ok, declined?, destination? } instead of a bare boolean.
+            // Falsy `ok` keeps existing caller checks working; `declined` marks
+            // an explicit student cancellation (as opposed to a hard failure).
             try {
-                // Warm the course-attachment cache so the safety backup taken before
-                // an import carries every stored file's binary content.
-                try { await warmCourseAttachmentCache(); } catch (err) { console.warn('warmCourseAttachmentCache failed before safety snapshot', err); }
-                const snapshotPayload = buildWorkspaceExportPayload({ mode: 'json', includeSensitiveSettings: false });
-                const dataStr = JSON.stringify(snapshotPayload, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-                triggerBlobDownload(blob, `sutra_pre_import_snapshot_UNENCRYPTED_${datePart}.json`);
-                if (options.recordHealth !== false) {
+                const outcome = await openSutraBackupPassphraseModal({
+                    title: 'Encrypt safety snapshot before restoring',
+                    perform: async (passphrase) => {
+                        const encrypted = await createEncryptedSutraBackupBlob({
+                            passphrase,
+                            filenamePrefix: 'sutra_pre_import_snapshot'
+                        });
+                        const download = await triggerBlobDownload(encrypted.blob, encrypted.filename);
+                        return { destination: (download && download.destination) || 'download', filename: encrypted.filename };
+                    }
+                });
+                if (!outcome) return { ok: false, declined: true };
+                if (options.recordHealth !== false && outcome.destination === 'folder') {
+                    // Only claim a durable snapshot timestamp for a verified
+                    // folder write; a browser-download anchor click cannot be
+                    // confirmed by the app, so it must not masquerade as one.
                     recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
                 }
-                return true;
+                return { ok: true, destination: outcome.destination, filename: outcome.filename };
             } catch (err) {
                 console.warn('Pre-import safety snapshot failed', err);
-                return false;
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(err, { where: 'createPreImportSafetySnapshot' }, 'warning');
+                }
+                return { ok: false };
             }
         }
 
@@ -64221,20 +64284,36 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return false;
                 }
             }
-            showToast('Creating safety snapshot before import...', { durationMs: 1400 });
-            const snapshotOk = await createPreImportSafetySnapshot({
-                recordHealth: options.recordSafetySnapshotHealth !== false
-            });
-            // Never silently replace the workspace with no fallback. If the
-            // automatic pre-import snapshot could not be created, block the
-            // destructive import unless the student explicitly opts to continue.
-            if (!snapshotOk) {
-                const proceedAnyway = (typeof confirm === 'function')
-                    ? confirm('The automatic pre-import safety snapshot could NOT be created.\n\nIf you continue, your current workspace will be replaced with no automatic backup to fall back on. Consider exporting a .sutra backup first.\n\nContinue with the import anyway?')
-                    : false;
-                if (!proceedAnyway) {
-                    showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
-                    return false;
+            // External safety snapshot policy: interactive restores offer an
+            // encrypted .sutra safety snapshot first. Cancelling that dialog
+            // cancels the whole import — a destructive replacement should never
+            // proceed because a privacy dialog was dismissed. Hard failures
+            // (crypto unavailable, missing attachment bytes) fall back to the
+            // explicit continue-anyway gate below; the canonical IndexedDB
+            // recovery journal still protects the previous root in every case.
+            // Background flows (e.g. Drive clean pulls) pass safetySnapshot:false
+            // and rely on the recovery journal alone — they must never spawn
+            // surprise file downloads.
+            if (options.safetySnapshot !== false) {
+                showToast('Preparing encrypted safety snapshot...', { durationMs: 1400 });
+                const snapshot = await createPreImportSafetySnapshot({
+                    recordHealth: options.recordSafetySnapshotHealth !== false
+                });
+                if (!snapshot.ok) {
+                    if (snapshot.declined) {
+                        showToast('Import cancelled — the pre-restore safety snapshot was not created.');
+                        return false;
+                    }
+                    // Never silently replace the workspace with no fallback. If the
+                    // automatic pre-import snapshot could not be created, block the
+                    // destructive import unless the student explicitly opts to continue.
+                    const proceedAnyway = (typeof confirm === 'function')
+                        ? confirm('The automatic pre-import safety snapshot could NOT be created.\n\nIf you continue, your current workspace will be replaced with no automatic backup file to fall back on. Consider exporting a .sutra backup first.\n\nContinue with the import anyway?')
+                        : false;
+                    if (!proceedAnyway) {
+                        showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
+                        return false;
+                    }
                 }
             }
             // Remote snapshot pulls may have spent seconds downloading,
@@ -70049,9 +70128,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         document.addEventListener('DOMContentLoaded', async () => {
             if (sutraRevocationLockActive) {
                 mountSutraRevokedScreen(
-                    sutraRevocationGuard && sutraRevocationGuard.status === 'complete'
-                        ? 'Local Sutra user data has been removed from this browser.'
-                        : 'Sutra is locked because revocation cleanup has not completed. No workspace data will be shown or saved.'
+                    sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                        ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                        : (sutraRevocationGuard && sutraRevocationCleanupFinished(sutraRevocationGuard.status)
+                            ? 'Local Sutra user data has been removed from this browser.'
+                            : 'Sutra is locked because revocation cleanup has not completed. No workspace data will be shown or saved.')
                 );
                 return;
             }

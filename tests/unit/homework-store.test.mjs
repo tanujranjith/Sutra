@@ -182,6 +182,34 @@ test('async persistence failure rolls back before the next queued mutation', asy
   assert.deepEqual(persisted.tasks.map((task) => task.id), ['kept']);
 });
 
+test('scheduled persistence observes adapter rejections without rolling back accepted mutations', async () => {
+  const store = canonical.createStore({ courses: [], tasks: [] });
+  let persisted = store.getSnapshot();
+  let sawPromise = false;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: () => {
+      sawPromise = true;
+      // A durable-contract adapter returns a real promise even for scheduled
+      // callers; the store must observe rejection instead of letting it become
+      // an unhandled rejection (failures stay visible through persistence
+      // health), while the already-accepted mutation stays committed.
+      return Promise.reject(new Error('async disk full'));
+    }
+  });
+  assert.equal(sawPromise, true);
+  // configure() schedules its own migration persist through the same path.
+  await new Promise((resolve) => setImmediate(resolve));
+  store.transact((workspace) => {
+    workspace.tasks.push({ id: 'kept', title: 'Scheduled', courseId: '' });
+  }, { reason: 'batch' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.getSnapshot().tasks[0].id, 'kept');
+  assert.equal(persisted.tasks[0].id, 'kept');
+});
+
 test('normalization rejects unsafe URLs, repairs duplicate IDs, and records orphans', () => {
   const workspace = canonical.normalizeWorkspace({
     courses: [{ id: 'same', name: 'A' }, { id: 'same', name: 'A duplicate' }],

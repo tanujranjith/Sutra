@@ -201,7 +201,17 @@
       state.lastMutation = { id: text(meta && meta.id, 160) || ('mutation-' + stableHash(state.updatedAt + '|' + state.revision)), reason: text(meta && meta.reason, 160) || 'update', at: state.updatedAt };
       try {
         if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
-        if (adapter && typeof adapter.persist === 'function') adapter.persist(state.lastMutation.reason);
+        if (adapter && typeof adapter.persist === 'function') {
+          // Scheduled (non-durable) path: the mutation is accepted now and the
+          // save rides the canonical persistence pipeline. The adapter may
+          // return a real promise (durable contract), so observe rejection
+          // here — failures surface through persistence health, not as an
+          // unhandled rejection. Durable callers go through commitDurably.
+          var scheduledPersist = adapter.persist(state.lastMutation.reason);
+          if (scheduledPersist && typeof scheduledPersist.catch === 'function') {
+            scheduledPersist.catch(function () { /* surfaced by workspace persistence health */ });
+          }
+        }
       } catch (error) {
         state = previous;
         try { if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot()); } catch (_) {}
@@ -248,7 +258,12 @@
         var legacy = adapter && typeof adapter.readLegacy === 'function' ? adapter.readLegacy() : null;
         state = mergeLegacy(canonical || state, legacy || {}, { now: new Date().toISOString() });
         if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
-        if (adapter && typeof adapter.persist === 'function') adapter.persist('homework-migration');
+        if (adapter && typeof adapter.persist === 'function') {
+          var migrationPersist = adapter.persist('homework-migration');
+          if (migrationPersist && typeof migrationPersist.catch === 'function') {
+            migrationPersist.catch(function () { /* surfaced by workspace persistence health */ });
+          }
+        }
         emit({ reason: 'configure' });
         return getSnapshot();
       },
