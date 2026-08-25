@@ -167,16 +167,26 @@
     // reported + degraded and then settles with opts.fallback. Attaching the
     // handler here keeps both branches on one chain: no detached rejection,
     // and an ignoring caller cannot produce an unhandled rejection.
-    if (result && typeof result.then === 'function') {
-      var derived;
-      try {
-        derived = result.then(undefined, function (e) {
-          handleFailure(name, e, opts);
-          if (opts.rethrow) throw e;
-          return opts.fallback;
-        });
-      } catch (e) { /* non-thenable lied about then */ }
-      if (derived && typeof derived.then === 'function') return derived;
+    var then;
+    try {
+      then = result && result.then;
+    } catch (e) {
+      handleFailure(name, e, opts);
+      if (opts.rethrow) throw e;
+      return opts.fallback;
+    }
+    if (typeof then === 'function') {
+      // Assimilate arbitrary thenables ourselves. Accessing `then` or invoking
+      // a malformed implementation can throw synchronously; both are still
+      // feature failures and must follow the same fallback/rethrow contract.
+      return new Promise(function (resolve, reject) {
+        try { then.call(result, resolve, reject); }
+        catch (e) { reject(e); }
+      }).then(undefined, function (e) {
+        handleFailure(name, e, opts);
+        if (opts.rethrow) throw e;
+        return opts.fallback;
+      });
     }
     return result;
   }

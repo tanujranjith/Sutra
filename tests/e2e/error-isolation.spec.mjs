@@ -141,6 +141,44 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
   expect(res.unhandled).toEqual([]);
 });
 
+test('SutraFeatureGuard contains malformed thenables', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const getterFallback = window.SutraFeatureGuard.run('guard-then-getter', () => ({
+      get then() { throw new Error('then getter failed'); }
+    }), { fallback: 'getter-safe' });
+
+    const callFallback = await window.SutraFeatureGuard.run('guard-then-call', () => ({
+      then() { throw new Error('then call failed'); }
+    }), { fallback: 'call-safe' });
+
+    let rethrown = '';
+    try {
+      await window.SutraFeatureGuard.run('guard-then-rethrow', () => ({
+        then() { throw new Error('then rethrow failed'); }
+      }), { rethrow: true });
+    } catch (error) {
+      rethrown = error.message;
+    }
+    return {
+      getterFallback,
+      callFallback,
+      rethrown,
+      getterDegraded: window.SutraFeatureGuard.isDegraded('guard-then-getter'),
+      callDegraded: window.SutraFeatureGuard.isDegraded('guard-then-call'),
+      rethrowDegraded: window.SutraFeatureGuard.isDegraded('guard-then-rethrow')
+    };
+  });
+  expect(result).toEqual({
+    getterFallback: 'getter-safe',
+    callFallback: 'call-safe',
+    rethrown: 'then rethrow failed',
+    getterDegraded: true,
+    callDegraded: true,
+    rethrowDegraded: true
+  });
+});
+
 test('SutraReportError records structured, severity-tagged, de-duplicated diagnostics', async ({ page }) => {
   await openApp(page);
   const res = await page.evaluate(() => {
