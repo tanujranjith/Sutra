@@ -54549,10 +54549,9 @@ function getActiveEditor() {
                     skipConflictCheck: options.skipConflictCheck === true,
                     backupTimestamp: String(remoteFile.modifiedTime || ''),
                     backupLabel: 'Drive backup',
-                    // A background clean pull must never spawn a surprise file
-                    // download; the canonical IndexedDB recovery journal is the
-                    // rollback guarantee here.
-                    safetySnapshot: false,
+                    // Background callers opt out explicitly; interactive Drive
+                    // restores retain the encrypted pre-replacement snapshot gate.
+                    safetySnapshot: options.safetySnapshot !== false,
                     // The snapshot download itself is still created, but its
                     // health timestamp must not masquerade as a user mutation
                     // while the final pre-apply barrier is watching for edits.
@@ -54656,6 +54655,7 @@ function getActiveEditor() {
             if (!meta.localDirty && remoteChanged) {
                 return applySutraDriveRemoteSnapshot(remote, {
                     skipConflictCheck: true,
+                    safetySnapshot: false,
                     abortOnLocalMutation: true,
                     expectedLocalRevision: meta.localMutationRevision,
                     expectedLocalSaveRequestRevision: localWorkspaceSaveRequestRevision
@@ -54777,7 +54777,10 @@ function getActiveEditor() {
             // decision (Drive conflict modal's "Use the Drive version here",
             // programmatic restores) — don't double-gate with the conflict
             // chooser. Interactive restores from Settings DO get the chooser.
-            return applySutraDriveRemoteSnapshot(remote, { skipConflictCheck: options.skipConfirm === true });
+            return applySutraDriveRemoteSnapshot(remote, {
+                skipConflictCheck: options.skipConfirm === true,
+                safetySnapshot: options.safetySnapshot !== false
+            });
         }
 
         async function uploadThisDeviceToSutraDrive(options = {}) {
