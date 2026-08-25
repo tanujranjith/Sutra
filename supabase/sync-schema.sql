@@ -550,6 +550,57 @@ exception when invalid_text_representation or numeric_value_out_of_range then
 end;
 $$;
 
+-- Retention (2026-08 audit): ops are prunable only when BOTH of the following
+-- hold, so no device can ever miss an incremental record it still needs:
+--   1. a compaction snapshot exists whose cursor covers them (new devices
+--      bootstrap from the snapshot, never from those ops); and
+--   2. every ACTIVE (non-revoked) device has acknowledged pulling past them
+--      via last_seen_cursor — an offline or stale device pins retention at
+--      its own cursor.
+-- The floor is therefore least(snapshot_cursor, min_active_device_cursor).
+-- Called opportunistically by clients after a compaction cycle; it is safe to
+-- call any time and from any number of devices.
+create or replace function public.sync_prune_ops("deviceId" text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_code text;
+  v_snapshot_cursor bigint;
+  v_min_device_cursor bigint;
+  v_floor bigint;
+  v_deleted bigint;
+begin
+  v_code := public.sync_authorize_device("deviceId", true);
+  if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
+
+  select max(cursor) into v_snapshot_cursor
+    from public.sync_snapshots
+   where user_id = auth.uid();
+  if v_snapshot_cursor is null then
+    return jsonb_build_object('ok', true, 'pruned', 0, 'reason', 'no-snapshot');
+  end if;
+
+  select min(last_seen_cursor) into v_min_device_cursor
+    from public.sync_devices
+   where user_id = auth.uid()
+     and revoked_at is null;
+
+  v_floor := least(v_snapshot_cursor, coalesce(v_min_device_cursor, 0));
+  if v_floor is null or v_floor <= 0 then
+    return jsonb_build_object('ok', true, 'pruned', 0, 'reason', 'no-floor');
+  end if;
+
+  delete from public.sync_ops
+   where user_id = auth.uid()
+     and id <= sync_prune_ops.v_floor;
+  get diagnostics v_deleted = row_count;
+  return jsonb_build_object('ok', true, 'pruned', v_deleted, 'floor', v_floor);
+end;
+$$;
+
 create or replace function public.sync_put_asset(hash text, size_bytes bigint default 0, "deviceId" text default null)
 returns jsonb
 language plpgsql
@@ -762,6 +813,7 @@ revoke all on function public.sync_revoke_device(text, text) from public, anon;
 revoke all on function public.sync_get_device_status(text) from public, anon, authenticated;
 revoke all on function public.sync_acknowledge_device_wipe(text, timestamptz) from public, anon, authenticated;
 revoke all on function public.sync_delete_vault(text) from public, anon;
+revoke all on function public.sync_prune_ops(text) from public, anon;
 
 grant execute on function public.sync_session_active() to authenticated;
 grant execute on function public.sync_ping(text) to authenticated;
@@ -780,6 +832,7 @@ grant execute on function public.sync_revoke_device(text, text) to authenticated
 grant execute on function public.sync_get_device_status(text) to authenticated;
 grant execute on function public.sync_acknowledge_device_wipe(text, timestamptz) to authenticated;
 grant execute on function public.sync_delete_vault(text) to authenticated;
+grant execute on function public.sync_prune_ops(text) to authenticated;
 
 -- rls_auto_enable() is a database/event-trigger helper, never a browser RPC.
 -- Supabase projects may provide it outside this schema, so harden its ACL only

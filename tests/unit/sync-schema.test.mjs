@@ -182,3 +182,13 @@ test('additive migration chain is ordered, non-destructive, and folded into the 
   const upgradedTwice = applySyncAssetPolicyDdl(upgradedOnce, productionHardeningMigration);
   assert.deepEqual(upgradedTwice, expectedPolicies, 're-running the final migration must not duplicate policies');
 });
+
+test('op-log retention prunes only below the snapshot-and-devices floor', () => {
+  assert.match(sql, /create or replace function public\.sync_prune_ops\(/);
+  // Retention is pinned by the SLOWEST active device, never the snapshot alone.
+  assert.match(sql, /least\(v_snapshot_cursor, coalesce\(v_min_device_cursor, 0\)\)/);
+  assert.match(sql, /revoked_at is null[\s\S]*?min\(last_seen_cursor\)/);
+  // Authenticated-only grant, like every other data-bearing RPC.
+  assert.match(sql, /revoke all on function public\.sync_prune_ops\(text\) from public, anon;/);
+  assert.match(sql, /grant execute on function public\.sync_prune_ops\(text\) to authenticated;/);
+});
