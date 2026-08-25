@@ -66,3 +66,25 @@ test('turning the chime OFF is preserved across a reload (returning-user choice 
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('0');
   await expect(page.locator('[data-pref-path="startup.playSound"]')).not.toBeChecked();
 });
+
+test('an explicit startup-chime opt-in is preserved across reload', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    document.querySelector('.view-tab[data-view="settings"]')?.click();
+  });
+  await expect(page.locator('#view-settings')).toBeVisible();
+  await page.waitForSelector('#view-settings [data-pref-path="startup.playSound"]', { state: 'attached' });
+  await page.evaluate(() => {
+    const checkbox = document.querySelector('#view-settings [data-pref-path="startup.playSound"]');
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    (document.getElementById('settingsApplyBtn') || document.getElementById('settingsApplyBtnTop'))?.click();
+  });
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
+
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await completeOnboarding(page);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
+  await expect(page.locator('[data-pref-path="startup.playSound"]')).toBeChecked();
+});
