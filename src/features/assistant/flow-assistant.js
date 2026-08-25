@@ -281,7 +281,7 @@
             if (typeof v2.flushToMirror === 'function') v2.flushToMirror();
             const mirror = document.getElementById('editor');
             if (!mirror) return;
-            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(window.pages) ? window.pages : []);
+            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
             const page = pages.find(p => p && p.id === pageId);
             if (page) page.content = mirror.innerHTML || '';
         } catch (e) { /* best effort only */ }
@@ -292,7 +292,7 @@
             syncActiveV2NoteForContext();
             const b = bridge();
             const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
-            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(window.pages) ? window.pages : []);
+            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
             if (!pageId) return null;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return null;
@@ -375,7 +375,7 @@
     function summarizeTasksFor(scope) {
         try {
             const b = bridge();
-            const tasks = b ? (Array.isArray(b.tasks) ? b.tasks : []) : (Array.isArray(window.tasks) ? window.tasks : []);
+            const tasks = b ? (Array.isArray(b.tasks) ? b.tasks : []) : [];
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const horizon = new Date(today); horizon.setDate(horizon.getDate() + 7);
             const ranked = tasks
@@ -405,7 +405,7 @@
     function summarizeTimeline(daysAhead) {
         try {
             const b = bridge();
-            const blocks = b ? (Array.isArray(b.timeBlocks) ? b.timeBlocks : []) : (Array.isArray(window.timeBlocks) ? window.timeBlocks : []);
+            const blocks = b ? (Array.isArray(b.timeBlocks) ? b.timeBlocks : []) : [];
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const end = new Date(today); end.setDate(end.getDate() + Math.max(1, daysAhead || 2));
             return blocks
@@ -2194,7 +2194,7 @@
 
     function applyCreateTask(action) {
         const b = bridge();
-        const tasks = b ? b.tasks : window.tasks;
+        const tasks = b ? b.tasks : [];
         if (!Array.isArray(tasks)) return { ok: false, message: 'Tasks not available.' };
         // IMPORTANT: match the canonical Atelier task shape (see app.js task
         // creation at line ~16329). Missing `isActive`/`scheduleType`/etc. makes
@@ -2271,7 +2271,7 @@
 
     function applyCreateTimelineBlock(action) {
         const b = bridge();
-        const blocks = b ? b.timeBlocks : window.timeBlocks;
+        const blocks = b ? b.timeBlocks : [];
         if (!Array.isArray(blocks)) return { ok: false, message: 'Timeline not available.' };
         // Match the canonical timeBlock shape (see app.js auto-block creator):
         // missing recurrence/source/updatedAt would still render, but several
@@ -2308,7 +2308,7 @@
 
     function applyCreatePage(action) {
         const b = bridge();
-        const pages = b ? b.pages : window.pages;
+        const pages = b ? (b.pages || []) : [];
         if (!Array.isArray(pages)) return { ok: false, message: 'Pages not available.' };
         const id = makeId('p');
         const body = action.body || '';
@@ -2574,7 +2574,7 @@
         const out = [];
         try {
             const b = bridge();
-            const tasks = b ? b.tasks : window.tasks;
+            const tasks = b ? b.tasks : [];
             (Array.isArray(tasks) ? tasks : []).forEach(t => {
                 if (!t || typeof t !== 'object') return;
                 // Skip homework MIRROR tasks (synced copies of hwTasks:v2 rows) —
@@ -2845,7 +2845,7 @@
     // --------------------------------------------------------------
     function resolveTimelineBlock(action) {
         const b = bridge();
-        const blocks = b ? b.timeBlocks : window.timeBlocks;
+        const blocks = b ? b.timeBlocks : [];
         if (!Array.isArray(blocks)) return null;
         if (action.blockId) {
             return blocks.find(x => x && String(x.id) === String(action.blockId)) || null;
@@ -2880,7 +2880,7 @@
 
     function applyDeleteTimelineBlock(action) {
         const b = bridge();
-        const blocks = b ? b.timeBlocks : window.timeBlocks;
+        const blocks = b ? b.timeBlocks : [];
         const block = resolveTimelineBlock(action);
         if (!block || block === 'ambiguous') return { ok: false, message: block === 'ambiguous' ? 'Multiple blocks match — be more specific.' : 'Block not found.' };
         const idx = blocks.indexOf(block);
@@ -2901,7 +2901,7 @@
     // --------------------------------------------------------------
     function resolveNotePage(action) {
         const b = bridge();
-        const pages = b ? b.pages : window.pages;
+        const pages = b ? (b.pages || []) : [];
         if (!Array.isArray(pages)) return null;
         if (action.noteId) return pages.find(p => p && p.id === action.noteId) || null;
         const wanted = String(action.noteTitle || '').trim().toLowerCase();
@@ -3763,7 +3763,7 @@
     function findBlockConflicts(proposedBlocks, defaultDate) {
         const existing = (() => {
             const b = bridge();
-            return Array.isArray(b ? b.timeBlocks : window.timeBlocks) ? (b ? b.timeBlocks : window.timeBlocks) : [];
+            return (Array.isArray(b && b.timeBlocks) ? b.timeBlocks : []);
         })();
         const mins = (v) => {
             const m = String(v || '').match(/^(\d{1,2}):(\d{2})/);
@@ -4708,7 +4708,7 @@
             return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', excludedCount: 0 };
         }
         const b = bridge();
-        const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(window.pages) ? window.pages : []);
+        const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
         const unlockedIds = b ? b.unlockedPageIds : window.unlockedPageIds;
         const permissions = privacy && typeof privacy.getPermissions === 'function' ? privacy.getPermissions() : {};
         const allowLocked = permissions.allowLockedNotes === true;
@@ -5009,7 +5009,7 @@
     function addPageLinks(pageId, links) {
         try {
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             if (!Array.isArray(pages) || !pageId) return false;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return false;
@@ -5065,7 +5065,7 @@
     function setPageMeta(pageId, meta) {
         try {
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const page = (pages || []).find(p => p && p.id === pageId);
             if (!page) return;
             Object.assign(page, meta);
@@ -5448,7 +5448,7 @@
             const note = getActiveNoteSummary();
             if (!note || !note.id) return null;
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const page = (pages || []).find(p => p && p.id === note.id);
             if (!page) return null;
             return { pageId: page.id, content: page.content, body: page.body };
@@ -5547,7 +5547,7 @@
         let restored = 0;
         if (payload.kind === 'task_state' && Array.isArray(payload.items)) {
             const b = bridge();
-            const plannerTasks = b ? b.tasks : window.tasks;
+            const plannerTasks = b ? (b.tasks || []) : [];
             const hwPatches = {};
             payload.items.forEach(item => {
                 if (!item || !item.prev) return;
@@ -5580,7 +5580,7 @@
         }
         if (payload.kind === 'timeline_delete' && payload.block) {
             const b = bridge();
-            const blocks = b ? b.timeBlocks : window.timeBlocks;
+            const blocks = b ? b.timeBlocks : [];
             if (Array.isArray(blocks)) {
                 blocks.push(payload.block);
                 if (b) safeCall(b.saveTimeBlocks); else safeCall(window.saveTimeBlocks);
@@ -5591,7 +5591,7 @@
         }
         if (payload.kind === 'timeline_update' && payload.blockId && payload.prev) {
             const b = bridge();
-            const blocks = b ? b.timeBlocks : window.timeBlocks;
+            const blocks = b ? b.timeBlocks : [];
             const block = (Array.isArray(blocks) ? blocks : []).find(x => x && String(x.id) === String(payload.blockId));
             if (block) {
                 Object.assign(block, payload.prev);
@@ -5613,7 +5613,7 @@
         }
         if (payload.kind === 'page_snapshot' && payload.snapshot && payload.snapshot.pageId) {
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const page = (Array.isArray(pages) ? pages : []).find(p => p && p.id === payload.snapshot.pageId);
             if (page) {
                 if (payload.snapshot.content != null) page.content = payload.snapshot.content;
@@ -5637,15 +5637,15 @@
         try {
             const b = bridge();
             if (kind === 'task') {
-                const tasks = b ? b.tasks : window.tasks;
+                const tasks = b ? b.tasks : [];
                 const idx = (tasks || []).findIndex(t => t && t.id === id);
                 if (idx >= 0) { tasks.splice(idx, 1); return true; }
             } else if (kind === 'timeline') {
-                const blocks = b ? b.timeBlocks : window.timeBlocks;
+                const blocks = b ? b.timeBlocks : [];
                 const idx = (blocks || []).findIndex(x => x && x.id === id);
                 if (idx >= 0) { blocks.splice(idx, 1); if (b) safeCall(b.saveTimeBlocks); else safeCall(window.saveTimeBlocks); return true; }
             } else if (kind === 'page') {
-                const pages = b ? b.pages : window.pages;
+                const pages = b ? (b.pages || []) : [];
                 const idx = (pages || []).findIndex(p => p && p.id === id);
                 if (idx >= 0) { pages.splice(idx, 1); return true; }
             } else if (kind === 'homework') {
@@ -5686,7 +5686,7 @@
         (rec.createdObjectIds || []).forEach(o => { if (deleteObject(o.kind, o.id)) removed += 1; });
         if (rec.beforeSnapshot && rec.beforeSnapshot.pageId) {
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const page = (pages || []).find(p => p && p.id === rec.beforeSnapshot.pageId);
             if (page) {
                 if (rec.beforeSnapshot.content != null) page.content = rec.beforeSnapshot.content;
@@ -6167,7 +6167,7 @@
         }
         // Subtract existing blocks.
         const b = bridge();
-        const blocks = (Array.isArray(b ? b.timeBlocks : window.timeBlocks) ? (b ? b.timeBlocks : window.timeBlocks) : [])
+        const blocks = ((Array.isArray(b && b.timeBlocks) ? b.timeBlocks : []))
             .filter(x => x && x.date === isoDate)
             .map(x => ({ start: hhmmToMinutes(x.start), end: hhmmToMinutes(x.end) }))
             .filter(x => x.start != null && x.end != null && x.end > x.start)
@@ -6589,7 +6589,7 @@
         if (openNote && openNote[1]) {
             const q = openNote[1].trim();
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const i = intel();
             const match = (pages || []).find(p => p && p.title && (i ? i.titleSimilarity(p.title, q) >= 0.5 : String(p.title).toLowerCase().includes(q.toLowerCase())));
             if (match) { callApp('loadPage', match.id); callApp('setActiveView', 'notes'); return { handled: true, message: `Opened "${match.title}".` }; }
@@ -7221,7 +7221,7 @@
             const active = getActiveNoteSummary();
             if (!active || !active.id || active.locked) return null;
             const b = bridge();
-            const pages = b ? b.pages : window.pages;
+            const pages = b ? (b.pages || []) : [];
             const page = (Array.isArray(pages) ? pages : []).find(item => item && String(item.id) === String(active.id));
             if (!page) return null;
             const id = 'attachment_source_' + attachmentSourceHash([page.id, att.name, att.sizeBytes, att.extractedText || ''].join('|'));
