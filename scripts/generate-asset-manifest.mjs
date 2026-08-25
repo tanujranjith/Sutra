@@ -74,6 +74,11 @@ function collectReferences() {
   });
   for (const item of critical) lazy.delete(item);
   for (const item of optional) lazy.delete(item);
+  // Vendored Office document import parsers are loaded on demand by the
+  // importer and runtime-cached by the service worker on first online use;
+  // they must not gate PWA installation, so they are lazy entries.
+  lazy.add('./assets/vendor/office/mammoth.browser.min.js?v=1.8.0');
+  lazy.add('./assets/vendor/office/xlsx.full.min.js?v=0.18.5');
   return {
     schemaVersion: 1,
     shell: `./${shellFile}`,

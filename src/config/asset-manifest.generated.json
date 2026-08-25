@@ -352,6 +352,8 @@
     "./assets/brand/sutra/generated/sutra-icon-32.png"
   ],
   "lazy": [
+    "./assets/vendor/office/mammoth.browser.min.js?v=1.8.0",
+    "./assets/vendor/office/xlsx.full.min.js?v=0.18.5",
     "./src/domain/notes-knowledge-core.js?v=20260711-knowledge1",
     "./src/features/assistant/action-system.js?v=20260807-agentplans2",
     "./src/features/assistant/assistant-core.js?v=20260714-assistant-trust1",

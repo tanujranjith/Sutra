@@ -111,7 +111,6 @@ test('SutraFeatureGuard async contract: fallback settlement, no detached rejecti
       { label: 'Ignored', rethrow: true }
     );
     const ignoredRejected = await ignored.then(() => false, (error) => error instanceof Error);
-    ignored.catch(() {}); // silence our own observation copy
 
     await new Promise((r) => setTimeout(r, 50));
     window.removeEventListener('unhandledrejection', onUnhandled);

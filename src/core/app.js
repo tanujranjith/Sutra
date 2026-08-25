@@ -54963,7 +54963,10 @@ function getActiveEditor() {
         // that would put data recovery at the mercy of the network. (MIT/GPL
         // dual-licensed; see assets/vendor/jszip/LICENSE.markdown.)
         const SUTRA_JSZIP_LOCAL_PATH = 'assets/vendor/jszip/jszip.min.js';
-        const APPROVED_EXTERNAL_SCRIPT_ORIGINS = new Set(['https://cdnjs.cloudflare.com', 'https://unpkg.com', 'https://accounts.google.com']);
+        // Office document parsers (Mammoth, SheetJS) are vendored under
+        // assets/vendor/office/ and load same-origin — no CDN script origin is
+        // approved anymore. accounts.google.com remains for Google Identity.
+        const APPROVED_EXTERNAL_SCRIPT_ORIGINS = new Set(['https://accounts.google.com']);
         // Normalize keys before comparing so equivalent snake_case, kebab-case,
         // and camelCase names (for example `api_key`) cannot leak into a backup.
         const ATELIER_SENSITIVE_SETTING_KEYS = new Set(['apikey', 'accesstoken', 'refreshtoken', 'idtoken', 'token', 'clientsecret', 'secret', 'password', 'authorization', 'authorizationheader', 'bearertoken', 'privatekey', 'servicekey']);
@@ -63794,7 +63797,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         });
 
         async function importDocxFile(file) {
-            const mammoth = await loadExternalScript('https://unpkg.com/mammoth/mammoth.browser.min.js', 'mammoth');
+            // Pinned + vendored locally (audit remediation): document parsers
+            // execute in the privileged page origin, so remote unpkg/cdnjs
+            // loads were an avoidable supply-chain surface and an offline gap.
+            const mammoth = await loadExternalScript('assets/vendor/office/mammoth.browser.min.js?v=1.8.0', 'mammoth', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const result = await mammoth.convertToHtml({ arrayBuffer });
             const stripHtml = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -63838,7 +63844,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function importSpreadsheetFile(file) {
-            const XLSX = await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX');
+            // Pinned + vendored locally (see importDocxFile note above).
+            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.18.5', 'XLSX', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             const sheetNames = workbook.SheetNames || [];

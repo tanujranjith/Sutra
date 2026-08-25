@@ -62,8 +62,7 @@ const approved = [
   'https://www.figma.com',
   'https://embed.figma.com',
   'https://codesandbox.io',
-  'https://cdnjs.cloudflare.com',
-  'https://unpkg.com',
+  // Office import parsers are vendored locally; no CDN script origins remain.
   'https://console.groq.com',
   'https://platform.openai.com',
   'https://console.anthropic.com',
