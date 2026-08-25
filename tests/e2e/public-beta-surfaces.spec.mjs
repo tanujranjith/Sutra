@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 const PASS = 'correct horse battery staple';
 
@@ -97,7 +97,7 @@ test('integration registry truthfully gates external services and Smart Import a
   await expect(page.locator('.smart-import-proposal')).toHaveCount(1);
 
   // Smart Import writes through the canonical SutraHomeworkStore (workspace/IndexedDB),
-  // not the legacy hwTasks:v2 localStorage key — read homework from the store.
+  // not the legacy hwTasks:v2 localStorage key â€” read homework from the store.
   const before = await page.evaluate(() => (window.SutraHomeworkStore.getSnapshot().tasks || []).length);
   expect(before).toBe(0);
 
@@ -195,6 +195,13 @@ test('Assistant chat history persists locally and is included in encrypted backu
   // Whole-workspace imports onto a non-empty device now show the restore
   // conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  // Manual restores now complete an encrypted pre-restore safety snapshot first.
+  const snapModal = page.locator('#sutraBackupPasswordModal');
+  await snapModal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', PASS);
+  await page.fill('#sutraBackupPassphraseConfirmInput', PASS);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(snapModal).not.toHaveClass(/active/, { timeout: 60_000 });
   await expect.poll(
     () => page.evaluate(() => !!localStorage.getItem('sutra:assistantChats:v1')),
     { timeout: 20_000 }
