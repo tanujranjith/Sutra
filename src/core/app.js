@@ -2968,7 +2968,6 @@ function populateProgressDashboard() {
         // newer commit has superseded them before touching shared health state.
         let persistenceCommitSeq = 0;
         const SUTRA_PERSISTENCE_HEALTH_KEY = 'sutra:persistenceHealth:v1';
-        const SUTRA_PERSISTENCE_HEALTH_VERSION = 1;
         let sutraPersistenceState = {
             version: SUTRA_PERSISTENCE_HEALTH_VERSION,
             lastConfirmedSaveAt: null,
@@ -3103,23 +3102,9 @@ function populateProgressDashboard() {
             return appSettings.dataHealth;
         }
 
-        function normalizePersistenceState(raw) {
-            const source = raw && typeof raw === 'object' ? raw : {};
-            return {
-                version: SUTRA_PERSISTENCE_HEALTH_VERSION,
-                lastConfirmedSaveAt: source.lastConfirmedSaveAt || null,
-                lastAttemptAt: source.lastAttemptAt || null,
-                lastFailureAt: source.lastFailureAt || null,
-                lastFailure: source.lastFailure && typeof source.lastFailure === 'object' ? source.lastFailure : null,
-                lastSerializedBytes: Number(source.lastSerializedBytes) || 0,
-                lastLocalStorageBytes: Number(source.lastLocalStorageBytes) || 0,
-                lastAttachmentCount: Number(source.lastAttachmentCount) || 0,
-                lastAttachmentBytes: Number(source.lastAttachmentBytes) || 0,
-                lastAttachmentWarnings: Array.isArray(source.lastAttachmentWarnings) ? source.lastAttachmentWarnings.slice(0, 12) : [],
-                backupState: String(source.backupState || 'No recent backup'),
-                retryCount: Number(source.retryCount) || 0
-            };
-        }
+        // normalizePersistenceState, SUTRA_PERSISTENCE_HEALTH_VERSION, and
+        // SUTRA_EXPORT_FAILURE_PHASES are owned by src/state/persistence-state.js
+        // (loaded before this file; same shared global scope).
 
         function persistSutraPersistenceState() {
             try {
@@ -3188,7 +3173,6 @@ function populateProgressDashboard() {
         // only an explicit user action (Retry / manual save) may clear it.
         let persistenceFailureRecordedThisSession = false;
         let persistenceFailureRequiresExplicitRecovery = false;
-        const SUTRA_EXPORT_FAILURE_PHASES = new Set(['attachment-export', 'cache-warming', 'sutra-export', 'emergency-export']);
 
         function shouldClearPersistenceFailureOnSuccess(reason) {
             const failurePhase = String(sutraPersistenceState && sutraPersistenceState.lastFailure && sutraPersistenceState.lastFailure.phase || '').toLowerCase();

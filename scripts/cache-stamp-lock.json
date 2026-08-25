@@ -32,24 +32,24 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260823-combined2",
-    "hash": "eea044a1d78dcae7"
+    "stamp": "20260825-oxremed1",
+    "hash": "f55264225658a056"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260824-globalsearch2",
-    "hash": "086c6090c46ba9f0"
+    "stamp": "20260825-oxremed1",
+    "hash": "d301c17d63c8ae0b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
     "hash": "75f9c663cd99393e"
   },
   "src/core/credential-vault.js": {
-    "stamp": "20260823-credential-vault4",
-    "hash": "5423f4aedd56c0d7"
+    "stamp": "20260825-oxremed1",
+    "hash": "0f8cdb0942bbf91e"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -60,8 +60,8 @@
     "hash": "ca17d5ce335801c7"
   },
   "src/core/feature-guard.js": {
-    "stamp": "20260613-harden1",
-    "hash": "f1f7244179aab33f"
+    "stamp": "20260825-oxremed1",
+    "hash": "29e1e545b1a8da2c"
   },
   "src/core/issue-prompt.js": {
     "stamp": "20260617-issue1",
@@ -76,8 +76,8 @@
     "hash": "64ecef3c1df3b9bb"
   },
   "src/core/safe-storage.js": {
-    "stamp": "20260716-syncparity1",
-    "hash": "06be13ef1df8d058"
+    "stamp": "20260825-oxremed1",
+    "hash": "ee923f9b991d0f72"
   },
   "src/core/startup-health.js": {
     "stamp": "20260620-health1",
@@ -100,12 +100,12 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260710-assistant-permissions1",
-    "hash": "f7664650c6f3ea93"
+    "stamp": "20260825-oxremed1",
+    "hash": "099c52969bf2eb82"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260709-homework-store1",
-    "hash": "757c3d86b785a544"
+    "stamp": "20260825-oxremed1",
+    "hash": "46c57b636d689fbc"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
@@ -184,12 +184,12 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "e80c657a850b4d4e"
+    "stamp": "20260825-oxremed1",
+    "hash": "bf6b862d9c31f5f2"
   },
   "src/features/assistant/flow-intelligence.js": {
-    "stamp": "20260614-storage1",
-    "hash": "cd3412ef19cf9cb0"
+    "stamp": "20260825-oxremed1",
+    "hash": "37bec479ffc10418"
   },
   "src/features/assistant/intelligence-diagnostics.js": {
     "stamp": "20260714-intel1",
@@ -408,8 +408,8 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "7121f2feb1f71a97"
+    "stamp": "20260825-oxremed1",
+    "hash": "b38df40c605eea32"
   },
   "src/persistence/storage-hygiene.js": {
     "stamp": "20260710-hygiene1",
@@ -422,6 +422,10 @@
   "src/persistence/workspace-db.js": {
     "stamp": "20260818-storage-journal4",
     "hash": "b1f32b92bdbc29e1"
+  },
+  "src/state/persistence-state.js": {
+    "stamp": "20260825-state1",
+    "hash": "192c344954791833"
   },
   "src/state/workspace-normalizers.js": {
     "stamp": "20260616-state1",

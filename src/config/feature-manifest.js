@@ -24,8 +24,8 @@
         './src/features/assistant/sutra-capability-registry.js?v=20260807-surfaces2',
         './src/features/assistant/action-system.js?v=20260807-agentplans2',
         './src/features/assistant/note-patch-system.js?v=20260711-note-patch1',
-        './src/features/assistant/flow-intelligence.js?v=20260614-storage1',
-        './src/features/assistant/flow-assistant.js?v=20260823-credential-vault1',
+        './src/features/assistant/flow-intelligence.js?v=20260825-oxremed1',
+        './src/features/assistant/flow-assistant.js?v=20260825-oxremed1',
         './src/features/assistant/sutra-assistant-memory.js?v=20260716-syncwipe1',
         './src/features/assistant/sutra-local-help.js?v=20260816-home-create1'
       ],

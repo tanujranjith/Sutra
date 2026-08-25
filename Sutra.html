@@ -47,7 +47,7 @@
     <!-- Defensive browser-storage wrapper. Loaded before all feature modules so
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
-    <script src="src/core/safe-storage.js?v=20260716-syncparity1"></script>
+    <script src="src/core/safe-storage.js?v=20260825-oxremed1"></script>
     <script src="src/core/workspace-lock.js?v=20260821-lock5"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
@@ -57,12 +57,12 @@
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
-    <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
+    <script src="src/core/feature-guard.js?v=20260825-oxremed1"></script>
     <script src="src/core/migrations.js?v=20260813-pdf2"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
-    <script src="src/core/credential-vault.js?v=20260823-credential-vault4"></script>
+    <script src="src/core/credential-vault.js?v=20260825-oxremed1"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
-    <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
+    <script src="src/domain/homework-store.js?v=20260825-oxremed1"></script>
     <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
@@ -71,11 +71,11 @@
     <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
-    <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
+    <script src="src/domain/assistant-permissions.js?v=20260825-oxremed1"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
     <script src="src/boot/legacy-workspace-migration.js?v=20260823-storage-journal8"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
-    <script src="src/persistence/revocation-wipe.js?v=20260823-credential-vault1"></script>
+    <script src="src/persistence/revocation-wipe.js?v=20260825-oxremed1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
@@ -88,10 +88,11 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
     <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260823-combined2"></script>
+    <script src="src/config/feature-manifest.js?v=20260825-oxremed1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
-    <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
+    <script src="src/state/persistence-state.js?v=20260825-state1"></script>
+<script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
     <!-- Pure student date/time vocabulary shared by Quick Capture, Homework,
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
@@ -7888,7 +7889,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal2"></script>
-    <script src="src/core/app.js?v=20260824-globalsearch2"></script>
+    <script src="src/core/app.js?v=20260825-oxremed1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260823-credential-bridge4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
