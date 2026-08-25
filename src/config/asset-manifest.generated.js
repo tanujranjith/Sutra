@@ -260,7 +260,7 @@
     "./src/features/workspace/help-docs-refresh.js?v=20260823-combined1",
     "./src/features/workspace/html-pages.js?v=20260825-oxremed1",
     "./src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1",
-    "./src/features/workspace/mobile-nav.js?v=20260808-contextual-ui1",
+    "./src/features/workspace/mobile-nav.js?v=20260825-sol2-2",
     "./src/features/workspace/notifications.js?v=20260816-home-labels1",
     "./src/features/workspace/office-interoperability.js?v=20260822-office4",
     "./src/features/workspace/pdf-engine.js?v=20260823-pdf4",

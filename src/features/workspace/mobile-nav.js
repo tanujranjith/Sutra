@@ -241,6 +241,9 @@
     if (!options || options.restoreFocus !== false) {
       var target = moreLastFocus;
       window.requestAnimationFrame(function () {
+        if (!(target && document.contains(target))) {
+          target = navEl && navEl.querySelector('[data-bn-view="__more"]');
+        }
         if (target && typeof target.focus === 'function' && document.contains(target)) target.focus();
       });
     }
@@ -330,7 +333,16 @@
     moreList.addEventListener('click', function (event) {
       var button = event.target.closest('[data-mobile-more-view]');
       if (!button) return;
-      clickTabForView(button.getAttribute('data-mobile-more-view'));
+      var view = button.getAttribute('data-mobile-more-view');
+      if (moreHistoryActive && history.state && history.state.sutraMobileMore === true) {
+        moreLastFocus = null;
+        window.addEventListener('popstate', function navigateAfterSheetHistory() {
+          clickTabForView(view);
+        }, { once: true });
+        closeMore({ restoreFocus: false });
+        return;
+      }
+      clickTabForView(view);
       closeMore({ restoreFocus: false });
     });
     moreActions.addEventListener('click', function (event) {
