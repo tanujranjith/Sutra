@@ -38,8 +38,10 @@ test('the All sections sheet keeps dialog semantics, focus containment, and Back
   assert.ok(build.body.includes('data-mobile-more-view'), 'the sheet derives destinations from data attributes');
 });
 
-test('the sheet routes every section row through clickTabForView and closes after', () => {
+test('the sheet clears its history entry before routing through the canonical tab', () => {
   const build = extractFunction(source, 'buildMoreSheet');
-  assert.ok(build.body.includes('clickTabForView(button.getAttribute(\'data-mobile-more-view\'))'), 'section rows activate the canonical tab handler');
-  assert.ok(build.body.includes('closeMore({ restoreFocus: false })'), 'the sheet closes and restores focus after navigation');
+  assert.ok(build.body.includes("var view = button.getAttribute('data-mobile-more-view')"), 'the selected canonical view is captured before the sheet closes');
+  assert.ok(build.body.includes('function navigateAfterSheetHistory()'), 'history-backed sheets defer navigation until their marker is popped');
+  assert.ok(build.body.includes('clickTabForView(view)'), 'both history and non-history paths activate the canonical tab handler');
+  assert.ok(build.body.includes('closeMore({ restoreFocus: false })'), 'the sheet closes without stealing focus from the destination');
 });
