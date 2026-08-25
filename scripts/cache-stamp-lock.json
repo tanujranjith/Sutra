@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260825-oxremed2",
-    "hash": "f35c4bd55a14698d"
+    "stamp": "20260825-oxremed3",
+    "hash": "24b5e9ae1c73d692"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -312,8 +312,8 @@
     "hash": "0ad9808ef25fcae8"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20260822-htmlpages4",
-    "hash": "4e4cee38bb7257c8"
+    "stamp": "20260825-oxremed1",
+    "hash": "f90a17f531a988fe"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -356,12 +356,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20260821-sheets-v2-2",
-    "hash": "48328140fac653fa"
+    "stamp": "20260825-oxremed1",
+    "hash": "afa05f9c91491c83"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260821-slides-v2-2",
-    "hash": "f54b889b239fc9d3"
+    "stamp": "20260825-oxremed1",
+    "hash": "ca917c577e4b2222"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -424,8 +424,8 @@
     "hash": "192c344954791833"
   },
   "src/state/workspace-normalizers.js": {
-    "stamp": "20260616-state1",
-    "hash": "e63fece82e587d1b"
+    "stamp": "20260825-oxremed1",
+    "hash": "9d3be0ba07f108c3"
   },
   "src/sync/sync-crypto.js": {
     "stamp": "20260716-sync6",
