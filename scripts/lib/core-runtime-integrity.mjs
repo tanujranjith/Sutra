@@ -112,10 +112,14 @@ function readBudget(options = {}) {
     const parsed = JSON.parse(raw);
     const maxBytes = Number(parsed.maxBytes);
     const maxLines = Number(parsed.maxLines);
+    const reviewedReason = String(parsed.reviewedReason || '').trim();
     if (!Number.isFinite(maxBytes) || !Number.isFinite(maxLines) || maxBytes <= 0 || maxLines <= 0) {
       return { ok: false, budgetPath, error: new Error('budget file must contain positive numeric maxBytes and maxLines') };
     }
-    return { ok: true, budgetPath, maxBytes, maxLines };
+    if (!reviewedReason) {
+      return { ok: false, budgetPath, error: new Error('budget file must contain a non-empty reviewedReason') };
+    }
+    return { ok: true, budgetPath, maxBytes, maxLines, reviewedReason };
   } catch (error) {
     return { ok: false, budgetPath, error };
   }
@@ -172,7 +176,7 @@ export function checkCoreRuntimeSource(source, options = {}) {
     } else {
       failures.push(
         `runtime grew past the blessed budget (${bytes} bytes > ${budget.maxBytes}). ` +
-        'If this growth is intentional, re-bless with: npm run core:budget'
+        'If this growth is intentional, re-bless with: npm run core:budget -- --reason="concise engineering rationale" --allow-growth'
       );
     }
     if (lines <= budget.maxLines) {
@@ -180,11 +184,11 @@ export function checkCoreRuntimeSource(source, options = {}) {
     } else {
       failures.push(
         `runtime grew past the blessed line count (${lines} lines > ${budget.maxLines}). ` +
-        'If this growth is intentional, re-bless with: npm run core:budget'
+        'If this growth is intentional, re-bless with: npm run core:budget -- --reason="concise engineering rationale" --allow-growth'
       );
     }
   } else if (budget && !budget.ok) {
-    failures.push(`core runtime budget unavailable (${budget.budgetPath}): ${budget.error.message}. Create it with: npm run core:budget`);
+    failures.push(`core runtime budget unavailable (${budget.budgetPath}): ${budget.error.message}. Create it with: npm run core:budget -- --reason="initial reviewed ceiling"`);
   }
 
   for (const [label, fragment] of REQUIRED_FRAGMENTS) {
@@ -222,7 +226,7 @@ export function blessCoreRuntimeBudget(options = {}) {
   }
   return {
     schema: 1,
-    note: 'Blessed maximum size of src/core/app.js. Growth requires an explicit re-bless (npm run core:budget); decomposition should lower this file.',
+    note: 'Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.',
     blessedAt: new Date().toISOString(),
     reviewedReason: reason,
     maxBytes: bytes,

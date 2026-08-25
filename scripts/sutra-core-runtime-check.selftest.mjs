@@ -87,6 +87,17 @@ try {
       readLabel: 'read shrunk fixture'
     });
     if (!shrunk.ok) failures.push(`budget-shrink: decomposition-sized runtime failed: ${shrunk.failures.join(' | ')}`);
+
+    const unexplainedBudgetPath = join(tempRoot, 'unexplained-budget.json');
+    writeFileSync(unexplainedBudgetPath, JSON.stringify({ maxBytes: baseline.bytes, maxLines: baseline.lines }), 'utf8');
+    const unexplained = checkCoreRuntimeSource(source, {
+      repoRoot: tempRoot,
+      budgetPath: 'unexplained-budget.json',
+      bytes: baseline.bytes
+    });
+    if (!unexplained.failures.some((item) => /non-empty reviewedReason/.test(item))) {
+      failures.push(`budget-evidence: unexplained ceiling was accepted: ${unexplained.failures.join(' | ')}`);
+    }
   } catch (error) {
     failures.push(`budget ratchet self-test error: ${error.message}`);
   }
