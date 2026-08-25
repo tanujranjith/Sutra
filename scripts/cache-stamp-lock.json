@@ -32,16 +32,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260825-oxremed5",
-    "hash": "62f22d7931500a4c"
+    "stamp": "20260825-sol1-1",
+    "hash": "7356efb325d49799"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260825-oxremed3",
-    "hash": "24b5e9ae1c73d692"
+    "stamp": "20260825-sol1-1",
+    "hash": "cb818c74ff8f2aab"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -60,8 +60,8 @@
     "hash": "ca17d5ce335801c7"
   },
   "src/core/feature-guard.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "29e1e545b1a8da2c"
+    "stamp": "20260825-sol1-1",
+    "hash": "d2ac11be99e16209"
   },
   "src/core/issue-prompt.js": {
     "stamp": "20260617-issue1",
@@ -100,12 +100,12 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "099c52969bf2eb82"
+    "stamp": "20260825-sol1-1",
+    "hash": "81319748a9bcd998"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "46c57b636d689fbc"
+    "stamp": "20260825-sol1-1",
+    "hash": "110d121df2a62695"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260825-oxremed4",
-    "hash": "3a9e8286d9ece2c6"
+    "stamp": "20260825-sol1-1",
+    "hash": "525742ba443a6218"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -404,8 +404,8 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "b38df40c605eea32"
+    "stamp": "20260825-sol1-1",
+    "hash": "416ba029ebf241d8"
   },
   "src/persistence/storage-hygiene.js": {
     "stamp": "20260710-hygiene1",
@@ -436,8 +436,8 @@
     "hash": "949e9c15ba5ad93d"
   },
   "src/sync/sync-engine.js": {
-    "stamp": "20260806-signoutpause1",
-    "hash": "caf496517229c79f"
+    "stamp": "20260825-sol1-1",
+    "hash": "78f62e7f2ba0ed4d"
   },
   "src/sync/sync-merge.js": {
     "stamp": "20260807-duress2",
@@ -456,8 +456,8 @@
     "hash": "5a176198efc28e8d"
   },
   "src/sync/sync-transport.js": {
-    "stamp": "20260806-runtime-clean1",
-    "hash": "49363d158e454892"
+    "stamp": "20260825-sol1-1",
+    "hash": "b3e7993c7a912adb"
   },
   "src/ui/select-enhancer.js": {
     "stamp": "20260708-toolbar-compact",

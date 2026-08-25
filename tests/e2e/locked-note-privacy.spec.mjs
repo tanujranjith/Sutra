@@ -156,3 +156,36 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.report.excludedSensitiveAreas).toContain('privacy_boundary_unavailable');
   expect(report.diagnosed).toBe(true);
 });
+
+test('Assistant bridge failure is reported and mutating actions fail closed', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const originalBridge = window.flowAtelier;
+    const originalReporter = window.SutraReportError;
+    const errors = [];
+    window.flowAtelier = undefined;
+    window.SutraReportError = (error, context, severity) => {
+      errors.push({ message: String(error && error.message || error), context, severity });
+    };
+    try {
+      const context = window.getFlowAssistantContext({ depth: 'workspace' });
+      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' });
+      const block = window.sutraAssistant.applyAction({
+        type: 'create_timeline_block', name: 'Must not disappear', date: '2026-08-25', start: '09:00', end: '10:00'
+      });
+      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' });
+      return { context, task, block, note, errors };
+    } finally {
+      window.flowAtelier = originalBridge;
+      window.SutraReportError = originalReporter;
+    }
+  });
+
+  expect(report.context.tasks).toEqual([]);
+  expect(report.task.ok).toBe(false);
+  expect(report.block.ok).toBe(false);
+  expect(report.note.ok).toBe(false);
+  expect(report.errors).toEqual([
+    expect.objectContaining({ message: 'Assistant workspace bridge is unavailable.', severity: 'error' })
+  ]);
+});

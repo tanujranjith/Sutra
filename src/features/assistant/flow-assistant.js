@@ -164,8 +164,21 @@
         } catch (e) { /* ignore */ }
     }
 
-    function bridge() {
-        return (typeof window !== 'undefined' && window.flowAtelier) ? window.flowAtelier : null;
+    let assistantBridgeFailureReported = false;
+    function bridge(options) {
+        const value = (typeof window !== 'undefined' && window.flowAtelier) ? window.flowAtelier : null;
+        if (!value && (!options || options.diagnose !== false) && !assistantBridgeFailureReported) {
+            assistantBridgeFailureReported = true;
+            const error = new Error('Assistant workspace bridge is unavailable.');
+            try {
+                if (typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(error, { where: 'flow-assistant.bridge' }, 'error');
+                } else if (window.console && typeof window.console.error === 'function') {
+                    window.console.error(error);
+                }
+            } catch (reportingError) { /* callers still fail closed */ }
+        }
+        return value;
     }
 
     let assistantPrivacyBoundaryFailureReported = false;
@@ -2221,7 +2234,7 @@
 
     function applyCreateTask(action) {
         const b = bridge();
-        const tasks = b ? b.tasks : [];
+        const tasks = b && Array.isArray(b.tasks) ? b.tasks : null;
         if (!Array.isArray(tasks)) return { ok: false, message: 'Tasks not available.' };
         // IMPORTANT: match the canonical Atelier task shape (see app.js task
         // creation at line ~16329). Missing `isActive`/`scheduleType`/etc. makes
@@ -2298,7 +2311,7 @@
 
     function applyCreateTimelineBlock(action) {
         const b = bridge();
-        const blocks = b ? b.timeBlocks : [];
+        const blocks = b && Array.isArray(b.timeBlocks) ? b.timeBlocks : null;
         if (!Array.isArray(blocks)) return { ok: false, message: 'Timeline not available.' };
         // Match the canonical timeBlock shape (see app.js auto-block creator):
         // missing recurrence/source/updatedAt would still render, but several
@@ -2335,7 +2348,7 @@
 
     function applyCreatePage(action) {
         const b = bridge();
-        const pages = b ? (b.pages || []) : [];
+        const pages = b && Array.isArray(b.pages) ? b.pages : null;
         if (!Array.isArray(pages)) return { ok: false, message: 'Pages not available.' };
         const id = makeId('p');
         const body = action.body || '';
@@ -8577,7 +8590,7 @@
             // fire 'sutra:flow-bridge-ready' when it finishes installing
             // window.flowAtelier. Readiness-driven, not a fixed-delay guess; the
             // migration is idempotent so running on both paths is harmless.
-            if (bridge()) {
+            if (bridge({ diagnose: false })) {
                 migrateLegacyTaskShapes();
             } else {
                 window.addEventListener('sutra:flow-bridge-ready', onFlowBridgeReady, { once: true });
