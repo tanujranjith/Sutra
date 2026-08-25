@@ -5,6 +5,7 @@
    runs under file://. Part of `npm run check:all`. */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -15,14 +16,25 @@ function ok(cond, label, detail) {
     else { failures++; console.error('  FAIL', label, detail !== undefined ? '→ ' + JSON.stringify(detail) : ''); }
 }
 function read(p) { return existsSync(resolve(repoRoot, p)) ? readFileSync(resolve(repoRoot, p), 'utf8') : null; }
+function sha256(p) {
+    const file = resolve(repoRoot, p);
+    return existsSync(file) ? createHash('sha256').update(readFileSync(file)).digest('hex') : null;
+}
 
 console.log('Service worker / PWA safety check');
 console.log('--------------------------------');
 
 const sw = read('sw.js');
+const officeHashes = {
+    'assets/vendor/office/mammoth.browser.min.js': 'deb07bf230d1cb3e190bc5adc6743f35c6531b6571d1e5469b24f452a7f0f4ab',
+    'assets/vendor/office/xlsx.full.min.js': 'c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99'
+};
 let assetManifest = null;
 try { assetManifest = JSON.parse(read('src/config/asset-manifest.generated.json') || 'null'); } catch (error) { /* assertions below report it */ }
 ok(!!sw, 'sw.js exists');
+Object.entries(officeHashes).forEach(([file, expected]) => {
+    ok(sha256(file) === expected, `${file} matches the reviewed upstream distribution bytes`);
+});
 if (sw) {
     ok(/CACHE_VERSION\s*=\s*(?:['"][^'"]+['"]|`[^`]+`)/.test(sw), 'sw uses a versioned cache name');
     ok(/caches\.keys\(\)[\s\S]*caches\.delete/.test(sw), 'sw deletes stale caches on activate');
