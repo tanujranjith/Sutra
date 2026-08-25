@@ -2897,12 +2897,13 @@ function populateProgressDashboard() {
             persistenceWriteBlockReason = 'This device was revoked. Sutra is locked while local user data is removed.';
         }
 
-        // Terminal revocation-cleanup statuses. 'complete-unverified' means
-        // every known Sutra database was deleted but this browser cannot
-        // enumerate IndexedDB to prove nothing else remains (Firefox/Safari);
-        // the device is reusable, with that limitation disclosed in UI copy.
+        // Only a verified terminal cleanup permits this origin to be reused.
+        // 'complete-unverified' is acknowledged server-side and stays locked:
+        // without IndexedDB enumeration, a future/unknown Sutra database could
+        // remain. Clearing all site data through the browser removes that data
+        // and this guard together, which is the safe recovery path.
         function sutraRevocationCleanupFinished(status) {
-            return status === 'complete' || status === 'complete-unverified';
+            return status === 'complete';
         }
 
         function mountSutraRevokedScreen(message) {
@@ -62536,7 +62537,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     clearSutraRevokedInMemoryData();
                     try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
                     mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
-                        ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
                         : 'Local Sutra user data has been removed from this browser.');
                     return true;
                 };
@@ -62602,7 +62603,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         mountSutraRevokedScreen(!followerCleanupComplete
                             ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
                             : (followerGuard && followerGuard.status === 'complete-unverified'
-                                ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                                ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
                                 : 'Local Sutra user data has been removed from this browser.'));
                     }
                 };
@@ -70178,7 +70179,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (sutraRevocationLockActive) {
                 mountSutraRevokedScreen(
                     sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
-                        ? 'Every known Sutra database was removed from this browser. This browser cannot enumerate storage, so completeness could not be verified.'
+                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
                         : (sutraRevocationGuard && sutraRevocationCleanupFinished(sutraRevocationGuard.status)
                             ? 'Local Sutra user data has been removed from this browser.'
                             : 'Sutra is locked because revocation cleanup has not completed. No workspace data will be shown or saved.')

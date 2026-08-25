@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260825-sol1-2",
-    "hash": "4a1cbfdf8adf698d"
+    "stamp": "20260825-sol1-3",
+    "hash": "ea1848041bca4abb"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
