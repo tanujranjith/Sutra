@@ -32,8 +32,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "f55264225658a056"
+    "stamp": "20260825-oxremed5",
+    "hash": "62f22d7931500a4c"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "bf6b862d9c31f5f2"
+    "stamp": "20260825-oxremed4",
+    "hash": "3a9e8286d9ece2c6"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -480,8 +480,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260818-cache-refresh1",
-    "hash": "3ce195b7714c5540"
+    "stamp": "20260825-oxremed4",
+    "hash": "63889ff2e73fad67"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
