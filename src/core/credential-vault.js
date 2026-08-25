@@ -338,6 +338,19 @@
     return changeWriteGuard(name, false);
   }
 
+  function reportVaultIssue(error, where, detail) {
+    // Corruption-class vault issues must be diagnosable (audit remediation):
+    // they are surfaced through the standard error funnel without blocking the
+    // caller, which still receives null exactly as before.
+    try {
+      if (global && typeof global.SutraReportError === 'function') {
+        global.SutraReportError(error, { where: where, name: detail }, 'warning');
+        return;
+      }
+    } catch (_) { /* fall through to console */ }
+    try { (console.warn || console.log).call(console, '[sutra:credential-vault]', where, detail, error); } catch (_) {}
+  }
+
   async function getValue(name) {
     var cryptoApi = getCrypto();
     var encoder = getTextEncoder();
@@ -346,7 +359,12 @@
     var keyName = String(name || '').trim();
     if (!keyName) return null;
     var record = await read(CREDENTIAL_STORE, keyName);
-    if (!record || record.version !== 1 || !record.iv || !record.ciphertext) return null;
+    if (!record) return null;
+    if (record.version !== 1 || !record.iv || !record.ciphertext) {
+      // A present-but-malformed record is corruption, not "never saved".
+      reportVaultIssue(new Error('Stored credential record is malformed.'), 'credential-vault.getValue.malformed', keyName);
+      return null;
+    }
     try {
       var plaintext = await cryptoApi.subtle.decrypt(
         { name: 'AES-GCM', iv: base64ToBytes(record.iv), additionalData: encoder.encode(keyName) },
@@ -355,7 +373,9 @@
       );
       return JSON.parse(decoder.decode(plaintext));
     } catch (error) {
-      // A corrupted or unrecoverable secret must not block the workspace.
+      // A corrupted or unrecoverable secret must not block the workspace,
+      // but the loss must not be indistinguishable from "never saved".
+      reportVaultIssue(error, 'credential-vault.getValue.decrypt', keyName);
       return null;
     }
   }
