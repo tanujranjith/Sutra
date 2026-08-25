@@ -13,7 +13,7 @@ restore points with a compare view.
   collection-level deltas (e.g. `pages +2`, `tasks -1`, `reviewCards +10`).
 - **Delete** — removes a snapshot.
 
-Open via **Ctrl/⌘+K → Workspace snapshots** (or `window.openSnapshotBrowserModal()`).
+Open via **Ctrl/⌘+Shift+P → Workspace snapshots** (or `window.openSnapshotBrowserModal()`).
 APIs: `createWorkspaceSnapshot`, `getWorkspaceSnapshots`, `diffWorkspaceSnapshot`,
 `restoreWorkspaceSnapshot`, `deleteWorkspaceSnapshot`.
 

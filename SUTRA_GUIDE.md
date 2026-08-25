@@ -1,4 +1,4 @@
-﻿# Sutra Guidebook
+# Sutra Guidebook
 
 A friendly, hands-on walkthrough of your **first session** with Sutra - from opening the app to saving your first backup. No required account, no setup files, local by default. Optional Google Drive sync is off unless you enable it.
 
@@ -75,7 +75,7 @@ Add your first task right here: click **+ Task**, fill in a title (and optionall
 
 Want to add a habit? Type a name in the *Add a habit...* input under the **Habits** card and press Enter. Tap it each day; streaks and weekly consistency track themselves.
 
-> The fastest way around the whole app is the **Command Palette**: press **Ctrl/Cmd+K** (anywhere outside an editor) and start typing.
+> The fastest way to find anything is **Global Search**: press **Ctrl/Cmd+K** (anywhere outside an editor) and start typing. For commands and quick jumps, open the **Command Palette** with **Ctrl/Cmd+Shift+P**.
 
 ---
 
@@ -141,7 +141,7 @@ Open **AP Study**.
 
 At the top of the workspace, the **AP Battle Plan** card auto-picks your soonest exam, weighs weak units, recent practice, confidence, and days-left, and recommends a concrete next session - with reasoning. From the card you can create a real AP session, open a linked unit note, log a task, or schedule a prep block.
 
-> On the AP Study view, `Ctrl/Cmd+K` is reserved for **Add subject** rather than the Command Palette.
+> On the AP Study view, `Ctrl/Cmd+K` is reserved for **Add subject** rather than Global Search.
 
 When you want to drill the material, the **Testing Hub** and **Cram** surfaces help you pin exams and run focused last-minute sessions.
 
@@ -151,7 +151,7 @@ When you want to drill the material, the **Testing Hub** and **Cram** surfaces h
 
 **Review** is what keeps the material from leaking out between study sessions - spaced repetition and active recall, all local.
 
-1. Open **Review** (top tab, or `Ctrl/Cmd+K -> Start review session`).
+1. Open **Review** (top tab, or `Ctrl/Cmd+Shift+P -> Start review session`).
 2. Hit **+ Deck** and name it (e.g. *"AP Bio * Unit 3"*).
 3. In **Create review card**, pick the deck, write a prompt and an answer, optionally add tags, and pick a **source** - a note, an AP class, or a homework class.
 4. Save. The card is due immediately and lands in the **Due queue**.

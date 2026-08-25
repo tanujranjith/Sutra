@@ -173,7 +173,7 @@
     Object.keys(meta).forEach(function (key) {
       if (key === 'context' || key === 'locked') return;
       var value = meta[key];
-      if (value == null || value === '') return;
+      if (value == null || value === '' || typeof value === 'boolean') return;
       if (Array.isArray(value)) { parts.push(value.join(' ')); return; }
       if (typeof value === 'object') return;
       parts.push(text(value));
@@ -240,6 +240,7 @@
 
     var titleMatched = titleBest > 0 || pathBest > 0 || phraseInTitle;
     var bodyMatched = bodyHits > 0 || phraseInBody;
+    var metaMatched = metaBest > 0;
 
     if (record.prematched) {
       // Already filtered by the owning module; never dropped, never ranked
@@ -255,7 +256,12 @@
       };
     }
 
-    if (!titleMatched && !bodyMatched) return null;
+    // Qualification contract: pages qualify through title/location or note
+    // body only (Pages=title/location, Notes=body). Other record types also
+    // qualify through metadata alone — due dates, priority, category, time,
+    // kind, MIME, and size are real search fields, not just ranking boosts.
+    var qualified = titleMatched || bodyMatched || (record.type !== 'page' && metaMatched);
+    if (!qualified) return null;
 
     var allWords = words.every(function (word) {
       return countFieldHits(record.title, [word]) > 0
@@ -285,7 +291,7 @@
       score: Math.round(score),
       titleMatched: titleMatched,
       bodyMatched: bodyMatched,
-      matchKind: titleMatched ? 'title' : 'body',
+      matchKind: titleMatched ? 'title' : (bodyMatched ? 'body' : 'meta'),
       snippet: snippet
     };
   }

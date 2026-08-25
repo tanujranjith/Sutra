@@ -410,11 +410,13 @@
 
   function setFilter(filter) {
     state.filter = filter || 'all';
+    // Chips are ordinary toggle buttons: the announced state is aria-pressed
+    // (matching the static markup), and every chip stays in the natural Tab
+    // order — no roving tabindex, no aria-selected.
     document.querySelectorAll('#globalSearchPanel [data-gs-filter]').forEach(function (chip) {
       var isActive = chip.getAttribute('data-gs-filter') === state.filter;
       chip.classList.toggle('is-active', isActive);
-      chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
-      chip.setAttribute('tabindex', isActive ? '0' : '-1');
+      chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
     var input = el('globalSearchInput');
     if (input && String(input.value || '').trim()) runSearch(true);

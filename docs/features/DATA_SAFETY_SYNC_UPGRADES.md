@@ -6,7 +6,7 @@ Deleting a page is no longer permanent. Deleted pages are captured into a
 **Trash** collection that travels in your `.sutra`/JSON backups, and can be
 restored or permanently purged.
 
-- Open Trash via the Command Palette (Ctrl/⌘+K → **Open Trash**) or
+- Open Trash via the Command Palette (Ctrl/⌘+Shift+P → **Open Trash**) or
   `window.openTrashModal()`.
 - Restore puts the page back (with a fresh id if needed and a valid space);
   "Delete forever" purges one item; "Empty Trash" clears all (with confirm).
@@ -19,7 +19,7 @@ restored or permanently purged.
 Completed focus-timer sessions are logged to a `focusSessions` history (habit
 timers are excluded). Aggregate your time by subject for the last N days:
 
-- `Ctrl/⌘+K → Focus stats (this week)` shows total minutes, session count, and
+- `Ctrl/⌘+Shift+P → Focus stats (this week)` shows total minutes, session count, and
   the top subjects.
 - API: `recordFocusSession({minutes, subject, category})` and
   `getFocusStatsBySubject(days)`. New persisted `focusSessions` collection

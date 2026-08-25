@@ -655,14 +655,14 @@
     }
     .today-header-actions .neumo-btn .fas { margin-right: 4px; }
 
-    /* Reduce ⌘K label on phones — keep the icon visible */
-    .today-header-actions .neumo-btn[title*="⌘K"] {
+    /* Collapse the Quick Capture button to its icon on phones (header space) */
+    .today-header-actions #todayQuickCaptureBtn {
         font-size: 0;
         width: 40px;
         padding: 0;
         justify-content: center;
     }
-    .today-header-actions .neumo-btn[title*="⌘K"] .fas {
+    .today-header-actions #todayQuickCaptureBtn .fas {
         font-size: 14px;
         margin: 0;
     }
@@ -1453,15 +1453,29 @@
         border-radius: 16px !important;
         max-height: 76dvh !important;
     }
-    /* Global search panel — full width sheet sliding from top */
+    /* Global search sheet. The overlay ROOT must keep full-viewport coverage
+       (inset 0) so the backdrop dismisses taps over the whole screen and the
+       focus trap cannot leak; sheet positioning lives on the CARD. Reconciled
+       with styles/features/global-search.css, which owns in-card behavior. */
     .global-search-panel {
-        left: 8px !important;
-        right: 8px !important;
-        top: calc(env(safe-area-inset-top, 0px) + 64px) !important;
-        width: auto !important;
-        max-width: calc(100vw - 16px) !important;
-        max-height: 70dvh !important;
-        overflow-y: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        align-items: flex-start !important;
+    }
+    .global-search-panel .global-search-card {
+        width: calc(100% - 16px) !important;
+        max-width: calc(100% - 16px) !important;
+        margin-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+        margin-bottom: env(safe-area-inset-bottom, 0px);
+        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px) !important;
+        border-radius: 16px !important;
     }
     /* Inputs inside the palette must be tall enough to not crowd the caret */
     .command-palette-modal .modal-input,

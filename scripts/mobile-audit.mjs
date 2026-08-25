@@ -179,7 +179,7 @@ const DEEP_SURFACES = [
   { name: 'college-essays', view: 'collegeapp', action: p => p.evaluate(() => document.querySelector('[data-collegeapp-page="essays"]')?.click()) },
   { name: 'semester-setup', view: 'courses', action: p => p.evaluate(() => { const b = [...document.querySelectorAll('#view-courses button')].find(x => /semester setup/i.test(x.textContent)); b?.click(); }) },
   { name: 'task-modal', view: 'today', action: p => p.evaluate(() => { const b = [...document.querySelectorAll('.today-header-actions button')].find(x => /task/i.test(x.textContent)); b?.click(); }) },
-  { name: 'command-palette', view: 'today', action: p => p.evaluate(() => { const b = [...document.querySelectorAll('.today-header-actions button')].find(x => /⌘K/i.test(x.textContent) || /⌘K/.test(x.title || '')); b?.click(); }) },
+  { name: 'command-palette', view: 'today', action: p => p.evaluate(() => { const item = [...document.querySelectorAll('#todayHeaderMoreMenu .today-hero-menu-item')].find(x => /palette/i.test(x.textContent)); if (item) { item.click(); } else if (window.bindCommandPaletteInput && window.openCommandPalette) { window.bindCommandPaletteInput(); window.openCommandPalette(''); } }) },
   { name: 'block-modal', view: 'timeline', action: p => p.evaluate(() => document.getElementById('addBlockBtn')?.click()) },
   { name: 'timeline-more-menu', view: 'timeline', action: p => p.evaluate(() => document.getElementById('timelineMoreBtn')?.click()) },
   { name: 'notif-panel', view: 'today', action: p => p.evaluate(() => document.getElementById('notifBellBtn')?.click()) },

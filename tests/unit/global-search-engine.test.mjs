@@ -155,17 +155,93 @@ test('breadcrumb and metadata matches rank and surface', () => {
   assert.equal(out.results[0].sourceId, 'in-course');
 });
 
-test('attachment metadata (kind, size) is searchable', () => {
+test('non-page records qualify through metadata alone (due date, priority, category, time)', () => {
   const records = [
-    { sourceId: 'f1', type: 'attachment', title: 'Summary.pdf', body: 'photosynthesis overview', breadcrumb: 'Biology 101 / Attachments', metadata: { kind: 'pdf', sizeBytes: 1400000 }, timestamp: 0 }
+    { sourceId: 'hw-1', type: 'homework', title: 'Worksheet 3', body: '', breadcrumb: '', metadata: { due: '2026-05-22', priority: 'high' }, timestamp: 0 },
+    { sourceId: 'task-1', type: 'task', title: 'Finish reading', body: '', breadcrumb: '', metadata: { due: '2026-05-23', priority: 'medium', completed: false }, timestamp: 0 },
+    { sourceId: 'block-1', type: 'timeline', title: 'Deep work', body: '', breadcrumb: '', metadata: { date: '2026-05-21', start: '16:00', end: '17:30', category: 'study' }, timestamp: 0 }
   ];
-  const byName = engine.search(records, 'summary', { now: NOW });
-  assert.equal(byName.total, 1);
-  const byCourse = engine.search(records, 'biology 101', { now: NOW });
-  assert.equal(byCourse.total, 1);
+  // Homework due date.
+  const byDue = engine.search(records, '2026-05-22', { now: NOW });
+  assert.equal(byDue.total, 1);
+  assert.equal(byDue.results[0].sourceId, 'hw-1');
+  assert.equal(byDue.results[0].matchKind, 'meta');
+  // Task priority.
+  const byPriority = engine.search(records, 'high', { now: NOW });
+  assert.equal(byPriority.total, 1);
+  assert.equal(byPriority.results[0].sourceId, 'hw-1');
+  // Timeline category and start time.
+  const byCategory = engine.search(records, 'study', { now: NOW });
+  assert.equal(byCategory.total, 1);
+  assert.equal(byCategory.results[0].sourceId, 'block-1');
+  const byTime = engine.search(records, '16:00', { now: NOW });
+  assert.equal(byTime.total, 1);
+  assert.equal(byTime.results[0].sourceId, 'block-1');
+  // Metadata matches outrank nothing — a title match still wins.
+  const mixed = engine.search([
+    { sourceId: 'meta-only', type: 'homework', title: 'Worksheet 3', body: '', breadcrumb: '', metadata: { due: '2026-05-22' }, timestamp: 0 },
+    { sourceId: 'title-hit', type: 'homework', title: '2026-05-22 debrief', body: '', breadcrumb: '', metadata: {}, timestamp: 0 }
+  ], '2026-05-22', { now: NOW });
+  assert.equal(mixed.results[0].sourceId, 'title-hit');
+});
+
+test('attachment kind, MIME type, and size are genuinely searchable', () => {
+  const records = [
+    { sourceId: 'f1', type: 'attachment', title: 'Cell summary report', body: 'photosynthesis overview', breadcrumb: 'Biology 101 / Attachments', metadata: { kind: 'pdf', mimeType: 'application/pdf', sizeBytes: 1468006 }, timestamp: 0 }
+  ];
+  // Kind is metadata-only here: the title and body contain neither "pdf" nor
+  // "application", so each hit below proves metadata qualification.
+  const byKind = engine.search(records, 'pdf', { now: NOW });
+  assert.equal(byKind.total, 1);
+  assert.equal(byKind.results[0].sourceId, 'f1');
+  assert.equal(byKind.results[0].matchKind, 'meta');
+  const byMime = engine.search(records, 'application/pdf', { now: NOW });
+  assert.equal(byMime.total, 1);
+  const byMimeToken = engine.search(records, 'application', { now: NOW });
+  assert.equal(byMimeToken.total, 1);
+  const bySize = engine.search(records, '1468006', { now: NOW });
+  assert.equal(bySize.total, 1);
+  assert.equal(bySize.results[0].sourceId, 'f1');
+  // A body match on the same record still wins over its metadata match.
   const byBody = engine.search(records, 'photosynthesis', { now: NOW });
   assert.equal(byBody.total, 1);
   assert.ok(byBody.results[0].snippet.text.includes('photosynthesis'));
+});
+
+test('pages never qualify through metadata, preserving the Pages/Notes contract', () => {
+  const records = [
+    page({ sourceId: 'p1', title: 'Unit plan', body: 'plain text only', metadata: { updatedAt: '2026-05-22T00:00:00Z' } })
+  ];
+  // The date exists only in page metadata: it must not qualify the page.
+  const byMeta = engine.search(records, '2026-05-22', { now: NOW });
+  assert.equal(byMeta.total, 0);
+  // Title and body qualification still work.
+  assert.equal(engine.search(records, 'unit plan', { now: NOW }).total, 1);
+  assert.equal(engine.search(records, 'plain text', { now: NOW }).total, 1);
+});
+
+test('boolean metadata flags are not searchable text', () => {
+  const records = [
+    { sourceId: 't1', type: 'task', title: 'Something to do', body: '', breadcrumb: '', metadata: { due: '', completed: false, priority: '' }, timestamp: 0 },
+    { sourceId: 't2', type: 'task', title: 'Another thing', body: '', breadcrumb: '', metadata: { due: '', completed: true, priority: '' }, timestamp: 0 }
+  ];
+  assert.equal(engine.search(records, 'false', { now: NOW }).total, 0);
+  assert.equal(engine.search(records, 'true', { now: NOW }).total, 0);
+});
+
+test('locked records stay title-only even with metadata present', () => {
+  const locked = page({
+    title: 'Private journal',
+    body: 'NEVER-SNIPPET secret contents',
+    breadcrumb: 'Personal',
+    locked: true,
+    metadata: { locked: true, updatedAt: '2026-05-22T00:00:00Z' }
+  });
+  assert.equal(engine.search([locked], 'journal', { now: NOW }).total, 1, 'title still matches');
+  assert.equal(engine.search([locked], 'NEVER-SNIPPET', { now: NOW }).total, 0, 'body never matches');
+  assert.equal(engine.search([locked], '2026-05-22', { now: NOW }).total, 0, 'metadata never qualifies a locked page');
+  const byTitle = engine.search([locked], 'journal', { now: NOW });
+  assert.equal(byTitle.results[0].snippet, null);
 });
 
 test('prematched records are always included in All and ranked modestly', () => {

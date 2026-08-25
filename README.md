@@ -1,4 +1,4 @@
-﻿# Sutra
+# Sutra
 
 **Your academic life, woven into one private workspace.**
 *One workspace. Every thread.*
@@ -78,7 +78,7 @@ We use the thread metaphor sparingly. Inside the app, labels stay literal — *T
 1. Open **`Sutra.html`** directly (double-click is fine), or open the landing page **`HomePage.html`** and click **Start your session**. (`index.html` simply redirects to `HomePage.html`.)
 2. On first launch, the **Sutra Setup** wizard walks you through Welcome, Classes, Setup, Mode, Protect, and Finish. Skip it if you prefer a blank slate.
 3. Open **Today** to see the **Daily Thread** and one **Next Step**.
-4. Press **Ctrl/⌘+K** to open the **Command Palette** and try Quick Capture, *Create Weekly Review note*, or *Export backup*.
+4. Press **Ctrl/⌘+K** to open **Global Search** and try a workspace-wide query, or **Ctrl/⌘+Shift+P** for the **Command Palette** with Quick Capture, *Create Weekly Review note*, or *Export backup*.
 5. Open **Settings → Data** and save a password-encrypted **`.sutra`** backup as soon as your workspace feels real.
 
 For a full walkthrough, see the [Sutra Guidebook](SUTRA_GUIDE.md).
@@ -405,12 +405,13 @@ Sutra is responsive from **1440 px down to 320 px**. Breakpoints in `styles/resp
 
 ## Keyboard Shortcuts
 
-Sutra is keyboard-first. The most important shortcut is the **Command Palette** (`Ctrl/⌘+K`) — type to filter, arrow to navigate, `Enter` to run, `Esc` to close. From it you can jump to any view, run Quick Capture, export a backup, create a Weekly Review note, restart onboarding, open a class dashboard, and more.
+Sutra is keyboard-first. The most important shortcut is **Global Search** (`Ctrl/⌘+K`) — type to search the whole workspace, arrow to navigate, `Enter` to open, `Esc` to close. For commands, the **Command Palette** (`Ctrl/⌘+Shift+P`) lets you jump to any view, run Quick Capture, export a backup, create a Weekly Review note, restart onboarding, open a class dashboard, and more.
 
 | Shortcut | Action |
 | --- | --- |
-| `Ctrl/⌘+K` | Command Palette (on AP Study, this is *Add subject* instead). |
-| `Shift+Ctrl/⌘+F` | Global Search across Notes, Tasks, Homework, AP Study, Review, trackers, College, and Timeline. |
+| `Ctrl/⌘+K` | Global Search (on AP Study, this is *Add subject* instead; in the Notes Editor V2 it is *Insert Link*). |
+| `Ctrl/⌘+Shift+P` | Command Palette. |
+| `Shift+Ctrl/⌘+F` | Global Search (legacy alternate) across Pages, Notes, Homework, Tasks, Timeline, Attachments, and more. |
 | `Alt+Shift+F` | Toggle Focus Mode. |
 | `Ctrl/⌘+Shift+M` | Toggle the markdown shortcut on the current selection (where supported). |
 | `Tab` / `Shift+Tab` | Indent / outdent list items in the editor. |

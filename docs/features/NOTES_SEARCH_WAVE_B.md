@@ -26,7 +26,7 @@ Builds on the backlinks panel.
 
 ## Fuzzy + recent command palette
 
-Ctrl/⌘+K now ranks commands with the shared fuzzy scorer (`sutraFuzzyScore`):
+Ctrl/⌘+Shift+P now ranks commands with the shared fuzzy scorer (`sutraFuzzyScore`):
 prefix > word-boundary > infix > subsequence (so `otl` finds "Open Timeline"). With
 no query, recently-run commands float to the top (persisted via SutraSafeStorage).
 

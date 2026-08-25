@@ -35,6 +35,13 @@ A page that matches both title and body appears once, typed as *Page*; the
   (`apbio` finds *AP Biology*). Title matches outrank breadcrumb, metadata,
   and deep body matches; multiple matching words improve ranking; due-soon
   homework/tasks rank above far-out work and completed work ranks lower.
+- Metadata alone qualifies non-page records: homework/tasks match by due date
+  and priority, timeline by date/time/category, and attachments by kind, MIME
+  type, and size. Pages still qualify only through title/location (Pages) or
+  note body (Notes), never through metadata.
+- Filter chips are ordinary toggle buttons (`aria-pressed`), all keyboard
+  reachable; results follow the listbox/combobox keyboard model
+  (`↑`/`↓`/`Home`/`End`/`Enter` with `aria-activedescendant`).
 - Results are deduplicated per entity, capped (60 in All, 40 per filter), and
   rendered with contextual snippets and `<mark>`-highlighted matches.
 - Input is debounced (140 ms). All data is read from in-memory canonical state

@@ -248,8 +248,8 @@ Accessibility and input support includes keyboard navigation, visible focus, ARI
 
 Common shortcuts include:
 
-- `Ctrl/⌘+K` for Command Palette
-- `Shift+Ctrl/⌘+F` for Global Search
+- `Ctrl/⌘+K` for Global Search
+- `Ctrl/⌘+Shift+P` for Command Palette
 - `Alt+Shift+F` for Focus Mode
 - `/` in the editor for slash commands
 - `Tab` / `Shift+Tab` for list indentation

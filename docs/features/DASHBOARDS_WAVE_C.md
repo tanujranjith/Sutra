@@ -3,7 +3,7 @@
 ## Focus stats dashboard
 
 The focus-session history (recorded automatically when a focus timer completes)
-now has a visual home. Open via **Ctrl/⌘+K → Focus stats** (or
+now has a visual home. Open via **Ctrl/⌘+Shift+P → Focus stats** (or
 `window.openFocusStatsModal()`):
 
 - **This week / Sessions / Avg session** stat cards.
@@ -13,7 +13,7 @@ now has a visual home. Open via **Ctrl/⌘+K → Focus stats** (or
 ## Grade trends
 
 Each course's grade is plotted **over time** from its dated score entries. Open via
-**Ctrl/⌘+K → Grade trends** (or `window.openGradeTrendsModal()`):
+**Ctrl/⌘+Shift+P → Grade trends** (or `window.openGradeTrendsModal()`):
 
 - Per-course cumulative-grade line chart (`buildSutraLineSvg`) with current % and a
   ▲/▼ delta since the first dated entry.

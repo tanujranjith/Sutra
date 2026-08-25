@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260824-globalsearch1",
-    "hash": "9d8ef4b473c163e2"
+    "stamp": "20260824-globalsearch2",
+    "hash": "086c6090c46ba9f0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -236,12 +236,12 @@
     "hash": "b1d98ccd341fd3bb"
   },
   "src/features/search/global-search-engine.js": {
-    "stamp": "20260824-gsengine2",
-    "hash": "c0098dcf98c6c590"
+    "stamp": "20260824-gsengine3",
+    "hash": "08b9978ca9a9ae07"
   },
   "src/features/search/global-search-modal.js": {
-    "stamp": "20260824-gsmodal1",
-    "hash": "53cc6547682aaeb9"
+    "stamp": "20260824-gsmodal2",
+    "hash": "842f559aeb5b3f23"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -512,8 +512,8 @@
     "hash": "3bcf3e999e605556"
   },
   "styles/features/global-search.css": {
-    "stamp": "20260824-gsstyles1",
-    "hash": "4f99b10d694447f3"
+    "stamp": "20260824-gsstyles2",
+    "hash": "b0e04ab6ebf1004a"
   },
   "styles/features/homework-redesign.css": {
     "stamp": "20260807-cohesion2",
@@ -600,8 +600,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260821-iossafe1",
-    "hash": "05fb6a4f98a57889"
+    "stamp": "20260824-mobile-gs1",
+    "hash": "a34d325349503638"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

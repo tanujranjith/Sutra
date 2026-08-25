@@ -582,14 +582,14 @@
                     </div>
                     <div class="today-header-actions">
                         <button id="topAddTaskBtn" class="neumo-btn today-hero-primary" title="Add task"><i class="fas fa-plus"></i> Add Task</button>
-                        <button id="todayQuickCaptureBtn" class="neumo-btn today-hero-ghost" type="button" title="Quick Capture (Ctrl/⌘+K)"><i class="fas fa-bolt"></i> Capture</button>
+                        <button id="todayQuickCaptureBtn" class="neumo-btn today-hero-ghost" type="button" title="Quick Capture"><i class="fas fa-bolt"></i> Capture</button>
                         <button id="todayFocusBtn" class="neumo-btn today-hero-ghost" type="button" title="Start a 50-minute focus session"><i class="fas fa-play"></i> Focus</button>
                         <button id="planMyDayBtn" class="neumo-btn today-hero-ghost" type="button" title="Shape My Day — sequence today's work against your calendar"><i class="fas fa-calendar-check"></i> Shape My Day</button>
                         <div class="today-hero-more-wrap">
                             <button class="neumo-btn today-hero-ghost today-hero-more" id="todayHeaderMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis"></i></button>
                             <div class="today-hero-menu" id="todayHeaderMoreMenu" role="menu" hidden>
                                 <button type="button" role="menuitem" id="toggleAllTasksBtn" class="today-hero-menu-item"><i class="fas fa-list-check"></i><span>All tasks</span></button>
-                                <button type="button" role="menuitem" class="today-hero-menu-item" onclick="bindCommandPaletteInput(); openCommandPalette('')"><i class="fas fa-terminal"></i><span>Command palette (Ctrl/⌘+K)</span></button>
+                                <button type="button" role="menuitem" class="today-hero-menu-item" onclick="bindCommandPaletteInput(); openCommandPalette('')"><i class="fas fa-terminal"></i><span>Command palette (Ctrl/⌘+Shift+P)</span></button>
                                 <button type="button" role="menuitem" id="todayPasteImportBtn" class="today-hero-menu-item"><i class="fas fa-file-import"></i><span>Paste assignments / syllabus</span></button>
                                 <button type="button" role="menuitem" id="todayWeeklyReviewBtn" class="today-hero-menu-item"><i class="fas fa-calendar-check"></i><span>Weekly review</span></button>
                                 <button type="button" role="menuitem" class="today-hero-menu-item" data-open-today-dashboard><i class="fas fa-sliders" aria-hidden="true"></i><span>Customize Home</span></button>
@@ -5530,7 +5530,7 @@
         <div class="command-palette-backdrop" data-modal-close aria-hidden="true"></div>
         <div class="command-palette-card glass-card">
             <div class="command-palette-head">
-                <label class="eyebrow" for="commandPaletteInput" id="commandPaletteTitle">Command Palette · Ctrl/⌘ + K</label>
+                <label class="eyebrow" for="commandPaletteInput" id="commandPaletteTitle">Command Palette · Ctrl/⌘ + Shift + P</label>
                 <input id="commandPaletteInput" class="modal-input" type="search" placeholder="Type a command or search notes, tasks, homework, AP, college…" autocomplete="off" />
             </div>
             <div id="commandPaletteList" class="command-palette-scroll" aria-live="polite"></div>
@@ -7886,9 +7886,9 @@
     <!-- Workspace-wide search: pure ranking engine + modal controller. Both are
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
-    <script src="src/features/search/global-search-engine.js?v=20260824-gsengine2"></script>
-    <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal1"></script>
-    <script src="src/core/app.js?v=20260824-globalsearch1"></script>
+    <script src="src/features/search/global-search-engine.js?v=20260824-gsengine3"></script>
+    <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal2"></script>
+    <script src="src/core/app.js?v=20260824-globalsearch2"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260823-credential-bridge4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
@@ -8310,8 +8310,8 @@
     <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/features/global-search.css?v=20260824-gsstyles1">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260821-iossafe1">
+    <link rel="stylesheet" href="styles/features/global-search.css?v=20260824-gsstyles2">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260824-mobile-gs1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">

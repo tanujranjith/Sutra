@@ -25290,7 +25290,7 @@ function populateProgressDashboard() {
                     <div class="today-brief-nba today-brief-nba-empty tnu-body">
                         <div class="today-brief-nba-label tnu-eyebrow">Next up</div>
                         <div class="today-brief-nba-title tnu-title">Nothing due — you're clear</div>
-                        <p class="tnu-context">Capture an assignment (Ctrl/⌘+K)${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</p>
+                        <p class="tnu-context">Capture an assignment with Quick Capture${reviewDue > 0 ? ` or review your ${reviewDue} due card${reviewDue === 1 ? '' : 's'}` : ''} to stay ahead.</p>
                         <div class="today-brief-actions tnu-actions">
                             <button type="button" class="neumo-btn tnu-primary" onclick="if(typeof openQuickCaptureModal==='function') openQuickCaptureModal('')">Quick Capture</button>
                         </div>
@@ -26274,7 +26274,7 @@ function populateProgressDashboard() {
         // understand what each one does before they see the navigation.
         const ONBOARDING_CORE_SURFACES = [
             { view: 'today',    title: 'Home',      icon: 'fa-house',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
-            { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — Ctrl+K or + to instantly add assignments, notes, or tasks.' },
+            { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
             { view: 'homework', title: 'Homework',  icon: 'fa-book-open',     description: 'All your classes and assignments in one place.' },
             { view: 'notes',    title: 'Create',    icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
             { view: 'timeline', title: 'Timeline',  icon: 'fa-calendar-days', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
@@ -27560,7 +27560,7 @@ function buildOnboardingPlanPreview() {
                     if (pasteText) {
                         showToast('Setup complete. Review your assignments on Home.');
                     } else {
-                        showToast('Setup complete. Welcome to Sutra. Capture your first item with Ctrl+K.');
+                        showToast('Setup complete. Welcome to Sutra. Capture your first item with the Capture button on Home.');
                     }
                 } else if (chosenAction === 'capture') {
                     try { setActiveView('today'); } catch (err) { /* non-critical */ }
@@ -34114,7 +34114,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#todayDailyBrief',
                   before: () => safeRunTutorial(() => setActiveView('today')),
                   title: 'Command Palette',
-                  body: 'Press Ctrl/⌘+K (outside editors) to jump between views, run Quick Capture, export .sutra, create a Weekly Review note, open a Class Dashboard, rerun the unified onboarding, or trigger Sutra Assistant actions — keyboard-first navigation for the whole app.',
+                  body: 'Press Ctrl/⌘+Shift+P (outside editors) to jump between views, run Quick Capture, export .sutra, create a Weekly Review note, open a Class Dashboard, rerun the unified onboarding, or trigger Sutra Assistant actions — keyboard-first navigation for the whole app. Ctrl/⌘+K opens Global Search.',
                   actionLabel: 'Open Command Palette',
                   autoAction: false,
                   action: () => safeRunTutorial(() => { bindCommandPaletteInput(); openCommandPalette(''); }) },
@@ -40469,8 +40469,9 @@ function buildOnboardingPlanPreview() {
                 e.preventDefault();
                 if (typeof formatText === 'function') formatText('underline');
             }
-            // Ctrl/Cmd+Shift+K - Insert Link (moved off Ctrl/Cmd+K so the
-            // Command Palette can own Ctrl/Cmd+K consistently, including inside note text).
+            // Ctrl/Cmd+Shift+K - Insert Link (inside the Notes Editor V2,
+            // plain Ctrl/Cmd+K remains Insert Link and stops propagation
+            // before the workspace-wide Global Search handler).
             if (isMeta && e.shiftKey && typeof e.key === 'string' && e.key.toLowerCase() === 'k'
                 && ((document.activeElement && document.activeElement.id === 'editor') || inEditorV2)) {
                 e.preventDefault();
@@ -44619,7 +44620,7 @@ function buildOnboardingPlanPreview() {
   <li>Scheduling uses a local SM-2-lite algorithm: <code>intervalDays</code>, <code>ease</code>, <code>repetitions</code>, and <code>lapses</code> all live with each card and survive export/import. No backend, no AI required.</li>
   <li>The dashboard cards show <strong>Due today</strong>, <strong>Overdue</strong>, <strong>Reviewed this week</strong>, <strong>Weak cards</strong> (high-lapse), and <strong>Active decks</strong>. The history panel keeps the last sessions and the cards you keep getting wrong.</li>
   <li>Settings — <code>dailyLimit</code>, <code>newItemsPerDay</code>, <code>interleaveDecks</code>, <code>showAnswerMode</code> — live inside <code>reviewWorkspace.settings</code> and travel with your encrypted <code>.sutra</code> backup.</li>
-  <li>Common shortcuts: <strong>Open Review</strong> from the Command Palette (Ctrl/⌘+K), <strong>Start review session</strong> for a one-click study run, or click <strong>Start session</strong> on the Home card.</li>
+  <li>Common shortcuts: <strong>Open Review</strong> from the Command Palette (Ctrl/⌘+Shift+P), <strong>Start review session</strong> for a one-click study run, or click <strong>Start session</strong> on the Home card.</li>
 </ul>
                     `
                 },
@@ -44683,8 +44684,8 @@ function buildOnboardingPlanPreview() {
                     title: 'Command Palette, Global Search, And Quick Capture',
                     body: `
 <ul>
-  <li><strong>Command Palette</strong> (Ctrl/⌘+K) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
-  <li><strong>Global Search</strong> (Shift+Ctrl/⌘+F or "Search everywhere…") groups results across <em>Notes, Tasks, Homework, AP Study, Review, Trackers, College, Timeline</em>. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
+  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
+  <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, Homework, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
   <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items.</li>
   <li>If more than one AP subject exists, Quick Capture requires you to choose the destination subject before it saves.</li>

@@ -37,6 +37,7 @@
   position: relative;
   width: 100%;
   max-width: 720px;
+  min-width: 0;
   padding: 14px;
   display: grid;
   gap: 8px;
@@ -125,12 +126,14 @@
   justify-content: space-between;
   gap: 12px;
   padding: 0 2px;
+  min-width: 0;
 }
 .global-search-chips {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .global-search-chip {
   border: 1px solid color-mix(in srgb, var(--surface-border) 80%, transparent);
@@ -388,17 +391,28 @@
 .sidebar-search-kbd { font-size: 0.64rem; padding: 2px 6px; }
 
 /* ===== Responsive ===== */
+/* Phone sheet geometry (overlay root stays full-viewport; the card becomes a
+   top sheet) is owned by styles/responsive/mobile.css, which loads later.
+   This block only adjusts component-level behavior inside the card. */
 @media (max-width: 640px) {
-  .global-search-panel { padding: 12px; align-items: center; }
-  .global-search-card { max-height: 92vh; padding: 10px; }
-  .global-search-results { max-height: 56vh; }
+  .global-search-results { max-height: none; min-height: 0; }
+  /* The card grid gives the results row the remaining sheet height. */
+  .global-search-card { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
   .global-search-panel-columns { grid-template-columns: 1fr; }
   .global-search-item-meta { display: none; }
   .global-search-footer { display: none; }
   .global-search-kbd { display: none; }
-  .global-search-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  /* Filter row scrolls horizontally inside the card instead of stretching it. */
+  .global-search-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; }
   .global-search-chips::-webkit-scrollbar { display: none; }
   .global-search-chip { flex: none; }
+  /* 44px primary touch targets on phones. */
+  .global-search-chip { min-height: 44px; padding: 8px 16px; }
+  .global-search-clear,
+  .global-search-close { width: 44px; height: 44px; }
+  .global-search-recent,
+  .global-search-action { min-height: 44px; }
+  .global-search-clear-recents { min-height: 44px; padding: 8px 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
