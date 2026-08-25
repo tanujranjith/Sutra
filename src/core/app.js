@@ -21195,13 +21195,23 @@ function populateProgressDashboard() {
                     const snapshot = store.getSnapshot();
                     const update = key === 'hwCourses:v2' ? { courses: value } : { tasks: value };
                     store.replace({ ...snapshot, ...update }, { reason: 'compat-write-adapter' });
-                } catch (error) { console.warn(`Failed to persist ${key}`, error); }
+                } catch (error) {
+                    // User-authored data failed to reach the canonical store:
+                    // diagnosable via the error funnel, not just the console.
+                    console.warn(`Failed to persist ${key}`, error);
+                    if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                        window.SutraReportError(error, { where: 'writeLocalArraySafe', key }, 'warning');
+                    }
+                }
                 return;
             }
             try {
                 localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
             } catch (err) {
                 console.warn(`Failed to persist ${key}`, err);
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(err, { where: 'writeLocalArraySafe', key }, 'warning');
+                }
             }
         }
 
@@ -55792,7 +55802,14 @@ function getActiveEditor() {
         window.addEventListener('sutra:safe-storage-mutated', event => {
             const key = String(event && event.detail && event.detail.key || '');
             if (!SUTRA_SYNC_TRIGGER_STORAGE_KEYS.has(key)) return;
-            try { persistAppData(); } catch (error) { console.warn('Portable mirror save scheduling failed', error); }
+            try { persistAppData(); } catch (error) {
+                // A scheduling failure means no canonical save would be
+                // attempted at all — that must be diagnosable, not silent.
+                console.warn('Portable mirror save scheduling failed', error);
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(error, { where: 'mirror-save-schedule', key }, 'warning');
+                }
+            }
         });
 
         function recordAtelierDataHealth(patch) {
