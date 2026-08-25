@@ -44,13 +44,25 @@ test('title matches outrank deep body-text matches', () => {
   assert.ok(out.results[0].score > out.results[1].score);
 });
 
-test('multiple matching words improve ranking', () => {
+test('multi-word queries exclude records that only match one token', () => {
   const records = [
     page({ sourceId: 'one-word', title: 'Biology hub', body: '' }),
     page({ sourceId: 'two-words', title: 'Biology notes', body: 'notes about cells' })
   ];
   const out = engine.search(records, 'biology notes', { now: NOW });
+  assert.equal(out.total, 1);
   assert.equal(out.results[0].sourceId, 'two-words');
+});
+
+test('specific long queries require meaningful token coverage without demanding every word', () => {
+  const records = [
+    { sourceId: 'exact', type: 'homework', title: 'AP Gov summer work', body: '', breadcrumb: 'AP Gov', metadata: {}, timestamp: 0 },
+    { sourceId: 'near', type: 'homework', title: 'AP Lit summer work', body: '', breadcrumb: 'AP Lit', metadata: {}, timestamp: 0 },
+    { sourceId: 'two-of-four', type: 'course', title: 'AP Gov', body: '', breadcrumb: 'Courses', metadata: {}, timestamp: 0 },
+    { sourceId: 'one-of-four', type: 'timeline', title: 'AP Networking Exam', body: '', breadcrumb: '', metadata: {}, timestamp: 0 }
+  ];
+  const out = engine.search(records, 'ap gov summer work', { now: NOW });
+  assert.deepEqual(out.results.map(result => result.sourceId), ['exact', 'near']);
 });
 
 test('results are deduplicated by type and sourceId', () => {

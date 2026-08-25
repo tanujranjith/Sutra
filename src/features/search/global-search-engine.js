@@ -105,6 +105,25 @@
     return hits;
   }
 
+  // A long query should not turn every record containing one common token
+  // into a result. Keep single-token fuzzy matching, but require meaningful
+  // literal token coverage once the user supplies a more specific query.
+  function countCoveredWords(record, words, metadata) {
+    return words.reduce(function (total, word) {
+      var covered = countFieldHits(record.title, [word]) > 0
+        || countFieldHits(record.breadcrumb, [word]) > 0
+        || (!record.locked && countFieldHits(record.body, [word]) > 0)
+        || (record.type !== 'page' && countFieldHits(metadata, [word]) > 0);
+      return total + (covered ? 1 : 0);
+    }, 0);
+  }
+
+  function requiredWordCoverage(wordCount) {
+    if (wordCount <= 1) return 1;
+    if (wordCount === 2) return 2;
+    return Math.ceil(wordCount * 0.65);
+  }
+
   // Earliest position (case-insensitive) of any query word inside text.
   function firstMatchPosition(value, words) {
     var h = text(value).toLowerCase();
@@ -230,10 +249,11 @@
   function evaluateRecord(record, query, now) {
     var words = query.words;
     var phrase = query.phrase;
+    var metadata = metadataText(record);
     var titleBest = bestFieldScore(record.title, words);
     var titleHits = countFieldHits(record.title, words);
     var pathBest = bestFieldScore(record.breadcrumb, words);
-    var metaBest = bestFieldScore(metadataText(record), words);
+    var metaBest = bestFieldScore(metadata, words);
     var bodyHits = record.locked ? 0 : Math.min(countFieldHits(record.body, words), MAX_BODY_WORDS);
     var phraseInTitle = !!phrase && record.title.toLowerCase().indexOf(phrase) >= 0;
     var phraseInBody = !record.locked && !!phrase && record.body.toLowerCase().indexOf(phrase) >= 0;
@@ -263,12 +283,9 @@
     var qualified = titleMatched || bodyMatched || (record.type !== 'page' && metaMatched);
     if (!qualified) return null;
 
-    var allWords = words.every(function (word) {
-      return countFieldHits(record.title, [word]) > 0
-        || countFieldHits(record.breadcrumb, [word]) > 0
-        || countFieldHits(metadataText(record), [word]) > 0
-        || (!record.locked && countFieldHits(record.body, [word]) > 0);
-    });
+    var coveredWords = countCoveredWords(record, words, metadata);
+    if (words.length > 1 && coveredWords < requiredWordCoverage(words.length)) return null;
+    var allWords = coveredWords === words.length;
 
     var score = titleBest
       + (titleHits > 1 ? (titleHits - 1) * 40 : 0)

@@ -261,3 +261,15 @@ final result: passed
 - Confirmed source mode restores the editor without changing the durable HTML document model or sandbox policy.
 
 final result: passed
+
+## Global Search readability and relevance recheck — 2026-08-25
+
+- Source visual truth: `C:/Users/TANUJD~1.000/AppData/Local/Temp/codex-clipboard-0c4de5d9-68bf-43a4-ac35-ea5a3cba4ab6.png` (804 × 815 px).
+- Implementation evidence: `design-qa-global-search-fixed.png` and the combined side-by-side `design-qa-global-search-comparison.png`, captured at 804 × 815 CSS pixels, device scale 1, Dark theme, Create view, query `ap gov summer work`.
+- State and interactions: Minimal card mode was forced as the worst-case customization; Global Search opened with the populated query; Homework and All filters were toggled; no page or console errors occurred.
+- Full-view evidence: the reported implementation exposed editor text through the search card and returned 48 broad matches. The fixed card resolves to opaque `rgb(14, 20, 33)` with no backdrop filter or document overflow; only the exact four-word result and a useful three-of-four-word result remain.
+- Focused evidence: the 720-pixel card is legible in the equal-size comparison, so no separate crop was required. `AP Gov summer work` ranks first; `AP Lit summer work` remains; `AP Networking Exam` and the standalone `AP Gov` course are absent.
+- Typography, spacing, tokens, assets, and copy: existing Sutra typography, 720-pixel layout, padding, radii, theme accents, Font Awesome icons, labels, dates, and keyboard hints are unchanged. The reduced card height is intentional because invalid partial matches were removed. No custom imagery or replacement assets were introduced.
+- Comparison history: `[P1]` translucent card bleed-through was fixed with a modal-scoped solid theme surface; `[P1]` one-token noise in long queries was fixed with two-of-two coverage for two-word queries and 65% coverage for longer queries. Post-fix visual and browser evidence leaves no actionable P0/P1/P2 finding.
+
+final result: passed

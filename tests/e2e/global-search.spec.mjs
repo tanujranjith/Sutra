@@ -66,7 +66,10 @@ async function applyWorkspace(page, { includeQuokka = false } = {}) {
     }
     const tasks = [
       { id: 'gs-task-1', title: 'Biology flashcards', notes: 'Make cards for unit 1', dueDate: '2026-05-21', completed: false, priority: 'high', createdAt: iso, updatedAt: iso },
-      { id: 'gs-task-2', title: 'Water the plants', notes: '', dueDate: '', completed: false, priority: 'low', createdAt: iso, updatedAt: iso }
+      { id: 'gs-task-2', title: 'Water the plants', notes: '', dueDate: '', completed: false, priority: 'low', createdAt: iso, updatedAt: iso },
+      { id: 'gs-task-ap-gov', title: 'AP Gov summer work', notes: '', dueDate: '2026-08-31', completed: false, priority: 'medium', createdAt: iso, updatedAt: iso },
+      { id: 'gs-task-ap-lit', title: 'AP Lit summer work', notes: '', dueDate: '2026-08-31', completed: false, priority: 'medium', createdAt: iso, updatedAt: iso },
+      { id: 'gs-task-ap-networking', title: 'AP Networking Exam', notes: '', dueDate: '2026-05-05', completed: false, priority: 'low', createdAt: iso, updatedAt: iso }
     ];
     const timeBlocks = [
       { id: 'gs-block-1', name: 'Biology notes study session', date: '2026-05-21', start: '16:00', end: '17:00', category: 'study', createdAt: 1, updatedAt: 1 }
@@ -80,7 +83,10 @@ async function applyWorkspace(page, { includeQuokka = false } = {}) {
       timeBlocks,
       courseWorkspace: {
         schemaVersion: 1,
-        courses: [{ id: 'c-bio', name: 'Biology 101', createdAt: iso, updatedAt: iso }],
+        courses: [
+          { id: 'c-bio', name: 'Biology 101', createdAt: iso, updatedAt: iso },
+          { id: 'c-ap-gov', name: 'AP Gov', createdAt: iso, updatedAt: iso }
+        ],
         files: [{ id: 'gs-file-1', courseId: 'c-bio', name: 'Biology Notes Summary.pdf', originalName: 'Biology Notes Summary.pdf', kind: 'pdf', mimeType: 'application/pdf', sizeBytes: 1468006, storageType: 'indexeddb', blobKey: '', description: 'Overview of key concepts from biology notes.', createdAt: iso, updatedAt: iso }],
         resourceLinks: [],
         relationships: [],
@@ -155,6 +161,37 @@ test('one query returns results across pages, homework, tasks, timeline, and att
 
   const marks = await page.evaluate(() => Array.from(document.querySelectorAll('#globalSearchResults mark')).map(n => n.textContent.toLowerCase()));
   expect(marks.some(text => text.includes('biolog'))).toBeTruthy();
+});
+
+test('specific multi-word queries suppress partial-token noise', async ({ page }) => {
+  await seedWorkspace(page);
+  await searchFor(page, 'ap gov summer work');
+
+  const titles = await page.locator('#globalSearchResults .global-search-item-title').allTextContents();
+  expect(titles).toContain('AP Gov summer work');
+  expect(titles).toContain('AP Lit summer work');
+  expect(titles).not.toContain('AP Networking Exam');
+  expect(titles).not.toContain('AP Gov');
+  expect(titles[0]).toBe('AP Gov summer work');
+});
+
+test('search card remains solid over page content in Minimal card mode', async ({ page }) => {
+  await seedWorkspace(page);
+  await page.evaluate(() => document.body.setAttribute('data-card-style', 'minimal'));
+  await searchFor(page, 'biology');
+
+  const surface = await page.locator('.global-search-card').evaluate((card) => {
+    const style = getComputedStyle(card);
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      backdropFilter: style.backdropFilter || style.webkitBackdropFilter || 'none'
+    };
+  });
+  expect(surface.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  expect(surface.backgroundColor).not.toBe('transparent');
+  expect(surface.backgroundImage).toBe('none');
+  expect(surface.backdropFilter).toBe('none');
 });
 
 test('locked pages appear by title only and never leak contents', async ({ page }) => {

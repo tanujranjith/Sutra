@@ -33,8 +33,11 @@ A page that matches both title and body appears once, typed as *Page*; the
 
 - Case-insensitive, partial-word, and in-order subsequence matching
   (`apbio` finds *AP Biology*). Title matches outrank breadcrumb, metadata,
-  and deep body matches; multiple matching words improve ranking; due-soon
-  homework/tasks rank above far-out work and completed work ranks lower.
+  and deep body matches. Multi-word queries require meaningful token coverage
+  (both words for two-word searches and at least 65% for longer searches), so
+  a specific query does not fill the list with records matching one common
+  word. Complete phrase matches still rank first; due-soon homework/tasks rank
+  above far-out work and completed work ranks lower.
 - Metadata alone qualifies non-page records: homework/tasks match by due date
   and priority, timeline by date/time/category, and attachments by kind, MIME
   type, and size. Pages still qualify only through title/location (Pages) or

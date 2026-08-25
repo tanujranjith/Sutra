@@ -46,6 +46,16 @@
   border-radius: var(--radius);
   animation: global-search-in 140ms ease;
 }
+/* Search results must stay readable over editors and dense dashboards. This
+   modal is intentionally solid even when the user's general card style is
+   Glass or Minimal; the backdrop still provides the layered modal treatment. */
+#globalSearchPanel .global-search-card {
+  background: var(--bg-primary, #fff);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border: 1px solid var(--surface-border-strong, var(--glass-border));
+  box-shadow: var(--shadow-soft-lg, 0 24px 52px rgba(0, 0, 0, 0.28));
+}
 @keyframes global-search-in {
   from { opacity: 0; transform: translateY(-8px) scale(0.985); }
   to { opacity: 1; transform: none; }
