@@ -3937,10 +3937,12 @@ function populateProgressDashboard() {
                     quietMode: false
                 },
                 startup: {
-                    // Default ON for new workspaces (Section 19). Returning users'
-                    // explicit choice is preserved by normalizeWorkspacePreferences
-                    // (a persisted `false` stays false) and by the localStorage bridge.
-                    playSound: true
+                    // Calm-by-default (single source of truth): fresh workspaces
+                    // start silent. A returning user's explicit choice always
+                    // wins — normalizeWorkspacePreferences preserves a persisted
+                    // `true` or `false`, and the localStorage bridge carries the
+                    // value to startup-intro.js across loads.
+                    playSound: false
                 },
                 data: {
                     defaultExportFormat: 'atelier',
@@ -4205,10 +4207,11 @@ function populateProgressDashboard() {
                     quietMode: accessibilitySource.quietMode === true
                 },
                 startup: {
-                    // `!== false` keeps returning users who explicitly turned the chime
-                    // OFF (persisted `false`) silent, while a fresh workspace (no stored
-                    // startup pref) defaults ON. Section 19.
-                    playSound: startupSource.playSound !== false
+                    // `=== true` makes the canonical default (silent) apply to a
+                    // fresh workspace with no stored startup pref, while an
+                    // explicit persisted `true`/`false` — the user's own choice
+                    // from Settings — is always preserved.
+                    playSound: startupSource.playSound === true
                 },
                 data: {
                     defaultExportFormat: normalizeSettingChoice(dataSource.defaultExportFormat, ['json', 'atelier', 'docx', 'pdf', 'html', 'md', 'txt', 'rtf', 'doc'], defaults.data.defaultExportFormat),

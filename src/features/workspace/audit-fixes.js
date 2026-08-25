@@ -193,23 +193,10 @@
         if (today) new MutationObserver(refreshUndatedTaskCue).observe(today, { childList: true, subtree: true });
         installOnboardingExit();
         refreshUndatedTaskCue();
-        function applyStartupSoundDefault() {
-            var sound = document.querySelector('[data-pref-path="startup.playSound"]');
-            var hadExplicitStartupSound = document.documentElement.getAttribute('data-sutra-startup-sound-explicit') === '1';
-            if (sound && !hadExplicitStartupSound) {
-                sound.checked = false;
-                sound.dispatchEvent(new Event('change', { bubbles: true }));
-                var save = document.getElementById('settingsApplyBtn') || document.getElementById('settingsApplyBtnTop');
-                if (save) save.click();
-                if (window.SutraSafeStorage && typeof window.SutraSafeStorage.set === 'function') {
-                    window.SutraSafeStorage.set('sutra_startup_sound', '0', { importance: 'optional', label: 'startup sound preference' });
-                }
-            }
-        }
-        applyStartupSoundDefault();
-        // The legacy settings hydrator can finish after this bridge on a fresh
-        // workspace; repeat briefly so its default cannot turn opt-in sound back on.
-        [100, 500, 1200].forEach(function (delay) { window.setTimeout(applyStartupSoundDefault, delay); });
+        // NOTE: the startup-sound default repair that previously ran here (and
+        // re-ran itself at 100/500/1200ms) is retired. The canonical default in
+        // getDefaultWorkspacePreferences()/normalizeWorkspacePreferences() is
+        // now silent-by-default, so no post-load repair passes are needed.
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);

@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "d301c17d63c8ae0b"
+    "stamp": "20260825-oxremed2",
+    "hash": "f35c4bd55a14698d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -268,8 +268,8 @@
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "fd67377074ba20ae"
+    "stamp": "20260825-oxremed2",
+    "hash": "ba3d9bcc87cd1c56"
   },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260712-bc1",
@@ -370,10 +370,6 @@
   "src/features/workspace/starter-packs.data.js": {
     "stamp": "20260619-packs1",
     "hash": "4f806de479b221c8"
-  },
-  "src/features/workspace/startup-default-bridge.js": {
-    "stamp": "20260809-audit3",
-    "hash": "25eacf60dcd98947"
   },
   "src/features/workspace/surface-assistant-actions.js": {
     "stamp": "20260807-surfaces2",
