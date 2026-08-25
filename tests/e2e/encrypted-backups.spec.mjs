@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 const PASS = 'correct horse battery staple';
 
@@ -150,6 +151,28 @@ async function acceptRestoreConflictChooser(page) {
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
 }
 
+// Manual restores now offer an ENCRYPTED pre-restore safety snapshot through
+// the standard backup-passphrase dialog. Complete it so the import proceeds;
+// the resulting .sutra download is captured by Playwright's temp storage.
+async function completeSafetySnapshotDialog(page, pass = PASS) {
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await modal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', pass);
+  await page.fill('#sutraBackupPassphraseConfirmInput', pass);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  // PBKDF2 (600k iterations) runs before the dialog closes.
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
+}
+
+// Decline path: cancelling the snapshot passphrase must cancel the whole
+// import â€” the workspace stays exactly as it was.
+async function declineSafetySnapshotDialog(page) {
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await modal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.locator('#sutraBackupPasswordCancelBtn').click();
+  await expect(modal).not.toHaveClass(/active/);
+}
+
 test('new .sutra export is an authenticated encrypted envelope with no plaintext workspace data', async ({ page }) => {
   await openApp(page);
   await seedRichWorkspace(page, 'EXPORT');
@@ -219,6 +242,7 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   await page.locator('#sutraImportPasswordSubmitBtn').click();
   await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
   await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel Note IMPORT');
 
   await page.reload();
@@ -331,14 +355,17 @@ test('legacy unencrypted .sutra, legacy .atelier, and JSON workspace imports sti
 
   await page.setInputFiles('#fileInput', { name: 'legacy.sutra', mimeType: '', buffer: Buffer.from(fixtures.sutra) });
   await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Legacy Plain Sutra');
 
   await page.setInputFiles('#fileInput', { name: 'legacy.atelier', mimeType: 'application/octet-stream', buffer: Buffer.from(fixtures.atelier) });
   await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Legacy Atelier');
 
   await page.setInputFiles('#fileInput', { name: 'workspace.json', mimeType: 'application/json', buffer: Buffer.from(fixtures.json) });
   await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('JSON Restore');
 });
 
@@ -402,4 +429,35 @@ test('export passphrase modal blocks on mismatch and too-short, then exports a v
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^sutra_workspace_.*\.sutra$/);
   await expect(page.locator('#sutraBackupPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+});
+
+test('pre-restore safety snapshot is encrypted and never a plaintext JSON side effect', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await seedRichWorkspace(page, 'SNAP');
+  const { buffer, payload } = await createEncryptedBytes(page, 'SNAPTARGET');
+  await page.setInputFiles('#fileInput', { name: 'SNAPTARGET.SUTRA', mimeType: 'application/octet-stream', buffer });
+  await expect(page.locator('#sutraImportPasswordModal')).toHaveClass(/active/);
+  await page.fill('#sutraImportPassphraseInput', PASS);
+  await page.locator('#sutraImportPasswordSubmitBtn').click();
+  await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+  await acceptRestoreConflictChooser(page);
+
+  // The safety-snapshot passphrase dialog appears; capture the download it
+  // produces and prove it is an encrypted .sutra envelope containing none of
+  // the current workspace's plaintext.
+  const downloadPromise = page.waitForEvent('download');
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await modal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', PASS);
+  await page.fill('#sutraBackupPassphraseConfirmInput', PASS);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^sutra_pre_import_snapshot_.*\.sutra$/);
+  const bytes = readFileSync(await download.path());
+  expect(bytes.subarray(0, 8).toString('latin1')).toBe('SUTRAENC');
+  expect(bytes.toString('latin1')).not.toContain('Sentinel Note SNAP');
+
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
+  await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel Note SNAPTARGET');
 });
