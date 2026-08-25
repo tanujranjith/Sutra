@@ -96,3 +96,37 @@ test('immediate (non-deferred) wipe on enumeration-less browsers ends at complet
   assert.equal(result.status, 'complete-unverified');
   assert.equal(session.length, 0);
 });
+
+test('finalize refuses incomplete, malformed, and missing guards without clearing the session', () => {
+  for (const status of ['cleaning', 'cleanup-error', 'locked', 'future-state']) {
+    const local = memoryStorage();
+    const session = memoryStorage({ token: 'preserve-me' });
+    wipeApi.writeGuard(local, status);
+    assert.throws(
+      () => wipeApi.finalize({ localStorage: local, sessionStorage: session }),
+      /Cannot finalize revocation cleanup/
+    );
+    assert.equal(session.getItem('token'), 'preserve-me');
+    assert.equal(wipeApi.readGuard(local).status, status);
+  }
+
+  const local = memoryStorage();
+  const session = memoryStorage({ token: 'preserve-me' });
+  assert.throws(
+    () => wipeApi.finalize({ localStorage: local, sessionStorage: session }),
+    /state: missing/
+  );
+  assert.equal(session.getItem('token'), 'preserve-me');
+});
+
+test('finalize is idempotent for follower tabs after a terminal shared guard', () => {
+  for (const status of ['complete', 'complete-unverified']) {
+    const local = memoryStorage();
+    const session = memoryStorage({ token: 'remove-after-leader-ack' });
+    wipeApi.writeGuard(local, status, status === 'complete-unverified' ? 'unverified' : '');
+    const result = wipeApi.finalize({ localStorage: local, sessionStorage: session });
+    assert.equal(result.status, status);
+    assert.equal(session.length, 0);
+    assert.equal(wipeApi.readGuard(local).status, status);
+  }
+});

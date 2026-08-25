@@ -127,14 +127,25 @@
     var config = options || {};
     var local = config.localStorage || global.localStorage;
     var session = config.sessionStorage || global.sessionStorage;
+    var current = readGuard(local);
+    var currentStatus = current && current.status;
+    // Server acknowledgement may only terminalize a locally completed wipe.
+    // Accept terminal states idempotently for follower tabs that observe the
+    // leader's shared localStorage guard after its acknowledgement. Every
+    // other or future state remains fail-closed and keeps the auth session so
+    // the verified cleanup can be retried.
+    if (currentStatus !== 'local-verified' && currentStatus !== 'local-unverified'
+      && currentStatus !== 'complete' && currentStatus !== 'complete-unverified') {
+      throw new Error('Cannot finalize revocation cleanup from state: ' + String(currentStatus || 'missing'));
+    }
     session.clear(); // sutra-allow-storage: server acknowledgement completed; remove auth/provider session material
     verifyStorageEmpty(session, []);
     verifyStorageEmpty(local, [GUARD_KEY]);
     // Preserve the honesty of the underlying cleanup: if this browser could
     // not enumerate databases, the acknowledged terminal state must keep
     // saying so instead of upgrading to an unqualified "complete".
-    var current = readGuard(local);
-    var status = current && current.status === 'local-unverified' ? 'complete-unverified' : 'complete';
+    if (currentStatus === 'complete' || currentStatus === 'complete-unverified') return current;
+    var status = currentStatus === 'local-unverified' ? 'complete-unverified' : 'complete';
     return writeGuard(local, status);
   }
 
