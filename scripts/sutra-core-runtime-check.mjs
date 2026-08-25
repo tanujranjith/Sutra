@@ -11,10 +11,16 @@ if (process.argv.includes('--bless')) {
   const blessPath = explicitPath
     ? resolve(repoRoot, explicitPath.slice('--app='.length))
     : resolve(repoRoot, 'src/core/app.js');
-  const budget = blessCoreRuntimeBudget({ appPath: blessPath });
+  const reasonArg = process.argv.find((arg) => arg.startsWith('--reason='));
+  const budget = blessCoreRuntimeBudget({
+    appPath: blessPath,
+    repoRoot,
+    reason: reasonArg ? reasonArg.slice('--reason='.length) : '',
+    allowGrowth: process.argv.includes('--allow-growth')
+  });
   const outPath = resolve(repoRoot, CORE_RUNTIME_BUDGET_PATH);
   writeFileSync(outPath, `${JSON.stringify(budget, null, 2)}\n`, 'utf8');
-  console.log(`Core runtime budget blessed: ${budget.maxBytes} bytes / ${budget.maxLines} lines -> ${CORE_RUNTIME_BUDGET_PATH}`);
+  console.log(`Core runtime budget reviewed: ${budget.maxBytes} bytes / ${budget.maxLines} lines -> ${CORE_RUNTIME_BUDGET_PATH}`);
   process.exit(0);
 }
 

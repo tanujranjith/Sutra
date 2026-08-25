@@ -47,6 +47,58 @@ const REQUIRED_ORDER = [
   'window.SutraSync = {'
 ];
 
+// Required runtime contracts must be executable source, not prose that happens
+// to contain the expected spelling. Keep strings intact (several contracts
+// intentionally include literal values), but blank comments before checking
+// fragments and ordering. The VM parser above remains the authority for lexical
+// validity; this scanner only prevents comment-padding from spoofing a contract.
+function withoutComments(source) {
+  let output = '';
+  let state = 'code';
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (state === 'line-comment') {
+      if (char === '\n' || char === '\r') {
+        output += char;
+        state = 'code';
+      } else output += ' ';
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (char === '*' && next === '/') {
+        output += '  ';
+        index += 1;
+        state = 'code';
+      } else output += char === '\n' || char === '\r' ? char : ' ';
+      continue;
+    }
+    if (state === 'single' || state === 'double' || state === 'template') {
+      output += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if ((state === 'single' && char === "'") || (state === 'double' && char === '"') || (state === 'template' && char === '`')) state = 'code';
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      output += '  ';
+      index += 1;
+      state = 'line-comment';
+    } else if (char === '/' && next === '*') {
+      output += '  ';
+      index += 1;
+      state = 'block-comment';
+    } else {
+      output += char;
+      if (char === "'") state = 'single';
+      else if (char === '"') state = 'double';
+      else if (char === '`') state = 'template';
+    }
+  }
+  return output;
+}
+
 function readBudget(options = {}) {
   const repoRoot = options.repoRoot || process.cwd();
   const budgetPath = resolve(repoRoot, options.budgetPath || CORE_RUNTIME_BUDGET_PATH);
@@ -98,6 +150,7 @@ export function checkCoreRuntimeSource(source, options = {}) {
   const failures = [];
   const passes = [];
   const text = String(source || '');
+  const contractSource = withoutComments(text);
   const bytes = Number.isFinite(options.bytes) ? options.bytes : Buffer.byteLength(text, 'utf8');
   const lines = text.split(/\r?\n/).length;
   if (options.readLabel) passes.push(options.readLabel);
@@ -135,13 +188,13 @@ export function checkCoreRuntimeSource(source, options = {}) {
   }
 
   for (const [label, fragment] of REQUIRED_FRAGMENTS) {
-    if (text.includes(fragment)) passes.push(label);
+    if (contractSource.includes(fragment)) passes.push(label);
     else failures.push(`${label} is missing: ${fragment}`);
   }
 
   let previousIndex = -1;
   for (const fragment of REQUIRED_ORDER) {
-    const index = text.indexOf(fragment);
+    const index = contractSource.indexOf(fragment);
     if (index === -1) continue;
     if (index <= previousIndex) {
       failures.push(`critical runtime section is out of order: ${fragment}`);
@@ -160,10 +213,18 @@ export function blessCoreRuntimeBudget(options = {}) {
   const appPath = resolve(options.appPath || 'src/core/app.js');
   const bytes = statSync(appPath).size;
   const lines = readFileSync(appPath, 'utf8').split(/\r?\n/).length;
+  const reason = String(options.reason || '').trim();
+  if (!reason) throw new Error('budget review requires --reason="concise engineering rationale"');
+  const current = readBudget(options);
+  const grows = current.ok && (bytes > current.maxBytes || lines > current.maxLines);
+  if (grows && options.allowGrowth !== true) {
+    throw new Error('runtime budget growth requires both --reason and --allow-growth');
+  }
   return {
     schema: 1,
     note: 'Blessed maximum size of src/core/app.js. Growth requires an explicit re-bless (npm run core:budget); decomposition should lower this file.',
     blessedAt: new Date().toISOString(),
+    reviewedReason: reason,
     maxBytes: bytes,
     maxLines: lines
   };

@@ -56,6 +56,14 @@ try {
     (text) => text.replace('window.SutraSync = {', 'window.SutraSyncRemoved = {'),
     /Sync public bridge is missing/
   );
+  expectRejected(
+    'comment-cannot-spoof-contract',
+    (text) => text.replace(
+      'function serializeWorkspace(',
+      '// function serializeWorkspace(\n        function serializeWorkspaceRemoved('
+    ),
+    /workspace serializer is missing/
+  );
 
   // Budget ratchet: growth past the blessed budget must fail even when the
   // source stays syntactically valid and every fragment remains present.
