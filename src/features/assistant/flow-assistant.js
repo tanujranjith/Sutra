@@ -168,6 +168,41 @@
         return (typeof window !== 'undefined' && window.flowAtelier) ? window.flowAtelier : null;
     }
 
+    let assistantPrivacyBoundaryFailureReported = false;
+    function filterAssistantContext(context, options) {
+        const privacy = window.SutraAssistantPrivacy;
+        if (privacy && typeof privacy.filterContext === 'function') {
+            return privacy.filterContext(context, options);
+        }
+        // The privacy policy is a required outbound boundary. A load-order or
+        // initialization failure must reduce context to non-workspace envelope
+        // metadata instead of silently sending the unfiltered workspace.
+        if (!assistantPrivacyBoundaryFailureReported) {
+            assistantPrivacyBoundaryFailureReported = true;
+            try {
+                if (typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(
+                        new Error('Assistant privacy boundary is unavailable.'),
+                        { where: 'flow-assistant.filterAssistantContext' },
+                        'error'
+                    );
+                }
+            } catch (error) { /* context remains fail-closed */ }
+        }
+        const source = context && typeof context === 'object' ? context : {};
+        const safe = {};
+        ['schema', 'view', 'depth', 'now', 'timeOfDay'].forEach(key => {
+            if (Object.prototype.hasOwnProperty.call(source, key)) safe[key] = source[key];
+        });
+        safe.accessReport = {
+            mode: 'off',
+            areasRead: [],
+            recordsRead: [],
+            excludedSensitiveAreas: ['privacy_boundary_unavailable']
+        };
+        return safe;
+    }
+
     function getActiveViewName() {
         try {
             const b = bridge();
@@ -731,9 +766,7 @@
                 ctx.summary = `User is on the ${view} view in Sutra.`;
             }
             if (selection) ctx.selection = truncate(selection, 1200);
-            return window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.filterContext === 'function'
-                ? window.SutraAssistantPrivacy.filterContext(ctx, options)
-                : ctx;
+            return filterAssistantContext(ctx, options);
         }
 
         // Derived "student intelligence" — the model sees risk signals computed
@@ -838,20 +871,14 @@
                 // or settings) — give the model the full workspace picture
                 // instead of leaving it with only derived risk signals.
                 const workspaceContext = applyWorkspaceContext(ctx);
-                return window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.filterContext === 'function'
-                    ? window.SutraAssistantPrivacy.filterContext(workspaceContext, options)
-                    : workspaceContext;
+                return filterAssistantContext(workspaceContext, options);
             }
-            return window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.filterContext === 'function'
-                ? window.SutraAssistantPrivacy.filterContext(ctx, options)
-                : ctx;
+            return filterAssistantContext(ctx, options);
         }
 
         // depth === 'workspace': full picture (bounded)
         const workspaceContext = applyWorkspaceContext(ctx);
-        return window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.filterContext === 'function'
-            ? window.SutraAssistantPrivacy.filterContext(workspaceContext, options)
-            : workspaceContext;
+        return filterAssistantContext(workspaceContext, options);
     }
 
     // --------------------------------------------------------------

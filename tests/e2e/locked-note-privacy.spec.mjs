@@ -131,3 +131,28 @@ test('locked note plaintext stays behind the shared authorization boundary', asy
   expect(report.slidesContext).toBeNull();
   expect(report.slidesCurrentPage).toBeNull();
 });
+
+test('Assistant context fails closed when the privacy boundary is unavailable', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const original = window.SutraAssistantPrivacy;
+    window.SutraDiagnostics?.clear?.();
+    window.SutraAssistantPrivacy = undefined;
+    let context;
+    try {
+      context = window.getFlowAssistantContext({ depth: 'workspace' });
+    } finally {
+      window.SutraAssistantPrivacy = original;
+    }
+    return {
+      keys: Object.keys(context).sort(),
+      report: context.accessReport,
+      diagnosed: window.SutraDiagnostics?.getEntries?.().some(entry =>
+        entry.context?.where === 'flow-assistant.filterAssistantContext')
+    };
+  });
+  expect(report.keys).toEqual(['accessReport', 'depth', 'now', 'schema', 'timeOfDay', 'view']);
+  expect(report.report.areasRead).toEqual([]);
+  expect(report.report.excludedSensitiveAreas).toContain('privacy_boundary_unavailable');
+  expect(report.diagnosed).toBe(true);
+});

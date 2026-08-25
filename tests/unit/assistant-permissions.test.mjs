@@ -86,3 +86,50 @@ test('nested privateDocuments inside an approved area value are still removed', 
   });
   assert.equal(result.courses.privateDocuments, undefined);
 });
+
+test('approved private documents survive at every nesting depth', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: true }) });
+  const result = privacy.filterContext({
+    courses: { nested: { privateDocuments: [{ id: 'allowed', content: 'approved' }] } }
+  });
+  assert.equal(result.courses.nested.privateDocuments[0].content, 'approved');
+});
+
+test('unknown top-level context is denied instead of inheriting workspace access', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    schema: 'flow-context/1',
+    unexpectedProviderPayload: { id: 'secret', content: 'must not leave the browser' }
+  });
+  assert.equal(result.unexpectedProviderPayload, undefined);
+  assert.ok(!JSON.stringify(result).includes('must not leave the browser'));
+});
+
+test('sensitive concepts and locked records are stripped recursively', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    courses: {
+      nested: {
+        wellness: { mood: 1 },
+        privateDocuments: [{ content: 'medical' }],
+        note: { id: 'locked-1', title: 'Locked', isLocked: true, content: 'private note' }
+      }
+    }
+  });
+  assert.equal(result.courses.nested.wellness, undefined);
+  assert.equal(result.courses.nested.privateDocuments, undefined);
+  assert.deepEqual(result.courses.nested.note, { id: 'locked-1', title: 'Locked', isLocked: true });
+});
+
+test('summary and custom-tab content obey workspace area policy', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'ask_per_area', areas: { workspace: 'ask' } }) });
+  const denied = privacy.filterContext({ summary: 'Private dashboard text', customTab: { widgets: ['secret'] } });
+  assert.equal(denied.summary, undefined);
+  assert.equal(denied.customTab, undefined);
+  const approved = privacy.filterContext(
+    { summary: 'Approved dashboard text', customTab: { widgets: ['allowed'] } },
+    { approvedAreas: ['workspace'] }
+  );
+  assert.equal(approved.summary, 'Approved dashboard text');
+  assert.equal(approved.customTab.widgets[0], 'allowed');
+});

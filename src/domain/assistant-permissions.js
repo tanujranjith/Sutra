@@ -5,12 +5,18 @@
   var MODES = ['off', 'read_only', 'ask_per_area', 'approved_actions'];
   var adapter = null;
   var KEY_AREAS = {
-    activeNote: 'notes', selection: 'notes', canvas: 'notes', staleNotes: 'notes',
+    activeNote: 'notes', selection: 'notes', canvas: 'notes', slides: 'notes', staleNotes: 'notes',
     tasks: 'planning', homework: 'planning', timelineUpcoming: 'planning', timelineToday: 'planning', timeline: 'planning', deadlines: 'planning', allDue: 'planning', derived: 'planning',
     review: 'learning', apStudy: 'learning', cram: 'learning', testingHub: 'learning',
-    college: 'college', courses: 'courses', life: 'life', business: 'business', assistantMemory: 'memory'
+    college: 'college', applicationCosts: 'college', costs: 'college', financialAid: 'college', financialAidDeadlines: 'college', scholarships: 'college', tuition: 'college',
+    courses: 'courses', life: 'life', wellness: 'life', wellnessTrends: 'life', sleep: 'life', mood: 'life', stress: 'life',
+    business: 'business', runway: 'business', spending: 'business', income: 'business',
+    assistantMemory: 'memory', privateDocuments: 'workspace', summary: 'workspace', customTab: 'workspace'
   };
-  var ALWAYS = new Set(['schema', 'view', 'depth', 'now', 'timeOfDay', 'summary', 'customTab']);
+  // Only non-workspace envelope metadata bypasses area permission checks.
+  // Human-written summaries and custom-tab content can contain workspace data
+  // and therefore must never ride this unconditional path.
+  var ALWAYS = new Set(['schema', 'view', 'depth', 'now', 'timeOfDay']);
   // Outbound deny-by-default boundary (audit remediation): these concepts are
   // removed from the FILTERED OUTPUT unless their explicit permission flag is
   // approved — even when a caller supplies them as TOP-LEVEL context fields
@@ -19,10 +25,14 @@
   var PRIVATE_TOP_LEVEL_KEYS = ['privateDocuments'];
   var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress'];
   var FINANCIAL_TOP_LEVEL_FIELDS = ['applicationCosts', 'costs', 'financialAid', 'financialAidDeadlines', 'scholarships', 'runway', 'spending', 'income', 'tuition'];
-  function deniedTopLevelKey(key, permissions) {
-    if (!permissions.allowPrivateDocuments && PRIVATE_TOP_LEVEL_KEYS.indexOf(key) >= 0) return true;
-    if (!permissions.allowWellness && WELLNESS_TOP_LEVEL_FIELDS.indexOf(key) >= 0) return true;
-    if (!permissions.allowFinancial && FINANCIAL_TOP_LEVEL_FIELDS.indexOf(key) >= 0) return true;
+  var PRIVATE_KEYS = new Set(PRIVATE_TOP_LEVEL_KEYS.map(function (key) { return key.toLowerCase(); }));
+  var WELLNESS_KEYS = new Set(WELLNESS_TOP_LEVEL_FIELDS.map(function (key) { return key.toLowerCase(); }));
+  var FINANCIAL_KEYS = new Set(FINANCIAL_TOP_LEVEL_FIELDS.map(function (key) { return key.toLowerCase(); }));
+  function deniedSensitiveKey(key, permissions) {
+    var normalizedKey = String(key || '').toLowerCase();
+    if (!permissions.allowPrivateDocuments && PRIVATE_KEYS.has(normalizedKey)) return true;
+    if (!permissions.allowWellness && WELLNESS_KEYS.has(normalizedKey)) return true;
+    if (!permissions.allowFinancial && FINANCIAL_KEYS.has(normalizedKey)) return true;
     return false;
   }
 
@@ -72,18 +82,21 @@
     return value.id != null ? [String(value.id)] : [];
   }
   function stripSensitive(key, value, permissions) {
+    if (deniedSensitiveKey(key, permissions)) return undefined;
     if (!value || typeof value !== 'object') return value;
-    var out = clone(value);
-    if (key === 'activeNote' && out.locked && !permissions.allowLockedNotes) {
-      Object.keys(out).forEach(function (field) { if (!['id', 'title', 'locked', 'type'].includes(field)) delete out[field]; });
+    if (Array.isArray(value)) {
+      return value.map(function (entry) { return stripSensitive('', entry, permissions); })
+        .filter(function (entry) { return entry !== undefined; });
     }
-    if (key === 'life' && !permissions.allowWellness) {
-      delete out.wellness; delete out.wellnessTrends; delete out.sleep; delete out.mood; delete out.stress;
-    }
-    if (key === 'college' && !permissions.allowFinancial) {
-      ['applicationCosts', 'costs', 'financialAid', 'financialAidDeadlines', 'scholarships', 'runway', 'spending', 'income', 'tuition'].forEach(function (field) { delete out[field]; });
-    }
-    delete out.privateDocuments;
+    var locked = value.locked === true || value.isLocked === true;
+    var allowedLockedFields = new Set(['id', 'title', 'locked', 'isLocked', 'type']);
+    var out = {};
+    Object.keys(value).forEach(function (field) {
+      if (locked && !permissions.allowLockedNotes && !allowedLockedFields.has(field)) return;
+      if (deniedSensitiveKey(field, permissions)) return;
+      var sanitized = stripSensitive(field, value[field], permissions);
+      if (sanitized !== undefined) out[field] = sanitized;
+    });
     return out;
   }
   function filterContext(context, options) {
@@ -93,8 +106,9 @@
       // The policy boundary enforces its own privacy guarantees: a denied
       // sensitive field never reaches the outbound payload regardless of how
       // the caller structured its context.
-      if (deniedTopLevelKey(key, permissions)) return;
-      var area = KEY_AREAS[key] || 'workspace';
+      if (!Object.prototype.hasOwnProperty.call(KEY_AREAS, key)) return;
+      if (deniedSensitiveKey(key, permissions)) return;
+      var area = KEY_AREAS[key];
       if (!canRead(area, options)) return;
       var value = stripSensitive(key, source[key], permissions);
       out[key] = value;
