@@ -62,6 +62,30 @@ test('memory server rejects malformed envelopes wholesale', async () => {
   assert.equal(server.state.ops.length, 0);
 });
 
+test('pruning retains the device sequence replay barrier', async () => {
+  const key = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const server = transportApi.createMemoryServer();
+  const covered = await makeEnvelope(key, 'dev-a:1', 1);
+
+  assert.equal(server.push({ ops: [covered], cursor: 0, deviceId: 'dev-a' }).ok, true);
+  assert.equal(server.touchDevice({ deviceId: 'dev-a', cursor: 1 }).ok, true);
+  assert.equal(server.putSnapshot({
+    snapshot: { v: 1, meta: { type: 'snapshot', cursor: 1 } },
+    cursor: 1,
+    deviceId: 'dev-a'
+  }).ok, true);
+  assert.equal(server.pruneOps({ deviceId: 'dev-a' }).pruned, 1);
+  assert.equal(server.state.ops.length, 0);
+
+  const replay = server.push({ ops: [covered], cursor: 1, deviceId: 'dev-a' });
+  assert.deepEqual(replay, { ok: false, code: 'device-sequence-collision' });
+  assert.equal(server.state.ops.length, 0, 'a covered operation must not be resurrected after pruning');
+
+  const fresh = await makeEnvelope(key, 'dev-a:2', 2);
+  assert.equal(server.push({ ops: [fresh], cursor: 1, deviceId: 'dev-a' }).ok, true);
+  assert.equal(server.state.ops.length, 1);
+});
+
 test('vault key, snapshot, and asset storage round-trip on the server', async () => {
   const server = transportApi.createMemoryServer();
   assert.equal(server.getVaultKey().wrapped, null);

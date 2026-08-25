@@ -204,7 +204,11 @@ remains separate, so reorder-versus-edit and move-versus-edit preserve both.
 ```
 
 Push is idempotent: the server dedupes on `opId` (unique constraint) and a
-duplicate push acknowledges without appending.
+duplicate push acknowledges without appending. Pruning may remove the covered
+operation row, so the device registry also retains the greatest accepted
+Lamport for each device. A sequence at or below that durable high-water cannot
+be accepted as fresh after pruning; this preserves replay protection without
+retaining the operation ciphertext forever.
 
 ### 4.1 Versioning policy
 

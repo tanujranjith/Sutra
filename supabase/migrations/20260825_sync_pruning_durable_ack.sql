@@ -12,6 +12,21 @@
 
 begin;
 
+alter table public.sync_devices
+  add column if not exists last_pushed_sequence bigint not null default -1;
+
+-- This backfill must run before pruning is enabled. Once covered operation
+-- rows are deleted, their per-device sequence cannot be reconstructed.
+update public.sync_devices d
+   set last_pushed_sequence = greatest(
+     d.last_pushed_sequence,
+     coalesce((
+       select max(o.device_seq)
+         from public.sync_ops o
+        where o.user_id = d.user_id and o.device_id = d.device_id
+     ), -1)
+   );
+
 create or replace function public.sync_touch_device("deviceId" text, label text default null, cursor bigint default null)
 returns jsonb
 language plpgsql
@@ -94,6 +109,8 @@ declare
   v_schema integer;
   v_acked_max bigint;
   v_existing jsonb;
+  v_device_sequence_floor bigint;
+  v_fresh_sequence_max bigint := 0;
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
@@ -109,6 +126,10 @@ begin
     ) into v_head
     from public.sync_ops o
    where o.user_id = auth.uid();
+  select d.last_pushed_sequence into v_device_sequence_floor
+    from public.sync_devices d
+   where d.user_id = auth.uid() and d.device_id = "deviceId"
+   for update;
 
   for v_env in select * from jsonb_array_elements(coalesce(ops, '[]'::jsonb)) loop
     v_op_id := v_env #>> '{meta,opId}';
@@ -136,7 +157,11 @@ begin
     if found then
       if v_existing <> v_env then return jsonb_build_object('ok', false, 'code', 'op-id-collision'); end if;
     else
+      if v_seq <= coalesce(v_device_sequence_floor, -1) then
+        return jsonb_build_object('ok', false, 'code', 'device-sequence-collision');
+      end if;
       v_fresh := array_append(v_fresh, v_env);
+      v_fresh_sequence_max := greatest(v_fresh_sequence_max, v_seq);
     end if;
   end loop;
 
@@ -174,7 +199,9 @@ begin
   end loop;
 
   select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
-  update public.sync_devices set last_seen_at = now()
+  update public.sync_devices
+     set last_seen_at = now(),
+         last_pushed_sequence = greatest(last_pushed_sequence, v_fresh_sequence_max)
     where user_id = auth.uid() and device_id = "deviceId";
   return jsonb_build_object('ok', true, 'cursor', v_head);
 exception

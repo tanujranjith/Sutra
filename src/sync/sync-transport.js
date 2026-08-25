@@ -77,6 +77,7 @@
       vaultKey: null,     // wrapped blob
       snapshot: null,     // { envelope, cursor }
       assets: {},         // hash -> asset envelope
+      pushedSequences: {}, // deviceId -> greatest accepted Lamport, retained across pruning
       devices: {},        // deviceId -> { deviceId, label, lastSeenCursor, revokedAt, wipeRequired, wipeAcknowledgedAt }
       userId: String(config.userId || 'memory-user')
     };
@@ -134,8 +135,18 @@
         var errors = protocolApi.validateEnvelope(envelope);
         if (errors.length) return { ok: false, code: 'invalid-envelope', detail: errors.join('; ') };
         if (Object.prototype.hasOwnProperty.call(state.seenOpIds, envelope.meta.opId)) {
+          var existingSeq = state.seenOpIds[envelope.meta.opId];
+          var existingOp = state.ops.find(function (entry) { return entry.seq === existingSeq; });
+          if (!existingOp || protocolApi.stableStringify(existingOp.envelope) !== protocolApi.stableStringify(envelope)) {
+            return { ok: false, code: 'op-id-collision' };
+          }
           stats.dedupedOps += 1;
           continue;
+        }
+        var hasDeviceFloor = Object.prototype.hasOwnProperty.call(state.pushedSequences, envelope.meta.deviceId);
+        var deviceFloor = hasDeviceFloor ? Number(state.pushedSequences[envelope.meta.deviceId]) : -1;
+        if (Number(envelope.meta.lamport) <= deviceFloor) {
+          return { ok: false, code: 'device-sequence-collision' };
         }
         fresh.push(envelope);
       }
@@ -159,6 +170,10 @@
         state.head += 1;
         state.ops.push({ seq: state.head, envelope: clone(fresh[f]) });
         state.seenOpIds[fresh[f].meta.opId] = state.head;
+        state.pushedSequences[fresh[f].meta.deviceId] = Math.max(
+          Number(state.pushedSequences[fresh[f].meta.deviceId]) || 0,
+          Number(fresh[f].meta.lamport) || 0
+        );
       }
       return { ok: true, cursor: state.head };
     }
@@ -272,6 +287,7 @@
       state.vaultKey = null;
       state.snapshot = null;
       state.assets = {};
+      state.pushedSequences = {};
       state.devices = {};
       return { ok: true };
     }

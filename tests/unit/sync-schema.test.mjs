@@ -131,6 +131,8 @@ test('sensitive sync rows are written only from auth.uid and browser payloads co
 
 test('operation and vault-key contracts enforce idempotency and split-brain safety', () => {
   assert.match(sql, /sync_ops_user_device_seq/i);
+  assert.match(sql, /last_pushed_sequence\s+bigint\s+not null default -1/i);
+  assert.match(sql, /v_seq <= coalesce\(v_device_sequence_floor, -1\)/i);
   assert.match(sql, /op-id-collision/i);
   assert.match(sql, /device-sequence-collision/i);
   assert.match(sql, /expectedWrapped/i);
@@ -213,6 +215,11 @@ test('op-log retention prunes only below the snapshot-and-devices floor', () => 
   assert.match(pruningMigration, /create or replace function public\.sync_pull\(/);
   assert.match(pruningMigration, /create or replace function public\.sync_push\(/);
   assert.match(pruningMigration, /create or replace function public\.sync_prune_ops\(/);
+  assert.match(pruningMigration, /add column if not exists last_pushed_sequence bigint not null default -1/);
+  assert.match(pruningMigration, /select max\(o\.device_seq\)[\s\S]*?where o\.user_id = d\.user_id and o\.device_id = d\.device_id/,
+    'the migration must preserve the replay high-water before pruning can delete operation rows');
+  assert.match(pruningMigration, /v_seq <= coalesce\(v_device_sequence_floor, -1\)/,
+    'a pruned operation sequence must never be accepted as fresh');
   assert.match(pruningMigration, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/);
   assert.ok((pruningMigration.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2);
   assert.match(pruningMigration, /\bcommit;\s*$/i);
