@@ -4781,7 +4781,7 @@
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
         lastUserPrompt = String(userText || '');
-        const ctx = getFlowAssistantContext({});
+        let ctx = getFlowAssistantContext({ approvedAreas: options.approvedAreas });
         // Product-aware context: attach a SMALL set of relevant saved memories
         // and verified product-knowledge snippets so the model stays accurate
         // and personalized without a giant static prompt. Never dump everything.
@@ -4894,6 +4894,19 @@
             ctx.contextBudget = { usedTokens: contextBudget.usedTokens, availableTokens: contextBudget.availableTokens, reduced: contextBudget.reduced, compressedCount: contextBudget.compressedCount || 0, omittedSourceCount: contextBudget.omitted.length, canNarrow: contextBudget.canNarrow };
         }
         const hasAttempt = /\b(?:my attempt|my answer|my work|i (?:got|tried|wrote|calculated)|here(?:'s| is) my)\b/i.test(String(userText || ''));
+        // Enrichment happens after the initial view-context build. Re-run the
+        // same privacy boundary immediately before prompt construction so
+        // memories, retrieved notes, or future enriched workspace fields cannot
+        // bypass ask-per-area or deny-by-default filtering. Product knowledge
+        // and budget diagnostics are Sutra-owned metadata, not workspace data.
+        const trustedEnrichment = {
+            productKnowledge: ctx.productKnowledge,
+            contextBudget: ctx.contextBudget
+        };
+        ctx = filterAssistantContext(ctx, { approvedAreas: options.approvedAreas });
+        Object.keys(trustedEnrichment).forEach(key => {
+            if (trustedEnrichment[key] !== undefined) ctx[key] = trustedEnrichment[key];
+        });
         if (safety && typeof safety.academicIntegrity === 'function') {
             ctx.academicIntegrity = safety.academicIntegrity({ text: userText, hasAttempt });
         }

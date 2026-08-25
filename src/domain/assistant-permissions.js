@@ -11,7 +11,9 @@
     college: 'college', applicationCosts: 'college', costs: 'college', financialAid: 'college', financialAidDeadlines: 'college', scholarships: 'college', tuition: 'college',
     courses: 'courses', life: 'life', wellness: 'life', wellnessTrends: 'life', sleep: 'life', mood: 'life', stress: 'life',
     business: 'business', runway: 'business', spending: 'business', income: 'business',
-    assistantMemory: 'memory', privateDocuments: 'workspace', summary: 'workspace', customTab: 'workspace'
+    assistantMemory: 'memory', memory: 'memory', memoryUsedIds: 'memory',
+    retrievedNotes: 'notes', notesEvidenceStatus: 'notes', course: 'courses',
+    privateDocuments: 'workspace', summary: 'workspace', customTab: 'workspace'
   };
   // Only non-workspace envelope metadata bypasses area permission checks.
   // Human-written summaries and custom-tab content can contain workspace data

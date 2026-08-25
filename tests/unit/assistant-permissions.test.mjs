@@ -133,3 +133,24 @@ test('summary and custom-tab content obey workspace area policy', () => {
   assert.equal(approved.summary, 'Approved dashboard text');
   assert.equal(approved.customTab.widgets[0], 'allowed');
 });
+
+test('memory and retrieved-note enrichment remain permission-scoped', () => {
+  privacy.configure({ getPermissions: () => ({
+    mode: 'ask_per_area',
+    areas: { memory: 'ask', notes: 'ask' }
+  }) });
+  const context = {
+    memory: ['private study preference'],
+    memoryUsedIds: ['memory-1'],
+    retrievedNotes: [{ id: 'note-1', title: 'Private note', quote: 'private excerpt' }],
+    notesEvidenceStatus: 'complete'
+  };
+  const denied = privacy.filterContext(context);
+  assert.equal(denied.memory, undefined);
+  assert.equal(denied.retrievedNotes, undefined);
+
+  const approved = privacy.filterContext(context, { approvedAreas: ['memory', 'notes'] });
+  assert.deepEqual(approved.memory, ['private study preference']);
+  assert.deepEqual(approved.memoryUsedIds, ['memory-1']);
+  assert.equal(approved.retrievedNotes[0].quote, 'private excerpt');
+});

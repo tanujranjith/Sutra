@@ -162,6 +162,41 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.diagnosed).toBe(true);
 });
 
+test('Assistant prompt enrichment rechecks memory permission at the final context boundary', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const secret = 'MEMORY_MUST_REQUIRE_AREA_APPROVAL';
+    const priorPermissions = window.SutraAssistantPrivacy.getPermissions();
+    const originalMemory = window.SutraAssistantMemory;
+    window.SutraAssistantMemory = {
+      buildPromptSnippets: () => [{ id: 'memory-private-1', text: secret }],
+      recordUsed: () => {}
+    };
+    window.SutraAssistantPrivacy.configure({
+      getPermissions: () => ({ mode: 'ask_per_area', areas: { memory: 'ask', notes: 'denied' } })
+    });
+    try {
+      const denied = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', {});
+      const approved = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', { approvedAreas: ['memory'] });
+      return {
+        deniedPromptLeaks: denied.systemPrompt.includes(secret),
+        deniedContextLeaks: JSON.stringify(denied.context).includes(secret),
+        deniedMemoryIdLeaks: JSON.stringify(denied.context).includes('memory-private-1'),
+        approvedPromptIncludes: approved.systemPrompt.includes(secret),
+        approvedMemoryIds: approved.context.memoryUsedIds || []
+      };
+    } finally {
+      window.SutraAssistantMemory = originalMemory;
+      window.SutraAssistantPrivacy.configure({ getPermissions: () => priorPermissions });
+    }
+  });
+  expect(report.deniedPromptLeaks).toBe(false);
+  expect(report.deniedContextLeaks).toBe(false);
+  expect(report.deniedMemoryIdLeaks).toBe(false);
+  expect(report.approvedPromptIncludes).toBe(true);
+  expect(report.approvedMemoryIds).toEqual(['memory-private-1']);
+});
+
 test('Assistant bridge failure is reported and mutating actions fail closed', async ({ page }) => {
   await openApp(page);
   const report = await page.evaluate(() => {
