@@ -43,3 +43,46 @@ test('action permissions require approved-actions mode and explicit approval', (
   privacy.configure({ getPermissions: () => ({ mode: 'approved_actions' }) });
   assert.deepEqual(privacy.getActionPermissions({ approved: true, destructiveApproved: true }), ['workspace.read', 'workspace.write', 'workspace.delete']);
 });
+
+test('top-level privateDocuments are denied by default even when workspace is readable', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: false }) });
+  const result = privacy.filterContext({
+    tasks: [{ id: 'task-1' }],
+    privateDocuments: [{ id: 'doc-1', title: 'Diagnosis letter', content: 'highly sensitive' }]
+  });
+  // The outbound boundary itself must remove the field; it cannot rely on
+  // context builders choosing not to populate it.
+  assert.equal(result.privateDocuments, undefined);
+  assert.ok(!JSON.stringify(result).includes('Diagnosis letter'));
+  assert.ok(result.accessReport.excludedSensitiveAreas.includes('private_documents'));
+});
+
+test('explicit allowPrivateDocuments approval admits top-level private documents', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: true }) });
+  const result = privacy.filterContext({
+    privateDocuments: [{ id: 'doc-1', title: 'Allowed letter' }]
+  });
+  assert.equal(result.privateDocuments.length, 1);
+});
+
+test('wellness and financial concepts are denied as top-level fields by default too', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowWellness: false, allowFinancial: false }) });
+  const result = privacy.filterContext({
+    wellness: { mood: 3 },
+    sleep: [{ id: 's1' }],
+    financialAid: [{ id: 'f1' }],
+    spending: { id: 'sp-1' }
+  });
+  assert.equal(result.wellness, undefined);
+  assert.equal(result.sleep, undefined);
+  assert.equal(result.financialAid, undefined);
+  assert.equal(result.spending, undefined);
+});
+
+test('nested privateDocuments inside an approved area value are still removed', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: false }) });
+  const result = privacy.filterContext({
+    courses: { id: 'course-1', name: 'Biology', privateDocuments: [{ id: 'hidden' }] }
+  });
+  assert.equal(result.courses.privateDocuments, undefined);
+});

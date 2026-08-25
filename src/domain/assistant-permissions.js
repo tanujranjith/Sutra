@@ -11,6 +11,20 @@
     college: 'college', courses: 'courses', life: 'life', business: 'business', assistantMemory: 'memory'
   };
   var ALWAYS = new Set(['schema', 'view', 'depth', 'now', 'timeOfDay', 'summary', 'customTab']);
+  // Outbound deny-by-default boundary (audit remediation): these concepts are
+  // removed from the FILTERED OUTPUT unless their explicit permission flag is
+  // approved — even when a caller supplies them as TOP-LEVEL context fields
+  // rather than nested inside their owning area object. stripSensitive()
+  // additionally removes nested occurrences inside area values.
+  var PRIVATE_TOP_LEVEL_KEYS = ['privateDocuments'];
+  var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress'];
+  var FINANCIAL_TOP_LEVEL_FIELDS = ['applicationCosts', 'costs', 'financialAid', 'financialAidDeadlines', 'scholarships', 'runway', 'spending', 'income', 'tuition'];
+  function deniedTopLevelKey(key, permissions) {
+    if (!permissions.allowPrivateDocuments && PRIVATE_TOP_LEVEL_KEYS.indexOf(key) >= 0) return true;
+    if (!permissions.allowWellness && WELLNESS_TOP_LEVEL_FIELDS.indexOf(key) >= 0) return true;
+    if (!permissions.allowFinancial && FINANCIAL_TOP_LEVEL_FIELDS.indexOf(key) >= 0) return true;
+    return false;
+  }
 
   function clone(value) {
     if (typeof structuredClone === 'function') return structuredClone(value);
@@ -76,6 +90,10 @@
     var source = context && typeof context === 'object' ? context : {}, permissions = getPermissions(), out = {}, areasRead = [], recordsRead = [];
     Object.keys(source).forEach(function (key) {
       if (ALWAYS.has(key)) { out[key] = clone(source[key]); return; }
+      // The policy boundary enforces its own privacy guarantees: a denied
+      // sensitive field never reaches the outbound payload regardless of how
+      // the caller structured its context.
+      if (deniedTopLevelKey(key, permissions)) return;
       var area = KEY_AREAS[key] || 'workspace';
       if (!canRead(area, options)) return;
       var value = stripSensitive(key, source[key], permissions);
