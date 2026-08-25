@@ -211,7 +211,7 @@
     "./src/core/issue-prompt.js?v=20260617-issue1",
     "./src/core/migrations.js?v=20260813-pdf2",
     "./src/core/recovery-mode.js?v=20260710-recovery1",
-    "./src/core/safe-storage.js?v=20260825-oxremed1",
+    "./src/core/safe-storage.js?v=20260825-sol1-2",
     "./src/core/startup-health.js?v=20260620-health1",
     "./src/core/student-date-parser.js?v=20260709-studentdate1",
     "./src/core/time-utils.js?v=20260712-timeu1",

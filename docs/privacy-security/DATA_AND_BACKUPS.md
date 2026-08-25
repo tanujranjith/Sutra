@@ -81,7 +81,7 @@ fixtures by `npm run check:migrations`.
 - A curated allow-list of standalone **localStorage preferences** is embedded in
   exports (focus-timer state, streak settings, AI provider/model **choices**, the
   Assistant Activity log, and a couple of feature flags).
-- **Secrets** (AI provider API keys) use **`sessionStorage` by default** and are never exported. If the user explicitly enables “Remember API keys on this device,” Sutra stores them as AES-GCM encrypted records in `sutra_credentials_db`; the vault is device-local and excluded from exports and Sync. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
+- **Secrets** (AI provider API keys) use **`sessionStorage` by default** and are never exported. If the user explicitly enables “Remember API keys on this device,” Sutra stores them as AES-GCM encrypted records in `sutra_credentials_db`; the vault is device-local and excluded from exports and Sync. This protects against casual database inspection and export leakage, but it is not a passphrase vault: code already executing in Sutra's origin, or anyone able to use that browser profile, can ask Sutra to use remembered credentials. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
 
 ---
 

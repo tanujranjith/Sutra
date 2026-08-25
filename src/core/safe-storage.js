@@ -69,6 +69,8 @@
         return 'This browser blocked saving ' + label + ' (private mode or site data is disabled).';
       case 'serialize':
         return label + ' could not be prepared for saving.';
+      case 'parse':
+        return 'The stored ' + label + ' could not be read because it is damaged.';
       case 'unavailable':
         return 'Browser storage is unavailable, so ' + label + ' could not be saved.';
       default:
@@ -251,7 +253,7 @@
       try { return JSON.parse(raw); } catch (error) {
         if (opts.expectJson === true) {
           if (opts.importance === 'important' || opts.importance === 'critical') {
-            warn(key, 'serialize', opts.importance, opts.label || key);
+            warn(key, 'parse', opts.importance, opts.label || key);
           }
           return opts.fallback;
         }

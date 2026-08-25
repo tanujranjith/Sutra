@@ -26,7 +26,7 @@ function loadSafeStorage({ available = true } = {}) {
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve('src/core/safe-storage.js'), 'utf8');
-  vm.runInNewContext(source, { window: windowStub, console });
+  vm.runInNewContext(source, { window: windowStub, document: { body: null }, console });
   const api = windowStub.SutraSafeStorage;
   return { api, store, warnings };
 }
@@ -53,6 +53,18 @@ test("get({ expectJson: true }) treats unparseable content as corruption and ret
   // Structured values still parse normally under the strict option.
   api.set('ok', { a: 1 });
   assert.equal(JSON.stringify(api.get('ok', { fallback: null, expectJson: true })), JSON.stringify({ a: 1 }));
+});
+
+test('strict parse corruption is classified as a read failure, not a write serialization failure', () => {
+  const { api } = loadSafeStorage();
+  api.set('corrupt', '{broken json');
+  assert.equal(api.get('corrupt', {
+    fallback: null,
+    expectJson: true,
+    importance: 'important',
+    label: 'homework mirror'
+  }), null);
+  assert.equal(api.getDegraded().corrupt.classification, 'parse');
 });
 
 test("get({ parseJson: false }) keeps returning raw strings for legacy callers", () => {
