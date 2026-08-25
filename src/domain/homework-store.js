@@ -233,13 +233,23 @@
           reason: text(meta && meta.reason, 160) || 'update',
           at: state.updatedAt
         };
+        var attemptedMutationId = state.lastMutation.id;
+        var attemptedRevision = state.revision;
         try {
           if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
           if (adapter && typeof adapter.persist === 'function') {
             await Promise.resolve(adapter.persist(state.lastMutation.reason));
           }
         } catch (error) {
-          state = previous;
+          // Roll back only while this durable mutation is still the newest
+          // optimistic state. A scheduled UI mutation may have landed while
+          // the save was awaiting IndexedDB. Restoring `previous` in that case
+          // would erase the later accepted change; its queued canonical flush
+          // can still persist the combined state and persistence health already
+          // exposes the failed attempt.
+          var stillCurrent = state.revision === attemptedRevision
+            && state.lastMutation && state.lastMutation.id === attemptedMutationId;
+          if (stillCurrent) state = previous;
           try { if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot()); } catch (_) {}
           throw error;
         }

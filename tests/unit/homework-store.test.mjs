@@ -182,6 +182,37 @@ test('async persistence failure rolls back before the next queued mutation', asy
   assert.deepEqual(persisted.tasks.map((task) => task.id), ['kept']);
 });
 
+test('a failed durable save never rolls back a newer scheduled mutation', async () => {
+  const store = canonical.createStore({ courses: [{ id: 'c', name: 'Calculus' }], tasks: [] });
+  let persisted = store.getSnapshot();
+  let rejectDurable;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: (reason) => {
+      if (reason === 'durable-first') return new Promise((resolve, reject) => { rejectDurable = reject; });
+      return Promise.resolve();
+    }
+  });
+
+  const failed = store.transactDurably((workspace) => {
+    workspace.tasks.push({ id: 'first', title: 'Durable first', courseId: 'c' });
+  }, { reason: 'durable-first' });
+  await Promise.resolve();
+  assert.equal(typeof rejectDurable, 'function');
+
+  store.transact((workspace) => {
+    workspace.tasks.push({ id: 'later', title: 'Later UI change', courseId: 'c' });
+  }, { reason: 'scheduled-later' });
+  rejectDurable(new Error('first save failed'));
+  await assert.rejects(failed, /first save failed/);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(store.getSnapshot().tasks.map((task) => task.id), ['first', 'later']);
+  assert.deepEqual(persisted.tasks.map((task) => task.id), ['first', 'later']);
+});
+
 test('scheduled persistence observes adapter rejections without rolling back accepted mutations', async () => {
   const store = canonical.createStore({ courses: [], tasks: [] });
   let persisted = store.getSnapshot();
