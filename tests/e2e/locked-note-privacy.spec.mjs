@@ -18,6 +18,11 @@ async function openApp(page) {
     }
   });
   await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.SutraCanvas && !!window.SutraSlides);
+  await page.waitForFunction(() =>
+    typeof window.getFlowAssistantContext === 'function'
+    && window.sutraAssistant
+    && typeof window.sutraAssistant.applyAction === 'function'
+  );
 }
 
 test('locked note plaintext stays behind the shared authorization boundary', async ({ page }) => {

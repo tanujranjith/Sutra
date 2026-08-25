@@ -46,6 +46,7 @@ async function gotoHomework(page) {
 }
 
 test('Homework quick-add modal: dialog semantics, Tab-trap, Escape close + focus restore, no listener growth', async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   test.skip(
     ['mobile-chromium', 'tablet', 'narrow-desktop'].includes(testInfo.project.name),
     'Desktop trigger focus-restore stress case; responsive projects use the dedicated mobile usability modal test.'

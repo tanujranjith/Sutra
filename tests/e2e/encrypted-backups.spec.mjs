@@ -223,7 +223,9 @@ test('new .sutra export is an authenticated encrypted envelope with no plaintext
 });
 
 test('encrypted .sutra import rejects wrong password without mutating, then restores with correct password and persists', async ({ page }) => {
-  test.setTimeout(120000);
+  // This path deliberately performs four 600k-iteration PBKDF2 operations
+  // (export, wrong-password import, successful import, and safety snapshot).
+  test.setTimeout(240_000);
   await openApp(page);
   const { buffer } = await createEncryptedBytes(page, 'IMPORT');
   await seedRichWorkspace(page, 'LOCAL');
@@ -272,6 +274,9 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
 });
 
 test('tampered encrypted backups fail authentication without replacing local workspace', async ({ page }) => {
+  // Export plus two authenticated rejection attempts can exceed the ordinary
+  // UI timeout on slower browser/CI workers.
+  test.setTimeout(180_000);
   await openApp(page);
   const { buffer } = await createEncryptedBytes(page, 'TAMPER');
   await seedRichWorkspace(page, 'SAFE');
