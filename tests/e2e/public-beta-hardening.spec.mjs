@@ -138,6 +138,7 @@ test('corrupt .sutra import is refused without replacing workspace', async ({ pa
 });
 
 test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data', async ({ page }) => {
+  test.setTimeout(120_000);
   await openApp(page);
   const setup = await page.evaluate(async () => {
     const now = new Date().toISOString();
@@ -190,6 +191,12 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
   });
   expect(setup.restored).toBe(true);
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  const snapshotModal = page.locator('#sutraBackupPasswordModal');
+  await snapshotModal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', BACKUP_PASSWORD);
+  await page.fill('#sutraBackupPassphraseConfirmInput', BACKUP_PASSWORD);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(snapshotModal).not.toHaveClass(/active/, { timeout: 60_000 });
   const legacy = await page.evaluate(async (legacyTitle) => {
     await window.__legacyImportPromise;
     delete window.__legacyImportPromise;

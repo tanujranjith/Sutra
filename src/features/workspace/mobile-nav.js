@@ -522,7 +522,12 @@
       } else if (!nowOpen && wasOpen && restoreFocus) {
         var focusTarget = sidebarReturnFocus || toggle;
         window.requestAnimationFrame(function () {
-          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+          if (!(focusTarget && document.contains(focusTarget))) {
+            focusTarget = navEl && navEl.querySelector('[data-bn-view="__more"]');
+          }
+          if (focusTarget && typeof focusTarget.focus === 'function' && document.contains(focusTarget)) {
+            focusTarget.focus();
+          }
         });
       }
       if (!nowOpen) {

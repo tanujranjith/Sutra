@@ -39,9 +39,9 @@ test('calendar renderer provides Month, Week, and Day grids without replacing Ti
   const consoleErrors = [];
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
 
-  await expect(page.locator('.sutra-calendar-week .sutra-calendar-time-column')).toHaveCount(7);
-  await expect(page.locator('.sutra-calendar-week .sutra-calendar-time-gutter')).toHaveCount(2);
-  const overlap = page.locator('.sutra-calendar-week [data-block-id="cal-a"], .sutra-calendar-week [data-block-id="cal-b"]');
+  await expect(page.locator('.sutra-calendar-time-week .sutra-calendar-time-column')).toHaveCount(7);
+  await expect(page.locator('.sutra-calendar-time-week .sutra-calendar-time-gutter')).toHaveCount(2);
+  const overlap = page.locator('.sutra-calendar-time-week [data-block-id="cal-a"], .sutra-calendar-time-week [data-block-id="cal-b"]');
   await expect(overlap).toHaveCount(2);
   const positions = await overlap.evaluateAll(nodes => nodes.map(node => ({ left: node.getBoundingClientRect().left, width: node.getBoundingClientRect().width })));
   expect(positions[0].left).not.toBe(positions[1].left);
@@ -56,9 +56,9 @@ test('calendar renderer provides Month, Week, and Day grids without replacing Ti
   await expect(page.locator('.sutra-calendar-month')).not.toContainText('No events');
 
   await page.locator('[data-timeline-view-mode="day"]').click();
-  await expect(page.locator('.sutra-calendar-day .sutra-calendar-time-column')).toHaveCount(1);
-  await expect(page.locator('.sutra-calendar-day [data-block-id="cal-a"]')).toBeVisible();
-  await expect(page.locator('.sutra-calendar-day [data-block-id="cal-b"]')).toBeVisible();
+  await expect(page.locator('.sutra-calendar-time-day .sutra-calendar-time-column')).toHaveCount(1);
+  await expect(page.locator('.sutra-calendar-time-day [data-block-id="cal-a"]')).toBeVisible();
+  await expect(page.locator('.sutra-calendar-time-day [data-block-id="cal-b"]')).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
 
@@ -91,7 +91,7 @@ test('phone Month uses count indicators and opens the focused Day view without p
   expect(indicator).toContain('6');
 
   await todayCell.locator('.sutra-calendar-day-number').click();
-  await expect(page.locator('.sutra-calendar-day.sutra-calendar-time-view')).toBeVisible();
+  await expect(page.locator('.sutra-calendar-time-day.sutra-calendar-time-view')).toBeVisible();
   const overflow = await page.evaluate(() => ({
     document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     body: document.body.scrollWidth - document.body.clientWidth
