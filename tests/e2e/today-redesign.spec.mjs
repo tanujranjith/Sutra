@@ -141,7 +141,8 @@ test('pure helpers: urgency, grouping, prioritization, summary, agenda', async (
   expect(result.radarUndatedIds).toEqual(['undated']);
 });
 
-test('radar renders live data, filters, overflow, and opens the right source', async ({ page }) => {
+test('radar renders live data, filters, overflow, and opens the right source', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The phone Home shell uses its dedicated Next Up and agenda contract instead of the desktop radar.');
   await openApp(page);
 
   await page.evaluate(() => {
@@ -302,7 +303,8 @@ test('Deadline Radar can mark tasks, Homework, and Timeline items done', async (
   }), ids)).toEqual({ task: true, homework: true, block: true });
 });
 
-test('Next Up card, footer counts, and empty states use live data', async ({ page }) => {
+test('Next Up card, footer counts, and empty states use live data', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'The phone Home shell has separate live Next Up assertions below.');
   await openApp(page);
 
   // Empty workspace → clear empty states, zero counts, empty radar.

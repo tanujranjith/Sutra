@@ -65,7 +65,7 @@ test('Release notes open locally from the notification center without network fe
   await expect(page.locator('#whatsNewBtn')).toHaveCount(0);
 
   // Open the notification center and click the release notification.
-  await page.locator('#notifBellBtn').click();
+  await page.locator('#notifBellBtn:visible, [data-mobile-action="notifications"]:visible').first().click();
   await expect(page.locator('#notifPanel')).toBeVisible();
   await page.locator('#notifPanel').getByText(/release notes/i).first().click();
 
