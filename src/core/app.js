@@ -61837,6 +61837,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 getWorkspaceSnapshots: () => getWorkspaceSnapshots(),
                 diffWorkspaceSnapshot: (id) => diffWorkspaceSnapshot(id),
                 deleteWorkspaceSnapshot: (id) => deleteWorkspaceSnapshot(id),
+                restoreWorkspaceSnapshot: (id) => restoreWorkspaceSnapshot(id),
                 recordFocusSession: (rec) => recordFocusSession(rec),
                 getFocusSessions: () => (Array.isArray(focusSessions) ? focusSessions.slice() : []),
                 getFocusStatsBySubject: (days) => getFocusStatsBySubject(days),
@@ -64166,9 +64167,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         async function restoreWorkspaceSnapshot(id) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === id);
-            if (!snap || !snap.payload) return;
-            if (typeof confirm === 'function' && !confirm('Restore this snapshot? Your current workspace will be replaced. A "Before restore" snapshot is saved first.')) return;
-            createWorkspaceSnapshot('Before restore');
+            if (!snap || !snap.payload) return false;
+            if (typeof confirm === 'function' && !confirm('Restore this snapshot? Your current workspace will be replaced. A "Before restore" snapshot is saved first.')) return false;
+            if (!createWorkspaceSnapshot('Before restore')) {
+                showToast('Restore canceled — Sutra could not save the “Before restore” safety snapshot. Free up storage or export a .sutra backup, then try again.', { durationMs: 7000 });
+                return false;
+            }
             try {
                 importWorkspacePayload(snap.payload);
                 // Await durable attachment writes BEFORE the reload below — a reload
@@ -64184,7 +64188,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     showToast('Workspace restored. Reloading…');
                 }
                 setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, attachmentResult.ok ? 700 : 1600);
-            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); }
+                return true;
+            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); return false; }
         }
         function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === snapId);

@@ -60,3 +60,58 @@ test('snapshots are capped (oldest dropped)', async ({ page }) => {
   });
   expect(count).toBeLessThanOrEqual(3);
 });
+
+test('restore refuses to replace the workspace when its safety checkpoint fails, then succeeds on retry', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const H = window.__sutraPublicBetaTestHooks;
+    const pageB = H.createNoteInActiveSpace('Historical workspace B', '<p>historical B</p>');
+    const snapshotB = H.createWorkspaceSnapshot('Historical B');
+    H.renamePage(pageB.id, 'Current workspace A');
+
+    const safeStorage = window.SutraSafeStorage;
+    const originalSet = safeStorage.set;
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    safeStorage.set = (key, value, options) => {
+      if (key === 'sutra:workspaceSnapshots:v1') return { ok: false, error: new Error('forced checkpoint failure') };
+      return originalSet.call(safeStorage, key, value, options);
+    };
+
+    let refused;
+    try {
+      refused = await H.restoreWorkspaceSnapshot(snapshotB.id);
+    } finally {
+      safeStorage.set = originalSet;
+    }
+
+    const afterRefusal = H.getPagesForSpace(H.getActiveSpaceId()).find(item => item.id === pageB.id);
+    const toastText = Array.from(document.querySelectorAll('.toast, #toast, [role="status"]'))
+      .map(node => node.textContent || '')
+      .join(' ');
+    const restored = await H.restoreWorkspaceSnapshot(snapshotB.id);
+    window.confirm = originalConfirm;
+    const afterRetry = H.getPagesForSpace(H.getActiveSpaceId()).find(item => item.id === pageB.id);
+    const beforeRestore = H.getWorkspaceSnapshots().find(item => item && item.label === 'Before restore');
+    const checkpointPage = beforeRestore && beforeRestore.payload && Array.isArray(beforeRestore.payload.pages)
+      ? beforeRestore.payload.pages.find(item => item && item.id === pageB.id)
+      : null;
+
+    return {
+      refused,
+      titleAfterRefusal: afterRefusal && afterRefusal.title,
+      toastText,
+      restored,
+      titleAfterRetry: afterRetry && afterRetry.title,
+      checkpointTitle: checkpointPage && checkpointPage.title
+    };
+  });
+
+  expect(result.refused).toBe(false);
+  expect(result.titleAfterRefusal).toBe('Current workspace A');
+  expect(result.toastText).toContain('Restore canceled');
+  expect(result.toastText).toContain('safety snapshot');
+  expect(result.restored).toBe(true);
+  expect(result.titleAfterRetry).toBe('Historical workspace B');
+  expect(result.checkpointTitle).toBe('Current workspace A');
+});
