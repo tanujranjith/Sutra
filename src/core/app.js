@@ -61004,12 +61004,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function readFileAsArrayBuffer(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = evt => resolve(evt.target.result);
-                reader.onerror = () => reject(new Error('Unable to read file as binary'));
-                reader.readAsArrayBuffer(file);
-            });
+            if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+            return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read file as binary')); reader.readAsArrayBuffer(file); });
         }
 
         // Conservative limits for UNTRUSTED file import. Generous enough for real

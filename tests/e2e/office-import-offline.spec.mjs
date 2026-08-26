@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 async function openApp(page) {
   await page.goto('/Sutra.html');
@@ -6,7 +8,11 @@ async function openApp(page) {
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('office-offline-ready'));
 }
 
-test('a fresh installed app can import DOCX and XLSX after going offline', async ({ page, context }) => {
+test('a fresh installed app can import DOCX and XLSX after going offline', async ({ page, context }, testInfo) => {
+  const unexpectedParserRequests = [];
+  page.on('request', (request) => {
+    if (/\b(?:unpkg|cdnjs|jsdelivr)\b/i.test(request.url())) unexpectedParserRequests.push(request.url());
+  });
   await openApp(page);
   const cacheState = await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -25,32 +31,68 @@ test('a fresh installed app can import DOCX and XLSX after going offline', async
     const book = engine.createWorkbook('Offline sheet');
     engine.setCell(book.sheets[0], 0, 0, { value: 'Offline XLSX evidence' });
     const xlsxBlob = await window.SutraOfficeInterop.exportXlsx(book);
-    window.__sutraOfflineOfficeFiles = {
-      docx: new File([docxBlob], 'offline-evidence.docx', { type: docxBlob.type }),
-      xlsx: new File([xlsxBlob], 'offline-evidence.xlsx', { type: xlsxBlob.type })
+    return {
+      docxCached: !!docx,
+      xlsxCached: !!xlsx,
+      docxBytes: Array.from(new Uint8Array(await docxBlob.arrayBuffer())),
+      xlsxBytes: Array.from(new Uint8Array(await xlsxBlob.arrayBuffer()))
     };
-    return { docx: !!docx, xlsx: !!xlsx };
   });
-  expect(cacheState).toEqual({ docx: true, xlsx: true });
+  expect({ docx: cacheState.docxCached, xlsx: cacheState.xlsxCached }).toEqual({ docx: true, xlsx: true });
 
-  await context.setOffline(true);
+  const docxPath = testInfo.outputPath('offline-evidence.docx');
+  const xlsxPath = testInfo.outputPath('offline-evidence.xlsx');
+  const malformedPath = testInfo.outputPath('malformed.docx');
+  await mkdir(dirname(docxPath), { recursive: true });
+  await writeFile(docxPath, Buffer.from(cacheState.docxBytes));
+  await writeFile(xlsxPath, Buffer.from(cacheState.xlsxBytes));
+  await writeFile(malformedPath, Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+
+  // Playwright WebKit's setOffline(true) also disables local Blob/File I/O.
+  // Abort network requests instead so this exercises a real offline import:
+  // OS-backed files remain readable and parser scripts must come from the SW cache.
+  await context.route('**/*', (route) => route.abort());
   try {
+    await page.evaluate(() => {
+      const input = document.createElement('input');
+      input.id = 'officeOfflineFiles';
+      input.type = 'file';
+      input.multiple = true;
+      document.body.appendChild(input);
+    });
+    await page.locator('#officeOfflineFiles').setInputFiles([docxPath, xlsxPath, malformedPath]);
     const result = await page.evaluate(async () => {
-      const docxOk = await window.importWorkspaceFile(window.__sutraOfflineOfficeFiles.docx);
-      const xlsxOk = await window.importWorkspaceFile(window.__sutraOfflineOfficeFiles.xlsx);
+      const [docx, xlsx, malformed] = Array.from(document.getElementById('officeOfflineFiles').files || []);
+      const binaryProbe = {};
+      try { binaryProbe.fileBytes = (await docx.arrayBuffer()).byteLength; }
+      catch (error) { binaryProbe.fileError = error && error.message; }
+      FileReader.prototype.readAsArrayBuffer = function () {
+        throw new Error('Office import must prefer File.arrayBuffer when available.');
+      };
+      const docxOk = await window.importWorkspaceFile(docx);
+      const xlsxOk = await window.importWorkspaceFile(xlsx);
+      const pageCountBeforeMalformed = window.flowAtelier.pages.length;
+      const malformedOk = await window.importWorkspaceFile(malformed);
       const pages = window.flowAtelier.pages;
       return {
         docxOk,
         xlsxOk,
+        malformedOk,
+        malformedCreatedPage: pages.length !== pageCountBeforeMalformed,
+        binaryProbe,
         docxContent: pages.find((item) => item.title === 'Imported::offline-evidence')?.content || '',
         importedBodies: pages.filter((item) => item.title === 'Imported::offline-evidence').map((item) => item.content)
       };
     });
-    expect(result.docxOk).toBe(true);
+    expect(result.binaryProbe.fileBytes).toBeGreaterThan(0);
+    expect(result.docxOk, JSON.stringify(result.binaryProbe)).toBe(true);
     expect(result.xlsxOk).toBe(true);
+    expect(result.malformedOk).toBe(false);
+    expect(result.malformedCreatedPage).toBe(false);
     expect(result.importedBodies.some((body) => body.includes('Offline DOCX evidence'))).toBe(true);
     expect(result.importedBodies.some((body) => body.includes('Offline XLSX evidence'))).toBe(true);
+    expect(unexpectedParserRequests).toEqual([]);
   } finally {
-    await context.setOffline(false);
+    await context.unroute('**/*');
   }
 });
