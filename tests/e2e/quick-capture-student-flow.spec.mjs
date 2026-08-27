@@ -129,7 +129,7 @@ test('homework captured without a class remains editable', async ({ page }) => {
   await page.locator('#quickCaptureDate').fill('2026-08-28');
   await page.locator('#quickCaptureSubmitBtn').click();
 
-  await page.locator('#tabHomework').click();
+  await page.locator('#tabHomework:visible, [data-bn-view="homework"]:visible').first().click();
   const classSetup = page.getByRole('dialog').filter({ hasText: 'Set Up Your Classes' });
   if (await classSetup.isVisible()) {
     await classSetup.getByRole('button', { name: 'Cancel for now' }).click();
