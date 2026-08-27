@@ -119,3 +119,36 @@ test('empty Homework teaches one primary action: paste or type your homework', a
   expect(ui.hasCaptureBtn).toBe(true);
   expect(ui.label).toContain('Paste or type your homework');
 });
+
+test('homework captured without a class remains editable', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => window.openQuickCaptureModal());
+  await page.locator('#quickCaptureInput').fill('Classless chemistry lab');
+  await page.locator('#quickCaptureType').selectOption('homework');
+  await page.locator('#quickCaptureDate').fill('2026-08-28');
+  await page.locator('#quickCaptureSubmitBtn').click();
+
+  await page.locator('#tabHomework').click();
+  const classSetup = page.getByRole('dialog').filter({ hasText: 'Set Up Your Classes' });
+  if (await classSetup.isVisible()) {
+    await classSetup.getByRole('button', { name: 'Cancel for now' }).click();
+  }
+  const taskCard = page.locator('[data-task-id]').filter({ hasText: 'Classless chemistry lab' }).first();
+  await expect(taskCard).toBeVisible();
+  await expect(taskCard).toContainText('No class');
+
+  await taskCard.locator('[data-task-menu-trigger]').click();
+  await taskCard.locator('[data-task-edit]').click();
+  const editModal = page.locator('#hwGlobalAddModal');
+  await expect(editModal).toBeVisible();
+  await editModal.locator('[data-field="title"]').fill('Classless chemistry lab revised');
+  await editModal.locator('[data-field="dueDate"]').fill('2026-08-29');
+  await editModal.locator('button[type="submit"]').click();
+
+  await expect(editModal).toBeHidden();
+  const updatedCard = page.locator('[data-task-id]').filter({ hasText: 'Classless chemistry lab revised' }).first();
+  await expect(updatedCard).toBeVisible();
+  await expect(updatedCard).toContainText('Sat, Aug 29');
+  await expect(page.getByText('Pick a class first.', { exact: true })).toHaveCount(0);
+});
