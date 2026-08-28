@@ -2972,10 +2972,11 @@ function populateProgressDashboard() {
         // newer commit has superseded them before touching shared health state.
         let persistenceCommitSeq = 0;
         const SUTRA_PERSISTENCE_HEALTH_KEY = 'sutra:persistenceHealth:v1';
-        const SUTRA_PERSISTENCE_HEALTH_VERSION = 1;
+        const SUTRA_PERSISTENCE_HEALTH_VERSION = 2;
         let sutraPersistenceState = {
             version: SUTRA_PERSISTENCE_HEALTH_VERSION,
             lastConfirmedSaveAt: null,
+            lastConfirmedWorkspaceHash: null,
             lastAttemptAt: null,
             lastFailureAt: null,
             lastFailure: null,
@@ -3024,6 +3025,19 @@ function populateProgressDashboard() {
             if (value === null || value === undefined) return null;
             return hashPersistenceString(JSON.stringify(value));
         }
+        function normalizeWorkspaceHash(value) {
+            const hash = String(value || '').trim().toLowerCase();
+            return /^[0-9a-f]{8}$/.test(hash) ? hash : null;
+        }
+
+        function canRecoverMissingCanonicalRoot(options) {
+            const source = options && typeof options === 'object' ? options : {};
+            if (source.revocationLocked === true || source.actualHash !== null) return false;
+            const expectedHash = normalizeWorkspaceHash(source.expectedHash);
+            const checkpointHash = normalizeWorkspaceHash(source.lastConfirmedWorkspaceHash);
+            return !!expectedHash && checkpointHash === expectedHash;
+        }
+
 
         function formatByteCount(bytes) {
             const value = Number(bytes) || 0;
@@ -3114,6 +3128,7 @@ function populateProgressDashboard() {
                 lastConfirmedSaveAt: source.lastConfirmedSaveAt || null,
                 lastAttemptAt: source.lastAttemptAt || null,
                 lastFailureAt: source.lastFailureAt || null,
+                lastConfirmedWorkspaceHash: normalizeWorkspaceHash(source.lastConfirmedWorkspaceHash),
                 lastFailure: source.lastFailure && typeof source.lastFailure === 'object' ? source.lastFailure : null,
                 lastSerializedBytes: Number(source.lastSerializedBytes) || 0,
                 lastLocalStorageBytes: Number(source.lastLocalStorageBytes) || 0,
@@ -3145,6 +3160,38 @@ function populateProgressDashboard() {
             } catch (error) {
                 sutraPersistenceState = normalizePersistenceState(sutraPersistenceState);
             }
+        }
+
+        function readConfirmedWorkspaceCheckpointHash() {
+            try {
+                if (typeof localStorage === 'undefined') return null;
+                const raw = localStorage.getItem(SUTRA_PERSISTENCE_HEALTH_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                const directHash = normalizeWorkspaceHash(parsed && parsed.lastConfirmedWorkspaceHash);
+                if (directHash) return directHash;
+                // Builds predating the checkpoint stored the same confirmed base
+                // in this exact missing-root conflict shape. Reuse it only to
+                // fail closed on upgrade; a different/non-null root never qualifies.
+                const failure = parsed && parsed.lastFailure;
+                const conflict = failure && failure.kind === 'conflict' && failure.conflict;
+                return conflict && conflict.actualHash === null
+                    ? normalizeWorkspaceHash(conflict.expectedHash)
+                    : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function persistConfirmedWorkspaceCheckpoint(hash) {
+            const normalizedHash = normalizeWorkspaceHash(hash);
+            if (!normalizedHash) return false;
+            sutraPersistenceState = normalizePersistenceState({
+                ...sutraPersistenceState,
+                lastConfirmedWorkspaceHash: normalizedHash
+            });
+            persistSutraPersistenceState();
+            return readConfirmedWorkspaceCheckpointHash() === normalizedHash;
         }
 
         function buildPersistenceSummary(serializedText) {
@@ -3243,6 +3290,7 @@ function populateProgressDashboard() {
                 lastFailureAt: clearFailure ? null : sutraPersistenceState.lastFailureAt,
                 lastFailure: clearFailure ? null : sutraPersistenceState.lastFailure,
                 lastSerializedBytes: summary.serializedBytes,
+                lastConfirmedWorkspaceHash: summary.hash,
                 lastLocalStorageBytes: summary.localStorageBytes,
                 lastAttachmentCount: summary.attachmentCount,
                 lastAttachmentBytes: summary.attachmentBytes,
@@ -7322,33 +7370,55 @@ function populateProgressDashboard() {
                         throw skewError;
                     }
                     let lifecycleCommitSuperseded = false;
+                    let missingCanonicalRootRecovered = false;
+                    const confirmedCheckpointHash = readConfirmedWorkspaceCheckpointHash();
                     const conditional = await workspaceDb.writeIf(APP_DB_KEY, snapshot, (current) => {
                         if (options.lifecycleToken && !lifecycleSaveBarrierIsActive(options.lifecycleToken)) {
                             lifecycleCommitSuperseded = true;
                             return false;
                         }
-                        return hashCanonicalWorkspaceRecord(current) === canonicalWorkspaceHash;
+                        const actualHash = hashCanonicalWorkspaceRecord(current);
+                        if (actualHash === canonicalWorkspaceHash) return true;
+                        if (canRecoverMissingCanonicalRoot({
+                            expectedHash: canonicalWorkspaceHash,
+                            actualHash,
+                            lastConfirmedWorkspaceHash: confirmedCheckpointHash,
+                            revocationLocked: sutraRevocationLockActive || persistenceWritesBlocked
+                        })) {
+                            missingCanonicalRootRecovered = true;
+                            return true;
+                        }
+                        return false;
                     });
                     if (lifecycleCommitSuperseded) return;
                     if (!conditional || conditional.written !== true) {
                         const actualHash = hashCanonicalWorkspaceRecord(conditional && conditional.current);
+                        const missingCanonicalRoot = actualHash === null && canonicalWorkspaceHash !== null;
                         const coordinatorState = workspaceCoordinator && typeof workspaceCoordinator.getState === 'function'
                             ? workspaceCoordinator.getState()
                             : null;
                         const lastRemoteCommit = coordinatorState && coordinatorState.lastRemoteCommit;
                         const confirmedRemoteCommit = !!(sutraRemoteCommitPending && lastRemoteCommit
                             && lastRemoteCommit.hash && lastRemoteCommit.hash === actualHash);
-                        const conflictError = new Error(confirmedRemoteCommit
-                            ? 'A newer workspace was saved in another open Sutra page. This page was prevented from overwriting it. Export this page if it has unique edits, then reload before saving again.'
-                            : 'Browser storage no longer matches this page\'s last confirmed save. No other open Sutra page was detected, so Sutra is not attributing this to another session. A late reload/navigation save or an unannounced writer may be responsible. Sutra prevented an overwrite; export this page if it has unique edits, then reload before saving again.');
+                        const conflictError = new Error(missingCanonicalRoot
+                            ? 'The canonical workspace record disappeared from browser storage, and Sutra could not independently verify that this page still held the newest confirmed copy. Sutra preserved the in-memory workspace and prevented an unsafe replacement. Export this page, then reload only after securing that recovery copy.'
+                            : (confirmedRemoteCommit
+                                ? 'A newer workspace was saved in another open Sutra page. This page was prevented from overwriting it. Export this page if it has unique edits, then reload before saving again.'
+                                : 'Browser storage no longer matches this page\'s last confirmed save. No other open Sutra page was detected, so Sutra is not attributing this to another session. An unannounced writer may be responsible. Sutra prevented an overwrite; export this page if it has unique edits, then reload before saving again.'));
                         conflictError.name = 'WorkspaceConflictError';
                         conflictError.workspaceConflictDetails = {
-                            source: confirmedRemoteCommit ? 'confirmed-other-page' : 'unverified-storage-change',
+                            source: missingCanonicalRoot
+                                ? 'missing-canonical-root'
+                                : (confirmedRemoteCommit ? 'confirmed-other-page' : 'unverified-storage-change'),
                             expectedHash: canonicalWorkspaceHash,
                             actualHash,
+                            checkpointHash: confirmedCheckpointHash,
                             remoteCommit: confirmedRemoteCommit ? lastRemoteCommit : null
                         };
                         throw conflictError;
+                    }
+                    if (missingCanonicalRootRecovered) {
+                        console.warn('Recovered a missing canonical IndexedDB root from the independently confirmed in-memory checkpoint.');
                     }
                     // writeIf resolves only after the atomic root transaction has
                     // committed. Advance this tab's base at that boundary, before
@@ -7366,6 +7436,9 @@ function populateProgressDashboard() {
                             partialError.name = 'PartialWriteError';
                             throw partialError;
                         }
+                    }
+                    if (!persistConfirmedWorkspaceCheckpoint(summary.hash)) {
+                        console.warn('Canonical save succeeded, but its independent recovery checkpoint could not be confirmed.');
                     }
                 });
                 if (options.lifecycleToken && !lifecycleSaveBarrierIsActive(options.lifecycleToken)) return null;
@@ -7879,6 +7952,12 @@ function populateProgressDashboard() {
                 recordPersistenceFailure(error, { reason: 'startup-read', phase: 'startup-read', kind: 'indexeddb' });
             }
             canonicalWorkspaceHash = hashCanonicalWorkspaceRecord(stored);
+            if (stored && canonicalWorkspaceHash
+                && readConfirmedWorkspaceCheckpointHash() !== canonicalWorkspaceHash
+                && !persistConfirmedWorkspaceCheckpoint(canonicalWorkspaceHash)) {
+                console.warn('Loaded the canonical workspace, but its independent recovery checkpoint could not be confirmed.');
+            }
+
             if (stored && isStaleMigrationAssetSkew()) {
                 // The service worker served a cached migrations.js older than
                 // this app shell, so we cannot migrate the stored workspace up
@@ -7913,6 +7992,15 @@ function populateProgressDashboard() {
                 workspaceStartupPersistenceConfirmed = true;
             } else if (readFailed) {
                 appData = getDefaultAppData();
+            } else if (readConfirmedWorkspaceCheckpointHash()) {
+                persistenceWritesBlocked = true;
+                persistenceWriteBlockReason = 'Sutra previously confirmed a workspace on this device, but its canonical IndexedDB record is now missing. This tab will not replace it with a blank workspace.';
+                appData = getDefaultAppData();
+                const missingRootError = new Error(persistenceWriteBlockReason);
+                missingRootError.name = 'WorkspaceMissingRootError';
+                recordPersistenceFailure(missingRootError, {
+                    reason: 'startup-missing-root', phase: 'startup-missing-root', kind: 'indexeddb'
+                });
             } else {
                 appData = migrateLegacyData();
                 try {

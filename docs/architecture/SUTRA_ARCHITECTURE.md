@@ -204,7 +204,10 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
   emergency exports. It records the last confirmed save, classifies quota /
   serialization / transaction / attachment / partial-write failures, preserves
   unsaved in-memory state, and drives the non-dismissible save-failure banner
-  plus the Settings -> Data -> Storage Health panel.
+  plus the Settings -> Data -> Storage Health panel. Its compact device-local
+  last-confirmed hash may authorize recreation only when the canonical root is
+  absent and the live page still matches that exact confirmed base; a different
+  root remains a hard conflict, and a missing prior root at startup fails closed.
 - **One serializer/deserializer pair** drives every full-workspace transport:
   manual **`.sutra`**, optional Google Drive sync snapshots, legacy package
   import, and **JSON**. New `.sutra` exports wrap the existing internal ZIP

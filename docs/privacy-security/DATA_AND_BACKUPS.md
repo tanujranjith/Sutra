@@ -219,6 +219,13 @@ and legacy **`.atelier-plugin`** bundles still import.
 > attachment warnings. The live in-memory workspace is preserved; do not close
 > the tab until a save recovers or an emergency backup downloads.
 
+After a verified write and readback, Storage Health also keeps a compact
+device-local hash of that exact canonical workspace. If the IndexedDB `root`
+record later disappears while the page remains open, Sutra may recreate it only
+when this independent hash still matches the page's last confirmed base. A
+different existing root is never overwritten, and startup fails closed when a
+previously confirmed root is missing.
+
 Full `.sutra` packaging uses the vendored local JSZip build in
 `assets/vendor/jszip/`, so core backups do not require a CDN request. If a
 required attachment blob is missing or cannot be warmed from IndexedDB, Sutra

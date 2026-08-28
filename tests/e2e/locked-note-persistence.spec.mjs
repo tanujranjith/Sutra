@@ -190,6 +190,57 @@ test('a committed save remains the local base when only its verification read fa
   expect(result.failureBannerHidden).toBe(true);
 });
 
+test('a visibility-change save recreates a missing canonical root from its confirmed checkpoint', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const note = hooks.createNoteInActiveSpace('Missing root recovery baseline', '<p>safe baseline</p>');
+    await window.flowAtelier.flushAppSaveNow('missing-root-recovery-baseline');
+
+    const checkpointBefore = JSON.parse(localStorage.getItem('sutra:persistenceHealth:v1') || '{}')
+      .lastConfirmedWorkspaceHash || null;
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open('noteflow_atelier_db', 8);
+      request.onerror = () => reject(request.error || new Error('Could not open workspace DB'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('workspace', 'readwrite');
+        tx.objectStore('workspace').delete('root');
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => reject(tx.error || new Error('Could not delete root'));
+        tx.onabort = () => reject(tx.error || new Error('Root deletion aborted'));
+      };
+    });
+
+    hooks.renamePage(note.id, 'Recovered during visibility change');
+    let saveError = null;
+    try {
+      await window.flowAtelier.flushAppSaveNow('visibilitychange');
+    } catch (error) {
+      saveError = { name: error?.name || '', message: error?.message || String(error) };
+    }
+    const durable = await window.loadWorkspaceLocally();
+    const health = window.SutraPersistenceHealth.getState();
+    return {
+      checkpointBefore,
+      checkpointAfter: JSON.parse(localStorage.getItem('sutra:persistenceHealth:v1') || '{}')
+        .lastConfirmedWorkspaceHash || null,
+      saveError,
+      durableTitle: durable?.pages?.find(entry => entry.id === note.id)?.title || '',
+      failure: health.lastFailure,
+      bannerHidden: document.getElementById('sutraSaveFailureBanner')?.hidden === true
+    };
+  });
+
+  expect(result.checkpointBefore).toMatch(/^[0-9a-f]{8}$/);
+  expect(result.checkpointAfter).toMatch(/^[0-9a-f]{8}$/);
+  expect(result.saveError).toBeNull();
+  expect(result.durableTitle).toBe('Recovered during visibility change');
+  expect(result.failure).toBeNull();
+  expect(result.bannerHidden).toBe(true);
+});
+
 test('a superseded same-tab lifecycle save is declined without raising a conflict', async ({ page }) => {
   await openApp(page);
 

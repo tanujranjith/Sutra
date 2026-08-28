@@ -211,7 +211,7 @@
     "sutra:assistantCurrentChatId:v1": { "category": "reconstructed", "canonical": "assistantChatHistory.currentChatId" },
     "sutra_startup_sound": { "category": "reconstructed", "canonical": "settings.preferences.startup.playSound" },
     "sutra:activation:v1": { "category": "deviceLocal", "reason": "Explicitly device-scoped activation counters." },
-    "sutra:persistenceHealth:v1": { "category": "deviceLocal", "reason": "This device's save/readback health." },
+    "sutra:persistenceHealth:v1": { "category": "deviceLocal", "reason": "This device's save/readback health, including a compact last-confirmed workspace hash used only to verify missing-root recovery." },
     "sutra:assistantSidebarWidth:v1": { "category": "deviceLocal", "reason": "Viewport-specific layout." },
     "sutra:workspaceSnapshots:v1": { "category": "deviceLocal", "reason": "Local safety moments are backups, not replicated live state." },
     "sutra:recentCommands:v1": { "category": "ephemeral", "reason": "Regenerable recency cache." },

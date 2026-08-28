@@ -203,7 +203,7 @@
     "./src/components/icons/index.js?v=20260809-audit-icons1",
     "./src/config/feature-manifest.js?v=20260823-combined2",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20260828-storage-main1",
+    "./src/core/app.js?v=20260828-storage-main3",
     "./src/core/credential-vault-bridge.js?v=20260823-credential-bridge4",
     "./src/core/credential-vault.js?v=20260823-credential-vault4",
     "./src/core/dom-safety.js?v=20260613-harden1",

@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:5173/Sutra.html';
+const BASE = '/Sutra.html';
 
 test.describe('Chaos: storage fault injection', () => {
     test.beforeEach(async ({ page }) => {
@@ -38,20 +38,77 @@ test.describe('Chaos: storage fault injection', () => {
         expect(hasUI).toBeTruthy();
     });
 
-    test('app boots after IndexedDB clear', async ({ page }) => {
-        await page.evaluate(() => {
-            return new Promise(resolve => {
-                indexedDB.deleteDatabase('noteflow_atelier_db');
-                indexedDB.deleteDatabase('noteflow_attachments_db');
-                setTimeout(resolve, 200);
+    test('a missing IndexedDB root with a surviving confirmed hash fails closed at startup', async ({ page }) => {
+        await page.goto('/HomePage.html', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(2500);
+        const checkpoint = await page.evaluate(async () => {
+            const health = JSON.parse(localStorage.getItem('sutra:persistenceHealth:v1') || '{}');
+            const confirmedHash = health.lastConfirmedWorkspaceHash || null;
+            // Model the exact persisted diagnostics from the pre-checkpoint
+            // build in the user's screenshot.
+            delete health.lastConfirmedWorkspaceHash;
+            health.version = 1;
+            health.lastFailure = {
+                kind: 'conflict',
+                phase: 'visibilitychange',
+                conflict: { source: 'unverified-storage-change', expectedHash: confirmedHash, actualHash: null }
+            };
+            localStorage.setItem('sutra:persistenceHealth:v1', JSON.stringify(health));
+            await new Promise((resolve, reject) => {
+                const request = indexedDB.deleteDatabase('noteflow_atelier_db');
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('Workspace DB delete failed'));
+                request.onblocked = () => reject(new Error('Workspace DB delete blocked'));
             });
+            return confirmedHash;
         });
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(2000);
-        const hasUI = await page.evaluate(() => {
-            return document.body.children.length > 0;
+        expect(checkpoint).toMatch(/^[0-9a-f]{8}$/);
+
+        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => !!window.flowAtelier && !!window.SutraPersistenceHealth);
+        const result = await page.evaluate(async () => {
+            let saveError = null;
+            try { await window.flowAtelier.flushAppSaveNow('startup-missing-root-test'); }
+            catch (error) { saveError = { name: error?.name || '', message: error?.message || String(error) }; }
+            return {
+                failure: window.SutraPersistenceHealth.getState().lastFailure,
+                saveError,
+                durable: await window.loadWorkspaceLocally()
+            };
         });
-        expect(hasUI).toBeTruthy();
+        expect(result.failure?.phase).toBe('startup-missing-root');
+        expect(result.saveError?.name).toBe('WorkspaceReadSafetyError');
+        expect(result.durable).toBeNull();
+    });
+
+    test('a complete origin-data wipe boots as a fresh confirmed workspace', async ({ page }) => {
+        await page.goto('/HomePage.html', { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(2500);
+        await page.evaluate(async () => {
+            localStorage.clear();
+            sessionStorage.clear();
+            await Promise.all(['noteflow_atelier_db', 'noteflow_attachments_db'].map(name => new Promise((resolve, reject) => {
+                const request = indexedDB.deleteDatabase(name);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error(`${name} delete failed`));
+                request.onblocked = () => reject(new Error(`${name} delete blocked`));
+            })));
+        });
+
+        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => !!window.flowAtelier && !!window.SutraPersistenceHealth);
+        const result = await page.evaluate(async () => {
+            let saveError = null;
+            try { await window.flowAtelier.flushAppSaveNow('fresh-origin-confirmation'); }
+            catch (error) { saveError = { name: error?.name || '', message: error?.message || String(error) }; }
+            const durable = await window.loadWorkspaceLocally();
+            const checkpoint = JSON.parse(localStorage.getItem('sutra:persistenceHealth:v1') || '{}')
+                .lastConfirmedWorkspaceHash || null;
+            return { saveError, durable: !!durable, checkpoint };
+        });
+        expect(result.saveError).toBeNull();
+        expect(result.durable).toBe(true);
+        expect(result.checkpoint).toMatch(/^[0-9a-f]{8}$/);
     });
 
     test('SutraSafeStorage handles corrupt data gracefully', async ({ page }) => {
