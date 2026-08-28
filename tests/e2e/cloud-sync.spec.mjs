@@ -36,6 +36,7 @@ async function waitForCanonicalHydration(page) {
 
 async function openDevice(browser, server, label) {
   const context = await browser.newContext();
+  await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
   const page = await context.newPage();
@@ -48,6 +49,7 @@ async function openDevice(browser, server, label) {
 
 async function openAuthedDevice(browser, server, label) {
   const context = await browser.newContext();
+  await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
   await context.addInitScript(({ url }) => {
@@ -127,11 +129,16 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     });
     expect(device.net.seenAuthHeaders).toHaveLength(0);
 
-    await device.page.evaluate(() => window.SutraNotifications.openPanel());
+    await device.page.evaluate(() => {
+      // The notification module intentionally auto-initializes after a short
+      // startup delay. Its derived data can be available before its panel
+      // listeners are ready, so synchronize with the public idempotent init.
+      window.SutraNotifications.init();
+      window.SutraNotifications.openPanel();
+    });
     const noticeRow = device.page.getByRole('article', { name: /Sutra Sync Beta is available/i });
     await expect(noticeRow).toBeVisible();
-    await noticeRow.focus();
-    await device.page.keyboard.press('Enter');
+    await noticeRow.press('Enter');
     await expect(device.page.getByRole('dialog', { name: /Sutra Sync Beta/i })).toBeVisible();
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('Optional and currently off');
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('recent encrypted .sutra backup');
