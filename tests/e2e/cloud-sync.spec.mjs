@@ -1605,8 +1605,19 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }
       expect(sawQuiescence, 'two tabs must reach quiescence, never ping-pong').toBe(true);
 
-      // An edit in tab 2 makes tab 1 STALE: its sync must skip instead of
-      // pushing outdated records back to the server.
+      // Either racing tab may have written the last canonical root. Reload tab
+      // 2 from that root before choosing it as the next writer; otherwise the
+      // persistence conflict guard correctly rejects a stale local overwrite
+      // before this test reaches the Sync stale-tab assertion.
+      await tab2.reload();
+      await tab2.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(tab2);
+      await completeOnboarding(tab2);
+      const reunlocked = await tab2.evaluate(async (passphrase) => (await window.SutraSync.unlock(passphrase)).status.state, PASSPHRASE);
+      expect(reunlocked).toBe('idle');
+
+      // The fresh edit in tab 2 now deterministically makes tab 1 STALE: its
+      // sync must skip instead of pushing outdated records back to the server.
       await editPage(tab2, 'page-shared', '<p>typed in tab two</p>');
       const pushTab2 = await syncNow(tab2);
       expect(pushTab2.error).toBeNull();
