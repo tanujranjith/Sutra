@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260824-globalsearch2",
-    "hash": "086c6090c46ba9f0"
+    "stamp": "20260828-storage-main1",
+    "hash": "338b46d563d6282d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",

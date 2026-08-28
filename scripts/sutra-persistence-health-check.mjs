@@ -48,7 +48,7 @@ if (!/scheduleAppSave\(\)[\s\S]*commitAppDataWithHealth\('autosave'/.test(app)) 
   console.error('FAIL autosave does not route through commitAppDataWithHealth');
   failures += 1;
 }
-if (!/flushAppSaveNow\(reason = 'manual'\)[\s\S]*commitAppDataWithHealth\(reason/.test(app)) {
+if (!/flushAppSaveNow\(reason = 'manual'(?:, options = \{\})?\)[\s\S]*commitAppDataWithHealth\(reason/.test(app)) {
   console.error('FAIL manual/lifecycle flush does not route through commitAppDataWithHealth');
   failures += 1;
 }
