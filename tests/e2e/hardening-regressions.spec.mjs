@@ -5,6 +5,9 @@ import { expect, test } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  // Feature globals and shell markup arrive before canonical IndexedDB
+  // hydration. Slides must create its page against the hydrated bridge.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch (e) {}
     const overlay = document.getElementById('studentOnboardingOverlay');
