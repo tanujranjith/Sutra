@@ -24,6 +24,13 @@ async function completeOnboarding(page) {
   await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
 }
 
+async function waitForCanonicalHydration(page) {
+  // Shell markup attaches before IndexedDB hydration finishes. Export tests
+  // must mutate and inspect the canonical workspace only after initApp has
+  // completed its post-hydration bindings.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+}
+
 async function openApp(page) {
   const requests = [];
   page.on('request', request => {
@@ -36,6 +43,7 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForCanonicalHydration(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   return { requests, consoleErrors };
