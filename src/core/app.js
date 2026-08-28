@@ -2833,6 +2833,13 @@ function populateProgressDashboard() {
         // second canonical store: it is removed only after verified IDB readback.
         const LIFECYCLE_NOTE_JOURNAL_KEY = 'sutra:lifecycle-note-journal:v1';
         const LIFECYCLE_NOTE_JOURNAL_MAX_BYTES = 1500000;
+        // A reload can start its replacement document before the previous
+        // document's asynchronous pagehide save reaches IndexedDB. Coordinate
+        // that same-tab handoff through sessionStorage so the replacement never
+        // hydrates an older root and then reports its predecessor as a conflict.
+        const LIFECYCLE_SAVE_BARRIER_KEY = 'sutra:lifecycle-save-barrier:v1';
+        const LIFECYCLE_SAVE_BARRIER_MAX_WAIT_MS = 2000;
+        const LIFECYCLE_SAVE_BARRIER_MAX_AGE_MS = 15000;
         const workspaceDb = window.SutraWorkspaceDB.create({
             dbName: APP_DB_NAME,
             storeName: APP_DB_STORE,
@@ -2861,6 +2868,11 @@ function populateProgressDashboard() {
         // still in flight. Never let those boot-time requests write the default
         // in-memory workspace over a user's real root.
         let workspaceHydrationComplete = false;
+        // First-run UI is allowed only after Sutra has proved that the canonical
+        // workspace is usable: either an existing root was read successfully or
+        // a brand-new root was written and verified. A default in-memory fallback
+        // after a failed read/write is an UNKNOWN workspace, never a new one.
+        let workspaceStartupPersistenceConfirmed = false;
         let saveRequestedBeforeHydration = false;
         let resolveWorkspaceHydrationReady;
         const workspaceHydrationReady = new Promise(resolve => {
@@ -3253,7 +3265,10 @@ function populateProgressDashboard() {
                 message: error && error.message ? error.message : String(error || 'Unknown persistence failure'),
                 name: error && error.name ? error.name : '',
                 at: now,
-                attachmentWarnings: attachmentSnapshot.warnings || []
+                attachmentWarnings: attachmentSnapshot.warnings || [],
+                conflict: error && error.workspaceConflictDetails
+                    ? cloneSerializable(error.workspaceConflictDetails, null)
+                    : undefined
             };
             sutraPersistenceState = normalizePersistenceState({
                 ...sutraPersistenceState,
@@ -7042,6 +7057,82 @@ function populateProgressDashboard() {
             return writeAppDbRecord(APP_DB_KEY, data);
         }
 
+        function readLifecycleSaveBarrier() {
+            const safeStorage = window.SutraSafeStorage;
+            if (!safeStorage || typeof safeStorage.sessionGet !== 'function') return null;
+            const barrier = safeStorage.sessionGet(LIFECYCLE_SAVE_BARRIER_KEY, {
+                fallback: null,
+                parseJson: true
+            });
+            if (!barrier || barrier.version !== 1 || typeof barrier.token !== 'string'
+                || !barrier.token || !Number.isFinite(Number(barrier.startedAt))) {
+                if (barrier && typeof safeStorage.sessionRemove === 'function') {
+                    safeStorage.sessionRemove(LIFECYCLE_SAVE_BARRIER_KEY);
+                }
+                return null;
+            }
+            return barrier;
+        }
+
+        function beginLifecycleSaveBarrier(reason) {
+            const safeStorage = window.SutraSafeStorage;
+            if (!safeStorage || typeof safeStorage.session !== 'function') return '';
+            let entropy = '';
+            try {
+                entropy = window.crypto && typeof window.crypto.randomUUID === 'function'
+                    ? window.crypto.randomUUID()
+                    : Math.random().toString(36).slice(2);
+            } catch (error) {
+                entropy = Math.random().toString(36).slice(2);
+            }
+            const token = `${Date.now().toString(36)}-${entropy}`;
+            const result = safeStorage.session(LIFECYCLE_SAVE_BARRIER_KEY, {
+                version: 1,
+                token,
+                startedAt: Date.now(),
+                reason: String(reason || 'lifecycle').slice(0, 40)
+            });
+            return result && result.ok === true ? token : '';
+        }
+
+        function lifecycleSaveBarrierIsActive(token) {
+            if (!token) return true;
+            const barrier = readLifecycleSaveBarrier();
+            return !!barrier && barrier.token === token;
+        }
+
+        function clearLifecycleSaveBarrier(token) {
+            const safeStorage = window.SutraSafeStorage;
+            if (!token || !safeStorage || typeof safeStorage.sessionRemove !== 'function') return;
+            const barrier = readLifecycleSaveBarrier();
+            if (barrier && barrier.token === token) {
+                safeStorage.sessionRemove(LIFECYCLE_SAVE_BARRIER_KEY);
+            }
+        }
+
+        async function waitForPriorLifecycleSave() {
+            const initial = readLifecycleSaveBarrier();
+            if (!initial) return;
+            const age = Date.now() - Number(initial.startedAt);
+            if (age >= LIFECYCLE_SAVE_BARRIER_MAX_AGE_MS) {
+                clearLifecycleSaveBarrier(initial.token);
+                return;
+            }
+            const deadline = Date.now() + Math.min(
+                LIFECYCLE_SAVE_BARRIER_MAX_WAIT_MS,
+                LIFECYCLE_SAVE_BARRIER_MAX_AGE_MS - Math.max(0, age)
+            );
+            while (Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 25));
+                const current = readLifecycleSaveBarrier();
+                if (!current || current.token !== initial.token) return;
+            }
+            // The predecessor was frozen or terminated before it could finish.
+            // Supersede its token; its conditional write checks this token again
+            // inside the IndexedDB transaction and will decline a late write.
+            clearLifecycleSaveBarrier(initial.token);
+        }
+
         async function writePreMigrationRecoveryBackup(workspace, targetVersion) {
             const sourceVersion = Number(workspace && workspace.version) || 1;
             await writeAppDbRecord('workspace-pre-migration', {
@@ -7226,14 +7317,33 @@ function populateProgressDashboard() {
                         skewError.name = 'WorkspaceConflictError';
                         throw skewError;
                     }
+                    let lifecycleCommitSuperseded = false;
                     const conditional = await workspaceDb.writeIf(APP_DB_KEY, snapshot, (current) => {
+                        if (options.lifecycleToken && !lifecycleSaveBarrierIsActive(options.lifecycleToken)) {
+                            lifecycleCommitSuperseded = true;
+                            return false;
+                        }
                         return hashCanonicalWorkspaceRecord(current) === canonicalWorkspaceHash;
                     });
+                    if (lifecycleCommitSuperseded) return;
                     if (!conditional || conditional.written !== true) {
-                        const conflictError = new Error(sutraRemoteCommitPending
+                        const actualHash = hashCanonicalWorkspaceRecord(conditional && conditional.current);
+                        const coordinatorState = workspaceCoordinator && typeof workspaceCoordinator.getState === 'function'
+                            ? workspaceCoordinator.getState()
+                            : null;
+                        const lastRemoteCommit = coordinatorState && coordinatorState.lastRemoteCommit;
+                        const confirmedRemoteCommit = !!(sutraRemoteCommitPending && lastRemoteCommit
+                            && lastRemoteCommit.hash && lastRemoteCommit.hash === actualHash);
+                        const conflictError = new Error(confirmedRemoteCommit
                             ? 'A newer workspace was saved in another open Sutra page. This page was prevented from overwriting it. Export this page if it has unique edits, then reload before saving again.'
-                            : 'The stored workspace changed after this page\'s last confirmed save. Sutra prevented this page from overwriting it. Export this page if it has unique edits, then reload before saving again.');
+                            : 'Browser storage no longer matches this page\'s last confirmed save. No other open Sutra page was detected, so Sutra is not attributing this to another session. A late reload/navigation save or an unannounced writer may be responsible. Sutra prevented an overwrite; export this page if it has unique edits, then reload before saving again.');
                         conflictError.name = 'WorkspaceConflictError';
+                        conflictError.workspaceConflictDetails = {
+                            source: confirmedRemoteCommit ? 'confirmed-other-page' : 'unverified-storage-change',
+                            expectedHash: canonicalWorkspaceHash,
+                            actualHash,
+                            remoteCommit: confirmedRemoteCommit ? lastRemoteCommit : null
+                        };
                         throw conflictError;
                     }
                     // writeIf resolves only after the atomic root transaction has
@@ -7254,6 +7364,7 @@ function populateProgressDashboard() {
                         }
                     }
                 });
+                if (options.lifecycleToken && !lifecycleSaveBarrierIsActive(options.lifecycleToken)) return null;
                 clearLifecycleNoteJournalAfterConfirmedSnapshot(snapshot);
                 // Only the most recent commit may clear/advance shared health state.
                 // (Commits are serialized, so opId === seq normally holds; the guard
@@ -7299,7 +7410,7 @@ function populateProgressDashboard() {
             }, 250);
         }
 
-        async function flushAppSaveNow(reason = 'manual') {
+        async function flushAppSaveNow(reason = 'manual', options = {}) {
             if (!workspaceHydrationComplete) {
                 saveRequestedBeforeHydration = true;
                 await workspaceHydrationReady;
@@ -7309,7 +7420,7 @@ function populateProgressDashboard() {
                 pendingAppSave = null;
             }
             if (!appData) return;
-            await commitAppDataWithHealth(reason, { verifyReadback: true });
+            await commitAppDataWithHealth(reason, { ...options, verifyReadback: true });
         }
 
         function flushAppSaveOnLifecycle(reason = 'lifecycle') {
@@ -7321,12 +7432,14 @@ function populateProgressDashboard() {
             } catch (error) {
                 console.warn(`Lifecycle save snapshot failed (${reason})`, error);
             }
+            const lifecycleToken = beginLifecycleSaveBarrier(reason);
             Promise.resolve()
-                .then(() => flushAppSaveNow(reason))
+                .then(() => flushAppSaveNow(reason, { lifecycleToken }))
                 .catch((error) => {
                     console.warn(`Lifecycle save flush failed (${reason})`, error);
                 })
                 .finally(() => {
+                    clearLifecycleSaveBarrier(lifecycleToken);
                     lifecycleSaveFlushScheduled = false;
                 });
         }
@@ -7739,6 +7852,7 @@ function populateProgressDashboard() {
         }
 
         async function initAppData() {
+            workspaceStartupPersistenceConfirmed = false;
             if (sutraRevocationLockActive) {
                 appData = getDefaultAppData();
                 return;
@@ -7747,10 +7861,11 @@ function populateProgressDashboard() {
             let stored = null;
             let readFailed = false;
             try {
-                stored = await readAppData();
+                await waitForPriorLifecycleSave();
+                stored = await workspaceCoordinator.runExclusive(() => readAppData());
                 if (!stored) {
                     await new Promise(resolve => setTimeout(resolve, 50));
-                    stored = await readAppData();
+                    stored = await workspaceCoordinator.runExclusive(() => readAppData());
                 }
             } catch (error) {
                 readFailed = true;
@@ -7791,12 +7906,14 @@ function populateProgressDashboard() {
                 // carried over from a prior stale-asset session is provably
                 // resolved and never meant lost data — clear it.
                 clearResolvedMigrationFailure();
+                workspaceStartupPersistenceConfirmed = true;
             } else if (readFailed) {
                 appData = getDefaultAppData();
             } else {
                 appData = migrateLegacyData();
                 try {
                     await commitAppDataWithHealth('initial-migration', { verifyReadback: true });
+                    workspaceStartupPersistenceConfirmed = true;
                 } catch (error) {
                     console.warn('Initial workspace persistence failed; continuing in memory.', error);
                 }
@@ -27865,6 +27982,17 @@ function buildOnboardingPlanPreview() {
         let onboardingStartTimer = null;
         function maybeStartUnifiedOnboarding() {
             if (!appSettings || !appData) return;
+            if (!workspaceHydrationComplete || !workspaceStartupPersistenceConfirmed || persistenceWritesBlocked) {
+                if (onboardingStartTimer) {
+                    clearTimeout(onboardingStartTimer);
+                    onboardingStartTimer = null;
+                }
+                // Storage uncertainty must never look like first run. An early
+                // listener or a timer may have opened the default-state wizard
+                // before the canonical startup result became known.
+                if (AtelierOnboardingController.isOpen()) AtelierOnboardingController.close();
+                return;
+            }
             const state = getOnboardingState();
             if (state.completed || state.skipped) {
                 if (onboardingStartTimer) {
@@ -27898,8 +28026,10 @@ function buildOnboardingPlanPreview() {
                 onboardingStartTimer = null;
                 // Re-check at fire time: onboarding may have been completed or
                 // skipped during the delay (workspace import, programmatic
-                // completion, a fast user). Showing the wizard then would
-                // re-add body.onboarding-open and dead-lock the app chrome.
+                // completion, a fast user), or persistence may have entered a
+                // fail-closed state. Showing the wizard then would re-add
+                // body.onboarding-open and dead-lock the app chrome.
+                if (!workspaceHydrationComplete || !workspaceStartupPersistenceConfirmed || persistenceWritesBlocked) return;
                 const latest = getOnboardingState();
                 if (latest.completed || latest.skipped || AtelierOnboardingController.isOpen()) return;
                 AtelierOnboardingController.show();
@@ -61795,6 +61925,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             window.__sutraPublicBetaTestHooks = {
                 normalizePageIcon: (icon) => normalizePageIcon(icon),
+                persistenceLifecycle: {
+                    beginBarrier: (reason) => beginLifecycleSaveBarrier(reason),
+                    clearBarrier: (token) => clearLifecycleSaveBarrier(token),
+                    flushWithBarrier: (reason, token) => flushAppSaveNow(reason || 'lifecycle-test', { lifecycleToken: token }),
+                    isBarrierActive: (token) => lifecycleSaveBarrierIsActive(token)
+                },
                 syncParity: {
                     getPortableSnapshot: () => getSyncWorkspaceSnapshot(),
                     getAssistantChatHistory: () => collectAssistantChatSyncSnapshot(),

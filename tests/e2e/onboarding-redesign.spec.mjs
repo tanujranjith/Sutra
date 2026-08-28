@@ -203,6 +203,77 @@ test('existing user with completed onboarding does not see overlay', async ({ pa
   await expect(overlay).not.toBeVisible();
 });
 
+test('a failed canonical startup read never masquerades as first-run onboarding', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+    Object.defineProperty(window, 'indexedDB', {
+      configurable: true,
+      value: {
+        open() {
+          throw new DOMException('Simulated canonical startup read failure', 'InvalidStateError');
+        }
+      }
+    });
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+
+  // The first-run gate has a delayed open path. Wait past it so this proves
+  // both the immediate boot reconciliation and the timer re-check stay closed.
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#sutraSaveFailureBanner')).toBeVisible();
+  await expect(page.locator('#sutraSaveFailureMessage')).toContainText(/read|indexeddb|storage/i);
+  await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
+  await expect(page.locator('body')).not.toHaveClass(/onboarding-open/);
+
+  const failure = await page.evaluate(() => window.SutraPersistenceHealth.getState().lastFailure);
+  expect(failure).toMatchObject({ phase: 'startup-read', kind: 'indexeddb' });
+});
+
+test('a failed initial canonical write never opens unsavable onboarding', async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem('sutra_intro_played', '1');
+    const realPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, key) {
+      if (this.name === 'workspace' && key === 'root') {
+        throw new DOMException('Simulated initial workspace write failure', 'QuotaExceededError');
+      }
+      return realPut.call(this, value, key);
+    };
+  });
+
+  await page.goto('/Sutra.html');
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForTimeout(1200);
+
+  await expect(page.locator('#sutraSaveFailureBanner')).toBeVisible();
+  await expect(page.locator('#sutraSaveFailureMessage')).toContainText(/quota|save|storage/i);
+  await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
+  await expect(page.locator('body')).not.toHaveClass(/onboarding-open/);
+
+  const result = await page.evaluate(async () => {
+    const root = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('noteflow_atelier_db');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('workspace', 'readonly');
+        const get = tx.objectStore('workspace').get('root');
+        get.onerror = () => reject(get.error || tx.error);
+        get.onsuccess = () => resolve(get.result || null);
+      };
+    });
+    return {
+      root,
+      failure: window.SutraPersistenceHealth.getState().lastFailure
+    };
+  });
+  expect(result.root).toBeNull();
+  expect(result.failure.kind).toMatch(/quota|indexeddb/i);
+  expect(result.failure.phase).toMatch(/initial-migration|autosave/);
+});
+
 test('legacy localStorage workspace is migrated before onboarding can save', async ({ page }) => {
   await page.addInitScript(() => {
     sessionStorage.setItem('sutra_intro_played', '1');
