@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 // Opt-in, credential-safe live-project certification for conflict behaviour.
 // The operator enters OTPs and vault passphrases only in headed browser
@@ -6,13 +7,48 @@ import { expect, test } from '@playwright/test';
 //
 // PowerShell:
 //   $env:SUTRA_REAL_CONFLICT_CERTIFY='1'
+//   $env:SUTRA_REAL_SUPABASE_URL='https://your-staging-ref.supabase.co'
+//   $env:SUTRA_REAL_SUPABASE_ANON_KEY='<staging publishable or anon key>'
 //   npx playwright test tests/e2e/real-supabase-conflict-certification.spec.mjs --project=chromium --workers=1 --headed
 
 const RUN_REAL = process.env.SUTRA_REAL_CONFLICT_CERTIFY === '1';
 const BASE_URL = process.env.SUTRA_REAL_BASE_URL || 'http://127.0.0.1:5173/Sutra.html';
-const EXPECTED_STAMP = '20260717-conflict4';
+const PRODUCTION_PROJECT_URL = 'https://blfsmdyvdlhabltiicgx.supabase.co';
+const PROJECT_URL = String(process.env.SUTRA_REAL_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const PROJECT_ANON_KEY = String(process.env.SUTRA_REAL_SUPABASE_ANON_KEY || '').trim();
+const SHELL_SOURCE = readFileSync(new URL('../../Sutra.html', import.meta.url), 'utf8');
+const WORKER_SOURCE = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+
+function currentScriptStamp(path) {
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = SHELL_SOURCE.match(new RegExp(`${escaped}\\?v=([^"']+)`));
+  if (!match) throw new Error(`Could not resolve the current cache stamp for ${path}.`);
+  return match[1];
+}
+
+const EXPECTED_STAMPS = {
+  app: currentScriptStamp('src/core/app.js'),
+  merge: currentScriptStamp('src/sync/sync-merge.js'),
+  engine: currentScriptStamp('src/sync/sync-engine.js'),
+  serviceWorker: (WORKER_SOURCE.match(/const CACHE_VERSION = `\$\{CACHE_FAMILY\}([^`]+)`/) || [])[1] || ''
+};
 
 test.skip(!RUN_REAL, 'Set SUTRA_REAL_CONFLICT_CERTIFY=1 for manual real-Supabase certification.');
+
+if (RUN_REAL) {
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(PROJECT_URL)) {
+    throw new Error('SUTRA_REAL_SUPABASE_URL must name the disposable staging Supabase project.');
+  }
+  if (!PROJECT_ANON_KEY) {
+    throw new Error('SUTRA_REAL_SUPABASE_ANON_KEY must contain the staging publishable/anon key.');
+  }
+  if (PROJECT_URL.toLowerCase() === PRODUCTION_PROJECT_URL.toLowerCase()) {
+    throw new Error('Live conflict certification refuses to target the production Supabase project.');
+  }
+  if (!EXPECTED_STAMPS.serviceWorker) {
+    throw new Error('Could not resolve the current service-worker cache stamp.');
+  }
+}
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -56,12 +92,31 @@ async function hideBanner(page) {
 
 async function openDevice(browser, label) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const blockedProductionRequests = [];
+  await context.route(`${PRODUCTION_PROJECT_URL}/**`, route => {
+    blockedProductionRequests.push(route.request().url());
+    return route.abort('blockedbyclient');
+  });
   const page = await context.newPage();
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  await page.evaluate(async ({ url, anonKey }) => {
+    await window.SutraCloudSync.switchBackend({
+      mode: 'custom',
+      customSupabaseUrl: url,
+      customSupabaseAnonKey: anonKey
+    });
+    const active = window.SutraCloudSync.getActiveConfig();
+    if (active?.mode !== 'custom' || active?.url !== url || active?.configured !== true) {
+      throw new Error('The live conflict browser did not bind to the staging Supabase project.');
+    }
+  }, { url: PROJECT_URL, anonKey: PROJECT_ANON_KEY });
+  if (blockedProductionRequests.length) {
+    throw new Error('The live conflict browser attempted to contact the production Supabase project.');
+  }
   await showBanner(page, label, 'Sign in with the shared test account, enable sync, and unlock the existing vault.');
-  return { context, page, label };
+  return { context, page, label, blockedProductionRequests };
 }
 
 async function syncReady(page) {
@@ -222,10 +277,10 @@ test('real Supabase Notes UI converges ordinary edits and creates one hidden con
     const [runtimeA, runtimeB] = await Promise.all([runtimeIdentity(A.page), runtimeIdentity(B.page)]);
     expect(runtimeA).toEqual(runtimeB);
     expect(runtimeA.url).toContain('127.0.0.1:5173/Sutra.html');
-    expect(runtimeA.app.join(' ')).toContain(EXPECTED_STAMP);
-    expect(runtimeA.merge.join(' ')).toContain(EXPECTED_STAMP);
-    expect(runtimeA.engine.join(' ')).toContain(EXPECTED_STAMP);
-    expect(runtimeA.serviceWorkerCache).toContain(EXPECTED_STAMP);
+    expect(runtimeA.app.join(' ')).toContain(EXPECTED_STAMPS.app);
+    expect(runtimeA.merge.join(' ')).toContain(EXPECTED_STAMPS.merge);
+    expect(runtimeA.engine.join(' ')).toContain(EXPECTED_STAMPS.engine);
+    expect(runtimeA.serviceWorkerCache).toContain(EXPECTED_STAMPS.serviceWorker);
     expect(runtimeA.schema).toBe(7);
     expect(runtimeA.protocol).toBe(1);
     console.log('LIVE_RUNTIME_IDENTITY', JSON.stringify(runtimeA));

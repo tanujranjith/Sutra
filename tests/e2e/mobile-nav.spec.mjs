@@ -7,6 +7,8 @@ import { expect, test } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true
+    && !!window.SutraNotifications);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch (e) {}
     const o = document.getElementById('studentOnboardingOverlay');
@@ -202,13 +204,11 @@ test('unified More actions open Notifications and the custom dashboard prompt', 
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
-  await page.evaluate(() => {
-    const badge = document.querySelector('#notifBellBtn .notif-bell-badge');
-    badge.setAttribute('data-count', '3');
-    badge.textContent = '3';
-  });
-  await expect(more.locator('.sutra-mobile-nav-badge')).toHaveText('3');
-  await expect(more).toHaveAttribute('aria-label', 'More, 3 unread notifications');
+  const unread = await page.evaluate(() => window.SutraNotifications
+    .getNotifications().filter(notification => !notification.read).length);
+  expect(unread).toBeGreaterThan(0);
+  await expect(more.locator('.sutra-mobile-nav-badge')).toHaveText(unread > 99 ? '99+' : String(unread));
+  await expect(more).toHaveAttribute('aria-label', `More, ${unread} unread notification${unread === 1 ? '' : 's'}`);
 
   await more.click();
   await page.locator('[data-mobile-more-action="notifications"]').click();

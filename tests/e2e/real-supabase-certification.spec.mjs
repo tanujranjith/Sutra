@@ -6,11 +6,15 @@ import { expect, test } from '@playwright/test';
 //
 // PowerShell:
 //   $env:SUTRA_REAL_CERTIFY='1'
+//   $env:SUTRA_REAL_SUPABASE_URL='https://your-staging-ref.supabase.co'
+//   $env:SUTRA_REAL_SUPABASE_ANON_KEY='<staging publishable or anon key>'
 //   npx playwright test tests/e2e/real-supabase-certification.spec.mjs --project=chromium --workers=1 --headed
 
 const RUN_REAL = process.env.SUTRA_REAL_CERTIFY === '1';
 const BASE_URL = process.env.SUTRA_REAL_BASE_URL || 'http://127.0.0.1:5173/Sutra.html';
-const PROJECT_URL = 'https://blfsmdyvdlhabltiicgx.supabase.co';
+const PRODUCTION_PROJECT_URL = 'https://blfsmdyvdlhabltiicgx.supabase.co';
+const PROJECT_URL = String(process.env.SUTRA_REAL_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const PROJECT_ANON_KEY = String(process.env.SUTRA_REAL_SUPABASE_ANON_KEY || '').trim();
 const REQUIRED_DATABASES = [
   'noteflow_atelier_db',
   'noteflow_attachments_db',
@@ -21,6 +25,18 @@ const REQUIRED_DATABASES = [
 ];
 
 test.skip(!RUN_REAL, 'Set SUTRA_REAL_CERTIFY=1 for manual real-Supabase certification.');
+
+if (RUN_REAL) {
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(PROJECT_URL)) {
+    throw new Error('SUTRA_REAL_SUPABASE_URL must name the disposable staging Supabase project.');
+  }
+  if (!PROJECT_ANON_KEY) {
+    throw new Error('SUTRA_REAL_SUPABASE_ANON_KEY must contain the staging publishable/anon key.');
+  }
+  if (PROJECT_URL.toLowerCase() === PRODUCTION_PROJECT_URL.toLowerCase()) {
+    throw new Error('Live certification refuses to target the production Supabase project.');
+  }
+}
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -64,12 +80,31 @@ async function hideBanner(page) {
 
 async function openDevice(browser, label) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  const blockedProductionRequests = [];
+  await context.route(`${PRODUCTION_PROJECT_URL}/**`, route => {
+    blockedProductionRequests.push(route.request().url());
+    return route.abort('blockedbyclient');
+  });
   const page = await context.newPage();
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  await page.evaluate(async ({ url, anonKey }) => {
+    await window.SutraCloudSync.switchBackend({
+      mode: 'custom',
+      customSupabaseUrl: url,
+      customSupabaseAnonKey: anonKey
+    });
+    const active = window.SutraCloudSync.getActiveConfig();
+    if (active?.mode !== 'custom' || active?.url !== url || active?.configured !== true) {
+      throw new Error('The live certification browser did not bind to the staging Supabase project.');
+    }
+  }, { url: PROJECT_URL, anonKey: PROJECT_ANON_KEY });
+  if (blockedProductionRequests.length) {
+    throw new Error('The live certification browser attempted to contact the production Supabase project.');
+  }
   await showBanner(page, label, 'Preparing authentication controls…');
-  return { context, page, label };
+  return { context, page, label, blockedProductionRequests };
 }
 
 async function identityDigest(page) {

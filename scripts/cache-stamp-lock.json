@@ -324,8 +324,8 @@
     "hash": "681671eec77a5fc2"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "925c55e54b23026a"
+    "stamp": "20260828-revocation-lock1",
+    "hash": "1cfd1993f59f9298"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20260822-office4",

@@ -253,6 +253,7 @@ test('legacy localStorage workspace is migrated before onboarding can save', asy
 test('existing canonical workspace data is preserved when onboarding metadata is incomplete', async ({ page }) => {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
 
   await page.evaluate(async () => {
     const readRoot = () => new Promise((resolve, reject) => {
@@ -300,7 +301,7 @@ test('existing canonical workspace data is preserved when onboarding metadata is
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
 
   const result = await page.evaluate(() => new Promise((resolve, reject) => {

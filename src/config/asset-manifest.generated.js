@@ -261,7 +261,7 @@
     "./src/features/workspace/html-pages.js?v=20260825-oxremed1",
     "./src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1",
     "./src/features/workspace/mobile-nav.js?v=20260826-sol3-1",
-    "./src/features/workspace/notifications.js?v=20260816-home-labels1",
+    "./src/features/workspace/notifications.js?v=20260828-revocation-lock1",
     "./src/features/workspace/office-interoperability.js?v=20260822-office4",
     "./src/features/workspace/pdf-engine.js?v=20260823-pdf4",
     "./src/features/workspace/pdf-runtime-loader.js?v=20260813-pdf1",

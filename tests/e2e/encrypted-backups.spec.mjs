@@ -25,8 +25,30 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+}
+
+async function readPersistedPageTitle(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('noteflow_atelier_db');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('workspace', 'readonly');
+      const get = tx.objectStore('workspace').get('root');
+      get.onerror = () => {
+        db.close();
+        reject(get.error || tx.error);
+      };
+      get.onsuccess = () => {
+        const title = get.result?.pages?.[0]?.title || '';
+        db.close();
+        resolve(title);
+      };
+    };
+  }));
 }
 
 async function seedRichWorkspace(page, marker) {
@@ -246,9 +268,11 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   await acceptRestoreConflictChooser(page);
   await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel Note IMPORT');
+  await expect.poll(() => readPersistedPageTitle(page), { timeout: 20_000 }).toBe('Sentinel Note IMPORT');
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title)).toBe('Sentinel Note IMPORT');
   const restored = await page.evaluate(() => {
