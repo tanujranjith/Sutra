@@ -190,6 +190,72 @@ test('a committed save remains the local base when only its verification read fa
   expect(result.failureBannerHidden).toBe(true);
 });
 
+test('a superseded same-tab lifecycle save is declined without raising a conflict', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const note = hooks.createNoteInActiveSpace('Lifecycle predecessor baseline', '<p>safe baseline</p>');
+    await window.flowAtelier.flushAppSaveNow('lifecycle-predecessor-baseline');
+
+    // Model the previous document in this SAME browser tab. The replacement
+    // document supersedes its session-scoped barrier before the delayed
+    // lifecycle transaction reaches the conditional root write.
+    hooks.renamePage(note.id, 'Late predecessor must not overwrite');
+    const token = hooks.persistenceLifecycle.beginBarrier('pagehide');
+    hooks.persistenceLifecycle.clearBarrier(token);
+    await hooks.persistenceLifecycle.flushWithBarrier('pagehide', token);
+    const afterSuperseded = await window.loadWorkspaceLocally();
+    const failureAfterSuperseded = window.SutraPersistenceHealth.getState().lastFailure;
+
+    await window.flowAtelier.flushAppSaveNow('retry');
+    const afterRetry = await window.loadWorkspaceLocally();
+    return {
+      titleAfterSuperseded: afterSuperseded?.pages?.find(entry => entry.id === note.id)?.title || '',
+      titleAfterRetry: afterRetry?.pages?.find(entry => entry.id === note.id)?.title || '',
+      failureAfterSuperseded,
+      bannerHidden: document.getElementById('sutraSaveFailureBanner')?.hidden === true
+    };
+  });
+
+  expect(result.titleAfterSuperseded).toBe('Lifecycle predecessor baseline');
+  expect(result.titleAfterRetry).toBe('Late predecessor must not overwrite');
+  expect(result.failureAfterSuperseded).toBeNull();
+  expect(result.bannerHidden).toBe(true);
+});
+
+test('a real same-tab reload hands off its lifecycle save without a false conflict', async ({ page }) => {
+  test.slow(); // This regression intentionally performs two complete app boots.
+  await openApp(page);
+
+  const noteId = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const note = hooks.createNoteInActiveSpace('Reload lifecycle baseline', '<p>before reload</p>');
+    window.loadPage(note.id);
+    await window.flowAtelier.flushAppSaveNow('reload-lifecycle-baseline');
+    return note.id;
+  });
+
+  await page.fill('#pageTitle', 'Saved during same-tab reload');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => !!window.flowAtelier && !!window.SutraPersistenceHealth);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('reload-lifecycle-verification'));
+
+  const result = await page.evaluate(async (id) => {
+    const durable = await window.loadWorkspaceLocally();
+    return {
+      title: durable?.pages?.find(entry => entry.id === id)?.title || '',
+      failure: window.SutraPersistenceHealth.getState().lastFailure,
+      bannerHidden: document.getElementById('sutraSaveFailureBanner')?.hidden === true
+    };
+  }, noteId);
+
+  expect(result.title).toBe('Saved during same-tab reload');
+  expect(result.failure).toBeNull();
+  expect(result.bannerHidden).toBe(true);
+});
+
 test('an unproven root change is not mislabeled as another open Sutra page', async ({ page }) => {
   await openApp(page);
 
@@ -213,14 +279,19 @@ test('an unproven root change is not mislabeled as another open Sutra page', asy
     }
     return {
       saveError,
-      bannerMessage: document.getElementById('sutraSaveFailureMessage')?.textContent || ''
+      bannerMessage: document.getElementById('sutraSaveFailureMessage')?.textContent || '',
+      conflict: window.SutraPersistenceHealth.getState().lastFailure?.conflict || null
     };
   });
 
   expect(result.saveError).toMatchObject({ name: 'WorkspaceConflictError' });
-  expect(result.saveError.message).toContain('stored workspace changed');
-  expect(result.bannerMessage).toContain('stored workspace changed');
+  expect(result.saveError.message).toContain('No other open Sutra page was detected');
+  expect(result.bannerMessage).toContain('No other open Sutra page was detected');
   expect(result.saveError.message).not.toMatch(/another (tab|open Sutra page)|stale tab/i);
+  expect(result.conflict).toMatchObject({ source: 'unverified-storage-change' });
+  expect(result.conflict.expectedHash).toMatch(/^[0-9a-f]{8}$/);
+  expect(result.conflict.actualHash).toMatch(/^[0-9a-f]{8}$/);
+  expect(result.conflict.actualHash).not.toBe(result.conflict.expectedHash);
 });
 
 test('a stale second tab cannot overwrite a paste saved in a locked note', async ({ page, context }) => {

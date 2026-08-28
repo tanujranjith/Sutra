@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260827-storage-onboarding1",
-    "hash": "dc5e93ad703d78b6"
+    "stamp": "20260828-storage-lifecycle2",
+    "hash": "07580765b2e59af0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
