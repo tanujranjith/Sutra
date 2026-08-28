@@ -25,9 +25,17 @@ async function completeOnboarding(page) {
   await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
 }
 
+async function waitForCanonicalHydration(page) {
+  // Static shell controls attach before IndexedDB hydration finishes. Tests
+  // that inspect canonical attachment metadata must wait for initApp's
+  // post-hydration binding, not merely for shell markup.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+}
+
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForCanonicalHydration(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }
@@ -146,6 +154,7 @@ test('Attachments: a transient IndexedDB open failure can recover without reload
 
   await page.reload();
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForCanonicalHydration(page);
   await completeOnboarding(page);
   const restored = await page.evaluate(fileId => window.SutraAttachments.readDataUrl(fileId), result.fileId);
   expect(restored).toBe(result.dataUrl);
