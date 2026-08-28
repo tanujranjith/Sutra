@@ -149,6 +149,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
 
     await dismissed.page.reload();
     await dismissed.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(dismissed.page);
     await completeOnboarding(dismissed.page);
     await dismissed.page.waitForFunction(() => !!window.SutraNotifications && !!window.SutraSync);
     await dismissed.page.waitForTimeout(300);
@@ -214,6 +215,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     await enableSync(device.page);
     await device.page.reload();
     await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(device.page);
     await completeOnboarding(device.page);
     await device.page.waitForFunction(() => !!window.SutraSync);
     expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(true);
@@ -221,6 +223,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     await device.page.evaluate(() => window.SutraSync.disable());
     await device.page.reload();
     await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(device.page);
     await completeOnboarding(device.page);
     await device.page.waitForFunction(() => !!window.SutraSync);
     expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
@@ -517,11 +520,17 @@ async function readEverythingState(page) {
     const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
     const file = (full.courseWorkspace && full.courseWorkspace.files || [])
       .find(row => row.id === 'file-parity');
+    // Attachment cache warming is intentionally non-blocking at startup.
+    // Read the durable attachment store directly instead of assuming that
+    // shell/canonical hydration also means the export cache has warmed.
+    const durableAttachment = file?.blobKey
+      ? await hooks.readCourseAttachmentBlob(file.blobKey)
+      : null;
     return {
       snapshot: await hooks.syncParity.getPortableSnapshot(),
       assistantRuntime: hooks.syncParity.getAssistantRuntimeState(),
       localState: hooks.syncParity.getPortableLocalState(),
-      attachment: file ? file._exportBlob || null : null,
+      attachment: durableAttachment || (file ? file._exportBlob || null : null),
       missingAttachment: file ? file.missingBlob === true : null
     };
   });
@@ -989,6 +998,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         // Survives a reload: state is durably in IndexedDB, sync stays enabled.
         await B.page.reload();
         await B.page.waitForSelector('#fileInput', { state: 'attached' });
+        await waitForCanonicalHydration(B.page);
         const afterReload = await B.page.evaluate(() => {
           const pages = window.serializeWorkspace({ mode: 'json' }).pages;
           return {
@@ -1248,6 +1258,10 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           A.page.waitForSelector('#fileInput', { state: 'attached' }),
           B.page.waitForSelector('#fileInput', { state: 'attached' })
         ]);
+        await Promise.all([
+          waitForCanonicalHydration(A.page),
+          waitForCanonicalHydration(B.page)
+        ]);
         const [reloadedA, reloadedB] = await Promise.all([
           readEverythingState(A.page),
           readEverythingState(B.page)
@@ -1339,6 +1353,10 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await Promise.all([
         A.page.waitForSelector('#fileInput', { state: 'attached' }),
         B.page.waitForSelector('#fileInput', { state: 'attached' })
+      ]);
+      await Promise.all([
+        waitForCanonicalHydration(A.page),
+        waitForCanonicalHydration(B.page)
       ]);
       const [reloadA, reloadB] = await Promise.all([
         A.page.evaluate(() => window.SutraAssistantConversationController.getCurrent()),
@@ -1476,6 +1494,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       expect(await device.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       await device.page.reload();
       await device.page.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(device.page);
       expect(await device.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       expect(await device.page.locator('#sutraRevokedDeviceScreen').count()).toBe(0);
     } finally {
