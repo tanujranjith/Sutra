@@ -2861,6 +2861,11 @@ function populateProgressDashboard() {
         // still in flight. Never let those boot-time requests write the default
         // in-memory workspace over a user's real root.
         let workspaceHydrationComplete = false;
+        // First-run UI is allowed only after Sutra has proved that the canonical
+        // workspace is usable: either an existing root was read successfully or
+        // a brand-new root was written and verified. A default in-memory fallback
+        // after a failed read/write is an UNKNOWN workspace, never a new one.
+        let workspaceStartupPersistenceConfirmed = false;
         let saveRequestedBeforeHydration = false;
         let resolveWorkspaceHydrationReady;
         const workspaceHydrationReady = new Promise(resolve => {
@@ -7743,6 +7748,7 @@ function populateProgressDashboard() {
         }
 
         async function initAppData() {
+            workspaceStartupPersistenceConfirmed = false;
             if (sutraRevocationLockActive) {
                 appData = getDefaultAppData();
                 return;
@@ -7795,12 +7801,14 @@ function populateProgressDashboard() {
                 // carried over from a prior stale-asset session is provably
                 // resolved and never meant lost data — clear it.
                 clearResolvedMigrationFailure();
+                workspaceStartupPersistenceConfirmed = true;
             } else if (readFailed) {
                 appData = getDefaultAppData();
             } else {
                 appData = migrateLegacyData();
                 try {
                     await commitAppDataWithHealth('initial-migration', { verifyReadback: true });
+                    workspaceStartupPersistenceConfirmed = true;
                 } catch (error) {
                     console.warn('Initial workspace persistence failed; continuing in memory.', error);
                 }
@@ -27853,6 +27861,17 @@ function buildOnboardingPlanPreview() {
         let onboardingStartTimer = null;
         function maybeStartUnifiedOnboarding() {
             if (!appSettings || !appData) return;
+            if (!workspaceHydrationComplete || !workspaceStartupPersistenceConfirmed || persistenceWritesBlocked) {
+                if (onboardingStartTimer) {
+                    clearTimeout(onboardingStartTimer);
+                    onboardingStartTimer = null;
+                }
+                // Storage uncertainty must never look like first run. An early
+                // listener or a timer may have opened the default-state wizard
+                // before the canonical startup result became known.
+                if (AtelierOnboardingController.isOpen()) AtelierOnboardingController.close();
+                return;
+            }
             const state = getOnboardingState();
             if (state.completed || state.skipped) {
                 if (onboardingStartTimer) {
@@ -27886,8 +27905,10 @@ function buildOnboardingPlanPreview() {
                 onboardingStartTimer = null;
                 // Re-check at fire time: onboarding may have been completed or
                 // skipped during the delay (workspace import, programmatic
-                // completion, a fast user). Showing the wizard then would
-                // re-add body.onboarding-open and dead-lock the app chrome.
+                // completion, a fast user), or persistence may have entered a
+                // fail-closed state. Showing the wizard then would re-add
+                // body.onboarding-open and dead-lock the app chrome.
+                if (!workspaceHydrationComplete || !workspaceStartupPersistenceConfirmed || persistenceWritesBlocked) return;
                 const latest = getOnboardingState();
                 if (latest.completed || latest.skipped || AtelierOnboardingController.isOpen()) return;
                 AtelierOnboardingController.show();
