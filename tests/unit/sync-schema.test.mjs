@@ -22,6 +22,14 @@ const pruningMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260825_sync_pruning_durable_ack.sql'),
   'utf8'
 );
+const assetRpcMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260830_sync_put_asset_ambiguity.sql'),
+  'utf8'
+);
+const pruneFloorMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260830_sync_z_prune_floor_reference.sql'),
+  'utf8'
+);
 
 const tables = ['sync_ops', 'sync_devices', 'sync_vault_keys', 'sync_snapshots', 'sync_asset_index'];
 const exposedFunctions = [
@@ -148,10 +156,14 @@ test('schema is ordered after backup setup and exposes no elevated browser crede
 test('additive migration chain is ordered, non-destructive, and folded into the fresh schema', () => {
   assert.ok('20260716_device_revoke_wipe.sql' < '20260718_sync_account_isolation.sql');
   assert.ok('20260718_sync_account_isolation.sql' < '20260730_sync_storage_path_and_function_permissions.sql');
+  assert.ok('20260730_sync_storage_path_and_function_permissions.sql' < '20260825_sync_pruning_durable_ack.sql');
+  assert.ok('20260825_sync_pruning_durable_ack.sql' < '20260830_sync_put_asset_ambiguity.sql');
+  assert.ok('20260830_sync_put_asset_ambiguity.sql' < '20260830_sync_z_prune_floor_reference.sql');
   for (const [name, migration] of [
     ['device revoke/wipe', revokeWipeMigration],
     ['account isolation', accountIsolationMigration],
-    ['production hardening reconciliation', productionHardeningMigration]
+    ['production hardening reconciliation', productionHardeningMigration],
+    ['asset RPC ambiguity reconciliation', assetRpcMigration]
   ]) {
     assert.doesNotMatch(migration, /delete\s+from\s+public\.sync_|drop\s+table|truncate\s+/i,
       `${name} migration must preserve encrypted sync state`);
@@ -223,4 +235,35 @@ test('op-log retention prunes only below the snapshot-and-devices floor', () => 
   assert.match(pruningMigration, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/);
   assert.ok((pruningMigration.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2);
   assert.match(pruningMigration, /\bcommit;\s*$/i);
+});
+
+test('positive pruning floors use a local scalar instead of a missing table qualifier', () => {
+  for (const source of [sql, pruningMigration, pruneFloorMigration]) {
+    const start = source.indexOf('function public.sync_prune_ops');
+    assert.ok(start >= 0, 'missing sync_prune_ops');
+    const body = source.slice(start, source.indexOf('$$;', start) + 3);
+    assert.match(body, /v_prune_floor\s+bigint/i);
+    assert.match(body, /and id <= v_prune_floor/i);
+    assert.doesNotMatch(body, /sync_prune_ops\.v_floor/i);
+  }
+  assert.match(pruneFloorMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(pruneFloorMigration, /grant execute on function public\.sync_prune_ops\(text\) to authenticated;/i);
+  assert.equal((pruneFloorMigration.match(/delete\s+from\s+public\.sync_ops/gi) || []).length, 1,
+    'the replacement function retains exactly one account-scoped pruning statement');
+  assert.doesNotMatch(pruneFloorMigration, /drop\s+table|truncate\s+|delete\s+from\s+public\.(?!sync_ops)/i,
+    'applying the reconciliation must not add destructive migration statements');
+  assert.match(pruneFloorMigration, /\bcommit;\s*$/i);
+});
+
+test('sync_put_asset upserts through its named key without PL/pgSQL hash ambiguity', () => {
+  for (const source of [sql, assetRpcMigration]) {
+    const start = source.indexOf('function public.sync_put_asset');
+    assert.ok(start >= 0, 'missing sync_put_asset');
+    const body = source.slice(start, source.indexOf('$$;', start) + 3);
+    assert.match(body, /on conflict on constraint sync_asset_index_pkey/i);
+    assert.doesNotMatch(body, /on conflict\s*\(\s*user_id\s*,\s*hash\s*\)/i);
+    assert.match(source, /grant execute on function public\.sync_put_asset\(text, bigint, text\) to authenticated;/i);
+  }
+  assert.match(assetRpcMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(assetRpcMigration, /\bcommit;\s*$/i);
 });

@@ -265,7 +265,7 @@ declare
   v_code text;
   v_snapshot_cursor bigint;
   v_min_device_cursor bigint;
-  v_floor bigint;
+  v_prune_floor bigint;
   v_deleted bigint;
 begin
   v_code := public.sync_authorize_device("deviceId", true);
@@ -285,16 +285,16 @@ begin
    where user_id = auth.uid()
      and revoked_at is null;
 
-  v_floor := least(v_snapshot_cursor, coalesce(v_min_device_cursor, 0));
-  if v_floor is null or v_floor <= 0 then
+  v_prune_floor := least(v_snapshot_cursor, coalesce(v_min_device_cursor, 0));
+  if v_prune_floor is null or v_prune_floor <= 0 then
     return jsonb_build_object('ok', true, 'pruned', 0, 'reason', 'no-floor');
   end if;
 
   delete from public.sync_ops
    where user_id = auth.uid()
-     and id <= sync_prune_ops.v_floor;
+     and id <= v_prune_floor;
   get diagnostics v_deleted = row_count;
-  return jsonb_build_object('ok', true, 'pruned', v_deleted, 'floor', v_floor);
+  return jsonb_build_object('ok', true, 'pruned', v_deleted, 'floor', v_prune_floor);
 end;
 $$;
 
