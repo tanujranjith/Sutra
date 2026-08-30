@@ -27,6 +27,7 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
   // .app-container is visible on both desktop and mobile viewports (the desktop
   // brand-mark is CSS-hidden on phones), so it is the portable boot signal.
@@ -115,6 +116,9 @@ test('Homework quick-add modal is usable on a mobile viewport', async ({ page })
 // Creates a deck and opens its detail view, where the Review modal triggers
 // (Bulk import / Delete) live in the header action row.
 async function openReviewDeckDetail(page) {
+  await page.waitForFunction(() => typeof window.openReviewTab === 'function'
+    && typeof window.createReviewDeck === 'function'
+    && typeof window.openReviewDeck === 'function');
   await page.evaluate(() => {
     window.openReviewTab && window.openReviewTab();
     const deck = window.createReviewDeck ? window.createReviewDeck({ name: 'Modal QA Deck' }) : null;

@@ -49,7 +49,7 @@ export const EVERYTHING_ASSISTANT_HISTORY = {
         blockId: 'block-rich', title: 'Parity Parent::Parity Child',
         headingPath: ['Evidence'], quote: 'Unique parity evidence.',
         href: 'sutra://page/page-child', updatedAt: EVERYTHING_STAMP,
-        version: 'version-parity', confidence: 'high',
+        version: 'version-parity', sourceOffsets: null, score: 0, confidence: 'high',
         reasonCodes: ['exact-match'], safetyFlags: [], stale: false
       }],
       grounding: {

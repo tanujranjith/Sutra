@@ -32,8 +32,15 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
-  await page.waitForFunction(() => window.SutraSmartImport && window.SutraAssistantChats && window.SutraIntegrations);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
+  await page.waitForFunction(() => window.SutraSmartImport
+    && window.SutraAssistantChats
+    && window.SutraIntegrations
+    && window.SutraAssistantConversationController
+    && window.flowAssistant);
 }
 
 test('Release notes open locally from the notification center without network fetch', async ({ page }) => {
@@ -153,15 +160,46 @@ test('Assistant chat history persists locally and is included in encrypted backu
   await expect(page.locator('#chatbotMessages')).toBeVisible();
   // Deterministic local commands ("open notes") sit behind the
   // assistant.localRouting toggle, which defaults OFF (AI-only).
-  await page.evaluate(() => { window.setWorkspacePreference('assistant.localRouting', true); });
+  await page.evaluate(() => {
+    window.setWorkspacePreference('assistant.localRouting', true);
+    window.setWorkspacePreference('assistant.saveChatHistory', true);
+    window.setWorkspacePreference('assistant.includeChatsInEncryptedBackups', true);
+    window.setWorkspacePreference('assistant.includeChatsInPlaintextRecovery', false);
+    if (!window.SutraAssistantConversationController.getState().conversations.length) {
+      window.SutraAssistantConversationController.create({ title: 'Encrypted backup QA' });
+    }
+  });
+  const localRoute = await page.evaluate(() => ({
+    enabled: window.getWorkspacePreference('assistant.localRouting', null),
+    result: window.flowAssistant.handleOutgoing("what's overdue?")
+  }));
+  expect(localRoute.enabled).toBe(true);
+  expect(localRoute.result?.handled).toBe(true);
   await page.evaluate(async () => {
-    document.getElementById('chatInput').value = 'open notes';
+    document.getElementById('chatInput').value = "what's overdue?";
     await window.sendChat();
   });
-  await expect(page.locator('#chatbotMessages')).toContainText(/Switched to notes|Opened/i);
+  await expect(page.locator('#chatbotMessages .chatbot-msg.assistant').last()).toContainText(/overdue|caught up/i);
 
+  const chatState = await page.evaluate(() => {
+    const mirror = JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}');
+    return {
+      saveChatHistory: window.getWorkspacePreference('assistant.saveChatHistory', null),
+      internalRoles: window.SutraAssistantConversationController.getState()
+        .conversations?.[0]?.messages?.map(message => message.role),
+      canonicalRoles: window.SutraAssistantChats.getStore()
+        .conversations?.[0]?.messages?.map(message => message.role),
+      mirrorRoles: mirror.conversations?.[0]?.messages?.map(message => message.role)
+    };
+  });
+  expect(chatState.saveChatHistory).toBe(true);
+  expect(chatState.internalRoles).toEqual(['user', 'assistant']);
+  expect(chatState.canonicalRoles).toEqual(['user', 'assistant']);
+  await expect.poll(() => page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}');
+    return stored.conversations?.[0]?.messages?.map(message => message.role);
+  })).toEqual(['user', 'assistant']);
   const store = await page.evaluate(() => JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}'));
-  expect(store.conversations?.[0]?.messages?.map(m => m.role)).toEqual(['user', 'assistant']);
   expect(JSON.stringify(store)).not.toMatch(/<think>|flow-actions|sk-secret|developer prompt|system prompt/i);
 
   const backup = await page.evaluate(async ({ pass }) => {

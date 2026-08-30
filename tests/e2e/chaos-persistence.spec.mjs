@@ -3,8 +3,9 @@
  *
  * Every test names the invariant it protects:
  *  - corrupted legacy mirrors must not crash boot and must normalize/quarantine;
- *  - a wiped workspace database must come back as a FRESH CONFIRMED root
- *    (canonical write + readback pipeline runs);
+ *  - a missing workspace database with surviving confirmation metadata must
+ *    fail closed instead of being mistaken for a first run;
+ *  - a complete origin-data wipe may come back as a fresh confirmed root;
  *  - rapid serialized saves must all commit without corrupting the root;
  *  - an interrupted save must never lose the previous confirmed state;
  *  - rapid view switches must land on the requested route with no page errors,
@@ -50,23 +51,55 @@ test.describe('Chaos: storage fault injection', () => {
         expect(pageErrors).toEqual([]);
     });
 
-    test('a cleared workspace database boots as a fresh workspace whose first save confirms durably', async ({ page }) => {
+    test('a missing workspace database with a surviving confirmed hash fails closed at startup', async ({ page }) => {
+        await page.goto('http://127.0.0.1:5173/HomePage.html', { waitUntil: 'domcontentloaded' });
+        await page.evaluate(async () => {
+            localStorage.setItem('sutra:persistenceHealth:v1', JSON.stringify({
+                version: 2,
+                lastConfirmedSaveAt: '2026-08-28T20:00:00.000Z',
+                lastConfirmedWorkspaceHash: '2abb8907'
+            }));
+            await new Promise((resolve, reject) => {
+                const request = indexedDB.deleteDatabase('noteflow_atelier_db');
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error('Workspace DB delete failed'));
+                request.onblocked = () => reject(new Error('Workspace DB delete blocked'));
+            });
+        });
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.evaluate(() => new Promise((resolve) => {
-            indexedDB.deleteDatabase('noteflow_atelier_db');
-            indexedDB.deleteDatabase('noteflow_attachments_db');
-            setTimeout(resolve, 300);
-        }));
-        await page.reload({ waitUntil: 'domcontentloaded' });
         await expect(page.locator('.view-tab').first()).toBeAttached({ timeout: 20000 });
-        // Invariant: the durability pipeline itself reports success after the wipe —
-        // whenPersisted resolves only once the canonical IndexedDB commit (with
-        // readback verification) completed following the homework migration save.
+        const result = await page.evaluate(async () => {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const health = window.SutraPersistenceHealth?.getState();
+            let saveError = null;
+            try { await window.flowAtelier.flushAppSaveNow('startup-missing-root-test'); }
+            catch (error) { saveError = { name: error?.name || '', message: error?.message || String(error) }; }
+            return { health, saveError, durable: await window.loadWorkspaceLocally() };
+        });
+        expect(result.health?.lastFailure?.phase).toBe('startup-missing-root');
+        expect(result.saveError?.name).toBe('WorkspaceReadSafetyError');
+        expect(result.durable).toBeNull();
+    });
+
+    test('a complete origin-data wipe boots as a fresh workspace whose first save confirms durably', async ({ page }) => {
+        await page.goto('http://127.0.0.1:5173/HomePage.html', { waitUntil: 'domcontentloaded' });
+        await page.evaluate(async () => {
+            localStorage.clear();
+            sessionStorage.clear();
+            await Promise.all(['noteflow_atelier_db', 'noteflow_attachments_db'].map(name => new Promise((resolve, reject) => {
+                const request = indexedDB.deleteDatabase(name);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error || new Error(`${name} delete failed`));
+                request.onblocked = () => reject(new Error(`${name} delete blocked`));
+            })));
+        });
+        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await expect(page.locator('.view-tab').first()).toBeAttached({ timeout: 20000 });
         const persisted = await page.evaluate(async () => {
             const store = window.SutraHomeworkStore;
             if (!store || typeof store.whenPersisted !== 'function') return 'no-store';
             try { await store.whenPersisted(); return 'confirmed'; }
-            catch (e) { return 'failed'; }
+            catch (error) { return `failed:${error?.name || 'unknown'}`; }
         });
         expect(persisted).toBe('confirmed');
     });

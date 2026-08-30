@@ -33,6 +33,10 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  // flowAtelier is published before the canonical workspace has finished
+  // hydrating. Seed records only after the late boot delegates are bound so
+  // hydration cannot replace the arrays underneath this test.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
   await page.waitForFunction(() => !!window.SutraTodayCenter && !!window.flowAtelier);
 }

@@ -14,7 +14,18 @@
   var cloudWriteGeneration = null;
   var cloudHydration = null;
 
+  function revocationLocked() {
+    try {
+      return !!(global.SutraRevocationWipe
+        && typeof global.SutraRevocationWipe.readGuard === 'function'
+        && global.SutraRevocationWipe.readGuard());
+    } catch (error) {
+      return true;
+    }
+  }
+
   function vault() {
+    if (revocationLocked()) return null;
     return global.SutraCredentialVault && typeof global.SutraCredentialVault.get === 'function'
       ? global.SutraCredentialVault
       : null;

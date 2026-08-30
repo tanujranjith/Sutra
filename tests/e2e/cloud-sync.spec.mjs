@@ -27,19 +27,29 @@ async function completeOnboarding(page) {
   });
 }
 
+async function waitForCanonicalHydration(page) {
+  // Shell markup and globals arrive before canonical IndexedDB hydration.
+  // This binding is installed by initApp only after the workspace has loaded;
+  // fixture writes before it can be overwritten by a late hydrate.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+}
+
 async function openDevice(browser, server, label) {
   const context = await browser.newContext();
+  await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
   const page = await context.newPage();
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForCanonicalHydration(page);
   await completeOnboarding(page);
   return { context, page, net, label };
 }
 
 async function openAuthedDevice(browser, server, label) {
   const context = await browser.newContext();
+  await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
   await context.addInitScript(({ url }) => {
@@ -48,6 +58,7 @@ async function openAuthedDevice(browser, server, label) {
   const page = await context.newPage();
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForCanonicalHydration(page);
   await completeOnboarding(page);
   await page.evaluate(async () => {
     await window.SutraCloudSync.switchProvider('supabase');
@@ -118,11 +129,16 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     });
     expect(device.net.seenAuthHeaders).toHaveLength(0);
 
-    await device.page.evaluate(() => window.SutraNotifications.openPanel());
+    await device.page.evaluate(() => {
+      // The notification module intentionally auto-initializes after a short
+      // startup delay. Its derived data can be available before its panel
+      // listeners are ready, so synchronize with the public idempotent init.
+      window.SutraNotifications.init();
+      window.SutraNotifications.openPanel();
+    });
     const noticeRow = device.page.getByRole('article', { name: /Sutra Sync Beta is available/i });
     await expect(noticeRow).toBeVisible();
-    await noticeRow.focus();
-    await device.page.keyboard.press('Enter');
+    await noticeRow.press('Enter');
     await expect(device.page.getByRole('dialog', { name: /Sutra Sync Beta/i })).toBeVisible();
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('Optional and currently off');
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('recent encrypted .sutra backup');
@@ -140,6 +156,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
 
     await dismissed.page.reload();
     await dismissed.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(dismissed.page);
     await completeOnboarding(dismissed.page);
     await dismissed.page.waitForFunction(() => !!window.SutraNotifications && !!window.SutraSync);
     await dismissed.page.waitForTimeout(300);
@@ -205,6 +222,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     await enableSync(device.page);
     await device.page.reload();
     await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(device.page);
     await completeOnboarding(device.page);
     await device.page.waitForFunction(() => !!window.SutraSync);
     expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(true);
@@ -212,6 +230,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     await device.page.evaluate(() => window.SutraSync.disable());
     await device.page.reload();
     await device.page.waitForSelector('#fileInput', { state: 'attached' });
+    await waitForCanonicalHydration(device.page);
     await completeOnboarding(device.page);
     await device.page.waitForFunction(() => !!window.SutraSync);
     expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
@@ -305,6 +324,7 @@ test('two fresh tabs atomically choose one shared device identity', async ({ bro
   const secondPage = await device.context.newPage();
   await secondPage.goto('/Sutra.html');
   await secondPage.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForCanonicalHydration(secondPage);
   await completeOnboarding(secondPage);
 
   for (const page of [device.page, secondPage]) {
@@ -507,18 +527,26 @@ async function readEverythingState(page) {
     const full = window.serializeWorkspace({ mode: 'full', includeSensitiveSettings: false });
     const file = (full.courseWorkspace && full.courseWorkspace.files || [])
       .find(row => row.id === 'file-parity');
+    // Attachment cache warming is intentionally non-blocking at startup.
+    // Read the durable attachment store directly instead of assuming that
+    // shell/canonical hydration also means the export cache has warmed.
+    const durableAttachment = file?.blobKey
+      ? await hooks.readCourseAttachmentBlob(file.blobKey)
+      : null;
     return {
       snapshot: await hooks.syncParity.getPortableSnapshot(),
       assistantRuntime: hooks.syncParity.getAssistantRuntimeState(),
       localState: hooks.syncParity.getPortableLocalState(),
-      attachment: file ? file._exportBlob || null : null,
+      attachment: durableAttachment || (file ? file._exportBlob || null : null),
       missingAttachment: file ? file.missingBlob === true : null
     };
   });
 }
 
 test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
-  test.describe.configure({ timeout: 120000 });
+  // WebCrypto + IndexedDB workloads are intentionally serialized and can
+  // exceed two minutes on Windows CI/desktop hosts without being stuck.
+  test.describe.configure({ timeout: 300_000 });
 
   test('create + edit propagate, double-push is idempotent, applies never echo', async ({ browser }) => {
     const server = createSyncMockServer();
@@ -698,12 +726,18 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(resolver.page);
       expect(await A.page.evaluate(() => window.SutraSync.listConflicts())).toHaveLength(0);
       expect(await B.page.evaluate(() => window.SutraSync.listConflicts())).toHaveLength(0);
-      const resolutionMarkers = await Promise.all([A.page, B.page].map(page => page.evaluate(id => {
-        const ws = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-        return (ws.syncAuditLog || []).filter(row => row?.kind === 'sync_conflict_resolution' && row.conflictId === id);
-      }, review[0].id)));
-      expect(resolutionMarkers[0]).toHaveLength(1);
-      expect(resolutionMarkers[1]).toHaveLength(1);
+      await expect.poll(async () => {
+        // A confirmed save schedules an automatic cycle. Explicit syncNow()
+        // calls intentionally return { skipped: true } while that cycle owns
+        // the single-flight lock, so advance both peers until the encrypted
+        // resolution marker is observably durable on each one.
+        await syncNow(resolver.page);
+        await syncNow(follower.page);
+        return Promise.all([A.page, B.page].map(page => page.evaluate(id => {
+          const ws = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+          return (ws.syncAuditLog || []).filter(row => row?.kind === 'sync_conflict_resolution' && row.conflictId === id).length;
+        }, review[0].id)));
+      }, { timeout: 20000 }).toEqual([1, 1]);
       await syncNow(A.page);
       expect(await A.page.evaluate(() => window.SutraSync.listConflicts())).toHaveLength(0);
     } finally {
@@ -735,8 +769,21 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         await window.saveWorkspaceLocally();
       }, new Date().toISOString());
 
+      const prepared = await A.page.evaluate(async () => {
+        const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+        const analysis = await window.SutraSync.analyzeLegacyConflictCopies();
+        return {
+          counts: analysis.counts,
+          lastAtelierExportAt: payload.settings?.dataHealth?.lastAtelierExportAt || ''
+        };
+      });
+      expect(prepared.counts).toMatchObject({ total: 3, safe: 1, review: 1, ambiguous: 1, recursive: 0 });
+      expect(Date.now() - Date.parse(prepared.lastAtelierExportAt)).toBeLessThan(15 * 60 * 1000);
+
       const cleanupPromise = A.page.evaluate(() => window.SutraSync.cleanupLegacyConflictCopies());
-      await expect(A.page.locator('#customConfirmModal')).toHaveClass(/active/);
+      // Snapshot/save analysis can outlive the default locator timeout on a
+      // busy host; wait for the actual confirmation boundary, not wall time.
+      await expect(A.page.locator('#customConfirmModal')).toHaveClass(/active/, { timeout: 30_000 });
       await A.page.locator('#customConfirmAcceptBtn').click();
       const result = await cleanupPromise;
       expect(result.removedIds).toEqual(['conflict-cleanup-exact', 'conflict-cleanup-unique']);
@@ -768,6 +815,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('offline divergence, hidden same-note review conflicts, and delete-vs-edit all converge', async ({ browser }) => {
+    test.setTimeout(360_000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
     const B = await openDevice(browser, server, 'B');
@@ -806,6 +854,14 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(A.page);
       await syncNow(B.page);
       await syncNow(A.page);
+
+      // Resume can race the explicit cycles with an automatic debounced cycle.
+      // Keep both peers moving until B's durable task is observable on A.
+      await expect.poll(async () => {
+        await syncNow(B.page);
+        await syncNow(A.page);
+        return (await readTasks(A.page)).some(t => t.id === 'task-from-b-offline');
+      }, { timeout: 30_000 }).toBe(true);
 
       const pagesA = await readPages(A.page);
       const pagesB = await readPages(B.page);
@@ -873,6 +929,15 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await syncNow(B.page);
       await syncNow(A.page);
 
+      await expect.poll(async () => {
+        await syncNow(B.page);
+        await syncNow(A.page);
+        const [pagesOnA, pagesOnB] = await Promise.all([readPages(A.page), readPages(B.page)]);
+        return [pagesOnA, pagesOnB].every(rows =>
+          rows.find(p => p.id === 'page-shared')?.content.includes('edited while A deleted it')
+        );
+      }, { timeout: 30_000 }).toBe(true);
+
       const survivorA = (await readPages(A.page)).find(p => p.id === 'page-shared');
       const survivorB = (await readPages(B.page)).find(p => p.id === 'page-shared');
       expect(survivorA, 'edit must resurrect the record on the deleting device').toBeTruthy();
@@ -885,6 +950,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('new-device bootstrap: snapshot + ops rebuild the workspace and survive reload', async ({ browser }) => {
+    test.setTimeout(360_000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
     try {
@@ -939,6 +1005,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         // Survives a reload: state is durably in IndexedDB, sync stays enabled.
         await B.page.reload();
         await B.page.waitForSelector('#fileInput', { state: 'attached' });
+        await waitForCanonicalHydration(B.page);
         const afterReload = await B.page.evaluate(() => {
           const pages = window.serializeWorkspace({ mode: 'json' }).pages;
           return {
@@ -1052,7 +1119,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('complete portable workspace parity: snapshot bootstrap, Assistant hydration, assets, reverse incrementals, and reload', async ({ browser }) => {
-    test.setTimeout(180000);
+    test.setTimeout(360_000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
     const REPLACEMENT_ATTACHMENT =
@@ -1198,6 +1265,10 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           A.page.waitForSelector('#fileInput', { state: 'attached' }),
           B.page.waitForSelector('#fileInput', { state: 'attached' })
         ]);
+        await Promise.all([
+          waitForCanonicalHydration(A.page),
+          waitForCanonicalHydration(B.page)
+        ]);
         const [reloadedA, reloadedB] = await Promise.all([
           readEverythingState(A.page),
           readEverythingState(B.page)
@@ -1220,6 +1291,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('real Assistant composer history syncs incrementally both ways, survives stale legacy storage, and reloads', async ({ browser }) => {
+    test.setTimeout(360_000);
     const server = createSyncMockServer();
     const A = await openDevice(browser, server, 'A');
     const B = await openDevice(browser, server, 'B');
@@ -1289,6 +1361,10 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         A.page.waitForSelector('#fileInput', { state: 'attached' }),
         B.page.waitForSelector('#fileInput', { state: 'attached' })
       ]);
+      await Promise.all([
+        waitForCanonicalHydration(A.page),
+        waitForCanonicalHydration(B.page)
+      ]);
       const [reloadA, reloadB] = await Promise.all([
         A.page.evaluate(() => window.SutraAssistantConversationController.getCurrent()),
         B.page.evaluate(() => window.SutraAssistantConversationController.getCurrent())
@@ -1302,6 +1378,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('revoke and wipe blocks immediately, waits while offline, clears all tabs and stores, and survives reload', async ({ browser }) => {
+    test.setTimeout(360_000);
     const server = createSyncMockServer({ userId: 'mock-user-1' });
     const A = await openAuthedDevice(browser, server, 'A');
     const B = await openAuthedDevice(browser, server, 'B');
@@ -1333,6 +1410,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       const secondTab = await B.context.newPage();
       await secondTab.goto('/Sutra.html');
       await secondTab.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(secondTab);
       expect(await secondTab.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       await secondTab.evaluate(async (passphrase) => {
         await window.SutraCloudSync.switchProvider('supabase');
@@ -1423,6 +1501,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       expect(await device.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       await device.page.reload();
       await device.page.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(device.page);
       expect(await device.page.evaluate(marker => JSON.stringify(window.serializeWorkspace({ mode: 'json' })).includes(marker), marker)).toBe(true);
       expect(await device.page.locator('#sutraRevokedDeviceScreen').count()).toBe(0);
     } finally {
@@ -1442,6 +1521,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
     try {
       await page.goto('/Sutra.html');
       await page.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(page);
       await completeOnboarding(page);
       await seedBaseline(page);
       await editPage(page, 'page-shared', '<p>local-only edit</p>');
@@ -1455,6 +1535,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   });
 
   test('two tabs of one device: single-flight cycles, no duplicate ops, status relays across tabs', async ({ browser }) => {
+    test.setTimeout(360_000);
     const server = createSyncMockServer();
     const context = await browser.newContext();
     const net = { down: false };
@@ -1463,6 +1544,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
     try {
       await tab1.goto('/Sutra.html');
       await tab1.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(tab1);
       await completeOnboarding(tab1);
       await seedBaseline(tab1);
       await enableSync(tab1);
@@ -1472,6 +1554,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       const tab2 = await context.newPage();
       await tab2.goto('/Sutra.html');
       await tab2.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(tab2);
       await completeOnboarding(tab2);
 
       // Tab 2 sees sync enabled (workspace preference) but locked; unlocking
@@ -1522,8 +1605,19 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       }
       expect(sawQuiescence, 'two tabs must reach quiescence, never ping-pong').toBe(true);
 
-      // An edit in tab 2 makes tab 1 STALE: its sync must skip instead of
-      // pushing outdated records back to the server.
+      // Either racing tab may have written the last canonical root. Reload tab
+      // 2 from that root before choosing it as the next writer; otherwise the
+      // persistence conflict guard correctly rejects a stale local overwrite
+      // before this test reaches the Sync stale-tab assertion.
+      await tab2.reload();
+      await tab2.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(tab2);
+      await completeOnboarding(tab2);
+      const reunlocked = await tab2.evaluate(async (passphrase) => (await window.SutraSync.unlock(passphrase)).status.state, PASSPHRASE);
+      expect(reunlocked).toBe('idle');
+
+      // The fresh edit in tab 2 now deterministically makes tab 1 STALE: its
+      // sync must skip instead of pushing outdated records back to the server.
       await editPage(tab2, 'page-shared', '<p>typed in tab two</p>');
       const pushTab2 = await syncNow(tab2);
       expect(pushTab2.error).toBeNull();
@@ -1541,8 +1635,11 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       const tab3 = await context.newPage();
       await tab3.goto('/Sutra.html');
       await tab3.waitForSelector('#fileInput', { state: 'attached' });
-      const pagesTab3 = await readPages(tab3);
-      expect(pagesTab3.find(p => p.id === 'page-shared').content).toContain('tab two after closing the stale tab');
+      await waitForCanonicalHydration(tab3);
+      await expect.poll(async () => {
+        const page = (await readPages(tab3)).find(p => p.id === 'page-shared');
+        return page?.content || '';
+      }, { timeout: 20_000 }).toContain('tab two after closing the stale tab');
       const resumed = await tab3.evaluate(async (passphrase) => (await window.SutraSync.unlock(passphrase)).status.state, PASSPHRASE);
       expect(resumed).toBe('idle');
       await tab3.close();
@@ -1563,6 +1660,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await page.addInitScript(({ url }) => { window.SUTRA_CONFIG = { supabaseUrl: url, supabaseAnonKey: 'mock-anon-key' }; }, { url: SYNC_MOCK_ORIGIN });
       await page.goto('/Sutra.html');
       await page.waitForSelector('#fileInput', { state: 'attached' });
+      await waitForCanonicalHydration(page);
       await completeOnboarding(page);
       await seedBaseline(page);
 

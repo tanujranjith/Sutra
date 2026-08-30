@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260823-storage-journal8",
-    "hash": "afd3c2a57404f33d"
+    "stamp": "20260830-revoke2",
+    "hash": "2c25873166774cf9"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -40,12 +40,12 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260828-storage-lifecycle2",
-    "hash": "07580765b2e59af0"
+    "stamp": "20260830-rootrecovery1",
+    "hash": "e4bd7dc613e58cc0"
   },
   "src/core/credential-vault-bridge.js": {
-    "stamp": "20260823-credential-bridge4",
-    "hash": "75f9c663cd99393e"
+    "stamp": "20260830-revoke2",
+    "hash": "0f56756a5af9162d"
   },
   "src/core/credential-vault.js": {
     "stamp": "20260825-oxremed1",
@@ -324,8 +324,8 @@
     "hash": "681671eec77a5fc2"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "925c55e54b23026a"
+    "stamp": "20260828-revocation-lock1",
+    "hash": "1cfd1993f59f9298"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20260822-office4",
@@ -404,7 +404,7 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260825-sol1-1",
+    "stamp": "20260830-revoke2",
     "hash": "416ba029ebf241d8"
   },
   "src/persistence/storage-hygiene.js": {
@@ -420,8 +420,8 @@
     "hash": "b1f32b92bdbc29e1"
   },
   "src/state/persistence-state.js": {
-    "stamp": "20260825-state1",
-    "hash": "192c344954791833"
+    "stamp": "20260830-rootrecovery1",
+    "hash": "185ababa9c8ec683"
   },
   "src/state/workspace-normalizers.js": {
     "stamp": "20260825-oxremed1",

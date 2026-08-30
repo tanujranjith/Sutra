@@ -1,16 +1,31 @@
 import { expect, test } from '@playwright/test';
 
-// Credential-safe live-project certification. The operator enters OTPs and
-// vault passphrases only inside headed browser windows. This test never reads,
-// logs, exports, or persists those values or the resulting auth tokens.
+// Credential-safe live-project certification. Manual mode keeps OTPs and vault
+// passphrases inside headed browser windows; optional automation reads them from
+// process environment variables and passes them only to isolated page memory.
+// The test never logs, exports, or writes credentials or auth tokens to disk.
 //
 // PowerShell:
 //   $env:SUTRA_REAL_CERTIFY='1'
+//   $env:SUTRA_REAL_SUPABASE_URL='https://your-staging-ref.supabase.co'
+//   $env:SUTRA_REAL_SUPABASE_ANON_KEY='<staging publishable or anon key>'
 //   npx playwright test tests/e2e/real-supabase-certification.spec.mjs --project=chromium --workers=1 --headed
 
 const RUN_REAL = process.env.SUTRA_REAL_CERTIFY === '1';
 const BASE_URL = process.env.SUTRA_REAL_BASE_URL || 'http://127.0.0.1:5173/Sutra.html';
-const PROJECT_URL = 'https://blfsmdyvdlhabltiicgx.supabase.co';
+const PRODUCTION_PROJECT_URL = 'https://blfsmdyvdlhabltiicgx.supabase.co';
+const PROJECT_URL = String(process.env.SUTRA_REAL_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const PROJECT_ANON_KEY = String(process.env.SUTRA_REAL_SUPABASE_ANON_KEY || '').trim();
+const AUTOMATED_ACCOUNT_A_EMAIL = String(process.env.SUTRA_REAL_ACCOUNT_A_EMAIL || '').trim();
+const AUTOMATED_ACCOUNT_A_PASSWORD = String(process.env.SUTRA_REAL_ACCOUNT_A_PASSWORD || '');
+const AUTOMATED_ACCOUNT_B_EMAIL = String(process.env.SUTRA_REAL_ACCOUNT_B_EMAIL || '').trim();
+const AUTOMATED_ACCOUNT_B_PASSWORD = String(process.env.SUTRA_REAL_ACCOUNT_B_PASSWORD || '');
+const AUTOMATED_VAULT_PASSPHRASE = String(process.env.SUTRA_REAL_VAULT_PASSPHRASE || '');
+const AUTOMATED_AUTH = !!(
+  AUTOMATED_ACCOUNT_A_EMAIL && AUTOMATED_ACCOUNT_A_PASSWORD
+  && AUTOMATED_ACCOUNT_B_EMAIL && AUTOMATED_ACCOUNT_B_PASSWORD
+  && AUTOMATED_VAULT_PASSPHRASE
+);
 const REQUIRED_DATABASES = [
   'noteflow_atelier_db',
   'noteflow_attachments_db',
@@ -22,6 +37,18 @@ const REQUIRED_DATABASES = [
 
 test.skip(!RUN_REAL, 'Set SUTRA_REAL_CERTIFY=1 for manual real-Supabase certification.');
 
+if (RUN_REAL) {
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(PROJECT_URL)) {
+    throw new Error('SUTRA_REAL_SUPABASE_URL must name the disposable staging Supabase project.');
+  }
+  if (!PROJECT_ANON_KEY) {
+    throw new Error('SUTRA_REAL_SUPABASE_ANON_KEY must contain the staging publishable/anon key.');
+  }
+  if (PROJECT_URL.toLowerCase() === PRODUCTION_PROJECT_URL.toLowerCase()) {
+    throw new Error('Live certification refuses to target the production Supabase project.');
+  }
+}
+
 async function completeOnboarding(page) {
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted(true); } catch (error) {}
@@ -32,6 +59,67 @@ async function completeOnboarding(page) {
       overlay.style.setProperty('display', 'none', 'important');
     }
   });
+}
+
+async function exchangeAutomatedPassword(page, email, password) {
+  return page.evaluate(async ({ email, password, projectUrl, anonKey }) => {
+    const response = await fetch(projectUrl + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { apikey: anonKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || !json?.access_token || !json?.refresh_token || !json?.user?.id) {
+      throw new Error('The automated staging password sign-in could not establish a session.');
+    }
+    return {
+      accessToken: String(json.access_token),
+      refreshToken: String(json.refresh_token),
+      expiresAtMs: Date.now() + Math.max(0, Number(json.expires_in || 3600) * 1000 - 60000),
+      user: { id: String(json.user.id), email: String(json.user.email || '') }
+    };
+  }, {
+    email,
+    password,
+    projectUrl: PROJECT_URL,
+    anonKey: PROJECT_ANON_KEY
+  });
+}
+
+async function installAutomatedSession(page, session) {
+  await page.evaluate(value => {
+    sessionStorage.setItem('sutra:supabaseSession:v1', JSON.stringify(value));
+  }, session);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await completeOnboarding(page);
+  const active = await page.evaluate(() => window.SutraCloudSync.getActiveConfig());
+  if (active?.url !== PROJECT_URL || active?.configured !== true) {
+    throw new Error('The automated staging session did not reload on the staging Supabase project.');
+  }
+  await expect.poll(
+    () => page.evaluate(() => window.SutraCloudSync?.isSignedIn() === true).catch(() => false),
+    { timeout: 30000, intervals: [250, 500, 1000] }
+  ).toBe(true);
+}
+
+async function installAutomatedPasswordSession(page, email, password) {
+  await installAutomatedSession(page, await exchangeAutomatedPassword(page, email, password));
+}
+
+async function enableAutomatedSync(page) {
+  await page.evaluate(({ passphrase, endpoint }) => window.SutraSync.enable({ passphrase, endpoint }), {
+    passphrase: AUTOMATED_VAULT_PASSPHRASE,
+    endpoint: PROJECT_URL
+  });
+}
+
+async function unlockAutomatedSync(page) {
+  await expect.poll(
+    () => page.evaluate(() => window.SutraSync.status().enabled === true).catch(() => false),
+    { timeout: 30000, intervals: [250, 500, 1000] }
+  ).toBe(true);
+  await page.evaluate(passphrase => window.SutraSync.unlock(passphrase), AUTOMATED_VAULT_PASSPHRASE);
 }
 
 async function showBanner(page, label, message, openSync = true) {
@@ -59,17 +147,61 @@ async function showBanner(page, label, message, openSync = true) {
 }
 
 async function hideBanner(page) {
-  await page.evaluate(() => document.getElementById('sutraRealCertificationBanner')?.remove());
+  await page.evaluate(automated => {
+    document.getElementById('sutraRealCertificationBanner')?.remove();
+    if (automated && typeof window.closeSutraSyncModal === 'function') {
+      window.closeSutraSyncModal();
+    }
+  }, AUTOMATED_AUTH);
 }
 
-async function openDevice(browser, label) {
+function logLivePhase(phase) {
+  console.log('[live-cert]', phase);
+}
+
+async function openDevice(browser, label, automatedAccount = '') {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
+  await context.addInitScript(({ url, anonKey }) => {
+    window.SUTRA_CONFIG = {
+      ...(window.SUTRA_CONFIG || {}),
+      supabaseUrl: url,
+      supabaseAnonKey: anonKey
+    };
+  }, { url: PROJECT_URL, anonKey: PROJECT_ANON_KEY });
+  const blockedProductionRequests = [];
+  await context.route(`${PRODUCTION_PROJECT_URL}/**`, route => {
+    blockedProductionRequests.push(route.request().url());
+    return route.abort('blockedbyclient');
+  });
   const page = await context.newPage();
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  const pageUrl = AUTOMATED_AUTH && automatedAccount === 'a' && /Device B/.test(label)
+    ? BASE_URL.replace('127.0.0.1', 'localhost')
+    : BASE_URL;
+  await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  await page.evaluate(async ({ url, anonKey }) => {
+    await window.SutraCloudSync.switchBackend({
+      mode: 'custom',
+      customSupabaseUrl: url,
+      customSupabaseAnonKey: anonKey
+    });
+    const active = window.SutraCloudSync.getActiveConfig();
+    if (active?.mode !== 'custom' || active?.url !== url || active?.configured !== true) {
+      throw new Error('The live certification browser did not bind to the staging Supabase project.');
+    }
+  }, { url: PROJECT_URL, anonKey: PROJECT_ANON_KEY });
+  if (blockedProductionRequests.length) {
+    throw new Error('The live certification browser attempted to contact the production Supabase project.');
+  }
+  if (AUTOMATED_AUTH && automatedAccount === 'a') {
+    await installAutomatedPasswordSession(page, AUTOMATED_ACCOUNT_A_EMAIL, AUTOMATED_ACCOUNT_A_PASSWORD);
+  }
+  if (AUTOMATED_AUTH && automatedAccount === 'b') {
+    await installAutomatedPasswordSession(page, AUTOMATED_ACCOUNT_B_EMAIL, AUTOMATED_ACCOUNT_B_PASSWORD);
+  }
   await showBanner(page, label, 'Preparing authentication controls…');
-  return { context, page, label };
+  return { context, page, label, pageUrl, blockedProductionRequests };
 }
 
 async function identityDigest(page) {
@@ -109,7 +241,9 @@ async function syncNow(page) {
       pushed: Number(outcome?.pushed) || 0,
       pulled: Number(outcome?.pulled) || 0,
       conflicts: Number(outcome?.conflicts) || 0,
-      error: outcome?.error ? String(outcome.error) : ''
+      error: outcome?.error ? String(outcome.error) : '',
+      skipped: outcome?.skipped === true,
+      reason: String(outcome?.reason || '')
     };
   });
 }
@@ -117,20 +251,102 @@ async function syncNow(page) {
 async function syncUntil(page, predicate, timeout = 60000) {
   const deadline = Date.now() + timeout;
   let lastError = null;
+  let lastOutcome = null;
   while (Date.now() < deadline) {
     try {
       const outcome = await syncNow(page);
+      lastOutcome = outcome;
       if (outcome.error) lastError = new Error(outcome.error);
       if (await predicate()) return true;
     } catch (error) { lastError = error; }
     await page.waitForTimeout(1200);
   }
-  throw lastError || new Error('Timed out waiting for synchronized state.');
+  throw lastError || new Error('Timed out waiting for synchronized state. Last outcome: ' + JSON.stringify(lastOutcome));
+}
+
+async function readConvergenceState(page, ids, conversationId) {
+  return page.evaluate(({ ids, conversationId }) => {
+    const workspace = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const assistantChatHistory = window.__sutraPublicBetaTestHooks.syncParity.getAssistantChatHistory();
+    const conversation = assistantChatHistory.conversations.find(row => row.id === conversationId);
+    const status = window.SutraSync.status();
+    return {
+      note: workspace.pages.some(row => row.id === ids.note),
+      task: workspace.tasks.some(row => row.id === ids.task),
+      file: workspace.courseWorkspace.files.some(row => row.id === ids.file),
+      conversation: !!conversation,
+      conversationCount: assistantChatHistory.conversations.length,
+      messageCount: conversation?.messages?.length || 0,
+      syncState: status.state,
+      syncError: status.lastError || ''
+    };
+  }, { ids, conversationId });
+}
+
+async function readAssistantSyncInternals(page, conversationId) {
+  return page.evaluate(async conversationId => {
+    const session = JSON.parse(sessionStorage.getItem('sutra:supabaseSession:v1') || 'null');
+    const accountId = String(session?.user?.id || '');
+    const recordKey = window.SutraSyncProtocol.collectionKey('assistantConversations', conversationId);
+    const portable = await window.__sutraPublicBetaTestHooks.syncParity.getPortableSnapshot();
+    const projection = window.SutraSyncProjection.buildProjection(portable);
+    const store = window.SutraSyncStore.create({ scope: accountId ? ('supabase:' + accountId) : 'unbound' });
+    try {
+      const [baseline, outbox] = await Promise.all([store.getBaseline(), store.getOutbox()]);
+      return {
+        projectionHasConversation: Object.hasOwn(projection.records || {}, recordKey),
+        baselineHasConversation: Object.hasOwn(baseline?.records || {}, recordKey),
+        outboxHasConversation: (outbox || []).some(row => row?.recordKey === recordKey),
+        baselineCursor: Number(baseline?.cursor) || 0,
+        projectedRecordCount: Object.keys(projection.records || {}).length,
+        baselineRecordCount: Object.keys(baseline?.records || {}).length,
+        outboxCount: (outbox || []).length,
+        syncState: window.SutraSync.status().state,
+        syncCycles: Number(window.SutraSync.status().cycles) || 0
+      };
+    } finally { store.close(); }
+  }, conversationId);
+}
+
+async function waitForAssistantPush(page, conversationId, timeout = 120000) {
+  const deadline = Date.now() + timeout;
+  let lastOutcome = null;
+  let lastInternals = null;
+  while (Date.now() < deadline) {
+    lastOutcome = await syncNow(page);
+    lastInternals = await readAssistantSyncInternals(page, conversationId);
+    if (lastInternals.baselineHasConversation && !lastInternals.outboxHasConversation) {
+      return { outcome: lastOutcome, internals: lastInternals };
+    }
+    await page.waitForTimeout(800);
+  }
+  throw new Error('Assistant record remained unacknowledged on its source device: ' + JSON.stringify({
+    outcome: lastOutcome,
+    internals: lastInternals
+  }));
+}
+
+async function revokeDeviceEventually(page, targetDeviceId, timeout = 30000) {
+  const deadline = Date.now() + timeout;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      const revoked = await page.evaluate(target => window.SutraSync.revokeDevice(target), targetDeviceId);
+      if (revoked === true) return true;
+      lastError = new Error('The staging revoke RPC returned false.');
+    } catch (error) { lastError = error; }
+    await page.waitForTimeout(1000);
+  }
+  throw lastError || new Error('Timed out revoking the staging test device.');
 }
 
 async function getDeviceId(page) {
   return page.evaluate(async () => {
-    const store = window.SutraSyncStore.create();
+    const session = JSON.parse(sessionStorage.getItem('sutra:supabaseSession:v1') || 'null');
+    const accountId = String(session?.user?.id || '');
+    const store = window.SutraSyncStore.create({
+      scope: accountId ? ('supabase:' + accountId) : 'unbound'
+    });
     try { return await store.getMeta('deviceId'); }
     finally { store.close(); }
   });
@@ -221,6 +437,8 @@ async function storageAudit(page) {
 async function cleanupCertificationData(page, ids, conversationId) {
   await page.evaluate(async ({ ids, conversationId }) => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const assistantChatHistory = hooks.syncParity.getAssistantChatHistory();
     payload.pages = (payload.pages || []).filter(row => row?.id !== ids.note);
     payload.tasks = (payload.tasks || []).filter(row => row?.id !== ids.task);
     payload.taskOrder = (payload.taskOrder || []).filter(id => id !== ids.task);
@@ -228,15 +446,14 @@ async function cleanupCertificationData(page, ids, conversationId) {
       payload.courseWorkspace.courses = (payload.courseWorkspace.courses || []).filter(row => row?.id !== ids.course);
       payload.courseWorkspace.files = (payload.courseWorkspace.files || []).filter(row => row?.id !== ids.file);
     }
-    if (payload.assistantChatHistory) {
-      payload.assistantChatHistory.conversations = (payload.assistantChatHistory.conversations || [])
-        .filter(row => row?.id !== conversationId);
-      if (payload.assistantChatHistory.currentChatId === conversationId) payload.assistantChatHistory.currentChatId = '';
-    }
+    assistantChatHistory.conversations = (assistantChatHistory.conversations || [])
+      .filter(row => row?.id !== conversationId);
+    if (assistantChatHistory.currentChatId === conversationId) assistantChatHistory.currentChatId = '';
     if (payload.assistantMemory) {
       payload.assistantMemory.items = (payload.assistantMemory.items || []).filter(row => row?.id !== ids.memory);
     }
     window.deserializeWorkspace(payload);
+    hooks.syncParity.setAssistantChatHistory(assistantChatHistory);
     await window.saveWorkspaceLocally();
     await new Promise((resolve, reject) => {
       const request = indexedDB.open('noteflow_attachments_db', 1);
@@ -276,9 +493,9 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
   const attachmentDataUrl = 'data:text/plain;base64,' + Buffer.from(sentinels.attachment, 'utf8').toString('base64');
   const inlinePixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-  const A1 = await openDevice(browser, 'Account A — Device A');
-  const A2 = await openDevice(browser, 'Account A — Device B');
-  const B = await openDevice(browser, 'Account B — hostile-isolation identity');
+  const A1 = await openDevice(browser, 'Account A — Device A', 'a');
+  const A2 = await openDevice(browser, 'Account A — Device B', 'a');
+  const B = await openDevice(browser, 'Account B — hostile-isolation identity', 'b');
   let A2tab = null;
   let conversationId = '';
   let bDeviceId = '';
@@ -286,6 +503,11 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
   let cleanupComplete = false;
 
   try {
+    logLivePhase('auth-and-sync-setup');
+    if (AUTOMATED_AUTH) {
+      await enableAutomatedSync(A1.page);
+      await enableAutomatedSync(A2.page);
+    }
     await Promise.all([
       showBanner(A1.page, A1.label, 'Sign in with Account A by email OTP, then unlock the existing sync vault.'),
       showBanner(A2.page, A2.label, 'Sign in with the SAME Account A by email OTP, then unlock the same sync vault.'),
@@ -301,6 +523,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     expect(bIdentity).toBeTruthy();
     expect(bIdentity).not.toBe(a1Identity);
     await Promise.all([hideBanner(A1.page), hideBanner(A2.page), hideBanner(B.page)]);
+    logLivePhase('identities-and-device-registration-verified');
 
     const config = await A1.page.evaluate(() => ({
       url: window.SUTRA_CONFIG.supabaseUrl,
@@ -365,6 +588,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     }, { ids, sentinels, attachmentDataUrl, inlinePixel });
     recordsSeeded = true;
     await syncNow(A1.page);
+    logLivePhase('encrypted-workspace-seeded');
 
     await A1.page.locator('#chatbotBtn').click();
     await A1.page.locator('#chatInput').fill('search my notes for ' + sentinels.note + ' and include ' + sentinels.assistant);
@@ -379,7 +603,9 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
 
     await A1.page.evaluate(async ({ conversationId, ids, assistantMarker }) => {
       const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-      const conversation = payload.assistantChatHistory.conversations.find(row => row.id === conversationId);
+      const hooks = window.__sutraPublicBetaTestHooks;
+      const assistantChatHistory = hooks.syncParity.getAssistantChatHistory();
+      const conversation = assistantChatHistory.conversations.find(row => row.id === conversationId);
       const last = conversation.messages.at(-1);
       last.memoryUsedIds = [ids.memory];
       last.deepLinks = [{ type: 'note', id: ids.note }];
@@ -392,19 +618,42 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
         { id: ids.memory, text: 'Synthetic certification memory', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
       ];
       window.deserializeWorkspace(payload);
+      hooks.syncParity.setAssistantChatHistory(assistantChatHistory);
       await window.saveWorkspaceLocally();
     }, { conversationId, ids, assistantMarker: sentinels.assistant });
-    await syncNow(A1.page);
+    const sourceConvergenceState = await readConvergenceState(A1.page, ids, conversationId);
+    expect(sourceConvergenceState).toEqual(expect.objectContaining({
+      note: true, task: true, file: true, conversation: true
+    }));
+    console.log('[live-cert] source-assistant-before-push', JSON.stringify(
+      await readAssistantSyncInternals(A1.page, conversationId)
+    ));
+    console.log('[live-cert] source-push-acknowledged', JSON.stringify(
+      await waitForAssistantPush(A1.page, conversationId)
+    ));
 
-    await syncUntil(A2.page, () => A2.page.evaluate(({ noteId, conversationId }) => {
-      const workspace = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-      return workspace.pages.some(row => row.id === noteId)
-        && workspace.assistantChatHistory.conversations.some(row => row.id === conversationId);
-    }, { noteId: ids.note, conversationId }));
+    let convergenceChecks = 0;
+    await syncUntil(A2.page, async () => {
+      const state = await readConvergenceState(A2.page, ids, conversationId);
+      const asset = await A2.page.evaluate(async ({ blobKey, expected }) => ({
+        matches: (await window.__sutraPublicBetaTestHooks.readCourseAttachmentBlob(blobKey)) === expected,
+        pending: Number(window.SutraSync.status().assetsPending) || 0
+      }), { blobKey: ids.blob, expected: attachmentDataUrl });
+      convergenceChecks += 1;
+      if (convergenceChecks === 1 || convergenceChecks % 10 === 0) {
+        console.log('[live-cert] convergence-state', JSON.stringify({ ...state, asset }));
+        console.log('[live-cert] destination-assistant-state', JSON.stringify(
+          await readAssistantSyncInternals(A2.page, conversationId)
+        ));
+      }
+      return state.note && state.task && state.file && state.conversation
+        && asset.matches && asset.pending === 0;
+    }, 120000);
 
     const hydrated = await A2.page.evaluate(async ({ ids, conversationId, attachmentDataUrl, inlinePixel }) => {
       const workspace = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-      const conversation = workspace.assistantChatHistory.conversations.find(row => row.id === conversationId);
+      const assistantChatHistory = window.__sutraPublicBetaTestHooks.syncParity.getAssistantChatHistory();
+      const conversation = assistantChatHistory.conversations.find(row => row.id === conversationId);
       return {
         note: workspace.pages.find(row => row.id === ids.note),
         task: workspace.tasks.find(row => row.id === ids.task),
@@ -443,6 +692,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
       const row = window.SutraAssistantConversationController.getState().conversations.find(item => item.id === id);
       return !!row && row.messages.length > count;
     }, { id: conversationId, count: beforeReverse }));
+    logLivePhase('two-device-round-trip-converged');
 
     const [aConversation, bConversation] = await Promise.all([
       A1.page.evaluate(id => window.SutraAssistantConversationController.getState().conversations.find(row => row.id === id), conversationId),
@@ -461,6 +711,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     await A2.page.reload({ waitUntil: 'domcontentloaded' });
     await A2.page.waitForSelector('#fileInput', { state: 'attached' });
     await completeOnboarding(A2.page);
+    if (AUTOMATED_AUTH) await unlockAutomatedSync(A2.page);
     await expect.poll(() => A2.page.evaluate(id =>
       !!window.SutraAssistantConversationController.getState().conversations.find(row => row.id === id),
     conversationId), { timeout: 30000, intervals: [300, 700, 1200] }).toBe(true);
@@ -484,6 +735,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     expect([401, 403]).toContain(unauthenticated.table.status);
     expect([401, 403]).toContain(unauthenticated.rpc.status);
     expect(unauthenticated.rpc.text).not.toMatch(/could not find.*function|schema cache/i);
+    logLivePhase('anonymous-denial-verified');
 
     // Account B registers only its own synthetic certification device. Every
     // direct request below reuses Account B's authenticated request in browser
@@ -572,6 +824,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
       expect(result.text).not.toContain(sentinels.assistant);
       expect(result.text).not.toContain(sentinels.attachment);
     }
+    logLivePhase('cross-account-and-direct-table-isolation-verified');
 
     await cipherAudit.settle();
     expect(cipherAudit.entries.length).toBeGreaterThan(0);
@@ -586,32 +839,39 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     });
     expect([400, 401, 403, 404]).toContain(bAsset.status);
     expect(bAsset.text).not.toContain(sentinels.attachment);
+    logLivePhase('ciphertext-and-storage-isolation-verified');
 
     // Open a second tab from Device B's existing page so the browser clones its
     // tab session. Both tabs must show the local synthetic workspace before the
     // controlling device revokes it.
     const popupPromise = A2.page.waitForEvent('popup');
-    await A2.page.evaluate(url => window.open(url, '_blank'), BASE_URL);
+    await A2.page.evaluate(() => window.open(location.href, '_blank'));
     A2tab = await popupPromise;
     await A2tab.waitForSelector('#fileInput', { state: 'attached' });
     await completeOnboarding(A2tab);
+    if (AUTOMATED_AUTH) {
+      await unlockAutomatedSync(A2.page);
+      await unlockAutomatedSync(A2tab);
+    }
     await Promise.all([
       showBanner(A2.page, A2.label, 'Unlock the existing vault again after the reload. The test will then take this browser offline.'),
       showBanner(A2tab, A2.label + ' — second tab', 'Unlock the existing vault in this tab too. It will verify multi-tab wipe propagation.')
     ]);
     await Promise.all([waitForSyncReady(A2.page), waitForSyncReady(A2tab)]);
     await Promise.all([hideBanner(A2.page), hideBanner(A2tab)]);
+    logLivePhase('offline-revocation-setup-ready');
     for (const page of [A2.page, A2tab]) {
       const visible = await page.evaluate(({ note, conversation }) => {
         const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+        const assistantChatHistory = window.__sutraPublicBetaTestHooks.syncParity.getAssistantChatHistory();
         return payload.pages.some(row => row.id === note)
-          && payload.assistantChatHistory.conversations.some(row => row.id === conversation);
+          && assistantChatHistory.conversations.some(row => row.id === conversation);
       }, { note: ids.note, conversation: conversationId });
       expect(visible).toBe(true);
     }
 
     await A2.context.setOffline(true);
-    const revoked = await A1.page.evaluate(target => window.SutraSync.revokeDevice(target), a2DeviceId);
+    const revoked = await revokeDeviceEventually(A1.page, a2DeviceId);
     expect(revoked).toBe(true);
     const pendingDevice = (await A1.page.evaluate(() => window.SutraSync.listDevices()))
       .find(row => row.deviceId === a2DeviceId);
@@ -657,6 +917,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
       const rows = await A1.page.evaluate(() => window.SutraSync.listDevices());
       return !!rows.find(row => row.deviceId === a2DeviceId)?.wipeAcknowledgedAt;
     }, { timeout: 30000, intervals: [700, 1200] }).toBe(true);
+    logLivePhase('revocation-wipe-and-ack-verified');
 
     for (const page of [A2.page, A2tab]) {
       const audit = await storageAudit(page);
@@ -686,6 +947,9 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     await completeOnboarding(A2.page);
     await A2tab.close();
     A2tab = null;
+    await A2.page.waitForFunction(() =>
+      typeof window.SutraCloudSync?.isSignedIn === 'function'
+      && typeof window.SutraSync?.status === 'function', null, { timeout: 30000 });
     expect(await A2.page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(false);
     expect(await A2.page.evaluate(() => window.SutraSync.status().enabled)).toBe(false);
     await expect(A2.page.locator('#sutraRevokedDeviceScreen')).toHaveCount(0);
@@ -697,6 +961,10 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
       A2.label + ' — fresh registration',
       'Sign in again with Account A, enable sync, register this browser as a fresh device, unlock the vault, and explicitly bootstrap.'
     );
+    if (AUTOMATED_AUTH) {
+      await installAutomatedPasswordSession(A2.page, AUTOMATED_ACCOUNT_A_EMAIL, AUTOMATED_ACCOUNT_A_PASSWORD);
+      await enableAutomatedSync(A2.page);
+    }
     await waitForSyncReady(A2.page);
     await hideBanner(A2.page);
     const replacementDeviceId = await getDeviceId(A2.page);
@@ -711,6 +979,7 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     }));
     expect(finalDevices.find(row => row.deviceId === a2DeviceId).wipeAcknowledgedAt).toBeTruthy();
     expect(finalDevices.find(row => row.deviceId === replacementDeviceId)?.revokedAt).toBeFalsy();
+    logLivePhase('fresh-device-bootstrap-verified');
 
     // Remove the synthetic Account B registration without touching Account A.
     const bDeleteOwnVault = await authenticatedProbe(B.page, {
@@ -725,10 +994,12 @@ test('real Supabase Assistant, RLS, payload, revocation, and wipe certification'
     await syncNow(A1.page);
     await syncUntil(A2.page, () => A2.page.evaluate(({ note, conversation }) => {
       const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+      const assistantChatHistory = window.__sutraPublicBetaTestHooks.syncParity.getAssistantChatHistory();
       return !payload.pages.some(row => row.id === note)
-        && !payload.assistantChatHistory.conversations.some(row => row.id === conversation);
+        && !assistantChatHistory.conversations.some(row => row.id === conversation);
     }, { note: ids.note, conversation: conversationId }));
     cleanupComplete = true;
+    logLivePhase('cleanup-complete');
   } finally {
     if (recordsSeeded && !cleanupComplete && !A1.page.isClosed()) {
       await cleanupCertificationData(A1.page, ids, conversationId).catch(() => undefined);

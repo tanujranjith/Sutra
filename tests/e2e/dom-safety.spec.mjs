@@ -10,6 +10,7 @@ import { expect, test } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForFunction(() => !!window.SutraDOMSafety, null, { timeout: 20000 });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
 }
 
 const HOSTILE = [
@@ -114,7 +115,8 @@ test('note tags render hostile names as inert text in the editor and sidebar', a
   await page.goto('/Sutra.html');
   await page.waitForFunction(() => !!window.flowAtelier
     && typeof window.setActiveView === 'function'
-    && !!document.querySelector('#tagsContainer .add-tag-btn'));
+    && !!document.querySelector('#tagsContainer .add-tag-btn')
+    && window.__hwDueDateDelegateBound === true);
   await page.evaluate(() => {
     window.__tagXss = 0;
     try { window.markStudentOnboardingCompleted?.(true); } catch (error) {}

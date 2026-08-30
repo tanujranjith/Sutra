@@ -71,8 +71,12 @@ as the person deploying Sutra.
   then
   [`migrations/20260730_sync_storage_path_and_function_permissions.sql`](./migrations/20260730_sync_storage_path_and_function_permissions.sql).
   Finally, apply
-  [`migrations/20260825_sync_pruning_durable_ack.sql`](./migrations/20260825_sync_pruning_durable_ack.sql).
-  All four are additive/idempotent and safe to rerun: existing encrypted ops,
+  [`migrations/20260825_sync_pruning_durable_ack.sql`](./migrations/20260825_sync_pruning_durable_ack.sql),
+  followed by
+  [`migrations/20260830_sync_put_asset_ambiguity.sql`](./migrations/20260830_sync_put_asset_ambiguity.sql),
+  then
+  [`migrations/20260830_sync_z_prune_floor_reference.sql`](./migrations/20260830_sync_z_prune_floor_reference.sql).
+  All six are additive/idempotent and safe to rerun: existing encrypted ops,
   snapshots, keys, assets, and devices are preserved. The storage migration
   recreates only the four `sync-assets` Storage policies with the exact anchored
   `^<auth.uid()>/[0-9a-f]{64}$` form and removes browser-role execution of
@@ -82,7 +86,11 @@ as the person deploying Sutra.
   authenticated conservative compaction pruning, and preserves the snapshot
   cursor as the logical head after covered ops are removed. Applying the
   migration does not itself prune rows; pruning remains client-triggered after
-  a successful encrypted snapshot.
+  a successful encrypted snapshot. The final asset-RPC migration preserves the
+  browser's `hash` argument while making the asset-index upsert unambiguous to
+  PL/pgSQL. The final pruning-floor reconciliation repairs the positive-floor
+  delete branch without changing its conservative snapshot/active-device floor
+  or deleting any row merely by applying the migration.
 
 Expected sync tables: `sync_ops`, `sync_devices`, `sync_vault_keys`,
 `sync_snapshots`, `sync_asset_index`. Expected private Storage buckets after
