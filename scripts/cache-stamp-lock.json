@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260828-storage-main3",
-    "hash": "9262b122337b3e36"
+    "stamp": "20260830-integrity2",
+    "hash": "737a2a2ff95c32f1"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -68,8 +68,8 @@
     "hash": "0cd88826ae6aeb3c"
   },
   "src/core/migrations.js": {
-    "stamp": "20260813-pdf2",
-    "hash": "ef85c157317a6b60"
+    "stamp": "20260830-integrity1",
+    "hash": "839f42bb461d5d99"
   },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",
@@ -232,8 +232,8 @@
     "hash": "3b1743d4329b2d0a"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260807-pagelinks1",
-    "hash": "b1d98ccd341fd3bb"
+    "stamp": "20260830-integrity2",
+    "hash": "cfddf282d319bd7c"
   },
   "src/features/search/global-search-engine.js": {
     "stamp": "20260825-gsengine4",

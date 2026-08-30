@@ -35,6 +35,59 @@ async function openApp(page) {
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-startup-settled'));
 }
 
+async function createUnlockedLockedNote(page, id, lockAutoLock = 'navigation') {
+  await page.evaluate(async ({ id, pin, lockAutoLock }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    payload.pages = [
+      ...payload.pages,
+      { id, title: id, content: '<p>before</p>', blocks: [], lockAutoLock }
+    ];
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, pin);
+    window.flowAtelier.setActiveView('notes');
+    window.loadPage(id);
+    const input = document.getElementById('lockScreenPinInput');
+    input.value = pin;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('lockScreenForm').requestSubmit();
+  }, { id, pin: PIN, lockAutoLock });
+  await page.waitForFunction(() => document.getElementById('lockedPageScreen')?.hidden === true);
+}
+
+async function pasteIntoVisibleEditor(page, text) {
+  return page.evaluate((text) => {
+    const data = new DataTransfer();
+    data.setData('text/html', `<p>${text}</p>`);
+    data.setData('text/plain', text);
+    const target = document.querySelector('#editorV2Host .ProseMirror');
+    target.focus();
+    target.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: data,
+      bubbles: true,
+      cancelable: true
+    }));
+    return {
+      visible: window.SutraNotesEditorV2.getStorageHtml(),
+      mirror: document.getElementById('editor').innerHTML
+    };
+  }, text);
+}
+
+async function readLockedPageLayers(page, id) {
+  return page.evaluate(async (id) => {
+    const live = window.flowAtelier.pages.find((entry) => entry.id === id);
+    const serialized = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false })
+      .pages.find((entry) => entry.id === id);
+    const durable = (await window.loadWorkspaceLocally())?.pages?.find((entry) => entry.id === id);
+    return {
+      live: live?.content || '',
+      serialized: serialized?.content || '',
+      durable: durable?.content || '',
+      lockState: window.__sutraPublicBetaTestHooks.getPageLockState(id)
+    };
+  }, id);
+}
+
 test('edits made in a locked note survive navigation auto-lock', async ({ page }) => {
   await openApp(page);
 
@@ -96,6 +149,162 @@ test('edits made in a locked note survive navigation auto-lock', async ({ page }
   expect(result.serializedContent).toContain('edited immediately before leaving');
   expect(result.durableContent).toContain('edited immediately before leaving');
   expect(result.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
+});
+
+test('a locked-note paste is durable when leaving Notes before the v2 mirror debounce', async ({ page }) => {
+  await openApp(page);
+
+  const result = await page.evaluate(async ({ pin }) => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const lockedId = 'locked-note-view-switch-paste-qa';
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    payload.pages = [
+      ...payload.pages,
+      { id: lockedId, title: 'Locked view switch paste QA', content: '<p>before</p>', blocks: [] }
+    ];
+    payload.settings = payload.settings || {};
+    payload.settings.preferences = payload.settings.preferences || {};
+    payload.settings.preferences.editor = {
+      ...(payload.settings.preferences.editor || {}),
+      autosaveMs: 8000
+    };
+    window.deserializeWorkspace(payload);
+    await hooks.lockPageWithPin(lockedId, pin);
+    window.loadPage(lockedId);
+
+    const input = document.getElementById('lockScreenPinInput');
+    input.value = pin;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('lockScreenForm').requestSubmit();
+    await new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const waitForUnlock = () => {
+        if (document.getElementById('lockedPageScreen')?.hidden) return resolve();
+        if (Date.now() - startedAt > 5000) return reject(new Error('Timed out waiting for note unlock.'));
+        setTimeout(waitForUnlock, 25);
+      };
+      waitForUnlock();
+    });
+
+    const data = new DataTransfer();
+    data.setData('text/html', '<p>paste before immediate view switch</p>');
+    data.setData('text/plain', 'paste before immediate view switch');
+    const target = document.querySelector('#editorV2Host .ProseMirror');
+    target.focus();
+    target.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: data,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    const visible = window.SutraNotesEditorV2.getStorageHtml();
+    const mirrorBeforeSwitch = document.getElementById('editor').innerHTML;
+    window.flowAtelier.setActiveView('today');
+    await window.flowAtelier.flushAppSaveNow('locked-note-view-switch-boundary');
+
+    const live = window.flowAtelier.pages.find(entry => entry.id === lockedId);
+    const serialized = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false })
+      .pages.find(entry => entry.id === lockedId);
+    const durable = (await window.loadWorkspaceLocally())?.pages?.find(entry => entry.id === lockedId);
+    return {
+      visible,
+      mirrorBeforeSwitch,
+      mirrorAfterSwitch: document.getElementById('editor').innerHTML,
+      liveContent: live?.content || '',
+      serializedContent: serialized?.content || '',
+      durableContent: durable?.content || '',
+      activeView: window.flowAtelier.activeView,
+      lockState: hooks.getPageLockState(lockedId)
+    };
+  }, { pin: PIN });
+
+  expect(result.visible).toContain('paste before immediate view switch');
+  expect(result.mirrorBeforeSwitch).not.toContain('paste before immediate view switch');
+  expect(result.mirrorAfterSwitch).toContain('paste before immediate view switch');
+  expect(result.liveContent).toContain('paste before immediate view switch');
+  expect(result.serializedContent).toContain('paste before immediate view switch');
+  expect(result.durableContent).toContain('paste before immediate view switch');
+  expect(result.activeView).toBe('today');
+  expect(result.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
+});
+
+for (const destination of ['homework', 'timeline']) {
+  test(`locked-note typing is durable when immediately switching to ${destination}`, async ({ page }) => {
+    await openApp(page);
+    const id = `locked-note-typing-${destination}-qa`;
+    const sentinel = `typed before ${destination} switch`;
+    await createUnlockedLockedNote(page, id);
+
+    const editor = page.locator('#editorV2Host .ProseMirror');
+    await editor.click();
+    await editor.pressSequentially(sentinel);
+    await page.evaluate((destination) => window.flowAtelier.setActiveView(destination), destination);
+    await page.evaluate(() => window.flowAtelier.flushAppSaveNow('locked-note-typing-view-switch'));
+
+    const stored = await readLockedPageLayers(page, id);
+    expect(stored.live).toContain(sentinel);
+    expect(stored.serialized).toContain(sentinel);
+    expect(stored.durable).toContain(sentinel);
+    expect(stored.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
+  });
+}
+
+test('manual and timed re-lock flush a pending Editor v2 paste before revoking authorization', async ({ page }) => {
+  await openApp(page);
+
+  for (const mode of ['manual', 'timer']) {
+    const id = `locked-note-${mode}-relock-qa`;
+    const sentinel = `${mode} re-lock pending paste`;
+    await createUnlockedLockedNote(page, id, mode === 'timer' ? '5min' : 'navigation');
+    const editorState = await pasteIntoVisibleEditor(page, sentinel);
+    expect(editorState.visible).toContain(sentinel);
+    expect(editorState.mirror).not.toContain(sentinel);
+
+    await page.evaluate(({ id, mode }) => {
+      const hooks = window.__sutraPublicBetaTestHooks;
+      if (mode === 'manual') hooks.lockPageNow(id);
+      else hooks.triggerPageAutoLock(id);
+    }, { id, mode });
+    await page.evaluate(() => window.flowAtelier.flushAppSaveNow('locked-note-relock-boundary'));
+
+    const stored = await readLockedPageLayers(page, id);
+    expect(stored.live).toContain(sentinel);
+    expect(stored.serialized).toContain(sentinel);
+    expect(stored.durable).toContain(sentinel);
+    expect(stored.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
+  }
+});
+
+test('pagehide and reload preserve an unlocked locked-note paste without journaling plaintext', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  const id = 'locked-note-pagehide-paste-qa';
+  const sentinel = 'pagehide pending paste survives reload';
+  await createUnlockedLockedNote(page, id);
+  const editorState = await pasteIntoVisibleEditor(page, sentinel);
+  expect(editorState.visible).toContain(sentinel);
+  expect(editorState.mirror).not.toContain(sentinel);
+
+  const journal = await page.evaluate(async () => {
+    window.dispatchEvent(new Event('pagehide'));
+    await window.flowAtelier.flushAppSaveNow('locked-note-pagehide-verification');
+    return sessionStorage.getItem('sutra:lifecycle-note-journal:v1');
+  });
+  expect(journal).toBeNull();
+
+  await page.reload();
+  await openApp(page);
+  await page.evaluate((id) => {
+    window.flowAtelier.setActiveView('notes');
+    window.loadPage(id);
+  }, id);
+  await page.fill('#lockScreenPinInput', PIN);
+  await page.locator('#lockScreenForm').evaluate((form) => form.requestSubmit());
+  await page.waitForFunction(() => document.getElementById('lockedPageScreen')?.hidden === true);
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText(sentinel);
+
+  const stored = await readLockedPageLayers(page, id);
+  expect(stored.durable).toContain(sentinel);
 });
 
 test('lifecycle recovery never copies unlocked PIN-note plaintext into session storage', async ({ page }) => {

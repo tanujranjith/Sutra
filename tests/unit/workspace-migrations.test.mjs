@@ -131,3 +131,48 @@ test('recursive and non-serializable imports fail validation before migration', 
   });
   assert.throws(() => migrations.migrateWorkspace({ version: 1, bad: () => {} }), /pre-migration validation/);
 });
+
+test('compatibility migrations cannot project supported modern page metadata away', () => {
+  const source = {
+    version: migrations.CURRENT_VERSION,
+    pages: [{
+      id: 'html-page-migration-qa',
+      title: 'Portable HTML page',
+      type: 'note',
+      content: '<p>ordinary note fallback</p>',
+      htmlDocument: {
+        version: 1,
+        source: '<!doctype html><main id="migration-sentinel">portable</main>',
+        createdAt: NOW,
+        updatedAt: NOW
+      },
+      pageMode: { enabled: true, size: 'a4', margins: { top: 20, right: 21, bottom: 22, left: 23 } }
+    }, {
+      id: 'ordinary-note-migration-qa',
+      title: 'Ordinary note',
+      type: 'note',
+      content: '<html>text that must not become an HTML page</html>'
+    }]
+  };
+
+  migrations.register(migrations.CURRENT_VERSION, (workspace) => {
+    workspace.pages = workspace.pages.map((page) => ({
+      id: page.id,
+      title: page.title,
+      type: page.type,
+      content: page.content
+    }));
+    return workspace;
+  }, { destructive: true, description: 'Legacy page projection fixture.' });
+
+  const result = migrations.migrateWorkspace(source, {
+    targetVersion: migrations.CURRENT_VERSION + 1,
+    now: NOW
+  }).workspace;
+  const restoredHtml = result.pages.find((page) => page.id === 'html-page-migration-qa');
+  const ordinary = result.pages.find((page) => page.id === 'ordinary-note-migration-qa');
+
+  assert.equal(restoredHtml.htmlDocument.source, source.pages[0].htmlDocument.source);
+  assert.deepEqual(restoredHtml.pageMode, source.pages[0].pageMode);
+  assert.equal('htmlDocument' in ordinary, false);
+});

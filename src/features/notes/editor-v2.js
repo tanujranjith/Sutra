@@ -491,6 +491,19 @@
         writeTrustedHtml(state.mirrorEl, getStorageHtml());
     }
 
+    // Persistence boundaries cannot wait for the ordinary mirror debounce.
+    // Cancel its callback as well as copying the current ProseMirror document:
+    // if the callback ran after a locked page had lost authorization it would
+    // queue a second save that the privacy guard must reject, leaving the save
+    // indicator stuck even though the boundary save already completed.
+    function flushPendingChanges() {
+        if (state.mirrorTimer) {
+            clearTimeout(state.mirrorTimer);
+            state.mirrorTimer = null;
+        }
+        flushToMirror();
+    }
+
     // Word / Google-Docs paste tends to encode structure as inline styles
     // (font-weight:700 instead of <strong>, mso-list paragraphs instead of
     // <ul>). Recover the semantics BEFORE the attribute-strip pass throws the
@@ -1422,6 +1435,7 @@
         loadDocument: loadDocument,
         getStorageHtml: getStorageHtml,
         flushToMirror: flushToMirror,
+        flushPendingChanges: flushPendingChanges,
         insertHtml: insertHtml,
         exec: exec,
         focus: focus,

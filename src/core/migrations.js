@@ -17,6 +17,40 @@
   }
   function nowIso(options) { return options && options.now ? String(options.now) : new Date().toISOString(); }
 
+  // These are supported page capabilities, not arbitrary extension data. They
+  // were added after the earliest workspace migrations and must survive a
+  // compatibility step that rebuilds a page with an older field projection.
+  var MODERN_PAGE_METADATA_FIELDS = ['htmlDocument', 'pageMode'];
+
+  function captureModernPageMetadata(workspace) {
+    var captured = Object.create(null);
+    (Array.isArray(workspace && workspace.pages) ? workspace.pages : []).forEach(function (page) {
+      var id = page && String(page.id || '');
+      if (!id) return;
+      var metadata = {};
+      if (isObject(page.htmlDocument) && typeof page.htmlDocument.source === 'string') {
+        metadata.htmlDocument = clone(page.htmlDocument);
+      }
+      if (isObject(page.pageMode)) metadata.pageMode = clone(page.pageMode);
+      if (Object.keys(metadata).length) captured[id] = metadata;
+    });
+    return captured;
+  }
+
+  function restoreModernPageMetadata(workspace, captured) {
+    (Array.isArray(workspace && workspace.pages) ? workspace.pages : []).forEach(function (page) {
+      var metadata = page && captured[String(page.id || '')];
+      if (!metadata) return;
+      MODERN_PAGE_METADATA_FIELDS.forEach(function (field) {
+        if ((page[field] === undefined || page[field] === null)
+            && Object.prototype.hasOwnProperty.call(metadata, field)) {
+          page[field] = clone(metadata[field]);
+        }
+      });
+    });
+    return workspace;
+  }
+
   function inspectSerializable(root) {
     var issues = [];
     var active = typeof WeakSet === 'function' ? new WeakSet() : null;
@@ -295,7 +329,9 @@
     var version = fromVersion;
     while (version < targetVersion) {
       var definition = registry[version];
+      var modernPageMetadata = captureModernPageMetadata(workspace);
       workspace = definition.migrate(workspace, opts) || workspace;
+      workspace = restoreModernPageMetadata(workspace, modernPageMetadata);
       version += 1;
       workspace.version = version;
       var record = { id: 'v' + (version - 1) + '->v' + version, from: version - 1, to: version, appliedAt: nowIso(opts) };

@@ -32817,7 +32817,18 @@ function buildOnboardingPlanPreview() {
             const resolvedView = (allowDisabledView || isViewEnabled(requestedView))
                 ? requestedView
                 : getFallbackView('notes');
-            if (activeView === 'notes' && resolvedView !== 'notes') {
+            if (workspaceHydrationComplete && activeView === 'notes' && resolvedView !== 'notes') {
+                const outgoing = pages.find(page => page && page.id === currentPageId);
+                const autoLockOnNavigation = !!(outgoing && outgoing.isLocked && outgoing.lockHash
+                    && unlockedPageIds.has(currentPageId)
+                    && (outgoing.lockAutoLock || 'navigation') === 'navigation');
+                clearAutoLockTimer(currentPageId);
+                // Editor v2 owns the visible document and mirrors it on a
+                // debounce. Capture it while the locked page is still
+                // authorized, before another view hides the editor and before
+                // navigation policy revokes that authorization.
+                savePage();
+                if (autoLockOnNavigation) unlockedPageIds.delete(currentPageId);
                 syncCurrentPrimaryScrollState({ persist: true });
             }
             activeView = resolvedView;
@@ -51207,22 +51218,25 @@ function getActiveEditor() {
             }
         }
 
+        function autoLockPageAfterTimeout(pageId) {
+            lockTimers.delete(pageId);
+            // The page must remain authorized until the visible editor state has
+            // crossed the Editor v2 mirror and canonical page boundary.
+            if (currentPageId === pageId) savePage();
+            unlockedPageIds.delete(pageId);
+            if (currentPageId === pageId) {
+                const timedOutPage = pages.find(p => p.id === pageId);
+                if (timedOutPage) renderLockedPageScreen(timedOutPage);
+            }
+        }
+
         function startAutoLockTimer(pageId, lockAutoLock) {
             clearAutoLockTimer(pageId);
             const setting = lockAutoLock || 'navigation';
             const durations = { '5min': 5 * 60 * 1000, '15min': 15 * 60 * 1000, '60min': 60 * 60 * 1000 };
             const delay = durations[setting];
             if (!delay) return; // 'navigation' and 'session' need no timer
-            const timer = setTimeout(() => {
-                lockTimers.delete(pageId);
-                // Flush unsaved editor content before the lock screen hides the editor
-                if (currentPageId === pageId) savePage();
-                unlockedPageIds.delete(pageId);
-                if (currentPageId === pageId) {
-                    const timedOutPage = pages.find(p => p.id === pageId);
-                    if (timedOutPage) renderLockedPageScreen(timedOutPage);
-                }
-            }, delay);
+            const timer = setTimeout(() => autoLockPageAfterTimeout(pageId), delay);
             lockTimers.set(pageId, timer);
         }
 
@@ -62017,6 +62031,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 setPageDuressPin: (pageId, pin) => setPageDuressPin(pageId, pin),
                 clearPageDuressPin: (pageId) => clearPageDuressPin(pageId),
                 lockPageNow: (pageId) => manualLockPage(pageId),
+                triggerPageAutoLock: (pageId) => autoLockPageAfterTimeout(pageId),
                 openPageLockSettings: (pageId) => openSetLockModal(pageId),
                 getPageLockState: (pageId) => {
                     const page = pages.find(entry => entry && entry.id === pageId);
@@ -66722,7 +66737,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Notes editor v2: force any pending debounced mirror write NOW so
             // the snapshot below reads the latest document state.
             if (editor.id === 'editor' && isNotesEditorV2Active()) {
-                try { window.SutraNotesEditorV2.flushToMirror(); } catch (e) { /* non-critical */ }
+                try {
+                    if (typeof window.SutraNotesEditorV2.flushPendingChanges === 'function') {
+                        window.SutraNotesEditorV2.flushPendingChanges();
+                    } else {
+                        window.SutraNotesEditorV2.flushToMirror();
+                    }
+                } catch (e) { /* non-critical */ }
             }
             syncHtmlEmbedBlocksFromEditor(editor, page);
             syncDrawingBlocksFromEditor(editor, page);
