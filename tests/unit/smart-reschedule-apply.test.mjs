@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+// Fixtures and expected local times below are intentionally Eastern.
+process.env.TZ = 'America/New_York';
+
 async function loadModule() {
   if (globalThis.SutraSmartReschedule) return globalThis.SutraSmartReschedule;
   const path = new URL('../../src/features/workspace/smart-reschedule.js', import.meta.url);
