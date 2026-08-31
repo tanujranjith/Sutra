@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-08-30T19:27:52.232Z",
-  "reviewedReason": "Add exact confirmed-hash recovery for a missing canonical IndexedDB root while preserving stale-tab and revocation protections.",
-  "maxBytes": 4884612,
-  "maxLines": 85930
+  "blessedAt": "2026-08-30T23:53:51.900Z",
+  "reviewedReason": "Restore encrypted-backup modal focus deterministically across Escape, Cancel, and close-button paths.",
+  "maxBytes": 4885749,
+  "maxLines": 85951
 }

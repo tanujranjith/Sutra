@@ -4627,7 +4627,7 @@
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Backups</span></div>
                         <div class="cc-stacked-actions">
-                            <button class="cc-btn cc-btn-ghost" id="exportAtelierWorkspaceBtn" onclick="exportWorkspaceAsAtelierPackage()">Encrypted Workspace Backup (.sutra)</button>
+                            <button class="cc-btn cc-btn-ghost" id="exportAtelierWorkspaceBtn" onclick="exportWorkspaceAsAtelierPackage({ returnFocus: this })">Encrypted Workspace Backup (.sutra)</button>
                             <button class="cc-btn cc-btn-ghost" id="exportUnencryptedSutraWorkspaceBtn" onclick="window.SutraEncryptedBackups.exportUnencryptedPackage()">Unencrypted Workspace Backup (.sutra)</button>
                             <button class="cc-btn cc-btn-ghost" id="exportWorkspaceBtn" onclick="exportToFile()">Export Workspace JSON (unencrypted)</button>
                             <button class="cc-btn cc-btn-ghost" id="importWorkspaceBtn" onclick="importFromFile()">Import Workspace / Docs</button>
@@ -7888,7 +7888,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal2"></script>
-    <script src="src/core/app.js?v=20260830-rootrecovery1"></script>
+    <script src="src/core/app.js?v=20260830-backupfocus1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260830-revoke2"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>

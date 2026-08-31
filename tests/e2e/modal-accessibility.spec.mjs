@@ -281,3 +281,37 @@ test('stacked modals isolate the lower dialog and restore focus when the top clo
   });
   expect(closed).toEqual({ active: 1, lowerIsolated: false, focusInLower: true });
 });
+
+test('encrypted backup password modal restores its trigger after every cancel path', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => window.setActiveView && window.setActiveView('settings'));
+  await page.locator('[data-settings-nav="data"]').click();
+
+  const trigger = page.locator('#exportAtelierWorkspaceBtn');
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await trigger.waitFor({ state: 'visible', timeout: 15000 });
+
+  const closeCases = [
+    { name: 'Escape', close: async () => page.keyboard.press('Escape') },
+    { name: 'Cancel', close: async () => page.locator('#sutraBackupPasswordCancelBtn').click() },
+    { name: 'close button', close: async () => page.locator('#sutraBackupPasswordCloseBtn').click() }
+  ];
+
+  for (const closeCase of closeCases) {
+    await test.step(closeCase.name, async () => {
+      await trigger.focus();
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await expect(modal).toBeVisible();
+      await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#sutraBackupPasswordModal'))).toBe(true);
+
+      await page.keyboard.press('Shift+Tab');
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => !!document.activeElement?.closest('#sutraBackupPasswordModal'))).toBe(true);
+
+      await closeCase.close();
+      await expect(modal).toBeHidden();
+      await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('exportAtelierWorkspaceBtn');
+    });
+  }
+});

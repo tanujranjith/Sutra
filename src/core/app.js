@@ -53466,6 +53466,11 @@ function getActiveEditor() {
             if (!modal) return;
             modal.classList.remove('active');
             try {
+                if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+                    window.SutraModalManager.sync();
+                }
+            } catch (error) { /* non-critical */ }
+            try {
                 if (!document.querySelector('.modal.active')) document.body.classList.remove('modal-open');
             } catch (error) { /* non-critical */ }
         }
@@ -53513,6 +53518,14 @@ function getActiveEditor() {
             const closeBtn = document.getElementById('sutraBackupPasswordCloseBtn');
             const title = document.getElementById('sutraBackupPasswordTitle');
             const form = document.getElementById('sutraBackupPasswordForm');
+            const requestedReturnFocus = options.returnFocus;
+            const returnFocusTarget = requestedReturnFocus
+                && requestedReturnFocus.isConnected
+                && typeof requestedReturnFocus.focus === 'function'
+                ? requestedReturnFocus
+                : document.activeElement;
+            const exportOptions = { ...options };
+            delete exportOptions.returnFocus;
             if (form) form.onsubmit = (event) => { event.preventDefault(); }; // submit still fires the browser's save heuristic; we just prevent navigation
             if (!modal || !passInput || !confirmInput || !submitBtn) {
                 showToast('Backup password dialog is unavailable.');
@@ -53609,7 +53622,7 @@ function getActiveEditor() {
                         // health stamp or re-prompting the password manager.
                         const result = typeof options.perform === 'function'
                             ? await options.perform(passphrase)
-                            : await performEncryptedSutraWorkspaceExport({ ...options, passphrase });
+                            : await performEncryptedSutraWorkspaceExport({ ...exportOptions, passphrase });
                         if (typeof options.perform !== 'function') {
                             sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
                         }
@@ -53629,8 +53642,16 @@ function getActiveEditor() {
                 if (closeBtn) closeBtn.onclick = cancel;
                 modal.onclick = (event) => { if (event.target === modal) cancel(); };
                 document.addEventListener('keydown', onKeydown, true);
+                if (returnFocusTarget && returnFocusTarget.isConnected && typeof returnFocusTarget.focus === 'function') {
+                    modal.__sutraReturnFocus = returnFocusTarget;
+                }
                 modal.classList.add('active');
                 try { document.body.classList.add('modal-open'); } catch (error) { /* non-critical */ }
+                try {
+                    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+                        window.SutraModalManager.sync();
+                    }
+                } catch (error) { /* non-critical */ }
                 validate();
                 setTimeout(() => { try { passInput.focus(); } catch (error) {} }, 30);
             });

@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260830-rootrecovery1",
-    "hash": "e4bd7dc613e58cc0"
+    "stamp": "20260830-backupfocus1",
+    "hash": "23d84e1cb0db8f74"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260830-revoke2",
