@@ -45,6 +45,7 @@ jobs:
           path: .deploy/
           if-no-files-found: error
           retention-days: 7
+          include-hidden-files: true
 
   browser-tests:
     name: Browser tests (Chromium, verified artifact)
