@@ -77,7 +77,8 @@ test('HTML identity survives an unencrypted workspace package round trip', async
     return {
       live,
       durable,
-      detected: !!window.SutraHTMLPages.getCurrentPage()
+      detected: !!window.SutraHTMLPages.getCurrentPage(),
+      htmlSurfaceVisible: document.getElementById('htmlPageEditor')?.hidden === false
     };
   }, exported.id);
 
@@ -91,6 +92,7 @@ test('HTML identity survives an unencrypted workspace package round trip', async
     margins: { top: 20, right: 21, bottom: 22, left: 23 }
   });
   expect(restored.detected).toBe(true);
+  expect(restored.htmlSurfaceVisible).toBe(true);
   await expect(page.locator('#htmlPageEditor')).toBeVisible();
 });
 
@@ -162,7 +164,8 @@ test('HTML identity survives the encrypted .sutra package and durable restore bo
       live,
       serialized,
       durable,
-      detected: !!window.SutraHTMLPages.getCurrentPage()
+      detected: !!window.SutraHTMLPages.getCurrentPage(),
+      htmlSurfaceVisible: document.getElementById('htmlPageEditor')?.hidden === false
     };
   }, exported.id);
 
@@ -173,6 +176,7 @@ test('HTML identity survives the encrypted .sutra package and durable restore bo
   expect(imported.live.title).toBe('Encrypted HTML transfer');
   expect(imported.live.pageMode).toMatchObject({ enabled: true, size: 'a4' });
   expect(imported.detected).toBe(true);
+  expect(imported.htmlSurfaceVisible).toBe(true);
   await expect(page.locator('#htmlPageEditor')).toBeVisible();
 
   await page.reload();

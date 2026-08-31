@@ -210,6 +210,7 @@ test('a locked-note paste is durable when leaving Notes before the v2 mirror deb
       visible,
       mirrorBeforeSwitch,
       mirrorAfterSwitch: document.getElementById('editor').innerHTML,
+      visibleAfterSwitch: window.SutraNotesEditorV2.getStorageHtml(),
       liveContent: live?.content || '',
       serializedContent: serialized?.content || '',
       durableContent: durable?.content || '',
@@ -220,12 +221,21 @@ test('a locked-note paste is durable when leaving Notes before the v2 mirror deb
 
   expect(result.visible).toContain('paste before immediate view switch');
   expect(result.mirrorBeforeSwitch).not.toContain('paste before immediate view switch');
-  expect(result.mirrorAfterSwitch).toContain('paste before immediate view switch');
+  expect(result.mirrorAfterSwitch).not.toContain('paste before immediate view switch');
+  expect(result.visibleAfterSwitch).not.toContain('paste before immediate view switch');
   expect(result.liveContent).toContain('paste before immediate view switch');
   expect(result.serializedContent).toContain('paste before immediate view switch');
   expect(result.durableContent).toContain('paste before immediate view switch');
   expect(result.activeView).toBe('today');
   expect(result.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
+
+  await page.evaluate(() => window.flowAtelier.setActiveView('notes'));
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('#editorV2Host .ProseMirror')).not.toContainText('paste before immediate view switch');
+  await page.fill('#lockScreenPinInput', PIN);
+  await page.locator('#lockScreenForm').evaluate((form) => form.requestSubmit());
+  await page.waitForFunction(() => document.getElementById('lockedPageScreen')?.hidden === true);
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText('paste before immediate view switch');
 });
 
 for (const destination of ['homework', 'timeline']) {
@@ -248,6 +258,33 @@ for (const destination of ['homework', 'timeline']) {
     expect(stored.lockState).toMatchObject({ isLocked: true, sessionUnlocked: false });
   });
 }
+
+test('leaving Notes keeps a timed auto-lock armed', async ({ page }) => {
+  await openApp(page);
+  const id = 'locked-note-timed-view-switch-qa';
+  await createUnlockedLockedNote(page, id, '5min');
+
+  const before = await page.evaluate((pageId) => ({
+    lock: window.__sutraPublicBetaTestHooks.getPageLockState(pageId),
+    timer: window.__sutraPublicBetaTestHooks.hasPageAutoLockTimer(pageId)
+  }), id);
+  expect(before.lock).toMatchObject({ sessionUnlocked: true });
+  expect(before.timer).toBe(true);
+
+  await page.evaluate(() => window.flowAtelier.setActiveView('today'));
+  const afterLeaving = await page.evaluate((pageId) => ({
+    lock: window.__sutraPublicBetaTestHooks.getPageLockState(pageId),
+    timer: window.__sutraPublicBetaTestHooks.hasPageAutoLockTimer(pageId)
+  }), id);
+  expect(afterLeaving.lock).toMatchObject({ sessionUnlocked: true });
+  expect(afterLeaving.timer).toBe(true);
+
+  await page.evaluate((pageId) => window.__sutraPublicBetaTestHooks.triggerPageAutoLock(pageId), id);
+  await page.evaluate(() => window.flowAtelier.setActiveView('notes'));
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  expect(await page.evaluate((pageId) => window.__sutraPublicBetaTestHooks.getPageLockState(pageId), id))
+    .toMatchObject({ isLocked: true, sessionUnlocked: false });
+});
 
 test('manual and timed re-lock flush a pending Editor v2 paste before revoking authorization', async ({ page }) => {
   await openApp(page);

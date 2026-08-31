@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260830-integrity2",
-    "hash": "737a2a2ff95c32f1"
+    "stamp": "20260831-integrity4",
+    "hash": "a66eb24898764d19"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260823-credential-bridge4",
@@ -68,8 +68,8 @@
     "hash": "0cd88826ae6aeb3c"
   },
   "src/core/migrations.js": {
-    "stamp": "20260830-integrity1",
-    "hash": "839f42bb461d5d99"
+    "stamp": "20260813-pdf2",
+    "hash": "ef85c157317a6b60"
   },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",

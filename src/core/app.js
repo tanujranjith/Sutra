@@ -32822,13 +32822,16 @@ function buildOnboardingPlanPreview() {
                 const autoLockOnNavigation = !!(outgoing && outgoing.isLocked && outgoing.lockHash
                     && unlockedPageIds.has(currentPageId)
                     && (outgoing.lockAutoLock || 'navigation') === 'navigation');
-                clearAutoLockTimer(currentPageId);
                 // Editor v2 owns the visible document and mirrors it on a
                 // debounce. Capture it while the locked page is still
                 // authorized, before another view hides the editor and before
                 // navigation policy revokes that authorization.
                 savePage();
-                if (autoLockOnNavigation) unlockedPageIds.delete(currentPageId);
+                if (autoLockOnNavigation) {
+                    clearAutoLockTimer(currentPageId);
+                    unlockedPageIds.delete(currentPageId);
+                    renderLockedPageScreen(outgoing);
+                }
                 syncCurrentPrimaryScrollState({ persist: true });
             }
             activeView = resolvedView;
@@ -49861,6 +49864,14 @@ function getActiveEditor() {
                     }
                 }
                 reopenLinkedPdfForNotePage(page);
+                // Dedicated page surfaces (HTML, Slides, Sheets) own their UI
+                // outside the rich-text editor. Notify them synchronously once
+                // the canonical page has been loaded so an imported HTML page
+                // cannot briefly reopen as an ordinary note while waiting for
+                // the compatibility polling fallback.
+                try {
+                    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', { detail: { pageId } }));
+                } catch (e) { /* optional feature surfaces may not be mounted */ }
             }
         }
 
@@ -50994,6 +51005,20 @@ function getActiveEditor() {
             const primaryPane = document.getElementById('notesPrimaryPane');
             const screen = document.getElementById('lockedPageScreen');
             if (!primaryPane || !screen) return;
+
+            // Authorization has already been revoked by every caller. Clear
+            // each page-owned editing surface immediately so switching back to
+            // Notes cannot reveal stale locked plaintext before the PIN screen
+            // paints. Feature surfaces listen to this event and apply the same
+            // authorization guard synchronously.
+            const primaryEditor = getPrimaryEditor();
+            if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+            const canvasRoot = document.getElementById('canvasEditor');
+            if (canvasRoot) canvasRoot.hidden = true;
+            document.body.classList.remove('canvas-page-active');
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', { detail: { pageId: page.id } }));
+            } catch (e) { /* feature surface may not be mounted */ }
 
             primaryPane.classList.add('is-page-locked');
             const editorContainer = document.getElementById('notesEditorContainer');
@@ -62032,6 +62057,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 clearPageDuressPin: (pageId) => clearPageDuressPin(pageId),
                 lockPageNow: (pageId) => manualLockPage(pageId),
                 triggerPageAutoLock: (pageId) => autoLockPageAfterTimeout(pageId),
+                hasPageAutoLockTimer: (pageId) => lockTimers.has(pageId),
                 openPageLockSettings: (pageId) => openSetLockModal(pageId),
                 getPageLockState: (pageId) => {
                     const page = pages.find(entry => entry && entry.id === pageId);

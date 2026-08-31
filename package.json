@@ -55,7 +55,7 @@
     "assets:check": "node scripts/generate-asset-manifest.mjs --check",
     "check:cache-stamps": "node scripts/sutra-cache-stamp-check.mjs",
     "check:cache-stamps:update": "node scripts/sutra-cache-stamp-check.mjs --update",
-    "test:unit": "node --test \"tests/unit/*.test.mjs\"",
+    "test:unit": "node --test tests/unit/*.test.mjs",
     "check:startup-health": "node scripts/sutra-startup-health-check.mjs",
     "check:dom": "node scripts/sutra-dom-integrity-check.mjs",
     "check:guardrails": "node scripts/sutra-guardrails-check.mjs",
