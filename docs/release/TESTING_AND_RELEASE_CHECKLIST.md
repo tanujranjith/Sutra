@@ -5,6 +5,9 @@ This is the pre-release checklist for **Sutra**. It combines the automated guard
 checks, the document-background round-trip, accessibility checks, and a final
 sign-off.
 
+The latest audit-remediation evidence is recorded in
+[Audit Remediation Release Certification — 2026-08-30](./AUDIT_REMEDIATION_CERTIFICATION_2026-08-30.md).
+
 Sutra is **local-first** - a static web app with no backend. The automated checks
 therefore verify the **shipped source** (export/import wiring, persistence parity,
 feature hooks) rather than spinning up a server.
