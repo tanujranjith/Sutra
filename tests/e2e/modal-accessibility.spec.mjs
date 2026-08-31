@@ -285,7 +285,12 @@ test('stacked modals isolate the lower dialog and restore focus when the top clo
 test('encrypted backup password modal restores its trigger after every cancel path', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => window.setActiveView && window.setActiveView('settings'));
-  await page.locator('[data-settings-nav="data"]').click();
+  const mobileCategory = page.locator('#settingsCategorySelect');
+  if (await mobileCategory.isVisible()) {
+    await mobileCategory.selectOption('data');
+  } else {
+    await page.locator('[data-settings-nav="data"]').click();
+  }
 
   const trigger = page.locator('#exportAtelierWorkspaceBtn');
   const modal = page.locator('#sutraBackupPasswordModal');
@@ -301,7 +306,7 @@ test('encrypted backup password modal restores its trigger after every cancel pa
     await test.step(closeCase.name, async () => {
       await trigger.focus();
       await expect(trigger).toBeFocused();
-      await trigger.click();
+      await page.keyboard.press('Enter');
       await expect(modal).toBeVisible();
       await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#sutraBackupPasswordModal'))).toBe(true);
 
