@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-08-30T23:53:51.900Z",
-  "reviewedReason": "Restore encrypted-backup modal focus deterministically across Escape, Cancel, and close-button paths.",
-  "maxBytes": 4885749,
-  "maxLines": 85951
+  "blessedAt": "2026-09-01T01:02:13.102Z",
+  "reviewedReason": "Guard stale detached image nodes from MutationObserver resize wrapping",
+  "maxBytes": 4886025,
+  "maxLines": 85954
 }
