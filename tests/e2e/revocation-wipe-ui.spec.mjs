@@ -35,6 +35,21 @@ test('an enumeration-unverified wipe remains fail-closed until browser site data
   await expectWorkspaceConcealed(page);
 });
 
+test('an unreadable revocation guard keeps startup fail-closed', async ({ page }) => {
+  await page.addInitScript(key => {
+    const originalGetItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (name) {
+      if (String(name) === key) throw new DOMException('Revocation guard is unavailable', 'SecurityError');
+      return originalGetItem.call(this, name);
+    };
+  }, GUARD_KEY);
+  await page.goto('/Sutra.html');
+  await expect(page.locator('#sutraRevokedDeviceScreen')).toBeVisible();
+  await expect(page.locator('#sutraRevokedDeviceReuse')).toBeHidden();
+  await expect(page.locator('#sutraRevokedDeviceMessage')).toContainText('Sutra is locked');
+  await expectWorkspaceConcealed(page);
+});
+
 test('a fully verified wipe permits an explicit empty-workspace restart', async ({ page }) => {
   await openWithGuard(page, 'complete');
   await expect(page.locator('#sutraRevokedDeviceReuse')).toBeVisible();

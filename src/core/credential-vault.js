@@ -13,6 +13,22 @@
   var opening = null;
   var keyPromise = null;
 
+  function revocationLocked() {
+    try {
+      return !!(global.SutraRevocationWipe
+        && typeof global.SutraRevocationWipe.readGuard === 'function'
+        && global.SutraRevocationWipe.readGuard());
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function assertRevocationUnlocked() {
+    if (!revocationLocked()) return;
+    close();
+    throw new Error('Credential vault is unavailable while this device is revoked.');
+  }
+
   function getCrypto() {
     return global.crypto && global.crypto.subtle ? global.crypto : null;
   }
@@ -47,6 +63,7 @@
   }
 
   function open() {
+    assertRevocationUnlocked();
     var indexedDb = global.indexedDB;
     if (liveDb) {
       if (indexedDb === liveFactory) return Promise.resolve(liveDb);
@@ -75,6 +92,11 @@
       request.onsuccess = function () {
         var db = request.result;
         if (settled) { try { db.close(); } catch (error) {} return; }
+        if (revocationLocked()) {
+          try { db.close(); } catch (error) {}
+          fail(new Error('Credential vault is unavailable while this device is revoked.'));
+          return;
+        }
         settled = true;
         opening = null;
         liveDb = db;
@@ -82,6 +104,7 @@
         db.onversionchange = function () {
           try { db.close(); } catch (error) {}
           forget(db);
+          keyPromise = null;
         };
         resolve(db);
       };
@@ -106,6 +129,7 @@
 
   async function read(storeName, key) {
     var db = await open();
+    assertRevocationUnlocked();
     var tx = db.transaction(storeName, 'readonly');
     var value = await requestResult(tx.objectStore(storeName).get(key));
     return value === undefined ? null : value;
@@ -113,6 +137,7 @@
 
   async function write(storeName, key, value) {
     var db = await open();
+    assertRevocationUnlocked();
     var tx = db.transaction(storeName, 'readwrite');
     tx.objectStore(storeName).put(value, key);
     return transactionDone(tx);
@@ -120,6 +145,7 @@
 
   async function remove(storeName, key) {
     var db = await open();
+    assertRevocationUnlocked();
     var tx = db.transaction(storeName, 'readwrite');
     tx.objectStore(storeName).delete(key);
     return transactionDone(tx);
@@ -127,6 +153,7 @@
 
   async function readOrCreateKey(generated) {
     var db = await open();
+    assertRevocationUnlocked();
     return new Promise(function (resolve, reject) {
       var tx;
       var selected = generated;
@@ -246,6 +273,7 @@
     var expected = Number(expectedGeneration);
     if (!Number.isSafeInteger(expected) || expected < 0) throw new Error('Credential write generation is invalid.');
     var db = await open();
+    assertRevocationUnlocked();
     return new Promise(function (resolve, reject) {
       var tx;
       var written = false;
@@ -283,10 +311,55 @@
     });
   }
 
+  async function removeValueGuarded(name, expectedGeneration) {
+    var keyName = String(name || '').trim();
+    if (!keyName) throw new Error('Credential name is required.');
+    var expected = Number(expectedGeneration);
+    if (!Number.isSafeInteger(expected) || expected < 0) throw new Error('Credential write generation is invalid.');
+    var db = await open();
+    assertRevocationUnlocked();
+    return new Promise(function (resolve, reject) {
+      var tx;
+      var removed = false;
+      var settled = false;
+
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        reject(error || new Error('Credential vault guarded removal failed.'));
+      }
+
+      try {
+        tx = db.transaction([META_STORE, CREDENTIAL_STORE], 'readwrite');
+        var request = tx.objectStore(META_STORE).get(guardKey(keyName));
+        request.onerror = function () {
+          try { tx.abort(); } catch (error) {}
+          fail(request.error);
+        };
+        request.onsuccess = function () {
+          var current = normalizeGuard(request.result);
+          if (current.blocked || current.generation !== expected) return;
+          tx.objectStore(CREDENTIAL_STORE).delete(keyName);
+          removed = true;
+        };
+        tx.oncomplete = function () {
+          if (settled) return;
+          settled = true;
+          resolve(removed);
+        };
+        tx.onerror = function () { fail(tx.error); };
+        tx.onabort = function () { fail(tx.error || new Error('Credential vault guarded removal aborted.')); };
+      } catch (error) {
+        fail(error);
+      }
+    });
+  }
+
   async function changeWriteGuard(name, blocked) {
     var keyName = String(name || '').trim();
     if (!keyName) throw new Error('Credential name is required.');
     var db = await open();
+    assertRevocationUnlocked();
     return new Promise(function (resolve, reject) {
       var tx;
       var nextGeneration = 0;
@@ -398,6 +471,7 @@
 
   async function clearAll() {
     var db = await open();
+    assertRevocationUnlocked();
     var tx = db.transaction([META_STORE, CREDENTIAL_STORE], 'readwrite');
     tx.objectStore(META_STORE).clear();
     tx.objectStore(CREDENTIAL_STORE).clear();
@@ -419,6 +493,7 @@
   var api = {
     set: setValue,
     setGuarded: setValueGuarded,
+    removeGuarded: removeValueGuarded,
     get: getValue,
     remove: clearValue,
     getWriteGuard: getWriteGuard,

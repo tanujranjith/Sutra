@@ -40,16 +40,16 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260830-backupfocus1",
-    "hash": "23d84e1cb0db8f74"
+    "stamp": "20260901-imageresize1",
+    "hash": "0679087b186de547"
   },
   "src/core/credential-vault-bridge.js": {
-    "stamp": "20260830-revoke2",
-    "hash": "0f56756a5af9162d"
+    "stamp": "20260831-revoke4",
+    "hash": "13cb16e4fc6f8813"
   },
   "src/core/credential-vault.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "0f8cdb0942bbf91e"
+    "stamp": "20260831-revoke4",
+    "hash": "40d49239acfc800c"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -404,8 +404,8 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260830-revoke2",
-    "hash": "416ba029ebf241d8"
+    "stamp": "20260831-revoke5",
+    "hash": "3b8eaca580bbc9a6"
   },
   "src/persistence/storage-hygiene.js": {
     "stamp": "20260710-hygiene1",

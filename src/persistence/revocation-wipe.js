@@ -13,13 +13,28 @@
     'sutra_share_target_db'
   ]);
 
-  function storageValue(storage, key) {
-    try { return storage && storage.getItem(key); } catch (error) { return null; }
+  function guardReadError() {
+    return {
+      version: 1,
+      status: 'guard-read-error',
+      detail: 'The revocation guard could not be read. Sutra remains locked.'
+    };
   }
 
   function readGuard(storage) {
-    var raw = storageValue(storage || global.localStorage, GUARD_KEY);
-    if (!raw) return null;
+    var raw;
+    try {
+      // Resolve localStorage inside the protected boundary too: some browser
+      // policies throw from the property getter before getItem() is reached.
+      var target = storage || global.localStorage;
+      if (!target || typeof target.getItem !== 'function') return guardReadError();
+      raw = target.getItem(GUARD_KEY);
+    } catch (error) {
+      return guardReadError();
+    }
+    // Only a successful missing-key read proves that this browser is unlocked.
+    // Empty, malformed, inaccessible, and unavailable state stays fail-closed.
+    if (raw === null) return null;
     try {
       var value = JSON.parse(raw);
       return value && Number(value.version) === 1 ? value : { version: 1, status: 'locked' };

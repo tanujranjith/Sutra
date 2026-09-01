@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const wipeApi = require('../../src/persistence/revocation-wipe.js');
+const wipeSource = fs.readFileSync(new URL('../../src/persistence/revocation-wipe.js', import.meta.url), 'utf8');
+const migrationSource = fs.readFileSync(new URL('../../src/boot/legacy-workspace-migration.js', import.meta.url), 'utf8');
 
 function memoryStorage(seed = {}) {
   const values = new Map(Object.entries(seed));
@@ -43,6 +47,75 @@ function fakeIndexedDb(options = {}) {
   }
   return factory;
 }
+
+function isolatedWipeRuntime(storageMode) {
+  let createCalls = 0;
+  const adapter = {
+    read: async () => null,
+    write: async () => true,
+    writeIf: async () => true,
+    close() {}
+  };
+  const context = {
+    console,
+    Promise,
+    Date,
+    Set,
+    module: { exports: {} },
+    SutraWorkspaceDB: {
+      create() {
+        createCalls += 1;
+        return adapter;
+      }
+    }
+  };
+  if (storageMode === 'absent-key') context.localStorage = memoryStorage();
+  if (storageMode === 'throwing-get') {
+    context.localStorage = { getItem() { throw new Error('SecurityError: localStorage unavailable'); } };
+  }
+  if (storageMode === 'throwing-getter') {
+    Object.defineProperty(context, 'localStorage', {
+      configurable: true,
+      get() { throw new Error('SecurityError: localStorage getter unavailable'); }
+    });
+  }
+  context.window = context;
+  context.globalThis = context;
+  const sandbox = vm.createContext(context);
+  vm.runInContext(wipeSource, sandbox, { filename: 'src/persistence/revocation-wipe.js' });
+  return {
+    api: context.module.exports,
+    runMigration() {
+      vm.runInContext(migrationSource, sandbox, { filename: 'src/boot/legacy-workspace-migration.js' });
+    },
+    get createCalls() { return createCalls; }
+  };
+}
+
+test('guard read failures stay locked while a confirmed missing key remains unlocked', () => {
+  assert.equal(wipeApi.readGuard(memoryStorage()), null, 'a successful missing-key read permits normal startup');
+
+  const throwingStorage = {
+    getItem() { throw new Error('SecurityError: localStorage unavailable'); }
+  };
+  assert.equal(wipeApi.readGuard(throwingStorage).status, 'guard-read-error');
+
+  const unavailable = isolatedWipeRuntime('unavailable');
+  assert.equal(unavailable.api.readGuard().status, 'guard-read-error');
+
+  const throwingGetter = isolatedWipeRuntime('throwing-getter');
+  assert.equal(throwingGetter.api.readGuard().status, 'guard-read-error');
+});
+
+test('legacy workspace migration stays closed on guard read failure and runs after a confirmed missing key', () => {
+  const unreadable = isolatedWipeRuntime('throwing-get');
+  unreadable.runMigration();
+  assert.equal(unreadable.createCalls, 0, 'unreadable revocation state must not initialize IndexedDB');
+
+  const unlocked = isolatedWipeRuntime('absent-key');
+  unlocked.runMigration();
+  assert.equal(unlocked.createCalls, 1, 'a successful missing-key read preserves normal startup');
+});
 
 test('verified wipe deletes every Sutra database, preserves session until acknowledgement, then finalizes', async () => {
   const local = memoryStorage({ workspaceMirror: 'private', homework: 'private' });
