@@ -71048,7 +71048,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function wrapImageForResize(img) {
-            if (img.closest('.resizable-media')) return;
+            // A MutationObserver can receive an added image after a synchronous
+            // editor update has already detached it. Only wrap an image that is
+            // still in the document with a live insertion parent.
+            if (!img || !img.isConnected || !img.parentNode || img.closest('.resizable-media')) return;
             
             const wrapper = document.createElement('div');
             wrapper.className = 'resizable-media';
