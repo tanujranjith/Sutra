@@ -100,6 +100,46 @@ test('phone Month uses count indicators and opens the focused Day view without p
   expect(overflow.body).toBeLessThanOrEqual(2);
 });
 
+test('short calendar blocks prioritize their title over a clipped time stack', async ({ page }) => {
+  await openTimeline(page);
+  await page.evaluate(() => {
+    const d = new Date();
+    const date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    window.flowAtelier.timeBlocks.push({
+      id: 'cal-short', name: 'Quick check-in', date, start: '06:00', end: '06:45', category: 'study'
+    });
+    window.flowAtelier.renderTimeline();
+  });
+
+  const event = page.locator('.sutra-calendar-time-week [data-block-id="cal-short"]');
+  await expect(event).toHaveClass(/is-compact/);
+  await expect(event.locator('.sutra-calendar-event-time')).toHaveCount(0);
+  await expect(event.locator('.sutra-calendar-event-source')).toHaveCount(0);
+  await expect(event.locator('.sutra-calendar-event-title')).toHaveText('Quick check-in');
+  await expect(event).toHaveAttribute('aria-label', /Quick check-in/);
+});
+
+test('phone day blocks keep a 45-minute title readable without a clipped time stack', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openTimeline(page);
+  await page.evaluate(() => {
+    const d = new Date();
+    const date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    window.flowAtelier.timeBlocks.push({
+      id: 'cal-phone-short', name: 'Phone study block', date, start: '06:00', end: '06:45', category: 'study'
+    });
+    window.flowAtelier.renderTimeline();
+  });
+
+  await page.locator('[data-timeline-view-mode="day"]').click();
+  const event = page.locator('.sutra-calendar-time-day [data-block-id="cal-phone-short"]');
+  await expect(event).toHaveClass(/is-compact/);
+  await expect(event.locator('.sutra-calendar-event-time')).toHaveCount(0);
+  await expect(event.locator('.sutra-calendar-event-source')).toHaveCount(0);
+  await expect(event.locator('.sutra-calendar-event-title')).toHaveText('Phone study block');
+  await expect(event).toHaveAttribute('aria-label', /6:00 AM to 6:45 AM/);
+});
+
 test('an open canvas cannot remain visible beneath Timeline after navigation', async ({ page }) => {
   await openTimeline(page);
 

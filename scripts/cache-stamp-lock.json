@@ -380,8 +380,8 @@
     "hash": "ac88591cfa5f81c7"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260808-contextual-ui1",
-    "hash": "ff560793703c6a9c"
+    "stamp": "20260904-compactevents4",
+    "hash": "ba427d1608b781d6"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
@@ -548,16 +548,16 @@
     "hash": "18271099686c5736"
   },
   "styles/features/sheets.css": {
-    "stamp": "20260821-sheets2",
-    "hash": "05ea749ecf9ffd3d"
+    "stamp": "20260904-editorlayout2",
+    "hash": "fd46dbbdfe960239"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260821-slidesworkbench2",
-    "hash": "73b09e0e561d9eac"
+    "stamp": "20260904-editorlayout2",
+    "hash": "f18180e3a13e0503"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
@@ -648,8 +648,8 @@
     "hash": "220440ec48d87134"
   },
   "styles/views/timeline-calendar.css": {
-    "stamp": "20260808-mobileday1",
-    "hash": "d711e1fd39e74488"
+    "stamp": "20260904-compactevents2",
+    "hash": "d9f941bdc3f01ed2"
   },
   "styles/views/today-focus-timer.css": {
     "stamp": "20260809-todaytimer1",
