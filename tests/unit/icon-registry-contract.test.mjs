@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('../..', import.meta.url);
-const rootPath = root.pathname.startsWith('/') ? root.pathname.slice(1) : root.pathname;
+const rootPath = fileURLToPath(new URL('../../', import.meta.url));
 const iconSource = readFileSync(new URL('../../src/components/icons/icon-paths.js', import.meta.url), 'utf8');
 const nonIconClasses = new Set([
   'fa', 'fas', 'far', 'fab', 'fal', 'fa-solid', 'fa-regular', 'fa-brands',
