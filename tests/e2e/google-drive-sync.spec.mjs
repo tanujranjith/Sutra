@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
+
 const PASS = 'correct horse battery staple';
 const CLIENT_ID = 'mock-client-id.apps.googleusercontent.com';
 

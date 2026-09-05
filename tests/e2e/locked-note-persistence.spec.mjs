@@ -412,11 +412,13 @@ test('a stale second tab cannot overwrite a paste saved in a locked note', async
       ? document.querySelector('#editorV2Host .ProseMirror')
       : document.getElementById('editor');
     target.focus();
-    target.dispatchEvent(new ClipboardEvent('paste', {
-      clipboardData: data,
+    const paste = new ClipboardEvent('paste', {
       bubbles: true,
       cancelable: true
-    }));
+    });
+    // Firefox discards constructor-provided synthetic clipboard contents.
+    Object.defineProperty(paste, 'clipboardData', { value: data });
+    target.dispatchEvent(paste);
     await new Promise(resolve => setTimeout(resolve, 1300));
     await window.flowAtelier.flushAppSaveNow('locked-note-cross-tab-paste');
   }, { lockedId: ids.lockedId, pin: PIN });

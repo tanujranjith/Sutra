@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Workspace-wide Global Search modal (#globalSearchPanel): entry points
 // (Ctrl/Cmd+K, sidebar launcher), unified results across entity types, filter
@@ -26,6 +27,7 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('.app-container', { state: 'visible' });
   await page.waitForFunction(() => typeof window.serializeWorkspace === 'function');
+  await waitForAppReady(page);
   await completeOnboarding(page);
 }
 

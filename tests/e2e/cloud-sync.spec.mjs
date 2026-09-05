@@ -35,7 +35,7 @@ async function waitForCanonicalHydration(page) {
 }
 
 async function openDevice(browser, server, label) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
@@ -48,7 +48,7 @@ async function openDevice(browser, server, label) {
 }
 
 async function openAuthedDevice(browser, server, label) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   await context.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   const net = { down: false };
   await routeSyncServer(context, server, net);
@@ -574,8 +574,9 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       expect(pushA.error).toBeNull();
       // A confirmed save schedules an automatic debounced cycle. It may win
       // the race with this explicit syncNow(), in which case pushed is already
-      // zero even though the encrypted op reached the server correctly.
-      expect(server.state.ops.length).toBeGreaterThan(opsBeforeCreate);
+      // zero or skipped while that cycle is still in flight. Wait for the
+      // observable server write instead of treating lock acquisition as completion.
+      await expect.poll(() => server.state.ops.length, { timeout: 20000 }).toBeGreaterThan(opsBeforeCreate);
 
       // B's automatic debounced cycle may apply the op before this explicit
       // call. Assert the observable convergence instead of which cycle won.
@@ -1511,7 +1512,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
   test('sync disabled: startup + edits + saves make zero requests to the sync endpoint', async ({ browser }) => {
     const server = createSyncMockServer();
-    const context = await browser.newContext();
+    const context = await browser.newContext({ serviceWorkers: 'block' });
     let syncRequests = 0;
     context.on('request', (request) => {
       if (request.url().startsWith(SYNC_MOCK_ORIGIN)) syncRequests += 1;
@@ -1537,7 +1538,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   test('two tabs of one device: single-flight cycles, no duplicate ops, status relays across tabs', async ({ browser }) => {
     test.setTimeout(360_000);
     const server = createSyncMockServer();
-    const context = await browser.newContext();
+    const context = await browser.newContext({ serviceWorkers: 'block' });
     const net = { down: false };
     await routeSyncServer(context, server, net);
     const tab1 = await context.newPage();
@@ -1651,7 +1652,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
   test('full UI flow on a configured Supabase backend: sign in, enable, authed sync, status card', async ({ browser }) => {
     const server = createSyncMockServer();
-    const context = await browser.newContext();
+    const context = await browser.newContext({ serviceWorkers: 'block' });
     const net = { down: false };
     await routeSyncServer(context, server, net);
     const page = await context.newPage();

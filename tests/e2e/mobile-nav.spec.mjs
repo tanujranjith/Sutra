@@ -223,6 +223,30 @@ test('unified More actions open Notifications and the custom dashboard prompt', 
   await expect(page.locator('#customPromptTitle')).toHaveText('New tab');
 });
 
+test('More actions wait for delayed history teardown before opening the next panel', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.evaluate(() => {
+    const back = history.back.bind(history);
+    history.back = () => {
+      // Controlled slow popstate, not a readiness sleep: the former 210ms
+      // action timer would open Notifications while the old sheet still owned focus.
+      window.setTimeout(() => {
+        window.__moreOpenedBeforeHistory = document.getElementById('notifPanel').getAttribute('aria-hidden') === 'false';
+        back();
+      }, 500);
+    };
+  });
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  await more.click();
+  await page.locator('[data-mobile-more-action="notifications"]').click();
+  await expect(page.locator('#notifPanel')).toBeVisible();
+  expect(await page.evaluate(() => window.__moreOpenedBeforeHistory)).toBe(false);
+  await expect(page.locator('#sutraMobileMoreOverlay')).toBeHidden();
+  await page.locator('#notifCloseBtn').click();
+  await expect(more).toBeFocused();
+});
+
 test('bottom nav is hidden on a desktop viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openApp(page);

@@ -1,4 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
+
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
 import { readFileSync } from 'node:fs';
 
 // Sutra Cloud — provider-agnostic encrypted backup. These tests mock the Supabase
@@ -110,6 +115,7 @@ async function openApp(page, { withConfig = true } = {}) {
   const supa = await installSupabaseMock(page);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   return supa;
@@ -366,7 +372,7 @@ test('Cloud sign-out wins over an already in-flight remembered-session write', a
 });
 
 test('Cloud sign-out blocks a stale tab from re-capturing its old session', async ({ browser }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   const first = await context.newPage();
   await openApp(first);
   await first.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });

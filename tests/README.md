@@ -27,3 +27,16 @@ catch it as a real regression (missing feature, blank view, console error).
 
 > CI runs `test:e2e:chromium` as the release gate; the deploy workflow runs the
 > full matrix. Keep `fullyParallel: false` (the suite shares the static server).
+
+## Cross-browser fixtures
+
+- Run targeted local batches with `--workers=1` to keep memory bounded.
+- Before ordinary fixture mutations, use `e2e/helpers/app-ready.mjs` to await
+  canonical hydration through the public save seam. Attached markup is not a
+  ready workspace. Fault-injection tests must establish their own readiness.
+- Network-mocked suites block service workers in their contexts so WebKit cannot
+  bypass Playwright routes. Keep the dedicated offline/service-worker suites
+  enabled; never disable browser network security to make mocks pass.
+- Firefox does not retain constructor-supplied synthetic clipboard contents.
+  Define `clipboardData` on the dispatched test event; still run the real paste
+  handler and assert the resulting document and persistence contracts.

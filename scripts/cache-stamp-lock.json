@@ -260,8 +260,8 @@
     "hash": "9683cdb464e6b16c"
   },
   "src/features/study/review.js": {
-    "stamp": "20260807-purge1",
-    "hash": "aefdeb9b209f3a59"
+    "stamp": "20260905-review-focus2",
+    "hash": "6f0c68206b093b9c"
   },
   "src/features/workspace/activation-metrics.js": {
     "stamp": "20260702-activation1",
@@ -320,8 +320,8 @@
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260826-sol3-1",
-    "hash": "681671eec77a5fc2"
+    "stamp": "20260905-more-actions1",
+    "hash": "2f35ac15ce9d28f4"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260828-revocation-lock1",
@@ -524,8 +524,8 @@
     "hash": "3d02270fdbca2fb5"
   },
   "styles/features/ios-install-guide.css": {
-    "stamp": "20260821-iosinstall2",
-    "hash": "e4a52d383aa68baf"
+    "stamp": "20260905-install-layering2",
+    "hash": "948378d5759459b5"
   },
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",

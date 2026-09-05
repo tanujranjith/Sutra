@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openShortNote(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted?.(true); } catch {}
     const overlay = document.getElementById('studentOnboardingOverlay');

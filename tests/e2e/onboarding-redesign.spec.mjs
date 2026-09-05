@@ -452,20 +452,23 @@ test('settings page shows feature pack toggles', async ({ page }) => {
   await openFreshApp(page);
   await completeOnboarding(page);
 
-  const settingsLink = page.locator('[data-view="settings"], #view-tab-settings, a[href*="settings"]').first();
-  if (await settingsLink.isVisible()) {
-    await settingsLink.click();
+  await page.evaluate(() => window.setActiveView('settings'));
+  await expect(page.locator('#view-settings')).toBeVisible();
+  const mobileCategory = page.locator('#settingsCategorySelect');
+  if (await mobileCategory.isVisible()) {
+    await mobileCategory.selectOption('advanced');
+  } else {
     const advancedGroup = page.locator('#settingsAdvancedGroup');
-    if (!await advancedGroup.getAttribute('open')) {
+    if (!await advancedGroup.evaluate(node => node.open)) {
       await advancedGroup.locator('summary').click();
     }
     const advancedNav = page.locator('[data-settings-nav="advanced"]');
     await expect(advancedNav).toBeVisible();
     await advancedNav.click();
-    const advanced = page.locator('[data-settings-section="advanced"]');
-    await expect(advanced).toBeVisible();
-    await expect(advanced.getByText('Feature packs', { exact: true })).toBeVisible();
   }
+  const advanced = page.locator('[data-settings-section="advanced"]');
+  await expect(advanced).toBeVisible();
+  await expect(advanced.getByText('Feature packs', { exact: true })).toBeVisible();
 });
 
 test('keyboard: navigate welcome step with Tab and Enter', async ({ page }) => {

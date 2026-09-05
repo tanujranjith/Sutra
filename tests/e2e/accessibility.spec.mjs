@@ -5,13 +5,14 @@
  * Uses Playwright's built-in accessibility snapshot API (no axe-core dependency).
  */
 import { test, expect } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
-const BASE = 'http://127.0.0.1:5173/Sutra.html';
+const BASE = '/Sutra.html';
 
 test.describe('Accessibility: core surfaces', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1500);
+        await waitForAppReady(page);
     });
 
     test('app shell has landmark roles', async ({ page }) => {
