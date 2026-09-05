@@ -86,6 +86,8 @@ const REQUIRED_SOURCE = [...new Set([
   'assets/brand/sutra/generated/favicon.ico',
   'assets/brand/sutra/generated/social-preview.png',
   'assets/vendor/jszip/jszip.min.js',
+  'assets/vendor/office/mammoth.browser.min.js',
+  'assets/vendor/office/xlsx.full.min.js',
   'sw.js',
   ...assetManifest.critical.map((asset) => asset.replace(/^\.\//, '').replace(/[?#].*$/, '')),
   ...assetManifest.optional.map((asset) => asset.replace(/^\.\//, '').replace(/[?#].*$/, '')),

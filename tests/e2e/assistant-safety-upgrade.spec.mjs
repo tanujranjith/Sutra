@@ -138,7 +138,7 @@ test('no-provider tutoring stays button-driven and makes zero provider requests'
   const selected = await page.evaluate(() => window.flowAssistant.chooseTutoringMode('hint_first'));
   expect(selected).toBe(false);
   await expect(page.locator('body')).toContainText('Sutra does not simulate a local free-text tutor');
-  for (const label of ['Connect a provider', 'Browse local study tools', 'Open Review', 'Open Testing Hub', 'Open Notes', 'Back']) {
+  for (const label of ['Connect a provider', 'Browse local study tools', 'Open Review', 'Open Testing Hub', 'Open Create', 'Back']) {
     await expect(page.getByRole('button', { name: new RegExp('^' + label + '\\s*›?$') })).toHaveCount(1);
   }
   expect(providerHits).toEqual([]);

@@ -67,6 +67,118 @@ test('SutraFeatureGuard.run preserves the return value on success and catches as
   expect(res.asyncDegraded).toBe(true);
 });
 
+test('SutraFeatureGuard async contract: fallback settlement, no detached rejection, explicit rethrow', async ({ page }) => {
+  await openApp(page);
+  const res = await page.evaluate(async () => {
+    const unhandled = [];
+    const onUnhandled = (event) => unhandled.push(String(event && event.reason && event.reason.message || event.reason));
+    window.addEventListener('unhandledrejection', onUnhandled);
+
+    let resolveSlow;
+    const slow = window.SutraFeatureGuard.run('guard-slow', () => new Promise((resolve) => { resolveSlow = resolve; }), { fallback: 'fb', label: 'Slow' });
+    let settledEarly = false;
+    slow.then(() => { settledEarly = true; }, () => { settledEarly = true; });
+
+    // Rejected async feature: the derived promise must settle with the
+    // fallback (not reject), degrade the feature, and leave nothing detached.
+    const degradedOutcome = await window.SutraFeatureGuard.run(
+      'guard-reject',
+      () => Promise.reject(new Error('isolated boom')),
+      { fallback: 'safe', label: 'Rejecting' }
+    );
+
+    // Still pending immediately after the synchronous resolve() call — the
+    // derived chain has not been observed to settle ahead of time.
+    const settledBeforeMicrotasks = settledEarly;
+    resolveSlow('late-value');
+    const slowValue = await slow;
+
+    // Explicit rethrow travels through the SAME returned promise and is
+    // observable by an awaiting caller.
+    let rethrownMessage = '';
+    try {
+      await window.SutraFeatureGuard.run(
+        'guard-rethrow',
+        () => Promise.reject(new Error('explicit rethrow')),
+        { label: 'Rethrow', rethrow: true }
+      );
+    } catch (error) {
+      rethrownMessage = error && error.message;
+    }
+
+    // An ignored rethrow-enabled rejection is the caller's choice; it must
+    // still be observable as a rejection of the returned promise only.
+    const ignored = window.SutraFeatureGuard.run(
+      'guard-ignored-rethrow',
+      () => Promise.reject(new Error('ignored on purpose')),
+      { label: 'Ignored', rethrow: true }
+    );
+    const ignoredRejected = await ignored.then(() => false, (error) => error instanceof Error);
+
+    await new Promise((r) => setTimeout(r, 50));
+    window.removeEventListener('unhandledrejection', onUnhandled);
+    return {
+      degradedOutcome,
+      slowValue,
+      settledBeforeMicrotasks,
+      rethrownMessage,
+      ignoredRejected,
+      unhandled,
+      degradedFlags: {
+        reject: window.SutraFeatureGuard.isDegraded('guard-reject'),
+        rethrow: window.SutraFeatureGuard.isDegraded('guard-rethrow'),
+        ignored: window.SutraFeatureGuard.isDegraded('guard-ignored-rethrow')
+      }
+    };
+  });
+
+  expect(res.degradedOutcome).toBe('safe');
+  expect(res.slowValue).toBe('late-value');
+  expect(res.settledBeforeMicrotasks).toBe(false);
+  expect(res.rethrownMessage).toBe('explicit rethrow');
+  expect(res.ignoredRejected).toBe(true);
+  expect(res.degradedFlags).toEqual({ reject: true, rethrow: true, ignored: true });
+  expect(res.unhandled).toEqual([]);
+});
+
+test('SutraFeatureGuard contains malformed thenables', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const getterFallback = window.SutraFeatureGuard.run('guard-then-getter', () => ({
+      get then() { throw new Error('then getter failed'); }
+    }), { fallback: 'getter-safe' });
+
+    const callFallback = await window.SutraFeatureGuard.run('guard-then-call', () => ({
+      then() { throw new Error('then call failed'); }
+    }), { fallback: 'call-safe' });
+
+    let rethrown = '';
+    try {
+      await window.SutraFeatureGuard.run('guard-then-rethrow', () => ({
+        then() { throw new Error('then rethrow failed'); }
+      }), { rethrow: true });
+    } catch (error) {
+      rethrown = error.message;
+    }
+    return {
+      getterFallback,
+      callFallback,
+      rethrown,
+      getterDegraded: window.SutraFeatureGuard.isDegraded('guard-then-getter'),
+      callDegraded: window.SutraFeatureGuard.isDegraded('guard-then-call'),
+      rethrowDegraded: window.SutraFeatureGuard.isDegraded('guard-then-rethrow')
+    };
+  });
+  expect(result).toEqual({
+    getterFallback: 'getter-safe',
+    callFallback: 'call-safe',
+    rethrown: 'then rethrow failed',
+    getterDegraded: true,
+    callDegraded: true,
+    rethrowDegraded: true
+  });
+});
+
 test('SutraReportError records structured, severity-tagged, de-duplicated diagnostics', async ({ page }) => {
   await openApp(page);
   const res = await page.evaluate(() => {

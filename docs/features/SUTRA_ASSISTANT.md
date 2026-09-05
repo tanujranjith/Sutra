@@ -356,7 +356,14 @@ confirmed local-save seam as workspace edits.
 Provider **API keys live in this browser session only by default**
 (`sessionStorage`). This is the safest mode. You can explicitly choose
 “Remember API keys on this device” in Settings ▸ Assistant; remembered keys are
-encrypted in the device-local credential vault. In both modes, keys are:
+encrypted in the device-local credential vault.
+
+The remembered-credential option protects against casual browser-database
+inspection and keeps keys out of exports and Sync. It does not add a separate
+passphrase gate and cannot protect a key from malicious code already executing
+in Sutra's origin. Session-only storage remains the safer default.
+
+In both modes, keys are:
 
 - **never written to workspace storage** (they are not in localStorage or the
   workspace IndexedDB; remembered keys use a separate encrypted vault),

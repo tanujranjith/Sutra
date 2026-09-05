@@ -8,6 +8,10 @@ async function openFreshApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  // Shell markup arrives before the initial canonical write/readback and the
+  // post-hydration onboarding reconciliation. Wait for initApp rather than
+  // racing the durable first-run gate from an attached static element.
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
 }
 
 async function completeOnboarding(page) {
@@ -324,6 +328,7 @@ test('legacy localStorage workspace is migrated before onboarding can save', asy
 test('existing canonical workspace data is preserved when onboarding metadata is incomplete', async ({ page }) => {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
 
   await page.evaluate(async () => {
     const readRoot = () => new Promise((resolve, reject) => {
@@ -371,7 +376,7 @@ test('existing canonical workspace data is preserved when onboarding metadata is
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await page.waitForTimeout(1000);
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
 
   const result = await page.evaluate(() => new Promise((resolve, reject) => {
@@ -499,13 +504,8 @@ test('keyboard: Tab through footer buttons', async ({ page }) => {
 });
 
 test('reduced motion: onboarding has reduced-motion class support', async ({ page }) => {
-  await page.addInitScript(() => {
-    sessionStorage.setItem('sutra_intro_played', '1');
-  });
-
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/Sutra.html');
-  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await openFreshApp(page);
 
   // The onboarding panel should still be visible even with reduced motion
   const dialog = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');
@@ -517,12 +517,7 @@ test('reduced motion: onboarding has reduced-motion class support', async ({ pag
 });
 
 test('200% zoom: onboarding remains usable', async ({ page }) => {
-  await page.addInitScript(() => {
-    sessionStorage.setItem('sutra_intro_played', '1');
-  });
-
-  await page.goto('/Sutra.html');
-  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await openFreshApp(page);
 
   // Set zoom to 200%
   await page.evaluate(() => {

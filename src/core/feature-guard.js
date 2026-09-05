@@ -13,8 +13,14 @@
  *   const safeInit = SutraFeatureGuard.wrap('focus', initFocusTimer);
  *
  * Returns fn()'s value on success (so wrapping is behavior-preserving), or
- * opts.fallback (undefined by default) on failure. Async fns whose promise
- * rejects are also caught and degrade the same way.
+ * opts.fallback (undefined by default) on failure. For an async fn the returned
+ * promise is DERIVED, not the original: a rejection is reported and degraded,
+ * then the returned promise settles with opts.fallback instead of rejecting.
+ * A caller that ignores the promise therefore cannot cause an unhandled
+ * rejection, and a caller that awaits it observes the fallback contract the
+ * header promises. With opts.rethrow the reported error is rethrown through
+ * that same returned promise (an awaiting caller catches it there; ignoring a
+ * rethrow-enabled rejection remains the caller's explicit choice).
  *
  * Zero hard dependencies (degrades gracefully if SutraReportError is missing).
  * Classic script, IIFE, attaches to window. Must never throw.
@@ -142,7 +148,9 @@
    *   opts.severity — reportError severity (default 'error')
    *   opts.badge    — false to suppress the visible badge (still reported)
    *   opts.fallback — value returned on failure (default undefined)
-   *   opts.rethrow  — true to re-throw after reporting (rarely needed)
+   *   opts.rethrow  — true to propagate the reported error to the caller:
+   *                    thrown synchronously for sync fns, rejected through
+   *                    the returned promise for async fns
    */
   function run(name, fn, opts) {
     opts = opts || {};
@@ -155,14 +163,30 @@
       if (opts.rethrow) throw e;
       return opts.fallback;
     }
-    // Catch async rejections too, without changing the returned value shape.
-    if (result && typeof result.then === 'function') {
-      try {
-        result.then(null, function (e) {
-          handleFailure(name, e, opts);
-          if (opts.rethrow) throw e;
-        });
-      } catch (e) { /* non-thenable lied about then */ }
+    // Async isolation: derive (do not return) the promise so a rejection is
+    // reported + degraded and then settles with opts.fallback. Attaching the
+    // handler here keeps both branches on one chain: no detached rejection,
+    // and an ignoring caller cannot produce an unhandled rejection.
+    var then;
+    try {
+      then = result && result.then;
+    } catch (e) {
+      handleFailure(name, e, opts);
+      if (opts.rethrow) throw e;
+      return opts.fallback;
+    }
+    if (typeof then === 'function') {
+      // Assimilate arbitrary thenables ourselves. Accessing `then` or invoking
+      // a malformed implementation can throw synchronously; both are still
+      // feature failures and must follow the same fallback/rethrow contract.
+      return new Promise(function (resolve, reject) {
+        try { then.call(result, resolve, reject); }
+        catch (e) { reject(e); }
+      }).then(undefined, function (e) {
+        handleFailure(name, e, opts);
+        if (opts.rethrow) throw e;
+        return opts.fallback;
+      });
     }
     return result;
   }

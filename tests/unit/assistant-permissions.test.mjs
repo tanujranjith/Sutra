@@ -43,3 +43,114 @@ test('action permissions require approved-actions mode and explicit approval', (
   privacy.configure({ getPermissions: () => ({ mode: 'approved_actions' }) });
   assert.deepEqual(privacy.getActionPermissions({ approved: true, destructiveApproved: true }), ['workspace.read', 'workspace.write', 'workspace.delete']);
 });
+
+test('top-level privateDocuments are denied by default even when workspace is readable', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: false }) });
+  const result = privacy.filterContext({
+    tasks: [{ id: 'task-1' }],
+    privateDocuments: [{ id: 'doc-1', title: 'Diagnosis letter', content: 'highly sensitive' }]
+  });
+  // The outbound boundary itself must remove the field; it cannot rely on
+  // context builders choosing not to populate it.
+  assert.equal(result.privateDocuments, undefined);
+  assert.ok(!JSON.stringify(result).includes('Diagnosis letter'));
+  assert.ok(result.accessReport.excludedSensitiveAreas.includes('private_documents'));
+});
+
+test('explicit allowPrivateDocuments approval admits top-level private documents', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: true }) });
+  const result = privacy.filterContext({
+    privateDocuments: [{ id: 'doc-1', title: 'Allowed letter' }]
+  });
+  assert.equal(result.privateDocuments.length, 1);
+});
+
+test('wellness and financial concepts are denied as top-level fields by default too', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowWellness: false, allowFinancial: false }) });
+  const result = privacy.filterContext({
+    wellness: { mood: 3 },
+    sleep: [{ id: 's1' }],
+    financialAid: [{ id: 'f1' }],
+    spending: { id: 'sp-1' }
+  });
+  assert.equal(result.wellness, undefined);
+  assert.equal(result.sleep, undefined);
+  assert.equal(result.financialAid, undefined);
+  assert.equal(result.spending, undefined);
+});
+
+test('nested privateDocuments inside an approved area value are still removed', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: false }) });
+  const result = privacy.filterContext({
+    courses: { id: 'course-1', name: 'Biology', privateDocuments: [{ id: 'hidden' }] }
+  });
+  assert.equal(result.courses.privateDocuments, undefined);
+});
+
+test('approved private documents survive at every nesting depth', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowPrivateDocuments: true }) });
+  const result = privacy.filterContext({
+    courses: { nested: { privateDocuments: [{ id: 'allowed', content: 'approved' }] } }
+  });
+  assert.equal(result.courses.nested.privateDocuments[0].content, 'approved');
+});
+
+test('unknown top-level context is denied instead of inheriting workspace access', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    schema: 'flow-context/1',
+    unexpectedProviderPayload: { id: 'secret', content: 'must not leave the browser' }
+  });
+  assert.equal(result.unexpectedProviderPayload, undefined);
+  assert.ok(!JSON.stringify(result).includes('must not leave the browser'));
+});
+
+test('sensitive concepts and locked records are stripped recursively', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    courses: {
+      nested: {
+        wellness: { mood: 1 },
+        privateDocuments: [{ content: 'medical' }],
+        note: { id: 'locked-1', title: 'Locked', isLocked: true, content: 'private note' }
+      }
+    }
+  });
+  assert.equal(result.courses.nested.wellness, undefined);
+  assert.equal(result.courses.nested.privateDocuments, undefined);
+  assert.deepEqual(result.courses.nested.note, { id: 'locked-1', title: 'Locked', isLocked: true });
+});
+
+test('summary and custom-tab content obey workspace area policy', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'ask_per_area', areas: { workspace: 'ask' } }) });
+  const denied = privacy.filterContext({ summary: 'Private dashboard text', customTab: { widgets: ['secret'] } });
+  assert.equal(denied.summary, undefined);
+  assert.equal(denied.customTab, undefined);
+  const approved = privacy.filterContext(
+    { summary: 'Approved dashboard text', customTab: { widgets: ['allowed'] } },
+    { approvedAreas: ['workspace'] }
+  );
+  assert.equal(approved.summary, 'Approved dashboard text');
+  assert.equal(approved.customTab.widgets[0], 'allowed');
+});
+
+test('memory and retrieved-note enrichment remain permission-scoped', () => {
+  privacy.configure({ getPermissions: () => ({
+    mode: 'ask_per_area',
+    areas: { memory: 'ask', notes: 'ask' }
+  }) });
+  const context = {
+    memory: ['private study preference'],
+    memoryUsedIds: ['memory-1'],
+    retrievedNotes: [{ id: 'note-1', title: 'Private note', quote: 'private excerpt' }],
+    notesEvidenceStatus: 'complete'
+  };
+  const denied = privacy.filterContext(context);
+  assert.equal(denied.memory, undefined);
+  assert.equal(denied.retrievedNotes, undefined);
+
+  const approved = privacy.filterContext(context, { approvedAreas: ['memory', 'notes'] });
+  assert.deepEqual(approved.memory, ['private study preference']);
+  assert.deepEqual(approved.memoryUsedIds, ['memory-1']);
+  assert.equal(approved.retrievedNotes[0].quote, 'private excerpt');
+});

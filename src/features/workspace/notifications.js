@@ -126,7 +126,19 @@
         }
     }
 
+    function _revocationWriteLocked() {
+        var wipe = global.SutraRevocationWipe;
+        if (!wipe || typeof wipe.readGuard !== 'function') return false;
+        try {
+            return !!wipe.readGuard();
+        } catch (e) {
+            if (typeof global.SutraReportError === 'function') global.SutraReportError(e, { where: 'notifications._revocationWriteLocked' }, 'warning');
+            return true;
+        }
+    }
+
     function _saveState() {
+        if (_revocationWriteLocked()) return;
         try {
             var payload = {
                 prefs: _state.prefs,

@@ -302,8 +302,8 @@
     return createPage(input && input.value || 'HTML Page');
   }
 
-  global.addEventListener('sutra:note-page-loaded', refresh);
-  global.setInterval(refresh, 400);
+global.addEventListener('sutra:note-page-loaded', refresh);
+global.addEventListener('sutra:workspace-remote-commit', refresh);
   global.SutraHTMLPages = {
     createPage: createPage,
     createFromNewPageDialog: createFromNewPageDialog,

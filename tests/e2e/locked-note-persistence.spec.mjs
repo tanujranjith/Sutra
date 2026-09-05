@@ -346,6 +346,7 @@ test('an unproven root change is not mislabeled as another open Sutra page', asy
 });
 
 test('a stale second tab cannot overwrite a paste saved in a locked note', async ({ page, context }) => {
+  test.slow(); // This regression intentionally performs three full app boots across two pages.
   await openApp(page);
 
   const ids = await page.evaluate(async ({ pin }) => {

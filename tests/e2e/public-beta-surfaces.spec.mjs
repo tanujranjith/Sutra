@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+﻿import { expect, test } from '@playwright/test';
 
 const PASS = 'correct horse battery staple';
 
@@ -32,8 +32,15 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
-  await page.waitForFunction(() => window.SutraSmartImport && window.SutraAssistantChats && window.SutraIntegrations);
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
+  await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
+  await page.waitForFunction(() => window.SutraSmartImport
+    && window.SutraAssistantChats
+    && window.SutraIntegrations
+    && window.SutraAssistantConversationController
+    && window.flowAssistant);
 }
 
 test('Release notes open locally from the notification center without network fetch', async ({ page }) => {
@@ -65,7 +72,7 @@ test('Release notes open locally from the notification center without network fe
   await expect(page.locator('#whatsNewBtn')).toHaveCount(0);
 
   // Open the notification center and click the release notification.
-  await page.locator('#notifBellBtn').click();
+  await page.locator('#notifBellBtn:visible, [data-mobile-action="notifications"]:visible').first().click();
   await expect(page.locator('#notifPanel')).toBeVisible();
   await page.locator('#notifPanel').getByText(/release notes/i).first().click();
 
@@ -139,6 +146,9 @@ test('Notes rich paste sanitizes scripts, handlers, and javascript URLs', async 
 });
 
 test('Assistant chat history persists locally and is included in encrypted backups but not plaintext JSON by default', async ({ page }) => {
+  // This integration deliberately derives keys for backup creation, envelope
+  // inspection, restore decryption, and the pre-restore safety snapshot.
+  test.setTimeout(240_000);
   await openApp(page);
   // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
   // defaults OFF); enable it like a user would so the chat panel can open.
@@ -150,15 +160,46 @@ test('Assistant chat history persists locally and is included in encrypted backu
   await expect(page.locator('#chatbotMessages')).toBeVisible();
   // Deterministic local commands ("open notes") sit behind the
   // assistant.localRouting toggle, which defaults OFF (AI-only).
-  await page.evaluate(() => { window.setWorkspacePreference('assistant.localRouting', true); });
+  await page.evaluate(() => {
+    window.setWorkspacePreference('assistant.localRouting', true);
+    window.setWorkspacePreference('assistant.saveChatHistory', true);
+    window.setWorkspacePreference('assistant.includeChatsInEncryptedBackups', true);
+    window.setWorkspacePreference('assistant.includeChatsInPlaintextRecovery', false);
+    if (!window.SutraAssistantConversationController.getState().conversations.length) {
+      window.SutraAssistantConversationController.create({ title: 'Encrypted backup QA' });
+    }
+  });
+  const localRoute = await page.evaluate(() => ({
+    enabled: window.getWorkspacePreference('assistant.localRouting', null),
+    result: window.flowAssistant.handleOutgoing("what's overdue?")
+  }));
+  expect(localRoute.enabled).toBe(true);
+  expect(localRoute.result?.handled).toBe(true);
   await page.evaluate(async () => {
-    document.getElementById('chatInput').value = 'open notes';
+    document.getElementById('chatInput').value = "what's overdue?";
     await window.sendChat();
   });
-  await expect(page.locator('#chatbotMessages')).toContainText(/Switched to notes|Opened/i);
+  await expect(page.locator('#chatbotMessages .chatbot-msg.assistant').last()).toContainText(/overdue|caught up/i);
 
+  const chatState = await page.evaluate(() => {
+    const mirror = JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}');
+    return {
+      saveChatHistory: window.getWorkspacePreference('assistant.saveChatHistory', null),
+      internalRoles: window.SutraAssistantConversationController.getState()
+        .conversations?.[0]?.messages?.map(message => message.role),
+      canonicalRoles: window.SutraAssistantChats.getStore()
+        .conversations?.[0]?.messages?.map(message => message.role),
+      mirrorRoles: mirror.conversations?.[0]?.messages?.map(message => message.role)
+    };
+  });
+  expect(chatState.saveChatHistory).toBe(true);
+  expect(chatState.internalRoles).toEqual(['user', 'assistant']);
+  expect(chatState.canonicalRoles).toEqual(['user', 'assistant']);
+  await expect.poll(() => page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}');
+    return stored.conversations?.[0]?.messages?.map(message => message.role);
+  })).toEqual(['user', 'assistant']);
   const store = await page.evaluate(() => JSON.parse(localStorage.getItem('sutra:assistantChats:v1') || '{}'));
-  expect(store.conversations?.[0]?.messages?.map(m => m.role)).toEqual(['user', 'assistant']);
   expect(JSON.stringify(store)).not.toMatch(/<think>|flow-actions|sk-secret|developer prompt|system prompt/i);
 
   const backup = await page.evaluate(async ({ pass }) => {
@@ -195,6 +236,13 @@ test('Assistant chat history persists locally and is included in encrypted backu
   // Whole-workspace imports onto a non-empty device now show the restore
   // conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  // Manual restores now complete an encrypted pre-restore safety snapshot first.
+  const snapModal = page.locator('#sutraBackupPasswordModal');
+  await snapModal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', PASS);
+  await page.fill('#sutraBackupPassphraseConfirmInput', PASS);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(snapModal).not.toHaveClass(/active/, { timeout: 60_000 });
   await expect.poll(
     () => page.evaluate(() => !!localStorage.getItem('sutra:assistantChats:v1')),
     { timeout: 20_000 }

@@ -22,6 +22,15 @@ async function completeOnboarding(page) {
   await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
 }
 
+async function completeSafetySnapshotDialog(page, passphrase = PASS) {
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await modal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', passphrase);
+  await page.fill('#sutraBackupPassphraseConfirmInput', passphrase);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
+}
+
 function installGoogleIdentityMock(page) {
   return page.addInitScript(({ clientId }) => {
     window.SUTRA_CONFIG = { googleDriveClientId: clientId };
@@ -330,8 +339,28 @@ test('Drive restore rejects wrong password without mutating, then restores with 
 
   const restorePromise = page.evaluate(() => window.SutraDriveSync.restoreFromDrive({ skipConfirm: true }).then(() => 'ok'));
   await fillCloudPassword(page, PASS, false);
+  await completeSafetySnapshotDialog(page);
   await expect(restorePromise).resolves.toBe('ok');
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Drive Sentinel REMOTE');
+});
+
+test('a clean background Drive pull uses the recovery journal without prompting for a download', async ({ page }) => {
+  test.setTimeout(120_000);
+  const drive = await openApp(page);
+  await seedWorkspace(page, 'BASE');
+  const connectPromise = page.evaluate(() => window.SutraDriveSync.connect().then(() => true));
+  await fillCloudPassword(page);
+  await connectPromise;
+
+  await seedWorkspace(page, 'LOCAL-TO-REPLACE');
+  drive.files[0].version = '99';
+  drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
+  await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ localDirty: false }));
+  const result = await page.evaluate(() => window.SutraDriveSync.syncNow());
+
+  expect(result).toEqual({ restored: true });
+  await expect(page.locator('#sutraBackupPasswordModal')).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title)).toBe('Drive Sentinel BASE');
 });
 
 test('Drive sync enters conflict instead of overwriting local dirty and remote changed copies', async ({ page }) => {
@@ -437,6 +466,7 @@ test('conflict resolution: Use Drive copy restores the remote workspace without 
   await expect(page.locator('#sutraDriveConflictModal')).toHaveClass(/active/);
 
   await page.locator('#sutraDriveConflictUseRemoteBtn').click();
+  await completeSafetySnapshotDialog(page);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Drive Sentinel BASE');
   expect(drive.uploads).toHaveLength(1); // restoring the remote copy must not upload
   await expect.poll(() => page.evaluate(() => window.SutraDriveSync.getStatus().state)).not.toBe('conflict');

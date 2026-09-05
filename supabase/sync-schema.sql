@@ -42,6 +42,7 @@ create table if not exists public.sync_devices (
   auth_session_id  text,
   label            text not null default '',
   last_seen_cursor bigint not null default 0,
+  last_pushed_sequence bigint not null default -1,
   last_seen_at     timestamptz not null default now(),
   revoked_at       timestamptz,
   revoked_by       uuid references auth.users(id) on delete set null,
@@ -50,11 +51,24 @@ create table if not exists public.sync_devices (
   primary key (user_id, device_id)
 );
 alter table public.sync_devices add column if not exists auth_session_id text;
+alter table public.sync_devices add column if not exists last_pushed_sequence bigint not null default -1;
 alter table public.sync_devices add column if not exists revoked_by uuid references auth.users(id) on delete set null;
 alter table public.sync_devices add column if not exists wipe_required boolean not null default false;
 alter table public.sync_devices add column if not exists wipe_acknowledged_at timestamptz;
 create unique index if not exists sync_devices_user_session
   on public.sync_devices (user_id, auth_session_id) where auth_session_id is not null;
+
+-- Preserve the per-device replay barrier before any covered sync_ops rows are
+-- pruned. The operation table alone cannot provide idempotency after deletion.
+update public.sync_devices d
+   set last_pushed_sequence = greatest(
+     d.last_pushed_sequence,
+     coalesce((
+       select max(o.device_seq)
+         from public.sync_ops o
+        where o.user_id = d.user_id and o.device_id = d.device_id
+     ), -1)
+   );
 
 create table if not exists public.sync_vault_keys (
   user_id    uuid primary key default auth.uid() references auth.users(id) on delete cascade,
@@ -277,16 +291,28 @@ language plpgsql
 security definer
 set search_path = pg_catalog, public
 as $$
-declare v_code text;
+declare
+  v_code text;
+  v_head bigint;
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
+  if sync_touch_device.cursor is not null
+     and (sync_touch_device.cursor < 0 or sync_touch_device.cursor > v_head) then
+    return jsonb_build_object('ok', false, 'code', 'bad-cursor');
+  end if;
   update public.sync_devices d
      set label = coalesce(sync_touch_device.label, d.label),
          last_seen_cursor = greatest(d.last_seen_cursor, coalesce(sync_touch_device.cursor, d.last_seen_cursor)),
          last_seen_at = now()
    where d.user_id = auth.uid() and d.device_id = "deviceId";
-  return jsonb_build_object('ok', true);
+  return jsonb_build_object('ok', true, 'cursor', coalesce(sync_touch_device.cursor, v_head));
 end;
 $$;
 
@@ -314,9 +340,11 @@ begin
       limit least(greatest(coalesce(max_rows, 500), 1), 1000)
     ) o;
 
+  -- Delivery is not durable incorporation. The client advances
+  -- last_seen_cursor through sync_touch_device only after its atomic local
+  -- baseline/outbox commit and workspace readback have succeeded.
   update public.sync_devices
-     set last_seen_cursor = greatest(last_seen_cursor, coalesce(v_last, sync_pull.cursor, 0)),
-         last_seen_at = now()
+     set last_seen_at = now()
    where user_id = auth.uid() and device_id = "deviceId";
 
   return jsonb_build_object('ok', true, 'ops', v_rows, 'cursor', coalesce(v_last, sync_pull.cursor, 0));
@@ -342,6 +370,8 @@ declare
   v_schema integer;
   v_acked_max bigint;
   v_existing jsonb;
+  v_device_sequence_floor bigint;
+  v_fresh_sequence_max bigint := 0;
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
@@ -351,7 +381,16 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('sutra-sync-push:' || auth.uid()::text, 0));
-  select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
+  select d.last_pushed_sequence into v_device_sequence_floor
+    from public.sync_devices d
+   where d.user_id = auth.uid() and d.device_id = "deviceId"
+   for update;
 
   for v_env in select * from jsonb_array_elements(coalesce(ops, '[]'::jsonb)) loop
     v_op_id := v_env #>> '{meta,opId}';
@@ -379,7 +418,11 @@ begin
     if found then
       if v_existing <> v_env then return jsonb_build_object('ok', false, 'code', 'op-id-collision'); end if;
     else
+      if v_seq <= coalesce(v_device_sequence_floor, -1) then
+        return jsonb_build_object('ok', false, 'code', 'device-sequence-collision');
+      end if;
       v_fresh := array_append(v_fresh, v_env);
+      v_fresh_sequence_max := greatest(v_fresh_sequence_max, v_seq);
     end if;
   end loop;
 
@@ -390,7 +433,7 @@ begin
         and o.op_id in (
           select e #>> '{meta,opId}' from jsonb_array_elements(coalesce(ops, '[]'::jsonb)) e
         );
-    update public.sync_devices set last_seen_cursor = greatest(last_seen_cursor, v_acked_max), last_seen_at = now()
+    update public.sync_devices set last_seen_at = now()
       where user_id = auth.uid() and device_id = "deviceId";
     return jsonb_build_object('ok', true, 'cursor', v_acked_max);
   end if;
@@ -417,7 +460,9 @@ begin
   end loop;
 
   select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
-  update public.sync_devices set last_seen_cursor = greatest(last_seen_cursor, v_head), last_seen_at = now()
+  update public.sync_devices
+     set last_seen_at = now(),
+         last_pushed_sequence = greatest(last_pushed_sequence, v_fresh_sequence_max)
     where user_id = auth.uid() and device_id = "deviceId";
   return jsonb_build_object('ok', true, 'cursor', v_head);
 exception
@@ -524,7 +569,12 @@ declare
 begin
   v_code := public.sync_authorize_device("deviceId", true);
   if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
-  select coalesce(max(id), 0) into v_head from public.sync_ops where user_id = auth.uid();
+  select greatest(
+      coalesce(max(o.id), 0),
+      coalesce((select s.cursor from public.sync_snapshots s where s.user_id = auth.uid()), 0)
+    ) into v_head
+    from public.sync_ops o
+   where o.user_id = auth.uid();
   if snapshot is null
      or (snapshot->>'v') is distinct from '1'
      or (snapshot->>'alg') is distinct from 'A256GCM'
@@ -550,6 +600,61 @@ exception when invalid_text_representation or numeric_value_out_of_range then
 end;
 $$;
 
+-- Retention (2026-08 audit): ops are prunable only when BOTH of the following
+-- hold, so no device can ever miss an incremental record it still needs:
+--   1. a compaction snapshot exists whose cursor covers them (new devices
+--      bootstrap from the snapshot, never from those ops); and
+--   2. every ACTIVE (non-revoked) device has acknowledged pulling past them
+--      via last_seen_cursor — an offline or stale device pins retention at
+--      its own cursor.
+-- The floor is therefore least(snapshot_cursor, min_active_device_cursor).
+-- Called opportunistically by clients after a compaction cycle; it is safe to
+-- call any time and from any number of devices.
+create or replace function public.sync_prune_ops("deviceId" text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_code text;
+  v_snapshot_cursor bigint;
+  v_min_device_cursor bigint;
+  v_prune_floor bigint;
+  v_deleted bigint;
+begin
+  v_code := public.sync_authorize_device("deviceId", true);
+  if v_code <> 'ok' then return jsonb_build_object('ok', false, 'code', v_code); end if;
+
+  -- Serialize with push so pruning cannot make the computed server head
+  -- transiently disappear between a push cursor check and its inserts.
+  perform pg_advisory_xact_lock(hashtextextended('sutra-sync-push:' || auth.uid()::text, 0));
+
+  select max(cursor) into v_snapshot_cursor
+    from public.sync_snapshots
+   where user_id = auth.uid();
+  if v_snapshot_cursor is null then
+    return jsonb_build_object('ok', true, 'pruned', 0, 'reason', 'no-snapshot');
+  end if;
+
+  select min(last_seen_cursor) into v_min_device_cursor
+    from public.sync_devices
+   where user_id = auth.uid()
+     and revoked_at is null;
+
+  v_prune_floor := least(v_snapshot_cursor, coalesce(v_min_device_cursor, 0));
+  if v_prune_floor is null or v_prune_floor <= 0 then
+    return jsonb_build_object('ok', true, 'pruned', 0, 'reason', 'no-floor');
+  end if;
+
+  delete from public.sync_ops
+   where user_id = auth.uid()
+     and id <= v_prune_floor;
+  get diagnostics v_deleted = row_count;
+  return jsonb_build_object('ok', true, 'pruned', v_deleted, 'floor', v_prune_floor);
+end;
+$$;
+
 create or replace function public.sync_put_asset(hash text, size_bytes bigint default 0, "deviceId" text default null)
 returns jsonb
 language plpgsql
@@ -565,7 +670,8 @@ begin
   end if;
   insert into public.sync_asset_index (user_id, hash, size_bytes)
   values (auth.uid(), hash, coalesce(size_bytes, 0))
-  on conflict (user_id, hash) do update set size_bytes = excluded.size_bytes;
+  on conflict on constraint sync_asset_index_pkey
+  do update set size_bytes = excluded.size_bytes;
   return jsonb_build_object('ok', true);
 end;
 $$;
@@ -762,6 +868,7 @@ revoke all on function public.sync_revoke_device(text, text) from public, anon;
 revoke all on function public.sync_get_device_status(text) from public, anon, authenticated;
 revoke all on function public.sync_acknowledge_device_wipe(text, timestamptz) from public, anon, authenticated;
 revoke all on function public.sync_delete_vault(text) from public, anon;
+revoke all on function public.sync_prune_ops(text) from public, anon;
 
 grant execute on function public.sync_session_active() to authenticated;
 grant execute on function public.sync_ping(text) to authenticated;
@@ -780,6 +887,7 @@ grant execute on function public.sync_revoke_device(text, text) to authenticated
 grant execute on function public.sync_get_device_status(text) to authenticated;
 grant execute on function public.sync_acknowledge_device_wipe(text, timestamptz) to authenticated;
 grant execute on function public.sync_delete_vault(text) to authenticated;
+grant execute on function public.sync_prune_ops(text) to authenticated;
 
 -- rls_auto_enable() is a database/event-trigger helper, never a browser RPC.
 -- Supabase projects may provide it outside this schema, so harden its ACL only

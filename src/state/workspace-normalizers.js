@@ -33,18 +33,21 @@ const SUTRA_FEATURE_PACKS = Object.freeze({
 });
 
 // Student-first default navigation: the daily-loop core surfaces are on;
-// broader optional modules (AP Study, College planning, Life, Business, Course Hub,
-// Assistant) are off by default and enabled from Settings → Feature packs or
-// through onboarding.
+// broader optional modules (AP Study, College planning, Life, Business, Course
+// Hub) are off by default and enabled from Settings → Feature packs or through
+// onboarding.
 // Existing users keep their saved selections — normalizeEnabledViews only
 // overrides keys actually present in stored preferences. Review/Cram Hub stay
 // "enabled" so their consolidated Testing Hub redirects work even though they
 // render no standalone tab.
-// Assistant is deliberately absent here so fresh student workspaces start with
-// it off. Its real gate is the `assistant.enabled` preference (default false),
-// which isViewEnabled() consults directly for 'assistantview' regardless of this
-// set — so listing it here would only be misleading, not functional. Existing
-// students who opted into Assistant keep it via their saved assistant.enabled.
+// Canonical Assistant policy (single source of truth): the LOCAL Assistant
+// shell ships enabled in every fresh workspace — its gate is the
+// `assistant.enabled` preference (canonical default true, see
+// getDefaultWorkspacePreferences), which isViewEnabled() consults directly for
+// 'assistantview'. Provider/network access remains a separate opt-in, and this
+// set intentionally does NOT list 'assistantview': adding it here would couple
+// two different gates (pack visibility vs assistant preference) that must stay
+// independent. The manifest's assistant.defaultEnabled mirrors this policy.
 // Focus is not a top-level tab — it is accessed from the sidebar, Today view,
 // and command palette across every mode.
 const STUDENT_DEFAULT_ENABLED_VIEWS = new Set(['today', 'homework', 'notes', 'timeline', 'review', 'cramhub']);

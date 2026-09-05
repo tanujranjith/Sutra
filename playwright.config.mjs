@@ -14,10 +14,12 @@ const responsiveTestMatch = [
 ];
 
 const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);
+const playwrightOutputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || '.tmp/playwright-results';
+const playwrightTrace = process.env.PLAYWRIGHT_TRACE === 'off' ? 'off' : 'retain-on-failure';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  outputDir: '.tmp/playwright-results',
+  outputDir: playwrightOutputDir,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -30,7 +32,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL: `http://127.0.0.1:${playwrightPort}`,
-    trace: 'retain-on-failure',
+    trace: playwrightTrace,
     screenshot: 'only-on-failure'
   },
   webServer: {

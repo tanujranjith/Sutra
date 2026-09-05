@@ -18,6 +18,11 @@ async function openApp(page) {
     }
   });
   await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.SutraCanvas && !!window.SutraSlides);
+  await page.waitForFunction(() =>
+    typeof window.getFlowAssistantContext === 'function'
+    && window.sutraAssistant
+    && typeof window.sutraAssistant.applyAction === 'function'
+  );
 }
 
 test('locked note plaintext stays behind the shared authorization boundary', async ({ page }) => {
@@ -130,4 +135,97 @@ test('locked note plaintext stays behind the shared authorization boundary', asy
   expect(report.slidesBodyMode).toBe(false);
   expect(report.slidesContext).toBeNull();
   expect(report.slidesCurrentPage).toBeNull();
+});
+
+test('Assistant context fails closed when the privacy boundary is unavailable', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const original = window.SutraAssistantPrivacy;
+    window.SutraDiagnostics?.clear?.();
+    window.SutraAssistantPrivacy = undefined;
+    let context;
+    try {
+      context = window.getFlowAssistantContext({ depth: 'workspace' });
+    } finally {
+      window.SutraAssistantPrivacy = original;
+    }
+    return {
+      keys: Object.keys(context).sort(),
+      report: context.accessReport,
+      diagnosed: window.SutraDiagnostics?.getEntries?.().some(entry =>
+        entry.context?.where === 'flow-assistant.filterAssistantContext')
+    };
+  });
+  expect(report.keys).toEqual(['accessReport', 'depth', 'now', 'schema', 'timeOfDay', 'view']);
+  expect(report.report.areasRead).toEqual([]);
+  expect(report.report.excludedSensitiveAreas).toContain('privacy_boundary_unavailable');
+  expect(report.diagnosed).toBe(true);
+});
+
+test('Assistant prompt enrichment rechecks memory permission at the final context boundary', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const secret = 'MEMORY_MUST_REQUIRE_AREA_APPROVAL';
+    const priorPermissions = window.SutraAssistantPrivacy.getPermissions();
+    const originalMemory = window.SutraAssistantMemory;
+    window.SutraAssistantMemory = {
+      buildPromptSnippets: () => [{ id: 'memory-private-1', text: secret }],
+      recordUsed: () => {}
+    };
+    window.SutraAssistantPrivacy.configure({
+      getPermissions: () => ({ mode: 'ask_per_area', areas: { memory: 'ask', notes: 'denied' } })
+    });
+    try {
+      const denied = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', {});
+      const approved = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', { approvedAreas: ['memory'] });
+      return {
+        deniedPromptLeaks: denied.systemPrompt.includes(secret),
+        deniedContextLeaks: JSON.stringify(denied.context).includes(secret),
+        deniedMemoryIdLeaks: JSON.stringify(denied.context).includes('memory-private-1'),
+        approvedPromptIncludes: approved.systemPrompt.includes(secret),
+        approvedMemoryIds: approved.context.memoryUsedIds || []
+      };
+    } finally {
+      window.SutraAssistantMemory = originalMemory;
+      window.SutraAssistantPrivacy.configure({ getPermissions: () => priorPermissions });
+    }
+  });
+  expect(report.deniedPromptLeaks).toBe(false);
+  expect(report.deniedContextLeaks).toBe(false);
+  expect(report.deniedMemoryIdLeaks).toBe(false);
+  expect(report.approvedPromptIncludes).toBe(true);
+  expect(report.approvedMemoryIds).toEqual(['memory-private-1']);
+});
+
+test('Assistant bridge failure is reported and mutating actions fail closed', async ({ page }) => {
+  await openApp(page);
+  const report = await page.evaluate(() => {
+    const originalBridge = window.flowAtelier;
+    const originalReporter = window.SutraReportError;
+    const errors = [];
+    window.flowAtelier = undefined;
+    window.SutraReportError = (error, context, severity) => {
+      errors.push({ message: String(error && error.message || error), context, severity });
+    };
+    try {
+      const context = window.getFlowAssistantContext({ depth: 'workspace' });
+      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' });
+      const block = window.sutraAssistant.applyAction({
+        type: 'create_timeline_block', name: 'Must not disappear', date: '2026-08-25', start: '09:00', end: '10:00'
+      });
+      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' });
+      return { context, task, block, note, errors };
+    } finally {
+      window.flowAtelier = originalBridge;
+      window.SutraReportError = originalReporter;
+    }
+  });
+
+  expect(report.context.tasks).toEqual([]);
+  expect(report.task.ok).toBe(false);
+  expect(report.block.ok).toBe(false);
+  expect(report.note.ok).toBe(false);
+  expect(report.errors).toEqual([
+    expect.objectContaining({ message: 'Assistant workspace bridge is unavailable.', severity: 'error' })
+  ]);
 });

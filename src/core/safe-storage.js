@@ -69,6 +69,8 @@
         return 'This browser blocked saving ' + label + ' (private mode or site data is disabled).';
       case 'serialize':
         return label + ' could not be prepared for saving.';
+      case 'parse':
+        return 'The stored ' + label + ' could not be read because it is damaged.';
       case 'unavailable':
         return 'Browser storage is unavailable, so ' + label + ' could not be saved.';
       default:
@@ -241,7 +243,22 @@
       var raw = window.localStorage.getItem(key);
       if (raw === null) return opts.fallback;
       if (opts.parseJson === false) return raw;
-      try { return JSON.parse(raw); } catch (error) { return raw; }
+      // Documented parse contract (audit remediation):
+      // - Default: stored JSON is parsed; a value that was stored as a plain
+      //   string (set() stores strings verbatim) round-trips as that string.
+      // - { expectJson: true }: unparseable content is treated as corruption
+      //   and opts.fallback is returned (with an important-level warning),
+      //   matching sessionGet({parseJson:true}). Callers that need a strict
+      //   shape no longer have to defend against a bare string leaking back.
+      try { return JSON.parse(raw); } catch (error) {
+        if (opts.expectJson === true) {
+          if (opts.importance === 'important' || opts.importance === 'critical') {
+            warn(key, 'parse', opts.importance, opts.label || key);
+          }
+          return opts.fallback;
+        }
+        return raw;
+      }
     } catch (e) {
       if (opts.importance === 'important' || opts.importance === 'critical') {
         warn(key, classify(e), opts.importance, opts.label || key);

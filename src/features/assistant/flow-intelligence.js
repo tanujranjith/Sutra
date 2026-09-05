@@ -581,12 +581,16 @@
     //   createdObjectIds:[{kind,id}], beforeSnapshot, reversible, status, batchId }
     function redactActivityText(value) {
         if (typeof value !== 'string' || !value) return value;
+        // Privacy boundaries fail CLOSED (audit remediation): if the safety
+        // module is unavailable or throws, the free-text field is scrubbed
+        // from the persisted record instead of being written unredacted. The
+        // record itself survives so the action history stays intact.
         try {
             if (window.SutraAssistantSafety && typeof window.SutraAssistantSafety.redactText === 'function') {
                 return window.SutraAssistantSafety.redactText(value);
             }
-        } catch (e) { /* fall through to unredacted rather than drop the record */ }
-        return value;
+        } catch (e) { /* fall through to fail-closed placeholder */ }
+        return '[redacted: safety module unavailable]';
     }
     function logActivity(record) {
         const list = getActivityLog();

@@ -2,9 +2,9 @@
 
 > This file is the required starting point for every coding agent, reviewer, and human contributor working on Sutra. Read it before changing code. Use it to understand the product, architecture, completed foundation, current objective, and non-negotiable constraints.
 >
-> **Last verified:** 2026-07-22
-> **Branch:** `main`  
-> **Verified against commit:** `f708ec3d48fcc3d2e5d2fbe178aaf35b643e230a`
+> **Last verified:** 2026-08-25
+> **Branch:** `main` (verification performed on the `ox-alpha/audit-remediation` branch; merge before relying on the noted commit)
+> **Verified against commit:** `db7dc5e` (audit-remediation HEAD; pre-remediation baseline was `44ec5d4`)
 
 ## How to use this file
 
