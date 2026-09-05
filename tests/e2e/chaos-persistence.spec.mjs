@@ -168,25 +168,28 @@ test.describe('Chaos: storage fault injection', () => {
 test.describe('Chaos: concurrent operations', () => {
     test('reload during an in-flight save keeps the previously saved workspace intact', async ({ page }) => {
         const seeded = [{ id: 'chaos-task-1', title: 'Survives the reload', courseId: '' }];
-        await page.addInitScript((tasks) => {
-            try {
-                localStorage.setItem('hwTasks:v2', JSON.stringify(tasks));
-                localStorage.setItem('hwSchemaVersion', '3');
-            } catch {}
-        }, seeded);
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
         await expect(page.locator('.view-tab').first()).toBeAttached({ timeout: 20000 });
+        await page.waitForFunction(() => !!window.SutraHomeworkStore
+            && !!window.flowAtelier
+            && typeof window.flowAtelier.flushAppSaveNow === 'function');
+        // Establish a confirmed canonical baseline before interrupting the next
+        // save. Legacy localStorage injection races async workspace hydration.
+        await page.evaluate(async (tasks) => {
+            window.SutraHomeworkStore.replace({ courses: [], tasks }, { reason: 'chaos-confirmed-seed' });
+            await window.flowAtelier.flushAppSaveNow('chaos-confirmed-seed');
+        }, seeded);
         // Fire a save and reload BEFORE awaiting it — the mid-flight write must
         // either complete atomically or be discarded wholesale; either way the
         // seeded task must still be there afterwards.
         await page.evaluate(() => { window.saveWorkspaceLocally && window.saveWorkspaceLocally('chaos-interrupted'); });
         await page.reload({ waitUntil: 'domcontentloaded' });
         await expect(page.locator('.view-tab').first()).toBeAttached({ timeout: 20000 });
-        const titles = await page.evaluate(() => {
+        await page.waitForFunction(() => !!window.SutraHomeworkStore && !!window.flowAtelier);
+        await expect.poll(() => page.evaluate(() => {
             const snap = window.SutraHomeworkStore && window.SutraHomeworkStore.getSnapshot();
             return snap ? snap.tasks.map((t) => t.id) : [];
-        });
-        expect(titles).toContain('chaos-task-1');
+        })).toContain('chaos-task-1');
     });
 
     test('rapid tab switching lands on the last requested view with zero page errors', async ({ page }) => {

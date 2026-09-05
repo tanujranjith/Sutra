@@ -156,7 +156,7 @@ test('desktop: command palette opens, filters, restores focus on close', async (
     const tab = document.querySelector('.view-tab[data-view="today"]');
     if (tab) tab.focus();
   });
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('Control+Shift+p');
   const modal = page.locator('#commandPaletteModal');
   await expect(modal).toBeVisible();
   // Focus moves into the palette on open. Poll for focus being *inside* the modal
@@ -290,7 +290,7 @@ test('desktop: modal traps focus and Escape restores it', async ({ page }) => {
     const tab = document.querySelector('.view-tab[data-view="today"]');
     if (tab) tab.focus();
   });
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('Control+Shift+p');
   await expect(page.locator('#commandPaletteModal')).toBeVisible();
   // Wait until the palette is fully rendered (list populated) and focus has moved
   // inside the modal before exercising the Tab trap — otherwise tabbing can race

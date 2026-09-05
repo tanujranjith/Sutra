@@ -360,7 +360,9 @@ test('redesigned panel: WORKING FROM card, onboarding card without key, pulse fr
       workingFromLabel: (es.querySelector('.flow-workingfrom-label') || {}).textContent || '',
       signals: (es.querySelector('.flow-workingfrom-signals') || {}).textContent || '',
       onboarding: !!es.querySelector('.flow-onboarding'),
-      providerButtons: es.querySelectorAll('.flow-onboarding-provider').length,
+      providerIds: Array.from(es.querySelectorAll('.flow-onboarding-provider'))
+        .map(button => button.getAttribute('data-flow-connect')),
+      registeredProviderIds: window.SutraProviderMeta.list().map(provider => provider.id),
       pulse: !!es.querySelector('.flow-pulse'),
       pulseText: (es.querySelector('.flow-pulse') || {}).innerText || '',
       subtitle: document.getElementById('chatbotSubtitle').textContent,
@@ -370,10 +372,13 @@ test('redesigned panel: WORKING FROM card, onboarding card without key, pulse fr
   expect(ui.workingFrom).toBe(true);
   expect(ui.workingFromLabel).toBe('WORKING FROM');
   expect(ui.signals).toContain('Workspace signals enabled');
-  // No key configured → onboarding card with all nine implemented providers
-  // (the original six plus DeepSeek, xAI, and Perplexity).
+  // No key configured → onboarding stays aligned with the central provider
+  // registry as implemented providers are added or removed.
   expect(ui.onboarding).toBe(true);
-  expect(ui.providerButtons).toBe(9);
+  expect(ui.providerIds).toEqual(ui.registeredProviderIds);
+  expect(ui.providerIds).toEqual(expect.arrayContaining([
+    'groq', 'gemini', 'openai', 'anthropic', 'openrouter', 'local'
+  ]));
   // Pulse shows the REAL overdue signal (4 seeded), not demo data.
   expect(ui.pulse).toBe(true);
   expect(ui.pulseText).toContain('4 overdue assignments');

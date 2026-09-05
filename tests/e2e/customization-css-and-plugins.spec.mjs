@@ -56,7 +56,7 @@ test('curated snippet gallery exposes the six safe presets, all valid CSS', asyn
   });
   const names = gallery.map(g => g.name);
   expect(names).toEqual(expect.arrayContaining([
-    'Compact Sidebar', 'Bigger Editor Text', 'Minimal Today View',
+    'Compact Sidebar', 'Bigger Editor Text', 'Minimal Home View',
     'Softer Cards', 'High Contrast', 'Calm Focus Mode'
   ]));
   // Every preset must be non-empty and pass the brace-balance validator.

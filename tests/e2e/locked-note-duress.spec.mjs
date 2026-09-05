@@ -18,7 +18,10 @@ async function openApp(page) {
       overlay.style.setProperty('display', 'none', 'important');
     }
   });
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks);
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('locked-note-duress-ready'));
 }
 
 async function seedLockedTree(page, { withChild = true } = {}) {

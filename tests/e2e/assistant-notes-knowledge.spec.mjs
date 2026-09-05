@@ -135,8 +135,13 @@ test('both assistant shells remain labeled, focusable, and viewport-safe on a re
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await openApp(page);
 
+  // The dedicated mobile Home shell intentionally hides floating controls.
+  // Exercise the dock from a normal workspace surface where it is available.
+  await page.evaluate(() => window.setActiveView('notes'));
+  await expect(page.locator('#view-notes')).toBeVisible();
   const launcher = page.locator('#chatbotBtn');
   await expect(launcher).toHaveAttribute('aria-label', /Open Sutra Assistant/i);
+  await expect(launcher).toBeVisible();
   await launcher.click();
   const panel = page.locator('#chatbotPanel');
   await expect(panel).toBeVisible();

@@ -16,7 +16,12 @@ async function openApp(page) {
     }
     document.getElementById('sutraStartupIntro')?.remove();
   });
-  await page.waitForFunction(() => !!window.SutraQuote && !!window.flowAtelier);
+  await page.waitForFunction(() => !!window.SutraQuote
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // Shell globals are exposed before IndexedDB hydration completes. Cross the
+  // public durability seam before mutating portable quote preferences.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('custom-quotes-ready'));
 }
 
 test('custom quotes are manageable, portable, filtered, and responsive', async ({ page }) => {
@@ -65,7 +70,11 @@ test('custom quotes are manageable, portable, filtered, and responsive', async (
   await expect(sidebarQuote).toBeHidden();
   dialog = page.getByRole('dialog', { name: 'Quotes' });
   await dialog.getByRole('checkbox', { name: /Sidebar/ }).check();
-  await expect(sidebarQuote).toBeVisible();
+  // Settings owns the full canvas, and the modal manager inerts the background,
+  // so the sidebar quote is not visually exposed while this dialog is open.
+  // Verify the quote feature itself restored the sidebar state.
+  await expect(sidebarQuote).toHaveJSProperty('hidden', false);
+  await expect(sidebarQuote).toHaveAttribute('aria-hidden', 'false');
 
   dialog = page.getByRole('dialog', { name: 'Quotes' });
   await dialog.getByRole('button', { name: 'Edit' }).click();
@@ -126,7 +135,10 @@ test('custom quotes are manageable, portable, filtered, and responsive', async (
   await dialog.getByRole('button', { name: 'Close quotes' }).click();
 
   await page.reload();
-  await page.waitForFunction(() => !!window.SutraQuote && !!window.flowAtelier);
+  await page.waitForFunction(() => !!window.SutraQuote
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('custom-quotes-reload-ready'));
   const restored = await page.evaluate(() => {
     const settings = window.SutraQuote.getSettings();
     return { count: settings.customQuotes.length, text: settings.customQuotes[0] && settings.customQuotes[0].text };

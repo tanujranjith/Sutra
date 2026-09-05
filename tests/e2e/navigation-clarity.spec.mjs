@@ -5,6 +5,9 @@ async function openApp(page, width = 1440) {
   await page.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('navigation-clarity-ready'));
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');
@@ -36,10 +39,10 @@ test('desktop navigation keeps the daily loop direct and groups advanced packs i
   await openApp(page);
   await enableAdvancedPacks(page);
 
-  for (const view of ['today', 'homework', 'notes', 'timeline', 'apstudy', 'settings']) {
+  for (const view of ['today', 'homework', 'notes', 'timeline', 'settings']) {
     await expect(page.locator(`.view-tabs > .view-tab[data-view="${view}"]`)).toBeVisible();
   }
-  for (const view of ['collegeapp', 'life', 'business', 'assistantview']) {
+  for (const view of ['apstudy', 'collegeapp', 'life', 'business', 'assistantview']) {
     await expect(page.locator(`.view-tabs > .view-tab[data-view="${view}"]`)).toBeHidden();
   }
 
@@ -185,7 +188,12 @@ test('overflowed custom dashboards remain reachable through My dashboards', asyn
   await page.waitForFunction(() => !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs);
   await enableAdvancedPacks(page);
   await page.evaluate(() => {
-    window.SutraCustomTabsBridge.setTabs([{ id: 'qa-night-shift', name: 'Night Shift', icon: 'fa-star', widgets: [] }]);
+    window.SutraCustomTabsBridge.setTabs([
+      { id: 'qa-dashboard-one', name: 'Dashboard One', icon: 'fa-star', widgets: [] },
+      { id: 'qa-dashboard-two', name: 'Dashboard Two', icon: 'fa-star', widgets: [] },
+      { id: 'qa-dashboard-three', name: 'Dashboard Three', icon: 'fa-star', widgets: [] },
+      { id: 'qa-night-shift', name: 'Night Shift', icon: 'fa-star', widgets: [] }
+    ]);
     window.SutraCustomTabs.refresh();
     window.setActiveView('today');
   });

@@ -33,9 +33,11 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
-  await completeOnboarding(page);
   await page.waitForFunction(() => !!window.SutraAcademicState && !!window.SutraSchoolSchedule
-    && !!window.SutraGradePlanner && !!window.SutraSemesterSetup && !!window.SutraAssignmentStudio);
+    && !!window.SutraGradePlanner && !!window.SutraSemesterSetup && !!window.SutraAssignmentStudio
+    && !!window.flowAtelier && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('academic-upgrade-ready'));
+  await completeOnboarding(page);
 }
 
 const SAMPLE_SCHEDULE = {
@@ -259,8 +261,10 @@ test('new academic state survives a reload', async ({ page }) => {
   await page.waitForTimeout(900);
   await page.reload();
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() => !!window.SutraAcademicState && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('academic-upgrade-reload-ready'));
   await completeOnboarding(page);
-  await page.waitForFunction(() => !!window.SutraAcademicState);
 
   const restored = await page.evaluate(() => ({
     scheduleEnabled: window.SutraAcademicState.getSchoolSchedule().enabled,
