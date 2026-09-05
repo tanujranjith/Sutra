@@ -239,7 +239,11 @@ test('More actions wait for delayed history teardown before opening the next pan
   });
   const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
   await more.click();
+  await expect.poll(() => page.evaluate(() => history.state?.sutraMobileMore)).toBe(true);
   await page.locator('[data-mobile-more-action="notifications"]').click();
+  // This drawer remains CSS-visible while translated offscreen and transparent.
+  // Wait for its actual open state before reading the delayed-history probe.
+  await expect(page.locator('#notifPanel')).toHaveAttribute('aria-hidden', 'false');
   await expect(page.locator('#notifPanel')).toBeVisible();
   expect(await page.evaluate(() => window.__moreOpenedBeforeHistory)).toBe(false);
   await expect(page.locator('#sutraMobileMoreOverlay')).toBeHidden();
