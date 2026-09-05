@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// The fixture imports America/New_York wall times and asserts their rendered
+// clock values. Keep that expectation independent of the CI runner timezone.
+test.use({ timezoneId: 'America/New_York' });
+
 async function openTimeline(page, viewport = { width: 1440, height: 900 }) {
   await page.setViewportSize(viewport);
   await page.goto('/Sutra.html');

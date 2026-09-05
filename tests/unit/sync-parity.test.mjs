@@ -73,6 +73,8 @@ test('Assistant thread contract includes order, provenance, receipts, memory, an
   const empty = records['c/assistantConversations/chat-parity-empty'];
   assert.deepEqual(main.messages.map(message => message.id), ['msg-parity-user', 'msg-parity-assistant']);
   assert.equal(main.messages[1].sources[0].quote, 'Unique parity evidence.');
+  assert.equal(main.messages[1].sources[0].score, 0);
+  assert.equal(main.messages[1].sources[0].sourceOffsets, null);
   assert.equal(main.messages[1].receipt.schema, 'sutra-assistant-receipt/1');
   assert.deepEqual(main.messages[1].receipt.actionsProposed, ['create_task']);
   assert.deepEqual(main.messages[1].memoryUsedIds, ['memory-parity-1']);

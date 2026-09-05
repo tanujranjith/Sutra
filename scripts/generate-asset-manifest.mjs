@@ -61,6 +61,12 @@ function collectReferences() {
   // the device goes offline.
   critical.add('./assets/vendor/pdf-lib/pdf-lib.min.js?v=1.17.1');
   critical.add('./assets/vendor/pdf-fontkit/fontkit.umd.min.js?v=1.1.1');
+  // Document import is a local-first workflow too. Precache the exact vendored
+  // parser bytes so the first DOCX/XLSX import works after installation even
+  // when the device has gone offline; neither parser may depend on having been
+  // exercised once while online.
+  optional.add('./assets/vendor/office/mammoth.browser.min.js?v=1.8.0');
+  optional.add('./assets/vendor/office/xlsx.full.min.js?v=0.18.5');
   for (const item of critical) optional.delete(item);
   const featureSource = readFileSync(resolve(root, 'src/config/feature-manifest.js'), 'utf8');
   const sandbox = {};

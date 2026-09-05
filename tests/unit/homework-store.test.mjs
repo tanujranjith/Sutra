@@ -182,6 +182,65 @@ test('async persistence failure rolls back before the next queued mutation', asy
   assert.deepEqual(persisted.tasks.map((task) => task.id), ['kept']);
 });
 
+test('a failed durable save never rolls back a newer scheduled mutation', async () => {
+  const store = canonical.createStore({ courses: [{ id: 'c', name: 'Calculus' }], tasks: [] });
+  let persisted = store.getSnapshot();
+  let rejectDurable;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: (reason) => {
+      if (reason === 'durable-first') return new Promise((resolve, reject) => { rejectDurable = reject; });
+      return Promise.resolve();
+    }
+  });
+
+  const failed = store.transactDurably((workspace) => {
+    workspace.tasks.push({ id: 'first', title: 'Durable first', courseId: 'c' });
+  }, { reason: 'durable-first' });
+  await Promise.resolve();
+  assert.equal(typeof rejectDurable, 'function');
+
+  store.transact((workspace) => {
+    workspace.tasks.push({ id: 'later', title: 'Later UI change', courseId: 'c' });
+  }, { reason: 'scheduled-later' });
+  rejectDurable(new Error('first save failed'));
+  await assert.rejects(failed, /first save failed/);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(store.getSnapshot().tasks.map((task) => task.id), ['first', 'later']);
+  assert.deepEqual(persisted.tasks.map((task) => task.id), ['first', 'later']);
+});
+
+test('scheduled persistence observes adapter rejections without rolling back accepted mutations', async () => {
+  const store = canonical.createStore({ courses: [], tasks: [] });
+  let persisted = store.getSnapshot();
+  let sawPromise = false;
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: () => {
+      sawPromise = true;
+      // A durable-contract adapter returns a real promise even for scheduled
+      // callers; the store must observe rejection instead of letting it become
+      // an unhandled rejection (failures stay visible through persistence
+      // health), while the already-accepted mutation stays committed.
+      return Promise.reject(new Error('async disk full'));
+    }
+  });
+  assert.equal(sawPromise, true);
+  // configure() schedules its own migration persist through the same path.
+  await new Promise((resolve) => setImmediate(resolve));
+  store.transact((workspace) => {
+    workspace.tasks.push({ id: 'kept', title: 'Scheduled', courseId: '' });
+  }, { reason: 'batch' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(store.getSnapshot().tasks[0].id, 'kept');
+  assert.equal(persisted.tasks[0].id, 'kept');
+});
+
 test('normalization rejects unsafe URLs, repairs duplicate IDs, and records orphans', () => {
   const workspace = canonical.normalizeWorkspace({
     courses: [{ id: 'same', name: 'A' }, { id: 'same', name: 'A duplicate' }],

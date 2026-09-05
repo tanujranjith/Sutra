@@ -165,6 +165,49 @@ test('double sync is idempotent: second cycle pushes nothing new', async () => {
   assert.equal(second.applied, false, 'no echo re-apply');
 });
 
+test('server pruning cursor advances only after the local cycle commit is durable', async () => {
+  const server = transportApi.createMemoryServer();
+  const keyBytes = syncCrypto.generateVaultKeyBytes();
+  const A = await makeDevice(server, 'device-a', keyBytes);
+  const realCommit = A.store.commitCycleState;
+  A.store.commitCycleState = async () => { throw new Error('cycle commit failed'); };
+
+  const failed = await A.engine.syncNow();
+  assert.match(failed.error?.message || '', /cycle commit failed/);
+  assert.equal(server.state.devices['device-a'], undefined,
+    'pull/push delivery must not acknowledge a cursor before durable local commit');
+
+  A.store.commitCycleState = realCommit;
+  A.engine.resume();
+  const recovered = await A.engine.syncNow();
+  assert.ok(recovered.cursor > 0);
+  assert.equal(server.state.devices['device-a'].lastSeenCursor, recovered.cursor,
+    'the explicit post-commit acknowledgement advances the pruning cursor');
+});
+
+test('compaction pruning preserves the logical head and accepts later pushes', async () => {
+  const server = transportApi.createMemoryServer();
+  const keyBytes = syncCrypto.generateVaultKeyBytes();
+  const A = await makeDevice(server, 'device-a', keyBytes);
+  const B = await makeDevice(server, 'device-b', keyBytes);
+  await A.engine.syncNow();
+  await B.engine.syncNow();
+  const headBeforePrune = server.state.head;
+  assert.ok(headBeforePrune > 0);
+
+  const compacted = await A.engine.compactNow();
+  assert.equal(compacted.ok, true);
+  assert.equal(server.state.ops.length, 0, 'all snapshot-covered acknowledged ops may be pruned');
+  assert.equal(server.state.head, headBeforePrune, 'pruning must not collapse the logical cursor head');
+
+  A.bridge.holder.workspace.pages[0].body = 'edit after prune';
+  const pushed = await A.engine.syncNow();
+  assert.ok(pushed.pushed > 0, 'a baseline at the snapshot cursor remains a valid push base');
+  assert.ok(server.state.head > headBeforePrune);
+  await B.engine.syncNow();
+  assert.equal(pagesOf(B)[0].body, 'edit after prune');
+});
+
 test('remote apply does not echo back as new ops', async () => {
   const server = transportApi.createMemoryServer();
   const keyBytes = syncCrypto.generateVaultKeyBytes();

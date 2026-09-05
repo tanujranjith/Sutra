@@ -40,6 +40,8 @@ const SKIP_FILES = new Set([
   'assets/vendor/pdf-lib/pdf-lib.min.js', // vendored minified PDF writer embeds PDF encoding tables
   'assets/vendor/pdfjs/build/pdf.worker.min.mjs', // vendored PDF.js worker embeds font/character tables
   'assets/vendor/pdfjs/build/pdf.worker.sutra.min.js', // local classic build of the same pinned PDF.js worker tables
+  'assets/vendor/office/mammoth.browser.min.js', // vendored minified DOCX parser (embeds control chars in string tables)
+  'assets/vendor/office/xlsx.full.min.js', // vendored minified XLSX parser embeds codepage/binary tables
 ]);
 const SKIP_PREFIXES = [
   'scripts/_',              // local throwaway analysis helpers, never committed

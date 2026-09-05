@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260823-storage-journal8",
-    "hash": "afd3c2a57404f33d"
+    "stamp": "20260830-revoke2",
+    "hash": "2c25873166774cf9"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -32,24 +32,24 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260823-combined2",
-    "hash": "eea044a1d78dcae7"
+    "stamp": "20260825-sol2-1",
+    "hash": "59f5d013afa6cf78"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260828-storage-main3",
-    "hash": "9262b122337b3e36"
+    "stamp": "20260904-mergerecovery1",
+    "hash": "74dc75498b4787d9"
   },
   "src/core/credential-vault-bridge.js": {
-    "stamp": "20260823-credential-bridge4",
-    "hash": "75f9c663cd99393e"
+    "stamp": "20260831-revoke4",
+    "hash": "13cb16e4fc6f8813"
   },
   "src/core/credential-vault.js": {
-    "stamp": "20260823-credential-vault4",
-    "hash": "5423f4aedd56c0d7"
+    "stamp": "20260831-revoke4",
+    "hash": "40d49239acfc800c"
   },
   "src/core/dom-safety.js": {
     "stamp": "20260613-harden1",
@@ -60,8 +60,8 @@
     "hash": "ca17d5ce335801c7"
   },
   "src/core/feature-guard.js": {
-    "stamp": "20260613-harden1",
-    "hash": "f1f7244179aab33f"
+    "stamp": "20260825-sol1-1",
+    "hash": "d2ac11be99e16209"
   },
   "src/core/issue-prompt.js": {
     "stamp": "20260617-issue1",
@@ -76,8 +76,8 @@
     "hash": "64ecef3c1df3b9bb"
   },
   "src/core/safe-storage.js": {
-    "stamp": "20260716-syncparity1",
-    "hash": "06be13ef1df8d058"
+    "stamp": "20260825-sol1-2",
+    "hash": "256f8e91cd8fa4e3"
   },
   "src/core/startup-health.js": {
     "stamp": "20260620-health1",
@@ -100,12 +100,12 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260710-assistant-permissions1",
-    "hash": "f7664650c6f3ea93"
+    "stamp": "20260825-sol2-1",
+    "hash": "cd6d317f94b67645"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260709-homework-store1",
-    "hash": "757c3d86b785a544"
+    "stamp": "20260825-sol1-1",
+    "hash": "110d121df2a62695"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
@@ -184,12 +184,12 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "e80c657a850b4d4e"
+    "stamp": "20260825-sol2-1",
+    "hash": "1c6f6afc320a0839"
   },
   "src/features/assistant/flow-intelligence.js": {
-    "stamp": "20260614-storage1",
-    "hash": "cd3412ef19cf9cb0"
+    "stamp": "20260825-oxremed1",
+    "hash": "37bec479ffc10418"
   },
   "src/features/assistant/intelligence-diagnostics.js": {
     "stamp": "20260714-intel1",
@@ -252,8 +252,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260823-combined1",
-    "hash": "a536393b65eea230"
+    "stamp": "20260826-classless-edit1",
+    "hash": "024d7acc6e783185"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -268,8 +268,8 @@
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "fd67377074ba20ae"
+    "stamp": "20260825-oxremed2",
+    "hash": "ba3d9bcc87cd1c56"
   },
   "src/features/workspace/backup-confidence.js": {
     "stamp": "20260712-bc1",
@@ -312,20 +312,20 @@
     "hash": "0ad9808ef25fcae8"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20260822-htmlpages4",
-    "hash": "4e4cee38bb7257c8"
+    "stamp": "20260825-oxremed1",
+    "hash": "f90a17f531a988fe"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260808-contextual-ui1",
-    "hash": "4167227b3a9ba643"
+    "stamp": "20260826-sol3-1",
+    "hash": "681671eec77a5fc2"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "925c55e54b23026a"
+    "stamp": "20260828-revocation-lock1",
+    "hash": "1cfd1993f59f9298"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20260822-office4",
@@ -356,12 +356,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20260821-sheets-v2-2",
-    "hash": "48328140fac653fa"
+    "stamp": "20260825-oxremed1",
+    "hash": "afa05f9c91491c83"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260821-slides-v2-2",
-    "hash": "f54b889b239fc9d3"
+    "stamp": "20260825-oxremed1",
+    "hash": "ca917c577e4b2222"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -370,10 +370,6 @@
   "src/features/workspace/starter-packs.data.js": {
     "stamp": "20260619-packs1",
     "hash": "4f806de479b221c8"
-  },
-  "src/features/workspace/startup-default-bridge.js": {
-    "stamp": "20260809-audit3",
-    "hash": "25eacf60dcd98947"
   },
   "src/features/workspace/surface-assistant-actions.js": {
     "stamp": "20260807-surfaces2",
@@ -384,8 +380,8 @@
     "hash": "ac88591cfa5f81c7"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260808-contextual-ui1",
-    "hash": "ff560793703c6a9c"
+    "stamp": "20260904-compactevents4",
+    "hash": "ba427d1608b781d6"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260730-pushTime1",
@@ -408,8 +404,8 @@
     "hash": "6ee0586443745a0e"
   },
   "src/persistence/revocation-wipe.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "7121f2feb1f71a97"
+    "stamp": "20260831-revoke5",
+    "hash": "3b8eaca580bbc9a6"
   },
   "src/persistence/storage-hygiene.js": {
     "stamp": "20260710-hygiene1",
@@ -423,9 +419,13 @@
     "stamp": "20260818-storage-journal4",
     "hash": "b1f32b92bdbc29e1"
   },
+  "src/state/persistence-state.js": {
+    "stamp": "20260904-legacycheckpoint1",
+    "hash": "219d93452ee49cc3"
+  },
   "src/state/workspace-normalizers.js": {
-    "stamp": "20260616-state1",
-    "hash": "e63fece82e587d1b"
+    "stamp": "20260825-oxremed1",
+    "hash": "9d3be0ba07f108c3"
   },
   "src/sync/sync-crypto.js": {
     "stamp": "20260716-sync6",
@@ -436,8 +436,8 @@
     "hash": "949e9c15ba5ad93d"
   },
   "src/sync/sync-engine.js": {
-    "stamp": "20260806-signoutpause1",
-    "hash": "caf496517229c79f"
+    "stamp": "20260825-sol1-1",
+    "hash": "78f62e7f2ba0ed4d"
   },
   "src/sync/sync-merge.js": {
     "stamp": "20260807-duress2",
@@ -456,8 +456,8 @@
     "hash": "5a176198efc28e8d"
   },
   "src/sync/sync-transport.js": {
-    "stamp": "20260806-runtime-clean1",
-    "hash": "49363d158e454892"
+    "stamp": "20260825-sol2-1",
+    "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
     "stamp": "20260708-toolbar-compact",
@@ -480,8 +480,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260818-cache-refresh1",
-    "hash": "3ce195b7714c5540"
+    "stamp": "20260825-oxremed4",
+    "hash": "63889ff2e73fad67"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -548,16 +548,16 @@
     "hash": "18271099686c5736"
   },
   "styles/features/sheets.css": {
-    "stamp": "20260821-sheets2",
-    "hash": "05ea749ecf9ffd3d"
+    "stamp": "20260904-editorlayout2",
+    "hash": "fd46dbbdfe960239"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260821-slidesworkbench2",
-    "hash": "73b09e0e561d9eac"
+    "stamp": "20260904-editorlayout2",
+    "hash": "f18180e3a13e0503"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
@@ -632,8 +632,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260823-title-spacing1",
-    "hash": "5574c9505d03d9cf"
+    "stamp": "20260904-nav-overflow1",
+    "hash": "754b1899b7573544"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",
@@ -648,8 +648,8 @@
     "hash": "220440ec48d87134"
   },
   "styles/views/timeline-calendar.css": {
-    "stamp": "20260808-mobileday1",
-    "hash": "d711e1fd39e74488"
+    "stamp": "20260904-compactevents2",
+    "hash": "d9f941bdc3f01ed2"
   },
   "styles/views/today-focus-timer.css": {
     "stamp": "20260809-todaytimer1",

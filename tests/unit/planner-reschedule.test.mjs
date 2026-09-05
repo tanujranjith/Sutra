@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
+process.env.TZ = 'America/New_York';
+
 const require = createRequire(import.meta.url);
 const planner = require('../../src/domain/planner.js');
 

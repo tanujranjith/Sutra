@@ -14,10 +14,30 @@
   var cloudWriteGeneration = null;
   var cloudHydration = null;
 
+  function revocationLocked() {
+    try {
+      return !!(global.SutraRevocationWipe
+        && typeof global.SutraRevocationWipe.readGuard === 'function'
+        && global.SutraRevocationWipe.readGuard());
+    } catch (error) {
+      return true;
+    }
+  }
+
   function vault() {
+    if (revocationLocked()) return null;
     return global.SutraCredentialVault && typeof global.SutraCredentialVault.get === 'function'
       ? global.SutraCredentialVault
       : null;
+  }
+
+  function operationActive(store) {
+    return !!store && store === global.SutraCredentialVault && !revocationLocked();
+  }
+
+  function assertOperationActive(store) {
+    if (operationActive(store)) return;
+    throw new Error('Credential operation was cancelled because this device is revoked.');
   }
 
   function safeStorage() {
@@ -87,7 +107,9 @@
   async function hydrateAssistantKeys() {
     var store = vault();
     if (!store) return false;
-    assistantRemember = await store.getPreference('assistantRemember', false).catch(function () { return false; });
+    var remembered = await store.getPreference('assistantRemember', false).catch(function () { return false; });
+    if (!operationActive(store)) return false;
+    assistantRemember = remembered;
     var rememberInput = document.getElementById('assistantRememberKeysInput');
     if (rememberInput && rememberInput.dataset.userChanged !== 'true') rememberInput.checked = assistantRemember;
     if (!assistantRemember) return false;
@@ -95,6 +117,7 @@
     for (var i = 0; i < ASSISTANT_PROVIDERS.length; i += 1) {
       var provider = ASSISTANT_PROVIDERS[i];
       var key = await store.get(assistantVaultKey(provider)).catch(function () { return null; });
+      if (!operationActive(store)) return false;
       if (typeof key !== 'string' || !key) continue;
       var config = global.CHAT_PROVIDER_CONFIG;
       var storageKey = config && config[provider] && config[provider].keyStorage;
@@ -104,10 +127,10 @@
       if (input) input.value = key;
       restored += 1;
     }
-    if (restored) {
+    if (restored && operationActive(store)) {
       try { global.dispatchEvent(new CustomEvent('sutra:assistant-credentials-restored', { detail: { count: restored } })); } catch (error) {}
     }
-    return restored > 0;
+    return restored > 0 && operationActive(store);
   }
 
   async function saveAssistantKeys() {
@@ -115,8 +138,10 @@
     if (!store) return false;
     var requested = !!(document.getElementById('assistantRememberKeysInput') || {}).checked;
     await store.setPreference('assistantRemember', requested);
+    assertOperationActive(store);
     if (!requested) {
       await clearAssistantVault();
+      assertOperationActive(store);
       assistantRemember = false;
       return true;
     }
@@ -126,19 +151,30 @@
       var value = input ? String(input.value || '').trim() : '';
       if (value) await store.set(assistantVaultKey(provider), value);
       else await store.remove(assistantVaultKey(provider));
+      assertOperationActive(store);
     }
     assistantRemember = true;
     return true;
   }
 
   function restoreAssistantRememberChoice(input, previous) {
+    if (revocationLocked()) {
+      assistantRemember = false;
+      if (input) input.checked = false;
+      return;
+    }
     assistantRemember = previous;
     if (input) input.checked = previous;
     var store = vault();
     if (!store) return;
     store.setPreference('assistantRemember', previous).then(function () {
-      if (!previous) return clearAssistantVault();
+      assertOperationActive(store);
+      if (!previous) return clearAssistantVault().then(function () { assertOperationActive(store); });
     }).catch(function (error) {
+      if (revocationLocked()) {
+        assistantRemember = false;
+        if (input) input.checked = false;
+      }
       reportCredentialFailure(error, 'credential-vault.assistant-rollback');
     });
   }
@@ -160,19 +196,33 @@
     var store = vault();
     if (!store) return false;
     cloudHydration = (async function () {
-      cloudRemember = await store.getPreference('cloudRemember', false).catch(function () { return false; });
+      var remembered = await store.getPreference('cloudRemember', false).catch(function () { return false; });
+      if (!operationActive(store)) return false;
+      cloudRemember = remembered;
       if (!cloudRemember) return false;
       if (typeof store.getWriteGuard !== 'function') throw new Error('Credential vault write guards are unavailable.');
       var guard = await store.getWriteGuard(CLOUD_VAULT_KEY);
+      if (!operationActive(store)) return false;
       if (guard.blocked) return false;
       cloudWriteGeneration = guard.generation;
       if (readSession(CLOUD_SESSION_KEY)) return false;
       var saved = await store.get(CLOUD_VAULT_KEY).catch(function () { return null; });
+      if (!operationActive(store)) return false;
       if (!saved || saved.version !== 1 || !saved.refreshToken || !saved.user || !saved.user.id
           || String(saved.backendUrl || '') !== cloudBackendUrl()) {
-        if (saved) await store.remove(CLOUD_VAULT_KEY).catch(function () {});
+        if (saved) {
+          if (typeof store.removeGuarded !== 'function') throw new Error('Credential vault guarded removal is unavailable.');
+          await store.removeGuarded(CLOUD_VAULT_KEY, guard.generation).catch(function () { return false; });
+          if (!operationActive(store)) return false;
+        }
         return false;
       }
+      var currentGuard = await store.getWriteGuard(CLOUD_VAULT_KEY);
+      if (!operationActive(store) || currentGuard.blocked || currentGuard.generation !== guard.generation) {
+        cloudWriteGeneration = null;
+        return false;
+      }
+      cloudWriteGeneration = currentGuard.generation;
       writeSession(CLOUD_SESSION_KEY, {
         accessToken: '',
         refreshToken: String(saved.refreshToken),
@@ -191,32 +241,44 @@
     if (!Number.isSafeInteger(cloudWriteGeneration) || typeof store.setGuarded !== 'function') return false;
     var session = readSession(CLOUD_SESSION_KEY);
     if (!session || !session.refreshToken || !session.user || !session.user.id) return false;
-    return store.setGuarded(CLOUD_VAULT_KEY, {
+    var written = await store.setGuarded(CLOUD_VAULT_KEY, {
       version: 1,
       backendUrl: cloudBackendUrl(),
       refreshToken: String(session.refreshToken),
       user: { id: String(session.user.id), email: String(session.user.email || '') },
       savedAt: new Date().toISOString()
     }, cloudWriteGeneration);
+    return operationActive(store) && written;
   }
 
   async function authorizeFreshCloudSession() {
     var store = vault();
     if (!store || !cloudRemember || typeof store.unblock !== 'function') return false;
-    cloudWriteGeneration = await store.unblock(CLOUD_VAULT_KEY);
+    var generation = await store.unblock(CLOUD_VAULT_KEY);
+    assertOperationActive(store);
+    cloudWriteGeneration = generation;
     return captureCloudSession();
   }
 
   async function restoreCloudRememberChoice(store, input, previous) {
+    if (!operationActive(store)) {
+      cloudRemember = false;
+      input.checked = false;
+      cloudWriteGeneration = null;
+      return false;
+    }
     cloudRemember = previous;
     input.checked = previous;
     await store.setPreference('cloudRemember', previous);
+    assertOperationActive(store);
     // Never re-authorize writes during rollback: an explicit sign-out may have
     // advanced and blocked the shared guard while this UI operation was failing.
     cloudWriteGeneration = null;
     if (!previous) {
       await store.block(CLOUD_VAULT_KEY);
+      assertOperationActive(store);
     }
+    return true;
   }
 
   function cloudRememberInput() {
@@ -244,13 +306,16 @@
       cloudRemember = requested;
       try {
         await store.setPreference('cloudRemember', requested);
+        assertOperationActive(store);
         if (requested) {
           if (typeof store.unblock !== 'function') throw new Error('Credential vault write guards are unavailable.');
           cloudWriteGeneration = await store.unblock(CLOUD_VAULT_KEY);
+          assertOperationActive(store);
           await captureCloudSession();
         } else {
           if (typeof store.block !== 'function') throw new Error('Credential vault write guards are unavailable.');
           await store.block(CLOUD_VAULT_KEY);
+          assertOperationActive(store);
           cloudWriteGeneration = null;
         }
       } catch (error) {

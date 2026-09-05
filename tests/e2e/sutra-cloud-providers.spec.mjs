@@ -140,6 +140,15 @@ async function fillCloudPassword(page, pass = PASS, confirm = true) {
   await page.locator('#sutraCloudSyncPasswordSubmitBtn').click();
 }
 
+async function completeSafetySnapshotDialog(page, pass = PASS) {
+  const modal = page.locator('#sutraBackupPasswordModal');
+  await modal.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.fill('#sutraBackupPassphraseInput', pass);
+  await page.fill('#sutraBackupPassphraseConfirmInput', pass);
+  await page.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
+}
+
 function parseEnvelopeHeader(buffer) { return JSON.parse(buffer.slice(13, 13 + buffer.readUInt32BE(9)).toString('utf8')); }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +269,10 @@ test('Supabase session credentials are tab-session only and legacy durable token
   expect(storage.session).toContain('"refreshToken":"r1"');
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  expect(await page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+  await page.waitForFunction(() => !!window.SutraCloudSync);
+  // Session restoration refreshes the token asynchronously after the shell and
+  // cloud runtime are exposed, so assert the eventual authenticated state.
+  await expect.poll(() => page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('sutra:supabaseSession:v1'))).toBeNull();
 });
 
@@ -566,6 +578,9 @@ test('Supabase rollback cannot delete an earlier indexed backup or collide with 
 });
 
 test('Supabase provider: restore reproduces workspace; wrong passphrase is safe', async ({ page }) => {
+  // Backup, wrong-password restore, successful restore, and the mandatory
+  // encrypted pre-restore safety snapshot each perform 600k-iteration PBKDF2.
+  test.setTimeout(240_000);
   await openApp(page);
   await seedWorkspace(page, 'REMOTE');
   await useSupabaseSignedIn(page);
@@ -583,6 +598,7 @@ test('Supabase provider: restore reproduces workspace; wrong passphrase is safe'
   // otherwise block this awaited evaluate forever.
   const ok = page.evaluate(async () => { const rows = await window.SutraCloudSync.listBackups(); return window.SutraCloudSync.restore(rows[0], { skipConflictCheck: true }).then(x => (x && x.restored ? 'ok' : 'no')); });
   await fillCloudPassword(page, PASS, false);
+  await completeSafetySnapshotDialog(page);
   expect(await ok).toBe('ok');
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel REMOTE');
 });
@@ -800,6 +816,7 @@ async function installDropboxMock(page) {
 }
 
 test('Google Drive: connect, backup uploads ciphertext only, restore round-trips, retention keeps 10', async ({ page }) => {
+  test.setTimeout(240_000);
   await stubGoogleIdentity(page);
   const gd = await installGoogleDriveMock(page);
   await openApp(page);
@@ -817,7 +834,9 @@ test('Google Drive: connect, backup uploads ciphertext only, restore round-trips
   expect(gd.uploads[0].bytes.toString('utf8')).not.toContain('Sentinel GDRIVE');
   // restore reproduces the workspace
   await seedWorkspace(page, 'GDLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restorePromise = page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  await completeSafetySnapshotDialog(page);
+  const restored = await restorePromise;
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel GDRIVE');
   // retention keeps the latest 10
@@ -826,6 +845,7 @@ test('Google Drive: connect, backup uploads ciphertext only, restore round-trips
 });
 
 test('OneDrive: backup uploads ciphertext, restore round-trips via the content CDN', async ({ page }) => {
+  test.setTimeout(120_000);
   const od = await installOneDriveMock(page);
   await openApp(page);
   await seedWorkspace(page, 'ODRIVE');
@@ -839,12 +859,15 @@ test('OneDrive: backup uploads ciphertext, restore round-trips via the content C
   expect(od.uploads[0].bytes.slice(0, 8).toString('utf8')).toBe('SUTRAENC');
   expect(await page.evaluate(() => window.SutraCloudSync.listBackups().then(r => r.length))).toBe(1);
   await seedWorkspace(page, 'ODLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restorePromise = page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  await completeSafetySnapshotDialog(page);
+  const restored = await restorePromise;
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel ODRIVE');
 });
 
 test('Dropbox: backup uploads ciphertext, restore round-trips', async ({ page }) => {
+  test.setTimeout(120_000);
   const db = await installDropboxMock(page);
   await openApp(page);
   await seedWorkspace(page, 'DBOX');
@@ -857,7 +880,9 @@ test('Dropbox: backup uploads ciphertext, restore round-trips', async ({ page })
   expect(db.uploads).toHaveLength(1);
   expect(db.uploads[0].bytes.slice(0, 8).toString('utf8')).toBe('SUTRAENC');
   await seedWorkspace(page, 'DBLOCAL');
-  const restored = await page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  const restorePromise = page.evaluate(({ pass }) => window.SutraCloudSync.listBackups().then(rs => window.SutraCloudSync.restore(rs[0], { passphrase: pass, skipConflictCheck: true })).then(x => !!(x && x.restored)), { pass: PASS });
+  await completeSafetySnapshotDialog(page);
+  const restored = await restorePromise;
   expect(restored).toBe(true);
   await expect.poll(() => page.evaluate(() => window.serializeWorkspace().pages[0].title), { timeout: 20_000 }).toBe('Sentinel DBOX');
 });

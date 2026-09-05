@@ -55,9 +55,19 @@
         button.setAttribute('data-block-id', text(block.id)); button.setAttribute('data-block-name', text(block.name || 'Untitled'));
         button.setAttribute('aria-label', text(block.name || 'Untitled') + ', ' + date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' + displayTime(block.start) + ' to ' + displayTime(block.end) + ', ' + source(block));
         button.style.setProperty('--sutra-calendar-event-color', color(block)); Object.keys(style || {}).forEach(function (name) { button.style[name] = style[name]; });
-        button.appendChild(el('span', 'sutra-calendar-event-time', displayTime(block.start) + ' - ' + displayTime(block.end)));
+        // A 30-45 minute item can be shorter than its time + title stack. Show
+        // the title (the useful scanning signal) rather than clipping both;
+        // the complete time remains available through the accessible label.
+        // A phone uses a taller hour grid than desktop, so the same 45-minute
+        // block can be 45px instead of 33px. Both are too short for the time
+        // plus title stack once theme padding is applied. Keep a desktop
+        // one-hour block expansive: its 45px height can fit time and title.
+        var compactLimit = global.innerWidth <= 640 ? 48 : 42;
+        var compact = style && Number.parseFloat(style.height) <= compactLimit;
+        if (compact) button.classList.add('is-compact');
+        else button.appendChild(el('span', 'sutra-calendar-event-time', displayTime(block.start) + ' - ' + displayTime(block.end)));
         button.appendChild(el('span', 'sutra-calendar-event-title', text(block.name || 'Untitled')));
-        if (expanded) button.appendChild(el('span', 'sutra-calendar-event-source', source(block) + (block.courseId ? ' · ' + block.courseId : '')));
+        if (expanded && !compact) button.appendChild(el('span', 'sutra-calendar-event-source', source(block) + (block.courseId ? ' · ' + block.courseId : '')));
         button.addEventListener('click', function (event) { event.stopPropagation(); openBlock(block); }); return button;
     }
     function month(root, view) {

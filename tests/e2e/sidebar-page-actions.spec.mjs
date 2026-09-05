@@ -6,6 +6,9 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true
+    && typeof window.setActiveView === 'function'
+    && !!window.flowAtelier);
   await page.evaluate(() => {
     const intro = document.getElementById('sutraStartupIntro');
     if (intro) {
@@ -36,6 +39,8 @@ async function openApp(page) {
         updatedAt: new Date().toISOString()
       }]
     });
+    window.setActiveView('notes');
+    window.flowAtelier.renderPagesList();
   });
 }
 

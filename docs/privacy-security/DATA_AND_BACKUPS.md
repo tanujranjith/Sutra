@@ -81,7 +81,7 @@ fixtures by `npm run check:migrations`.
 - A curated allow-list of standalone **localStorage preferences** is embedded in
   exports (focus-timer state, streak settings, AI provider/model **choices**, the
   Assistant Activity log, and a couple of feature flags).
-- **Secrets** (AI provider API keys) use **`sessionStorage` by default** and are never exported. If the user explicitly enables “Remember API keys on this device,” Sutra stores them as AES-GCM encrypted records in `sutra_credentials_db`; the vault is device-local and excluded from exports and Sync. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
+- **Secrets** (AI provider API keys) use **`sessionStorage` by default** and are never exported. If the user explicitly enables “Remember API keys on this device,” Sutra stores them as AES-GCM encrypted records in `sutra_credentials_db`; the vault is device-local and excluded from exports and Sync. This protects against casual database inspection and export leakage, but it is not a passphrase vault: code already executing in Sutra's origin, or anyone able to use that browser profile, can ask Sutra to use remembered credentials. The optional Local AI endpoint (`baseUrl`, model, and vision flag) is device-local too: it is not included in JSON, plaintext, or encrypted `.sutra` exports and is preserved on the receiving device during restore.
 
 ---
 
@@ -455,10 +455,21 @@ nor synchronized. See the exhaustive executable decision matrix in
 
 ## 6. Pre-import safety snapshot
 
-Importing replaces your current workspace, so before applying an import Sutra
-takes a **pre-import safety snapshot** of your existing data first. If an import
-is not what you expected, this snapshot is your fallback — the import is not a
-one-way door that discards your prior state with no recourse.
+Importing replaces your current workspace, so before applying a **manual** import
+or restore Sutra first offers to save an **encrypted `.sutra` safety snapshot**
+of your existing data (you choose the password). If an import is not what you
+expected, this snapshot is your fallback — the import is not a one-way door that
+discards your prior state with no recourse.
+
+Two deliberate details:
+
+- The safety snapshot is always **encrypted**. Restoring never silently writes
+  an unencrypted copy of your workspace to disk as a side effect.
+- Background restores (for example a Google Drive clean pull) do not download
+  files behind your back. Their rollback guarantee is the canonical workspace
+  database's built-in recovery journal: every confirmed write keeps the previous
+  root in the same transaction, so the prior workspace stays recoverable even
+  when no external file was created.
 
 ---
 
@@ -521,8 +532,10 @@ round-trip in a browser.
 
 - **Lost or corrupted workspace:** import your most recent `.sutra` (or JSON, or
   legacy `.atelier`) backup from Settings → Data.
-- **Unexpected import:** fall back to the **pre-import safety snapshot** taken
-  automatically before the import.
+- **Unexpected import:** fall back to the encrypted **pre-import safety
+  snapshot** you accepted before the import, or use Sutra's canonical local
+  recovery journal. A browser download request cannot be verified by the app;
+  confirm the file finished downloading before relying on it.
 - **App misbehaving (CSS/plugins), data intact:** load in **Safe Mode**
   (`?sutraSafeMode=1`, legacy `?atelierSafeMode=1`, or hold **Shift** on load),
   which skips custom CSS and plugins and **never deletes** anything.

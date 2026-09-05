@@ -375,3 +375,47 @@ test('Slides and Sheets expose the student productivity V2 controls', async ({ p
   expect(state.style).toMatchObject({ fontWeight: '700', textAlign: 'center' });
   expect(state.chartCount).toBe(1);
 });
+
+test('phone Slides and Sheets keep a usable editing surface', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.waitForFunction(() => !!window.SutraSlides && !!window.SutraSheets);
+
+  await page.evaluate(() => window.SutraSlides.createPage('Phone presentation'));
+  const slidesLayout = await page.evaluate(() => {
+    const root = document.getElementById('slidesEditor');
+    const workspace = root.querySelector('.slides-workspace');
+    const stage = root.querySelector('.slides-stage');
+    const thumbnails = root.querySelector('.slides-thumbnails');
+    const toolbarButton = root.querySelector('.slides-toolbar-btn');
+    return {
+      workspaceDisplay: getComputedStyle(workspace).display,
+      stageTop: stage.getBoundingClientRect().top,
+      thumbnailsTop: thumbnails.getBoundingClientRect().top,
+      thumbnailHeight: thumbnails.getBoundingClientRect().height,
+      toolbarButtonHeight: toolbarButton.getBoundingClientRect().height
+    };
+  });
+  expect(slidesLayout.workspaceDisplay).toBe('flex');
+  expect(slidesLayout.thumbnailsTop).toBeGreaterThan(slidesLayout.stageTop);
+  expect(slidesLayout.thumbnailHeight).toBeGreaterThanOrEqual(66);
+  expect(slidesLayout.toolbarButtonHeight).toBeGreaterThanOrEqual(44);
+
+  await page.evaluate(() => window.SutraSheets.createPage('Phone grades'));
+  const sheetsLayout = await page.evaluate(() => {
+    const root = document.getElementById('sheetsEditor');
+    const toolbarButton = root.querySelector('.sheets-toolbar button');
+    const formula = root.querySelector('.sheets-formula input');
+    const grid = root.querySelector('.sheets-grid-wrap');
+    return {
+      toolbarHeight: root.querySelector('.sheets-toolbar').getBoundingClientRect().height,
+      toolbarButtonHeight: toolbarButton.getBoundingClientRect().height,
+      formulaHeight: formula.getBoundingClientRect().height,
+      gridHeight: grid.getBoundingClientRect().height
+    };
+  });
+  expect(sheetsLayout.toolbarHeight).toBeGreaterThanOrEqual(58);
+  expect(sheetsLayout.toolbarButtonHeight).toBeGreaterThanOrEqual(44);
+  expect(sheetsLayout.formulaHeight).toBeGreaterThanOrEqual(40);
+  expect(sheetsLayout.gridHeight).toBeGreaterThanOrEqual(320);
+});

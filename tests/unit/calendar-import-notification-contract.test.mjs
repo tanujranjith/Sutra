@@ -37,6 +37,35 @@ function deriveNotifications(deadlines) {
   return window.SutraNotifications.getNotifications();
 }
 
+function notificationWritesWithRevocationGuard(guarded) {
+  let writes = 0;
+  const safeStorage = {
+    get() { return null; },
+    set() { writes += 1; }
+  };
+  const document = {
+    readyState: 'loading',
+    addEventListener() {},
+    getElementById() { return null; }
+  };
+  const window = {
+    document,
+    addEventListener() {},
+    setTimeout() { return 0; },
+    clearTimeout() {},
+    setInterval() { return 0; },
+    clearInterval() {},
+    SutraSafeStorage: safeStorage,
+    SutraRevocationWipe: {
+      readGuard() { return guarded ? { state: 'locked' } : null; }
+    }
+  };
+  window.window = window;
+  vm.runInNewContext(notificationsSource, { window, document, console, Date, Map, Set, Math, JSON, SutraSafeStorage: safeStorage });
+  window.SutraNotifications.importState({ prefs: { enabled: true } });
+  return writes;
+}
+
 test('imported calendar blocks remain Timeline context without becoming overdue reminders', () => {
   const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const notifications = deriveNotifications([
@@ -65,4 +94,9 @@ test('the canonical deadline bridge keeps only five recent local days of importe
   assert.ok(collector, 'canonical deadline collector exists');
   assert.match(collector.body, /importedCalendarHistoryCutoff\.setDate\(importedCalendarHistoryCutoff\.getDate\(\) - 5\)/);
   assert.match(collector.body, /block\.source === 'calendar_ics' && due < importedCalendarHistoryCutoff/);
+});
+
+test('notification persistence remains fail-closed while a revocation wipe guard exists', () => {
+  assert.equal(notificationWritesWithRevocationGuard(true), 0);
+  assert.equal(notificationWritesWithRevocationGuard(false), 1);
 });

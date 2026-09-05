@@ -4,6 +4,7 @@ async function openHomework(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await page.waitForFunction(() => window.SutraHomework && window.SutraHomeworkStore && typeof window.setActiveView === 'function');
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted?.(true); } catch (_) {}
     const overlay = document.getElementById('studentOnboardingOverlay');
@@ -24,6 +25,9 @@ async function openHomework(page) {
 }
 
 test('an extracurricular icon can be chosen and survives reload', async ({ page }) => {
+  // A full Pixel 7 startup plus an IndexedDB-backed reload can legitimately
+  // approach the suite-wide 60s default on a busy local runner.
+  test.setTimeout(120_000);
   await openHomework(page);
   await page.evaluate(() => {
     const snapshot = window.SutraHomeworkStore.getSnapshot();
@@ -48,7 +52,7 @@ test('an extracurricular icon can be chosen and survives reload', async ({ page 
   await expect.poll(() => page.evaluate(() => {
     return window.SutraHomeworkStore.getSnapshot().courses.find(course => course.id === 'icon-robotics')?.icon;
   })).toBe('robot');
-  await page.evaluate(() => window.SutraHomeworkStore.whenPersisted());
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('course-icon-test'));
 
   await page.reload();
   await openHomework(page);

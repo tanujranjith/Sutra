@@ -31,6 +31,7 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   return { thirdParty };

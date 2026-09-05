@@ -71,6 +71,7 @@ test('a terse scheduling promise recovers concrete dates from its user turn', as
 });
 
 test('persisted Assistant replies show review cards and mutate only after Apply', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-08-07T12:00:00Z'));
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   page.on('console', message => {

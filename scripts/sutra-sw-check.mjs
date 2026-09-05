@@ -5,6 +5,7 @@
    runs under file://. Part of `npm run check:all`. */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -15,12 +16,25 @@ function ok(cond, label, detail) {
     else { failures++; console.error('  FAIL', label, detail !== undefined ? '→ ' + JSON.stringify(detail) : ''); }
 }
 function read(p) { return existsSync(resolve(repoRoot, p)) ? readFileSync(resolve(repoRoot, p), 'utf8') : null; }
+function sha256(p) {
+    const file = resolve(repoRoot, p);
+    return existsSync(file) ? createHash('sha256').update(readFileSync(file)).digest('hex') : null;
+}
 
 console.log('Service worker / PWA safety check');
 console.log('--------------------------------');
 
 const sw = read('sw.js');
+const officeHashes = {
+    'assets/vendor/office/mammoth.browser.min.js': 'deb07bf230d1cb3e190bc5adc6743f35c6531b6571d1e5469b24f452a7f0f4ab',
+    'assets/vendor/office/xlsx.full.min.js': 'c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99'
+};
+let assetManifest = null;
+try { assetManifest = JSON.parse(read('src/config/asset-manifest.generated.json') || 'null'); } catch (error) { /* assertions below report it */ }
 ok(!!sw, 'sw.js exists');
+Object.entries(officeHashes).forEach(([file, expected]) => {
+    ok(sha256(file) === expected, `${file} matches the reviewed upstream distribution bytes`);
+});
 if (sw) {
     ok(/CACHE_VERSION\s*=\s*(?:['"][^'"]+['"]|`[^`]+`)/.test(sw), 'sw uses a versioned cache name');
     ok(/caches\.keys\(\)[\s\S]*caches\.delete/.test(sw), 'sw deletes stale caches on activate');
@@ -34,6 +48,10 @@ if (sw) {
     ok(!/ignoreSearch\s*:\s*true/.test(sw), 'versioned assets never use search-insensitive cache matching');
     ok(/cache\.match\(req,\s*\{\s*ignoreSearch:\s*false\s*\}\)/.test(sw), 'asset lookup is exact and scoped to the current cache');
     ok(/cache\.addAll\(CRITICAL_ASSETS\)/.test(sw), 'critical shell precache is atomic and failures reject install');
+    ok(assetManifest && assetManifest.optional.includes('./assets/vendor/office/mammoth.browser.min.js?v=1.8.0'), 'DOCX parser is non-blocking precached for first-use offline import');
+    ok(assetManifest && assetManifest.optional.includes('./assets/vendor/office/xlsx.full.min.js?v=0.18.5'), 'XLSX parser is non-blocking precached for first-use offline import');
+    ok(assetManifest && !assetManifest.critical.some((asset) => /assets\/vendor\/office\//.test(asset)), 'Office parsers cannot fail the atomic core install');
+    ok(assetManifest && !assetManifest.lazy.some((asset) => /assets\/vendor\/office\//.test(asset)), 'Office parsers are not deferred until first online use');
     ok(/Promise\.allSettled\(OPTIONAL_ASSETS/.test(sw), 'only optional precache failures degrade gracefully');
     // Strip comments so the keyword-absence checks inspect executable code only.
     const swCode = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');

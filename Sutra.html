@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://integrate.api.nvidia.com https://api.mistral.ai https://api.together.xyz https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.supabase.co https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com; font-src 'self'; connect-src 'self' https://api.groq.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://openrouter.ai https://integrate.api.nvidia.com https://api.mistral.ai https://api.together.xyz https://api.deepseek.com https://api.x.ai https://api.perplexity.ai https://www.googleapis.com https://accounts.google.com https://login.microsoftonline.com https://graph.microsoft.com https://www.dropbox.com https://api.dropboxapi.com https://content.dropboxapi.com https://*.supabase.co https://*.1drv.com https://*.sharepoint.com https://*.microsoftpersonalcontent.com https://*.dms.live.net http://localhost:* http://127.0.0.1:*; frame-src 'self' https://accounts.google.com https://docs.google.com https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io data: blob:; media-src 'self' data: blob: https://open.spotify.com https://w.soundcloud.com; worker-src 'self' blob:; form-action 'self' https://docs.google.com">
     <title>Sutra</title>
     <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/sutra/generated/sutra-icon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/sutra/generated/sutra-icon-16.png">
@@ -47,7 +47,7 @@
     <!-- Defensive browser-storage wrapper. Loaded before all feature modules so
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
-    <script src="src/core/safe-storage.js?v=20260716-syncparity1"></script>
+    <script src="src/core/safe-storage.js?v=20260825-sol1-2"></script>
     <script src="src/core/workspace-lock.js?v=20260821-lock5"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
@@ -57,12 +57,13 @@
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
     <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
-    <script src="src/core/feature-guard.js?v=20260613-harden1"></script>
+    <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
     <script src="src/core/migrations.js?v=20260813-pdf2"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
-    <script src="src/core/credential-vault.js?v=20260823-credential-vault4"></script>
+    <script src="src/persistence/revocation-wipe.js?v=20260831-revoke5"></script>
+    <script src="src/core/credential-vault.js?v=20260831-revoke4"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
-    <script src="src/domain/homework-store.js?v=20260709-homework-store1"></script>
+    <script src="src/domain/homework-store.js?v=20260825-sol1-1"></script>
     <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
@@ -71,11 +72,10 @@
     <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
-    <script src="src/domain/assistant-permissions.js?v=20260710-assistant-permissions1"></script>
+    <script src="src/domain/assistant-permissions.js?v=20260825-sol2-1"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
-    <script src="src/boot/legacy-workspace-migration.js?v=20260823-storage-journal8"></script>
+    <script src="src/boot/legacy-workspace-migration.js?v=20260830-revoke2"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
-    <script src="src/persistence/revocation-wipe.js?v=20260823-credential-vault1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
@@ -86,12 +86,13 @@
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260807-duress2"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
-    <script src="src/sync/sync-transport.js?v=20260806-runtime-clean1"></script>
-    <script src="src/sync/sync-engine.js?v=20260806-signoutpause1"></script>
-    <script src="src/config/feature-manifest.js?v=20260823-combined2"></script>
+    <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
+    <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
+    <script src="src/config/feature-manifest.js?v=20260825-sol2-1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
-    <script src="src/state/workspace-normalizers.js?v=20260616-state1"></script>
+    <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
+<script src="src/state/workspace-normalizers.js?v=20260825-oxremed1"></script>
     <!-- Pure student date/time vocabulary shared by Quick Capture, Homework,
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
@@ -115,9 +116,9 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260818-cache-refresh1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260825-oxremed4">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260821-iosinstall2">
-    <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260808-mobileday1">
+    <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -4626,7 +4627,7 @@
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Backups</span></div>
                         <div class="cc-stacked-actions">
-                            <button class="cc-btn cc-btn-ghost" id="exportAtelierWorkspaceBtn" onclick="exportWorkspaceAsAtelierPackage()">Encrypted Workspace Backup (.sutra)</button>
+                            <button class="cc-btn cc-btn-ghost" id="exportAtelierWorkspaceBtn" onclick="exportWorkspaceAsAtelierPackage({ returnFocus: this })">Encrypted Workspace Backup (.sutra)</button>
                             <button class="cc-btn cc-btn-ghost" id="exportUnencryptedSutraWorkspaceBtn" onclick="window.SutraEncryptedBackups.exportUnencryptedPackage()">Unencrypted Workspace Backup (.sutra)</button>
                             <button class="cc-btn cc-btn-ghost" id="exportWorkspaceBtn" onclick="exportToFile()">Export Workspace JSON (unencrypted)</button>
                             <button class="cc-btn cc-btn-ghost" id="importWorkspaceBtn" onclick="importFromFile()">Import Workspace / Docs</button>
@@ -4670,13 +4671,13 @@
                             <div class="cc-data-health-row"><span>Backup state</span><span id="sutraHealthBackupState">No recent backup</span></div>
                             <div class="cc-data-health-row"><span>Last Backup</span><span id="atelierDataHealthExport">Never</span></div>
                             <div class="cc-data-health-row"><span>Last Restore</span><span id="atelierDataHealthImport">Never</span></div>
-                            <div class="cc-data-health-row"><span>Last safety snapshot</span><span id="atelierDataHealthSnapshot">Never</span></div>
+                            <div class="cc-data-health-row"><span>Last verified safety snapshot</span><span id="atelierDataHealthSnapshot">Never</span></div>
                             <div class="sutra-health-details" id="sutraHealthTechnicalDetails" tabindex="0" aria-label="Storage health technical details">No persistence warnings recorded.</div>
                             <div class="cc-stacked-actions">
                                 <button class="cc-btn cc-btn-ghost" id="atelierDataHealthExportBtn" type="button">Backup now</button>
                                 <button class="cc-btn cc-btn-ghost" id="atelierDataHealthSnapshotBtn" type="button">Download safety snapshot</button>
                             </div>
-                            <p class="cc-foot-help">A safety snapshot is also created automatically before any workspace import. Encrypted .sutra backups need your password to restore. JSON exports and safety snapshots are unencrypted recovery files.</p>
+                            <p class="cc-foot-help">Interactive restores first offer an encrypted .sutra safety snapshot; browser downloads must be confirmed by you, while backup-folder writes are verified by Sutra. The local recovery journal remains the always-on fallback. Advanced JSON exports are unencrypted.</p>
                         </div>
                     </div>
                     <div class="cc-group cc-group-stacked" id="sutraFullSyncSection">
@@ -5417,7 +5418,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260823-combined1"></script>
+                <script src="src/features/study/homework.js?v=20260826-classless-edit1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5852,133 +5853,133 @@
         <div class="theme-presets">
             <div class="preset-title">Preset Themes</div>
             <div class="preset-grid">
-                <div class="preset-card active" onclick="applyPresetTheme('default')" data-theme="default">
+                <button type="button" class="preset-card active" onclick="applyPresetTheme('default')" data-theme="default">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #ffffff"></div>
                         <div class="preset-color" style="background: #f5f7fa"></div>
                         <div class="preset-color" style="background: #d8c4a1"></div>
                     </div>
                     <div class="preset-name">Default</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('dark')" data-theme="dark">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('dark')" data-theme="dark">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #1a1d22"></div>
                         <div class="preset-color" style="background: #232831"></div>
                         <div class="preset-color" style="background: #d8c4a1"></div>
                     </div>
                     <div class="preset-name">Dark</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('sutra')" data-theme="sutra">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('sutra')" data-theme="sutra">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #070c18"></div>
                         <div class="preset-color" style="background: #0d1426"></div>
                         <div class="preset-color" style="background: #5d82f5"></div>
                     </div>
                     <div class="preset-name">Sutra</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('botanical')" data-theme="botanical">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('botanical')" data-theme="botanical">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f6fbf4"></div>
                         <div class="preset-color" style="background: #edf6e9"></div>
                         <div class="preset-color" style="background: #3f8f5a"></div>
                     </div>
                     <div class="preset-name">Botanical</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('heritage')" data-theme="heritage">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('heritage')" data-theme="heritage">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #fbf6ed"></div>
                         <div class="preset-color" style="background: #e9dcc9"></div>
                         <div class="preset-color" style="background: #a96f3f"></div>
                     </div>
                     <div class="preset-name">Peach</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('luxury')" data-theme="luxury" hidden>
+                <button type="button" class="preset-card" onclick="applyPresetTheme('luxury')" data-theme="luxury" hidden>
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #fbf7ef"></div>
                         <div class="preset-color" style="background: #f2eadb"></div>
                         <div class="preset-color" style="background: #c08a2f"></div>
                     </div>
                     <div class="preset-name">Luxury</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('sepia')" data-theme="sepia" hidden>
+                <button type="button" class="preset-card" onclick="applyPresetTheme('sepia')" data-theme="sepia" hidden>
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f7f1e6"></div>
                         <div class="preset-color" style="background: #eee3cf"></div>
                         <div class="preset-color" style="background: #a86a3f"></div>
                     </div>
                     <div class="preset-name">Sepia</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('ocean')" data-theme="ocean">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('ocean')" data-theme="ocean">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #eef7fb"></div>
                         <div class="preset-color" style="background: #e1f0f7"></div>
                         <div class="preset-color" style="background: #2f82a7"></div>
                     </div>
                     <div class="preset-name">Ocean</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('sunrise')" data-theme="sunrise">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('sunrise')" data-theme="sunrise">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #fff6f0"></div>
                         <div class="preset-color" style="background: #fbe8dd"></div>
                         <div class="preset-color" style="background: #d06f41"></div>
                     </div>
                     <div class="preset-name">Sunrise</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('graphite')" data-theme="graphite">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('graphite')" data-theme="graphite">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f3f4f6"></div>
                         <div class="preset-color" style="background: #e7e9ee"></div>
                         <div class="preset-color" style="background: #4e6a8a"></div>
                     </div>
                     <div class="preset-name">Graphite</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('aurora')" data-theme="aurora">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('aurora')" data-theme="aurora">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f2fbfb"></div>
                         <div class="preset-color" style="background: #e2f4f4"></div>
                         <div class="preset-color" style="background: #2d9f97"></div>
                     </div>
                     <div class="preset-name">Aurora</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('rosewater')" data-theme="rosewater">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('rosewater')" data-theme="rosewater">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #fff5f7"></div>
                         <div class="preset-color" style="background: #fbe7ec"></div>
                         <div class="preset-color" style="background: #c56582"></div>
                     </div>
                     <div class="preset-name">Rosewater</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('glass')" data-theme="glass">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('glass')" data-theme="glass">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: linear-gradient(135deg, #fbfdff, #dfe6f0)"></div>
                         <div class="preset-color" style="background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9)"></div>
                         <div class="preset-color" style="background: #0a84ff"></div>
                     </div>
                     <div class="preset-name">Glass</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('windows11')" data-theme="windows11">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('windows11')" data-theme="windows11">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #e9f2ff"></div>
                         <div class="preset-color" style="background: #c3dbff"></div>
                         <div class="preset-color" style="background: #0078d4"></div>
                     </div>
                     <div class="preset-name">Windows 11</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('retro95')" data-theme="retro95">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('retro95')" data-theme="retro95">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #d8d2c6"></div>
                         <div class="preset-color" style="background: #f5f1e7"></div>
@@ -5986,9 +5987,9 @@
                         <div class="preset-color" style="background: #2f5fa7"></div>
                     </div>
                     <div class="preset-name">Retro 95</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('chromeos')" data-theme="chromeos">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('chromeos')" data-theme="chromeos">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #ea4335"></div>
                         <div class="preset-color" style="background: #fbbc05"></div>
@@ -5996,97 +5997,97 @@
                         <div class="preset-color" style="background: #4285f4"></div>
                     </div>
                     <div class="preset-name">ChromeOS</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('ubuntu')" data-theme="ubuntu">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('ubuntu')" data-theme="ubuntu">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #4a1d72"></div>
                         <div class="preset-color" style="background: #050308"></div>
                         <div class="preset-color" style="background: #ffb87a"></div>
                     </div>
                     <div class="preset-name">Ubuntu</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('github')" data-theme="github">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('github')" data-theme="github">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f3f6fb"></div>
                         <div class="preset-color" style="background: #d8e1f0"></div>
                         <div class="preset-color" style="background: #0969da"></div>
                     </div>
                     <div class="preset-name">GitHub</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('spotify')" data-theme="spotify">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('spotify')" data-theme="spotify">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #07140d"></div>
                         <div class="preset-color" style="background: #0d2a1a"></div>
                         <div class="preset-color" style="background: #1ed760"></div>
                     </div>
                     <div class="preset-name">Spotify</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('netflix')" data-theme="netflix">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('netflix')" data-theme="netflix">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #09090c"></div>
                         <div class="preset-color" style="background: #1b0d12"></div>
                         <div class="preset-color" style="background: #e50914"></div>
                     </div>
                     <div class="preset-name">Netflix</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('slack')" data-theme="slack">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('slack')" data-theme="slack">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #140d24"></div>
                         <div class="preset-color" style="background: #2f1450"></div>
                         <div class="preset-color" style="background: #36c5f0"></div>
                     </div>
                     <div class="preset-name">Slack</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('dune')" data-theme="dune">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('dune')" data-theme="dune">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #1a120d"></div>
                         <div class="preset-color" style="background: #281b14"></div>
                         <div class="preset-color" style="background: #d4ad73"></div>
                     </div>
                     <div class="preset-name">Dune</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('blueprint')" data-theme="blueprint">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('blueprint')" data-theme="blueprint">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #061522"></div>
                         <div class="preset-color" style="background: #0b2940"></div>
                         <div class="preset-color" style="background: #5ad7ff"></div>
                     </div>
                     <div class="preset-name">Blueprint</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('paper')" data-theme="paper">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('paper')" data-theme="paper">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f5eee2"></div>
                         <div class="preset-color" style="background: #e7dccb"></div>
                         <div class="preset-color" style="background: #c64d32"></div>
                     </div>
                     <div class="preset-name">Paper</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('arcade')" data-theme="arcade">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('arcade')" data-theme="arcade">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #13082d"></div>
                         <div class="preset-color" style="background: #35125d"></div>
                         <div class="preset-color" style="background: #ff65d4"></div>
                     </div>
                     <div class="preset-name">Arcade</div>
-                </div>
+                </button>
 
-                <div class="preset-card" onclick="applyPresetTheme('custom-theme')" data-theme="custom-theme">
+                <button type="button" class="preset-card" onclick="applyPresetTheme('custom-theme')" data-theme="custom-theme">
                     <div class="preset-preview">
                         <div class="preset-color" style="background: #f7f8fb"></div>
                         <div class="preset-color" style="background: #eceff6"></div>
                         <div class="preset-color" style="background: #4f46e5"></div>
                     </div>
                     <div class="preset-name">Custom Theme</div>
-                </div>
+                </button>
             </div>
 
             <div class="glass-options" id="glassOptions" hidden>
@@ -7875,7 +7876,6 @@
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
-<script src="src/features/workspace/startup-default-bridge.js?v=20260809-audit3"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
          Other served/PWA browsers use the smaller module + real worker path. -->
@@ -7888,14 +7888,14 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal2"></script>
-    <script src="src/core/app.js?v=20260828-storage-main3"></script>
-    <script src="src/core/credential-vault-bridge.js?v=20260823-credential-bridge4"></script>
+    <script src="src/core/app.js?v=20260904-mergerecovery1"></script>
+    <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20260823-combined1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
-    <script src="src/features/workspace/audit-fixes.js?v=20260816-home-labels1"></script>
+    <script src="src/features/workspace/audit-fixes.js?v=20260825-oxremed2"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
@@ -7903,10 +7903,10 @@
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
-    <script src="src/features/workspace/slides.js?v=20260821-slides-v2-2"></script>
+    <script src="src/features/workspace/slides.js?v=20260825-oxremed1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
-    <script src="src/features/workspace/sheets.js?v=20260821-sheets-v2-2"></script>
-    <script src="src/features/workspace/html-pages.js?v=20260822-htmlpages4"></script>
+    <script src="src/features/workspace/sheets.js?v=20260825-oxremed1"></script>
+    <script src="src/features/workspace/html-pages.js?v=20260825-oxremed1"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
@@ -7921,11 +7921,11 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260807-customquotes2"></script>
-    <script src="src/features/workspace/notifications.js?v=20260816-home-labels1"></script>
+    <script src="src/features/workspace/notifications.js?v=20260828-revocation-lock1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260808-contextual-ui1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260826-sol3-1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260816-home-labels1"></script>
@@ -7935,7 +7935,7 @@
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
     <script src="src/features/workspace/timeline-drag.js?v=20260730-pushTime1"></script>
-    <script src="src/features/workspace/timeline-calendar.js?v=20260808-contextual-ui1"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20260904-compactevents4"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
@@ -8319,8 +8319,8 @@
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260807-cohesion2">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20260821-slidesworkbench2">
-    <link rel="stylesheet" href="styles/features/sheets.css?v=20260821-sheets2">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">
     <link rel="stylesheet" href="styles/features/html-pages.css?v=20260821-htmlpages3">
     <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260815-pdf7">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
@@ -8335,7 +8335,7 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260823-title-spacing1">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260904-nav-overflow1">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260820-liquidglass-toolbar2">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.

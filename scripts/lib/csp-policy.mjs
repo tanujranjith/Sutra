@@ -18,7 +18,10 @@ export const CSP_DIRECTIVES = Object.freeze({
   // `unsafe-inline` remains temporarily required by legacy inline handlers.
   // scripts/sutra-csp-check.mjs ratchets their count so this permission can
   // only be removed, never expanded, during modular extraction.
-  'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com', 'https://unpkg.com', 'https://accounts.google.com'],
+  // The Office document import parsers (Mammoth, SheetJS) are vendored under
+  // assets/vendor/office/ and load same-origin, so no CDN script origin is
+  // approved anymore.
+  'script-src': ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
   'style-src': ["'self'", "'unsafe-inline'"],
   'img-src': ["'self'", 'data:', 'blob:', 'https://i.ytimg.com'],
   'font-src': ["'self'"],

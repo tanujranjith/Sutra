@@ -341,7 +341,7 @@ section('flow-assistant + app.js integration (static)');
     // S9: readiness-driven migration — no fixed-delay timers; a real event drives it.
     ok(!/setTimeout\(migrateLegacyTaskShapes/.test(fa), 'no fixed-delay setTimeout drives the task-shape migration');
     ok(/addEventListener\('sutra:flow-bridge-ready'/.test(fa), 'migration listens for the flow-bridge-ready readiness event');
-    ok(/if \(bridge\(\)\) \{\s*migrateLegacyTaskShapes\(\);/.test(fa), 'migration also runs immediately when the bridge is already installed');
+    ok(/if \(bridge\(\{ diagnose: false \}\)\) \{\s*migrateLegacyTaskShapes\(\);/.test(fa), 'migration also runs immediately when the bridge is already installed without misreporting expected startup ordering');
     ok(/dispatchEvent\(new CustomEvent\('sutra:flow-bridge-ready'\)\)/.test(app), 'app.js dispatches sutra:flow-bridge-ready after installing the flow bridge');
     ok(/removeEventListener\('sutra:flow-bridge-ready'/.test(fa), 'teardown removes the readiness listener');
 

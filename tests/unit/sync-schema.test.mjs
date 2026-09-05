@@ -18,6 +18,18 @@ const revokeWipeMigration = readFileSync(
   path.join(root, 'supabase', 'migrations', '20260716_device_revoke_wipe.sql'),
   'utf8'
 );
+const pruningMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260825_sync_pruning_durable_ack.sql'),
+  'utf8'
+);
+const assetRpcMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260830_sync_put_asset_ambiguity.sql'),
+  'utf8'
+);
+const pruneFloorMigration = readFileSync(
+  path.join(root, 'supabase', 'migrations', '20260830_sync_z_prune_floor_reference.sql'),
+  'utf8'
+);
 
 const tables = ['sync_ops', 'sync_devices', 'sync_vault_keys', 'sync_snapshots', 'sync_asset_index'];
 const exposedFunctions = [
@@ -26,7 +38,7 @@ const exposedFunctions = [
   'sync_put_snapshot', 'sync_put_asset', 'sync_has_asset',
   'sync_list_assets', 'sync_list_devices', 'sync_revoke_device',
   'sync_get_device_status', 'sync_acknowledge_device_wipe',
-  'sync_delete_vault'
+  'sync_prune_ops', 'sync_delete_vault'
 ];
 
 function applySyncAssetPolicyDdl(initial, source) {
@@ -127,6 +139,8 @@ test('sensitive sync rows are written only from auth.uid and browser payloads co
 
 test('operation and vault-key contracts enforce idempotency and split-brain safety', () => {
   assert.match(sql, /sync_ops_user_device_seq/i);
+  assert.match(sql, /last_pushed_sequence\s+bigint\s+not null default -1/i);
+  assert.match(sql, /v_seq <= coalesce\(v_device_sequence_floor, -1\)/i);
   assert.match(sql, /op-id-collision/i);
   assert.match(sql, /device-sequence-collision/i);
   assert.match(sql, /expectedWrapped/i);
@@ -142,10 +156,14 @@ test('schema is ordered after backup setup and exposes no elevated browser crede
 test('additive migration chain is ordered, non-destructive, and folded into the fresh schema', () => {
   assert.ok('20260716_device_revoke_wipe.sql' < '20260718_sync_account_isolation.sql');
   assert.ok('20260718_sync_account_isolation.sql' < '20260730_sync_storage_path_and_function_permissions.sql');
+  assert.ok('20260730_sync_storage_path_and_function_permissions.sql' < '20260825_sync_pruning_durable_ack.sql');
+  assert.ok('20260825_sync_pruning_durable_ack.sql' < '20260830_sync_put_asset_ambiguity.sql');
+  assert.ok('20260830_sync_put_asset_ambiguity.sql' < '20260830_sync_z_prune_floor_reference.sql');
   for (const [name, migration] of [
     ['device revoke/wipe', revokeWipeMigration],
     ['account isolation', accountIsolationMigration],
-    ['production hardening reconciliation', productionHardeningMigration]
+    ['production hardening reconciliation', productionHardeningMigration],
+    ['asset RPC ambiguity reconciliation', assetRpcMigration]
   ]) {
     assert.doesNotMatch(migration, /delete\s+from\s+public\.sync_|drop\s+table|truncate\s+/i,
       `${name} migration must preserve encrypted sync state`);
@@ -181,4 +199,71 @@ test('additive migration chain is ordered, non-destructive, and folded into the 
   assert.deepEqual(upgradedOnce, expectedPolicies, 'older installation must upgrade to exactly four policies');
   const upgradedTwice = applySyncAssetPolicyDdl(upgradedOnce, productionHardeningMigration);
   assert.deepEqual(upgradedTwice, expectedPolicies, 're-running the final migration must not duplicate policies');
+});
+
+test('op-log retention prunes only below the snapshot-and-devices floor', () => {
+  assert.match(sql, /create or replace function public\.sync_prune_ops\(/);
+  // Retention is pinned by the SLOWEST active device, never the snapshot alone.
+  assert.match(sql, /least\(v_snapshot_cursor, coalesce\(v_min_device_cursor, 0\)\)/);
+  assert.match(sql, /revoked_at is null[\s\S]*?min\(last_seen_cursor\)/);
+  assert.match(sql, /sync_pull[\s\S]*?set last_seen_at = now\(\)[\s\S]*?sync_push/,
+    'pull delivery must not advance the durable device cursor');
+  assert.doesNotMatch(
+    sql.match(/create or replace function public\.sync_pull\([\s\S]*?\n\$\$;/)?.[0] || '',
+    /set last_seen_cursor/,
+    'pull must leave last_seen_cursor for the post-commit acknowledgement RPC'
+  );
+  assert.match(sql, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/,
+    'cursor acknowledgements cannot claim an unseen server position');
+  assert.ok((sql.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2,
+    'push and prune must share the account-scoped transaction lock');
+  assert.match(sql, /sync_push[\s\S]*?greatest\([\s\S]*?sync_snapshots/,
+    'the snapshot cursor preserves the logical head after covered ops are deleted');
+  // Authenticated-only grant, like every other data-bearing RPC.
+  assert.match(sql, /revoke all on function public\.sync_prune_ops\(text\) from public, anon;/);
+  assert.match(sql, /grant execute on function public\.sync_prune_ops\(text\) to authenticated;/);
+  assert.match(pruningMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(pruningMigration, /create or replace function public\.sync_touch_device\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_pull\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_push\(/);
+  assert.match(pruningMigration, /create or replace function public\.sync_prune_ops\(/);
+  assert.match(pruningMigration, /add column if not exists last_pushed_sequence bigint not null default -1/);
+  assert.match(pruningMigration, /select max\(o\.device_seq\)[\s\S]*?where o\.user_id = d\.user_id and o\.device_id = d\.device_id/,
+    'the migration must preserve the replay high-water before pruning can delete operation rows');
+  assert.match(pruningMigration, /v_seq <= coalesce\(v_device_sequence_floor, -1\)/,
+    'a pruned operation sequence must never be accepted as fresh');
+  assert.match(pruningMigration, /sync_touch_device\.cursor < 0 or sync_touch_device\.cursor > v_head/);
+  assert.ok((pruningMigration.match(/hashtextextended\('sutra-sync-push:' \|\| auth\.uid\(\)::text, 0\)/g) || []).length >= 2);
+  assert.match(pruningMigration, /\bcommit;\s*$/i);
+});
+
+test('positive pruning floors use a local scalar instead of a missing table qualifier', () => {
+  for (const source of [sql, pruningMigration, pruneFloorMigration]) {
+    const start = source.indexOf('function public.sync_prune_ops');
+    assert.ok(start >= 0, 'missing sync_prune_ops');
+    const body = source.slice(start, source.indexOf('$$;', start) + 3);
+    assert.match(body, /v_prune_floor\s+bigint/i);
+    assert.match(body, /and id <= v_prune_floor/i);
+    assert.doesNotMatch(body, /sync_prune_ops\.v_floor/i);
+  }
+  assert.match(pruneFloorMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(pruneFloorMigration, /grant execute on function public\.sync_prune_ops\(text\) to authenticated;/i);
+  assert.equal((pruneFloorMigration.match(/delete\s+from\s+public\.sync_ops/gi) || []).length, 1,
+    'the replacement function retains exactly one account-scoped pruning statement');
+  assert.doesNotMatch(pruneFloorMigration, /drop\s+table|truncate\s+|delete\s+from\s+public\.(?!sync_ops)/i,
+    'applying the reconciliation must not add destructive migration statements');
+  assert.match(pruneFloorMigration, /\bcommit;\s*$/i);
+});
+
+test('sync_put_asset upserts through its named key without PL/pgSQL hash ambiguity', () => {
+  for (const source of [sql, assetRpcMigration]) {
+    const start = source.indexOf('function public.sync_put_asset');
+    assert.ok(start >= 0, 'missing sync_put_asset');
+    const body = source.slice(start, source.indexOf('$$;', start) + 3);
+    assert.match(body, /on conflict on constraint sync_asset_index_pkey/i);
+    assert.doesNotMatch(body, /on conflict\s*\(\s*user_id\s*,\s*hash\s*\)/i);
+    assert.match(source, /grant execute on function public\.sync_put_asset\(text, bigint, text\) to authenticated;/i);
+  }
+  assert.match(assetRpcMigration, /^\s*--[\s\S]*\bbegin;\s/i);
+  assert.match(assetRpcMigration, /\bcommit;\s*$/i);
 });

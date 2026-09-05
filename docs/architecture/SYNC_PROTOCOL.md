@@ -204,7 +204,11 @@ remains separate, so reorder-versus-edit and move-versus-edit preserve both.
 ```
 
 Push is idempotent: the server dedupes on `opId` (unique constraint) and a
-duplicate push acknowledges without appending.
+duplicate push acknowledges without appending. Pruning may remove the covered
+operation row, so the device registry also retains the greatest accepted
+Lamport for each device. A sequence at or below that durable high-water cannot
+be accepted as fresh after pruning; this preserves replay protection without
+retaining the operation ciphertext forever.
 
 ### 4.1 Versioning policy
 
@@ -453,7 +457,11 @@ Cycle:
    verification), with echo suppression (reason `sync-remote-apply` + an
    applying-remote flag; baseline advance is the structural backstop).
 5. Re-diff the merged state against the remote head → encrypt → `push`.
-6. On ack: advance cursor + baseline atomically, clear acked outbox entries.
+6. On push/pull completion: atomically commit the cursor + baseline locally and
+   clear acked outbox entries. Only after that durable commit (including any
+   remote workspace apply/readback) succeeds, acknowledge the incorporated
+   cursor to the server with `touchDevice`; delivery alone never advances the
+   pruning watermark.
 
 Triggers: confirmed local save (debounced), regained connectivity, tab becoming
 visible, manual "Sync now", periodic foreground interval. Sync errors surface in
@@ -464,7 +472,9 @@ sync's own status UI — **never** through the local persistence-failure banner.
 - After N ops (default 500) or on demand, the leader uploads an encrypted
   **compaction snapshot** (full projection) tagged with its cursor. Ops at or
   below a snapshot's cursor become prunable server-side; pruning must never
-  remove ops above any active device's last-seen cursor.
+  remove ops above any active device's durably acknowledged cursor. When all
+  covered ops are removed, the snapshot cursor remains part of the logical
+  server head so later pushes continue from the same monotonic cursor.
 - New device: sign in → fetch wrapped vault key → unlock with passphrase →
   download latest snapshot → replay ops after its cursor → validate → apply →
   readback-verify → mark synced. The replay cursor comes from the snapshot

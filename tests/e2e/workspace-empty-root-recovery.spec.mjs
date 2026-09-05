@@ -6,6 +6,16 @@ async function openApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page, 'workspace-empty-root-open-ready');
+}
+
+async function waitForAppReady(page, reason) {
+  await page.waitForFunction(() => !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // The shell and serialization globals are exposed before IndexedDB
+  // hydration and the boot-time recovery adapter finish. Cross the public,
+  // readback-verified save seam before inspecting or replacing canonical data.
+  await page.evaluate(readyReason => window.flowAtelier.flushAppSaveNow(readyReason), reason);
 }
 
 async function leaveAppBeforeDirectStorageSetup(page) {
@@ -16,6 +26,7 @@ async function leaveAppBeforeDirectStorageSetup(page) {
 async function returnToApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page, 'workspace-empty-root-return-ready');
 }
 
 async function writeWorkspaceRecord(page, key, value) {

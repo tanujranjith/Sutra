@@ -2909,6 +2909,15 @@ function populateProgressDashboard() {
             persistenceWriteBlockReason = 'This device was revoked. Sutra is locked while local user data is removed.';
         }
 
+        // Only a verified terminal cleanup permits this origin to be reused.
+        // 'complete-unverified' is acknowledged server-side and stays locked:
+        // without IndexedDB enumeration, a future/unknown Sutra database could
+        // remain. Clearing all site data through the browser removes that data
+        // and this guard together, which is the safe recovery path.
+        function sutraRevocationCleanupFinished(status) {
+            return status === 'complete';
+        }
+
         function mountSutraRevokedScreen(message) {
             let screen = document.getElementById('sutraRevokedDeviceScreen');
             if (!screen) {
@@ -2936,8 +2945,8 @@ function populateProgressDashboard() {
                 action.id = 'sutraRevokedDeviceReuse';
                 action.textContent = 'Start with an empty local workspace';
                 action.addEventListener('click', () => {
-                    if (!window.SutraRevocationWipe || !window.SutraRevocationWipe.readGuard()
-                        || window.SutraRevocationWipe.readGuard().status !== 'complete') return;
+                    if (!window.SutraRevocationWipe || !window.SutraRevocationWipe.readGuard()) return;
+                    if (!sutraRevocationCleanupFinished(window.SutraRevocationWipe.readGuard().status)) return;
                     window.SutraRevocationWipe.clearGuard();
                     location.reload();
                 });
@@ -2953,11 +2962,30 @@ function populateProgressDashboard() {
                 screen.appendChild(card);
                 document.body.appendChild(screen);
             }
+            // Resetting the in-memory workspace cannot reliably remove text
+            // already rendered by every feature surface. Keep every other body
+            // subtree concealed for the lifetime of this locked document,
+            // including UI appended later by startup listeners. Explicit reuse
+            // reloads a fresh document, so this transient state needs no undo.
+            document.body.classList.add('sutra-revocation-locked');
+            let concealmentStyle = document.getElementById('sutraRevocationConcealmentStyle');
+            if (!concealmentStyle) {
+                concealmentStyle = document.createElement('style');
+                concealmentStyle.id = 'sutraRevocationConcealmentStyle';
+                concealmentStyle.textContent = 'body.sutra-revocation-locked > :not(#sutraRevokedDeviceScreen) { display: none !important; }';
+                document.head.appendChild(concealmentStyle);
+            }
+            for (const child of Array.from(document.body.children)) {
+                if (child === screen) continue;
+                child.hidden = true;
+                child.inert = true;
+                child.setAttribute('aria-hidden', 'true');
+            }
             const copy = screen.querySelector('#sutraRevokedDeviceMessage');
             if (copy) copy.textContent = String(message || 'Local Sutra user data has been removed from this browser.');
             const guard = window.SutraRevocationWipe && window.SutraRevocationWipe.readGuard();
             const action = screen.querySelector('#sutraRevokedDeviceReuse');
-            if (action) action.hidden = !guard || guard.status !== 'complete';
+            if (action) action.hidden = !guard || !sutraRevocationCleanupFinished(guard.status);
             const retry = screen.querySelector('#sutraRevokedDeviceRetry');
             if (retry) retry.hidden = !guard || guard.status !== 'cleanup-error' || !sutraSyncRuntime || !sutraSyncRuntime.transport;
             try { screen.querySelector('h1').focus(); } catch (error) {}
@@ -2972,7 +3000,6 @@ function populateProgressDashboard() {
         // newer commit has superseded them before touching shared health state.
         let persistenceCommitSeq = 0;
         const SUTRA_PERSISTENCE_HEALTH_KEY = 'sutra:persistenceHealth:v1';
-        const SUTRA_PERSISTENCE_HEALTH_VERSION = 2;
         let sutraPersistenceState = {
             version: SUTRA_PERSISTENCE_HEALTH_VERSION,
             lastConfirmedSaveAt: null,
@@ -3025,19 +3052,6 @@ function populateProgressDashboard() {
             if (value === null || value === undefined) return null;
             return hashPersistenceString(JSON.stringify(value));
         }
-        function normalizeWorkspaceHash(value) {
-            const hash = String(value || '').trim().toLowerCase();
-            return /^[0-9a-f]{8}$/.test(hash) ? hash : null;
-        }
-
-        function canRecoverMissingCanonicalRoot(options) {
-            const source = options && typeof options === 'object' ? options : {};
-            if (source.revocationLocked === true || source.actualHash !== null) return false;
-            const expectedHash = normalizeWorkspaceHash(source.expectedHash);
-            const checkpointHash = normalizeWorkspaceHash(source.lastConfirmedWorkspaceHash);
-            return !!expectedHash && checkpointHash === expectedHash;
-        }
-
 
         function formatByteCount(bytes) {
             const value = Number(bytes) || 0;
@@ -3121,24 +3135,9 @@ function populateProgressDashboard() {
             return appSettings.dataHealth;
         }
 
-        function normalizePersistenceState(raw) {
-            const source = raw && typeof raw === 'object' ? raw : {};
-            return {
-                version: SUTRA_PERSISTENCE_HEALTH_VERSION,
-                lastConfirmedSaveAt: source.lastConfirmedSaveAt || null,
-                lastAttemptAt: source.lastAttemptAt || null,
-                lastFailureAt: source.lastFailureAt || null,
-                lastConfirmedWorkspaceHash: normalizeWorkspaceHash(source.lastConfirmedWorkspaceHash),
-                lastFailure: source.lastFailure && typeof source.lastFailure === 'object' ? source.lastFailure : null,
-                lastSerializedBytes: Number(source.lastSerializedBytes) || 0,
-                lastLocalStorageBytes: Number(source.lastLocalStorageBytes) || 0,
-                lastAttachmentCount: Number(source.lastAttachmentCount) || 0,
-                lastAttachmentBytes: Number(source.lastAttachmentBytes) || 0,
-                lastAttachmentWarnings: Array.isArray(source.lastAttachmentWarnings) ? source.lastAttachmentWarnings.slice(0, 12) : [],
-                backupState: String(source.backupState || 'No recent backup'),
-                retryCount: Number(source.retryCount) || 0
-            };
-        }
+        // normalizePersistenceState, SUTRA_PERSISTENCE_HEALTH_VERSION, and
+        // SUTRA_EXPORT_FAILURE_PHASES are owned by src/state/persistence-state.js
+        // (loaded before this file; same shared global scope).
 
         function persistSutraPersistenceState() {
             try {
@@ -3168,16 +3167,7 @@ function populateProgressDashboard() {
                 const raw = localStorage.getItem(SUTRA_PERSISTENCE_HEALTH_KEY);
                 if (!raw) return null;
                 const parsed = JSON.parse(raw);
-                const directHash = normalizeWorkspaceHash(parsed && parsed.lastConfirmedWorkspaceHash);
-                if (directHash) return directHash;
-                // Builds predating the checkpoint stored the same confirmed base
-                // in this exact missing-root conflict shape. Reuse it only to
-                // fail closed on upgrade; a different/non-null root never qualifies.
-                const failure = parsed && parsed.lastFailure;
-                const conflict = failure && failure.kind === 'conflict' && failure.conflict;
-                return conflict && conflict.actualHash === null
-                    ? normalizeWorkspaceHash(conflict.expectedHash)
-                    : null;
+                return resolveConfirmedWorkspaceCheckpointHash(parsed);
             } catch (error) {
                 return null;
             }
@@ -3191,6 +3181,8 @@ function populateProgressDashboard() {
                 lastConfirmedWorkspaceHash: normalizedHash
             });
             persistSutraPersistenceState();
+            // Recovery authorization must depend on a value independently
+            // readable from shared device storage, never this tab's cached copy.
             return readConfirmedWorkspaceCheckpointHash() === normalizedHash;
         }
 
@@ -3239,7 +3231,6 @@ function populateProgressDashboard() {
         // only an explicit user action (Retry / manual save) may clear it.
         let persistenceFailureRecordedThisSession = false;
         let persistenceFailureRequiresExplicitRecovery = false;
-        const SUTRA_EXPORT_FAILURE_PHASES = new Set(['attachment-export', 'cache-warming', 'sutra-export', 'emergency-export']);
 
         function shouldClearPersistenceFailureOnSuccess(reason) {
             const failurePhase = String(sutraPersistenceState && sutraPersistenceState.lastFailure && sutraPersistenceState.lastFailure.phase || '').toLowerCase();
@@ -3286,11 +3277,11 @@ function populateProgressDashboard() {
             sutraPersistenceState = normalizePersistenceState({
                 ...sutraPersistenceState,
                 lastConfirmedSaveAt: confirmedAt,
+                lastConfirmedWorkspaceHash: summary.hash,
                 lastAttemptAt: sutraPersistenceState.lastAttemptAt || confirmedAt,
                 lastFailureAt: clearFailure ? null : sutraPersistenceState.lastFailureAt,
                 lastFailure: clearFailure ? null : sutraPersistenceState.lastFailure,
                 lastSerializedBytes: summary.serializedBytes,
-                lastConfirmedWorkspaceHash: summary.hash,
                 lastLocalStorageBytes: summary.localStorageBytes,
                 lastAttachmentCount: summary.attachmentCount,
                 lastAttachmentBytes: summary.attachmentBytes,
@@ -4008,10 +3999,12 @@ function populateProgressDashboard() {
                     quietMode: false
                 },
                 startup: {
-                    // Default ON for new workspaces (Section 19). Returning users'
-                    // explicit choice is preserved by normalizeWorkspacePreferences
-                    // (a persisted `false` stays false) and by the localStorage bridge.
-                    playSound: true
+                    // Calm-by-default (single source of truth): fresh workspaces
+                    // start silent. A returning user's explicit choice always
+                    // wins — normalizeWorkspacePreferences preserves a persisted
+                    // `true` or `false`, and the localStorage bridge carries the
+                    // value to startup-intro.js across loads.
+                    playSound: false
                 },
                 data: {
                     defaultExportFormat: 'atelier',
@@ -4276,10 +4269,11 @@ function populateProgressDashboard() {
                     quietMode: accessibilitySource.quietMode === true
                 },
                 startup: {
-                    // `!== false` keeps returning users who explicitly turned the chime
-                    // OFF (persisted `false`) silent, while a fresh workspace (no stored
-                    // startup pref) defaults ON. Section 19.
-                    playSound: startupSource.playSound !== false
+                    // `=== true` makes the canonical default (silent) apply to a
+                    // fresh workspace with no stored startup pref, while an
+                    // explicit persisted `true`/`false` — the user's own choice
+                    // from Settings — is always preserved.
+                    playSound: startupSource.playSound === true
                 },
                 data: {
                     defaultExportFormat: normalizeSettingChoice(dataSource.defaultExportFormat, ['json', 'atelier', 'docx', 'pdf', 'html', 'md', 'txt', 'rtf', 'doc'], defaults.data.defaultExportFormat),
@@ -7957,7 +7951,6 @@ function populateProgressDashboard() {
                 && !persistConfirmedWorkspaceCheckpoint(canonicalWorkspaceHash)) {
                 console.warn('Loaded the canonical workspace, but its independent recovery checkpoint could not be confirmed.');
             }
-
             if (stored && isStaleMigrationAssetSkew()) {
                 // The service worker served a cached migrations.js older than
                 // this app shell, so we cannot migrate the stored workspace up
@@ -7993,14 +7986,15 @@ function populateProgressDashboard() {
             } else if (readFailed) {
                 appData = getDefaultAppData();
             } else if (readConfirmedWorkspaceCheckpointHash()) {
+                // A device-local confirmed hash proves this origin previously
+                // had a durable root. Treating its absence as first run would
+                // overwrite evidence of data loss with a default workspace.
                 persistenceWritesBlocked = true;
                 persistenceWriteBlockReason = 'Sutra previously confirmed a workspace on this device, but its canonical IndexedDB record is now missing. This tab will not replace it with a blank workspace.';
                 appData = getDefaultAppData();
                 const missingRootError = new Error(persistenceWriteBlockReason);
                 missingRootError.name = 'WorkspaceMissingRootError';
-                recordPersistenceFailure(missingRootError, {
-                    reason: 'startup-missing-root', phase: 'startup-missing-root', kind: 'indexeddb'
-                });
+                recordPersistenceFailure(missingRootError, { reason: 'startup-missing-root', phase: 'startup-missing-root', kind: 'indexeddb' });
             } else {
                 appData = migrateLegacyData();
                 try {
@@ -8100,10 +8094,16 @@ function populateProgressDashboard() {
                     readLegacy: () => window.SutraLegacyHomework && window.SutraLegacyHomework.readSnapshot
                         ? window.SutraLegacyHomework.readSnapshot(localStorage)
                         : { courses: [], tasks: [], quarantine: [] },
-                    persist: () => queueMicrotask(() => {
-                        try { persistAppData(); }
-                        catch (error) { console.warn('Homework workspace save failed', error); }
-                    })
+                    // Durable persistence contract (audit remediation): the
+                    // store's commitDurably() awaits this promise and rolls
+                    // back on rejection, so it must resolve only after the
+                    // canonical workspace save has been committed and verified
+                    // (flushAppSaveNow -> commitAppDataWithHealth). It must
+                    // never be a detached fire-and-forget microtask. Callers
+                    // using the scheduled path (commit) observe rejections
+                    // themselves; failures stay visible through the workspace
+                    // persistence-health pipeline.
+                    persist: () => flushAppSaveNow('homework')
                 });
                 appData.homeworkWorkspace = window.SutraHomeworkStore.getSnapshot();
                 try { window.dispatchEvent(new CustomEvent('homework:updated')); } catch (error) { /* non-critical */ }
@@ -21386,13 +21386,23 @@ function populateProgressDashboard() {
                     const snapshot = store.getSnapshot();
                     const update = key === 'hwCourses:v2' ? { courses: value } : { tasks: value };
                     store.replace({ ...snapshot, ...update }, { reason: 'compat-write-adapter' });
-                } catch (error) { console.warn(`Failed to persist ${key}`, error); }
+                } catch (error) {
+                    // User-authored data failed to reach the canonical store:
+                    // diagnosable via the error funnel, not just the console.
+                    console.warn(`Failed to persist ${key}`, error);
+                    if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                        window.SutraReportError(error, { where: 'writeLocalArraySafe', key }, 'warning');
+                    }
+                }
                 return;
             }
             try {
                 localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
             } catch (err) {
                 console.warn(`Failed to persist ${key}`, err);
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(err, { where: 'writeLocalArraySafe', key }, 'warning');
+                }
             }
         }
 
@@ -33578,8 +33588,12 @@ function buildOnboardingPlanPreview() {
             if (atelierDataHealthSnapshotBtn && atelierDataHealthSnapshotBtn.dataset.bound !== 'true') {
                 atelierDataHealthSnapshotBtn.dataset.bound = 'true';
                 atelierDataHealthSnapshotBtn.addEventListener('click', async () => {
-                    const ok = await createPreImportSafetySnapshot();
-                    showToast(ok ? 'Local safety snapshot downloaded.' : 'Could not create safety snapshot.');
+                    const snapshot = await createPreImportSafetySnapshot();
+                    showToast(snapshot && snapshot.ok && snapshot.verified
+                        ? 'Encrypted safety snapshot saved to your backup folder.'
+                        : (snapshot && snapshot.ok ? 'Encrypted safety snapshot download started. Confirm it finishes before relying on it.'
+                            : (snapshot && snapshot.declined ? 'Safety snapshot cancelled.' : 'Could not create safety snapshot.')
+                        ));
                 });
             }
 
@@ -34685,7 +34699,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#atelierDataHealthExport, .atelier-data-health-card',
                   before: () => gotoTutorialSettingsSection('data'),
                   title: 'Local data health',
-                  body: 'See the last .atelier export, last import, and last safety snapshot at a glance. A safety snapshot is taken automatically before every import — so a bad import is never the end of your data. Aim to export at least weekly.' },
+                  body: 'See the last encrypted backup, last import, and last verified safety snapshot. Interactive restores offer an encrypted snapshot first; the local recovery journal remains the always-on fallback. Aim to export at least weekly.' },
 
                 { selector: '#featureToggleListSettings',
                   before: () => gotoTutorialSettingsSection('advanced'),
@@ -39136,6 +39150,47 @@ function buildOnboardingPlanPreview() {
                 document.body.classList.toggle('modal-open', state.active.length > 0 || !!document.querySelector('.modal.active'));
             }
 
+            // Isolate every branch outside the top modal while preserving live
+            // regions and critical recovery dialogs. aria-hidden is the fallback
+            // for browsers without native inert support.
+            const MODAL_INERT_MARKER = 'data-sutra-modal-inert';
+            const MODAL_PREV_ARIA = 'data-sutra-modal-prev-aria';
+            const MODAL_PREV_INERT = 'data-sutra-modal-prev-inert';
+            function releaseBackgroundInert() {
+                document.querySelectorAll(`[${MODAL_INERT_MARKER}]`).forEach(el => {
+                    const priorAria = el.getAttribute(MODAL_PREV_ARIA);
+                    if (priorAria === '__missing__') el.removeAttribute('aria-hidden');
+                    else if (priorAria !== null) el.setAttribute('aria-hidden', priorAria);
+                    if ('inert' in el) el.inert = el.getAttribute(MODAL_PREV_INERT) === '1';
+                    el.removeAttribute(MODAL_INERT_MARKER);
+                    el.removeAttribute(MODAL_PREV_ARIA);
+                    el.removeAttribute(MODAL_PREV_INERT);
+                });
+            }
+            function isolateModalBranch(el) {
+                if (!el || el.nodeType !== 1) return;
+                el.setAttribute(MODAL_PREV_ARIA, el.hasAttribute('aria-hidden') ? el.getAttribute('aria-hidden') : '__missing__');
+                el.setAttribute(MODAL_PREV_INERT, el.inert === true ? '1' : '0');
+                el.setAttribute(MODAL_INERT_MARKER, '1');
+                el.setAttribute('aria-hidden', 'true');
+                if ('inert' in el) el.inert = true;
+            }
+            function syncBackgroundInert() {
+                releaseBackgroundInert();
+                if (!state.active.length) return;
+                const top = state.active[state.active.length - 1];
+                const protectedRoots = [top];
+                document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"], .sutra-save-failure-banner, [aria-modal="true"]:not([data-sutra-modal-enhanced])').forEach(el => {
+                    if (!state.active.some(root => root.contains(el))) protectedRoots.push(el);
+                });
+                const containsProtected = el => protectedRoots.some(root => root && root.isConnected && (el === root || el.contains(root)));
+                const walk = parent => Array.from(parent.children || []).forEach(el => {
+                    if (!containsProtected(el)) { isolateModalBranch(el); return; }
+                    if (!protectedRoots.includes(el)) walk(el);
+                });
+                walk(document.body);
+            }
+
             function onOpen(root) {
                 enhance(root);
                 if (!state.active.includes(root)) {
@@ -39148,26 +39203,27 @@ function buildOnboardingPlanPreview() {
                     state.active.push(root);
                 }
                 syncScrollLock();
+                syncBackgroundInert();
                 setTimeout(() => focusInitial(root), 0);
             }
 
-            // Single, deterministic focus-restoration owner. Restores immediately
-            // (as soon as the modal's open-signal is removed) and re-asserts on a
-            // short bounded schedule to survive close animations / late browser
-            // focus moves under load. Later retries only run when focus is still
-            // effectively lost, or trapped in the closing modal.
             function restoreFocusTo(previous, closedRoot = null) {
-                if (!(previous && previous.isConnected && typeof previous.focus === 'function')) return;
+                const underlying = state.active[state.active.length - 1] || null;
+                const target = underlying
+                    ? (previous && previous.isConnected && underlying.contains(previous) ? previous : (getFocusable(underlying)[0] || getDialogNode(underlying) || underlying))
+                    : previous;
+                if (!(target && target.isConnected && typeof target.focus === 'function')) return;
                 const apply = (force = false) => {
-                    if (state.active.length > 0) return;
+                    const currentUnderlying = state.active[state.active.length - 1] || null;
+                    if (currentUnderlying !== underlying) return;
                     if (!force) {
                         const active = document.activeElement;
                         const focusIsLost = !active || active === document.body || active === document.documentElement;
-                        const focusStillInClosingModal = !!(closedRoot && active && closedRoot.contains(active));
-                        if (active === previous) return;
-                        if (!focusIsLost && !focusStillInClosingModal) return;
+                        const focusStillClosing = !!(closedRoot && active && closedRoot.contains(active));
+                        if (active === target) return;
+                        if (!focusIsLost && !focusStillClosing && (!underlying || underlying.contains(active))) return;
                     }
-                    try { previous.focus({ preventScroll: true }); } catch (error) { try { previous.focus(); } catch (e) {} }
+                    try { target.focus({ preventScroll: true }); } catch (error) { try { target.focus(); } catch (e) {} }
                 };
                 apply(true);
                 if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => apply(false));
@@ -39180,6 +39236,7 @@ function buildOnboardingPlanPreview() {
                 const index = state.active.indexOf(root);
                 if (index !== -1) state.active.splice(index, 1);
                 syncScrollLock();
+                syncBackgroundInert();
                 restoreFocusTo(state.previousFocus.get(root), root);
                 try { delete root.__sutraReturnFocus; } catch (e) { root.__sutraReturnFocus = null; }
             }
@@ -45093,7 +45150,7 @@ function buildOnboardingPlanPreview() {
   <li><code>.sutra</code> is the full-fidelity encrypted workspace backup format for local state, notes, settings, AP data, homework, college data, binary assets, and linked metadata. Older unencrypted <code>.sutra</code> and legacy <code>.atelier</code> files still import.</li>
   <li>The connected-productivity additions — <code>reviewWorkspace</code> (decks, items, sessions, settings), <code>focusTemplates</code>, <code>splitPaneContexts</code>, plus <code>settings.mobileTodayMode</code> and <code>settings.recentSearches</code> — all flow through the same save/export/import path. Round-trip tests verify 19 workspace fields stay in sync.</li>
   <li>Export from Settings before major changes and keep multiple dated copies. Sutra will ask for a backup password and cannot recover it if forgotten.</li>
-  <li>Import replaces the active workspace state, so Sutra creates a pre-import safety snapshot first.</li>
+  <li>Import replaces the active workspace state, so Sutra first offers an encrypted pre-import safety snapshot. Confirm browser downloads yourself; Sutra verifies configured backup-folder writes.</li>
   <li><strong>Optional Drive sync:</strong> Settings &rsaquo; Data can upload encrypted snapshots to your Google Drive app-data folder while Sutra is open, online, unlocked, and authorized. Manual encrypted <code>.sutra</code> backups remain independent of Drive.</li>
 </ul>
                     `
@@ -45130,7 +45187,7 @@ function buildOnboardingPlanPreview() {
 </ul>
 <h3>Restore warning</h3>
 <ul>
-  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and takes a pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
+  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and offers an encrypted pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
 </ul>
 <h3>Auto-backup</h3>
 <ul>
@@ -49850,6 +49907,16 @@ function getActiveEditor() {
                     }
                 }
                 reopenLinkedPdfForNotePage(page);
+
+                // Canonical note-page lifecycle signal. Slides, Sheets, and HTML
+                // Pages subscribe to this instead of polling for the active page;
+                // it also fires when the same id is re-loaded (e.g. after an import)
+                // so surface editors re-sync their visibility.
+                try {
+                    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
+                        detail: { pageId: pageId }
+                    }));
+                } catch (err) { /* lifecycle signal is best-effort */ }
             }
         }
 
@@ -53393,6 +53460,11 @@ function getActiveEditor() {
             if (!modal) return;
             modal.classList.remove('active');
             try {
+                if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+                    window.SutraModalManager.sync();
+                }
+            } catch (error) { /* non-critical */ }
+            try {
                 if (!document.querySelector('.modal.active')) document.body.classList.remove('modal-open');
             } catch (error) { /* non-critical */ }
         }
@@ -53440,12 +53512,26 @@ function getActiveEditor() {
             const closeBtn = document.getElementById('sutraBackupPasswordCloseBtn');
             const title = document.getElementById('sutraBackupPasswordTitle');
             const form = document.getElementById('sutraBackupPasswordForm');
+            const requestedReturnFocus = options.returnFocus;
+            const returnFocusTarget = requestedReturnFocus
+                && requestedReturnFocus.isConnected
+                && typeof requestedReturnFocus.focus === 'function'
+                ? requestedReturnFocus
+                : document.activeElement;
+            const exportOptions = { ...options };
+            delete exportOptions.returnFocus;
             if (form) form.onsubmit = (event) => { event.preventDefault(); }; // submit still fires the browser's save heuristic; we just prevent navigation
             if (!modal || !passInput || !confirmInput || !submitBtn) {
                 showToast('Backup password dialog is unavailable.');
                 return Promise.resolve(false);
             }
-            if (title) title.textContent = options.emergency ? 'Encrypt Emergency Backup' : 'Encrypt Sutra Backup';
+            if (title) {
+                // Custom callers (e.g. the pre-restore safety snapshot) may name
+                // the dialog for their own purpose; the default titles describe
+                // the canonical manual export.
+                title.textContent = options.title
+                    || (options.emergency ? 'Encrypt Emergency Backup' : 'Encrypt Sutra Backup');
+            }
             passInput.value = '';
             confirmInput.value = '';
             if (showToggle) showToggle.checked = false;
@@ -53524,8 +53610,16 @@ function getActiveEditor() {
                     if (statusEl) statusEl.textContent = 'Encrypting backup... This can take a moment.';
                     if (errorEl) errorEl.textContent = '';
                     try {
-                        const result = await performEncryptedSutraWorkspaceExport({ ...options, passphrase });
-                        sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
+                        // options.perform lets a caller reuse this audited dialog
+                        // for a different encrypted artifact (e.g. the pre-restore
+                        // safety snapshot) without recording a manual-export
+                        // health stamp or re-prompting the password manager.
+                        const result = typeof options.perform === 'function'
+                            ? await options.perform(passphrase)
+                            : await performEncryptedSutraWorkspaceExport({ ...exportOptions, passphrase });
+                        if (typeof options.perform !== 'function') {
+                            sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
+                        }
                         if (statusEl) statusEl.textContent = 'Encrypted backup ready.';
                         finish(result || true);
                     } catch (error) {
@@ -53542,8 +53636,16 @@ function getActiveEditor() {
                 if (closeBtn) closeBtn.onclick = cancel;
                 modal.onclick = (event) => { if (event.target === modal) cancel(); };
                 document.addEventListener('keydown', onKeydown, true);
+                if (returnFocusTarget && returnFocusTarget.isConnected && typeof returnFocusTarget.focus === 'function') {
+                    modal.__sutraReturnFocus = returnFocusTarget;
+                }
                 modal.classList.add('active');
                 try { document.body.classList.add('modal-open'); } catch (error) { /* non-critical */ }
+                try {
+                    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+                        window.SutraModalManager.sync();
+                    }
+                } catch (error) { /* non-critical */ }
                 validate();
                 setTimeout(() => { try { passInput.focus(); } catch (error) {} }, 30);
             });
@@ -54685,6 +54787,9 @@ function getActiveEditor() {
                     skipConflictCheck: options.skipConflictCheck === true,
                     backupTimestamp: String(remoteFile.modifiedTime || ''),
                     backupLabel: 'Drive backup',
+                    // Background callers opt out explicitly; interactive Drive
+                    // restores retain the encrypted pre-replacement snapshot gate.
+                    safetySnapshot: options.safetySnapshot !== false,
                     // The snapshot download itself is still created, but its
                     // health timestamp must not masquerade as a user mutation
                     // while the final pre-apply barrier is watching for edits.
@@ -54788,6 +54893,7 @@ function getActiveEditor() {
             if (!meta.localDirty && remoteChanged) {
                 return applySutraDriveRemoteSnapshot(remote, {
                     skipConflictCheck: true,
+                    safetySnapshot: false,
                     abortOnLocalMutation: true,
                     expectedLocalRevision: meta.localMutationRevision,
                     expectedLocalSaveRequestRevision: localWorkspaceSaveRequestRevision
@@ -54899,7 +55005,7 @@ function getActiveEditor() {
             if (!remote) throw new Error('No Drive sync file is available.');
             const ok = options.skipConfirm === true || await showCustomConfirmDialog({
                 title: 'Restore from Drive?',
-                message: 'Sutra will create a local safety snapshot first, then replace this device with the encrypted Drive workspace.',
+                message: 'Sutra will offer an encrypted local safety snapshot first, then replace this device with the encrypted Drive workspace.',
                 confirmText: 'Restore from Drive',
                 cancelText: 'Cancel',
                 confirmVariant: 'danger'
@@ -54909,7 +55015,10 @@ function getActiveEditor() {
             // decision (Drive conflict modal's "Use the Drive version here",
             // programmatic restores) — don't double-gate with the conflict
             // chooser. Interactive restores from Settings DO get the chooser.
-            return applySutraDriveRemoteSnapshot(remote, { skipConflictCheck: options.skipConfirm === true });
+            return applySutraDriveRemoteSnapshot(remote, {
+                skipConflictCheck: options.skipConfirm === true,
+                safetySnapshot: options.safetySnapshot !== false
+            });
         }
 
         async function uploadThisDeviceToSutraDrive(options = {}) {
@@ -55146,7 +55255,10 @@ function getActiveEditor() {
         // that would put data recovery at the mercy of the network. (MIT/GPL
         // dual-licensed; see assets/vendor/jszip/LICENSE.markdown.)
         const SUTRA_JSZIP_LOCAL_PATH = 'assets/vendor/jszip/jszip.min.js';
-        const APPROVED_EXTERNAL_SCRIPT_ORIGINS = new Set(['https://cdnjs.cloudflare.com', 'https://unpkg.com', 'https://accounts.google.com']);
+        // Office document parsers (Mammoth, SheetJS) are vendored under
+        // assets/vendor/office/ and load same-origin — no CDN script origin is
+        // approved anymore. accounts.google.com remains for Google Identity.
+        const APPROVED_EXTERNAL_SCRIPT_ORIGINS = new Set(['https://accounts.google.com']);
         // Normalize keys before comparing so equivalent snake_case, kebab-case,
         // and camelCase names (for example `api_key`) cannot leak into a backup.
         const ATELIER_SENSITIVE_SETTING_KEYS = new Set(['apikey', 'accesstoken', 'refreshtoken', 'idtoken', 'token', 'clientsecret', 'secret', 'password', 'authorization', 'authorizationheader', 'bearertoken', 'privatekey', 'servicekey']);
@@ -55567,6 +55679,13 @@ function getActiveEditor() {
                         href: 'sutra://page/' + encodeURIComponent(String(source.noteId).slice(0, 160)),
                         updatedAt: String(source.updatedAt || '').slice(0, 40),
                         version: String(source.version || '').slice(0, 120),
+                        sourceOffsets: source.sourceOffsets && typeof source.sourceOffsets === 'object'
+                            ? {
+                                start: Math.max(0, Number(source.sourceOffsets.start) || 0),
+                                end: Math.max(0, Number(source.sourceOffsets.end) || 0)
+                            }
+                            : null,
+                        score: Number.isFinite(Number(source.score)) ? Number(source.score) : 0,
                         confidence: ['high', 'medium', 'low'].includes(source.confidence) ? source.confidence : 'low',
                         reasonCodes: (Array.isArray(source.reasonCodes) ? source.reasonCodes : []).map(reason => String(reason).slice(0, 80)).slice(0, 20),
                         safetyFlags: (Array.isArray(source.safetyFlags) ? source.safetyFlags : []).map(flag => String(flag).slice(0, 80)).slice(0, 10),
@@ -55932,7 +56051,14 @@ function getActiveEditor() {
         window.addEventListener('sutra:safe-storage-mutated', event => {
             const key = String(event && event.detail && event.detail.key || '');
             if (!SUTRA_SYNC_TRIGGER_STORAGE_KEYS.has(key)) return;
-            try { persistAppData(); } catch (error) { console.warn('Portable mirror save scheduling failed', error); }
+            try { persistAppData(); } catch (error) {
+                // A scheduling failure means no canonical save would be
+                // attempted at all — that must be diagnosable, not silent.
+                console.warn('Portable mirror save scheduling failed', error);
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(error, { where: 'mirror-save-schedule', key }, 'warning');
+                }
+            }
         });
 
         function recordAtelierDataHealth(patch) {
@@ -58206,7 +58332,7 @@ function getActiveEditor() {
                 body.appendChild(warn);
             }
             const note = document.createElement('p');
-            note.textContent = 'A safety snapshot of this device is saved automatically before anything is replaced.';
+            note.textContent = 'Before replacement, Sutra asks you to create an encrypted safety snapshot. Browser downloads are not verifiable; the local recovery journal remains available.';
             note.setAttribute('style', 'margin:10px 0 0;font-size:0.8rem;opacity:0.7;');
             body.appendChild(note);
 
@@ -61122,12 +61248,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function readFileAsArrayBuffer(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = evt => resolve(evt.target.result);
-                reader.onerror = () => reject(new Error('Unable to read file as binary'));
-                reader.readAsArrayBuffer(file);
-            });
+            if (file && typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+            return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read file as binary')); reader.readAsArrayBuffer(file); });
         }
 
         // Conservative limits for UNTRUSTED file import. Generous enough for real
@@ -61961,6 +62083,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 getWorkspaceSnapshots: () => getWorkspaceSnapshots(),
                 diffWorkspaceSnapshot: (id) => diffWorkspaceSnapshot(id),
                 deleteWorkspaceSnapshot: (id) => deleteWorkspaceSnapshot(id),
+                restoreWorkspaceSnapshot: (id) => restoreWorkspaceSnapshot(id),
                 recordFocusSession: (rec) => recordFocusSession(rec),
                 getFocusSessions: () => (Array.isArray(focusSessions) ? focusSessions.slice() : []),
                 getFocusStatsBySubject: (days) => getFocusStatsBySubject(days),
@@ -62660,7 +62783,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     sutraRevocationGuard = window.SutraRevocationWipe.readGuard();
                     clearSutraRevokedInMemoryData();
                     try { if (channel) channel.postMessage({ type: 'revoke-wipe-complete' }); } catch (error) {}
-                    mountSutraRevokedScreen('Local Sutra user data has been removed from this browser.');
+                    mountSutraRevokedScreen(sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                        : 'Local Sutra user data has been removed from this browser.');
                     return true;
                 };
                 try {
@@ -62721,9 +62846,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                             try { window.SutraRevocationWipe.writeGuard(null, 'cleanup-error', 'A tab could not clear its session data.'); } catch (guardError) {}
                         }
                         clearSutraRevokedInMemoryData();
-                        mountSutraRevokedScreen(followerCleanupComplete
-                            ? 'Local Sutra user data has been removed from this browser.'
-                            : 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.');
+                        const followerGuard = window.SutraRevocationWipe ? window.SutraRevocationWipe.readGuard() : null;
+                        mountSutraRevokedScreen(!followerCleanupComplete
+                            ? 'Cleanup is incomplete in this tab. Sutra remains locked and will not show or save workspace data.'
+                            : (followerGuard && followerGuard.status === 'complete-unverified'
+                                ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                                : 'Local Sutra user data has been removed from this browser.'));
                     }
                 };
             } catch (error) {
@@ -63978,7 +64106,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         });
 
         async function importDocxFile(file) {
-            const mammoth = await loadExternalScript('https://unpkg.com/mammoth/mammoth.browser.min.js', 'mammoth');
+            // Pinned + vendored locally (audit remediation): document parsers
+            // execute in the privileged page origin, so remote unpkg/cdnjs
+            // loads were an avoidable supply-chain surface and an offline gap.
+            const mammoth = await loadExternalScript('assets/vendor/office/mammoth.browser.min.js?v=1.8.0', 'mammoth', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const result = await mammoth.convertToHtml({ arrayBuffer });
             const stripHtml = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -64022,7 +64153,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function importSpreadsheetFile(file) {
-            const XLSX = await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX');
+            // Pinned + vendored locally (see importDocxFile note above).
+            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.18.5', 'XLSX', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             const sheetNames = workbook.SheetNames || [];
@@ -64184,22 +64316,34 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function createPreImportSafetySnapshot(options = {}) {
+            // External rollback copies are opt-in encrypted .sutra files; the
+            // IndexedDB recovery journal remains the always-on fallback.
             try {
-                // Warm the course-attachment cache so the safety backup taken before
-                // an import carries every stored file's binary content.
-                try { await warmCourseAttachmentCache(); } catch (err) { console.warn('warmCourseAttachmentCache failed before safety snapshot', err); }
-                const snapshotPayload = buildWorkspaceExportPayload({ mode: 'json', includeSensitiveSettings: false });
-                const dataStr = JSON.stringify(snapshotPayload, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const datePart = new Date().toISOString().replace(/[:.]/g, '-');
-                triggerBlobDownload(blob, `sutra_pre_import_snapshot_UNENCRYPTED_${datePart}.json`);
-                if (options.recordHealth !== false) {
+                const outcome = await openSutraBackupPassphraseModal({
+                    title: 'Encrypt safety snapshot before restoring',
+                    perform: async (passphrase) => {
+                        const encrypted = await createEncryptedSutraBackupBlob({
+                            passphrase,
+                            filenamePrefix: 'sutra_pre_import_snapshot'
+                        });
+                        const download = await triggerBlobDownload(encrypted.blob, encrypted.filename);
+                        return { destination: (download && download.destination) || 'download', filename: encrypted.filename };
+                    }
+                });
+                if (!outcome) return { ok: false, declined: true };
+                if (options.recordHealth !== false && outcome.destination === 'folder') {
+                    // Only claim a durable snapshot timestamp for a verified
+                    // folder write; a browser-download anchor click cannot be
+                    // confirmed by the app, so it must not masquerade as one.
                     recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
                 }
-                return true;
+                return { ok: true, verified: outcome.destination === 'folder', destination: outcome.destination, filename: outcome.filename };
             } catch (err) {
                 console.warn('Pre-import safety snapshot failed', err);
-                return false;
+                if (window.SutraReportError && typeof window.SutraReportError === 'function') {
+                    window.SutraReportError(err, { where: 'createPreImportSafetySnapshot' }, 'warning');
+                }
+                return { ok: false };
             }
         }
 
@@ -64269,9 +64413,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         async function restoreWorkspaceSnapshot(id) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === id);
-            if (!snap || !snap.payload) return;
-            if (typeof confirm === 'function' && !confirm('Restore this snapshot? Your current workspace will be replaced. A "Before restore" snapshot is saved first.')) return;
-            createWorkspaceSnapshot('Before restore');
+            if (!snap || !snap.payload) return false;
+            if (typeof confirm === 'function' && !confirm('Restore this snapshot? Your current workspace will be replaced. A "Before restore" snapshot is saved first.')) return false;
+            if (!createWorkspaceSnapshot('Before restore')) {
+                showToast('Restore canceled — Sutra could not save the “Before restore” safety snapshot. Free up storage or export a .sutra backup, then try again.', { durationMs: 7000 });
+                return false;
+            }
             try {
                 importWorkspacePayload(snap.payload);
                 // Await durable attachment writes BEFORE the reload below — a reload
@@ -64287,7 +64434,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     showToast('Workspace restored. Reloading…');
                 }
                 setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, attachmentResult.ok ? 700 : 1600);
-            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); }
+                return true;
+            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); return false; }
         }
         function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === snapId);
@@ -64445,20 +64593,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return false;
                 }
             }
-            showToast('Creating safety snapshot before import...', { durationMs: 1400 });
-            const snapshotOk = await createPreImportSafetySnapshot({
-                recordHealth: options.recordSafetySnapshotHealth !== false
-            });
-            // Never silently replace the workspace with no fallback. If the
-            // automatic pre-import snapshot could not be created, block the
-            // destructive import unless the student explicitly opts to continue.
-            if (!snapshotOk) {
-                const proceedAnyway = (typeof confirm === 'function')
-                    ? confirm('The automatic pre-import safety snapshot could NOT be created.\n\nIf you continue, your current workspace will be replaced with no automatic backup to fall back on. Consider exporting a .sutra backup first.\n\nContinue with the import anyway?')
-                    : false;
-                if (!proceedAnyway) {
-                    showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
-                    return false;
+            // Interactive restores offer an encrypted file; cancellation stops
+            // replacement. Background restores rely on the recovery journal.
+            if (options.safetySnapshot !== false) {
+                showToast('Preparing encrypted safety snapshot...', { durationMs: 1400 });
+                const snapshot = await createPreImportSafetySnapshot({
+                    recordHealth: options.recordSafetySnapshotHealth !== false
+                });
+                if (!snapshot.ok) {
+                    if (snapshot.declined) {
+                        showToast('Import cancelled — the pre-restore safety snapshot was not created.');
+                        return false;
+                    }
+                    // Never silently replace the workspace with no fallback. If the
+                    // automatic pre-import snapshot could not be created, block the
+                    // destructive import unless the student explicitly opts to continue.
+                    const proceedAnyway = (typeof confirm === 'function')
+                        ? confirm('The automatic pre-import safety snapshot could NOT be created.\n\nIf you continue, your current workspace will be replaced with no automatic backup file to fall back on. Consider exporting a .sutra backup first.\n\nContinue with the import anyway?')
+                        : false;
+                    if (!proceedAnyway) {
+                        showToast('Import cancelled — no safety snapshot was created, so your workspace was left untouched.');
+                        return false;
+                    }
                 }
             }
             // Remote snapshot pulls may have spent seconds downloading,
@@ -70273,9 +70429,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         document.addEventListener('DOMContentLoaded', async () => {
             if (sutraRevocationLockActive) {
                 mountSutraRevokedScreen(
-                    sutraRevocationGuard && sutraRevocationGuard.status === 'complete'
-                        ? 'Local Sutra user data has been removed from this browser.'
-                        : 'Sutra is locked because revocation cleanup has not completed. No workspace data will be shown or saved.'
+                    sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
+                        ? 'Every known Sutra database was removed, but this browser cannot verify that no other Sutra data remains. Clear all site data for Sutra in your browser before using this origin again.'
+                        : (sutraRevocationGuard && sutraRevocationCleanupFinished(sutraRevocationGuard.status)
+                            ? 'Local Sutra user data has been removed from this browser.'
+                            : 'Sutra is locked because revocation cleanup has not completed. No workspace data will be shown or saved.')
                 );
                 return;
             }
@@ -70884,7 +71042,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function wrapImageForResize(img) {
-            if (img.closest('.resizable-media')) return;
+            // A MutationObserver can receive an added image after a synchronous
+            // editor update has already detached it. Only wrap an image that is
+            // still in the document with a live insertion parent.
+            if (!img || !img.isConnected || !img.parentNode || img.closest('.resizable-media')) return;
             
             const wrapper = document.createElement('div');
             wrapper.className = 'resizable-media';

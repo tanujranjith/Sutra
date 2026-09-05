@@ -71,6 +71,10 @@ pitch-decks/
 product-documentation/
 docs/review/
 
+# Local landing-page experiment. Keep the working files on this machine; the
+# canonical public landing page remains HomePage.html unless explicitly changed.
+/NewLandingPage/
+
 # Launch film: large rendered media (frames/MP4s/WAVs ~2GB) + generated artifacts.
 # Marketing output, not part of the app. Sources stay on disk under launch-film/.
 launch-film/

@@ -2841,7 +2841,7 @@
             return;
           }
           const selectedCourseId = String(courseSelect.value || '').trim();
-          if (!selectedCourseId) {
+          if (!selectedCourseId && !editingTaskId) {
             await showHomeworkAlert(currentLane === 'misc'
               ? 'Pick an extracurricular first.'
               : 'Pick a class first.');

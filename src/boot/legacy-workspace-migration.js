@@ -5,6 +5,11 @@
     'use strict';
 
     if (!global || !global.SutraWorkspaceDB || typeof global.SutraWorkspaceDB.create !== 'function') return;
+    // A verified device revocation must survive reload without recreating an
+    // empty canonical database. The user must explicitly clear the terminal
+    // guard and start fresh before any recovery adapter touches IndexedDB.
+    if (global.SutraRevocationWipe && typeof global.SutraRevocationWipe.readGuard === 'function'
+        && global.SutraRevocationWipe.readGuard()) return;
 
     const originalApi = global.SutraWorkspaceDB;
     const originalCreate = originalApi.create;

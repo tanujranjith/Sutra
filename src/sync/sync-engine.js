@@ -422,6 +422,21 @@
           meta: { lastServerCursor: finalCursor, lamport: lamportCounter }
         });
 
+        // `lastSeenCursor` is the server's pruning acknowledgement, not a
+        // delivery receipt. Advance it only after the baseline/outbox commit
+        // (and any remote workspace apply/readback above) is durable. A pull or
+        // push response alone is insufficient: the tab can still crash or the
+        // local commit can fail before incorporating those operations.
+        if (typeof transport.touchDevice === 'function') {
+          var touchResult = await transport.touchDevice({ cursor: finalCursor });
+          if (!touchResult || touchResult.ok === false) {
+            var touchCode = touchResult && touchResult.code ? touchResult.code : 'transport';
+            var touchError = new Error('Sync cursor acknowledgement failed (' + touchCode + ').');
+            touchError.code = touchCode;
+            throw touchError;
+          }
+        }
+
         // Compaction: once enough ops accumulated past the last snapshot,
         // upload an encrypted full-projection snapshot at the acknowledged
         // cursor so new devices bootstrap fast and old ops become prunable.
@@ -525,6 +540,11 @@
       var result = await transport.putSnapshot({ snapshot: envelope, cursor: cursor });
       if (!result || result.ok === false) return false;
       await store.setMeta('lastSnapshotCursor', cursor);
+      // Retention is best-effort. The server independently requires both this
+      // snapshot and every active device's durable cursor acknowledgement.
+      if (typeof transport.pruneOps === 'function') {
+        try { await transport.pruneOps(); } catch (error) { /* next compaction retries */ }
+      }
       return true;
     }
 

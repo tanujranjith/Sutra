@@ -21,10 +21,16 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() => !!window.SutraFeatureRegistry
+    && !!window.__sutraPublicBetaTestHooks
+    && !!window.serializeWorkspace
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // Public globals are registered before IndexedDB hydration completes. Cross
+  // the durable-save seam before reading or mutating portable workspace state.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('product-hardening-ready'));
   await completeOnboarding(page);
-  await page.waitForFunction(() => !!window.SutraFeatureRegistry);
   await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.serializeWorkspace);
 }
 
 test('new spaces open protected Help & Docs without silent Untitled notes', async ({ page }) => {
@@ -103,7 +109,11 @@ test('imports that omit generated Help restore one canonical page per space imme
 
   await page.reload();
   await page.waitForSelector('#storageOptions', { state: 'attached' });
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && !!window.serializeWorkspace);
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks
+    && !!window.serializeWorkspace
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('product-hardening-reload-ready'));
   const afterReload = await page.evaluate(() => {
     const snapshot = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     return snapshot.pages.filter(item =>

@@ -3,6 +3,12 @@ import { test, expect } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => !!window.serializeWorkspace
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // Public globals are registered before IndexedDB hydration completes. Cross
+  // the durable-save seam before reading or mutating portable workspace state.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('sutra-2-core-ready'));
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted(true); } catch (e) {}
     const overlay = document.getElementById('studentOnboardingOverlay');
@@ -55,6 +61,10 @@ test('Sutra 2.0 student OS ranks, plans, records mastery, and round-trips its sc
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => !!window.serializeWorkspace
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('sutra-2-core-reload-ready'));
   const persisted = await page.evaluate(() => window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }));
   expect(persisted.studentDecisionState.preset).toBe('grade_recovery');
   expect(persisted.masteryRecords).toHaveLength(1);

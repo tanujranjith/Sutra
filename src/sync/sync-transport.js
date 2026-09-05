@@ -77,6 +77,7 @@
       vaultKey: null,     // wrapped blob
       snapshot: null,     // { envelope, cursor }
       assets: {},         // hash -> asset envelope
+      pushedSequences: {}, // deviceId -> greatest accepted Lamport, retained across pruning
       devices: {},        // deviceId -> { deviceId, label, lastSeenCursor, revokedAt, wipeRequired, wipeAcknowledgedAt }
       userId: String(config.userId || 'memory-user')
     };
@@ -96,7 +97,13 @@
       };
       if (existing.revokedAt) return { ok: false, code: 'revoked' };
       if (body.label !== undefined) existing.label = String(body.label);
-      if (body.cursor !== undefined) existing.lastSeenCursor = Number(body.cursor) || 0;
+      if (body.cursor !== undefined) {
+        var cursor = Number(body.cursor);
+        if (!Number.isSafeInteger(cursor) || cursor < 0 || cursor > state.head) {
+          return { ok: false, code: 'bad-cursor' };
+        }
+        existing.lastSeenCursor = Math.max(Number(existing.lastSeenCursor) || 0, cursor);
+      }
       state.devices[body.deviceId] = existing;
       return { ok: true, device: clone(existing) };
     }
@@ -113,7 +120,6 @@
       var cursor = out.length
         ? state.seenOpIds[out[out.length - 1].meta.opId]
         : Math.min(after, state.head) || after;
-      if (body.deviceId) touchDevice({ deviceId: body.deviceId, cursor: cursor });
       return { ok: true, ops: out, cursor: out.length ? cursor : after };
     }
 
@@ -129,8 +135,18 @@
         var errors = protocolApi.validateEnvelope(envelope);
         if (errors.length) return { ok: false, code: 'invalid-envelope', detail: errors.join('; ') };
         if (Object.prototype.hasOwnProperty.call(state.seenOpIds, envelope.meta.opId)) {
+          var existingSeq = state.seenOpIds[envelope.meta.opId];
+          var existingOp = state.ops.find(function (entry) { return entry.seq === existingSeq; });
+          if (!existingOp || protocolApi.stableStringify(existingOp.envelope) !== protocolApi.stableStringify(envelope)) {
+            return { ok: false, code: 'op-id-collision' };
+          }
           stats.dedupedOps += 1;
           continue;
+        }
+        var hasDeviceFloor = Object.prototype.hasOwnProperty.call(state.pushedSequences, envelope.meta.deviceId);
+        var deviceFloor = hasDeviceFloor ? Number(state.pushedSequences[envelope.meta.deviceId]) : -1;
+        if (Number(envelope.meta.lamport) <= deviceFloor) {
+          return { ok: false, code: 'device-sequence-collision' };
         }
         fresh.push(envelope);
       }
@@ -144,7 +160,6 @@
           var seq = state.seenOpIds[envelopes[a].meta.opId];
           if (Number(seq) > ackedMax) ackedMax = Number(seq);
         }
-        if (body.deviceId) touchDevice({ deviceId: body.deviceId, cursor: ackedMax });
         return { ok: true, cursor: ackedMax };
       }
       if (expected !== state.head) {
@@ -155,8 +170,11 @@
         state.head += 1;
         state.ops.push({ seq: state.head, envelope: clone(fresh[f]) });
         state.seenOpIds[fresh[f].meta.opId] = state.head;
+        state.pushedSequences[fresh[f].meta.deviceId] = Math.max(
+          Number(state.pushedSequences[fresh[f].meta.deviceId]) || 0,
+          Number(fresh[f].meta.lamport) || 0
+        );
       }
-      if (body.deviceId) touchDevice({ deviceId: body.deviceId, cursor: state.head });
       return { ok: true, cursor: state.head };
     }
 
@@ -203,6 +221,33 @@
       return { ok: true };
     }
 
+    function pruneOps(input) {
+      var body = input || {};
+      if (deviceRevoked(body.deviceId)) return { ok: false, code: 'revoked' };
+      if (!state.snapshot) return { ok: true, pruned: 0, reason: 'no-snapshot' };
+      var activeDevices = Object.keys(state.devices)
+        .map(function (id) { return state.devices[id]; })
+        .filter(function (device) { return device && !device.revokedAt; });
+      if (!activeDevices.length) return { ok: true, pruned: 0, reason: 'no-floor' };
+      var minDeviceCursor = Math.min.apply(null, activeDevices.map(function (device) {
+        return Number(device.lastSeenCursor) || 0;
+      }));
+      var floor = Math.min(Number(state.snapshot.cursor) || 0, minDeviceCursor);
+      if (floor <= 0) return { ok: true, pruned: 0, reason: 'no-floor' };
+      var retained = [];
+      var pruned = 0;
+      for (var i = 0; i < state.ops.length; i += 1) {
+        if (state.ops[i].seq <= floor) {
+          delete state.seenOpIds[state.ops[i].envelope.meta.opId];
+          pruned += 1;
+        } else {
+          retained.push(state.ops[i]);
+        }
+      }
+      state.ops = retained;
+      return { ok: true, pruned: pruned, floor: floor };
+    }
+
     function putAsset(input) {
       var body = input || {};
       if (deviceRevoked(body.deviceId)) return { ok: false, code: 'revoked' };
@@ -242,6 +287,7 @@
       state.vaultKey = null;
       state.snapshot = null;
       state.assets = {};
+      state.pushedSequences = {};
       state.devices = {};
       return { ok: true };
     }
@@ -304,6 +350,7 @@
       sync_put_vault_key: putVaultKey,
       sync_get_snapshot: getSnapshot,
       sync_put_snapshot: putSnapshot,
+      sync_prune_ops: pruneOps,
       sync_put_asset: putAsset,
       sync_get_asset: getAsset,
       sync_has_asset: hasAsset,
@@ -333,6 +380,7 @@
       putVaultKey: putVaultKey,
       getSnapshot: getSnapshot,
       putSnapshot: putSnapshot,
+      pruneOps: pruneOps,
       putAsset: putAsset,
       getAsset: getAsset,
       hasAsset: hasAsset,
@@ -372,6 +420,7 @@
       putVaultKey: function (input) { return call(server.putVaultKey, input); },
       getSnapshot: function () { return call(server.getSnapshot, {}); },
       putSnapshot: function (input) { return call(server.putSnapshot, input); },
+      pruneOps: function () { return call(server.pruneOps, {}); },
       putAsset: function (input) { return call(server.putAsset, input); },
       getAsset: function (input) { return call(server.getAsset, input); },
       hasAsset: function (input) { return call(server.hasAsset, input); },
@@ -443,6 +492,7 @@
       putVaultKey: function (input) { return rpc('sync_put_vault_key', input); },
       getSnapshot: function () { return rpc('sync_get_snapshot', {}); },
       putSnapshot: function (input) { return rpc('sync_put_snapshot', input); },
+      pruneOps: function () { return rpc('sync_prune_ops', {}); },
       putAsset: function (input) { return rpc('sync_put_asset', input); },
       getAsset: function (input) { return rpc('sync_get_asset', input); },
       hasAsset: function (input) { return rpc('sync_has_asset', input); },

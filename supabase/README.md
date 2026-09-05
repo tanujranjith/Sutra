@@ -70,12 +70,27 @@ as the person deploying Sutra.
   [`migrations/20260718_sync_account_isolation.sql`](./migrations/20260718_sync_account_isolation.sql),
   then
   [`migrations/20260730_sync_storage_path_and_function_permissions.sql`](./migrations/20260730_sync_storage_path_and_function_permissions.sql).
-  All three are additive/idempotent and safe to rerun: existing encrypted ops,
-  snapshots, keys, assets, and devices are preserved. The final migration
+  Finally, apply
+  [`migrations/20260825_sync_pruning_durable_ack.sql`](./migrations/20260825_sync_pruning_durable_ack.sql),
+  followed by
+  [`migrations/20260830_sync_put_asset_ambiguity.sql`](./migrations/20260830_sync_put_asset_ambiguity.sql),
+  then
+  [`migrations/20260830_sync_z_prune_floor_reference.sql`](./migrations/20260830_sync_z_prune_floor_reference.sql).
+  All six are additive/idempotent and safe to rerun: existing encrypted ops,
+  snapshots, keys, assets, and devices are preserved. The storage migration
   recreates only the four `sync-assets` Storage policies with the exact anchored
   `^<auth.uid()>/[0-9a-f]{64}$` form and removes browser-role execution of
   `public.rls_auto_enable()` while retaining `postgres`. It creates no
-  table/bucket, changes no Sync RPC grant, and never deletes an object.
+  table/bucket, changes no Sync RPC grant, and never deletes an object. The
+  pruning migration makes device cursor acknowledgement post-commit, exposes
+  authenticated conservative compaction pruning, and preserves the snapshot
+  cursor as the logical head after covered ops are removed. Applying the
+  migration does not itself prune rows; pruning remains client-triggered after
+  a successful encrypted snapshot. The final asset-RPC migration preserves the
+  browser's `hash` argument while making the asset-index upsert unambiguous to
+  PL/pgSQL. The final pruning-floor reconciliation repairs the positive-floor
+  delete branch without changing its conservative snapshot/active-device floor
+  or deleting any row merely by applying the migration.
 
 Expected sync tables: `sync_ops`, `sync_devices`, `sync_vault_keys`,
 `sync_snapshots`, `sync_asset_index`. Expected private Storage buckets after
@@ -83,6 +98,7 @@ both files: `backups`, `sync-assets`. Expected browser RPCs: `sync_ping`,
 `sync_touch_device`, `sync_pull`, `sync_push`, `sync_get_vault_key`,
 `sync_put_vault_key`, `sync_get_snapshot`, `sync_put_snapshot`,
 `sync_put_asset`, `sync_has_asset`, `sync_list_assets`, `sync_list_devices`,
+`sync_prune_ops`,
 `sync_revoke_device`, `sync_get_device_status`,
 `sync_acknowledge_device_wipe`, and `sync_delete_vault`.
 
