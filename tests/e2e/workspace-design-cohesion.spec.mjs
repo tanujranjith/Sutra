@@ -51,6 +51,7 @@ test('default workspace palette keeps supporting text and primary actions readab
     const primary = document.querySelector('.today-hero-primary');
     const primaryStyle = getComputedStyle(primary);
     const activeStyle = getComputedStyle(activeTab);
+    const activeIndicatorStyle = getComputedStyle(activeTab, '::after');
     return {
       background: resolveColor('--bg-primary'),
       muted: resolveColor('--text-muted'),
@@ -58,7 +59,7 @@ test('default workspace palette keeps supporting text and primary actions readab
       primaryColor: primaryStyle.color,
       primaryBackground: primaryStyle.backgroundColor,
       activeBackground: activeStyle.backgroundColor,
-      activeShadow: activeStyle.boxShadow
+      activeIndicatorOpacity: Number(activeIndicatorStyle.opacity)
     };
   });
 
@@ -66,7 +67,7 @@ test('default workspace palette keeps supporting text and primary actions readab
   expect(contrastRatio(design.accentStrong, design.background)).toBeGreaterThanOrEqual(4.5);
   expect(contrastRatio(design.primaryColor, design.primaryBackground)).toBeGreaterThanOrEqual(4.5);
   expect(design.activeBackground).not.toBe('rgba(0, 0, 0, 0)');
-  expect(design.activeShadow).not.toBe('none');
+  expect(design.activeIndicatorOpacity).toBeGreaterThan(0);
 });
 
 test('Cancel for now dismisses empty Homework setup for the current session', async ({ page }) => {
