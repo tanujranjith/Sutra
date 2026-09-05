@@ -25,6 +25,9 @@ async function openApp(page) {
 }
 
 test('custom quotes are manageable, portable, filtered, and responsive', async ({ page }) => {
+  // One end-to-end journey covers CRUD, several preference rerenders, desktop
+  // and phone dialogs, serialization, and durable reload in slower engines.
+  test.slow();
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   page.on('console', message => {

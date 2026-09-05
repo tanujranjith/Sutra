@@ -78,6 +78,20 @@ function publicDriveFile(file) {
 }
 
 async function installDriveMock(page, options = {}) {
+  await page.addInitScript(() => {
+    const fetch = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url?.startsWith('https://www.googleapis.com/') && init?.body instanceof Blob) {
+        // WebKit omits Blob-backed request bodies from interception. Send the
+        // same bytes as an ArrayBuffer so the mock can inspect real ciphertext.
+        const headers = new Headers(init.headers);
+        if (!headers.has('Content-Type') && init.body.type) headers.set('Content-Type', init.body.type);
+        return fetch(input, { ...init, headers, body: await init.body.arrayBuffer() });
+      }
+      return fetch(input, init);
+    };
+  });
   const mediaWaiters = [];
   const state = {
     files: (options.files || []).map(file => ({ ...file })),

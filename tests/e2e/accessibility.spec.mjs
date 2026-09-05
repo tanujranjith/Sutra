@@ -31,12 +31,12 @@ test.describe('Accessibility: core surfaces', () => {
     });
 
     test('navigation tabs are keyboard accessible', async ({ page }) => {
-        // Dismiss onboarding if visible
+        // Fresh contexts always have onboarding. Its deferred render can arrive
+        // after hydration; do not race it with a one-shot isVisible() check.
         const skipBtn = page.getByRole('button', { name: 'Skip setup', exact: true });
-        if (await skipBtn.isVisible().catch(() => false)) {
-            await skipBtn.click();
-            await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
-        }
+        await expect(skipBtn).toBeVisible();
+        await skipBtn.click();
+        await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
         const tabs = page.locator('.view-tab:not([hidden])');
         const count = await tabs.count();
         expect(count).toBeGreaterThan(0);

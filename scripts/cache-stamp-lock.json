@@ -240,8 +240,8 @@
     "hash": "1f414bc61c0d7c03"
   },
   "src/features/search/global-search-modal.js": {
-    "stamp": "20260824-gsmodal2",
-    "hash": "842f559aeb5b3f23"
+    "stamp": "20260905-search-focus1",
+    "hash": "b301eca9a4b51363"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -300,8 +300,8 @@
     "hash": "1bf6440c0e3f0ae5"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
-    "stamp": "20260807-customquotes2",
-    "hash": "e7b21896681e016c"
+    "stamp": "20260905-quote-focus1",
+    "hash": "88323393a0652f0b"
   },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
