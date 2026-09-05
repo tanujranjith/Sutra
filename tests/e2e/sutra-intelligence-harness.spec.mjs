@@ -41,7 +41,15 @@ async function openApp(page) {
   });
   await page.waitForFunction(() => !!window.SutraFeatureRegistry);
   await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
-  await page.waitForFunction(() => window.SutraModelCapabilities && window.SutraStudyMaterials && window.SutraIntelligence && window.flowAssistant);
+  await page.waitForFunction(() => window.SutraModelCapabilities
+    && window.SutraStudyMaterials
+    && window.SutraIntelligence
+    && window.flowAssistant
+    && window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  // Public globals are registered before IndexedDB hydration completes. Cross
+  // the durable-save seam before reading or mutating portable workspace state.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('intelligence-harness-ready'));
 }
 
 // Configure a provider + model and skip the (already-covered) consent modal.
@@ -300,7 +308,10 @@ test('study-material generation creates an editable guide Note and an interactiv
   // debounced autosave, which an immediate reload could race.
   await page.evaluate(() => window.saveWorkspaceLocally());
   await page.reload();
-  await page.waitForFunction(() => window.SutraStudyMaterials);
+  await page.waitForFunction(() => window.SutraStudyMaterials
+    && window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('intelligence-harness-reload-ready'));
   const persisted = await page.evaluate(() => {
     const t = window.SutraStudyMaterials.listTests()[0];
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });

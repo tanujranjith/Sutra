@@ -2,12 +2,21 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/Sutra.html?today-dashboard-test=1');
-  await page.waitForFunction(() => !!window.SutraTodayDashboard && !!window.flowAtelier);
+  await page.getByRole('button', { name: 'Skip setup', exact: true }).click();
+  await page.waitForFunction(() => !!window.SutraTodayDashboard
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('today-dashboard-ready'));
 });
 
+async function openHomeCustomizer(page) {
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Customize Home' }).click();
+}
+
 test('Today widgets can be shown, resized, reordered, and persisted', async ({ page }) => {
-  await page.getByRole('button', { name: 'Customize' }).click();
-  const modal = page.getByRole('dialog', { name: 'Make Today yours' });
+  await openHomeCustomizer(page);
+  const modal = page.getByRole('dialog', { name: 'Make Home yours' });
   await expect(modal).toBeVisible();
 
   const habits = modal.locator('[data-widget-id="habits"]');
@@ -22,7 +31,10 @@ test('Today widgets can be shown, resized, reordered, and persisted', async ({ p
   await assignments.getByRole('button', { name: 'Move Assignments later' }).click();
   await modal.getByRole('button', { name: 'Done' }).click();
   await page.reload();
-  await page.waitForFunction(() => !!window.SutraTodayDashboard && !!window.flowAtelier);
+  await page.waitForFunction(() => !!window.SutraTodayDashboard
+    && !!window.flowAtelier
+    && typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('today-dashboard-reload-ready'));
   await expect(page.locator('#view-today .today-panel-habits')).toBeVisible();
   await expect(page.locator('#todayReviewCard')).toHaveClass(/today-widget-size-wide/);
 
@@ -32,8 +44,8 @@ test('Today widgets can be shown, resized, reordered, and persisted', async ({ p
 });
 
 test('Calm preset keeps the mobile Today shell canonical', async ({ page }) => {
-  await page.getByRole('button', { name: 'Customize' }).click();
-  await page.getByRole('button', { name: /Calm/ }).click();
+  await openHomeCustomizer(page);
+  await page.getByRole('button', { name: 'Calm Daily essentials first', exact: true }).click();
   await page.getByRole('button', { name: 'Done' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#todayMobileShell')).toBeVisible();
