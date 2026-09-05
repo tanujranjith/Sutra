@@ -44,6 +44,7 @@ jobs:
           name: verified-deploy-${{ github.sha }}
           path: .deploy/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 7
 
   browser-tests:
@@ -78,6 +79,7 @@ jobs:
           name: playwright-chromium-failure-${{ github.sha }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
   browser-compatibility-matrix:
@@ -112,4 +114,5 @@ jobs:
           name: playwright-compatibility-failure-${{ github.sha }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
