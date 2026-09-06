@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { waitForAppReady } from './helpers/app-ready.mjs';
+import { waitForAppHydrated, waitForAppReady } from './helpers/app-ready.mjs';
 import { installInspectableBlobRequests } from './helpers/inspectable-blob-requests.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -111,7 +111,7 @@ async function installSupabaseMock(page) {
   return state;
 }
 
-async function openApp(page, { withConfig = true } = {}) {
+async function openApp(page, { withConfig = true, persistReady = true } = {}) {
   await installInspectableBlobRequests(page, [
     `${SUPA_URL}/`, 'https://www.googleapis.com/',
     'https://graph.microsoft.com/', 'https://content.dropboxapi.com/'
@@ -120,9 +120,12 @@ async function openApp(page, { withConfig = true } = {}) {
   const supa = await installSupabaseMock(page);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await waitForAppReady(page);
-  await completeOnboarding(page);
-  await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+  if (persistReady) await waitForAppReady(page);
+  else await waitForAppHydrated(page);
+  if (persistReady) {
+    await completeOnboarding(page);
+    await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+  }
   return supa;
 }
 
@@ -388,7 +391,7 @@ test('Cloud sign-out blocks a stale tab from re-capturing its old session', asyn
   await expect.poll(() => first.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).not.toBeNull();
 
   const stale = await context.newPage();
-  await openApp(stale);
+  await openApp(stale, { persistReady: false });
   await stale.evaluate(() => window.SutraCloudSync.open());
   await expect.poll(() => stale.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
 

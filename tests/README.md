@@ -34,6 +34,9 @@ catch it as a real regression (missing feature, blank view, console error).
 - Before ordinary fixture mutations, use `e2e/helpers/app-ready.mjs` to await
   canonical hydration through the public save seam. Attached markup is not a
   ready workspace. Fault-injection tests must establish their own readiness.
+- Cross-tab stale-write fixtures use its read-only hydration helper for the
+  deliberately stale tab; forcing a startup save there would erase the state
+  the test is meant to protect.
 - Network-mocked suites block service workers in their contexts so WebKit cannot
   bypass Playwright routes. Keep the dedicated offline/service-worker suites
   enabled; never disable browser network security to make mocks pass.

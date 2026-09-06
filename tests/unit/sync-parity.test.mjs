@@ -56,7 +56,7 @@ test('everything fixture survives actual diff, merge, and projection bootstrap',
       dataHealth: { lastSaveAttemptAt: 'device-b-only' },
       preferences: { sync: { enabled: true, endpoint: 'device-b-only' } }
     },
-    notificationsState: { lastActiveAt: 123 }
+    notificationsState: { lastActiveAt: 123, lastDigest: 456, lastWeeklyReviewAt: 789, lastWeeklyNudge: 101112 }
   }, 'device-a');
 
   const comparison = comparePortableWorkspaces(deviceA, deviceB);
@@ -65,6 +65,9 @@ test('everything fixture survives actual diff, merge, and projection bootstrap',
   assert.equal(deviceB.ui.lastActiveView, 'today');
   assert.equal(deviceB.settings.preferences.sync.endpoint, 'device-b-only');
   assert.equal(deviceB.notificationsState.lastActiveAt, 123);
+  assert.equal(deviceB.notificationsState.lastDigest, 456);
+  assert.equal(deviceB.notificationsState.lastWeeklyReviewAt, 789);
+  assert.equal(deviceB.notificationsState.lastWeeklyNudge, 101112);
 });
 
 test('Assistant thread contract includes order, provenance, receipts, memory, and empty threads', () => {

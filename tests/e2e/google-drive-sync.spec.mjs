@@ -358,10 +358,16 @@ test('a clean background Drive pull uses the recovery journal without prompting 
   await fillCloudPassword(page);
   await connectPromise;
 
+  // This fixture deliberately creates a locally persisted, already-clean copy
+  // so it can exercise the background pull path.  Disable the test metadata
+  // only while making that setup save: otherwise the real autosync debounce
+  // may independently see the mock change below on a slow worker and put the
+  // fixture into a conflict before its explicit pull owns the decision.
+  await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ enabled: false }));
   await seedWorkspace(page, 'LOCAL-TO-REPLACE');
+  await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ enabled: true, localDirty: false }));
   drive.files[0].version = '99';
   drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
-  await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ localDirty: false }));
   const result = await page.evaluate(() => window.SutraDriveSync.syncNow());
 
   expect(result).toEqual({ restored: true });

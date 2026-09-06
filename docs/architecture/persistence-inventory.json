@@ -128,7 +128,7 @@
     "customTabs": { "category": "record", "collection": "customTabs", "orderedBy": "o/customTabs" },
     "splitPaneContexts": { "category": "deviceLocal", "reason": "Pane selection, layout, filters, and scroll position describe this browser's current UI." },
     "pinnedPages": { "category": "atomic", "record": "a/pinnedPages" },
-    "notificationsState": { "category": "atomic", "record": "a/notificationsState", "localOnlyDescendants": ["lastActiveAt"] },
+    "notificationsState": { "category": "atomic", "record": "a/notificationsState", "localOnlyDescendants": ["lastActiveAt", "lastDigest", "lastWeeklyReviewAt", "lastWeeklyNudge"] },
     "assistantChatHistory": { "category": "record", "collection": "assistantConversations", "restRecord": "a/assistantChatHistory.__rest" },
     "settings": { "category": "atomic", "record": "a/settings", "localOnlyDescendants": ["dataHealth", "preferences.sync", "preferences.assistant.localEndpoint"] },
     "ui": { "category": "deviceLocal", "reason": "Active view, open page, and scroll restoration are browser context." },

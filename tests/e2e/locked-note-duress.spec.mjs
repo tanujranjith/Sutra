@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 const NORMAL_PIN = '246824';
 const DURESS_PIN = '864209';
@@ -18,10 +19,8 @@ async function openApp(page) {
       overlay.style.setProperty('display', 'none', 'important');
     }
   });
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks
-    && !!window.flowAtelier
-    && typeof window.flowAtelier.flushAppSaveNow === 'function');
-  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('locked-note-duress-ready'));
+  await waitForAppReady(page);
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks);
 }
 
 async function seedLockedTree(page, { withChild = true } = {}) {

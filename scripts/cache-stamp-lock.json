@@ -444,12 +444,12 @@
     "hash": "3454a3298ade2efb"
   },
   "src/sync/sync-projection.js": {
-    "stamp": "20260807-localendpoint1",
-    "hash": "74dd8dc00c148b8f"
+    "stamp": "20260906-notificationlocal1",
+    "hash": "49c1062cf4f287b2"
   },
   "src/sync/sync-protocol.js": {
-    "stamp": "20260813-pdf1",
-    "hash": "1e63b0dfec3f4e3a"
+    "stamp": "20260906-notificationlocal1",
+    "hash": "59cb23eac0460ecf"
   },
   "src/sync/sync-store.js": {
     "stamp": "20260805-device-session1",
