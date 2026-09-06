@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Custom Tabs + Today-center coverage the other specs don't touch:
 //   1. Custom Tabs lifecycle: bridge -> nav button -> section render.
@@ -33,6 +34,7 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await page.waitForFunction(() =>
     !!window.SutraCustomTabsBridge && !!window.SutraCustomTabs && !!window.SutraTodayCenter);

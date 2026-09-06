@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Part 4 — Notes & Search:
 //  - Backlinks / linked references (reverse index over page-link tokens)
@@ -7,6 +8,7 @@ import { expect, test } from '@playwright/test';
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch (e) {}
     const o = document.getElementById('studentOnboardingOverlay');

@@ -1,14 +1,14 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
 const PIN = '2468';
 
-async function openApp(page) {
+async function openApp(page, { persistReady = true } = {}) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await page.waitForFunction(() =>
-    !!window.__sutraPublicBetaTestHooks &&
-    !!window.flowAtelier &&
-    typeof window.flowAtelier.flushAppSaveNow === 'function');
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks);
+  await waitForAppHydrated(page);
+  if (!persistReady) return;
   // Production keeps the startup overlay above the app until canonical
   // hydration is ready. Establish that baseline before touching onboarding.
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
@@ -377,14 +377,14 @@ test('a stale second tab cannot overwrite a paste saved in a locked note', async
 
   // This tab hydrates the pre-paste workspace and deliberately stays stale.
   const stalePage = await context.newPage();
-  await openApp(stalePage);
+  await openApp(stalePage, { persistReady: false });
   await stalePage.waitForFunction((lockedId) => {
     return window.flowAtelier?.pages?.find(entry => entry.id === lockedId)?.content === '<p>before</p>';
   }, ids.lockedId);
 
   // Start the editing tab from that exact confirmed base. The second tab now
   // holds the same base in memory but will not hydrate the later paste.
-  await openApp(page);
+  await openApp(page, { persistReady: false });
   await page.waitForFunction((lockedId) => {
     return window.flowAtelier?.pages?.find(entry => entry.id === lockedId)?.content === '<p>before</p>';
   }, ids.lockedId);
@@ -412,11 +412,13 @@ test('a stale second tab cannot overwrite a paste saved in a locked note', async
       ? document.querySelector('#editorV2Host .ProseMirror')
       : document.getElementById('editor');
     target.focus();
-    target.dispatchEvent(new ClipboardEvent('paste', {
-      clipboardData: data,
+    const paste = new ClipboardEvent('paste', {
       bubbles: true,
       cancelable: true
-    }));
+    });
+    // Firefox discards constructor-provided synthetic clipboard contents.
+    Object.defineProperty(paste, 'clipboardData', { value: data });
+    target.dispatchEvent(paste);
     await new Promise(resolve => setTimeout(resolve, 1300));
     await window.flowAtelier.flushAppSaveNow('locked-note-cross-tab-paste');
   }, { lockedId: ids.lockedId, pin: PIN });

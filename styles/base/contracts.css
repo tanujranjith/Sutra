@@ -52,6 +52,10 @@
 [data-sutra-layer="toast"] { z-index: var(--z-toast); }
 [data-sutra-layer="popover"] { z-index: var(--z-popover); }
 [data-sutra-layer="takeover"] { z-index: var(--z-takeover); }
+/* Optional update advice must not intercept a blocking dialog's controls. */
+body:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .sidebar-open, .notif-panel-open) .sutra-update-banner {
+  display: none;
+}
 #sutraRecoveryModeBanner { z-index: var(--z-recovery) !important; }
 
 .sutra-state,

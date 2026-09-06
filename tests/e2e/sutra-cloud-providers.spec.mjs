@@ -1,4 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppHydrated, waitForAppReady } from './helpers/app-ready.mjs';
+import { installInspectableBlobRequests } from './helpers/inspectable-blob-requests.mjs';
+
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
 import { readFileSync } from 'node:fs';
 
 // Sutra Cloud — provider-agnostic encrypted backup. These tests mock the Supabase
@@ -105,13 +111,21 @@ async function installSupabaseMock(page) {
   return state;
 }
 
-async function openApp(page, { withConfig = true } = {}) {
+async function openApp(page, { withConfig = true, persistReady = true } = {}) {
+  await installInspectableBlobRequests(page, [
+    `${SUPA_URL}/`, 'https://www.googleapis.com/',
+    'https://graph.microsoft.com/', 'https://content.dropboxapi.com/'
+  ]);
   if (withConfig) await configureSupabase(page);
   const supa = await installSupabaseMock(page);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await completeOnboarding(page);
-  await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+  if (persistReady) await waitForAppReady(page);
+  else await waitForAppHydrated(page);
+  if (persistReady) {
+    await completeOnboarding(page);
+    await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
+  }
   return supa;
 }
 
@@ -366,7 +380,7 @@ test('Cloud sign-out wins over an already in-flight remembered-session write', a
 });
 
 test('Cloud sign-out blocks a stale tab from re-capturing its old session', async ({ browser }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   const first = await context.newPage();
   await openApp(first);
   await first.evaluate(async () => { await window.SutraCloudSync.switchProvider('supabase'); });
@@ -377,7 +391,7 @@ test('Cloud sign-out blocks a stale tab from re-capturing its old session', asyn
   await expect.poll(() => first.evaluate(() => window.SutraCredentialVault.get('cloud:supabaseSession:v1'))).not.toBeNull();
 
   const stale = await context.newPage();
-  await openApp(stale);
+  await openApp(stale, { persistReady: false });
   await stale.evaluate(() => window.SutraCloudSync.open());
   await expect.poll(() => stale.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
 

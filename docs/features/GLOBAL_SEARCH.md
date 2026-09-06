@@ -82,7 +82,8 @@ and a "Locked — unlock to search contents" hint. The contract is pinned by
   fall back to the command palette if the module ever fails to load.
 - Focus trapping, Escape, scroll lock, and focus restoration are owned by
   `SutraModalManager`; the modal registers `[aria-label="Close"]` and a
-  `data-modal-close` backdrop for it.
+  `data-modal-close` backdrop for it. Opening captures the external trigger and
+  synchronizes the manager before autofocus, preserving return focus in WebKit.
 - The command palette still searches through `globalSearchAll` directly; the
   bench (`tests/bench/heavy-workspace.spec.mjs`) measures that path.
 

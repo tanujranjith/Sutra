@@ -136,5 +136,10 @@ confirm completion for the local calendar date; duplicate confirmations are
 blocked, future dates are rejected by the local-date gate, unscheduled days are
 ignored, and missed scheduled days reset the streak once.
 
+Habit summaries and display reads do not create missing day records. They read
+existing completion state without changing it, so merely rendering Home cannot
+add empty records and change Sync parity. Habit mutations retain their existing
+canonical save and normalization path.
+
 Timed reminders are derived through the existing notification center as
 `source: "timedHabit"` notifications and respect read/dismissed state.

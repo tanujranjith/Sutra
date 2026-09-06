@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openEditableNote(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(async () => {
     try { window.markStudentOnboardingCompleted?.(true); } catch {}
     const overlay = document.getElementById('studentOnboardingOverlay');
@@ -40,14 +42,20 @@ async function focusedControlColors(page) {
     document.body.appendChild(element);
     element.focus();
     const style = getComputedStyle(element);
+    const outlineColor = style.outlineColor;
+    const outlineStyle = style.outlineStyle;
+    // WebKit's native input appearance suppresses box-shadow even when the
+    // declaration is valid. Check its outline above, then probe the shared
+    // shadow token on an author-styled control without changing app styling.
+    element.style.appearance = 'none';
     const probe = document.createElement('span');
     probe.style.color = 'var(--accent-strong, var(--accent))';
     document.body.appendChild(probe);
     const themeAccent = getComputedStyle(probe).color;
     probe.remove();
     const result = {
-      outlineColor: style.outlineColor,
-      outlineStyle: style.outlineStyle,
+      outlineColor,
+      outlineStyle,
       boxShadow: style.boxShadow,
       themeAccent,
     };
@@ -89,6 +97,7 @@ test('shared focus rings follow the active theme instead of the gold fallback', 
   await applyTheme(page, 'sutra');
   const sutra = await focusedControlColors(page);
   expect(sutra.outlineColor).toBe(sutra.themeAccent);
+  expect(sutra.boxShadow).not.toBe('none');
   expect(sutra.outlineColor).not.toBe(dark.outlineColor);
 });
 

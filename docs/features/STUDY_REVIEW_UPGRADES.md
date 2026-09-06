@@ -44,6 +44,8 @@ exports**, and **CSV**:
 - Anki plain-text **directive lines** (`#separator:tab`, `#html:true`, …) are skipped.
 - Basic HTML entities (`&amp;`, `&lt;`, …) are decoded.
 - `{{cloze}}` syntax is preserved, so imported cloze cards just work.
+- Dialogs restore focus to the Review action that opened them, including
+  pointer activation in Safari (which does not automatically focus buttons).
 
 For Anki **`.apkg`** decks (a SQLite database, not text), export from Anki via
 **File → Export → "Notes in Plain Text (.txt)"** and paste/import that.

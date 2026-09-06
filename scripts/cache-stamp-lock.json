@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260904-mergerecovery1",
-    "hash": "74dc75498b4787d9"
+    "stamp": "20260905-habitread1",
+    "hash": "bf9348773df28a66"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -240,8 +240,8 @@
     "hash": "1f414bc61c0d7c03"
   },
   "src/features/search/global-search-modal.js": {
-    "stamp": "20260824-gsmodal2",
-    "hash": "842f559aeb5b3f23"
+    "stamp": "20260905-search-focus1",
+    "hash": "b301eca9a4b51363"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260707-batch1",
@@ -260,8 +260,8 @@
     "hash": "9683cdb464e6b16c"
   },
   "src/features/study/review.js": {
-    "stamp": "20260807-purge1",
-    "hash": "aefdeb9b209f3a59"
+    "stamp": "20260905-review-focus2",
+    "hash": "6f0c68206b093b9c"
   },
   "src/features/workspace/activation-metrics.js": {
     "stamp": "20260702-activation1",
@@ -300,8 +300,8 @@
     "hash": "1bf6440c0e3f0ae5"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
-    "stamp": "20260807-customquotes2",
-    "hash": "e7b21896681e016c"
+    "stamp": "20260905-quote-focus1",
+    "hash": "88323393a0652f0b"
   },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
@@ -320,8 +320,8 @@
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260826-sol3-1",
-    "hash": "681671eec77a5fc2"
+    "stamp": "20260905-more-actions1",
+    "hash": "2f35ac15ce9d28f4"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260828-revocation-lock1",
@@ -444,12 +444,12 @@
     "hash": "3454a3298ade2efb"
   },
   "src/sync/sync-projection.js": {
-    "stamp": "20260807-localendpoint1",
-    "hash": "74dd8dc00c148b8f"
+    "stamp": "20260906-notificationlocal1",
+    "hash": "49c1062cf4f287b2"
   },
   "src/sync/sync-protocol.js": {
-    "stamp": "20260813-pdf1",
-    "hash": "1e63b0dfec3f4e3a"
+    "stamp": "20260906-notificationlocal1",
+    "hash": "59cb23eac0460ecf"
   },
   "src/sync/sync-store.js": {
     "stamp": "20260805-device-session1",
@@ -472,8 +472,8 @@
     "hash": "45186a4c913b046f"
   },
   "styles/base/contracts.css": {
-    "stamp": "20260723-layercontract1",
-    "hash": "ab7a4a971ad8a392"
+    "stamp": "20260905-updatelayer1",
+    "hash": "adba6b437cec1b36"
   },
   "styles/base/microinteractions.css": {
     "stamp": "20260807-cohesion1",
@@ -524,8 +524,8 @@
     "hash": "3d02270fdbca2fb5"
   },
   "styles/features/ios-install-guide.css": {
-    "stamp": "20260821-iosinstall2",
-    "hash": "e4a52d383aa68baf"
+    "stamp": "20260905-install-layering2",
+    "hash": "948378d5759459b5"
   },
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",

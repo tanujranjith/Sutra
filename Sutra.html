@@ -80,9 +80,9 @@
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
-    <script src="src/sync/sync-protocol.js?v=20260813-pdf1"></script>
+    <script src="src/sync/sync-protocol.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
-    <script src="src/sync/sync-projection.js?v=20260807-localendpoint1"></script>
+    <script src="src/sync/sync-projection.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260807-duress2"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
@@ -117,7 +117,7 @@
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/base/styles.css?v=20260825-oxremed4">
-    <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260821-iosinstall2">
+    <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
@@ -7887,8 +7887,8 @@
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
-    <script src="src/features/search/global-search-modal.js?v=20260824-gsmodal2"></script>
-    <script src="src/core/app.js?v=20260904-mergerecovery1"></script>
+    <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
+    <script src="src/core/app.js?v=20260905-habitread1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
@@ -7916,16 +7916,16 @@
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
     <script src="src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1"></script>
     <script src="src/features/study/ap-study.js?v=20260707-batch1"></script>
-    <script src="src/features/study/review.js?v=20260807-purge1"></script>
+    <script src="src/features/study/review.js?v=20260905-review-focus2"></script>
     <script src="src/features/study/math-render.js?v=20260620-math1"></script>
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
-    <script src="src/features/workspace/daily-lock-in-quote.js?v=20260807-customquotes2"></script>
+    <script src="src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1"></script>
     <script src="src/features/workspace/notifications.js?v=20260828-revocation-lock1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260826-sol3-1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20260905-more-actions1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260816-home-labels1"></script>
@@ -8331,7 +8331,7 @@
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
-    <link rel="stylesheet" href="styles/base/contracts.css?v=20260723-layercontract1">
+    <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">

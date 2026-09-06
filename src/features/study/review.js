@@ -164,6 +164,10 @@
     }
 
     function showReviewModal(opts) {
+        const host = ensureReviewModalRoot();
+        // Register the trigger before rendering or autofocus can move it.
+        // The shared manager remains the sole owner of restoration.
+        host.__sutraReturnFocus = document.activeElement;
         activeReviewModal = Object.assign({
             kind: 'confirm',         // 'confirm' | 'prompt' | 'bulk'
             title: '',
@@ -206,7 +210,7 @@
             host.innerHTML = '';
             host.classList.remove('is-visible');
             host.removeAttribute('aria-hidden');
-            // Restore focus to the page if we stole it.
+            if (window.SutraModalManager) window.SutraModalManager.sync();
             return;
         }
         const m = activeReviewModal;
@@ -233,6 +237,7 @@
             </div>
         `;
         host.classList.add('is-visible');
+        if (window.SutraModalManager) window.SutraModalManager.sync();
         host.querySelectorAll('[data-review-modal-action]').forEach(btn => {
             btn.addEventListener('click', event => {
                 event.preventDefault();
@@ -1985,6 +1990,9 @@ render();
             if (!target) return;
             const btn = target.closest('[data-review-action]');
             if (!btn) return;
+            // Safari does not focus buttons on pointer activation. Establish
+            // the real trigger before a dialog captures its return-focus target.
+            if (typeof btn.focus === 'function') btn.focus({ preventScroll: true });
             const action = btn.getAttribute('data-review-action');
             handleAction(action, extractActionContext(btn));
         });

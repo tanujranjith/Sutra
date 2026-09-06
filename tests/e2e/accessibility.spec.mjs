@@ -5,13 +5,14 @@
  * Uses Playwright's built-in accessibility snapshot API (no axe-core dependency).
  */
 import { test, expect } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
-const BASE = 'http://127.0.0.1:5173/Sutra.html';
+const BASE = '/Sutra.html';
 
 test.describe('Accessibility: core surfaces', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(1500);
+        await waitForAppReady(page);
     });
 
     test('app shell has landmark roles', async ({ page }) => {
@@ -30,13 +31,16 @@ test.describe('Accessibility: core surfaces', () => {
     });
 
     test('navigation tabs are keyboard accessible', async ({ page }) => {
-        // Dismiss onboarding if visible
+        // Fresh contexts always have onboarding. Its deferred render can arrive
+        // after hydration; do not race it with a one-shot isVisible() check.
         const skipBtn = page.getByRole('button', { name: 'Skip setup', exact: true });
-        if (await skipBtn.isVisible().catch(() => false)) {
-            await skipBtn.click();
-            await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
-        }
-        const tabs = page.locator('.view-tab:not([hidden])');
+        await expect(skipBtn).toBeVisible();
+        await skipBtn.click();
+        await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+        // Some route-local tabs remain in the DOM under a hidden owner. Pick a
+        // visible tab, as a keyboard user would, rather than asking WebKit to
+        // focus a control that has no rendered focus target.
+        const tabs = page.locator('.view-tab:visible:not([disabled])');
         const count = await tabs.count();
         expect(count).toBeGreaterThan(0);
 

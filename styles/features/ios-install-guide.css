@@ -4,7 +4,8 @@
     left: max(12px, var(--sutra-safe-left, 0px));
     right: max(12px, var(--sutra-safe-right, 0px));
     bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + var(--sutra-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px);
-    z-index: var(--z-toast, 14600);
+    /* Optional installation advice must stay below drawers and dialogs. */
+    z-index: calc(var(--z-nav, 2400) + 1);
     display: flex;
     align-items: flex-start;
     gap: 12px;
@@ -26,6 +27,11 @@
     opacity: 0;
     pointer-events: none;
     transform: translateY(8px);
+}
+
+body:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .sidebar-open, .notif-panel-open) .sutra-ios-install-guide {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .sutra-ios-install-guide-copy {
