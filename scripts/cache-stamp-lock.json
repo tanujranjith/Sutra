@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260904-mergerecovery1",
-    "hash": "74dc75498b4787d9"
+    "stamp": "20260905-habitread1",
+    "hash": "bf9348773df28a66"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -472,8 +472,8 @@
     "hash": "45186a4c913b046f"
   },
   "styles/base/contracts.css": {
-    "stamp": "20260723-layercontract1",
-    "hash": "ab7a4a971ad8a392"
+    "stamp": "20260905-updatelayer1",
+    "hash": "adba6b437cec1b36"
   },
   "styles/base/microinteractions.css": {
     "stamp": "20260807-cohesion1",

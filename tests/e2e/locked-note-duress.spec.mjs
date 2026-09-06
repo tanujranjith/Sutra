@@ -25,7 +25,7 @@ async function openApp(page) {
 }
 
 async function seedLockedTree(page, { withChild = true } = {}) {
-  return page.evaluate(async ({ normalPin, secret, withChild }) => {
+  const ids = await page.evaluate(({ secret, withChild }) => {
     const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     const rootId = 'duress-root-note';
     const childId = 'duress-child-note';
@@ -38,10 +38,16 @@ async function seedLockedTree(page, { withChild = true } = {}) {
     payload.tasks = [...(payload.tasks || []), { id: 'duress-linked-task', title: 'Linked', noteId: rootId, createdAt: now, updatedAt: now }];
     window.deserializeWorkspace(payload);
     window.loadPage(rootId);
-    await window.__sutraPublicBetaTestHooks.lockPageWithPin(rootId, normalPin);
-    window.loadPage(rootId);
     return { rootId, childId: withChild ? childId : null };
-  }, { normalPin: NORMAL_PIN, secret: SECRET, withChild });
+  }, { secret: SECRET, withChild });
+  // A real user locks a displayed document. Wait for the editor migration to
+  // mount that document before the low-level lock hook flushes its contents.
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText(SECRET);
+  await page.evaluate(async ({ rootId, pin }) => {
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(rootId, pin);
+    window.loadPage(rootId);
+  }, { rootId: ids.rootId, pin: NORMAL_PIN });
+  return ids;
 }
 
 async function submitLockPin(page, pin) {
@@ -53,6 +59,7 @@ async function submitLockPin(page, pin) {
 async function unlockNormally(page) {
   await submitLockPin(page, NORMAL_PIN);
   await expect(page.locator('#lockedPageScreen')).toBeHidden();
+  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText(SECRET);
 }
 
 async function openLockSettings(page, pageId) {
@@ -149,7 +156,7 @@ test('explicit duress use permanently removes the protected page tree and local 
   });
 });
 
-test('ambiguity guards reject matching PINs while wrong and normal PINs never delete', async ({ page }) => {
+test('duress setup requires acknowledgement and a PIN distinct from the normal PIN', async ({ page }) => {
   test.setTimeout(90_000);
   await openApp(page);
   const ids = await seedLockedTree(page, { withChild: false });
@@ -174,6 +181,13 @@ test('ambiguity guards reject matching PINs while wrong and normal PINs never de
     isLocked: true, hasDuress: false, sessionUnlocked: true
   });
   await page.locator('#setPageLockCancelBtn').click();
+});
+
+test('wrong and normal PINs never delete, and the normal PIN cannot match the duress PIN', async ({ page }) => {
+  test.setTimeout(90_000);
+  await openApp(page);
+  const ids = await seedLockedTree(page, { withChild: false });
+  await unlockNormally(page);
 
   await configureDuressThroughUi(page, ids.rootId);
   await page.evaluate(id => window.__sutraPublicBetaTestHooks.lockPageNow(id), ids.rootId);

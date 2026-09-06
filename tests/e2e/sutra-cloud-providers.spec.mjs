@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './helpers/app-ready.mjs';
+import { installInspectableBlobRequests } from './helpers/inspectable-blob-requests.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
 // worker behavior is covered separately by the offline/chaos suites.
@@ -111,6 +112,10 @@ async function installSupabaseMock(page) {
 }
 
 async function openApp(page, { withConfig = true } = {}) {
+  await installInspectableBlobRequests(page, [
+    `${SUPA_URL}/`, 'https://www.googleapis.com/',
+    'https://graph.microsoft.com/', 'https://content.dropboxapi.com/'
+  ]);
   if (withConfig) await configureSupabase(page);
   const supa = await installSupabaseMock(page);
   await page.goto('/Sutra.html');
