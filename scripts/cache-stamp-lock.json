@@ -32,8 +32,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260825-sol2-1",
-    "hash": "59f5d013afa6cf78"
+    "stamp": "20260907-locked-context-1",
+    "hash": "429f1424e1f789ec"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260825-sol2-1",
-    "hash": "1c6f6afc320a0839"
+    "stamp": "20260907-locked-context-1",
+    "hash": "26861b11a3acf7c5"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

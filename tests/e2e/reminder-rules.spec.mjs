@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Reminder-rules layer (notifications.js, shipped 2026-07-07):
 //   1. Default thresholds notify; a tighter per-course rule suppresses.
@@ -29,6 +30,9 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  // The notification/Homework globals exist before canonical hydration.
+  // Settle startup before onboarding or fixture writes can be replaced by it.
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await page.waitForFunction(() =>
     !!window.SutraNotifications && !!window.SutraHomework &&
