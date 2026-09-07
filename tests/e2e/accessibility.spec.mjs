@@ -37,6 +37,11 @@ test.describe('Accessibility: core surfaces', () => {
         await expect(skipBtn).toBeVisible();
         await skipBtn.click();
         await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
+        await page.waitForFunction(() => {
+            const tab = Array.from(document.querySelectorAll('.view-tab:not([disabled])'))
+                .find(element => element.getClientRects().length > 0 && !element.closest('[inert]'));
+            return !!tab && tab.tabIndex >= 0;
+        });
         // Some route-local tabs remain in the DOM under a hidden owner. Pick a
         // visible tab, as a keyboard user would, rather than asking WebKit to
         // focus a control that has no rendered focus target.

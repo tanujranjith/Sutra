@@ -46,6 +46,11 @@ async function seedLockedTree(page, { withChild = true } = {}) {
     await window.__sutraPublicBetaTestHooks.lockPageWithPin(rootId, pin);
     window.loadPage(rootId);
   }, { rootId: ids.rootId, pin: NORMAL_PIN });
+  // Loading a protected page clears the v2 editor asynchronously. Wait for
+  // that privacy transition before submitting an unlock, so its pending clear
+  // cannot race the subsequent content restoration.
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('#editorV2Host .ProseMirror')).not.toContainText(SECRET);
   return ids;
 }
 
