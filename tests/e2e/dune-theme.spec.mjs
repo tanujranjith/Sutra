@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openApp(page) {
   await page.addInitScript(() => {
@@ -17,13 +18,19 @@ async function openApp(page) {
     document.getElementById('sutraStartupIntro')?.remove();
   });
   await page.waitForFunction(() => !!window.flowAtelier && typeof window.applyPresetTheme === 'function');
+  // The Dune selection is a persisted workspace preference. Do not race its
+  // write with the initial workspace hydrate that can replace appSettings.
+  await waitForAppReady(page);
 }
 
 test('Dune is an authored, accessible, persistent desktop and mobile theme', async ({ page }, testInfo) => {
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   page.on('console', message => {
-    if (message.type() === 'error') browserErrors.push(message.text());
+    if (message.type() === 'error') {
+      const location = message.location();
+      browserErrors.push(`${message.text()} (${location.url}:${location.lineNumber})`);
+    }
   });
 
   await openApp(page);

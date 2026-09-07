@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openApp(page) {
   await page.addInitScript(() => {
@@ -17,6 +18,9 @@ async function openApp(page) {
     }
   });
   await page.waitForFunction(() => !!window.flowAtelier && !!window.SutraHTMLPages && !!window.SutraWorkspaceLock);
+  // Notes layout is owned by the hydrated shell. This prevents the fixture
+  // from measuring a pre-hydration layout that can be replaced a moment later.
+  await waitForAppReady(page);
 }
 
 test('Home/Create labels and Home quick task use the canonical task path', async ({ page }) => {
