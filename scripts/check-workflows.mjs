@@ -21,6 +21,18 @@ if (!/failure\(\)[\s\S]*playwright/i.test(ci)) failures.push('ci.yml: Playwright
 
 const deploy = texts['.github/workflows/deploy.yml'];
 const deployJob = deploy.split(/^  deploy:/m)[1]?.split(/^  live-smoke:/m)[0] || '';
+const browserJob = deploy.split(/^  browser-tests:/m)[1]?.split(/^  package-pages:/m)[0] || '';
+const packageJob = deploy.split(/^  package-pages:/m)[1]?.split(/^  deploy:/m)[0] || '';
+if (!/needs:\s*release-gate/.test(browserJob) || !/--workers=1/.test(browserJob)) failures.push('deploy.yml: browser lanes must depend on the build and run serially');
+for (const project of ['chromium', 'chrome', 'firefox', 'webkit', 'mobile-chromium', 'mobile-webkit', 'tablet', 'narrow-desktop']) {
+  if (!new RegExp(`--project=${project}(?=\\s|$)`).test(browserJob)) failures.push(`deploy.yml: missing browser project ${project}`);
+}
+for (const [label, job] of [['browser', browserJob], ['packaging', packageJob]]) {
+  if (!/download-artifact@[a-f0-9]{40}/i.test(job) || !/name:\s*deploy-candidate-\$\{\{ github.sha \}\}/.test(job)) failures.push(`deploy.yml: ${label} must download the original candidate artifact`);
+  if (/build:deploy/.test(job)) failures.push(`deploy.yml: ${label} must not rebuild the candidate`);
+}
+if (!/needs:\s*\[release-gate, browser-tests\]/.test(packageJob) || /^\s+if:/m.test(packageJob)) failures.push('deploy.yml: Pages packaging must require all release checks to succeed');
+if (!/needs:\s*package-pages/.test(deployJob)) failures.push('deploy.yml: deploy must depend on verified Pages packaging');
 if (/checkout|build:deploy|npm\s/.test(deployJob)) failures.push('deploy.yml: deploy job rebuilds or checks out instead of using the verified Pages artifact');
 if (!/SUTRA_SERVE_ROOT:\s*\.deploy/.test(deploy)) failures.push('deploy.yml: release gate does not browser-test .deploy');
 if (!/upload-pages-artifact@[a-f0-9]{40}/i.test(deploy)) failures.push('deploy.yml: verified artifact is not uploaded to Pages');

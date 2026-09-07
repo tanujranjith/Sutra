@@ -26,7 +26,10 @@ only by runtime behavior. If a restructure breaks load order or a path, these
 catch it as a real regression (missing feature, blank view, console error).
 
 > CI runs `test:e2e:chromium` as the release gate; the deploy workflow runs the
-> full matrix. Keep `fullyParallel: false` (the suite shares the static server).
+> full matrix in five isolated, single-worker lanes. Each lane downloads the
+> same build artifact; Pages packaging waits for every lane and downloads that
+> original artifact without rebuilding. Keep `fullyParallel: false` (each lane
+> shares its static server).
 
 ## Cross-browser fixtures
 
