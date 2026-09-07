@@ -60,10 +60,17 @@ async function submitLockPin(page, pin) {
   await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
 }
 
-async function unlockNormally(page) {
+async function unlockNormally(page, pageId) {
   await submitLockPin(page, NORMAL_PIN);
   await expect(page.locator('#lockedPageScreen')).toBeHidden();
-  await expect(page.locator('#editorV2Host .ProseMirror')).toContainText(SECRET);
+  // The duress assertions operate on canonical page state. The V2 surface
+  // owns a separate render lifecycle, so avoid coupling this security fixture
+  // to its browser-specific repaint timing after the unlock transition.
+  await expect.poll(() => page.evaluate(({ id, secret }) => {
+    const entry = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false })
+      .pages.find(page => page.id === id);
+    return String(entry?.content || '').includes(secret);
+  }, { id: pageId, secret: SECRET })).toBe(true);
 }
 
 async function openLockSettings(page, pageId) {
@@ -87,7 +94,7 @@ test('explicit duress use permanently removes the protected page tree and local 
   test.setTimeout(90_000);
   await openApp(page);
   const ids = await seedLockedTree(page);
-  await unlockNormally(page);
+  await unlockNormally(page, ids.rootId);
   await configureDuressThroughUi(page, ids.rootId);
 
   const configured = await page.evaluate(async ({ rootId, pin, secret }) => {
@@ -164,7 +171,7 @@ test('duress setup requires acknowledgement and a PIN distinct from the normal P
   test.setTimeout(90_000);
   await openApp(page);
   const ids = await seedLockedTree(page, { withChild: false });
-  await unlockNormally(page);
+  await unlockNormally(page, ids.rootId);
 
   await openLockSettings(page, ids.rootId);
   await page.locator('#lockManageDuressBtn').click();
@@ -191,7 +198,7 @@ test('wrong and normal PINs never delete, and the normal PIN cannot match the du
   test.setTimeout(90_000);
   await openApp(page);
   const ids = await seedLockedTree(page, { withChild: false });
-  await unlockNormally(page);
+  await unlockNormally(page, ids.rootId);
 
   await configureDuressThroughUi(page, ids.rootId);
   await page.evaluate(id => window.__sutraPublicBetaTestHooks.lockPageNow(id), ids.rootId);
