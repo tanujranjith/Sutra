@@ -10,7 +10,7 @@ const PASS = 'correct horse battery staple';
 const CLIENT_ID = 'mock-client-id.apps.googleusercontent.com';
 
 async function completeOnboarding(page) {
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     try {
       if (typeof window.markStudentOnboardingCompleted === 'function') {
         window.markStudentOnboardingCompleted(true);
@@ -24,6 +24,7 @@ async function completeOnboarding(page) {
       overlay.style.setProperty('display', 'none', 'important');
       overlay.style.setProperty('pointer-events', 'none', 'important');
     }
+    await window.flowAtelier.flushAppSaveNow('e2e-drive-onboarding-complete');
   });
   await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
 }

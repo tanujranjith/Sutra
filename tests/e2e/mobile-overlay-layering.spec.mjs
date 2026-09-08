@@ -1,11 +1,15 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#sutraBottomNav', { state: 'attached' });
-  await page.evaluate(() => {
+  // The phone shell is present before canonical startup can finish. Settle that
+  // boundary before suppressing onboarding or inserting sidebar test pages.
+  await waitForAppReady(page);
+  await page.evaluate(async () => {
     try {
       if (typeof window.markStudentOnboardingCompleted === 'function') {
         window.markStudentOnboardingCompleted(true);
@@ -19,6 +23,7 @@ async function openApp(page) {
       overlay.style.setProperty('display', 'none', 'important');
       overlay.style.setProperty('pointer-events', 'none', 'important');
     }
+    await window.flowAtelier.flushAppSaveNow('e2e-mobile-overlay-onboarding-complete');
   });
   await expect(page.locator('#sutraBottomNav')).toBeVisible();
 }
