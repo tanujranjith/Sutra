@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 import { installInspectableBlobRequests } from './helpers/inspectable-blob-requests.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -233,6 +234,10 @@ async function openApp(page, options = {}) {
   const drive = await installDriveMock(page, options);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  // The static shell appears before canonical startup settles. Do not seed the
+  // Drive fixture or open its shared password dialog while hydration can still
+  // reset the form fields beneath the test.
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   await page.evaluate(() => window.SutraDriveSync._resetForTests());
