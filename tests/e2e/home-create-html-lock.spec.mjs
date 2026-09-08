@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppHydrated, waitForAppReady } from './helpers/app-ready.mjs';
 
-async function openApp(page) {
+async function openApp(page, { durable = true } = {}) {
   await page.addInitScript(() => {
     try { sessionStorage.setItem('sutra_intro_played', '1'); } catch (error) {}
   });
@@ -17,6 +18,13 @@ async function openApp(page) {
     }
   });
   await page.waitForFunction(() => !!window.flowAtelier && !!window.SutraHTMLPages && !!window.SutraWorkspaceLock);
+  // Notes layout is owned by the hydrated shell. This prevents the fixture
+  // from measuring a pre-hydration layout that can be replaced a moment later.
+  if (durable) {
+    await waitForAppReady(page);
+  } else {
+    await waitForAppHydrated(page);
+  }
 }
 
 test('Home/Create labels and Home quick task use the canonical task path', async ({ page }) => {
@@ -220,7 +228,9 @@ test('workspace privacy gate verifies PINs, refresh-locks, crosses tabs, and ref
 
   if (browserName !== 'webkit') {
     const second = await context.newPage();
-    await openApp(second);
+    // A second tab must hydrate without making a durable write. Its snapshot
+    // intentionally predates the primary tab's subsequent lock mutation.
+    await openApp(second, { durable: false });
     await expect(second.locator('#sutraWorkspaceLockScreen')).toBeVisible();
     await second.locator('#sutraWorkspaceUnlockPin').fill('2468');
     await second.locator('#sutraWorkspaceUnlockForm button').click();

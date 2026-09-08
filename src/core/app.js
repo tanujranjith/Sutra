@@ -8622,7 +8622,7 @@ function populateProgressDashboard() {
             }
 
             if (importedType === 'imp_tracker_summary') {
-                const habitState = getHabitDayState(todayKey);
+                const habitState = readHabitDayState(todayKey);
                 const habitDone = Array.isArray(habitState.completedHabitIds) ? habitState.completedHabitIds.length : 0;
                 return {
                     stats: [
@@ -9862,7 +9862,7 @@ function populateProgressDashboard() {
                 },
                 getHabitsToday: () => {
                     try {
-                        const state = getHabitDayState(today());
+                        const state = readHabitDayState(today());
                         const done = Array.isArray(state.completedHabitIds) ? state.completedHabitIds : [];
                         return (Array.isArray(habits) ? habits : []).map(h => ({
                             id: h.id,
@@ -21759,6 +21759,12 @@ function populateProgressDashboard() {
             habitDayStates = mergedDayStates;
         }
 
+        // Display reads must not create portable habit records.
+        function readHabitDayState(dateKeyStr) {
+            const state = habitDayStates[dateKeyStr];
+            return state && Array.isArray(state.completedHabitIds) ? state : { completedHabitIds: [] };
+        }
+
         function getHabitDayState(dateKeyStr) {
             if (!habitDayStates[dateKeyStr]) {
                 habitDayStates[dateKeyStr] = { completedHabitIds: [] };
@@ -21982,7 +21988,7 @@ function populateProgressDashboard() {
             evaluateTimedHabitStreaks();
             const activeHabits = (Array.isArray(habits) ? habits : []).filter(habit => habit && habit.isActive !== false);
             const todayKey = today();
-            const dayState = getHabitDayState(todayKey);
+            const dayState = readHabitDayState(todayKey);
             const completedToday = Array.isArray(dayState.completedHabitIds) ? dayState.completedHabitIds : [];
             const activeHabitIdSet = new Set(activeHabits.map(habit => habit.id));
             const completedActiveHabitIds = completedToday.filter(id => activeHabitIdSet.has(id));
@@ -25044,7 +25050,7 @@ function populateProgressDashboard() {
             const card = document.getElementById('todayTrackerSummary');
             if (!card) return;
             const todayK = today();
-            const dayState = (typeof getHabitDayState === 'function') ? getHabitDayState(todayK) : (habitDayStates && habitDayStates[todayK]) || {};
+            const dayState = readHabitDayState(todayK);
             const completedHabitIds = Array.isArray(dayState && dayState.completedHabitIds) ? dayState.completedHabitIds : [];
             const habitTotal = Array.isArray(habits) ? habits.filter(h => h && h.isActive !== false).length : 0;
             const habitDone = completedHabitIds.length;

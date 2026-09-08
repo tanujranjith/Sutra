@@ -26,6 +26,8 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => typeof window.flowAtelier?.flushAppSaveNow === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-diagnostics-ready'));
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
@@ -197,6 +199,7 @@ test('after a reload, an old message never inherits a new turn\'s stats (no ephe
 
   // Reload (fresh session): the in-memory stats Map is cleared. The persisted
   // chat history reloads, but the old turn's ephemeral stats are gone.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-diagnostics-reload'));
   await openApp(page);
   const firstReply = page.locator(assistantReplies).first();
   await expect(firstReply).toBeVisible();

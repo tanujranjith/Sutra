@@ -443,6 +443,7 @@
     var root = panel();
     if (!root || !state.configured) return false;
     bindOnce();
+    if (!state.open) root.__sutraReturnFocus = document.activeElement;
     state.open = true;
     state.filter = 'all';
     setFilter('all');
@@ -460,6 +461,7 @@
 
     root.classList.add('active');
     root.setAttribute('aria-hidden', 'false');
+    if (global.SutraModalManager) global.SutraModalManager.sync();
     renderEmptyState();
     if (input && String(input.value || '').trim()) runSearch(true);
 
@@ -478,6 +480,7 @@
     if (!root) return;
     root.classList.remove('active');
     root.setAttribute('aria-hidden', 'true');
+    if (global.SutraModalManager) global.SutraModalManager.sync();
   }
 
   function isOpen() {

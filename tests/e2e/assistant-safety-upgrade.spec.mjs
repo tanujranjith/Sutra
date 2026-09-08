@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
+
 async function openApp(page, { openPanel = true } = {}) {
   await page.addInitScript(() => { try { sessionStorage.setItem('sutra_intro_played', '1'); } catch {} });
   await page.goto('/Sutra.html');

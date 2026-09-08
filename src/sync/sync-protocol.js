@@ -198,7 +198,11 @@
       'a/homeworkWorkspace.__rest': { localOnly: ['revision', 'updatedAt', 'lastMutation'] },
       // Backup chat snapshots stamp exportedAt; sync snapshots omit it, but
       // this keeps older baselines quiescent.
-      'a/assistantChatHistory.__rest': { hashVolatile: ['exportedAt'] }
+      'a/assistantChatHistory.__rest': { hashVolatile: ['exportedAt'] },
+      // Delivery timestamps control this browser's reminder and weekly-review
+      // prompts.  They are not shared workspace decisions, so one device
+      // opening Sutra must not suppress another device's local prompt.
+      'a/notificationsState': { localOnly: ['lastActiveAt', 'lastDigest', 'lastWeeklyReviewAt', 'lastWeeklyNudge'] }
     },
     // Generated records reconstructed by every runtime are not user content.
     // Excluding them prevents a fresh device's bootstrap seed from being

@@ -5,6 +5,7 @@
 // across reloads. Actual audio is suppressed under automation (navigator.webdriver),
 // so these tests assert the preference/bridge contract, not real playback.
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -25,6 +26,9 @@ async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  // Settings are hydrated asynchronously from canonical workspace state. Wait
+  // for that boundary before changing or reading a persisted preference.
+  await waitForAppReady(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }
 
@@ -58,11 +62,13 @@ test('turning the chime OFF is preserved across a reload (returning-user choice 
     if (save) save.click();
   });
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('0');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('startup-chime-opt-out-e2e'));
 
   // Reload: normalize must preserve the persisted OFF choice (not re-default to ON).
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  await waitForAppReady(page);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('0');
   await expect(page.locator('[data-pref-path="startup.playSound"]')).not.toBeChecked();
 });
@@ -81,10 +87,12 @@ test('an explicit startup-chime opt-in is preserved across reload', async ({ pag
     (document.getElementById('settingsApplyBtn') || document.getElementById('settingsApplyBtnTop'))?.click();
   });
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('startup-chime-opt-in-e2e'));
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
   await completeOnboarding(page);
+  await waitForAppReady(page);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('sutra_startup_sound'))).toBe('1');
   await expect(page.locator('[data-pref-path="startup.playSound"]')).toBeChecked();
 });

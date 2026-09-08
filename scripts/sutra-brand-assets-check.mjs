@@ -19,8 +19,9 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const join = (...parts) => resolve(ROOT, ...parts);
 const read = (p) => { try { return readFileSync(join(p), 'utf8'); } catch { return ''; } };
 

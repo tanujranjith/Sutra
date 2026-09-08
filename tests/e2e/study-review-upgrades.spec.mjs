@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Part 2 — Study & Review upgrades:
 //  - Math/LaTeX rendering (vendored KaTeX, lazy + offline)
@@ -15,6 +16,7 @@ async function openApp(page) {
     const o = document.getElementById('studentOnboardingOverlay');
     if (o) { o.classList.remove('active'); o.hidden = true; o.style.setProperty('display', 'none', 'important'); }
   });
+  await waitForAppReady(page);
   await page.waitForFunction(() => !!(window.SutraHighlight && window.SutraMath && window.SutraReviewTesting));
 }
 

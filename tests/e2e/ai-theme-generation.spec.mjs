@@ -5,6 +5,11 @@
 // theme, conversational refinement + regenerate, persistence, .sutra import/export
 // round-trips, backward compatibility, missing-provider config, and provider errors.
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
+
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
 
 const THEME_OK = {
   name: 'Kyoto Paper',
@@ -36,6 +41,7 @@ async function openApp(page) {
   await page.addInitScript(() => { sessionStorage.setItem('sutra_intro_played', '1'); });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true); } catch {}
     document.body.classList.remove('onboarding-open');

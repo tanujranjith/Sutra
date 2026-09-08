@@ -33,6 +33,7 @@
   var moreLastFocus = null;
   var moreHistoryActive = false;
   var moreCloseTimer = null;
+  var morePendingCloseOptions = null;
   var notificationBadgeObserver = null;
   var sidebarReturnFocus = null;
 
@@ -204,9 +205,10 @@
   }
 
   function runMoreAction(action) {
-    var moreTrigger = navEl && navEl.querySelector('[data-bn-view="__more"]');
-    closeMore({ restoreFocus: false });
-    window.setTimeout(function () {
+    closeMore({ restoreFocus: false, afterClose: function () {
+      // History navigation can rerender the nav. Resolve the live trigger only
+      // after the sheet is actually closed, not before a guessed delay.
+      var moreTrigger = navEl && navEl.querySelector('[data-bn-view="__more"]');
       if (moreTrigger && typeof moreTrigger.focus === 'function') moreTrigger.focus();
       if (action === 'pages') {
         var sidebarToggle = document.getElementById('sidebarToggle');
@@ -225,7 +227,7 @@
           if (bell) bell.click();
         }
       }
-    }, reducedMotion() ? 0 : 210);
+    } });
   }
 
   function finishCloseMore(options) {
@@ -237,6 +239,7 @@
       moreOverlay.hidden = true;
       moreOverlay.setAttribute('aria-hidden', 'true');
       moreCloseTimer = null;
+      if (options && typeof options.afterClose === 'function') options.afterClose();
     }, reducedMotion() ? 0 : 180);
     if (!options || options.restoreFocus !== false) {
       var target = moreLastFocus;
@@ -255,16 +258,22 @@
     if (!options || options.fromHistory !== true) {
       if (moreHistoryActive && history.state && history.state.sutraMobileMore === true) {
         moreHistoryActive = false;
+        morePendingCloseOptions = options || null;
         history.back();
         return;
       }
     }
     moreHistoryActive = false;
+    if (options && options.fromHistory === true && morePendingCloseOptions) {
+      options = morePendingCloseOptions;
+    }
+    morePendingCloseOptions = null;
     finishCloseMore(options);
   }
 
   function openMore(trigger) {
     if (!moreOverlay || !isMobile()) return;
+    morePendingCloseOptions = null;
     if (moreCloseTimer) { window.clearTimeout(moreCloseTimer); moreCloseTimer = null; }
     moreLastFocus = trigger || document.activeElement;
     renderMoreActions();

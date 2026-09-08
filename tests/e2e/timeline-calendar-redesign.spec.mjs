@@ -87,7 +87,12 @@ test('phone Month uses count indicators and opens the focused Day view without p
   const todayCell = page.locator('.sutra-calendar-day.is-today');
   await expect(todayCell.locator('.sutra-calendar-month-events')).toHaveAttribute('data-event-count', '6');
   await expect(todayCell.locator('.sutra-calendar-month-event').first()).toBeHidden();
-  const indicator = await todayCell.locator('.sutra-calendar-month-events').evaluate((node) => getComputedStyle(node, '::before').content);
+  const indicator = await todayCell.locator('.sutra-calendar-month-events').evaluate((node) => {
+    const content = getComputedStyle(node, '::before').content;
+    // Firefox serializes attr() rather than the resolved string. Check the
+    // referenced value, retaining the same six-event rendering contract.
+    return content === 'attr(data-event-count)' ? node.getAttribute('data-event-count') : content;
+  });
   expect(indicator).toContain('6');
 
   await todayCell.locator('.sutra-calendar-day-number').click();

@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openHomework(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted?.(true); } catch (_) {}
     const overlay = document.getElementById('studentOnboardingOverlay');

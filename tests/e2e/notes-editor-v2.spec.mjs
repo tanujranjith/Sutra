@@ -438,6 +438,9 @@ test('pasted foreign fonts and colors are stripped while document structure surv
     );
     data.setData('text/plain', 'Paste Heading\nLinked bold\nCell');
     const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    // Firefox's synthetic ClipboardEvent constructor does not retain supplied
+    // DataTransfer contents. Keep this fixture payload on the dispatched event.
+    Object.defineProperty(event, 'clipboardData', { value: data });
     pm.dispatchEvent(event);
   }, PM_SELECTOR);
 
@@ -686,7 +689,9 @@ test('smart paste recovers Google Docs style-based bold/italic as semantics', as
       '<p><span style="font-weight:700">Bold via style</span> and <span style="font-style:italic">italic via style</span></p>' +
       '</b>');
     data.setData('text/plain', 'Bold via style and italic via style');
-    pm.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    pm.dispatchEvent(event);
   }, PM_SELECTOR);
 
   await page.waitForFunction((sel) => document.querySelector(sel).textContent.includes('Bold via style'), PM_SELECTOR);
@@ -711,7 +716,9 @@ test('smart paste converts Word mso-list paragraphs into a real list', async ({ 
       '<p class="MsoListParagraph" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">1.</span>First item</p>' +
       '<p class="MsoListParagraph" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">2.</span>Second item</p>');
     data.setData('text/plain', 'First item\nSecond item');
-    pm.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    pm.dispatchEvent(event);
   }, PM_SELECTOR);
 
   await page.waitForFunction((sel) => document.querySelector(sel).textContent.includes('First item'), PM_SELECTOR);

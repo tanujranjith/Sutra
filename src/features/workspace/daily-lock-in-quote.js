@@ -546,7 +546,7 @@
         content.appendChild(library);
     }
 
-    function openManager() {
+    function openManager(event) {
         if (typeof document === 'undefined') return false;
         if (managerRoot && managerRoot.isConnected) {
             var existing = managerRoot.querySelector('.daily-quotes-textarea');
@@ -555,6 +555,11 @@
         }
         editingQuoteId = '';
         var overlay = element('div', 'cw-modal-overlay daily-quotes-modal active');
+        // Safari pointer clicks need not focus buttons. Give the shared modal
+        // manager the actual launcher, including the sidebar Manage button.
+        var trigger = event && event.currentTarget;
+        overlay.__sutraReturnFocus = trigger && typeof trigger.focus === 'function'
+            ? trigger : document.activeElement;
         overlay.setAttribute('data-sutra-layer', 'modal');
         overlay.setAttribute('aria-hidden', 'false');
         var card = element('div', 'cw-modal-card daily-quotes-card');

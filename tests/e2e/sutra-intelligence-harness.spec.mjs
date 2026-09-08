@@ -7,6 +7,10 @@
 // GUI-audit editor/theme regressions fixed in the same pass.
 import { expect, test } from '@playwright/test';
 
+// Network stubs must own requests in every engine, including WebKit. Service
+// worker behavior is covered separately by the offline/chaos suites.
+test.use({ serviceWorkers: 'block' });
+
 const STRUCTURED_OK = {
   studyGuide: {
     title: 'Photosynthesis Study Guide',

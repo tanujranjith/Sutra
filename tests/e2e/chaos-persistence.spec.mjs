@@ -176,6 +176,7 @@ test.describe('Chaos: concurrent operations', () => {
         // Establish a confirmed canonical baseline before interrupting the next
         // save. Legacy localStorage injection races async workspace hydration.
         await page.evaluate(async (tasks) => {
+            await window.flowAtelier.flushAppSaveNow('chaos-ready-before-seed');
             window.SutraHomeworkStore.replace({ courses: [], tasks }, { reason: 'chaos-confirmed-seed' });
             await window.flowAtelier.flushAppSaveNow('chaos-confirmed-seed');
         }, seeded);

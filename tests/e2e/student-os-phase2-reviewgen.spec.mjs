@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 // Student OS Phase 2 (#8) — Generate Review Deck workflows:
 // 1. Deterministic candidate generation from mixed pasted material.
@@ -28,6 +29,7 @@ async function completeOnboarding(page) {
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await page.waitForFunction(() => !!window.SutraReviewGen && !!window.createReviewDeck
     && !!window.renderReviewWorkspace && !!window.flowAtelier && !!window.flowAtelier.reviewWorkspace);

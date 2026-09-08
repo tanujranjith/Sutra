@@ -7,6 +7,7 @@
 //   4. Normal Settings does NOT expose plugin controls unless the Advanced /
 //      Experimental opt-in is enabled.
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -26,6 +27,7 @@ async function completeOnboarding(page) {
 async function openApp(page, query = '') {
   await page.goto('/Sutra.html' + query);
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }

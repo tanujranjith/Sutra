@@ -168,6 +168,8 @@ with note title, heading path, exact excerpt, update date, confidence, and why
 the source matched. Source links open the note directly. Locked-note bodies are
 always excluded from Assistant context; safe metadata may identify a locked
 source without quoting or linking its contents.
+Context collection also preserves the canonical locked document: the blank
+editor privacy surface must never be copied back into the protected note.
 
 The **What Sutra knows about me** view combines readable-note counts, explicit
 memories and their source links, current Assistant permissions, and detected

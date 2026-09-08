@@ -160,6 +160,9 @@ return settings;
     var notifications = clone(notificationValue);
     if (!notifications || typeof notifications !== 'object') return notifications;
     delete notifications.lastActiveAt;
+    delete notifications.lastDigest;
+    delete notifications.lastWeeklyReviewAt;
+    delete notifications.lastWeeklyNudge;
     return notifications;
   }
 
@@ -440,8 +443,12 @@ return settings;
           && typeof currentWorkspace.notificationsState === 'object'
           ? currentWorkspace.notificationsState
           : {};
-        if (currentNotifications.lastActiveAt !== undefined) {
-          incoming.lastActiveAt = clone(currentNotifications.lastActiveAt);
+        var localNotificationFields = ['lastActiveAt', 'lastDigest', 'lastWeeklyReviewAt', 'lastWeeklyNudge'];
+        for (var nf = 0; nf < localNotificationFields.length; nf += 1) {
+          var notificationField = localNotificationFields[nf];
+          if (currentNotifications[notificationField] !== undefined) {
+            incoming[notificationField] = clone(currentNotifications[notificationField]);
+          }
         }
       }
       workspace[field] = incoming;

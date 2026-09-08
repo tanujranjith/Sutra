@@ -11,6 +11,9 @@ belong to the workspace. Open **Settings > Appearance > Quotes** or choose
 - independently show or hide the collection in the sidebar and Custom Tab
   Motivation widgets.
 
+Closing the manager restores keyboard focus to the launcher, including when
+opened by a pointer in Safari. The shared modal manager owns this restoration.
+
 The sidebar still selects deterministically for the local calendar day. The
 **Another** control advances only the current session and does not create save
 or Sync churn. Custom Tab widgets keep their existing per-widget rotation index

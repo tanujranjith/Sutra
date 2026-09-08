@@ -326,12 +326,17 @@
             const b = bridge();
             const pageId = b ? b.currentPageId : (typeof window.currentPageId !== 'undefined' ? window.currentPageId : null);
             if (!host || !pageId || host.dataset.pageId !== String(pageId)) return;
+            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
+            const page = pages.find(p => p && p.id === pageId);
+            if (!page) return;
+            const unlocked = b ? b.unlockedPageIds : window.unlockedPageIds;
+            // A locked editor is deliberately blank. Context reads must never
+            // copy that privacy surface over the protected canonical document.
+            if (page.isLocked && !(unlocked && unlocked.has && unlocked.has(pageId))) return;
             if (typeof v2.flushToMirror === 'function') v2.flushToMirror();
             const mirror = document.getElementById('editor');
             if (!mirror) return;
-            const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
-            const page = pages.find(p => p && p.id === pageId);
-            if (page) page.content = mirror.innerHTML || '';
+            page.content = mirror.innerHTML || '';
         } catch (e) { /* best effort only */ }
     }
 
