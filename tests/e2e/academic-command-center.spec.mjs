@@ -1,8 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
+  // The academic globals arrive before canonical workspace hydration. Settle
+  // that boundary before hiding onboarding or seeding the command center.
+  await waitForAppReady(page);
   await page.evaluate(() => {
     const overlay = document.getElementById('studentOnboardingOverlay');
     if (overlay) {
