@@ -432,7 +432,14 @@ test('a local save during a clean remote pull becomes a conflict instead of bein
     drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, attempt, 0)).toISOString();
     const mediaStarted = drive.waitForNextMediaGet();
     pullPromise = page.evaluate(() => {
-      window.SutraDriveSync._setMetadataForTests({ localDirty: false });
+      // A delayed clean cycle can update the remembered remote version without
+      // downloading. Force this explicit cycle to see the mocked remote as
+      // changed, so the test owns the download window where its local save is
+      // made.
+      window.SutraDriveSync._setMetadataForTests({
+        localDirty: false,
+        lastKnownDriveVersion: `fixture-baseline-${Date.now()}`
+      });
       return window.SutraDriveSync.syncNow();
     });
     const first = await Promise.race([
