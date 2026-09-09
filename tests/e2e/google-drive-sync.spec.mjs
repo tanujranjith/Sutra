@@ -417,6 +417,9 @@ test('a local save during a clean remote pull becomes a conflict instead of bein
   await page.evaluate(() => window.SutraDriveSync.syncNow());
   await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ localDirty: false }));
   const uploadsBeforePull = drive.uploads.length;
+  await page.evaluate(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => true });
+  });
 
   // Make the mock remote newer before beginning the new cycle. Mutating only
   // when the next list request arrived let an earlier queued cycle consume the
