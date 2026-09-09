@@ -115,7 +115,7 @@ jobs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@decdde0ac072f6dda20e68cb7378e2b123d56205 # v4.0.5
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 
   live-smoke:
     name: Post-deploy live smoke
