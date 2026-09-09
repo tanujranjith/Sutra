@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 
 const PASS = 'correct horse battery staple';
 
@@ -8,10 +9,10 @@ async function openFreshApp(page) {
   });
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  // Shell markup arrives before the initial canonical write/readback and the
-  // post-hydration onboarding reconciliation. Wait for initApp rather than
-  // racing the durable first-run gate from an attached static element.
-  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+  // Shell markup arrives before the canonical workspace boundary and its
+  // onboarding reconciliation. Use the established readiness seam instead
+  // of treating an unrelated startup delegate as durable readiness.
+  await waitForAppReady(page);
 }
 
 async function completeOnboarding(page) {
@@ -174,10 +175,14 @@ test('Continue later: close overlay and reopen preserves step progress', async (
   const overlay = page.locator('#studentOnboardingOverlay');
   await expect(overlay).not.toBeVisible({ timeout: 3000 });
 
+  // Continue later persists its in-progress step. Do not race that canonical
+  // save with the reload that verifies it.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-onboarding-continue-later'));
+
   // Reload — dismiss preserves state so onboarding should reappear
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });
-  await page.waitForTimeout(1000);
+  await waitForAppReady(page);
 
   // Overlay should reappear since dismiss didn't mark as completed
   const reopen = page.locator('#studentOnboardingOverlay[aria-hidden="false"], #studentOnboardingOverlay:not([aria-hidden])');

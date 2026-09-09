@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppReady } from './helpers/app-ready.mjs';
 import { installInspectableBlobRequests } from './helpers/inspectable-blob-requests.mjs';
 
 // Network stubs must own requests in every engine, including WebKit. Service
@@ -9,7 +10,7 @@ const PASS = 'correct horse battery staple';
 const CLIENT_ID = 'mock-client-id.apps.googleusercontent.com';
 
 async function completeOnboarding(page) {
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     try {
       if (typeof window.markStudentOnboardingCompleted === 'function') {
         window.markStudentOnboardingCompleted(true);
@@ -23,6 +24,7 @@ async function completeOnboarding(page) {
       overlay.style.setProperty('display', 'none', 'important');
       overlay.style.setProperty('pointer-events', 'none', 'important');
     }
+    await window.flowAtelier.flushAppSaveNow('e2e-drive-onboarding-complete');
   });
   await expect(page.locator('#studentOnboardingOverlay')).toBeHidden();
 }
@@ -233,6 +235,10 @@ async function openApp(page, options = {}) {
   const drive = await installDriveMock(page, options);
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
+  // The static shell appears before canonical startup settles. Do not seed the
+  // Drive fixture or open its shared password dialog while hydration can still
+  // reset the form fields beneath the test.
+  await waitForAppReady(page);
   await completeOnboarding(page);
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
   await page.evaluate(() => window.SutraDriveSync._resetForTests());
@@ -411,17 +417,20 @@ test('a local save during a clean remote pull becomes a conflict instead of bein
   await page.evaluate(() => window.SutraDriveSync.syncNow());
   await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ localDirty: false }));
   const uploadsBeforePull = drive.uploads.length;
+  await page.evaluate(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => true });
+  });
 
+  // A save debounce can still own the first manual call. Make the mocked
+  // remote newer for every attempt so a just-finished stale cycle cannot
+  // consume the only changed version and turn the asserted pull into a clean
+  // no-op.
   let pullPromise;
   let pullStarted = false;
   for (let attempt = 0; attempt < 3 && !pullStarted; attempt += 1) {
+    drive.files[0].version = String(99 + attempt);
+    drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, attempt, 0)).toISOString();
     const mediaStarted = drive.waitForNextMediaGet();
-    if (attempt === 0) {
-      drive.mutateOnNextList(state => {
-        state.files[0].version = '99';
-        state.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
-      });
-    }
     pullPromise = page.evaluate(() => {
       window.SutraDriveSync._setMetadataForTests({ localDirty: false });
       return window.SutraDriveSync.syncNow();
