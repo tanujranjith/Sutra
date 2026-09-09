@@ -421,17 +421,28 @@ test('a local save during a clean remote pull becomes a conflict instead of bein
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => true });
   });
 
-  // Make the mock remote newer before beginning the new cycle. Mutating only
-  // when the next list request arrived let an earlier queued cycle consume the
-  // mutation, so the asserted pull could legitimately see no remote change.
-  drive.files[0].version = '99';
-  drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, 0, 0)).toISOString();
-  const mediaStarted = drive.waitForNextMediaGet();
-  const pullPromise = page.evaluate(() => {
-    window.SutraDriveSync._setMetadataForTests({ localDirty: false });
-    return window.SutraDriveSync.syncNow();
-  });
-  await expect(mediaStarted).resolves.toBeGreaterThan(0);
+  // A save debounce can still own the first manual call. Make the mocked
+  // remote newer for every attempt so a just-finished stale cycle cannot
+  // consume the only changed version and turn the asserted pull into a clean
+  // no-op.
+  let pullPromise;
+  let pullStarted = false;
+  for (let attempt = 0; attempt < 3 && !pullStarted; attempt += 1) {
+    drive.files[0].version = String(99 + attempt);
+    drive.files[0].modifiedTime = new Date(Date.UTC(2026, 5, 6, 15, attempt, 0)).toISOString();
+    const mediaStarted = drive.waitForNextMediaGet();
+    pullPromise = page.evaluate(() => {
+      window.SutraDriveSync._setMetadataForTests({ localDirty: false });
+      return window.SutraDriveSync.syncNow();
+    });
+    const first = await Promise.race([
+      mediaStarted.then(() => 'media'),
+      pullPromise.then(() => 'cycle')
+    ]);
+    pullStarted = first === 'media';
+    if (!pullStarted) await pullPromise;
+  }
+  expect(pullStarted).toBe(true);
   await seedWorkspace(page, 'MID-PULL-LOCAL');
 
   await expect(pullPromise).resolves.toEqual({ conflict: true });
