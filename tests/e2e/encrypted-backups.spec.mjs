@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 
 const PASS = 'correct horse battery staple';
+const PORTABLE_INLINE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -295,6 +296,105 @@ test('encrypted .sutra import rejects wrong password without mutating, then rest
   expect(restored.pluginReviewRequired).toBe(true);
   expect(restored.pluginDisabled).toBe(true);
   expect(restored.apiKeyExported).toBe(false);
+});
+
+test('inline note images survive encrypted packaging, restore, and reload', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+
+  const packaged = await page.evaluate(async ({ imageSrc }) => {
+    const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const pageId = 'portable-inline-image';
+    const now = new Date().toISOString();
+    window.deserializeWorkspace({
+      ...base,
+      pages: [{
+        id: pageId,
+        title: 'Portable inline image',
+        type: 'note',
+        content: `<p>Portable image sentinel.</p><p><img src="${imageSrc}" alt="Portable image"></p>`,
+        blocks: [],
+        isLocked: false,
+        lockHash: null,
+        lockSalt: null,
+        createdAt: now,
+        updatedAt: now
+      }]
+    });
+    await window.saveWorkspaceLocally();
+
+    const backup = await window.SutraEncryptedBackups.createBackupBlob('correct horse battery staple');
+    const zipBytes = await window.SutraEncryptedBackups.decryptEnvelopeBytes(backup.blob, 'correct horse battery staple');
+    const zip = await window.JSZip.loadAsync(zipBytes);
+    const manifest = JSON.parse(await zip.file('manifest.json').async('text'));
+    const workspace = JSON.parse(await zip.file('workspace.json').async('text'));
+    const note = workspace.pages.find(item => item && item.id === pageId);
+    const reference = String(note && note.content || '').match(/atelier-asset:\/\/([A-Za-z0-9._-]+)/);
+    const assetBytes = reference ? await zip.file(`assets/${reference[1]}`).async('uint8array') : null;
+    let assetBase64 = '';
+    if (assetBytes) {
+      let binary = '';
+      assetBytes.forEach(byte => { binary += String.fromCharCode(byte); });
+      assetBase64 = btoa(binary);
+    }
+    return {
+      packageReference: reference ? reference[1] : '',
+      packageStillHasDataUrl: String(note && note.content || '').includes(imageSrc),
+      manifestAssetFiles: (manifest.assets || []).map(asset => asset.file),
+      assetBase64
+    };
+  }, { imageSrc: PORTABLE_INLINE_IMAGE });
+
+  expect(packaged.packageReference).toMatch(/^asset_[A-Za-z0-9]+\.png$/);
+  expect(packaged.packageStillHasDataUrl).toBe(false);
+  expect(packaged.manifestAssetFiles).toContain(packaged.packageReference);
+  expect(packaged.assetBase64).toBe(PORTABLE_INLINE_IMAGE.split(',')[1]);
+
+  const buffer = await page.evaluate(async () => {
+    const backup = await window.SutraEncryptedBackups.createBackupBlob('correct horse battery staple');
+    return Array.from(new Uint8Array(await backup.blob.arrayBuffer()));
+  });
+  await page.setInputFiles('#fileInput', {
+    name: 'portable-inline-image.sutra',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(buffer)
+  });
+  await expect(page.locator('#sutraImportPasswordModal')).toHaveClass(/active/);
+  await page.fill('#sutraImportPassphraseInput', PASS);
+  await page.locator('#sutraImportPasswordSubmitBtn').click();
+  await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+  await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
+
+  await expect.poll(() => page.evaluate(() => {
+    const workspace = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return workspace.pages.find(item => item && item.id === 'portable-inline-image')?.content || '';
+  }), { timeout: 20_000 }).toContain(PORTABLE_INLINE_IMAGE);
+
+  await page.evaluate(() => window.loadPage('portable-inline-image'));
+  await expect.poll(() => page.evaluate(() => {
+    const image = document.querySelector('#editorV2Host img, #editor img');
+    return image?.getAttribute('src') || '';
+  }), { timeout: 10_000 }).toBe(PORTABLE_INLINE_IMAGE);
+
+  const restored = await page.evaluate(() => {
+    const image = document.querySelector('#editorV2Host img, #editor img');
+    return {
+      src: image?.getAttribute('src') || '',
+      naturalWidth: image?.naturalWidth || 0
+    };
+  });
+  expect(restored.src).toBe(PORTABLE_INLINE_IMAGE);
+  expect(restored.naturalWidth).toBeGreaterThan(0);
+
+  await page.reload();
+  await page.waitForSelector('#fileInput', { state: 'attached' });
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+  await completeOnboarding(page);
+  await expect.poll(() => page.evaluate(() => {
+    const workspace = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    return workspace.pages.find(item => item && item.id === 'portable-inline-image')?.content || '';
+  })).toContain(PORTABLE_INLINE_IMAGE);
 });
 
 test('tampered encrypted backups fail authentication without replacing local workspace', async ({ page }) => {
