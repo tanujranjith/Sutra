@@ -864,6 +864,61 @@ test('inserting an image in v2 creates a resizable image node, not a media-wrapp
   expect(storage).not.toContain('media-wrapper');
 });
 
+test('pasting an image into v2 inserts and persists the image', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 pasted image');
+
+  await page.evaluate((sel) => {
+    const pm = document.querySelector(sel);
+    pm.focus();
+    const data = new DataTransfer();
+    const bytes = Uint8Array.from(atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+    ), (char) => char.charCodeAt(0));
+    data.items.add(new File([bytes], 'pasted.png', { type: 'image/png' }));
+    const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: data });
+    pm.dispatchEvent(event);
+  }, PM_SELECTOR);
+
+  await expect(page.locator('#editorV2Host .sutra-img-wrap img')).toBeVisible({ timeout: 5_000 });
+  const state = await page.evaluate(() => ({
+    imageCount: document.querySelectorAll('#editorV2Host .sutra-img-wrap img').length,
+    storage: window.SutraNotesEditorV2.getStorageHtml()
+  }));
+  expect(state.imageCount).toBe(1);
+  expect(state.storage).toContain('data:image/png;base64,');
+
+  await page.waitForTimeout(250);
+  await page.evaluate(async () => {
+    window.SutraNotesEditorV2.flushToMirror();
+    await window.saveWorkspaceLocally();
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const workspace = await window.loadWorkspaceLocally();
+    const current = workspace?.pages?.find((note) => note.id === window.flowAtelier.currentPageId);
+    return current?.content || '';
+  })).toContain('data:image/png;base64,');
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await page.waitForFunction(() => window.SutraNotesEditorV2 && window.SutraNotesEditorV2.isMounted());
+  await openNotesView(page);
+  await expect(page.locator('#editorV2Host .sutra-img-wrap img')).toBeVisible({ timeout: 5_000 });
+  const restored = await page.evaluate(() => {
+    const image = document.querySelector('#editorV2Host .sutra-img-wrap img');
+    return {
+      src: image?.getAttribute('src') || '',
+      naturalWidth: image?.naturalWidth || 0
+    };
+  });
+  expect(restored.src).toContain('data:image/png;base64,');
+  expect(restored.naturalWidth).toBeGreaterThan(0);
+});
+
 // ---- Phase 5: page-like layout ----
 
 test('pages mode renders the v2 host as a clean page card', async ({ page }) => {
