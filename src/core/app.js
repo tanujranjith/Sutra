@@ -2097,7 +2097,7 @@ function updateToolbarTimeWidget() {
                 const toolbarOverlaysEditor = toolbarPosition === 'fixed' || toolbarPosition === 'absolute';
 
                 if (!toolbarVisible) {
-                    editorContainer.style.setProperty('padding-top', `${hiddenToolbarPadding}px`, 'important');
+                    editorContainer.style.setProperty('padding-top', `${document.body.matches('.html-page-active') ? 0 : hiddenToolbarPadding}px`, 'important');
                     return;
                 }
 
@@ -2135,11 +2135,11 @@ function updateToolbarTimeWidget() {
                     const shortfall = Math.ceil((toolbarRect.bottom + flowGap) - flowRect.top);
                     // Cap the correction. toolbarRect can be read mid-animation/mid-
                     // transition (sidebar collapse, theme entrance transforms) and
-                    // briefly report a bogus, far-too-large bottom edge; unlike the
+                    // briefly report a bogus edge; unlike the
                     // padding-top calc below, this margin is stamped on with
                     // !important and nothing else bounds it, so an uncapped shortfall
-                    // here permanently shoves the chip row (and the title below it)
-                    // hundreds of pixels down the page.
+                    // here can shove the chip row and title hundreds of pixels
+                    // down the page.
                     const maxShortfall = compactViewport ? 120 : 160;
                     if (shortfall > 0) {
                         flowRow.style.setProperty('margin-top', `${baselineMarginTop + Math.min(shortfall, maxShortfall)}px`, 'important');

@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260905-habitread1",
-    "hash": "bf9348773df28a66"
+    "stamp": "20260912-html-layout-app1",
+    "hash": "af1ce8ebab543eb9"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -520,8 +520,8 @@
     "hash": "9a3783cbf7c875c1"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20260821-htmlpages3",
-    "hash": "3d02270fdbca2fb5"
+    "stamp": "20260912-html-layout1",
+    "hash": "70f24d8f6338e0af"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -632,8 +632,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260904-nav-overflow1",
-    "hash": "754b1899b7573544"
+    "stamp": "20260912-html-layout-shell1",
+    "hash": "d25b33c7526a3ec4"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260706-ctabs3",

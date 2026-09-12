@@ -282,6 +282,20 @@ body.settings-anchored-mode .top-nav {
   body[data-view="notes"]:not(.notes-split-active):not(.notes-pages-mode) #view-notes #notesEditorContainer {
     margin-top: -90px !important;
   }
+
+  /* HTML Pages hide the legacy formatting toolbar and own their preview
+     scrolling. Do not retain the ordinary Create toolbar reservation or the
+     page will stop short of the available viewport. */
+  body.html-page-active[data-view="notes"] #view-notes {
+    height: 100% !important;
+    overflow: hidden !important;
+    padding-top: var(--sutra-global-nav-height) !important;
+    padding-bottom: 0 !important;
+  }
+  body.html-page-active[data-view="notes"]:not(.notes-split-active):not(.notes-pages-mode) #view-notes #notesEditorContainer {
+    margin-top: 0 !important;
+    padding: 0 !important;
+  }
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
