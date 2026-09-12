@@ -239,7 +239,7 @@
     "./src/features/customization/customization.js?v=20260816-home-labels1",
     "./src/features/customization/plugin-system.js?v=20260601-plugins",
     "./src/features/feature-registry.js?v=20260709-features1",
-    "./src/features/notes/editor-v2.js?v=20260807-pagelinks1",
+    "./src/features/notes/editor-v2.js?v=20260912-imagepaste1",
     "./src/features/search/global-search-engine.js?v=20260825-gsengine4",
     "./src/features/search/global-search-modal.js?v=20260905-search-focus1",
     "./src/features/study/ap-study.js?v=20260707-batch1",
