@@ -3,6 +3,58 @@ import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
 const PIN = '2468';
 
+for (const leaveImmediately of [false, true]) {
+  test(`locked note user edits survive automatic saving and reload (immediate navigation: ${leaveImmediately})`, async ({ page }) => {
+    await openApp(page);
+    const id = 'locked-note-autosave-reload';
+    const otherId = 'locked-note-autosave-other';
+    const text = 'Pasted private text must survive without a manual save.';
+    await page.evaluate(async ({ id, otherId }) => {
+      const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+      payload.pages.push(
+        { id, title: 'Private autosave note', content: '<p>Original text</p>', blocks: [] },
+        { id: otherId, title: 'Other autosave note', content: '<p>Other note</p>', blocks: [] }
+      );
+      await window.deserializeWorkspace(payload);
+      await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, '2468');
+      window.loadPage(id);
+    }, { id, otherId });
+    await page.locator('#lockScreenPinInput').fill(PIN);
+    await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+    await expect(page.locator('#lockedPageScreen')).toBeHidden();
+    const editor = page.locator('#editorV2Host .ProseMirror');
+    await expect(editor).toBeVisible();
+    await editor.evaluate((target, { text, leaveImmediately, otherId }) => {
+      target.focus();
+      const clipboard = new DataTransfer();
+      clipboard.setData('text/plain', text);
+      clipboard.setData('text/html', `<p>${text}</p>`);
+      const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, 'clipboardData', { value: clipboard });
+      target.dispatchEvent(paste);
+      // Navigate in the same task, before either editor debounce can fire.
+      if (leaveImmediately) window.loadPage(otherId);
+    }, { text, leaveImmediately, otherId });
+    // Poll IndexedDB directly: invoking a serializer or explicit flush here
+    // could hide a broken automatic-save path.
+    await expect.poll(() => page.evaluate(async id => {
+      const workspace = await window.loadWorkspaceLocally();
+      return workspace?.pages?.find(note => note.id === id)?.content || '';
+    }, id)).toContain(text);
+    if (!leaveImmediately) await page.evaluate(id => window.loadPage(id), otherId);
+    await page.reload();
+    await waitForAppHydrated(page);
+    await page.waitForFunction(id => window.flowAtelier.pages.some(note => note.id === id), id);
+    await page.locator('.top-nav .view-tabs > [data-view="notes"]').click();
+    await page.locator(`.page-item[data-page-id="${id}"] .page-title-text`).click();
+    await expect(page.locator('#lockedPageScreen')).toBeVisible();
+    await page.locator('#lockScreenPinInput').fill(PIN);
+    await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+    await expect(page.locator('#lockedPageScreen')).toBeHidden();
+    await expect(editor).toContainText(text);
+  });
+}
+
 async function openApp(page, { persistReady = true } = {}) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#fileInput', { state: 'attached' });
