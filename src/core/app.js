@@ -39041,7 +39041,7 @@ function buildOnboardingPlanPreview() {
                 '.google-feedback-modal',
                 '.doc-stats-modal',
                 '.acad-modal-overlay',
-                '.emoji-modal-overlay',
+                '.emoji-modal-overlay', '.emoji-picker',
                 '.hw-paste-modal',
                 '.class-dashboard-drawer',
                 '.atelier-onboarding',
@@ -39185,7 +39185,7 @@ function buildOnboardingPlanPreview() {
                 releaseBackgroundInert();
                 if (!state.active.length) return;
                 const top = state.active[state.active.length - 1];
-                const protectedRoots = [top];
+                const protectedRoots = top.id.startsWith('emoji') ? [...document.querySelectorAll('#emojiModalOverlay,#emojiPicker')] : [top];
                 document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"], .sutra-save-failure-banner, [aria-modal="true"]:not([data-sutra-modal-enhanced])').forEach(el => {
                     if (!state.active.some(root => root.contains(el))) protectedRoots.push(el);
                 });
@@ -65210,7 +65210,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             html += '  </div>';
             html += '  <div class="emoji-header-actions">';
             html += '    <button type="button" class="emoji-remove-btn" onclick="removePageIcon();hideEmojiPicker();">Remove</button>';
-            html += '    <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close emoji picker"><i class="fas fa-times"></i></button>';
+            html += '    <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>';
             html += '  </div>';
             html += '</div>';
             html += '<div class="emoji-search-container">';
