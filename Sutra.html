@@ -56,7 +56,7 @@
            - dom-safety.js:     central sanitize/escape/sandbox helpers (no raw user HTML)
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
-    <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
+    <script src="src/core/dom-safety.js?v=20260913-custom-html-safety1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
     <script src="src/core/migrations.js?v=20260813-pdf2"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
@@ -7928,7 +7928,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20260905-more-actions1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260913-content-limits-custom-tabs1"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260913-custom-html-widget1"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
@@ -8330,7 +8330,7 @@
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
-    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
+    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">

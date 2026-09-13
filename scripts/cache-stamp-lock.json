@@ -52,8 +52,8 @@
     "hash": "40d49239acfc800c"
   },
   "src/core/dom-safety.js": {
-    "stamp": "20260613-harden1",
-    "hash": "3298453c79e87b74"
+    "stamp": "20260913-custom-html-safety1",
+    "hash": "b603e1a961a34644"
   },
   "src/core/error-reporter.js": {
     "stamp": "20260812-error1",
@@ -296,8 +296,8 @@
     "hash": "838a9ef90334af9c"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20260913-content-limits-custom-tabs1",
-    "hash": "a0800bcc6148eaed"
+    "stamp": "20260913-custom-html-widget1",
+    "hash": "4a4758eae0cbc9af"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
@@ -636,8 +636,8 @@
     "hash": "d25b33c7526a3ec4"
   },
   "styles/views/custom-tabs.css": {
-    "stamp": "20260706-ctabs3",
-    "hash": "af0b8bb807caf0f3"
+    "stamp": "20260913-custom-html-widget1",
+    "hash": "15051464153a295b"
   },
   "styles/views/focus-session.css": {
     "stamp": "20260807-atmospheres1",
