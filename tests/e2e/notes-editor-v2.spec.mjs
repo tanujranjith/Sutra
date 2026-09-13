@@ -956,6 +956,104 @@ test('pages mode renders the v2 host as a clean page card', async ({ page }) => 
     if (window.insertPageBreak) window.insertPageBreak();
   }, PM_SELECTOR);
   await expect(page.locator('#editorV2Host .atelier-page-break')).toHaveCount(1);
+  expect(await page.locator('#editorV2Host .atelier-page-break').evaluate((node) => getComputedStyle(node, '::after').display)).toBe('none');
+});
+
+test('page-break dividers survive legacy style overrides, themes, reload, and print', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 page-break dividers');
+
+  await page.evaluate(() => {
+    window.SutraNotesEditorV2.setContent(
+      '<p>Paragraph before the first break.</p>' +
+      '<div class="atelier-page-break" data-atelier-block="page-break" role="separator" aria-label="Page break"></div>' +
+      '<h2>Heading between breaks</h2>' +
+      '<div class="atelier-page-break" data-atelier-block="page-break" style="background: none;" role="separator" aria-label="Page break"></div>' +
+      '<ul><li>List content between breaks</li></ul>' +
+      '<div class="atelier-page-break" data-atelier-block="page-break" style="background-image: none;" role="separator" aria-label="Page break"></div>' +
+      '<blockquote>Blockquote after the last break.</blockquote>'
+    );
+  });
+
+  const readBreakMetrics = () => page.evaluate(() => Array.from(document.querySelectorAll('#editorV2Host .atelier-page-break')).map((node) => {
+    const line = getComputedStyle(node, '::after');
+    const rect = node.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      lineDisplay: line.display,
+      lineWidth: parseFloat(line.width),
+      lineHeight: line.height,
+      lineColor: line.backgroundColor,
+      lineLeft: line.left,
+      lineRight: line.right,
+      labelDisplay: getComputedStyle(node, '::before').display
+    };
+  }));
+
+  const assertVisibleDividers = (metrics) => {
+    expect(metrics).toHaveLength(3);
+    expect(metrics.map((metric) => metric.width)).toEqual([metrics[0].width, metrics[0].width, metrics[0].width]);
+    expect(metrics.every((metric) => metric.width > 0 && metric.height > 0)).toBe(true);
+    expect(metrics.every((metric) => metric.lineDisplay === 'block')).toBe(true);
+    expect(metrics.every((metric) => Math.abs(metric.lineWidth - metric.width) < 0.1)).toBe(true);
+    expect(metrics.every((metric) => metric.lineHeight === '1px')).toBe(true);
+    expect(metrics.every((metric) => metric.lineColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
+    expect(metrics.every((metric) => metric.lineLeft === '0px' && metric.lineRight === '0px')).toBe(true);
+    expect(metrics.every((metric) => metric.labelDisplay === 'block')).toBe(true);
+  };
+
+  assertVisibleDividers(await readBreakMetrics());
+
+  await page.evaluate(async () => {
+    await window.applyAtelierTheme('dark', { persist: false });
+  });
+  const darkMetrics = await readBreakMetrics();
+  assertVisibleDividers(darkMetrics);
+  expect(new Set(darkMetrics.map((metric) => metric.lineColor)).size).toBe(1);
+
+  await page.evaluate(async () => {
+    window.SutraNotesEditorV2.flushToMirror();
+    await window.saveWorkspaceLocally();
+  });
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await page.waitForFunction(() => window.SutraNotesEditorV2 && window.SutraNotesEditorV2.isMounted());
+  await openNotesView(page);
+  await page.waitForFunction(() => document.querySelectorAll('#editorV2Host .atelier-page-break').length === 3);
+  await page.evaluate(async () => {
+    await window.applyAtelierTheme('dark', { persist: false });
+  });
+  assertVisibleDividers(await readBreakMetrics());
+
+  await page.evaluate(() => window.togglePagesMode());
+  const pageModeMetrics = await page.evaluate(() => Array.from(document.querySelectorAll('#editorV2Host .atelier-page-break')).map((node) => ({
+    height: getComputedStyle(node).height,
+    backgroundColor: getComputedStyle(node).backgroundColor,
+    lineDisplay: getComputedStyle(node, '::after').display,
+    labelDisplay: getComputedStyle(node, '::before').display
+  })));
+  expect(pageModeMetrics.every((metric) => metric.height === '60px')).toBe(true);
+  expect(pageModeMetrics.every((metric) => metric.backgroundColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
+  expect(pageModeMetrics.every((metric) => metric.lineDisplay === 'none' && metric.labelDisplay === 'none')).toBe(true);
+  await page.evaluate(() => window.togglePagesMode());
+
+  await page.emulateMedia({ media: 'print' });
+  const printMetrics = await page.evaluate(() => Array.from(document.querySelectorAll('#editorV2Host .atelier-page-break')).map((node) => ({
+    breakBefore: getComputedStyle(node).breakBefore,
+    lineDisplay: getComputedStyle(node, '::after').display,
+    labelDisplay: getComputedStyle(node, '::before').display
+  })));
+  expect(printMetrics.every((metric) => metric.breakBefore === 'page')).toBe(true);
+  expect(printMetrics.every((metric) => metric.lineDisplay === 'none' && metric.labelDisplay === 'none')).toBe(true);
+  await page.emulateMedia({ media: 'screen' });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileMetrics = await readBreakMetrics();
+  assertVisibleDividers(mobileMetrics);
 });
 
 // ---- Phase 6: live NodeViews for preserved atoms ----

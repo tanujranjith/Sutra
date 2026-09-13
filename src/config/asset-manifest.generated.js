@@ -302,7 +302,7 @@
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260905-updatelayer1",
     "./styles/base/microinteractions.css?v=20260807-cohesion1",
-    "./styles/base/styles.css?v=20260825-oxremed4",
+    "./styles/base/styles.css?v=20260913-pagebreak2",
     "./styles/base/tokens.css?v=20260807-themefocus1",
     "./styles/features/academic-command-center.css?v=20260614-acc1",
     "./styles/features/academic-planning.css?v=20260707-batch2",
