@@ -462,7 +462,7 @@
         </div>
         <p class="hw-course-quick-copy" id="hwCourseQuickCopy">Type a class name, then press Enter or click Add.</p>
         <form data-course-quick-form class="hw-course-quick-form" style="display:flex; gap:8px; align-items:center;">
-          <input type="text" data-course-quick-input maxlength="120" placeholder="Type a class name…" autocomplete="off" style="flex:1 1 auto;" />
+          <input type="text" data-course-quick-input placeholder="Type a class name…" autocomplete="off" style="flex:1 1 auto;" />
           <button type="submit" class="neumo-btn btn-primary hw-course-quick-add" data-course-quick-add aria-label="Add">Add</button>
         </form>
       </div>
@@ -1175,7 +1175,7 @@
       <div class="hw-inline-add" data-inline-add>
         <button type="button" class="hw-inline-add-trigger" data-inline-trigger><i class="fas fa-plus" aria-hidden="true"></i><span>Add a task&hellip;</span></button>
         <form class="hw-inline-add-form" data-inline-form hidden autocomplete="off">
-          <input type="text" class="hw-inline-title" data-inline-title placeholder="What needs doing?" maxlength="180" />
+          <input type="text" class="hw-inline-title" data-inline-title placeholder="What needs doing?" />
           <div class="hw-inline-chips">
             <select class="hw-inline-course" data-inline-course aria-label="Subject">${buildCourseOptions('')}</select>
             <input type="date" class="hw-inline-date" data-inline-date value="${escHtml(presetDate || '')}" aria-label="Due date" />
@@ -1338,7 +1338,7 @@
         <div class="hw-quick-add-row">
           <div class="hw-quick-add-field">
             <i class="fas fa-bolt" aria-hidden="true"></i>
-            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" maxlength="200" autocomplete="off" />
+            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" autocomplete="off" />
           </div>
           <button type="button" class="hw-quick-add-submit" data-quick-add-submit>Add</button>
         </div>
@@ -2330,7 +2330,7 @@
               <form id="hwGlobalAddForm" class="hw-global-add-form" autocomplete="off">
                 <label for="hwCourseSelect" data-course-label class="hw-add-field-label">Class</label>
                 <select id="hwCourseSelect" data-field="courseId"></select>
-                <input type="text" data-field="title" placeholder="Assignment title" maxlength="180" />
+                <input type="text" data-field="title" placeholder="Assignment title" />
                 <div class="hw-global-meta-row">
                   <input type="date" data-field="dueDate" placeholder="Due date" />
                   <input type="time" data-field="dueTime" placeholder="Due time" />

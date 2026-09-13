@@ -158,6 +158,61 @@ test('Canvas pages are isolated: empty on create, no note content leak, independ
   expect(result.errors, JSON.stringify(result.errors, null, 2)).toEqual([]);
 });
 
+test('Canvas preserves long authored text, table cells, and labels across workspace round-trip', async ({ page }) => {
+  test.setTimeout(60000);
+  await openApp(page);
+
+  const result = await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    hooks.createSpace('Canvas content limits QA');
+    const canvasPage = hooks.createCanvasInActiveSpace('Long Canvas content');
+    const longText = 'Canvas text ' + 'T'.repeat(9000);
+    const longCell = 'Table cell ' + 'C'.repeat(1400);
+    const longLabel = 'Canvas label ' + 'L'.repeat(700);
+    const first = window.SutraCanvas.addText(longText);
+    const second = window.SutraCanvas.addText('Second object');
+    const tableSeed = window.SutraCanvas.addTable();
+    const table = hooks.getCurrentPage().canvas.objects.find((object) => object.id === tableSeed.id);
+    table.cells[0][1] = longCell;
+    const group = window.SutraCanvas.group([first.id, second.id], longLabel);
+    const connection = window.SutraCanvas.addConnector(first.id, second.id, { label: longLabel });
+    // Force the current page through the normal save/normalization seam after
+    // editing the table object returned by the canonical Canvas API.
+    window.SutraCanvas.setViewport({ x: 1, y: 2, zoom: 1 });
+    const before = hooks.getCurrentPage();
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    window.deserializeWorkspace(payload);
+    window.loadPage(canvasPage.id);
+    const restored = hooks.getCurrentPage();
+    const restoredText = restored.canvas.objects.find((object) => object.id === first.id);
+    const restoredTable = restored.canvas.objects.find((object) => object.id === table.id);
+    const restoredGroup = restored.canvas.groups.find((item) => item.id === group.id);
+    const restoredConnection = restored.canvas.connections.find((item) => item.id === connection.id);
+    return {
+      before: {
+        text: before.canvas.objects.find((object) => object.id === first.id).text,
+        cell: before.canvas.objects.find((object) => object.id === table.id).cells[0][1]
+      },
+      after: {
+        text: restoredText && restoredText.text,
+        cell: restoredTable && restoredTable.cells[0][1],
+        groupLabel: restoredGroup && restoredGroup.label,
+        connectionLabel: restoredConnection && restoredConnection.label
+      }
+    };
+  });
+
+  const longText = 'Canvas text ' + 'T'.repeat(9000);
+  const longCell = 'Table cell ' + 'C'.repeat(1400);
+  const longLabel = 'Canvas label ' + 'L'.repeat(700);
+  expect(result.before.text).toBe(longText);
+  expect(result.before.cell).toBe(longCell);
+  expect(result.after.text).toBe(longText);
+  expect(result.after.cell).toBe(longCell);
+  expect(result.after.groupLabel).toBe(longLabel);
+  expect(result.after.connectionLabel).toBe(longLabel);
+});
+
 test('Canvas toolbar renders correctly: groups, active tool, selection-dependent controls', async ({ page }) => {
   test.setTimeout(60000);
   await openApp(page);

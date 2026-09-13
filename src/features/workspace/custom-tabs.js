@@ -722,7 +722,6 @@
         input.type = 'text';
         input.className = 'ctab-add-input';
         input.placeholder = 'Add an item…';
-        input.maxLength = 200;
         var commit = function () {
             var text = input.value.trim();
             if (!text) return;
@@ -746,7 +745,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-scratchpad';
         area.placeholder = 'Jot anything…';
-        area.maxLength = 20000;
         area.value = widget.config && typeof widget.config.text === 'string' ? widget.config.text : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -757,7 +755,7 @@
                     var w = findWidget(t, widget.id);
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
-                    w.config.text = area.value.slice(0, 20000);
+                    w.config.text = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1132,7 +1130,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-sticky-text';
         area.placeholder = 'Sticky note…';
-        area.maxLength = 2000;
         area.value = typeof cfg.text === 'string' ? cfg.text : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -1143,7 +1140,7 @@
                     var w = findWidget(t, widget.id);
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
-                    w.config.text = area.value.slice(0, 2000);
+                    w.config.text = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1639,7 +1636,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-scratchpad ctab-gratitude-text';
         area.placeholder = 'Write a line…';
-        area.maxLength = 500;
         area.value = typeof entries[todayK] === 'string' ? entries[todayK] : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -1651,7 +1647,7 @@
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
                     if (!w.config.entries || typeof w.config.entries !== 'object') w.config.entries = {};
-                    w.config.entries[todayK] = area.value.slice(0, 500);
+                    w.config.entries[todayK] = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1673,7 +1669,7 @@
         var cfg = { title: '', currentPage: 0, totalPages: 0 };
         return promptText({ title: 'Currently reading', label: 'Book or material title', placeholder: 'e.g. The Great Gatsby' }).then(function (title) {
             if (title == null) return null;
-            cfg.title = String(title).trim().slice(0, 80) || 'Reading';
+            cfg.title = String(title).trim() || 'Reading';
             return promptText({ title: 'Total pages', label: 'How many pages?', placeholder: '180', inputType: 'number' }).then(function (pages) {
                 if (pages == null) return null;
                 cfg.totalPages = Math.max(1, Math.round(Number(pages) || 100));
@@ -1957,7 +1953,6 @@
         input.type = 'text';
         input.className = 'ctab-add-input';
         input.placeholder = 'e.g. What should I do next?';
-        input.maxLength = 300;
         var send = function () {
             var q = input.value.trim();
             if (!q) return;

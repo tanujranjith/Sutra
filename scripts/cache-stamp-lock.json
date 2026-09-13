@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260912-html-layout-app1",
-    "hash": "af1ce8ebab543eb9"
+    "stamp": "20260913-content-limits-app1",
+    "hash": "bea61c4c87cd5eaa"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -104,16 +104,16 @@
     "hash": "cd6d317f94b67645"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "110d121df2a62695"
+    "stamp": "20260913-content-limits-homework-store1",
+    "hash": "6d7bc955a18ced93"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
     "hash": "f7b9eb86d508c54f"
   },
   "src/domain/import-engine.js": {
-    "stamp": "20260807-ics2",
-    "hash": "c275198eea7edbcd"
+    "stamp": "20260913-content-limits-import1",
+    "hash": "6b7ca67ec808622e"
   },
   "src/domain/learning-engine.js": {
     "stamp": "20260710-learning1",
@@ -168,8 +168,8 @@
     "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20260807-ics1",
-    "hash": "095bc3670ad9c824"
+    "stamp": "20260913-content-limits-semester1",
+    "hash": "244d6d49e2babdd5"
   },
   "src/features/assistant/action-system.js": {
     "stamp": "20260807-agentplans2",
@@ -244,24 +244,24 @@
     "hash": "b301eca9a4b51363"
   },
   "src/features/study/ap-study.js": {
-    "stamp": "20260707-batch1",
-    "hash": "8e602082b3a0e4a0"
+    "stamp": "20260913-content-limits-ap1",
+    "hash": "e06b7a0b7d124014"
   },
   "src/features/study/code-highlight.js": {
     "stamp": "20260620-hl1",
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260912-ux2",
-    "hash": "de0f6063417c17b2"
+    "stamp": "20260913-content-limits-homework1",
+    "hash": "5522c9e9e3b88e9c"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
     "hash": "9683cdb464e6b16c"
   },
   "src/features/study/review.js": {
-    "stamp": "20260905-review-focus2",
-    "hash": "6f0c68206b093b9c"
+    "stamp": "20260913-content-limits-review1",
+    "hash": "bc11c47b834a6b39"
   },
   "src/features/workspace/activation-metrics.js": {
     "stamp": "20260702-activation1",
@@ -296,8 +296,8 @@
     "hash": "838a9ef90334af9c"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "1bf6440c0e3f0ae5"
+    "stamp": "20260913-content-limits-custom-tabs1",
+    "hash": "a0800bcc6148eaed"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
@@ -384,8 +384,8 @@
     "hash": "ba427d1608b781d6"
   },
   "src/features/workspace/timeline-drag.js": {
-    "stamp": "20260730-pushTime1",
-    "hash": "62041ecaea7e198f"
+    "stamp": "20260913-content-limits-timeline1",
+    "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
     "stamp": "20260721-radar-consolidation1",

@@ -1834,7 +1834,7 @@
                     <form class="ap-study-quick-tasks__form"
                         data-ap-quick-task-form
                         data-ap-subject-id="${escapeHtml(subject.id)}">
-                        <input type="text" name="text" maxlength="120"
+                        <input type="text" name="text"
                             placeholder="Add a prep task..."
                             class="ap-study-quick-tasks__input modal-input" />
                         <button type="submit" class="neumo-btn" aria-label="Add task">

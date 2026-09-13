@@ -384,8 +384,8 @@ function normalizeCanvasObject(rawObject, seenIds) {
         groupId: typeof rawObject.groupId === 'string' && rawObject.groupId ? rawObject.groupId : '',
         // Linked-note cards are references, not copies. Older builds persisted a
         // plaintext excerpt that could reveal a source after it was locked.
-        text: type === 'linked-note' ? '' : (typeof rawObject.text === 'string' ? rawObject.text.slice(0, 8000) : ''),
-        label: typeof rawObject.label === 'string' ? rawObject.label.slice(0, 500) : '',
+        text: type === 'linked-note' ? '' : (typeof rawObject.text === 'string' ? rawObject.text : ''),
+        label: typeof rawObject.label === 'string' ? rawObject.label : '',
         color: normalizeCanvasColor(rawObject.color, ''),
         fill: normalizeCanvasColor(rawObject.fill, ''),
         stroke: normalizeCanvasColor(rawObject.stroke, ''),
@@ -418,7 +418,7 @@ function normalizeCanvasObject(rawObject, seenIds) {
     if (rawObject.url) normalized.url = normalizeExternalUrl(rawObject.url);
     if (Array.isArray(rawObject.cells)) {
         normalized.cells = rawObject.cells.slice(0, 100).map(row => (
-            Array.isArray(row) ? row.slice(0, 24).map(cell => String(cell || '').slice(0, 1000)) : []
+            Array.isArray(row) ? row.slice(0, 24).map(cell => String(cell || '')) : []
         ));
     }
     return normalized;
@@ -437,7 +437,7 @@ function normalizeCanvasConnection(rawConnection, objectIds, seenIds) {
         id,
         fromId,
         toId,
-        label: typeof rawConnection.label === 'string' ? rawConnection.label.slice(0, 500) : '',
+        label: typeof rawConnection.label === 'string' ? rawConnection.label : '',
         direction: ['none', 'forward', 'backward', 'both'].includes(rawConnection.direction) ? rawConnection.direction : 'forward',
         color: normalizeCanvasColor(rawConnection.color, ''),
         strokeWidth: normalizeCanvasNumber(rawConnection.strokeWidth, 2, 1, 16),
@@ -458,7 +458,7 @@ function normalizeCanvasGroup(rawGroup, objectIds, seenIds) {
     return {
         ...rawGroup,
         id,
-        label: typeof rawGroup.label === 'string' ? rawGroup.label.slice(0, 500) : '',
+        label: typeof rawGroup.label === 'string' ? rawGroup.label : '',
         objectIds: Array.from(new Set(objectIdsList)),
         locked: rawGroup.locked === true,
         createdAt: typeof rawGroup.createdAt === 'string' ? rawGroup.createdAt : new Date().toISOString(),
@@ -31882,8 +31882,6 @@ function buildOnboardingPlanPreview() {
                 let q = sutraReviewDecodeText(qRaw);
                 let a = sutraReviewDecodeText(aRaw);
                 if (!q || q.length < 3 || !a) return;
-                if (q.length > 200) q = q.slice(0, 200);
-                if (a.length > 400) a = a.slice(0, 400);
                 const key = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
                 if (!key || seen.has(key)) return;
                 seen.add(key);
@@ -43089,8 +43087,8 @@ function buildOnboardingPlanPreview() {
             testingHub.custom = testingHub.custom || [];
             const exam = normalizeCustomExam({
                 id: 'cx_' + generateId(),
-                name: name.slice(0, 80),
-                description: description.slice(0, 200),
+                name,
+                description,
                 examDate,
                 targetScore
             });
@@ -43124,9 +43122,9 @@ function buildOnboardingPlanPreview() {
             if (!exam) return;
             const newName = await atelierPrompt('Edit name:', exam.name, { title: 'Edit Custom Exam' });
             if (newName === null) return;
-            exam.name = newName.slice(0, 80);
+            exam.name = newName;
             const newDesc = await atelierPrompt('Edit description:', exam.description, { title: 'Description', multiline: true });
-            if (newDesc !== null) exam.description = newDesc.slice(0, 200);
+            if (newDesc !== null) exam.description = newDesc;
             persistAppData();
             _refreshAfterExamMutation('custom:' + id);
         }
@@ -48812,7 +48810,7 @@ function getActiveEditor() {
                 showToast('Select Canvas text first');
                 return null;
             }
-            const title = String(text.split(/\n/)[0] || 'Canvas note').slice(0, 80);
+            const title = String(text.split(/\n/)[0] || 'Canvas note');
             const ok = await showCustomConfirmDialog({
                 title: 'Create Note From Canvas',
                 message: `Create a standard note from the selected Canvas text?`,
@@ -48850,7 +48848,7 @@ function getActiveEditor() {
             }
             const task = {
                 id: generateId(),
-                title: text.split(/\n/)[0].slice(0, 200),
+                title: text.split(/\n/)[0],
                 notes: text,
                 completed: false,
                 isActive: true,
@@ -49727,9 +49725,9 @@ function getActiveEditor() {
                         const runtime = ensureCanvasRuntime(page);
                         if (!page || !runtime) return null;
                         runtime.selectedObjectIds = [fromId, toId].filter(Boolean);
-                        const connection = canvasAddConnector();
+                        let connection = canvasAddConnector();
                         if (connection && fields && typeof fields === 'object') {
-                            Object.assign(connection, fields);
+                            connection = page.canvas.connections.find(item=>item.id===connection.id)||connection; Object.assign(connection,fields);
                             saveCanvasPage(page, { persist: true });
                             renderCanvasPage(page);
                         }
@@ -49751,9 +49749,11 @@ function getActiveEditor() {
                         if (ids) setCanvasSelection(Array.isArray(ids) ? ids : [ids]);
                         const group = canvasGroupSelected();
                         if (group && label) {
-                            group.label = String(label).slice(0, 120);
                             const page = getPrimaryCanvasPage();
+                            const persistedGroup = page && page.canvas && page.canvas.groups.find(item => item.id === group.id); const labeledGroup = persistedGroup || group;
+                            labeledGroup.label = String(label);
                             if (page) saveCanvasPage(page, { persist: true });
+                            return labeledGroup;
                         }
                         return group;
                     },
@@ -84494,7 +84494,7 @@ function scheduleDeadlineItemAsBlock(item) {
             date: iso,
             start: defaultStart,
             end: (function(){ const [h,m] = defaultStart.split(':').map(Number); const nh=(h+1)%24; return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`; })(),
-            name: `Prep: ${item.title || ''}`.slice(0, 120),
+            name: `Prep: ${item.title || ''}`,
             category: item.source === 'apexam' ? 'study' : 'general'
         });
         saveTimeBlocks && saveTimeBlocks();
@@ -84522,7 +84522,7 @@ function scheduleGenericItemAsBlock(item) {
             date: iso,
             start,
             end,
-            name: `Prep: ${String(item.title || item.name || 'Work').slice(0, 120)}`,
+            name: `Prep: ${String(item.title || item.name || 'Work')}`,
             category: item.category || 'general',
             ...linkage
         });

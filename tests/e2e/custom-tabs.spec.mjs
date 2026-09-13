@@ -193,6 +193,73 @@ test('custom tabs: checklist + scratchpad edits persist through the bridge', asy
   expect(saved.padText).toBe('scratch persists');
 });
 
+test('custom tabs: authored widget content is not silently truncated', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.SutraCustomTabsBridge.setTabs([{
+      id: 'qa-tab-long-content',
+      name: 'Long content QA',
+      icon: 'fa-layer-group',
+      widgets: [
+        { id: 'w-check-long', type: 'checklist', config: { items: [] } },
+        { id: 'w-pad-long', type: 'scratchpad', config: { text: '' } },
+        { id: 'w-sticky-long', type: 'sticky', config: { text: '', color: '#ffd97d' } },
+        { id: 'w-gratitude-long', type: 'gratitude', config: { entries: {} } },
+        { id: 'w-ask-long', type: 'asksutra', config: {} },
+        { id: 'w-reading-long', type: 'reading', config: { title: 'R'.repeat(100), totalPages: 1 } }
+      ]
+    }]);
+    window.SutraCustomTabs.refresh();
+  });
+  await page.locator('.view-tab[data-view="custom-qa-tab-long-content"]').first().click();
+  const section = page.locator('#view-custom-qa-tab-long-content');
+  await expect(section).toBeVisible();
+
+  const checklistText = 'Checklist item ' + 'C'.repeat(240);
+  const scratchpadText = 'Scratchpad ' + 'S'.repeat(20100);
+  const stickyText = 'Sticky ' + 'K'.repeat(2100);
+  const gratitudeText = 'Gratitude ' + 'G'.repeat(600);
+  const askText = 'Question ' + 'A'.repeat(340);
+  await section.locator('.ctab-widget', { hasText: 'Checklist' }).locator('.ctab-add-input').fill(checklistText);
+  await section.locator('.ctab-widget', { hasText: 'Checklist' }).locator('.ctab-add-btn').click();
+  await section.locator('.ctab-scratchpad:not(.ctab-gratitude-text)').fill(scratchpadText);
+  await section.locator('.ctab-sticky-text').fill(stickyText);
+  await section.locator('.ctab-gratitude-text').fill(gratitudeText);
+  const askInput = section.locator('.ctab-widget', { hasText: 'Ask Sutra' }).locator('input').first();
+  await askInput.fill(askText);
+  expect(await askInput.getAttribute('maxlength')).toBeNull();
+  expect(await askInput.inputValue()).toBe(askText);
+  await page.waitForTimeout(900);
+
+  const saved = await page.evaluate(() => {
+    const tab = window.SutraCustomTabsBridge.getTabs().find((item) => item.id === 'qa-tab-long-content');
+    const config = (id) => tab.widgets.find((widget) => widget.id === id).config;
+    return {
+      checklist: config('w-check-long').items[0].text,
+      scratchpad: config('w-pad-long').text,
+      sticky: config('w-sticky-long').text,
+      gratitude: config('w-gratitude-long').entries[Object.keys(config('w-gratitude-long').entries)[0]]
+    };
+  });
+  expect(saved.checklist).toBe(checklistText);
+  expect(saved.scratchpad).toBe(scratchpadText);
+  expect(saved.sticky).toBe(stickyText);
+  expect(saved.gratitude).toBe(gratitudeText);
+
+  const roundTrip = await page.evaluate(() => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    window.deserializeWorkspace(payload);
+    const tab = window.SutraCustomTabsBridge.getTabs().find((item) => item.id === 'qa-tab-long-content');
+    const reading = tab.widgets.find((widget) => widget.id === 'w-reading-long').config.title;
+    return {
+      scratchpad: tab.widgets.find((widget) => widget.id === 'w-pad-long').config.text,
+      reading
+    };
+  });
+  expect(roundTrip.scratchpad).toBe(scratchpadText);
+  expect(roundTrip.reading).toBe('R'.repeat(100));
+});
+
 test('custom tabs: imported page widgets register, appear in picker, and render', async ({ page }) => {
   await openApp(page);
 
