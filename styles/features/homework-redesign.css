@@ -828,6 +828,13 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-table th:nth-child(4) { width: 10%; }
 .hw-assignment-table th:nth-child(5) { width: 14%; }
 .hw-assignment-table th:nth-child(6) { width: 16%; }
+.hw-assignment-table.is-by-class th:nth-child(1) { width: 27%; }
+.hw-assignment-table.is-by-class th:nth-child(2) { width: 15%; }
+.hw-assignment-table.is-by-class th:nth-child(3) { width: 14%; }
+.hw-assignment-table.is-by-class th:nth-child(4) { width: 12%; }
+.hw-assignment-table.is-by-class th:nth-child(5) { width: 10%; }
+.hw-assignment-table.is-by-class th:nth-child(6) { width: 12%; }
+.hw-assignment-table.is-by-class th:nth-child(7) { width: 10%; }
 .hw-assignment-row { border-bottom: 1px solid var(--surface-border); transition: background-color 0.14s ease; }
 .hw-assignment-row:last-child { border-bottom: 0; }
 .hw-assignment-row:hover { background: var(--hw-row-hover); }
@@ -851,6 +858,12 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 }
 .hw-assignment-title-btn:hover,
 .hw-activity-name:hover { color: var(--accent); }
+.hw-assignment-table.is-by-class .hw-assignment-title-btn {
+  display: block;
+  width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .hw-assignment-description,
 .hw-assignment-progress-copy {
   display: block;
@@ -889,6 +902,12 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
   cursor: pointer;
 }
 .hw-course-badge.is-activity { border-color: color-mix(in srgb, var(--hw-course-text) 35%, transparent); }
+.hw-course-badge.is-unassigned {
+  border-color: var(--surface-border);
+  background: var(--hw-control-bg);
+  color: var(--text-secondary);
+  cursor: default;
+}
 .hw-priority-badge { background: transparent; }
 .hw-priority-badge i { font-size: 0.62rem; }
 .hw-priority-badge.is-high { color: #ff5966; }
@@ -907,6 +926,21 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-due-cell.is-overdue .hw-due-relation,
 .hw-due-cell.is-today .hw-due-relation { color: #ff5966; }
 .hw-due-cell.is-tomorrow .hw-due-relation { color: #d99a21; }
+.hw-due-cell.is-completed .hw-due-relation { color: var(--text-secondary); font-weight: 600; }
+.hw-difficulty-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 7px;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  font-size: 0.67rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.hw-difficulty-badge.is-easy { color: #32a86c; background: rgba(50, 168, 108, 0.08); }
+.hw-difficulty-badge.is-medium { color: #d99a21; background: rgba(217, 154, 33, 0.08); }
+.hw-difficulty-badge.is-hard { color: #ff5966; background: rgba(255, 89, 102, 0.08); }
 .hw-assignment-row .hw-quick-actions-cell { padding-inline: 8px; white-space: nowrap; }
 .hw-row-action,
 .hw-activity-actions button {

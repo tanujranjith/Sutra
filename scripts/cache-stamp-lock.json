@@ -252,8 +252,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260826-classless-edit1",
-    "hash": "024d7acc6e783185"
+    "stamp": "20260912-ux2",
+    "hash": "de0f6063417c17b2"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -516,8 +516,8 @@
     "hash": "ec5b9fed4daf6503"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260807-cohesion2",
-    "hash": "9a3783cbf7c875c1"
+    "stamp": "20260912-ux1",
+    "hash": "e8ea7688c0091697"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",

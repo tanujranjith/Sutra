@@ -1528,6 +1528,19 @@
     const time = normalizeDueTime(task && task.dueTime);
     if (dayOffset == null) return { relation: 'undated', label: 'No due date', date: '', time: '', className: 'is-undated' };
 
+    // Completion is a separate state from the calendar relation. A finished
+    // assignment keeps its original due date, but it must never look overdue
+    // after the student has completed it.
+    if (task && task.done) {
+      return {
+        relation: 'completed',
+        label: formatDueDateLabel(task.dueDate),
+        date: '',
+        time: time ? formatDueTimeLabel(time) : '',
+        className: 'is-completed'
+      };
+    }
+
     let relation = 'upcoming';
     let label = formatDueDateLabel(task.dueDate);
     if (dayOffset < 0) { relation = 'overdue'; label = 'Overdue'; }
@@ -1630,17 +1643,26 @@
     return nextMilestone ? `Next: ${String(nextMilestone.title || 'Milestone')}` : '';
   }
 
-  function renderHomeworkWorkspaceRow(task) {
+  function renderHomeworkWorkspaceRow(task, options = {}) {
     const course = getCourseForTask(task);
-    const courseName = course ? course.name : 'No class';
+    const courseName = course ? course.name : (options.includeDifficulty ? 'Unassigned' : 'No class');
     const color = getCourseColor(task.courseId);
     const due = getTaskDuePresentation(task);
     const status = getHomeworkStatus(task);
     const statusLabel = homeworkStatusLabel(status);
     const priority = normalizePriority(task.priority);
+    const difficulty = normalizeDifficulty(task.difficulty);
     const description = getTaskDescription(task);
     const progress = studioPctOf(task);
     const toggleLabel = task.done ? 'Mark assignment as incomplete' : 'Mark assignment complete';
+    const courseCell = course
+      ? `<button type="button" class="hw-course-badge ${course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`
+      : (options.includeDifficulty
+        ? `<span class="hw-course-badge is-unassigned" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</span>`
+        : `<button type="button" class="hw-course-badge" data-filter-course="" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`);
+    const difficultyCell = options.includeDifficulty
+      ? `<td class="hw-difficulty-cell" data-label="Difficulty"><span class="hw-difficulty-badge is-${escHtml(difficulty)}">${escHtml(difficulty.charAt(0).toUpperCase() + difficulty.slice(1))}</span></td>`
+      : '';
     return `
       <tr class="hw-assignment-row ${task.done ? 'is-completed' : ''}" data-task-id="${escHtml(task.id)}" draggable="true" data-drag-title="${escHtml(task.title)}" data-drag-source="homework" data-drag-source-id="${escHtml(task.id)}" data-drag-due-date="${escHtml(task.dueDate || '')}">
         <td class="hw-assignment-name-cell" data-label="Assignment">
@@ -1649,13 +1671,14 @@
           ${progress != null ? `<span class="hw-assignment-progress-copy">${progress}% planned work complete</span>` : ''}
         </td>
         <td data-label="Class / activity">
-          <button type="button" class="hw-course-badge ${course && course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>
+          ${courseCell}
         </td>
         <td class="hw-due-cell ${due.className}" data-label="Due">
           <span class="hw-due-relation">${escHtml(due.label)}</span>
           ${due.date && due.date !== due.label ? `<span>${escHtml(due.date)}</span>` : ''}
           ${due.time ? `<span>${escHtml(due.time)}</span>` : ''}
         </td>
+        ${difficultyCell}
         <td data-label="Priority"><span class="hw-priority-badge is-${escHtml(priority)}"><i class="fas fa-angles-up" aria-hidden="true"></i>${escHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span></td>
         <td data-label="Status"><span class="hw-work-status is-${escHtml(status)}"><i class="fas ${status === 'completed' ? 'fa-check' : status === 'in-progress' ? 'fa-circle-half-stroke' : 'fa-diamond'}" aria-hidden="true"></i>${escHtml(statusLabel)}</span></td>
         <td class="hw-quick-actions-cell" data-label="Actions">
@@ -1667,7 +1690,8 @@
   }
 
   function renderHomeworkWorkspaceRows(filteredTasks) {
-    if (homeworkViewState.tab !== 'class') return filteredTasks.map(renderHomeworkWorkspaceRow).join('');
+    const includeDifficulty = homeworkViewState.tab === 'class';
+    if (!includeDifficulty) return filteredTasks.map(task => renderHomeworkWorkspaceRow(task)).join('');
 
     const grouped = new Map();
     filteredTasks.forEach(task => {
@@ -1677,11 +1701,11 @@
       grouped.get(key).tasks.push(task);
     });
     return Array.from(grouped.values())
-      .sort((a, b) => String(a.course && a.course.name || 'No class').localeCompare(String(b.course && b.course.name || 'No class')))
+      .sort((a, b) => String(a.course && a.course.name || 'Unassigned').localeCompare(String(b.course && b.course.name || 'Unassigned')))
       .map(group => {
-        const name = group.course ? group.course.name : 'No class';
-        const kind = group.course && group.course.type === 'misc' ? 'Activity' : 'Class';
-        return `<tr class="hw-assignment-group-row"><th colspan="6" scope="rowgroup"><span>${escHtml(name)}</span><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></th></tr>${group.tasks.map(renderHomeworkWorkspaceRow).join('')}`;
+        const name = group.course ? group.course.name : 'Unassigned';
+        const kind = group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned';
+        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><span>${escHtml(name)}</span><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
       }).join('');
   }
 
@@ -1707,6 +1731,7 @@
 
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
+    const byClass = homeworkViewState.tab === 'class';
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
     const addMethod = getHwAddMethod();
     let content = '';
@@ -1724,9 +1749,9 @@
     } else {
       content = `
         <div class="hw-assignment-table-wrap">
-          <table class="hw-assignment-table">
+          <table class="hw-assignment-table${byClass ? ' is-by-class' : ''}">
             <caption class="sr-only">Homework assignments</caption>
-            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
             <tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>
           </table>
         </div>`;
