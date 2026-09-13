@@ -278,7 +278,7 @@
     "./src/features/workspace/timeline-calendar.js?v=20260904-compactevents4",
     "./src/features/workspace/timeline-drag.js?v=20260913-content-limits-timeline1",
     "./src/features/workspace/today-command-center.js?v=20260721-radar-consolidation1",
-    "./src/features/workspace/today-dashboard.js?v=20260816-home-labels1",
+    "./src/features/workspace/today-dashboard.js?v=20260913-home-calm2",
     "./src/features/workspace/today-focus-timer.js?v=20260809-todaytimer1",
     "./src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1",
     "./src/persistence/revocation-wipe.js?v=20260831-revoke5",

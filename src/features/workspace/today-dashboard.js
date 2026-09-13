@@ -10,7 +10,7 @@
 (function () {
     'use strict';
 
-    var VERSION = 1;
+    var VERSION = 2;
     var SIZE_KEYS = ['compact', 'standard', 'wide'];
 
     var WIDGETS = [
@@ -42,9 +42,9 @@
     var PRESETS = {
         calm: {
             label: 'Calm',
-            description: 'The daily loop first, with secondary signals tucked away.',
+            description: 'Next up, Radar, priorities, and save confidence without duplicate cards.',
             order: WIDGET_IDS.slice(),
-            hidden: ['tonight', 'habits', 'tracker', 'life-signals', 'academic-planner', 'momentum'],
+            hidden: ['today-plan', 'assignments', 'calendar', 'tasks', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
             sizes: { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' }
         },
         study: {
@@ -119,6 +119,11 @@
     function normalizePreferences(raw) {
         var source = raw && typeof raw === 'object' ? raw : {};
         var presetKey = Object.prototype.hasOwnProperty.call(PRESETS, source.preset) ? source.preset : (source.preset === 'custom' ? 'custom' : 'calm');
+        // Calm is a named preset, not a user-customized layout. When the
+        // default composition changes, migrate an older saved Calm snapshot
+        // to the new essentials-only composition. Custom layouts retain every
+        // explicit user choice, including hidden widgets and ordering.
+        if (presetKey === 'calm' && Number(source.version) < VERSION) return getPresetPreferences('calm');
         var base = getPresetPreferences(presetKey === 'custom' ? 'calm' : presetKey);
         return {
             version: VERSION,
