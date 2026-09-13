@@ -328,15 +328,15 @@ body[data-theme="heritage"][data-theme-key="heritage"] :is(.view-tab.active, .to
         display: flex !important;
         align-items: center;
         justify-content: flex-start !important;
-        border: 1px solid rgba(255, 255, 255, 0.58) !important;
+        border: 1px solid var(--glass-chrome-edge, rgba(255, 255, 255, 0.58)) !important;
         border-radius: 18px !important;
         background:
-            linear-gradient(135deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.38)) !important;
-        -webkit-backdrop-filter: blur(24px) saturate(175%) !important;
-        backdrop-filter: blur(24px) saturate(175%) !important;
+            linear-gradient(180deg, var(--glass-chrome-top, rgba(255, 255, 255, 0.68)), var(--glass-chrome-bottom, rgba(255, 255, 255, 0.38))) !important;
+        -webkit-backdrop-filter: blur(var(--glass-blur, 24px)) saturate(var(--glass-saturate, 175%)) !important;
+        backdrop-filter: blur(var(--glass-blur, 24px)) saturate(var(--glass-saturate, 175%)) !important;
         box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+            inset 0 1px 0 var(--glass-inner-highlight, rgba(255, 255, 255, 0.9)),
+            inset 0 0 0 1px color-mix(in srgb, var(--glass-rim, #fff) 35%, transparent),
             0 10px 26px rgba(36, 54, 88, 0.12) !important;
     }
 
@@ -358,29 +358,29 @@ body[data-theme="heritage"][data-theme-key="heritage"] :is(.view-tab.active, .to
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-field,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .nf-select-trigger {
-        color: #3f4652;
-        border-color: rgba(87, 102, 128, 0.12) !important;
-        background: rgba(255, 255, 255, 0.32) !important;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+        color: var(--text-secondary, #3f4652) !important;
+        border-color: var(--surface-border-strong, rgba(87, 102, 128, 0.12)) !important;
+        background: var(--surface-bg-elevated, rgba(255, 255, 255, 0.32)) !important;
+        box-shadow: inset 0 1px 0 var(--glass-inner-highlight, rgba(255, 255, 255, 0.55)) !important;
     }
 
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn:hover,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-field:hover,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .nf-select-trigger:hover {
-        color: #1d1d1f;
-        background: rgba(255, 255, 255, 0.64) !important;
-        border-color: rgba(10, 132, 255, 0.24) !important;
+        color: var(--text-primary, #1d1d1f) !important;
+        background: var(--glass-fill-strong, rgba(255, 255, 255, 0.64)) !important;
+        border-color: color-mix(in srgb, var(--accent, #0a84ff) 24%, transparent) !important;
     }
 
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn.active,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-btn[aria-pressed="true"] {
-        color: #0069d9 !important;
-        background: rgba(10, 132, 255, 0.14) !important;
-        border-color: rgba(10, 132, 255, 0.28) !important;
+        color: var(--accent-strong, #0069d9) !important;
+        background: var(--accent-soft, rgba(10, 132, 255, 0.14)) !important;
+        border-color: color-mix(in srgb, var(--accent, #0a84ff) 28%, transparent) !important;
     }
 
     body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .toolbar-separator {
-        background: rgba(72, 88, 116, 0.22) !important;
+        background: var(--surface-border-strong, rgba(72, 88, 116, 0.22)) !important;
     }
 }
 

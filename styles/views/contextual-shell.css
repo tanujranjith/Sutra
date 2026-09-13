@@ -298,6 +298,17 @@ body.settings-anchored-mode .top-nav {
   }
 }
 
+/* Tablet Notes keeps the app bar in the shell and the document below it. The
+   shared sticky toolbar lives inside that already-offset content column, so a
+   navigation-height sticky inset would reserve the header twice and let the
+   editor title slide underneath the toolbar. Desktop has its own single-scroll
+   treatment above; phones remove the global bar entirely. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  body[data-view="notes"]:not(.notes-split-active) #view-notes .toolbar-wrapper {
+    top: 0 !important;
+  }
+}
+
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   body[data-view="notes"] .top-nav {
     background: var(--sutra-color-canvas) !important;

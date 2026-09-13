@@ -195,8 +195,8 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .sidebar {
     border-top: none !important;
     border-bottom: none !important;
     box-shadow: 1px 0 0 rgba(255, 255, 255, 0.45) !important;
-    -webkit-backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(180%);
-    backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(180%);
 }
 
 /* Remove the saturated tinted seam – use a clean neutral highlight */
@@ -290,8 +290,8 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .top-nav {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.65),
         0 2px 12px rgba(0, 0, 0, 0.08) !important;
-    -webkit-backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(180%);
-    backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(180%);
+    backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(180%);
 }
 
 body:is([data-theme="glass"], [data-theme="liquidglass"]) .window-chrome {
@@ -387,8 +387,8 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .toolbar-wrapper {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.62),
         0 2px 8px rgba(0, 0, 0, 0.07) !important;
-    -webkit-backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(160%);
-    backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(160%);
+    backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(160%);
 }
 
 body:is([data-theme="glass"], [data-theme="liquidglass"]) .toolbar-btn {
@@ -527,8 +527,8 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .storage-options {
     background: rgba(248, 248, 250, 0.92) !important;
     border: 1px solid rgba(0, 0, 0, 0.08) !important;
     box-shadow: 0 2px 14px rgba(0, 0, 0, 0.10) !important;
-    -webkit-backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(150%);
-    backdrop-filter: blur(var(--liquid-glass-blur, 18px)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(150%);
+    backdrop-filter: blur(var(--glass-blur, var(--liquid-glass-blur, 18px))) saturate(150%);
     border-radius: 28px !important;
 }
 
@@ -605,8 +605,8 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .view.active > *:nth-c
     body:is([data-theme="glass"], [data-theme="liquidglass"]) .storage-options,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) .theme-panel,
     body:is([data-theme="glass"], [data-theme="liquidglass"]) .chatbot-panel {
-        -webkit-backdrop-filter: blur(calc(var(--liquid-glass-blur, 18px) * 0.8)) saturate(150%);
-        backdrop-filter: blur(calc(var(--liquid-glass-blur, 18px) * 0.8)) saturate(150%);
+        -webkit-backdrop-filter: blur(calc(var(--glass-blur, var(--liquid-glass-blur, 18px)) * 0.8)) saturate(150%);
+        backdrop-filter: blur(calc(var(--glass-blur, var(--liquid-glass-blur, 18px)) * 0.8)) saturate(150%);
     }
 
     body:is([data-theme="glass"], [data-theme="liquidglass"]) .view-tabs {

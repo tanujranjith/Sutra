@@ -612,12 +612,12 @@
     "hash": "8b6daa5488340471"
   },
   "styles/themes/glass.css": {
-    "stamp": "20260712-glass-fix",
-    "hash": "125b698224d06332"
+    "stamp": "20260913-glass-runtime1",
+    "hash": "e61115a58fa9fd0d"
   },
   "styles/themes/macos26-redesign.css": {
-    "stamp": "20260712-glass-fix",
-    "hash": "140d902be25888a7"
+    "stamp": "20260913-glass-surfaces1",
+    "hash": "7e6662f56c7db9a1"
   },
   "styles/themes/signature-presets.css": {
     "stamp": "20260807-signaturethemes5",
@@ -628,16 +628,16 @@
     "hash": "3208734a65002e8c"
   },
   "styles/themes/theme-cohesion.css": {
-    "stamp": "20260820-liquidglass-toolbar2",
-    "hash": "36dc993f217c64a4"
+    "stamp": "20260913-glass-cohesion1",
+    "hash": "f9c709dd8079f484"
   },
   "styles/views/assistant-view.css": {
     "stamp": "20260818-cache-refresh1",
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260913-page-tree-guides1",
-    "hash": "ee5765f108883da6"
+    "stamp": "20260913-glass-notes1",
+    "hash": "a1746177f7db8aa0"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

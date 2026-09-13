@@ -398,6 +398,18 @@ body[data-theme="liquidglass"] .main-content {
     background: transparent !important;
 }
 
+/* A view is a scroll canvas, not a card. The macOS compatibility skin also
+   applies its shared glass layer to `.view`, which creates a full-viewport
+   backdrop-filter behind the cards and every other glass surface. That is both
+   needlessly expensive and prone to browser compositing glitches while a view
+   scrolls. Keep the translucent fill and let the smaller, purposeful surfaces
+   below carry the frost. */
+body[data-theme="glass"] .view,
+body[data-theme="liquidglass"] .view {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
 /* The desktop skin refinement (macos26-redesign.css, min-width:1025px)
    sets a near-opaque bluish nav + toolbar; re-assert the see-through glass
    fill at the same breakpoint so the upgrade wins on desktop too. */
