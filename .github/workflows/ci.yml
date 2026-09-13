@@ -22,7 +22,6 @@ permissions:
 
 env:
   NODE_VERSION: "20"
-  PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
 
 jobs:
   build-and-check:
@@ -48,10 +47,16 @@ jobs:
           retention-days: 7
 
   browser-tests:
-    name: Browser tests (Chromium, verified artifact)
+    name: Browser tests (Chromium shard ${{ matrix.shard }}, verified artifact)
     needs: build-and-check
     if: ${{ github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -65,13 +70,13 @@ jobs:
           path: .deploy
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ runner.temp }}/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-chromium
       - run: npx playwright install --with-deps chromium
       - name: Test the verified artifact
         env:
           SUTRA_SERVE_ROOT: .deploy
-        run: npm run test:e2e:chromium
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -99,15 +104,21 @@ jobs:
           - label: Desktop Chrome
             id: chrome
             project_args: --project=chrome
+            browser_install: chrome
           - label: Desktop Firefox
             id: firefox
             project_args: --project=firefox
+            browser_install: firefox
           - label: Desktop WebKit
             id: webkit
             project_args: --project=webkit
+            browser_install: webkit
           - label: Responsive devices
             id: responsive
             project_args: --project=mobile-chromium --project=mobile-webkit --project=tablet --project=narrow-desktop
+            browser_install: chromium firefox webkit
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -121,9 +132,9 @@ jobs:
           path: .deploy
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-all
-      - run: npx playwright install --with-deps chromium firefox webkit
+          path: ${{ runner.temp }}/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ matrix.id }}
+      - run: npx playwright install --with-deps ${{ matrix.browser_install }}
       - name: Test the verified artifact in the isolated compatibility lane
         env:
           SUTRA_SERVE_ROOT: .deploy
