@@ -51,7 +51,9 @@ const target = process.argv[2] || process.env.SUTRA_DEPLOYED_URL;
 if (target) {
   const url = new URL(target);
   if (url.protocol !== 'https:') throw new Error('Production header checks require an HTTPS URL.');
-  const response = await fetch(url, { redirect: 'follow', cache: 'no-store' });
+  // Header verification does not need a response body. HEAD also mirrors the
+  // release acceptance check and avoids downloading the full static shell.
+  const response = await fetch(url, { method: 'HEAD', redirect: 'follow', cache: 'no-store' });
   if (!response.ok) throw new Error('Header target returned HTTP ' + response.status + ': ' + response.url);
   verify(Object.fromEntries(response.headers.entries()), response.url);
 } else {

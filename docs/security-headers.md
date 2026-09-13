@@ -30,4 +30,23 @@ what a deployment actually sends:
 
     npm run check:headers -- https://your-deployment.example/Sutra.html
 
-The deployed check fails closed when a required header or directive is absent.
+The deployed check uses an HTTPS `HEAD` request and fails closed when a required
+header or directive is absent. It is intended for a header-capable deployment;
+running it against the current GitHub Pages host is expected to fail because
+those headers cannot be configured there.
+
+## Current GitHub Pages verification
+
+Sutra deliberately retains GitHub Pages as its production host. A read-only
+HTTPS `HEAD` check of `https://tanujranjith.github.io/Sutra/Sutra.html` on
+2026-09-13 returned `200` and:
+
+- present: `Strict-Transport-Security: max-age=31556952`;
+- absent: response-header `Content-Security-Policy`,
+  `X-Content-Type-Options`, `Referrer-Policy`, and framing protection.
+
+This is an accepted hosting limitation, not evidence that `vercel.json` applies
+to GitHub Pages. The HTML entry points therefore retain the canonical meta CSP
+for directives supported in markup, while `frame-ancestors` and the other
+HTTP-only protections remain unavailable on this host. Moving production to a
+header-capable host requires a separate hosting/deployment decision.

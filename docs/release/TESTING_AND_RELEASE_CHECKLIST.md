@@ -317,3 +317,16 @@ record actual results for:
 - [ ] Reduced-motion enabled on one physical device.
 - [ ] Offline launch from an already-cached local/static copy, noting any browser
       limitations honestly.
+
+## 8. Production response-header verification
+
+The current production host is GitHub Pages. It is intentionally retained as a
+static host, so the repository documents and accepts its inability to emit
+custom response headers. Before a release, perform the read-only HTTPS `HEAD`
+check documented in [`security-headers.md`](../security-headers.md) against the
+production `Sutra.html` URL and record any host-policy change. The current
+baseline is `200` with HSTS only; response-header CSP, MIME-sniffing,
+referrer, and framing protections are unavailable there. The meta CSP remains
+required in every HTML entry point. A header-capable host or reverse proxy is a
+separate deployment decision and must not be introduced implicitly by this
+checklist.
