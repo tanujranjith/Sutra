@@ -3,12 +3,11 @@
   'use strict';
 
   var PRESETS = Object.freeze({
-    balanced: Object.freeze({ urgency: 1.0, gradeImpact: 0.8, importance: 0.7, energyFit: 0.45, staleness: 0.35, effort: 0.25 }),
-    deadline_first: Object.freeze({ urgency: 1.5, gradeImpact: 0.55, importance: 0.55, energyFit: 0.2, staleness: 0.2, effort: 0.1 }),
-    grade_recovery: Object.freeze({ urgency: 0.8, gradeImpact: 1.5, importance: 0.8, energyFit: 0.25, staleness: 0.3, effort: 0.15 }),
-    low_energy: Object.freeze({ urgency: 0.8, gradeImpact: 0.65, importance: 0.6, energyFit: 1.35, staleness: 0.25, effort: 0.8 }),
-    exam_week: Object.freeze({ urgency: 1.25, gradeImpact: 1.2, importance: 0.75, energyFit: 0.35, staleness: 0.45, effort: 0.15 }),
-    overwhelmed: Object.freeze({ urgency: 0.9, gradeImpact: 0.8, importance: 0.65, energyFit: 0.8, staleness: 0.15, effort: 1.15 })
+    balanced: Object.freeze({ urgency: 1.0, gradeImpact: 0.8, importance: 0.7, staleness: 0.35, effort: 0.25 }),
+    deadline_first: Object.freeze({ urgency: 1.5, gradeImpact: 0.55, importance: 0.55, staleness: 0.2, effort: 0.1 }),
+    grade_recovery: Object.freeze({ urgency: 0.8, gradeImpact: 1.5, importance: 0.8, staleness: 0.3, effort: 0.15 }),
+    exam_week: Object.freeze({ urgency: 1.25, gradeImpact: 1.2, importance: 0.75, staleness: 0.45, effort: 0.15 }),
+    overwhelmed: Object.freeze({ urgency: 0.9, gradeImpact: 0.8, importance: 0.65, staleness: 0.15, effort: 1.15 })
   });
 
   function list(value) { return Array.isArray(value) ? value : []; }
@@ -63,7 +62,6 @@
         priority: String(item.priority || 'medium'),
         estimatedMinutes: effortMinutes(item),
         gradeImpact: clamp(item.gradeImpact || item.gradeWeight || item.weight || 0, 0, 1),
-        energy: String(item.energy || item.energyLevel || (String(item.difficulty).toLowerCase() === 'hard' ? 'high' : 'medium')),
         updatedAt: item.updatedAt || item.modifiedAt || item.createdAt || '',
         courseId: String(item.courseId || item.classId || item.classLinkId || ''),
         raw: item
@@ -118,25 +116,23 @@
     var dismissed = new Set(list(state.dismissed).map(String));
     var pinned = new Set(list(state.pinned).map(String));
     var snoozed = object(state.snoozed);
-    var requestedEnergy = String(opts.energy || 'medium');
     return actions.map(function (action) {
       var dep = dependencyState(ws, action, actions);
       var due = urgency(action.dueAt, nowMs);
       var importance = priorityScore(action.priority);
       var grade = action.gradeImpact || (action.sourceType === 'exam' ? 0.85 : action.sourceType === 'homework' ? 0.55 : 0.25);
-      var energyFit = action.energy === requestedEnergy ? 1 : (requestedEnergy === 'low' && action.energy === 'high' ? 0.05 : 0.5);
       var ageMs = Math.max(0, nowMs - (parseDate(action.updatedAt) || nowMs));
       var stale = clamp(ageMs / (30 * 86400000), 0, 1);
       var shortEffort = 1 - clamp((action.estimatedMinutes - 10) / 170, 0, 1);
       var score = due.score * weights.urgency + grade * weights.gradeImpact + importance * weights.importance
-        + energyFit * weights.energyFit + stale * weights.staleness + shortEffort * weights.effort;
+        + stale * weights.staleness + shortEffort * weights.effort;
       if (pinned.has(action.id) || pinned.has(action.sourceId)) score += 1.25;
       if (dep.blocked) score -= 10;
       var snoozeUntil = parseDate(snoozed[action.id] || snoozed[action.sourceId]);
       var hidden = dismissed.has(action.id) || dismissed.has(action.sourceId) || (snoozeUntil !== null && snoozeUntil > nowMs);
       var reason = dep.blocked
         ? 'Blocked until a prerequisite is completed.'
-        : (due.label + (grade >= 0.7 ? ', with high grade impact' : '') + (energyFit >= 0.9 ? ', and it fits your current energy' : '') + '.');
+        : (due.label + (grade >= 0.7 ? ', with high grade impact' : '') + '.');
       return Object.assign({}, action, { rankScore: Math.round(score * 100) / 100, rankReason: reason.charAt(0).toUpperCase() + reason.slice(1), blocked: dep.blocked, prerequisiteIds: dep.missing, hidden: hidden, preset: presetName });
     }).filter(function (action) { return opts.includeHidden === true || !action.hidden; })
       .sort(function (a, b) { return b.rankScore - a.rankScore || String(a.dueAt).localeCompare(String(b.dueAt)) || a.id.localeCompare(b.id); });
@@ -161,7 +157,6 @@
         priority: String(item.priority || 'medium'),
         estimatedMinutes: effortMinutes(item),
         gradeImpact: clamp(item.gradeImpact || item.gradeWeight || item.riskScore && Number(item.riskScore) / 5 || 0, 0, 1),
-        energy: String(item.energy || item.energyLevel || (Number(item.effortMinutes || item.estimatedMinutes) >= 75 ? 'high' : 'medium')),
         updatedAt: item.updatedAt || item.modifiedAt || item.createdAt || '',
         courseId: String(item.courseId || item.classId || item.classLinkId || ''),
         raw: item

@@ -58,29 +58,29 @@
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
     <script src="src/core/dom-safety.js?v=20260913-custom-html-safety1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
-    <script src="src/core/migrations.js?v=20260813-pdf2"></script>
+    <script src="src/core/migrations.js?v=20260913-energy-removal-migrations1"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
     <script src="src/persistence/revocation-wipe.js?v=20260831-revoke5"></script>
     <script src="src/core/credential-vault.js?v=20260831-revoke4"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
     <script src="src/domain/homework-store.js?v=20260913-homework-removal-homework-store1"></script>
-    <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
+    <script src="src/domain/student-engine.js?v=20260913-energy-removal-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
     <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
     <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
-    <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
+    <script src="src/domain/student-life.js?v=20260913-energy-removal-life1"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
     <script src="src/domain/assistant-permissions.js?v=20260825-sol2-1"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
-    <script src="src/boot/legacy-workspace-migration.js?v=20260830-revoke2"></script>
+    <script src="src/boot/legacy-workspace-migration.js?v=20260913-energy-removal-legacy1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
-    <script src="src/sync/sync-protocol.js?v=20260906-notificationlocal1"></script>
+    <script src="src/sync/sync-protocol.js?v=20260913-energy-removal-sync1"></script>
     <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-projection.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
@@ -88,7 +88,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20260907-locked-context-1"></script>
+    <script src="src/config/feature-manifest.js?v=20260913-energy-removal-feature-manifest1"></script>
     <script src="src/features/feature-registry.js?v=20260709-features1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -116,7 +116,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260913-pagebreak2">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260913-energy-removal-base1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
@@ -2723,9 +2723,9 @@
                             <div class="summary-meta" id="lifeSleepConsistencyMeta">Goal streak: 0 nights</div>
                         </div>
                         <div class="glass-card summary-card">
-                            <div class="summary-label">Quality / Energy</div>
-                            <div class="summary-value" id="lifeSleepQualityEnergyValue">&mdash;</div>
-                            <div class="summary-meta" id="lifeSleepQualityEnergyMeta">Under-goal nights are tracked over the last 30 days.</div>
+                            <div class="summary-label">Sleep Quality</div>
+                            <div class="summary-value" id="lifeSleepQualityValue">&mdash;</div>
+                            <div class="summary-meta" id="lifeSleepQualityMeta">Average rating over the last 30 days.</div>
                         </div>
                         <div class="glass-card summary-card">
                             <div class="summary-label">Avg Bedtime / Wake</div>
@@ -2757,7 +2757,6 @@
                                         <th>Wake</th>
                                         <th>Duration</th>
                                         <th>Quality (1-5)</th>
-                                        <th>Energy (1-5)</th>
                                         <th>Wake-Ups</th>
                                         <th>Tags</th>
                                         <th>Notes</th>
@@ -2915,7 +2914,7 @@
                     <div class="wellness-header">
                         <div>
                             <div class="eyebrow">Wellness</div>
-                            <h2>Mind &amp; Energy</h2>
+                            <h2>Mind &amp; Wellness</h2>
                             <p class="wellness-subcopy">A calm space for a quick check-in, a guided reset, and private reflection.</p>
                         </div>
                     </div>
@@ -2944,12 +2943,6 @@
                                 <label for="wellnessStressInput" class="wellness-label">Stress level <span class="wellness-slider-value" id="wellnessStressValue">5</span></label>
                                 <input id="wellnessStressInput" class="wellness-slider" type="range" min="0" max="10" step="1" value="5" aria-label="Stress level from 0 to 10">
                                 <div class="wellness-slider-marks"><span>Calm</span><span>Tense</span></div>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label for="wellnessEnergyInput" class="wellness-label">Energy level <span class="wellness-slider-value" id="wellnessEnergyValue">5</span></label>
-                                <input id="wellnessEnergyInput" class="wellness-slider" type="range" min="0" max="10" step="1" value="5" aria-label="Energy level from 0 to 10">
-                                <div class="wellness-slider-marks"><span>Drained</span><span>Energized</span></div>
                             </div>
 
                             <div class="wellness-field">
@@ -7888,7 +7881,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
-    <script src="src/core/app.js?v=20260913-content-limits-app1"></script>
+    <script src="src/core/app.js?v=20260913-energy-removal-app3"></script>
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
@@ -7929,7 +7922,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20260905-more-actions1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260913-custom-html-widget1"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260913-energy-removal-custom-tabs1"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
@@ -8312,7 +8305,7 @@
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/features/global-search.css?v=20260825-gsstyles3">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260824-mobile-gs1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260913-energy-removal-mobile1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">

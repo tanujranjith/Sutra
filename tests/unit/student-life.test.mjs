@@ -192,15 +192,17 @@ test('wellness trends average within window, flag low sleep, stay non-medical', 
   const now = '2026-07-10T12:00:00Z';
   const ws = { lifeWorkspace: {
     wellness: { checkIns: [
-      { createdAt: '2026-07-09T12:00:00Z', stress: 8, energy: 3 },
-      { createdAt: '2026-07-08T12:00:00Z', stress: 7, energy: 3 },
-      { createdAt: '2026-01-01T12:00:00Z', stress: 1, energy: 9 } // outside window
+      { createdAt: '2026-07-09T12:00:00Z', stress: 8 },
+      { createdAt: '2026-07-08T12:00:00Z', stress: 7 },
+      { createdAt: '2026-01-01T12:00:00Z', stress: 1 } // outside window
     ] },
     sleepTracker: { entries: [{ date: '2026-07-09', totalSleepMinutes: 360 }] }
   } };
   const trends = life.getWellnessTrends(ws, { now, days: 14 });
   assert.equal(trends.samples.checkIns, 2, 'old check-in excluded');
   assert.equal(trends.averages.stress, 7.5);
+  assert.equal(Object.prototype.hasOwnProperty.call(trends.averages, 'energy'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(trends.direction, 'energy'), false);
   assert.equal(trends.averages.sleepMinutes, 360);
   assert.ok(trends.signals.some((s) => /Stress has been high/.test(s)));
   assert.ok(trends.signals.some((s) => /below seven hours/.test(s)));

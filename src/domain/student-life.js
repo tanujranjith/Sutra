@@ -162,14 +162,12 @@
     function avg(rows, field) { var vals = rows.map(function (row) { return number(row[field], NaN); }).filter(Number.isFinite); return vals.length ? vals.reduce(function (a, b) { return a + b; }, 0) / vals.length : null; }
     var recent = checks.slice().sort(function (a, b) { return (dateMs(b.createdAt || b.date) || 0) - (dateMs(a.createdAt || a.date) || 0); });
     var half = Math.max(1, Math.floor(recent.length / 2)), current = recent.slice(0, half), prior = recent.slice(half, half * 2);
-    var stress = avg(checks, 'stress'), energy = avg(checks, 'energy'), sleepMinutes = avg(sleep, 'totalSleepMinutes');
+    var stress = avg(checks, 'stress'), sleepMinutes = avg(sleep, 'totalSleepMinutes');
     var stressDelta = avg(current, 'stress') !== null && avg(prior, 'stress') !== null ? avg(current, 'stress') - avg(prior, 'stress') : null;
-    var energyDelta = avg(current, 'energy') !== null && avg(prior, 'energy') !== null ? avg(current, 'energy') - avg(prior, 'energy') : null;
     var signals = [];
     if (stress !== null && stress >= 7) signals.push('Stress has been high recently. Consider reducing today to essential commitments.');
-    if (energy !== null && energy <= 3.5) signals.push('Energy has been low recently. Prefer shorter blocks and protect recovery time.');
     if (sleepMinutes !== null && sleepMinutes < 420) signals.push('Average sleep is below seven hours. Avoid scheduling optional late-night work.');
-    return { days: days, samples: { checkIns: checks.length, sleep: sleep.length }, averages: { stress: stress === null ? null : Math.round(stress * 10) / 10, energy: energy === null ? null : Math.round(energy * 10) / 10, sleepMinutes: sleepMinutes === null ? null : Math.round(sleepMinutes) }, direction: { stress: stressDelta === null ? 'unknown' : stressDelta > .5 ? 'rising' : stressDelta < -.5 ? 'falling' : 'stable', energy: energyDelta === null ? 'unknown' : energyDelta > .5 ? 'rising' : energyDelta < -.5 ? 'falling' : 'stable' }, signals: signals, disclaimer: 'These are gentle personal trends, not medical or mental-health advice.' };
+    return { days: days, samples: { checkIns: checks.length, sleep: sleep.length }, averages: { stress: stress === null ? null : Math.round(stress * 10) / 10, sleepMinutes: sleepMinutes === null ? null : Math.round(sleepMinutes) }, direction: { stress: stressDelta === null ? 'unknown' : stressDelta > .5 ? 'rising' : stressDelta < -.5 ? 'falling' : 'stable' }, signals: signals, disclaimer: 'These are gentle personal trends, not medical or mental-health advice.' };
   }
 
   function buildEmergencyWeek(workspace, options) {
@@ -196,7 +194,7 @@
 
   function normalizeOperatingManual(seed) {
     var row = seed || {};
-    return { version: 1, preferredStudyTimes: list(row.preferredStudyTimes).map(String), reminderStyle: text(row.reminderStyle) || 'calm', planningStyle: text(row.planningStyle) || 'balanced', accessibility: row.accessibility && typeof row.accessibility === 'object' ? clone(row.accessibility) : {}, energyPatterns: list(row.energyPatterns).map(function (entry) { return { day: text(entry.day), start: text(entry.start), end: text(entry.end), energy: text(entry.energy) }; }), hardConstraints: list(row.hardConstraints).map(String), helpfulStrategies: list(row.helpfulStrategies).map(String), unhelpfulStrategies: list(row.unhelpfulStrategies).map(String), notes: text(row.notes), updatedAt: text(row.updatedAt) || new Date().toISOString() };
+    return { version: 1, preferredStudyTimes: list(row.preferredStudyTimes).map(String), reminderStyle: text(row.reminderStyle) || 'calm', planningStyle: text(row.planningStyle) || 'balanced', accessibility: row.accessibility && typeof row.accessibility === 'object' ? clone(row.accessibility) : {}, hardConstraints: list(row.hardConstraints).map(String), helpfulStrategies: list(row.helpfulStrategies).map(String), unhelpfulStrategies: list(row.unhelpfulStrategies).map(String), notes: text(row.notes), updatedAt: text(row.updatedAt) || new Date().toISOString() };
   }
 
   var api = {

@@ -2271,7 +2271,7 @@
         min-width: 40px;
         min-height: 40px;
     }
-    /* Range sliders (Life check-in energy etc.) — 16px tracks are hard to
+    /* Range sliders — 16px tracks are hard to
        grab; padding grows the hit area without changing the visual track. */
     input[type="range"] {
         min-height: 32px;

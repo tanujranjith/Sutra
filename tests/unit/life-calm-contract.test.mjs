@@ -12,9 +12,9 @@ test('wellness trends are bounded, actionable, and never medical advice', () => 
     lifeWorkspace: {
       wellness: {
         checkIns: [
-          { createdAt: '2026-07-30T09:00:00.000Z', stress: 8, energy: 3 },
-          { createdAt: '2026-07-31T09:00:00.000Z', stress: 7, energy: 2.5 },
-          { createdAt: '2026-08-01T09:00:00.000Z', stress: 9, energy: 2 }
+          { createdAt: '2026-07-30T09:00:00.000Z', stress: 8 },
+          { createdAt: '2026-07-31T09:00:00.000Z', stress: 7 },
+          { createdAt: '2026-08-01T09:00:00.000Z', stress: 9 }
         ]
       },
       sleepTracker: {
@@ -27,6 +27,7 @@ test('wellness trends are bounded, actionable, and never medical advice', () => 
   }, { now: NOW });
 
   assert.equal(trends.averages.stress, 8, 'stress averages across the window');
+  assert.equal(Object.prototype.hasOwnProperty.call(trends.averages, 'energy'), false, 'removed Energy data is not surfaced');
   assert.ok(trends.signals.some(s => s.includes('Stress has been high recently. Consider reducing today to essential commitments.')), 'high stress produces an actionable signal');
   assert.ok(trends.signals.some(s => s.includes('Average sleep is below seven hours.')), 'short sleep produces an actionable signal');
   assert.equal(trends.disclaimer, 'These are gentle personal trends, not medical or mental-health advice.');

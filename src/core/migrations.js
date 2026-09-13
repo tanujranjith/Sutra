@@ -152,9 +152,6 @@
     var next = workspace;
     function arrayOrEmpty(value) { return Array.isArray(value) ? value : []; }
     function objectOrDefault(value, fallback) { return isObject(value) ? value : clone(fallback); }
-    next.energyProfile = objectOrDefault(next.energyProfile, {
-      version: 1, enabled: false, timezone: '', windows: [], sleepWindow: { start: '23:00', end: '07:00' }, protectedRecoveryMinutes: 30
-    });
     next.protectedTime = arrayOrEmpty(next.protectedTime);
     next.taskDependencies = arrayOrEmpty(next.taskDependencies);
     next.studySessions = arrayOrEmpty(next.studySessions);

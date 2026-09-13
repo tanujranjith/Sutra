@@ -270,7 +270,7 @@ Open the **Life** tab. The dashboard shows the primary trackers up front:
 
 - **SMART Goals** - write goals in SMART format, set status, due dates, and schedule.
 - **Habits** - same data as Today's habit tracker.
-- **Sleep** - log nightly. Eight analytics cards: last night, 7-day average, 30-day average, goal progress %, trend, consistency / streak, quality / energy, bedtime / wake-time average.
+- **Sleep** - log nightly. Eight analytics cards: last night, 7-day average, 30-day average, goal progress %, trend, consistency / streak, sleep quality, bedtime / wake-time average.
 - **Spending** - ledger with monthly total, transaction count, average per transaction, and top category.
 - **Journal** - dated entries.
 

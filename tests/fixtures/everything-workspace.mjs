@@ -317,7 +317,6 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
     cramSessions: [{ id: 'cram-parity', title: 'Synthetic cram session', resources: { notes: [{ id: 'cram-resource-parity', text: 'Cram resource sentinel' }] } }],
     trash: [{ id: 'trash-parity', kind: 'page', deletedAt: EVERYTHING_STAMP, value: { id: 'deleted-page-parity', title: 'Recoverable synthetic note', content: '<p>Trash sentinel</p>' } }],
     focusSessions: [{ id: 'focus-session-parity', taskId: 'task-parity-a', startedAt: EVERYTHING_STAMP, durationSeconds: 1500, completed: true }],
-    energyProfile: { version: 1, enabled: true, timezone: 'America/Indianapolis', windows: [{ id: 'energy-parity', start: '16:00', end: '18:00', energy: 'high' }], sleepWindow: { start: '22:30', end: '06:30' }, protectedRecoveryMinutes: 40 },
     protectedTime: [{ id: 'protected-parity', label: 'Synthetic recovery', startTime: '19:00', endTime: '20:00' }],
     taskDependencies: [{ id: 'dependency-parity', taskId: 'task-parity-a', dependsOnTaskId: 'task-parity-b' }],
     studySessions: [{ id: 'study-session-parity', subject: 'Synthetic Biology', durationMinutes: 35 }],

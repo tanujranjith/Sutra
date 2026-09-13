@@ -168,7 +168,7 @@
       'schoolSchedule', 'gradePlanner', 'semesterSetup', 'cramSessions',
       'focusSessions', 'focusTemplates', 'testingHub',
       'pinnedPages', 'notificationsState',
-      'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions',
+      'protectedTime', 'taskDependencies', 'studySessions',
       'masteryRecords', 'confidenceObservations', 'studentDecisionState',
       'assistantPermissions', 'assistantMemory',
       'sharedStudySessions', 'operatingManual', 'portfolioWorkspace',

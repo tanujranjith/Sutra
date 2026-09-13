@@ -5599,14 +5599,12 @@ function populateProgressDashboard() {
         function createLifeJournalRow(seed = {}) {
             const s = seed && typeof seed === 'object' ? seed : {};
             const hasStress = s.stress !== undefined && s.stress !== null && String(s.stress).trim() !== '';
-            const hasEnergy = s.energy !== undefined && s.energy !== null && String(s.energy).trim() !== '';
             return {
                 id: s.id || generateId(),
                 date: s.date || '',
                 title: s.title || '',
                 mood: s.mood || '',
                 stress: hasStress ? Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(s.stress, 5)))) : null,
-                energy: hasEnergy ? Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(s.energy, 5)))) : null,
                 tags: Array.isArray(s.tags) ? s.tags.map(t => String(t).trim().slice(0, 32)).filter(Boolean).slice(0, 12) : [],
                 prompt: s.prompt || '',
                 content: s.content || ''
@@ -5676,7 +5674,6 @@ function populateProgressDashboard() {
                 wakeTime: wakeTime || '07:00',
                 totalSleepMinutes: Number.isFinite(computedDuration) ? computedDuration : fallbackDuration,
                 sleepQuality: Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(seed.sleepQuality, 3)))),
-                nextDayEnergy: Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(seed.nextDayEnergy, 3)))),
                 notes: String(seed.notes || ''),
                 targetSleepMinutes: seed.targetSleepMinutes === undefined || seed.targetSleepMinutes === null
                     ? null
@@ -5763,13 +5760,11 @@ function populateProgressDashboard() {
         function normalizeWellnessCheckIn(row) {
             const source = row && typeof row === 'object' ? row : {};
             const stress = Number(source.stress);
-            const energy = Number(source.energy);
             return {
                 id: String(source.id || `wci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
                 createdAt: String(source.createdAt || new Date().toISOString()),
                 mood: String(source.mood || ''),
                 stress: Number.isFinite(stress) ? Math.max(0, Math.min(10, Math.round(stress))) : 5,
-                energy: Number.isFinite(energy) ? Math.max(0, Math.min(10, Math.round(energy))) : 5,
                 sleep: String(source.sleep || ''),
                 note: String(source.note || '')
             };
@@ -6896,7 +6891,6 @@ function populateProgressDashboard() {
                 cramSessions: [], // Section 31 — Cram Hub sessions
                 trash: [], // Part 5 — recently-deleted items (restore / purge)
                 focusSessions: [], // Part 5 — completed focus session history
-                energyProfile: { version: 1, enabled: false, timezone: '', windows: [], sleepWindow: { start: '23:00', end: '07:00' }, protectedRecoveryMinutes: 30 },
                 protectedTime: [],
                 taskDependencies: [],
                 studySessions: [],
@@ -8834,17 +8828,6 @@ function populateProgressDashboard() {
             if (importedType === 'imp_session_log') {
                 const rows = customTabFocusSessionRows(6);
                 return { list: rows, empty: rows.length ? '' : 'No focus sessions logged yet.' };
-            }
-
-            if (importedType === 'imp_energy_checkin') {
-                const checks = lifeWorkspace && lifeWorkspace.wellness && Array.isArray(lifeWorkspace.wellness.checkIns) ? lifeWorkspace.wellness.checkIns : [];
-                const recent = checks.slice(-5).reverse();
-                const avg = recent.length ? Math.round(recent.reduce((sum, row) => sum + (Number(row.energy || row.nextDayEnergy || row.mood || 0) || 0), 0) / recent.length * 10) / 10 : 0;
-                return {
-                    hero: { value: recent.length ? avg : '-', label: 'recent energy' },
-                    list: recent.map(row => ({ title: String(row.title || row.mood || 'Check-in'), meta: String(row.date || row.createdAt || '').slice(0, 10) })),
-                    actions: [{ label: 'Open wellness', action: 'open_view', payload: { view: 'life' } }]
-                };
             }
 
             if (importedType === 'imp_overdue_recovery') {
@@ -13364,7 +13347,6 @@ function populateProgressDashboard() {
                     { key: 'timeFellAsleep', label: 'Fell Asleep (optional)', type: 'time', default: '' },
                     { key: 'wakeTime', label: 'Wake Time', type: 'time', default: '07:00' },
                     { key: 'sleepQuality', label: 'Sleep Quality (1-5)', type: 'number', min: 1, max: 5, step: 1, default: 3 },
-                    { key: 'nextDayEnergy', label: 'Next-Day Energy (1-5)', type: 'number', min: 1, max: 5, step: 1, default: 3 },
                     { key: 'wakeUpsCount', label: 'Wake-Ups', type: 'number', min: 0, max: 20, step: 1, default: 0 },
                     { key: 'tagsInput', label: 'Tags', type: 'text', placeholder: 'caffeine, stress, travel' },
                     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional reflection...' }
@@ -15606,7 +15588,7 @@ function populateProgressDashboard() {
                 if (field === 'status') value = LIFE_GOAL_STATUS_VALUES.has(String(value)) ? String(value) : 'active';
                 if (field === 'priority') value = LIFE_PRIORITY_VALUES.has(String(value)) ? String(value) : '';
             }
-            if (collection === 'journals' && (field === 'stress' || field === 'energy')) {
+            if (collection === 'journals' && field === 'stress') {
                 value = String(target.value).trim() === '' ? null : Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(value, 5))));
             }
             if (collection === 'journals' && field === 'tags') {
@@ -16017,7 +15999,6 @@ function populateProgressDashboard() {
                     <td>
                         <input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="mood" value="${escapeHtml(String(row.mood || ''))}" placeholder="Mood">
                         <div class="life-journal-signals">
-                            <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="energy" value="${row.energy == null ? '' : escapeHtml(String(row.energy))}" placeholder="Energy" aria-label="Energy 0-10 (optional)">
                             <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="stress" value="${row.stress == null ? '' : escapeHtml(String(row.stress))}" placeholder="Stress" aria-label="Stress 0-10 (optional)">
                         </div>
                         <input class="college-input college-essay-next" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="tags" value="${escapeHtml((row.tags || []).join(', '))}" placeholder="Tags (comma-separated)" aria-label="Tags">
@@ -16129,7 +16110,7 @@ function populateProgressDashboard() {
         // ---- Journal reflection prompts + non-medical disclaimer ----
         const LIFE_JOURNAL_PROMPTS = [
             'What went well today?',
-            'What drained my energy?',
+            'What felt heavy today?',
             'One thing I am grateful for',
             'What will I do differently tomorrow?',
             'How did I take care of myself today?',
@@ -16349,9 +16330,6 @@ function populateProgressDashboard() {
             const avgSleepQuality = entries30.length
                 ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.sleepQuality, 3))), 0) / entries30.length)
                 : null;
-            const avgEnergy = entries30.length
-                ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.nextDayEnergy, 3))), 0) / entries30.length)
-                : null;
             const underGoalNights = entries30.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) < targetMinutes).length;
 
             return {
@@ -16368,7 +16346,6 @@ function populateProgressDashboard() {
                 goalProgressPercent,
                 goalStreak,
                 avgSleepQuality,
-                avgEnergy,
                 underGoalNights
             };
         }
@@ -16384,8 +16361,8 @@ function populateProgressDashboard() {
             const trendMetaEl = document.getElementById('lifeSleepTrendMeta');
             const consistencyEl = document.getElementById('lifeSleepConsistencyValue');
             const consistencyMetaEl = document.getElementById('lifeSleepConsistencyMeta');
-            const qualityEl = document.getElementById('lifeSleepQualityEnergyValue');
-            const qualityMetaEl = document.getElementById('lifeSleepQualityEnergyMeta');
+            const qualityEl = document.getElementById('lifeSleepQualityValue');
+            const qualityMetaEl = document.getElementById('lifeSleepQualityMeta');
             const bedtimeWakeEl = document.getElementById('lifeSleepBedtimeWakeValue');
             const bedtimeWakeMetaEl = document.getElementById('lifeSleepBedtimeWakeMeta');
             const goalTargetInput = document.getElementById('lifeSleepTargetMinutesInput');
@@ -16419,8 +16396,8 @@ function populateProgressDashboard() {
             if (consistencyEl) consistencyEl.textContent = `${analytics.consistencyScore}%`;
             if (consistencyMetaEl) consistencyMetaEl.textContent = `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`;
             if (qualityEl) {
-                if (Number.isFinite(analytics.avgSleepQuality) && Number.isFinite(analytics.avgEnergy)) {
-                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / ${analytics.avgEnergy.toFixed(1)}`;
+                if (Number.isFinite(analytics.avgSleepQuality)) {
+                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / 5`;
                 } else {
                     qualityEl.textContent = '\u2014';
                 }
@@ -16448,7 +16425,7 @@ function populateProgressDashboard() {
             if (!entries.length) {
                 body.innerHTML = `
                     <tr class="college-empty-row">
-                        <td colspan="11">
+                        <td colspan="10">
                             <div class="empty-state">
                                 <div class="empty-title">No sleep entries yet</div>
                                 <div class="empty-subtitle">Track bedtime, wake time, and sleep quality to build better routines.</div>
@@ -16475,7 +16452,6 @@ function populateProgressDashboard() {
                         <td data-label="Wake"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeTime" value="${escapeHtml(String(entry.wakeTime || ''))}"></td>
                         <td data-label="Duration"><span class="life-sleep-duration-badge">${escapeHtml(durationLabel)}</span></td>
                         <td data-label="Quality"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="sleepQuality">${ratingOptions(entry.sleepQuality)}</select></td>
-                        <td data-label="Energy"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="nextDayEnergy">${ratingOptions(entry.nextDayEnergy)}</select></td>
                         <td data-label="Wake-Ups"><input type="number" min="0" max="20" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeUpsCount" value="${escapeHtml(String(entry.wakeUpsCount || 0))}"></td>
                         <td data-label="Tags"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="tagsInput" value="${escapeHtml(String(tagsText))}" placeholder="caffeine, stress"></td>
                         <td data-label="Notes"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="notes" value="${escapeHtml(String(entry.notes || ''))}" placeholder="Notes"></td>
@@ -16504,7 +16480,7 @@ function populateProgressDashboard() {
                 const normalizedTime = normalizeLifeSleepTimeValue(target.value);
                 nextRow[field] = normalizedTime;
                 if (target.value !== normalizedTime) target.value = normalizedTime;
-            } else if (field === 'sleepQuality' || field === 'nextDayEnergy') {
+            } else if (field === 'sleepQuality') {
                 nextRow[field] = Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(target.value, row[field] || 3))));
             } else if (field === 'wakeUpsCount') {
                 nextRow.wakeUpsCount = Math.max(0, Math.min(20, Math.round(normalizeFiniteNumber(target.value, row.wakeUpsCount || 0))));
@@ -16609,7 +16585,7 @@ function populateProgressDashboard() {
             const payload = normalizeWellnessCheckIn({
                 id: existing ? existing.id : undefined,
                 createdAt: existing ? existing.createdAt : new Date().toISOString(),
-                mood: values.mood, stress: values.stress, energy: values.energy, sleep: values.sleep || '', note: values.note || ''
+                mood: values.mood, stress: values.stress, sleep: values.sleep || '', note: values.note || ''
             });
             if (existing) Object.assign(existing, payload);
             else lifeWorkspace.wellness.checkIns.push(payload);
@@ -16624,7 +16600,6 @@ function populateProgressDashboard() {
             if (!el) return;
             const todayCI = getLifeTodayCheckIn();
             const mood = todayCI ? todayCI.mood : 'good';
-            const energy = todayCI ? todayCI.energy : 5;
             const stress = todayCI ? todayCI.stress : 5;
             el.innerHTML = `
                 <div class="glass-card life-checkin">
@@ -16638,9 +16613,6 @@ function populateProgressDashboard() {
                     <div class="life-checkin-grid">
                         <label class="life-checkin-field"><span>Mood</span>
                             <select class="cc-input" id="lifeCheckInMood">${LIFE_MOODS.map(m => `<option value="${m.value}" ${mood === m.value ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
-                        </label>
-                        <label class="life-checkin-field"><span>Energy <b id="lifeCheckInEnergyVal">${energy}</b>/10</span>
-                            <input type="range" min="0" max="10" id="lifeCheckInEnergy" value="${energy}" class="cc-range">
                         </label>
                         <label class="life-checkin-field"><span>Stress <b id="lifeCheckInStressVal">${stress}</b>/10</span>
                             <input type="range" min="0" max="10" id="lifeCheckInStress" value="${stress}" class="cc-range">
@@ -16737,17 +16709,6 @@ function populateProgressDashboard() {
                 hasData: snap.monthTotal > 0 || upcomingTotal > 0
             };
         }
-        function getLifeEnergyTrend() {
-            const recent = getLifeRecentCheckIns(7);
-            const prior = getLifeCheckIns().filter(c => {
-                const d = new Date(c.createdAt); if (isNaN(d.getTime())) return false;
-                const cutA = new Date(); cutA.setHours(0, 0, 0, 0); cutA.setDate(cutA.getDate() - 13);
-                const cutB = new Date(); cutB.setHours(0, 0, 0, 0); cutB.setDate(cutB.getDate() - 7);
-                return d >= cutA && d < cutB;
-            });
-            const avg = (arr) => arr.length ? (arr.reduce((s, c) => s + normalizeFiniteNumber(c.energy, 5), 0) / arr.length) : null;
-            return { recentAvg: avg(recent), priorAvg: avg(prior), count: recent.length };
-        }
         // "One next life action" — a single, local heuristic suggestion.
         function getLifeNextAction() {
             if (!getLifeTodayCheckIn()) return { text: "Log today's check-in", action: 'cc-life-checkin' };
@@ -16783,22 +16744,9 @@ function populateProgressDashboard() {
             }
             const signals = [];
 
-            // Mood / energy trend
-            const trend = getLifeEnergyTrend();
+            // Check-in status
             const todayCI = getLifeTodayCheckIn();
-            if (trend.recentAvg !== null) {
-                const delta = (trend.priorAvg !== null) ? (trend.recentAvg - trend.priorAvg) : 0;
-                const arrow = delta > 0.4 ? '▲' : delta < -0.4 ? '▼' : '→';
-                signals.push({
-                    id: 'energy', icon: 'fa-bolt', label: 'Energy (7-day avg)',
-                    value: `${trend.recentAvg.toFixed(1)}/10`,
-                    meta: `${arrow} ${trend.priorAvg !== null ? (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' vs prior week' : `${trend.count} check-ins`}`,
-                    tone: trend.recentAvg >= 6 ? 'positive' : trend.recentAvg >= 4 ? 'info' : 'warn',
-                    action: 'cc-life-checkin'
-                });
-            } else {
-                signals.push({ id: 'energy', icon: 'fa-bolt', label: 'Daily check-in', value: todayCI ? 'Logged' : 'Not yet', meta: 'Track mood, energy, stress', tone: todayCI ? 'positive' : 'neutral', action: 'cc-life-checkin' });
-            }
+            signals.push({ id: "checkin", icon: "fa-heart", label: "Daily check-in", value: todayCI ? "Logged" : "Not yet", meta: "Track mood, stress, and sleep", tone: todayCI ? "positive" : "neutral", action: "cc-life-checkin" });
 
             // Sleep last night
             const sleep = (typeof getLifeSleepAnalytics === 'function') ? getLifeSleepAnalytics() : null;
@@ -17217,11 +17165,9 @@ function populateProgressDashboard() {
                     const act = lifeActionBtn.dataset.lifeAction;
                     if (act === 'save-checkin') {
                         const moodEl = document.getElementById('lifeCheckInMood');
-                        const energyEl = document.getElementById('lifeCheckInEnergy');
                         const stressEl = document.getElementById('lifeCheckInStress');
                         saveLifeCheckIn({
                             mood: moodEl ? moodEl.value : '',
-                            energy: energyEl ? energyEl.value : 5,
                             stress: stressEl ? stressEl.value : 5
                         });
                         return;
@@ -17322,10 +17268,9 @@ function populateProgressDashboard() {
                 }
             });
 
-            // Live value labels for the daily check-in sliders.
+            // Live value label for the daily check-in slider.
             root.addEventListener('input', (event) => {
-                if (event.target.id === 'lifeCheckInEnergy') { const v = document.getElementById('lifeCheckInEnergyVal'); if (v) v.textContent = event.target.value; }
-                else if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
+                if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
             });
 
             // Ensure dashboard is visible on init
@@ -18058,7 +18003,7 @@ function populateProgressDashboard() {
                                 <span class="wellness-recent-stamp">${escapeWellnessText(stamp)}</span>
                                 <span class="wellness-recent-meta">
                                     ${mood ? `<span class="wellness-recent-emoji" aria-hidden="true">${mood.emoji}</span>` : ''}
-                                    Stress ${entry.stress} · Energy ${entry.energy}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ''}
+                                    Stress ${entry.stress}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ""}
                                 </span>
                                 ${entry.note ? `<p class="wellness-recent-note">${escapeWellnessText(entry.note)}</p>` : ''}
                             </li>`;
@@ -18135,7 +18080,6 @@ function populateProgressDashboard() {
                 total,
                 lastWeekCount: lastWeek.length,
                 avgStressWeek: avg(lastWeek, 'stress'),
-                avgEnergyWeek: avg(lastWeek, 'energy'),
                 avgStressAll: avg(checkIns, 'stress'),
                 topMood,
                 topSleep
@@ -18156,7 +18100,6 @@ function populateProgressDashboard() {
             const cells = [
                 { label: 'Check-ins logged', value: String(p.total), sub: `${p.lastWeekCount} in last 7 days` },
                 { label: 'Avg stress (7d)', value: p.avgStressWeek, sub: `Overall ${p.avgStressAll}` },
-                { label: 'Avg energy (7d)', value: p.avgEnergyWeek, sub: 'Higher is better' },
                 {
                     label: 'Most common mood',
                     value: p.topMood ? `${p.topMood.emoji} ${p.topMood.label}` : '—',
@@ -18245,7 +18188,6 @@ function populateProgressDashboard() {
             const moodRow = document.getElementById('wellnessMoodRow');
             const sleepRow = document.getElementById('wellnessSleepRow');
             const stressInput = document.getElementById('wellnessStressInput');
-            const energyInput = document.getElementById('wellnessEnergyInput');
             const noteInput = document.getElementById('wellnessNoteInput');
             const w = getWellnessData();
             const entry = normalizeWellnessCheckIn({
@@ -18253,7 +18195,6 @@ function populateProgressDashboard() {
                 createdAt: new Date().toISOString(),
                 mood: moodRow ? (moodRow.dataset.selectedMood || '') : '',
                 stress: stressInput ? Number(stressInput.value) : 5,
-                energy: energyInput ? Number(energyInput.value) : 5,
                 sleep: sleepRow ? (sleepRow.dataset.selectedSleep || '') : '',
                 note: noteInput ? noteInput.value.trim() : ''
             });
@@ -18590,12 +18531,6 @@ function populateProgressDashboard() {
                 if (stress) {
                     const out = document.getElementById('wellnessStressValue');
                     if (out) out.textContent = String(stress.value);
-                    return;
-                }
-                const energy = event.target.closest('#wellnessEnergyInput');
-                if (energy) {
-                    const out = document.getElementById('wellnessEnergyValue');
-                    if (out) out.textContent = String(energy.value);
                     return;
                 }
                 const volume = event.target.closest('#wellnessVolumeInput');
@@ -24900,7 +24835,6 @@ function populateProgressDashboard() {
                 if (window.SutraStudentEngine && typeof window.SutraStudentEngine.rankActions === 'function') {
                     const ranked = window.SutraStudentEngine.rankActions(getSutra2DomainSnapshot(), candidates, {
                         now: now.toISOString(),
-                        energy: String(appData && appData.energyProfile && appData.energyProfile.currentEnergy || 'medium')
                     });
                     if (ranked.length) return { item: ranked[0].raw, reason: ranked[0].rankReason };
                 }
@@ -30220,7 +30154,6 @@ function buildOnboardingPlanPreview() {
                 if (window.SutraStudentEngine && typeof window.SutraStudentEngine.rankActions === 'function') {
                     sutra2Ranks = window.SutraStudentEngine.rankActions(getSutra2DomainSnapshot(), items, {
                         now: rankNow.toISOString(),
-                        energy: String(appData && appData.energyProfile && appData.energyProfile.currentEnergy || 'medium')
                     });
                 }
             } catch (error) { sutra2Ranks = null; }
@@ -51941,7 +51874,7 @@ function getActiveEditor() {
             journal: {
                 name: 'Daily Journal',
                 icon: PAGE_ICONS.JOURNAL,
-                description: 'Capture intention, energy, gratitude, and learning with a repeatable daily structure.',
+                description: 'Capture intention, gratitude, and learning with a repeatable daily structure.',
                 sections: ['Morning intention', 'Focus blocks', 'Events and notes', 'Gratitude', 'Evening reflection'],
                 category: 'general',
                 connectsTo: ['createsTasks'],
@@ -51987,7 +51920,7 @@ function getActiveEditor() {
 <table><thead><tr><th>Metric</th><th>Target</th><th>Actual</th><th>Status</th></tr></thead><tbody>
 <tr><td>Top priority completion</td><td></td><td></td><td></td></tr>
 <tr><td>Deep work hours</td><td></td><td></td><td></td></tr>
-<tr><td>Health / energy</td><td></td><td></td><td></td></tr></tbody></table>
+<tr><td>Health / wellbeing</td><td></td><td></td><td></td></tr></tbody></table>
 <h3>Wins</h3>
 <ul><li></li></ul>
 <h3>Misses / Slippage</h3>
@@ -56221,7 +56154,6 @@ function getActiveEditor() {
                 // Part 5 — recently-deleted items + focus session history travel in backups.
                 trash: Array.isArray(trash) ? cloneSerializable(trash, []) : [],
                 focusSessions: Array.isArray(focusSessions) ? cloneSerializable(focusSessions, []) : [],
-                energyProfile: cloneSerializable(appData && appData.energyProfile, getDefaultAppData().energyProfile),
                 protectedTime: cloneSerializable(appData && appData.protectedTime, []),
                 taskDependencies: cloneSerializable(appData && appData.taskDependencies, []),
                 studySessions: cloneSerializable(appData && appData.studySessions, []),
@@ -56289,7 +56221,6 @@ function getActiveEditor() {
                     cramSessions: payload.cramSessions,
                     trash: payload.trash,
                     focusSessions: payload.focusSessions,
-                    energyProfile: payload.energyProfile,
                     protectedTime: payload.protectedTime,
                     taskDependencies: payload.taskDependencies,
                     studySessions: payload.studySessions,
@@ -61206,7 +61137,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 'reviewWorkspace', 'courseWorkspace', 'testingHub', 'splitPaneContexts', 'pinnedPages',
                 'schoolSchedule', 'gradePlanner', 'semesterSetup',
                 'notificationsState', 'assistantChatHistory',
-                'settings', 'ui', 'localStorageSnapshot', 'energyProfile', 'studentDecisionState',
+                'settings', 'ui', 'localStorageSnapshot', 'studentDecisionState',
                 'assistantPermissions', 'assistantMemory', 'workspaceMeta', 'operatingManual', 'portfolioWorkspace'
             ];
             objectFields.forEach(field => {
@@ -61571,7 +61502,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
             stripSensitiveSettingFields(importedUnknownWorkspaceFields, [], []);
             const sutra2WorkspaceFields = [
-                'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions', 'masteryRecords',
+                'protectedTime', 'taskDependencies', 'studySessions', 'masteryRecords',
                 'confidenceObservations', 'studentDecisionState', 'assistantPermissions', 'assistantMemory',
                 'syncAuditLog', 'workspaceMeta', 'privateDocuments', 'sharedStudySessions',
                 'operatingManual', 'portfolioWorkspace', 'schema', 'migrationHistory',
@@ -61987,7 +61918,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     'schoolSchedule', 'gradePlanner', 'semesterSetup',
                     'cramSessions', 'trash', 'focusSessions', 'testingHub', 'focusTemplates',
                     'customTabs', 'splitPaneContexts', 'pinnedPages', 'notificationsState',
-                    'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions',
+                    'protectedTime', 'taskDependencies', 'studySessions',
                     'masteryRecords', 'confidenceObservations', 'studentDecisionState',
                     'assistantPermissions', 'assistantMemory', 'syncAuditLog', 'workspaceMeta',
                     'privateDocuments', 'sharedStudySessions', 'operatingManual', 'portfolioWorkspace',
@@ -83785,7 +83716,7 @@ function getCommandPaletteCommands() {
         { id: 'add-college-scholarship', label: 'Add scholarship', hint: 'New scholarship in College', hidden: modeHides('collegeapp'), run: () => { closeCommandPalette(); try { setActiveView('collegeapp'); showCollegeAppPage('scholarships'); addCollegeAppRow('scholarships'); } catch (err) {} } },
         { id: 'add-life-goal', label: 'Add life goal', hint: 'New SMART goal in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('goals'); } catch (err) {} } },
         { id: 'add-life-habit', label: 'Add habit', hint: 'New habit in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('habits'); } catch (err) {} } },
-        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, energy, and stress', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
+        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, stress, and sleep', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
         { id: 'add-business-project', label: 'Add business project', hint: 'New project in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('project'); } catch (err) {} } },
         { id: 'add-business-invoice', label: 'Add invoice', hint: 'New invoice in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('invoice'); } catch (err) {} } },
         { id: 'add-business-meeting', label: 'Add meeting', hint: 'New meeting in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('meeting'); } catch (err) {} } },

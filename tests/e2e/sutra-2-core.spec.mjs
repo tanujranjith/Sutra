@@ -29,8 +29,10 @@ test('Sutra 2.0 student OS ranks, plans, records mastery, and round-trips its sc
       tasks: [
         { id: 'sutra2-task', title: 'Finish the lab report', dueAt: due, priority: 'high', estimatedMinutes: 60, gradeImpact: 0.9, status: 'todo' }
       ],
+      // Legacy workspaces may still contain the removed profile. Import must
+      // retain it in unknownWorkspaceFields rather than revive the feature.
+      energyProfile: { version: 1, enabled: true, currentEnergy: 'medium', windows: [] },
       taskOrder: ['sutra2-task'],
-      energyProfile: { version: 1, enabled: true, currentEnergy: 'medium', windows: [], sleepWindow: { start: '23:00', end: '07:00' } },
       taskDependencies: [],
       studentDecisionState: { version: 1, preset: 'balanced', snoozed: {}, dismissed: [], pinned: [] },
       masteryRecords: [],
@@ -58,6 +60,7 @@ test('Sutra 2.0 student OS ranks, plans, records mastery, and round-trips its sc
   expect(result.exported.studentDecisionState.preset).toBe('grade_recovery');
   expect(result.exported.masteryRecords).toHaveLength(1);
   expect(result.exported.taskDependencies).toEqual([]);
+  expect(result.exported.unknownWorkspaceFields.energyProfile.currentEnergy).toBe('medium');
 
   await page.reload();
   await page.waitForSelector('#fileInput', { state: 'attached' });

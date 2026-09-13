@@ -524,7 +524,6 @@
         ['imp_streak_ribbon', 'Streak Ribbon', 'fa-fire-flame-curved', 'import_focus', 'Current and best streak.'],
         ['imp_pomodoro', 'Pomodoro', 'fa-hourglass-start', 'import_focus', 'Fixed 25/5 focus cycle.'],
         ['imp_session_log', 'Session Log', 'fa-clock-rotate-left', 'import_focus', 'Recent focus sessions.'],
-        ['imp_energy_checkin', 'Energy Check-in', 'fa-battery-three-quarters', 'import_focus', 'Recent energy summary.'],
         ['imp_overdue_recovery', 'Overdue Recovery', 'fa-life-ring', 'import_tasks', 'Recovery-first overdue list.'],
         ['imp_task_burndown', 'Task Burndown', 'fa-chart-column', 'import_tasks', 'Remaining work over time.'],
         ['imp_task_load', 'Task Load', 'fa-weight-hanging', 'import_tasks', 'Open task volume.'],

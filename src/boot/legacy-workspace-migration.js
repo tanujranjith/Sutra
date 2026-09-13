@@ -33,7 +33,7 @@
         'streaks', 'habitTracker', 'collegeTracker', 'academicWorkspace', 'collegeAppWorkspace',
         'lifeWorkspace', 'businessWorkspace', 'apStudyWorkspace', 'homeworkWorkspace', 'reviewWorkspace',
         'courseWorkspace', 'schoolSchedule', 'gradePlanner', 'semesterSetup', 'cramSessions', 'trash',
-        'focusSessions', 'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions',
+        'focusSessions', 'protectedTime', 'taskDependencies', 'studySessions',
         'masteryRecords', 'confidenceObservations', 'studentDecisionState', 'assistantPermissions',
         'assistantMemory', 'syncAuditLog', 'workspaceMeta', 'privateDocuments', 'sharedStudySessions',
         'operatingManual', 'portfolioWorkspace', 'testingHub', 'focusTemplates', 'customTabs',

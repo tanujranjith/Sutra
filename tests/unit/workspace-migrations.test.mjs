@@ -79,6 +79,12 @@ test('current migrations are idempotent and future workspaces are preserved', ()
   assert.equal(future.workspace.custom, true);
 });
 
+test('removed Energy profile remains available for the import compatibility quarantine', () => {
+  const legacyEnergy = { version: 1, enabled: true, currentEnergy: 'low', windows: [] };
+  const result = migrations.migrateWorkspace({ version: 4, energyProfile: legacyEnergy }, { now: NOW });
+  assert.deepEqual(result.workspace.energyProfile, legacyEnergy);
+});
+
 test('v5 through v8 add Sutra contracts, sync containers, canonical Assistant history, and PDF records without dropping plugin-owned fields', () => {
   const source = fixture('workspace-v3.json');
   const result = migrations.migrateWorkspace(source, { now: NOW }).workspace;

@@ -73,7 +73,6 @@ const IMPORTED_WIDGETS = [
   ['imp_streak_ribbon', 'Streak Ribbon', 'import_focus'],
   ['imp_pomodoro', 'Pomodoro', 'import_focus'],
   ['imp_session_log', 'Session Log', 'import_focus'],
-  ['imp_energy_checkin', 'Energy Check-in', 'import_focus'],
   ['imp_overdue_recovery', 'Overdue Recovery', 'import_tasks'],
   ['imp_task_burndown', 'Task Burndown', 'import_tasks'],
   ['imp_task_load', 'Task Load', 'import_tasks'],
@@ -82,6 +81,7 @@ const IMPORTED_WIDGETS = [
 
 test('custom tabs: lifecycle, injection hardening, widget rendering', async ({ page }) => {
   await openApp(page);
+  expect(await page.evaluate(() => window.SutraCustomTabs.getWidgetTypes().some(widget => widget.type === 'imp_energy_checkin'))).toBe(false);
 
   // Kept under the 40-char tab-name cap so the whole string survives
   // normalization and we can assert it rendered as literal text.

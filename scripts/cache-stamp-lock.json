@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260830-revoke2",
-    "hash": "2c25873166774cf9"
+    "stamp": "20260913-energy-removal-legacy1",
+    "hash": "30298f083707dc90"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -32,16 +32,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260907-locked-context-1",
-    "hash": "429f1424e1f789ec"
+    "stamp": "20260913-energy-removal-feature-manifest1",
+    "hash": "c1f0de280f5994c0"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260913-content-limits-app1",
-    "hash": "bea61c4c87cd5eaa"
+    "stamp": "20260913-energy-removal-app3",
+    "hash": "25f1d6bc07edf1c6"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -68,8 +68,8 @@
     "hash": "0cd88826ae6aeb3c"
   },
   "src/core/migrations.js": {
-    "stamp": "20260813-pdf2",
-    "hash": "ef85c157317a6b60"
+    "stamp": "20260913-energy-removal-migrations1",
+    "hash": "14e5d12d10823f2a"
   },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",
@@ -132,12 +132,12 @@
     "hash": "d164c6f2cac51a8c"
   },
   "src/domain/student-engine.js": {
-    "stamp": "20260710-student-engine1",
-    "hash": "b3906892b42c7000"
+    "stamp": "20260913-energy-removal-engine1",
+    "hash": "8a017b92eaa6e86f"
   },
   "src/domain/student-life.js": {
-    "stamp": "20260710-student-life1",
-    "hash": "10276452f1173261"
+    "stamp": "20260913-energy-removal-life1",
+    "hash": "86973127ffdda611"
   },
   "src/domain/workspace-entity-registry.js": {
     "stamp": "20260728-entity1",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260907-locked-context-1",
-    "hash": "26861b11a3acf7c5"
+    "stamp": "20260913-energy-removal-assistant1",
+    "hash": "072f6689a4e54d49"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -296,8 +296,8 @@
     "hash": "d2d01e3d4679216e"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20260913-custom-html-widget1",
-    "hash": "4a4758eae0cbc9af"
+    "stamp": "20260913-energy-removal-custom-tabs1",
+    "hash": "a7291327325711d6"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
@@ -452,8 +452,8 @@
     "hash": "49c1062cf4f287b2"
   },
   "src/sync/sync-protocol.js": {
-    "stamp": "20260906-notificationlocal1",
-    "hash": "59cb23eac0460ecf"
+    "stamp": "20260913-energy-removal-sync1",
+    "hash": "06cfa3a59c0c982d"
   },
   "src/sync/sync-store.js": {
     "stamp": "20260805-device-session1",
@@ -484,8 +484,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260913-pagebreak2",
-    "hash": "c1fe4aba0b0dd1d7"
+    "stamp": "20260913-energy-removal-base1",
+    "hash": "95d10bfbb928e1c8"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -604,8 +604,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260824-mobile-gs1",
-    "hash": "a34d325349503638"
+    "stamp": "20260913-energy-removal-mobile1",
+    "hash": "0b0383af3a47cfce"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

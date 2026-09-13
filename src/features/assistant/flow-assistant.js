@@ -572,7 +572,7 @@
             const checkIns = (lw.wellness && Array.isArray(lw.wellness.checkIns)) ? lw.wellness.checkIns : [];
             if (checkIns.length) {
                 const latest = checkIns[checkIns.length - 1];
-                out.latestCheckIn = { mood: latest.mood || '', energy: latest.energy, stress: latest.stress };
+                out.latestCheckIn = { mood: latest.mood || '', stress: latest.stress };
             }
             const budgets = (lw.spendingBudgets && typeof lw.spendingBudgets === 'object') ? lw.spendingBudgets : {};
             if (Object.keys(budgets).length) out.budgetCategories = Object.keys(budgets).length;
