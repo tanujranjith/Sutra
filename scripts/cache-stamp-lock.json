@@ -292,8 +292,8 @@
     "hash": "447a04ed9cb49a41"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20260808-contextual-ui10",
-    "hash": "838a9ef90334af9c"
+    "stamp": "20260913-page-tree-guides1",
+    "hash": "d2d01e3d4679216e"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260913-custom-html-widget1",
@@ -632,8 +632,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260912-html-layout-shell1",
-    "hash": "d25b33c7526a3ec4"
+    "stamp": "20260913-page-tree-guides1",
+    "hash": "ee5765f108883da6"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

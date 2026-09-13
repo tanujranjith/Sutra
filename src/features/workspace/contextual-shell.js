@@ -93,6 +93,73 @@
     window.setTimeout(function () { sync(resolvedView); }, 120);
   }
 
+  // The canonical page tree is rendered as a flat list. Its existing inline
+  // padding is the renderer's depth output, so the guide decoration can follow
+  // the same hierarchy without maintaining a second page model in this shell.
+  var PAGE_TREE_BASE_PADDING = 12;
+  var PAGE_TREE_INDENT = 20;
+  var pageTreeObserver = null;
+
+  function pageTreeDepth(row) {
+    if (!row) return 0;
+    var padding = row.style && row.style.paddingLeft;
+    if (!padding && typeof window.getComputedStyle === 'function') {
+      padding = window.getComputedStyle(row).paddingLeft;
+    }
+    var pixels = parseFloat(padding);
+    if (!Number.isFinite(pixels)) return 0;
+    return Math.max(0, Math.min(64, Math.round((pixels - PAGE_TREE_BASE_PADDING) / PAGE_TREE_INDENT)));
+  }
+
+  function directChildWithClass(row, className) {
+    if (!row || !row.children) return null;
+    for (var index = 0; index < row.children.length; index += 1) {
+      var child = row.children[index];
+      if (child.classList && child.classList.contains(className)) return child;
+    }
+    return null;
+  }
+
+  function decoratePageTree() {
+    var list = document.getElementById('pagesList');
+    if (!list) return;
+
+    Array.prototype.forEach.call(list.querySelectorAll('.page-item'), function (row) {
+      var depth = pageTreeDepth(row);
+      var guides = directChildWithClass(row, 'page-tree-guides');
+      if (!guides) {
+        guides = document.createElement('span');
+        guides.className = 'page-tree-guides';
+        guides.setAttribute('aria-hidden', 'true');
+        row.insertBefore(guides, row.firstChild);
+      }
+
+      while (guides.firstChild) guides.removeChild(guides.firstChild);
+      guides.hidden = depth === 0;
+      row.setAttribute('data-page-tree-depth', String(depth));
+      for (var level = 0; level < depth; level += 1) {
+        var line = document.createElement('span');
+        line.className = 'page-tree-guide-line';
+        line.setAttribute('aria-hidden', 'true');
+        line.style.left = (PAGE_TREE_BASE_PADDING + (level * PAGE_TREE_INDENT)) + 'px';
+        guides.appendChild(line);
+      }
+    });
+  }
+
+  function initPageTreeGuides() {
+    var list = document.getElementById('pagesList');
+    if (!list) return;
+    decoratePageTree();
+    if (pageTreeObserver || typeof MutationObserver !== 'function') return;
+
+    pageTreeObserver = new MutationObserver(decoratePageTree);
+    // renderPagesList replaces direct children during ordinary navigation,
+    // filtering, import, and restore. Observing only childList changes avoids
+    // reacting to the guide nodes that this decorator adds inside each row.
+    pageTreeObserver.observe(list, { childList: true });
+  }
+
   function activateView(view) {
     var tab = document.querySelector('.view-tabs > .view-tab[data-view="' + view + '"]')
       || document.querySelector('.view-tab[data-view="' + view + '"]');
@@ -236,6 +303,7 @@
       });
     }
     enhanceNotesToolbar();
+    initPageTreeGuides();
     settleSync(document.body && document.body.dataset.view);
 
     var sidebar = document.getElementById('sidebar');

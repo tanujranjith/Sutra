@@ -180,6 +180,7 @@ test('collapsed Notes sidebar remains a clean icon rail', async ({ page }) => {
   await expect(pageItem.locator('.page-icon')).toBeVisible();
   await expect(pageItem.locator('.page-title-text')).toBeHidden();
   await expect(pageItem.locator('.page-item-actions-toggle')).toBeHidden();
+  await expect(pageItem.locator('.page-tree-guides')).toBeHidden();
   expect(await pageItem.evaluate((node) => Math.round(parseFloat(getComputedStyle(node).paddingLeft)))).toBe(0);
 });
 

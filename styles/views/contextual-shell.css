@@ -433,6 +433,22 @@ body.settings-anchored-mode #view-settings .cc-page {
   border: 1px solid transparent;
   border-radius: 9px;
 }
+.sidebar .page-tree-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.sidebar .page-tree-guide-line {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  border-radius: 999px;
+  background: var(--sutra-color-border);
+  opacity: 0.72;
+}
+.sidebar.collapsed .page-tree-guides { display: none; }
 .sidebar .page-item:hover {
   border-color: color-mix(in srgb, var(--sutra-color-border) 76%, transparent);
   background: color-mix(in srgb, var(--sutra-color-accent) 6%, transparent);
