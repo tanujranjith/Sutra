@@ -216,6 +216,134 @@
         return safe;
     }
 
+    // Locked-note access is deliberately a separate capability from the
+    // editor's session unlock set. A ticket is created only after the student
+    // confirms the Assistant request and the core verifies the page PIN. It is
+    // consumed after one context build and is never persisted or sent to a
+    // provider as a credential.
+    const LOCKED_PAGE_ACCESS_TTL_MS = 60 * 1000;
+    let activeLockedPageAccessTicket = null;
+
+    function lockedPageAccessTicketIsValid(ticket) {
+        return !!(
+            ticket
+            && ticket === activeLockedPageAccessTicket
+            && Number(ticket.expiresAt) > Date.now()
+            && Array.isArray(ticket.pageIds)
+            && ticket.pageIds.length === 1
+        );
+    }
+
+    function currentLockedPageAccessTicket(options) {
+        const requested = options && options.lockedPageAccessTicket;
+        return requested && lockedPageAccessTicketIsValid(requested) ? requested : null;
+    }
+
+    function currentLockedPageAccessIds(options) {
+        const ticket = currentLockedPageAccessTicket(options);
+        return ticket ? ticket.pageIds.map(String) : [];
+    }
+
+    function scopedAssistantContextOptions(options) {
+        const source = options && typeof options === 'object' ? options : {};
+        const ticket = currentLockedPageAccessTicket(source);
+        return Object.assign({}, source, {
+            lockedPageAccessTicket: ticket,
+            authorizedPageIds: currentLockedPageAccessIds({ lockedPageAccessTicket: ticket })
+        });
+    }
+
+    function pageIsLocked(page) {
+        return !!(page && page.isLocked === true && page.lockHash);
+    }
+
+    function findLockedPageForAssistantPrompt(userText) {
+        const b = bridge({ diagnose: false });
+        const pages = b && Array.isArray(b.pages) ? b.pages : [];
+        const lockedPages = pages.filter(pageIsLocked);
+        if (!lockedPages.length) return null;
+        const text = String(userText || '').trim();
+        const lower = text.toLowerCase();
+        const refersToNote = /\b(?:this|current|open|active)\s+(?:note|page|document)\b/i.test(text)
+            || /\b(?:read|look(?:ing)?\s+at|summari[sz]e|explain|analy[sz]e|review|reference|use|quote|what\s+(?:does|is\s+in))\b[\s\S]{0,80}\b(?:note|page|document|draft|content|it|that|this)\b/i.test(text);
+        if (!refersToNote) return null;
+
+        const currentId = b && b.currentPageId ? String(b.currentPageId) : '';
+        const current = lockedPages.find(page => String(page.id) === currentId);
+        if (current && (getActiveViewName() === 'notes' || /\b(?:this|current|open|active)\b/i.test(text))) return current;
+
+        // An exact title mention is an explicit target even when the page is
+        // not currently open. Short titles are ignored to avoid accidental
+        // matches such as "Plan" inside ordinary prose.
+        return lockedPages.find(page => {
+            const title = String(page.title || '').trim().toLowerCase();
+            return title.length >= 4 && lower.includes(title);
+        }) || null;
+    }
+
+    async function requestLockedPageAccessForPrompt(userText) {
+        const target = findLockedPageForAssistantPrompt(userText);
+        // A ticket belongs to one send attempt. Starting any new attempt,
+        // including one that does not reference a note, invalidates leftovers
+        // from an earlier provider/configuration failure.
+        activeLockedPageAccessTicket = null;
+        if (!target) return { ok: true, needed: false, ticket: null, pageIds: [] };
+
+        const privacy = window.SutraAssistantPrivacy;
+        const permissions = privacy && typeof privacy.getPermissions === 'function'
+            ? privacy.getPermissions()
+            : null;
+        if (!privacy || typeof privacy.canRead !== 'function' || !permissions || permissions.mode === 'off') {
+            return { ok: false, needed: true, message: 'Assistant Notes access is off. Enable read-only Notes access before asking about a locked page.' };
+        }
+        if (!privacy.canRead('notes', { approvedAreas: ['notes'] })) {
+            return { ok: false, needed: true, message: 'Assistant Notes access is denied in privacy settings. Allow Notes access before asking about a locked page.' };
+        }
+
+        const confirm = typeof window.showCustomConfirmDialog === 'function'
+            ? await window.showCustomConfirmDialog({
+                title: 'Allow Assistant access once?',
+                message: `The Assistant wants to read the locked page "${target.title || 'Untitled'}" for this request. This one-time permission does not unlock the editor or change your saved privacy settings. Sutra will ask for the page PIN next.`,
+                confirmText: 'Continue to PIN',
+                cancelText: 'Cancel',
+                confirmVariant: 'primary'
+            })
+            : false;
+        if (!confirm) return { ok: false, needed: true, message: 'Cancelled — the locked page was not shared with Assistant.' };
+
+        const b = bridge();
+        if (!b || typeof b.requestAssistantPageAccess !== 'function') {
+            return { ok: false, needed: true, message: 'Locked-page Assistant access is unavailable in this build.' };
+        }
+        const verified = await b.requestAssistantPageAccess(target.id);
+        if (!verified || verified.ok !== true) {
+            return { ok: false, needed: true, message: verified && verified.message
+                ? verified.message
+                : 'Cancelled — the locked page was not shared with Assistant.' };
+        }
+
+        activeLockedPageAccessTicket = Object.freeze({
+            pageIds: [String(target.id)],
+            expiresAt: Date.now() + LOCKED_PAGE_ACCESS_TTL_MS
+        });
+        return {
+            ok: true,
+            needed: true,
+            ticket: activeLockedPageAccessTicket,
+            pageIds: activeLockedPageAccessTicket.pageIds.slice(),
+            approvedAreas: ['notes']
+        };
+    }
+
+    function consumeLockedPageAccess(ticket) {
+        if (!ticket || ticket === activeLockedPageAccessTicket) activeLockedPageAccessTicket = null;
+    }
+
+    async function prepareLockedPageAccessForPrompt(userText) {
+        try { return await requestLockedPageAccessForPrompt(userText); }
+        catch (error) { return { ok: false, needed: true, message: 'Locked-page Assistant access could not be verified.' }; }
+    }
+
     function getActiveViewName() {
         try {
             const b = bridge();
@@ -340,7 +468,7 @@
         } catch (e) { /* best effort only */ }
     }
 
-    function getActiveNoteSummary() {
+    function getActiveNoteSummary(options) {
         try {
             syncActiveV2NoteForContext();
             const b = bridge();
@@ -349,8 +477,11 @@
             if (!pageId) return null;
             const page = pages.find(p => p && p.id === pageId);
             if (!page) return null;
-            const unlocked = b ? b.unlockedPageIds : window.unlockedPageIds;
-            if (page.isLocked && !(unlocked && unlocked.has && unlocked.has(pageId))) {
+            const assistantAccessIds = currentLockedPageAccessIds(options);
+            // Editing authorization is intentionally not Assistant
+            // authorization. Even an already-open locked page requires the
+            // Assistant's own consent + PIN ticket before its content is read.
+            if (page.isLocked && !assistantAccessIds.includes(String(pageId))) {
                 return { id: page.id, title: page.title || 'Untitled', locked: true };
             }
             if (String(page.type || '').toLowerCase() === 'canvas') {
@@ -757,7 +888,7 @@
     }
 
     function getFlowAssistantContext(opts) {
-        const options = opts || {};
+        const options = scopedAssistantContextOptions(opts);
         const depth = normalizeDepth(options.depth);
         const view = String(options.view || getActiveViewName());
         // Respect the "include selection by default" preference unless the caller
@@ -825,7 +956,7 @@
         // surfacing it outside the Notes view isn't a staleness risk. Canvas
         // context and live text selection stay scoped to Notes since they only
         // make sense while that surface is actually visible.
-        const openNote = getActiveNoteSummary();
+        const openNote = getActiveNoteSummary(options);
         if (openNote) ctx.activeNote = openNote;
         if (view === 'notes') {
             const canvasContext = getCanvasContextSummary();
@@ -4733,14 +4864,15 @@
     // --------------------------------------------------------------
     let notesKnowledgeCache = { signature: '', index: null };
 
-    function buildNotesKnowledgeSignature(pages, unlockedIds, allowLocked) {
+    function buildNotesKnowledgeSignature(pages, unlockedIds, allowLocked, assistantAccessIds) {
         const unlocked = unlockedIds && typeof unlockedIds.forEach === 'function' ? [] : null;
         if (unlocked) unlockedIds.forEach(id => unlocked.push(String(id)));
+        const assistantAccess = Array.isArray(assistantAccessIds) ? assistantAccessIds.map(String).sort() : [];
         return (Array.isArray(pages) ? pages : []).map(page => {
             if (!page) return '';
             const isUnlocked = unlockedIds && typeof unlockedIds.has === 'function' && unlockedIds.has(page.id);
             return [page.id, page.updatedAt || page.modifiedAt || '', String(page.content || page.body || '').length, page.isLocked === true ? 1 : 0, isUnlocked ? 1 : 0].join(':');
-        }).join('|') + '|locked:' + (allowLocked ? '1' : '0') + (unlocked ? ':' + unlocked.sort().join(',') : '');
+        }).join('|') + '|locked:' + (allowLocked ? '1' : '0') + (unlocked ? ':' + unlocked.sort().join(',') : '') + '|assistant:' + assistantAccess.join(',');
     }
 
     function retrieveNoteSources(userText, options = {}) {
@@ -4749,15 +4881,20 @@
             return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'unavailable', excludedCount: 0 };
         }
         const privacy = window.SutraAssistantPrivacy;
-        if (privacy && typeof privacy.canRead === 'function' && !privacy.canRead('notes', options)) {
+        const accessOptions = scopedAssistantContextOptions(options);
+        const assistantAccessIds = currentLockedPageAccessIds(accessOptions);
+        if (privacy && typeof privacy.canRead === 'function' && !privacy.canRead('notes', Object.assign({}, accessOptions, {
+            approvedAreas: (options.approvedAreas || []).concat(assistantAccessIds.length ? ['notes'] : [])
+        }))) {
             return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', excludedCount: 0 };
         }
         const b = bridge();
         const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
-        const unlockedIds = b ? b.unlockedPageIds : window.unlockedPageIds;
-        const permissions = privacy && typeof privacy.getPermissions === 'function' ? privacy.getPermissions() : {};
-        const allowLocked = permissions.allowLockedNotes === true;
-        const signature = buildNotesKnowledgeSignature(pages, unlockedIds, allowLocked);
+        // The editor's unlock set is intentionally not used here. A page PIN
+        // entered to edit a note must not silently authorize Assistant access.
+        const unlockedIds = new Set(assistantAccessIds);
+        const allowLocked = assistantAccessIds.length > 0;
+        const signature = buildNotesKnowledgeSignature(pages, unlockedIds, allowLocked, assistantAccessIds);
         if (!notesKnowledgeCache.index || notesKnowledgeCache.signature !== signature) {
             notesKnowledgeCache = {
                 signature,
@@ -4769,7 +4906,7 @@
                 })
             };
         }
-        const active = getActiveNoteSummary();
+        const active = getActiveNoteSummary(accessOptions);
         const scope = options.scope && typeof options.scope === 'object'
             ? options.scope
             : { type: 'all' };
@@ -4786,7 +4923,13 @@
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
         lastUserPrompt = String(userText || '');
-        let ctx = getFlowAssistantContext({ approvedAreas: options.approvedAreas });
+        const accessTicket = currentLockedPageAccessTicket(options);
+        const accessOptions = Object.assign({}, options, {
+            lockedPageAccessTicket: accessTicket,
+            authorizedPageIds: currentLockedPageAccessIds({ lockedPageAccessTicket: accessTicket })
+        });
+        if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
+        let ctx = getFlowAssistantContext(accessOptions);
         // Product-aware context: attach a SMALL set of relevant saved memories
         // and verified product-knowledge snippets so the model stays accurate
         // and personalized without a giant static prompt. Never dump everything.
@@ -4810,7 +4953,8 @@
         } catch (e) { /* product knowledge is best-effort */ }
         const noteRetrieval = retrieveNoteSources(userText, {
             scope: options.scope || options.conversationScope,
-            approvedAreas: options.approvedAreas,
+            approvedAreas: accessOptions.approvedAreas,
+            lockedPageAccessTicket: accessTicket,
             limit: 8
         });
         if (noteRetrieval.sources.length) {
@@ -4908,7 +5052,7 @@
             productKnowledge: ctx.productKnowledge,
             contextBudget: ctx.contextBudget
         };
-        ctx = filterAssistantContext(ctx, { approvedAreas: options.approvedAreas });
+        ctx = filterAssistantContext(ctx, accessOptions);
         Object.keys(trustedEnrichment).forEach(key => {
             if (trustedEnrichment[key] !== undefined) ctx[key] = trustedEnrichment[key];
         });
@@ -4923,6 +5067,7 @@
         const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();
+        if (accessTicket) consumeLockedPageAccess(accessTicket);
         return {
             systemPrompt,
             systemPromptParts,
@@ -4941,7 +5086,8 @@
     // language command is recognized it is executed locally and the model call
     // is skipped. Also clears one-shot image attachments after a send.
     function handleOutgoing(userText) {
-        const cmd = tryHandleCommand(userText);
+        const cmd = tryHandleCommand(userText, { lockedPageAccessTicket: activeLockedPageAccessTicket });
+        if (cmd && cmd.handled) consumeLockedPageAccess();
         return cmd;
     }
 
@@ -6383,7 +6529,7 @@
     // --------------------------------------------------------------
     // Returns { handled:true, message } when it recognized & executed a command,
     // otherwise { handled:false } so the caller sends the text to the model.
-    function tryHandleCommand(rawText) {
+    function tryHandleCommand(rawText, options = {}) {
         const text = String(rawText || '').trim();
         if (!text) return { handled: false };
         const lc = text.toLowerCase();
@@ -6452,12 +6598,12 @@
         const notesQuestion = lc.match(/^(?:what do my notes say about|search my notes for|find in my notes|where did i (?:write|mention)|which note mentions)\s+(.+?)[?.!]?$/);
         if (notesQuestion && notesQuestion[1]) {
             const query = notesQuestion[1].trim();
-            const retrieval = retrieveNoteSources(query, { limit: 8 });
+            const retrieval = retrieveNoteSources(query, { limit: 8, lockedPageAccessTicket: options.lockedPageAccessTicket });
             if (retrieval.evidenceStatus === 'permission_required') {
                 return { handled: true, message: 'Notes access is off for the Assistant. Enable read-only Notes access in Assistant privacy settings to search them locally.', source: 'local' };
             }
             if (!retrieval.sources.length) {
-                return { handled: true, message: 'I could not find grounded note evidence for **' + query + '**. Locked notes stay excluded unless you explicitly unlock and allow them.', source: 'local' };
+                return { handled: true, message: 'I could not find grounded note evidence for **' + query + '**. Locked notes stay excluded unless you explicitly request that page and complete the Assistant permission and PIN check.', source: 'local' };
             }
             const lines = ['**Found in your notes** (local search — no provider call)', ''];
             retrieval.sources.slice(0, 6).forEach(source => {
@@ -6997,7 +7143,7 @@
         } catch (e) { /* ignore */ }
         const attachments = getAttachments();
         const attachBit = attachments.length ? ` Plus ${attachments.length} attached file${attachments.length === 1 ? '' : 's'} you chose.` : '';
-        return `Sutra will send: ${bits.join(', ')}.${attachBit} No Course Hub file contents and no locked-note bodies are included unless you attach or unlock them. Your API key is never part of the message.`;
+        return `Sutra will send: ${bits.join(', ')}.${attachBit} No Course Hub file contents and no locked-note bodies are included unless you explicitly request a locked page and complete its Assistant permission and PIN check. Your API key is never part of the message.`;
     }
 
     function showContextModal() {
@@ -8217,6 +8363,9 @@
         buildRequestMessages,
         buildRequestEnrichment,
         retrieveNoteSources,
+        requestLockedPageAccessForPrompt,
+        prepareLockedPageAccessForPrompt,
+        consumeLockedPageAccess,
         openProviderSetupWizard,
         // Workflow + intelligence surface
         classifyRisk,

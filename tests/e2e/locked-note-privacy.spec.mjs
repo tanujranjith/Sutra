@@ -162,6 +162,70 @@ test('Assistant context fails closed when the privacy boundary is unavailable', 
   expect(report.diagnosed).toBe(true);
 });
 
+test('Assistant locked-page access requires consent and PIN without unlocking the editor', async ({ page }) => {
+  await openApp(page);
+  const targetId = await page.evaluate(async ({ pin, secret }) => {
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    const targetId = 'assistant-locked-access-note';
+    const now = new Date().toISOString();
+    payload.pages.push({
+      id: targetId,
+      title: 'Assistant private draft',
+      content: '<p>' + secret + '</p>',
+      blocks: [],
+      createdAt: now,
+      updatedAt: now
+    });
+    window.deserializeWorkspace(payload);
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(targetId, pin);
+    window.loadPage(targetId);
+    return targetId;
+  }, { pin: PIN, secret: SECRET });
+
+  await page.evaluate(() => {
+    window.__assistantLockedAccessResult = window.flowAssistant.requestLockedPageAccessForPrompt('Read this current note and explain it.');
+  });
+  await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
+  await expect(page.locator('#customConfirmTitle')).toHaveText('Allow Assistant access once?');
+  await page.locator('#customConfirmAcceptBtn').click();
+  await expect(page.locator('#customPromptModal')).toHaveClass(/active/);
+  await expect(page.locator('#customPromptTitle')).toHaveText('Verify page PIN for Assistant');
+  await page.locator('#customPromptInput').fill(PIN);
+  await page.locator('#customPromptConfirmBtn').click();
+
+  const report = await page.evaluate(async ({ targetId, secret }) => {
+    const result = await window.__assistantLockedAccessResult;
+    const enrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
+      lockedPageAccessTicket: result.ticket
+    });
+    const reusedEnrichment = window.flowAssistant.buildRequestEnrichment('Read this current note and explain it.', 'openai', {
+      lockedPageAccessTicket: result.ticket
+    });
+    const contextAfter = window.getFlowAssistantContext({ depth: 'currentView' });
+    const editorText = document.getElementById('editor')?.textContent || '';
+    const v2Text = document.getElementById('editorV2Host')?.textContent || '';
+    const settings = window.SutraAssistantPermissions?.get?.();
+    window.flowAssistant.consumeLockedPageAccess(result.ticket);
+    return {
+      result,
+      sentContextContainsSecret: JSON.stringify(enrichment.context).includes(secret),
+      reusedGrantContainsSecret: JSON.stringify(reusedEnrichment?.context || {}).includes(secret),
+      pageStillEditorLocked: !window.flowAtelier.unlockedPageIds.has(targetId),
+      editorLeaks: editorText.includes(secret) || v2Text.includes(secret),
+      afterGrantLeaks: JSON.stringify(contextAfter).includes(secret),
+      persistedSettingUnchanged: settings?.allowLockedNotes === false
+    };
+  }, { targetId, secret: SECRET });
+
+  expect(report.result.ok).toBe(true);
+  expect(report.sentContextContainsSecret).toBe(true);
+  expect(report.reusedGrantContainsSecret).toBe(false);
+  expect(report.pageStillEditorLocked).toBe(true);
+  expect(report.editorLeaks).toBe(false);
+  expect(report.afterGrantLeaks).toBe(false);
+  expect(report.persistedSettingUnchanged).toBe(true);
+});
+
 test('Assistant prompt enrichment rechecks memory permission at the final context boundary', async ({ page }) => {
   await openApp(page);
   const report = await page.evaluate(() => {

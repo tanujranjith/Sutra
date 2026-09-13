@@ -113,7 +113,7 @@
             body: [
                 '**Canvas** provides pan/zoom, a minimap, selection, drawing, shapes, sticky notes, connectors, groups, tables, locking, layout tools, and local export.',
                 '**Slides** stores a deck on `page.slides` with themes, layouts, text, shapes, charts, local images, speaker notes, presentation mode, printing, and an experimental PPTX package export.',
-                'Both use canonical page saves and participate in encrypted `.sutra` backup/import and Sutra Sync. Assistant mutations are bounded, approval-based, and undoable; locked content and remote image fetches are not supported.'
+                'Both use canonical page saves and participate in encrypted `.sutra` backup/import and Sutra Sync. Assistant mutations are bounded, approval-based, and undoable; Assistant mutations to locked content and remote image fetches are not supported.'
             ],
             keywords: ['canvas', 'slides', 'visual workspace', 'presentation', 'speaker notes', 'PPTX', 'board', 'minimap'],
             nav: { view: 'notes' },
@@ -161,7 +161,7 @@
             body: [
                 '**Sutra itself makes no server calls and has no backend.** Your workspace stays in your browser on your device.',
                 'Data leaves your device only in two cases, both under your control:',
-                '1. **You send an AI request.** Sutra Assistant sends your message (plus the workspace context allowed by your Workspace Access setting) to the AI provider *you* chose and entered a key for. Locked-note contents and your API keys are never included.',
+                '1. **You send an AI request.** Sutra Assistant sends your message (plus the workspace context allowed by your Workspace Access setting) to the AI provider *you* chose and entered a key for. Locked-note contents are excluded by default; an explicitly requested locked page requires one-time Assistant consent and its page PIN. API keys are never included.',
                 '2. **You opt in to cloud backup.** Encrypted `.sutra` snapshots can be synced to a provider you connect (Google Drive, OneDrive, Dropbox, or Supabase). They are encrypted on your device first.',
                 'Local Help, Product Knowledge, Assistant Memory, and deterministic calculations all work fully **offline with no API key**. API keys are session-only by default; if you opt in to remembering them, Sutra keeps only encrypted device-local vault records. Keys are never written to `.sutra` exports, Activity logs, Memory, diagnostics, or any prompt.'
             ],
@@ -182,7 +182,7 @@
                 '- **Tags & folders** organize pages; links connect a note to tasks, homework, decks, courses, and timeline blocks.',
                 '- **Canvas** is a freeform board for sticky notes and cards; you can turn a selection into a note or task.',
                 '- **Slides** is a local presentation surface on a normal note page. Decks keep themes, layouts, speaker notes, local images, and presentation state in `page.slides` and use the normal backup path.',
-                '- **Locked notes** are protected by a password; their contents are never read by the assistant or included in AI prompts or exports in readable form.'
+                '- **Locked notes** are protected by a password. Their contents are excluded from Assistant context by default; an explicitly requested page requires one-time Assistant consent and its page PIN. Locked content is never saved into Assistant Memory or readable `.sutra` exports.'
             ],
             keywords: ['notes', 'pages', 'note', 'templates', 'tags', 'canvas', 'sticky', 'folders', 'locked notes', 'write', 'editor', 'markdown'],
             nav: { view: 'notes' },
@@ -194,10 +194,10 @@
             title: 'Locked (password-protected) notes',
             category: 'notes',
             availability: 'available',
-            summary: 'Lock a note with a password to keep its contents private. Locked content is never read by the assistant or included in AI prompts, Memory, or readable exports.',
+            summary: 'Lock a note with a password to keep its contents private. Locked content is excluded from Assistant context by default; an explicitly requested page requires one-time Assistant consent and its page PIN. It is never saved in Memory or readable exports.',
             body: [
                 'You can lock individual notes behind a password. While locked, the note body is hidden until you unlock it.',
-                'Sutra treats locked content as off-limits to the assistant: it is never sent to an AI provider, never saved into Assistant Memory, and never appears in readable form in `.sutra` exports.'
+                'Sutra excludes locked content from ordinary Assistant context. If you explicitly ask about an identified locked page, Assistant asks for one-time permission and verifies the page PIN before using it for that request. The grant does not unlock the editor, change saved privacy settings, or authorize a later request. Locked content is never saved into Assistant Memory or included in readable form in `.sutra` exports.'
             ],
             keywords: ['locked notes', 'password', 'private note', 'protect note', 'lock', 'encrypt note'],
             nav: { view: 'notes' },
@@ -538,13 +538,13 @@
             title: 'Workspace Access (context depth)',
             category: 'assistant',
             availability: 'available',
-            summary: 'Workspace Access controls how much context the assistant can read: minimal, current view only, or full workspace. Locked notes are always excluded.',
+            summary: 'Workspace Access controls how much context the assistant can read: minimal, current view only, or full workspace. Locked notes are excluded by default and require a separate one-time consent and page-PIN check when explicitly requested.',
             body: [
                 '**Workspace Access** (context depth) decides what the assistant can see when you send an AI request:',
                 '- **Minimal** — almost nothing beyond your message.',
                 '- **Current view** — only what is on the active screen / current area.',
                 '- **Full workspace** — broad context across your workspace.',
-                'Locked-note contents and your API keys are **never** included at any setting. Change it in Settings ▸ Assistant or by asking the assistant to change context depth.'
+                'Locked-note contents are excluded by default at every depth. An explicit request about an identified locked page starts a separate one-time permission and page-PIN check; that grant applies only to the current request. API keys are never included. Change context depth in Settings ▸ Assistant or by asking the assistant.'
             ],
             keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see'],
             nav: { view: 'settings', section: 'assistant' },

@@ -32,16 +32,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260913-energy-removal-feature-manifest1",
-    "hash": "c1f0de280f5994c0"
+    "stamp": "20260913-locked-assistant-manifest2",
+    "hash": "b545c07367f3df20"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260913-energy-removal-app3",
-    "hash": "25f1d6bc07edf1c6"
+    "stamp": "20260913-locked-assistant-app3",
+    "hash": "039cf2c98fdea5fd"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -100,8 +100,8 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260825-sol2-1",
-    "hash": "cd6d317f94b67645"
+    "stamp": "20260913-locked-assistant-permissions1",
+    "hash": "adcc8905d68c7e3f"
   },
   "src/domain/homework-store.js": {
     "stamp": "20260913-homework-removal-homework-store1",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260913-energy-removal-assistant1",
-    "hash": "072f6689a4e54d49"
+    "stamp": "20260913-locked-assistant-flow2",
+    "hash": "82b6cabc8c9ddc28"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -204,8 +204,8 @@
     "hash": "7f739452d174ca04"
   },
   "src/features/assistant/sutra-assistant-memory.js": {
-    "stamp": "20260716-syncwipe1",
-    "hash": "115268116c9d2f3d"
+    "stamp": "20260913-locked-assistant-memory1",
+    "hash": "87def3fca46ffcab"
   },
   "src/features/assistant/sutra-capability-registry.js": {
     "stamp": "20260807-surfaces2",
@@ -216,8 +216,8 @@
     "hash": "985bc2dccc287616"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "491cfe8917ae3c89"
+    "stamp": "20260913-locked-assistant-knowledge2",
+    "hash": "d6e93007ae1beb6c"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",

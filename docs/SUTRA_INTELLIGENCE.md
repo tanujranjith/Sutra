@@ -107,10 +107,14 @@ you send an AI request:
 - **Current view** — only the active screen / current area.
 - **Full workspace** — broad context across your workspace.
 
-Locked-note contents and API keys are **never** included at any setting. Each
-certified action also declares a required scope in the Capability Registry, so
-the registry knows which actions a given depth permits. Change it in
-**Settings ▸ Assistant** or by asking the assistant to change context depth.
+Locked-note contents are excluded by default, regardless of Workspace Access.
+When you explicitly ask about an identified locked page, Assistant must first
+obtain your one-time confirmation and verify that page's PIN; the resulting
+page-scoped grant applies only to that request and never changes saved settings.
+API keys are never included. Each certified action also declares a required
+scope in the Capability Registry, so the registry knows which actions a given
+depth permits. Change it in **Settings ▸ Assistant** or by asking the assistant
+to change context depth.
 
 ---
 
@@ -311,7 +315,9 @@ action/storage/Undo failures, and partial batches.
   fully offline.
 - API keys are session-only. Credentials never enter Memory,
   exports, Activity logs, prompts, diagnostics, or UI text.
-- Locked-note contents are never read by the assistant.
+- Locked-note contents are excluded from ordinary Assistant context. An
+  explicitly requested page can be read only after one-time Assistant consent
+  and verification of that page's PIN; the grant is not persisted or reused.
 - No analytics, tracking, telemetry, or Sutra backend.
 - CSP, DOM safety (`SutraDOMSafety`), safe storage (`SutraSafeStorage`),
   encryption, export/import safeguards, and architecture guardrails are

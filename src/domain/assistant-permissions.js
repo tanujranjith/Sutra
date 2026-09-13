@@ -83,26 +83,43 @@
     if (Array.isArray(value.courses)) return recordIds(value.courses);
     return value.id != null ? [String(value.id)] : [];
   }
-  function stripSensitive(key, value, permissions) {
+  function scopedLockedPageIds(options) {
+    var ids = options && options.authorizedPageIds;
+    if (ids instanceof Set) return new Set(Array.from(ids).map(String));
+    if (Array.isArray(ids)) return new Set(ids.map(String));
+    return new Set();
+  }
+  function hasScopedLockedAccess(value, options) {
+    if (!value || typeof value !== 'object' || !(value.locked === true || value.isLocked === true)) return false;
+    var id = value.id != null ? String(value.id) : (value.noteId != null ? String(value.noteId) : '');
+    return !!id && scopedLockedPageIds(options).has(id);
+  }
+  function stripSensitive(key, value, permissions, options) {
     if (deniedSensitiveKey(key, permissions)) return undefined;
     if (!value || typeof value !== 'object') return value;
     if (Array.isArray(value)) {
-      return value.map(function (entry) { return stripSensitive('', entry, permissions); })
+      return value.map(function (entry) { return stripSensitive('', entry, permissions, options); })
         .filter(function (entry) { return entry !== undefined; });
     }
     var locked = value.locked === true || value.isLocked === true;
-    var allowedLockedFields = new Set(['id', 'title', 'locked', 'isLocked', 'type']);
+    var allowedLockedFields = new Set(['id', 'noteId', 'title', 'locked', 'isLocked', 'type']);
+    var scopedAccess = hasScopedLockedAccess(value, options);
     var out = {};
     Object.keys(value).forEach(function (field) {
-      if (locked && !permissions.allowLockedNotes && !allowedLockedFields.has(field)) return;
+      // The persisted allowLockedNotes preference is retained for migration and
+      // display compatibility, but it is never an authorization by itself.
+      // Protected content requires a one-request page-scoped grant that has
+      // already passed the Assistant consent + page-PIN flow.
+      if (locked && !scopedAccess && !allowedLockedFields.has(field)) return;
       if (deniedSensitiveKey(field, permissions)) return;
-      var sanitized = stripSensitive(field, value[field], permissions);
+      var sanitized = stripSensitive(field, value[field], permissions, options);
       if (sanitized !== undefined) out[field] = sanitized;
     });
     return out;
   }
   function filterContext(context, options) {
     var source = context && typeof context === 'object' ? context : {}, permissions = getPermissions(), out = {}, areasRead = [], recordsRead = [];
+    var scopedIds = scopedLockedPageIds(options);
     Object.keys(source).forEach(function (key) {
       if (ALWAYS.has(key)) { out[key] = clone(source[key]); return; }
       // The policy boundary enforces its own privacy guarantees: a denied
@@ -112,7 +129,7 @@
       if (deniedSensitiveKey(key, permissions)) return;
       var area = KEY_AREAS[key];
       if (!canRead(area, options)) return;
-      var value = stripSensitive(key, source[key], permissions);
+      var value = stripSensitive(key, source[key], permissions, options);
       out[key] = value;
       if (areasRead.indexOf(area) < 0) areasRead.push(area);
       recordIds(value).forEach(function (id) { recordsRead.push({ area: area, kind: key, id: id }); });
@@ -122,9 +139,10 @@
       areasRead: areasRead.sort(),
       recordsRead: recordsRead.slice(0, 200),
       excludedSensitiveAreas: [
-        !permissions.allowLockedNotes && 'locked_notes', !permissions.allowWellness && 'wellness',
+        !scopedIds.size && 'locked_notes', !permissions.allowWellness && 'wellness',
         !permissions.allowFinancial && 'financial', !permissions.allowPrivateDocuments && 'private_documents'
-      ].filter(Boolean)
+      ].filter(Boolean),
+      lockedNotesRead: Array.from(scopedIds).slice(0, 20)
     };
     return out;
   }

@@ -763,12 +763,10 @@
         var b = typeof window !== 'undefined' ? window.flowAtelier : null;
         var pages = b && Array.isArray(b.pages) ? b.pages : [];
         var tasks = b && Array.isArray(b.tasks) ? b.tasks : [];
-        var unlocked = b && b.unlockedPageIds && typeof b.unlockedPageIds.has === 'function' ? b.unlockedPageIds : null;
         var privacy = typeof window !== 'undefined' ? window.SutraAssistantPrivacy : null;
         var permissions = privacy && typeof privacy.getPermissions === 'function' ? privacy.getPermissions() : { mode: 'off', areas: {} };
-        var allowLocked = permissions.allowLockedNotes === true;
         var readableNotes = pages.filter(function (page) {
-            return page && (page.isLocked !== true || (allowLocked && unlocked && unlocked.has(page.id)));
+            return page && page.isLocked !== true;
         }).length;
         var memories = list({ includeDisabled: true, includeExpired: true });
         var linked = memories.filter(function (record) {
@@ -857,7 +855,7 @@
             const accessCard = el('div', 'sutra-knowledge-card');
             accessCard.appendChild(el('strong', null, String(overview.permissions.mode || 'off').replace(/_/g, ' ')));
             accessCard.appendChild(el('span', null, 'Assistant access mode'));
-            accessCard.appendChild(el('small', null, overview.permissions.allowLockedNotes ? 'Unlocked notes may be included' : 'Locked notes excluded'));
+            accessCard.appendChild(el('small', null, 'Locked notes require one-time Assistant permission and page PIN'));
             const projectCard = el('div', 'sutra-knowledge-card');
             projectCard.appendChild(el('strong', null, String(overview.projects.length)));
             projectCard.appendChild(el('span', null, 'active project contexts'));

@@ -50867,6 +50867,40 @@ function getActiveEditor() {
             return false;
         }
 
+        // Assistant access is read-only, separate from the editor unlock set, and returns only a non-secret one-request capability result.
+        async function requestAssistantPageAccess(pageId) {
+            const id = String(pageId || '');
+            const page = pages.find(entry => entry && String(entry.id) === id);
+            if (!page || !page.isLocked || !page.lockHash || !page.lockSalt) {
+                return { ok: false, status: 'not_locked', message: 'This page is not currently PIN-locked.' };
+            }
+            let label = `Enter the page PIN for "${page.title || 'this note'}" to let Assistant read it once.`;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const pin = await showCustomPromptDialog({
+                    title: 'Verify page PIN for Assistant',
+                    label,
+                    placeholder: 'Page PIN',
+                    confirmText: 'Allow once',
+                    cancelText: 'Cancel',
+                    inputType: 'password'
+                });
+                if (pin === null) return { ok: false, status: 'cancelled', message: 'Cancelled — the locked page was not shared with Assistant.' };
+                const validation = validatePinInput(pin);
+                if (validation) {
+                    label = validation;
+                    continue;
+                }
+                const current = pages.find(entry => entry && String(entry.id) === id);
+                if (!current || !current.isLocked || !current.lockHash || !current.lockSalt) {
+                    return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
+                }
+                if (await verifyPagePin(pin, current.lockHash, current.lockSalt)) {
+                    return { ok: true, pageId: id };
+                }
+                label = 'Incorrect PIN. Try again to allow Assistant to read this page once.';
+            }
+            return { ok: false, status: 'failed', message: 'Assistant access was not granted because the correct page PIN was not entered.' };
+        }
         // A locked note (or a locked sub-page swept up in a parent's deletion)
         // must not be deletable without the PIN. Verifies every still-locked page
         // in the deletion set; aborts the whole delete if any verification fails.
@@ -77674,6 +77708,15 @@ ${cspMeta}
                 chatInput.value = '';
             }
 
+            let lockedPageAccess = { ok: true, needed: false, ticket: null };
+            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    appendChatNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             // Sutra Assistant command layer: if the text is a recognized natural-
             // language command (open note, run deadline radar, start focus, etc.)
             // execute it locally and skip the model call entirely.
@@ -77775,8 +77818,9 @@ ${cspMeta}
             // Build the exact, budgeted context before the disclosure. This is
             // local-only work and lets the user inspect what would be sent.
             const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(text, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope })
+                ? window.flowAssistant.buildRequestEnrichment(text, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
+            try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: false, status: 'pre-send' });
 
             // Phase 2D — first remote request privacy disclosure. Nothing leaves
@@ -78062,6 +78106,7 @@ ${cspMeta}
                 renderPagesList: () => { if (_origRenderPagesList) _origRenderPagesList(); },
                 getPageById: (id) => (Array.isArray(pages) ? pages.find(page => page && String(page.id) === String(id)) : null),
                 isPageContentAuthorized: (pageOrId) => isPageContentAuthorized(pageOrId),
+                requestAssistantPageAccess: (pageId) => requestAssistantPageAccess(pageId),
                 checkpointPage: (page, label) => {
                     if (!page || typeof createVersionSnapshot !== 'function') return null;
                     return createVersionSnapshot(page, label || 'Before Assistant change', { force: true });
@@ -79849,6 +79894,15 @@ ${cspMeta}
                 asstScrollToBottom();
             }
 
+            let lockedPageAccess = { ok: true, needed: false, ticket: null };
+            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    asstNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             // Command layer — natural-language commands run locally, no model call.
             try {
                 if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
@@ -79875,13 +79929,22 @@ ${cspMeta}
                 }
             } catch (e) { /* fall through to model */ }
 
-            await asstSendCore(text, sendText, { pushUser: true, contextTags });
+            await asstSendCore(text, sendText, { pushUser: true, contextTags, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
         }
 
         // Shared send pipeline. `displayText` is what the user sees/persists,
         // `sendText` is what the model receives (may carry a context block).
         // opts.pushUser=false is used by Regenerate (user turn already present).
         async function asstSendCore(displayText, sendText, opts = {}) {
+            let lockedPageAccess = { ok: true, needed: false, ticket: opts.lockedPageAccessTicket || null };
+            if (!opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(displayText);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    asstNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
             const provider = getCurrentChatProvider();
             const providerConfig = CHAT_PROVIDER_CONFIG[provider];
@@ -79932,8 +79995,9 @@ ${cspMeta}
             } catch (e) { /* non-blocking */ }
 
             const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope })
+                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
+            try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, {
                 local: false, provider: providerConfig.label, model: selectedModel, status: 'pre-send', dataTransmitted: false
             });
