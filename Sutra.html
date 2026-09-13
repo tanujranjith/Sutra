@@ -4062,23 +4062,10 @@
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
                             <h2 class="cc-section-title">Homework</h2>
-                            <p class="cc-section-copy">How assignments are shown and added.</p>
+                            <p class="cc-section-copy">How assignments are shown. Add work through the shared Homework composer.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
-                    <div class="cc-group">
-                        <span class="cc-group-title">Adding tasks</span>
-                        <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Add method</span><span class="cc-row-help">How the &ldquo;add a task&rdquo; experience works.</span></div>
-                            <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="study.homeworkAddMethod">
-                                    <option value="inline">Inline row — add in place</option>
-                                    <option value="quick">Quick add — type naturally</option>
-                                    <option value="panel">Panel — full add dialog</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
                     <div class="cc-group">
                         <span class="cc-group-title">Display</span>
                         <div class="cc-row" data-setting-item>
@@ -5342,7 +5329,7 @@
                                 </select>
                             </label>
                             <button id="hwOpenAddAssignment" class="hw-toolbar-btn hw-toolbar-primary" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add task</span>
+                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add homework</span>
                             </button>
                             <label class="hw-toolbar-btn hw-file-action" for="hwImportFile">
                                 <i class="fas fa-file-import" aria-hidden="true"></i><span>Import</span>
@@ -5411,7 +5398,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260913-homework-removal-homework2"></script>
+                <script src="src/features/study/homework.js?v=20260913-homework-consolidation-homework2"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7881,7 +7868,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
-    <script src="src/core/app.js?v=20260913-locked-assistant-app3"></script>
+    <script src="src/core/app.js?v=20260913-homework-consolidation-app2"></script>
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>

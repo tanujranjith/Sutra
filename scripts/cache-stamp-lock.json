@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260913-locked-assistant-app3",
-    "hash": "039cf2c98fdea5fd"
+    "stamp": "20260913-homework-consolidation-app2",
+    "hash": "795f41b60d8935a3"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -252,8 +252,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260913-homework-removal-homework2",
-    "hash": "08f2c539c3da15b4"
+    "stamp": "20260913-homework-consolidation-homework2",
+    "hash": "629872cd956092f7"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",

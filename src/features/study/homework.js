@@ -762,9 +762,9 @@
   }
 
   // =====================================================================
-  // Redesign layer: selectable layouts, add methods, and pinned countdowns.
-  // Layout + add method are read from body[data-homework-*] (driven by the
-  // Settings → Homework prefs in app.js). All renderers below emit the same
+  // Redesign layer: selectable layouts and pinned countdowns. The legacy
+  // layout/add-method helpers below remain isolated for compatibility paths;
+  // the active workspace uses the shared Quick Capture composer. All renderers
   // data-task-* / .hw-task-menu markup the original board used, so the
   // existing bindBoardInteractions() keeps wiring every action for free.
   // =====================================================================
@@ -823,6 +823,21 @@
   function getHwAddMethod() {
     const value = document.body && document.body.dataset ? document.body.dataset.homeworkAddMethod : '';
     return ['inline', 'quick', 'panel'].includes(value) ? value : 'inline';
+  }
+
+  // Single-assignment creation belongs to Quick Capture so Homework, Home and
+  // Course Hub share one parser, class picker and persistence path. Bulk import
+  // and programmatic callers still use the canonical Homework API directly.
+  function openHomeworkCapture(options = {}) {
+    if (typeof window.openQuickCaptureModal !== 'function') {
+      showHomeworkToast('Homework capture is still loading — try again in a moment.');
+      return false;
+    }
+    window.openQuickCaptureModal(String(options.prefillText || ''), {
+      type: 'homework',
+      courseId: options.courseId ? String(options.courseId) : ''
+    });
+    return true;
   }
 
   function studioPctOf(task) {
@@ -1145,8 +1160,8 @@
 
   function renderEmptyStateRedesign(message) {
     // One surface, one primary action: teach the fastest way to capture work.
-    // "Paste or type your homework" opens Quick Capture (which parses class,
-    // due date and type); "Add a class" is the lighter secondary path.
+    // "Paste or type your homework" opens the shared Homework composer (which
+    // parses class and due date); "Add a class" is the lighter secondary path.
     return `<div class="hw-empty-redesign">
       <i class="fas fa-clipboard-check" aria-hidden="true"></i>
       <p class="hw-empty-title">${escHtml(message || 'No homework yet.')}</p>
@@ -1158,7 +1173,7 @@
     </div>`;
   }
 
-  // ---- inline add composer (default add method) -------------------------
+  // ---- legacy inline composer (compatibility path) ----------------------
 
   function buildCourseOptions(selectedId) {
     const cls = courses.filter(c => c.type === 'class');
@@ -1247,7 +1262,7 @@
     });
   }
 
-  // ---- quick add (natural language) -------------------------------------
+  // ---- legacy quick add (compatibility path) ----------------------------
 
   const QUICK_WEEKDAYS = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
 
@@ -1736,7 +1751,6 @@
     const filteredTasks = getHomeworkFilteredTasks();
     const byClass = homeworkViewState.tab === 'class';
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
-    const addMethod = getHwAddMethod();
     let content = '';
 
     if (!tasks.length && !courses.length) {
@@ -1766,9 +1780,7 @@
           <div><span class="hw-panel-eyebrow">Assignments</span><h3 id="hwAssignmentsTitle">${homeworkViewState.tab === 'class' ? 'Assignments by class' : 'Assignment list'}</h3></div>
           <span class="hw-result-count">${escHtml(totalLabel)}</span>
         </div>
-        ${addMethod === 'quick' ? renderQuickAddBar() : ''}
         ${content}
-        ${addMethod === 'inline' && (courses.length || tasks.length) ? `<div class="hw-panel-inline-add">${renderInlineComposer('')}</div>` : ''}
       </section>`;
   }
 
@@ -1840,6 +1852,7 @@
           ${renderUpcomingDeadlinesPanel()}
         </aside>
       </div>
+      <!-- The legacy form remains available for editing existing assignments. -->
       ${renderGlobalAssignmentComposer()}`;
   }
 
@@ -2541,8 +2554,6 @@
     setSafeHTML(board, renderHomeworkWorkspace());
 
     bindBoardInteractions(board);
-    bindInlineComposers(board);
-    bindQuickAdd(board);
     bindExtraInteractions(board);
     renderPins();
   }
@@ -2878,7 +2889,7 @@
           setFormMode('add');
         };
 
-        if (openAddBtn) openAddBtn.onclick = () => openModal();
+        if (openAddBtn) openAddBtn.onclick = () => openHomeworkCapture();
         if (closeAddBtn) closeAddBtn.addEventListener('click', closeModal);
         addModal.addEventListener('click', event => {
           if (event.target === addModal) closeModal();
@@ -2897,7 +2908,7 @@
 
         board.querySelectorAll('[data-open-add-assignment]').forEach(button => {
           button.addEventListener('click', () => {
-            openModal(button.getAttribute('data-open-add-assignment'));
+            openHomeworkCapture({ courseId: button.getAttribute('data-open-add-assignment') });
           });
         });
 
@@ -2975,11 +2986,7 @@
     // type homework straight away (it parses class, due date and type).
     board.querySelectorAll('[data-hw-empty-capture]').forEach(button => {
       button.addEventListener('click', () => {
-        if (typeof window !== 'undefined' && typeof window.openQuickCaptureModal === 'function') {
-          window.openQuickCaptureModal('');
-        } else {
-          promptAddCourse('class', { returnFocus: button });
-        }
+        if (!openHomeworkCapture()) promptAddCourse('class', { returnFocus: button });
       });
     });
 
@@ -3552,11 +3559,6 @@
     window.addEventListener('homework:updated', () => {
       load();
       renderPins();
-      if (isHomeworkViewActive()) render();
-    });
-
-    // Re-render when the add-method preference changes in Settings.
-    window.addEventListener('sutra:homework-prefs', () => {
       if (isHomeworkViewActive()) render();
     });
 

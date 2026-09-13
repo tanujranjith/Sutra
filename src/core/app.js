@@ -30533,33 +30533,11 @@ function buildOnboardingPlanPreview() {
             const courses = getCourses({ filter: 'active' });
             const targetId = courseId || (courseWorkspace.settings.activeCourseId) || (courses[0] && courses[0].id) || '';
             if (!courses.length) { showToast('Create a course first.'); cwOpenNewCourseModal(); return; }
-            cwOpenFormModal({
-                title: 'Add Assignment',
-                submitLabel: 'Add Assignment',
-                fields: [
-                    { key: 'courseId', label: 'Course', type: 'select', value: targetId, options: courses.map(c => ({ value: c.id, label: c.name })) },
-                    { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Rotational motion lab', required: true },
-                    { key: 'dueDate', label: 'Due date', type: 'date' },
-                    { key: 'dueTime', label: 'Due time', type: 'time' },
-                    { key: 'priority', label: 'Urgency', type: 'select', value: 'medium', options: [
-                        { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }
-                    ] },
-                    { key: 'difficulty', label: 'Difficulty', type: 'select', value: 'medium', options: [
-                        { value: 'easy', label: 'Easy' }, { value: 'medium', label: 'Medium' }, { value: 'hard', label: 'Hard' }
-                    ] },
-                    { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional details' }
-                ],
-                onSubmit: (v) => {
-                    const created = createAssignmentForCourse(v.courseId, v);
-                    if (!created) { showToast('Add an assignment title.'); return; }
-                    if (String(courseWorkspace.settings.activeCourseId) !== String(v.courseId)) {
-                        courseWorkspace.settings.activeCourseId = v.courseId;
-                    }
-                    renderCourseHubView();
-                    renderAllDueView();
-                    showToast('Assignment added.');
-                }
-            });
+            if (typeof openQuickCaptureModal !== 'function') {
+                showToast('Homework capture is still loading — try again in a moment.');
+                return;
+            }
+            openQuickCaptureModal('', { type: 'homework', courseId: String(targetId) });
         }
 
         function cwSelectCourse(courseId) {
@@ -82548,9 +82526,13 @@ function syncQuickCaptureCourseField(parsed, modal) {
     return { selectedCourse, isNew };
 }
 
-function openQuickCaptureModal(prefillText) {
+function openQuickCaptureModal(prefillText, options) {
     const modal = document.getElementById('quickCaptureModal');
     if (!modal) return;
+    const captureOptions = options && typeof options === 'object' ? options : {};
+    const allowedTypes = ['task', 'homework', 'test', 'note', 'review', 'block', 'apsession', 'college', 'grade'];
+    const requestedType = allowedTypes.includes(String(captureOptions.type || '')) ? String(captureOptions.type) : '';
+    const requestedCourseId = captureOptions.courseId ? String(captureOptions.courseId) : '';
     const input = modal.querySelector('#quickCaptureInput');
     const previewEl = modal.querySelector('#quickCapturePreview');
     const typeSelect = modal.querySelector('#quickCaptureType');
@@ -82563,11 +82545,17 @@ function openQuickCaptureModal(prefillText) {
     const notesInput = modal.querySelector('#quickCaptureNotes');
     const courseSelect = modal.querySelector('#quickCaptureCourse');
     const newCourseInput = modal.querySelector('#quickCaptureNewCourse');
+    const titleEl = modal.querySelector('#quickCaptureTitle');
+    const submitLabel = modal.querySelector('#quickCaptureSubmitBtn');
     if (!input || !previewEl || !typeSelect || !dateInput || !timeInput || !apSubjectSelect) return;
+
+    if (titleEl) titleEl.textContent = requestedType === 'homework' ? 'Add homework' : 'Quick Capture';
+    if (submitLabel) submitLabel.textContent = requestedType === 'homework' ? 'Add homework' : 'Capture';
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
     if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+    if (!requestedType) typeSelect.value = 'task';
     [prioritySelect, difficultySelect, estimateInput].forEach(field => {
         if (field && field.dataset) field.dataset.userTouched = '0';
     });
@@ -82662,7 +82650,7 @@ function openQuickCaptureModal(prefillText) {
         previewEl.textContent = `“${parsed.title}” · ${bits.join(' · ')}`;
     };
     input.oninput = () => {
-        if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+        if (!requestedType && typeSelect.dataset) typeSelect.dataset.manualType = '';
         updatePreview();
     };
     typeSelect.onchange = () => {
@@ -82708,6 +82696,19 @@ function openQuickCaptureModal(prefillText) {
             if (event.key === 'Escape') { event.preventDefault(); closeQuickCaptureModal(); }
             if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submitQuickCapture(); }
         });
+    }
+
+    if (requestedType) {
+        typeSelect.value = requestedType;
+        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType;
+        syncQuickCaptureApSubjectField({ type: requestedType }, modal);
+        syncQuickCaptureCourseField({ type: requestedType, courseId: requestedCourseId, classHint: '' }, modal);
+        if (requestedCourseId && courseSelect && Array.from(courseSelect.options).some(option => option.value === requestedCourseId)) {
+            courseSelect.value = requestedCourseId;
+            courseSelect.dataset.userTouched = '1';
+        }
+        const blockField = modal.querySelector('#quickCaptureBlockTimeField');
+        if (blockField) blockField.hidden = !['homework', 'task', 'test', 'college', 'apsession'].includes(requestedType);
     }
     updatePreview();
 

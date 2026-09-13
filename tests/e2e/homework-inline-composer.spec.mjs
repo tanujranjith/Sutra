@@ -16,7 +16,6 @@ async function openHomework(page) {
   });
   await page.waitForFunction(() => !!window.SutraHomework && typeof window.setActiveView === 'function');
   await page.evaluate(() => {
-    document.body.dataset.homeworkAddMethod = 'inline';
     window.setActiveView('homework');
     window.SutraHomework.addCourse('Composer layout course');
     const now = new Date();
@@ -32,33 +31,47 @@ async function openHomework(page) {
   });
 }
 
-test('Homework inline composer fills the assignment panel and keeps its fields in a two-column grid', async ({ page }) => {
+test('Homework uses Quick Capture as the single assignment composer', async ({ page }) => {
   await openHomework(page);
 
-  const composer = page.locator('.hw-panel-inline-add [data-inline-add]').first();
-  await composer.locator('[data-inline-trigger]').click();
-  const form = composer.locator('[data-inline-form]');
-  await expect(form).toBeVisible();
+  await page.locator('#hwOpenAddAssignment').click();
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
+  await expect(page.locator('#quickCaptureTitle')).toHaveText('Add homework');
+  await expect(page.locator('#quickCaptureType')).toHaveValue('homework');
+  await expect(page.locator('[data-inline-add]')).toHaveCount(0);
+  await expect(page.locator('[data-quick-add-input]')).toHaveCount(0);
+  await expect(page.locator('#hwGlobalAddModal')).toBeHidden();
 
-  const layout = await composer.evaluate((element) => {
-    const form = element.querySelector('[data-inline-form]');
-    const chips = element.querySelector('.hw-inline-chips');
-    const fields = Array.from(element.querySelectorAll('.hw-inline-chips select, .hw-inline-chips input'));
-    return {
-      composer: element.getBoundingClientRect().toJSON(),
-      form: form.getBoundingClientRect().toJSON(),
-      chips: chips.getBoundingClientRect().toJSON(),
-      fields: fields.map((field) => field.getBoundingClientRect().toJSON())
-    };
+  await page.locator('#quickCaptureInput').fill('Shared composer work');
+  await page.locator('#quickCaptureDate').fill('2026-08-30');
+  await page.locator('#quickCaptureSubmitBtn').click();
+  await expect(page.locator('#quickCaptureModal')).toBeHidden();
+  await expect(page.locator('.hw-assignment-row', { hasText: 'Shared composer work' })).toHaveCount(1);
+
+  await page.evaluate(() => window.openQuickCaptureModal(''));
+  await expect(page.locator('#quickCaptureTitle')).toHaveText('Quick Capture');
+  await expect(page.locator('#quickCaptureSubmitBtn')).toHaveText('Capture');
+  await expect(page.locator('#quickCaptureType')).toHaveValue('task');
+  await page.locator('#quickCaptureCancelBtn').click();
+});
+
+test('Course Hub assignment actions open the same Homework composer', async ({ page }) => {
+  await openHomework(page);
+
+  const courseId = await page.evaluate(() => {
+    const existing = window.courseHub.getCourses({ filter: 'active' })[0];
+    return existing ? existing.id : window.courseHub.createCourse({ name: 'Course Hub composer course', type: 'class' }).id;
   });
-
-  expect(layout.form.width).toBeGreaterThan(layout.composer.width * 0.8);
-  expect(layout.chips.width).toBeGreaterThan(layout.form.width * 0.8);
-  expect(layout.fields).toHaveLength(4);
-  expect(layout.fields[0].width).toBeGreaterThan(100);
-  expect(layout.fields[1].width).toBeGreaterThan(100);
-  expect(Math.abs(layout.fields[0].y - layout.fields[1].y)).toBeLessThanOrEqual(2);
-  expect(layout.fields[2].y).toBeGreaterThan(layout.fields[0].y + 20);
+  await page.evaluate((id) => {
+    window.setActiveView('courses');
+    window.cwAddAssignment(id);
+  }, courseId);
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
+  await expect(page.locator('#quickCaptureTitle')).toHaveText('Add homework');
+  await expect(page.locator('#quickCaptureType')).toHaveValue('homework');
+  await expect(page.locator('#quickCaptureCourse')).toHaveValue(courseId);
+  await expect(page.locator('#cwFormModal')).toHaveCount(0);
+  await page.locator('#quickCaptureCancelBtn').click();
 });
 
 test('Homework workspace summaries, search, filters, and completion use live task data', async ({ page }) => {
