@@ -315,6 +315,10 @@
     "stamp": "20260823-combined1",
     "hash": "0ad9808ef25fcae8"
   },
+  "src/features/workspace/html-page-transfer-compat.js": {
+    "stamp": "20260913-html-transfer2",
+    "hash": "f9ff245580961672"
+  },
   "src/features/workspace/html-pages.js": {
     "stamp": "20260825-oxremed1",
     "hash": "f90a17f531a988fe"
