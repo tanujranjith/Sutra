@@ -255,6 +255,7 @@
     "./src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1",
     "./src/features/workspace/custom-tabs.js?v=20260913-custom-html-widget1",
     "./src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1",
+    "./src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2",
     "./src/features/workspace/handwriting.js?v=20260601-handwriting",
     "./src/features/workspace/help-docs-refresh.js?v=20260823-combined1",
     "./src/features/workspace/html-pages.js?v=20260825-oxremed1",

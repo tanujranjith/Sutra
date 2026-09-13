@@ -303,6 +303,10 @@
     "stamp": "20260905-quote-focus1",
     "hash": "88323393a0652f0b"
   },
+  "src/features/workspace/direct-pdf-export.js": {
+    "stamp": "20260913-direct-pdf2",
+    "hash": "66cf045204ce8513"
+  },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
     "hash": "b2a6953df38f74cb"

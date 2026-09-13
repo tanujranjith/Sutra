@@ -1194,6 +1194,7 @@
     "editPracticeTest",
     "ensureAiSendDisclosure",
     "explainExamNextAction",
+    "exportCurrentNoteDocument",
     "exportWorkspaceAsAtelier",
     "exportWorkspaceAsJson",
     "flowAssistant",
