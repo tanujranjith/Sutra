@@ -104,8 +104,8 @@
     "hash": "cd6d317f94b67645"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260913-content-limits-homework-store1",
-    "hash": "6d7bc955a18ced93"
+    "stamp": "20260913-homework-removal-homework-store1",
+    "hash": "0e02a60c40c66667"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
@@ -252,8 +252,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260913-content-limits-homework1",
-    "hash": "5522c9e9e3b88e9c"
+    "stamp": "20260913-homework-removal-homework2",
+    "hash": "08f2c539c3da15b4"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -516,8 +516,8 @@
     "hash": "ec5b9fed4daf6503"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260912-ux1",
-    "hash": "e8ea7688c0091697"
+    "stamp": "20260913-homework-removal-redesign2",
+    "hash": "20447f83ecd0d2b4"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",

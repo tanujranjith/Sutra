@@ -1705,7 +1705,10 @@
       .map(group => {
         const name = group.course ? group.course.name : 'Unassigned';
         const kind = group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned';
-        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><span>${escHtml(name)}</span><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
+        const removeButton = group.course
+          ? `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${escHtml(group.course.id)}" title="Remove ${escHtml(kind.toLowerCase())}" aria-label="Remove ${escHtml(kind.toLowerCase())} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`
+          : '';
+        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></span>${removeButton}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
       }).join('');
   }
 
@@ -1724,7 +1727,7 @@
     const classes = courses.filter(course => course.type === 'class');
     const rows = classes.map(course => {
       const color = getCourseColor(course.id);
-      return `<li class="hw-empty-class-row"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></li>`;
+      return `<li class="hw-empty-class-row"><div class="hw-empty-class-info"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></div><button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${escHtml(course.id)}" title="Remove class" aria-label="Remove class ${escHtml(course.name)}"><i class="fas fa-trash" aria-hidden="true"></i></button></li>`;
     }).join('');
     return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul><div class="hw-empty-actions"><button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-plus" aria-hidden="true"></i> Add an assignment</button><button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-book-open" aria-hidden="true"></i> Add a class</button></div></div>`;
   }
@@ -1796,6 +1799,7 @@
           <div class="hw-activity-actions">
             ${nearest ? `<button type="button" data-task-schedule="${escHtml(nearest.id)}" aria-label="Schedule ${escHtml(nearest.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>` : ''}
             <button type="button" data-open-add-assignment="${escHtml(course.id)}" aria-label="Add a task to ${escHtml(course.name)}" title="Add activity task"><i class="fas fa-plus" aria-hidden="true"></i></button>
+            <button type="button" class="hw-course-remove-action" data-course-delete="${escHtml(course.id)}" aria-label="Remove activity ${escHtml(course.name)}" title="Remove activity"><i class="fas fa-trash" aria-hidden="true"></i></button>
           </div>
         </article>`;
     }).join('');
@@ -2589,25 +2593,72 @@
     const target = courses.find(course => String(course.id) === String(courseId));
     if (!target) return;
 
-    const confirmed = await showHomeworkConfirm(`Remove "${target.name}" and all assignments in it?`, {
-      title: 'Delete Subject',
-      confirmText: 'Delete Subject',
-      cancelText: 'Keep Subject',
+    const kindLabel = target.type === 'misc' ? 'activity' : 'class';
+    const showRemovalFailure = () => {
+      showHomeworkToast(`This ${kindLabel} could not be removed safely. Export a backup and try again.`);
+      return false;
+    };
+    const linkedCount = tasks.filter(task => String(task.courseId) === String(courseId)).length;
+    const linkedCopy = linkedCount
+      ? ` Its ${linkedCount} linked assignment${linkedCount === 1 ? '' : 's'} will move to Trash.`
+      : '';
+    const confirmed = await showHomeworkConfirm(`Remove "${target.name}"?${linkedCopy}`, {
+      title: `Remove ${kindLabel}`,
+      confirmText: `Remove ${kindLabel}`,
+      cancelText: `Keep ${kindLabel}`,
       confirmVariant: 'danger'
     });
     if (!confirmed) return;
 
-    // Every assignment in the deleted subject goes to Trash so a mis-click
-    // on "Delete Subject" can be walked back one row at a time.
+    const store = window.SutraHomeworkStore;
+    if (!store || typeof store.removeCourse !== 'function') {
+      return showRemovalFailure();
+    }
+
+    // The Course Hub mirror is intentionally archived before the Homework
+    // lane is removed. Its bridge skips archived courses on the next hydrate,
+    // so legacy Course Hub metadata cannot recreate an explicit removal.
+    const courseHub = window.courseHub;
+    const hubCourse = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(courseId)
+      : null;
+    const hubWasArchived = !!(hubCourse && hubCourse.archived);
+    let archivedHubForRemoval = false;
+    if (hubCourse && !hubWasArchived) {
+      if (typeof courseHub.archiveCourse !== 'function') return showRemovalFailure();
+      const archivedHubCourse = courseHub.archiveCourse(courseId, true);
+      if (!archivedHubCourse || archivedHubCourse.archived !== true) return showRemovalFailure();
+      archivedHubForRemoval = true;
+    }
+
+    const restoreHubArchive = () => {
+      if (!archivedHubForRemoval) return;
+      try { courseHub.archiveCourse(courseId, false); } catch (_) {}
+    };
+
+    let removal;
+    try {
+      removal = store.removeCourse(courseId, { reason: 'homework-course-remove' });
+    } catch (error) {
+      restoreHubArchive();
+      if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.deleteCourse' }, 'error');
+      return showRemovalFailure();
+    }
+    const removed = removal && removal.result;
+    if (!removed || !removed.removed) {
+      restoreHubArchive();
+      return showRemovalFailure();
+    }
+
+    // Every linked assignment goes to Trash so removal remains recoverable.
     if (window.SutraTrash && typeof window.SutraTrash.add === 'function') {
-      tasks.filter(task => String(task.courseId) === String(courseId)).forEach(task => {
+      (removed.tasks || []).forEach(task => {
         try { window.SutraTrash.add('homework', task.title || task.text, serializeTask(task)); } catch (err) { /* non-critical */ }
       });
     }
-    courses = courses.filter(course => String(course.id) !== String(courseId));
-    tasks = tasks.filter(task => String(task.courseId) !== String(courseId));
-    save();
+    load();
     render();
+    return true;
   }
 
   function toggleTaskDone(taskId) {

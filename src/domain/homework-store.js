@@ -282,6 +282,19 @@
       },
       getSnapshot: getSnapshot,
       replace: function (next, meta) { return commit(Object.assign({}, state, next || {}), meta || {}); },
+      removeCourse: function (courseId, meta) {
+        var id = text(courseId, 160);
+        var target = state.courses.find(function (course) { return String(course.id) === id; });
+        if (!target) return { result: { removed: false, course: null, tasks: [] }, workspace: getSnapshot() };
+        var removedCourse = clone(target, {});
+        var removedTasks = state.tasks.filter(function (task) { return String(task.courseId || '') === id; });
+        var next = Object.assign({}, state, {
+          courses: state.courses.filter(function (course) { return String(course.id) !== id; }),
+          tasks: state.tasks.filter(function (task) { return String(task.courseId || '') !== id; })
+        });
+        var snapshot = commit(next, Object.assign({ reason: 'homework-course-remove' }, meta || {}));
+        return { result: { removed: true, course: removedCourse, tasks: clone(removedTasks, []) }, workspace: snapshot };
+      },
       replaceDurably: function (next, meta) {
         var replacement = clone(next || {}, {});
         return commitDurably(function (draft) { return Object.assign({}, draft, replacement); }, meta || {})
