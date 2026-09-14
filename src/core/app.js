@@ -50201,7 +50201,7 @@ function getActiveEditor() {
                 const currentSpace = activeSpaceId || 'default';
                 const helpPage = ensureHelpPageForSpace(currentSpace);
                 if (pages.length > 0) {
-                    const nextPage = pages.find(p => (p.spaceId || 'default') === currentSpace && !isHelpDocsPage(p))
+                    const nextPage = pages.find(p => (p.spaceId || 'default') === currentSpace && !isHelpDocsPage(p) && !isFolderPage(p))
                         || helpPage
                         || pages[0];
                     loadPage(nextPage.id);
