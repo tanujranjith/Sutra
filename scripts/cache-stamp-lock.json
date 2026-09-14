@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260913-homework-consolidation-app2",
-    "hash": "795f41b60d8935a3"
+    "stamp": "20260914-notes-folder-state",
+    "hash": "4672acf5457cf7d1"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -468,8 +468,8 @@
     "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
-    "stamp": "20260708-toolbar-compact",
-    "hash": "35abae7df9676466"
+    "stamp": "20260914-export-modal",
+    "hash": "f65f38a62c69d73b"
   },
   "src/ui/sidebar-page-actions-menu.js": {
     "stamp": "20260803-overflow1",
