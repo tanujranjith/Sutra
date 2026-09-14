@@ -25,6 +25,30 @@
         return select.dataset.inlineMenu !== 'true';
     }
 
+    function syncModalManager() {
+        try {
+            const manager = window.SutraModalManager;
+            if (manager && typeof manager.sync === 'function') manager.sync();
+            const dialog = openComponent && openComponent.select.closest('[aria-modal="true"]');
+            if (dialog && openComponent.usePortal && openComponent.menu.classList.contains('is-open')) {
+                // SutraModalManager isolates body-level portal branches while a
+                // dialog is open. The currently opened select is part of that
+                // dialog's interaction surface, so release only its temporary
+                // isolation after the manager has synchronized the rest of the
+                // page. The manager marker remains in place for clean restore.
+                const menu = openComponent.menu;
+                if (menu.getAttribute('data-sutra-modal-inert') === '1') {
+                    menu.removeAttribute('aria-hidden');
+                    if ('inert' in menu) menu.inert = false;
+                }
+            }
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') {
+                window.SutraReportError(error, { where: 'select-enhancer.modal-sync' }, 'warning');
+            }
+        }
+    }
+
     function getPortalLayer(trigger) {
         if (!(trigger instanceof Element)) return 13000;
         let maxZ = 0;
@@ -59,6 +83,7 @@
         component.trigger.setAttribute('aria-expanded', 'false');
         component.menu.classList.remove('is-open');
         component.menu.classList.remove('nf-select-menu--open-up');
+        syncModalManager();
     }
 
     function getSelectedOption(select) {
@@ -155,6 +180,7 @@
         component.menu.classList.add('is-open');
         if (component.usePortal) positionPortalMenu(component);
         openComponent = component;
+        syncModalManager();
 
         if (focusSelected) {
             const selected = component.menu.querySelector('.nf-select-option.is-selected:not(.is-disabled)');
@@ -272,6 +298,7 @@
         if (select.id) menu.id = select.id + '-menu';
         const usePortal = shouldUsePortal(select);
         if (usePortal) menu.classList.add('nf-select-menu--portal');
+        menu.__sutraSelectOwner = select;
 
         wrapper.appendChild(trigger);
         if (usePortal) {
@@ -462,13 +489,15 @@
             }
         }, true);
 
-        document.addEventListener('keydown', function (event) {
+        window.addEventListener('keydown', function (event) {
             if (event.key === 'Escape' && openComponent) {
                 const trigger = openComponent.trigger;
+                event.preventDefault();
+                event.stopPropagation();
                 closeOpenSelect();
                 trigger.focus();
             }
-        });
+        }, true);
 
         window.addEventListener('resize', closeOpenSelect);
         window.addEventListener('scroll', function () {
