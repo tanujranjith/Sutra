@@ -2602,7 +2602,7 @@
 
   async function deleteCourse(courseId) {
     const target = courses.find(course => String(course.id) === String(courseId));
-    if (!target) return;
+    if (!target) return false;
 
     const kindLabel = target.type === 'misc' ? 'activity' : 'class';
     const showRemovalFailure = () => {
@@ -2619,7 +2619,7 @@
       cancelText: `Keep ${kindLabel}`,
       confirmVariant: 'danger'
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
     const store = window.SutraHomeworkStore;
     if (!store || typeof store.removeCourse !== 'function') {
@@ -3582,6 +3582,7 @@
         const course = courses.find(c => String(c.id) === String(id));
         return { id: String(id), name: course ? String(course.name || normalized) : normalized };
       },
+      removeCourse: (id) => deleteCourse(id),
       // Canonical cross-feature write path. Quick Capture and future import
       // surfaces must use this instead of writing hwTasks:v2 directly so
       // quota/security failures keep the new assignment in module memory and

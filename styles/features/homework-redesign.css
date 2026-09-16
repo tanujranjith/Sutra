@@ -975,6 +975,10 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-group-heading strong { font-weight: 700; }
 .hw-assignment-group-heading .hw-row-action { flex: 0 0 auto; }
 .hw-assignment-group-row small { margin-left: 8px; color: var(--text-secondary); font-size: 0.65rem; font-weight: 500; }
+.hw-assignment-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hw-assignment-group-heading > span { min-width: 0; }
+.hw-assignment-group-heading strong { font-weight: 700; }
+.hw-assignment-group-heading .hw-row-action { flex: 0 0 auto; }
 
 .hw-panel-inline-add { padding: 10px 13px 13px; border-top: 1px solid var(--surface-border); }
 .hw-panel-inline-add .hw-inline-add { margin: 0; }

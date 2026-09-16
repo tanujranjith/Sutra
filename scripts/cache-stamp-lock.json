@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260915-cloud2",
-    "hash": "19a389942d724cfd"
+    "stamp": "20260916-integration-app1",
+    "hash": "fbaceca40c9b2e34"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -104,7 +104,7 @@
     "hash": "adcc8905d68c7e3f"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260913-homework-removal-homework-store1",
+    "stamp": "20260916-integration-homework-store1",
     "hash": "0e02a60c40c66667"
   },
   "src/domain/icalendar.js": {
@@ -247,13 +247,17 @@
     "stamp": "20260913-content-limits-ap1",
     "hash": "e06b7a0b7d124014"
   },
+  "src/features/study/class-dashboard-actions.js": {
+    "stamp": "20260916-class-ec-delete1",
+    "hash": "8579da8954653d25"
+  },
   "src/features/study/code-highlight.js": {
     "stamp": "20260620-hl1",
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260913-homework-consolidation-homework2",
-    "hash": "629872cd956092f7"
+    "stamp": "20260916-integration-homework1",
+    "hash": "c19d4394a052bbbb"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -488,8 +492,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260913-energy-removal-base1",
-    "hash": "95d10bfbb928e1c8"
+    "stamp": "20260916-integration-base1",
+    "hash": "f09fe4645df11eb2"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -524,8 +528,8 @@
     "hash": "ec5b9fed4daf6503"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260913-homework-removal-redesign2",
-    "hash": "20447f83ecd0d2b4"
+    "stamp": "20260916-integration-homework-redesign1",
+    "hash": "2901277da52344e7"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",
@@ -608,8 +612,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260915-cloud1",
-    "hash": "9e90aec52075a047"
+    "stamp": "20260916-integration-mobile1",
+    "hash": "ec13fbe97cdd22ca"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

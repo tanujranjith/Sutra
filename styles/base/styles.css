@@ -24355,7 +24355,8 @@ body.command-palette-open {
 
 /* ---- Sticky footer ---- */
 .class-dash-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     padding: 14px 18px;
     border-top: 1px solid color-mix(in srgb, var(--surface-border) 55%, transparent);
@@ -24372,6 +24373,20 @@ body.command-palette-open {
 }
 .class-dash-primary:hover {
     background: color-mix(in srgb, var(--accent) 38%, var(--surface-bg)) !important;
+}
+.class-dash-danger {
+    grid-column: 1 / -1;
+    color: var(--danger, #e0564f) !important;
+    border-color: color-mix(in srgb, var(--danger, #e0564f) 38%, var(--surface-border)) !important;
+}
+.class-dash-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger, #e0564f) 10%, var(--surface-bg)) !important;
+    border-color: var(--danger, #e0564f) !important;
+}
+
+@media (max-width: 640px) {
+    .class-dash-actions { grid-template-columns: 1fr; }
+    .class-dash-danger { grid-column: auto; }
 }
 
 .atelier-settings-header-main h2 {

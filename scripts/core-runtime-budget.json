@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-09-16T01:29:30.472Z",
-  "reviewedReason": "Reviewed unified Cloud lifecycle guards and backup status",
-  "maxBytes": 4895773,
-  "maxLines": 86093
+  "blessedAt": "2026-09-17T02:21:32.558Z",
+  "reviewedReason": "Bless combined local issue-fix and Sutra Cloud integration preview runtime",
+  "maxBytes": 4980783,
+  "maxLines": 86089
 }

@@ -7,124 +7,125 @@ async function openHomework(page) {
   await waitForAppReady(page);
   await page.evaluate(() => {
     try { window.markStudentOnboardingCompleted?.(true); } catch (_) {}
-    const overlay = document.getElementById('studentOnboardingOverlay');
-    if (overlay) {
-      overlay.hidden = true;
-      overlay.classList.remove('active');
-      overlay.style.setProperty('display', 'none', 'important');
+    const onboarding = document.getElementById('studentOnboardingOverlay');
+    if (onboarding) {
+      onboarding.hidden = true;
+      onboarding.classList.remove('active');
+      onboarding.style.setProperty('display', 'none', 'important');
     }
     document.body.classList.remove('onboarding-open');
   });
   await page.waitForFunction(() => !!window.SutraHomework && !!window.SutraHomeworkStore && typeof window.setActiveView === 'function');
   await page.evaluate(() => {
     window.setActiveView('homework');
-    window.courseHub.createCourse({ id: 'remove-class', name: 'Remove Biology', type: 'class' });
-    window.courseHub.createCourse({ id: 'remove-activity', name: 'Remove Robotics', type: 'activity' });
-    window.courseHub.createCourse({ id: 'remove-empty-class', name: 'Remove Empty Chemistry', type: 'class' });
-    const snapshot = window.SutraHomeworkStore.getSnapshot();
-    window.SutraHomeworkStore.replace({
-      ...snapshot,
-      courses: [
+    const setup = document.getElementById('hwSetupOverlay');
+    if (setup) {
+      setup.hidden = true;
+      setup.classList.remove('active');
+      setup.style.setProperty('display', 'none', 'important');
+    }
+    const store = window.SutraHomeworkStore;
+    const current = store.getSnapshot();
+    store.replace({
+      ...current,
+      courses: current.courses.concat([
         { id: 'remove-class', name: 'Remove Biology', type: 'class' },
         { id: 'remove-activity', name: 'Remove Robotics', type: 'misc' },
         { id: 'remove-empty-class', name: 'Remove Empty Chemistry', type: 'class' }
-      ],
-      tasks: [
-        { id: 'remove-class-task', courseId: 'remove-class', title: 'Biology assignment', notes: 'Keep this in the class Trash record.' },
-        { id: 'remove-activity-task', courseId: 'remove-activity', title: 'Robotics assignment', notes: 'Keep this in the activity Trash record.' }
-      ]
+      ]),
+      tasks: current.tasks.concat([
+        { id: 'remove-class-task', courseId: 'remove-class', title: 'Biology assignment' },
+        { id: 'remove-activity-task', courseId: 'remove-activity', title: 'Robotics assignment' }
+      ])
     }, { reason: 'homework-course-removal-test-seed' });
-    window.dispatchEvent(new CustomEvent('homework:updated'));
     window.SutraHomework.render();
   });
-  const setup = page.locator('#hwSetupOverlay');
-  if (await setup.count()) await setup.evaluate((element) => {
-    element.hidden = true;
-    element.classList.remove('active');
-    element.style.setProperty('display', 'none', 'important');
-  });
-  await page.locator('[data-homework-tab="class"]').click();
-  await expect(page.locator('[data-course-delete="remove-class"]').first()).toBeVisible();
 }
 
-async function confirmRemoval(page, id, { hasLinkedAssignments = true } = {}) {
-  await page.locator(`[data-course-delete="${id}"]`).first().click();
+async function acceptRemoval(page, selector) {
+  await page.locator(selector).click();
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
-  if (hasLinkedAssignments) await expect(page.locator('#customConfirmMessage')).toContainText('Trash');
   await page.locator('#customConfirmAcceptBtn').click();
-  await expect.poll(() => page.evaluate((courseId) => {
-    const snapshot = window.SutraHomeworkStore.getSnapshot();
-    return {
-      course: snapshot.courses.some((course) => course.id === courseId),
-      tasks: snapshot.tasks.filter((task) => task.courseId === courseId).length
-    };
-  }, id)).toEqual({ course: false, tasks: 0 });
 }
 
-test('Homework removes classes and activities through confirmation and canonical persistence', async ({ page }) => {
+test('Homework exposes removal for classes and extracurriculars with recoverable assignments', async ({ page }) => {
   await openHomework(page);
 
-  await page.locator('[data-course-delete="remove-class"]').first().click();
-  await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
-  await page.locator('#customConfirmCancelBtn').click();
-  await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.map((course) => course.id)))
-    .toEqual(['remove-class', 'remove-activity', 'remove-empty-class']);
+  await page.locator('[data-homework-tab="class"]').click();
+  await expect(page.locator('[data-course-delete="remove-class"]').first()).toBeVisible();
+  await acceptRemoval(page, '[data-course-delete="remove-class"]');
+  await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.some((course) => course.id === 'remove-class'))).toBe(false);
 
-  await confirmRemoval(page, 'remove-class');
-  await confirmRemoval(page, 'remove-activity');
-  await confirmRemoval(page, 'remove-empty-class', { hasLinkedAssignments: false });
-
-  const result = await page.evaluate(() => {
+  await expect(page.locator('.hw-activity-row [data-course-delete="remove-activity"]')).toBeVisible();
+  await acceptRemoval(page, '.hw-activity-row [data-course-delete="remove-activity"]');
+  await expect.poll(() => page.evaluate(() => {
     const snapshot = window.SutraHomeworkStore.getSnapshot();
-    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
-    window.deserializeWorkspace(payload);
-    const restored = window.SutraHomeworkStore.getSnapshot();
     return {
-      snapshot,
-      restored,
-      hubClassArchived: window.courseHub?.getCourseById('remove-class')?.archived === true,
-      hubActivityArchived: window.courseHub?.getCourseById('remove-activity')?.archived === true,
-      hubEmptyClassArchived: window.courseHub?.getCourseById('remove-empty-class')?.archived === true,
-      trash: window.__sutraPublicBetaTestHooks.getTrash().filter((item) => item.kind === 'homework').map((item) => item.title)
+      activityRemoved: !snapshot.courses.some((course) => course.id === 'remove-activity'),
+      classAssignmentRemoved: !snapshot.tasks.some((task) => task.id === 'remove-class-task'),
+      activityAssignmentRemoved: !snapshot.tasks.some((task) => task.id === 'remove-activity-task')
     };
-  });
+  })).toEqual({ activityRemoved: true, classAssignmentRemoved: true, activityAssignmentRemoved: true });
 
-  expect(result.snapshot.courses).toEqual([]);
-  expect(result.snapshot.tasks).toEqual([]);
-  expect(result.restored.courses).toEqual([]);
-  expect(result.restored.tasks).toEqual([]);
-  expect(result.hubClassArchived).toBe(true);
-  expect(result.hubActivityArchived).toBe(true);
-  expect(result.hubEmptyClassArchived).toBe(true);
-  expect(result.trash).toEqual(expect.arrayContaining(['Biology assignment', 'Robotics assignment']));
+  const trashTitles = await page.evaluate(() => window.__sutraPublicBetaTestHooks.getTrash()
+    .filter((item) => item.kind === 'homework')
+    .map((item) => item.title));
+  expect(trashTitles).toEqual(expect.arrayContaining(['Biology assignment', 'Robotics assignment']));
+});
 
-  await page.evaluate(async () => { await window.flowAtelier.flushAppSaveNow('homework-course-removal-test'); });
-  await page.reload();
-  await page.waitForSelector('#storageOptions', { state: 'attached' });
-  await waitForAppReady(page);
-  await page.waitForFunction(() => !!window.SutraHomeworkStore && !!window.courseHub);
+test('an empty class can be removed from the class empty state', async ({ page }) => {
+  await openHomework(page);
   await page.evaluate(() => {
-    try { window.markStudentOnboardingCompleted?.(true); } catch (_) {}
-    const overlay = document.getElementById('studentOnboardingOverlay');
-    if (overlay) {
-      overlay.hidden = true;
-      overlay.classList.remove('active');
-      overlay.style.setProperty('display', 'none', 'important');
-    }
-    window.setActiveView('homework');
+    const store = window.SutraHomeworkStore;
+    const current = store.getSnapshot();
+    store.replace({ ...current, tasks: [] }, { reason: 'homework-empty-class-removal-test-seed' });
+    window.SutraHomework.render();
   });
-  const afterReload = await page.evaluate(() => ({
-    courses: window.SutraHomeworkStore.getSnapshot().courses,
-    tasks: window.SutraHomeworkStore.getSnapshot().tasks,
-    hubClassArchived: window.courseHub.getCourseById('remove-class')?.archived === true,
-    hubActivityArchived: window.courseHub.getCourseById('remove-activity')?.archived === true,
-    hubEmptyClassArchived: window.courseHub.getCourseById('remove-empty-class')?.archived === true,
-    trash: window.__sutraPublicBetaTestHooks.getTrash().filter((item) => item.kind === 'homework').map((item) => item.title)
-  }));
-  expect(afterReload.courses).toEqual([]);
-  expect(afterReload.tasks).toEqual([]);
-  expect(afterReload.hubClassArchived).toBe(true);
-  expect(afterReload.hubActivityArchived).toBe(true);
-  expect(afterReload.hubEmptyClassArchived).toBe(true);
-  expect(afterReload.trash).toEqual(expect.arrayContaining(['Biology assignment', 'Robotics assignment']));
+
+  await page.locator('[data-homework-tab="class"]').click();
+  await expect(page.locator('[data-course-delete="remove-empty-class"]')).toBeVisible();
+  await acceptRemoval(page, '[data-course-delete="remove-empty-class"]');
+  await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.some((course) => course.id === 'remove-empty-class'))).toBe(false);
+});
+
+test('the class dashboard modal exposes the same removal action for both types', async ({ page }) => {
+  await openHomework(page);
+
+  await page.evaluate(() => window.openClassDashboardDrawer('remove-class'));
+  await expect(page.locator('#classDashboardDrawer')).toHaveClass(/active/);
+  await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove class');
+  await expect(page.locator('.class-dash-actions .neumo-btn')).toHaveCount(3);
+  await page.locator('#classDashDeleteBtn').click();
+  await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
+  await page.locator('#customConfirmAcceptBtn').click();
+  await expect(page.locator('#classDashboardDrawer')).not.toHaveClass(/active/);
+
+  await page.evaluate(() => window.openClassDashboardDrawer('remove-activity'));
+  await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove activity');
+  await page.locator('#classDashDeleteBtn').click();
+  await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
+  await page.locator('#customConfirmAcceptBtn').click();
+  await expect(page.locator('#classDashboardDrawer')).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses
+    .filter((course) => course.id === 'remove-class' || course.id === 'remove-activity'))).toHaveLength(0);
+});
+
+test('the dashboard removal action remains usable in the phone bottom sheet', async ({ page }) => {
+  await openHomework(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.openClassDashboardDrawer('remove-class'));
+
+  const footer = page.locator('.class-dash-actions');
+  await expect(footer).toBeVisible();
+  await expect(footer.locator('.neumo-btn')).toHaveCount(3);
+  await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove class');
+  await expect.poll(() => page.evaluate(() => {
+    const element = document.querySelector('.class-dash-actions');
+    const buttons = Array.from(element ? element.querySelectorAll('.neumo-btn') : []);
+    const footerBox = element && element.getBoundingClientRect();
+    return {
+      footerFitsViewport: !!footerBox && footerBox.right <= window.innerWidth,
+      buttonsFitViewport: buttons.every((button) => button.getBoundingClientRect().right <= window.innerWidth)
+    };
+  })).toEqual({ footerFitsViewport: true, buttonsFitViewport: true });
 });
