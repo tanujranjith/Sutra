@@ -39,8 +39,8 @@ function configureSupabase(page) {
   return page.addInitScript(({ url }) => { window.SUTRA_CONFIG = { supabaseUrl: url, supabaseAnonKey: 'test-anon-key' }; }, { url: SUPA_URL });
 }
 
-async function installSupabaseMock(page) {
-  const state = {
+async function installSupabaseMock(page, sharedState) {
+  const state = sharedState || {
     objects: new Map(),
     index: [],
     uploads: [],
@@ -673,6 +673,44 @@ test('switching destination signs out the old provider and keeps the local works
   expect(after.active).toBe('webdav');
   expect(after.title).toBe('Sentinel KEEP'); // local workspace untouched
   expect(after.auto).toBe(false);          // auto re-opt-in per destination
+});
+
+test('scheduled backups upload ciphertext once across two tabs and stop when disabled', async ({ page, context }) => {
+  test.setTimeout(90000);
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'automatic-backup');
+  await useSupabaseSignedIn(page);
+  await page.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
+  const second = await context.newPage();
+  await configureSupabase(second);
+  await installInspectableBlobRequests(second, [`${SUPA_URL}/`]);
+  await installSupabaseMock(second, supa);
+  await second.goto('/Sutra.html');
+  await waitForAppReady(second);
+  await completeOnboarding(second);
+  await second.evaluate(async ({ email, passphrase }) => {
+    await window.SutraCloudSync.verifyCode(email, '123456');
+    await window.SutraCloud.backupNow({ passphrase });
+    window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' });
+  }, { email: EMAIL, passphrase: PASS });
+  const before = supa.uploads.length;
+  const hide = tab => tab.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await Promise.all([hide(page), hide(second)]);
+  await expect.poll(() => supa.uploads.length).toBe(before + 1);
+  await expect.poll(() => second.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt)).toBeTruthy();
+  await Promise.all([hide(page), hide(second)]);
+  await second.waitForTimeout(1000);
+  expect(supa.uploads.length).toBe(before + 1);
+  expect(supa.uploads.at(-1).bytes.subarray(0, 8).toString()).toBe('SUTRAENC');
+  expect(supa.uploads.at(-1).bytes.toString()).not.toContain('Body automatic-backup');
+  await second.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: false, frequency: 'close' }));
+  await Promise.all([hide(page), hide(second)]);
+  await second.waitForTimeout(1000);
+  expect(supa.uploads.length).toBe(before + 1);
+  await second.close();
 });
 
 test('auto-backup is off by default and manual is always ready', async ({ page }) => {

@@ -449,6 +449,18 @@ whole repo. Add it to any move's verification loop.
 
 ## 15. Staged extraction plan (remaining decomposition)
 
+The Sutra Cloud coordinator remains beside the closure-bound provider and
+Sync bridges in `src/core/app.js`. `window.SutraCloud` exposes locally derived
+`getStatus()`, `open(section)`, `syncNow()`, `pauseSync()`, `resumeSync()`,
+`backupNow()`, `restore()`, and `setAutoBackup({ enabled, frequency })`.
+It emits `sutra:cloud-status` without replacing existing Sync events. Status
+reads must not open the Sync database or request provider data. The existing
+`SutraSync` and `SutraCloudSync` APIs retain their operational semantics;
+their open actions select the corresponding section in the shared modal.
+Sync scheduling stays inside its engine/bridge. Snapshot scheduling uses a
+separate Web Lock and successful-upload receipt in version-2 device-local
+Cloud metadata. The encryption helpers and provider registry stay in place.
+
 The restructure deliberately **stopped at green checkpoints**. Remaining work,
 in safe increments:
 

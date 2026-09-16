@@ -292,6 +292,12 @@ documented in [`GOOGLE_DRIVE_SYNC_SETUP.md`](../features/GOOGLE_DRIVE_SYNC_SETUP
 
 ## 5b. Optional encrypted Sutra Cloud backup (provider-based)
 
+Cloud is now one hub with Sync and Backups sections. The save bar has one
+Sutra Cloud entry; legacy Sync actions route into that hub. Its status model
+keeps confirmed local saves, encrypted replication, and point-in-time backup
+receipts distinct. Opening either section is local-only; listing, connecting,
+restoring and manual uploads remain explicit actions.
+
 **Sutra Cloud** is a second optional, consent-first backup layer. It is
 **provider-based**; Supabase is one advanced adapter, not a required Sutra
 backend. It is **off by default** and lives in the save bar (not first-run
@@ -354,6 +360,12 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   signed in, with the passphrase cached for the session, on the chosen trigger
   (app hidden / once a day / on significant change). Turning it off stops it
   immediately.
+  A cross-tab Web Lock and persisted successful-upload hash prevent duplicate
+  scheduled snapshots. Without Web Locks, automatic backups pause visibly.
+  Metadata remains at the compatibility key `sutra:supabaseCloud:v1`, now
+  versioned with `schemaVersion: 2`; migration preserves existing opt-in,
+  cadence and unknown fields. No Sync database, vault, backup format or
+  credential migration is involved.
 - **Password recovery:** because backups are end-to-end encrypted, a lost
   passphrase means the cloud copy is unrecoverable — so the passphrase modals are
   wired to let your **browser's password manager** save and autofill it.

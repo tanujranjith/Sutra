@@ -6318,13 +6318,9 @@
             <i class="fas fa-download"></i>
             <span class="btn-text">Import</span>
         </button>
-        <button class="storage-btn" id="sutraCloudOpenBtn" onclick="openSutraCloudModal()" title="Sutra Cloud — optional encrypted cloud backup">
+        <button class="storage-btn" id="sutraCloudOpenBtn" onclick="openSutraCloudModal()" title="Sutra Cloud — encrypted sync and backups">
             <i class="fas fa-cloud"></i>
             <span class="btn-text">Sutra Cloud</span>
-        </button>
-        <button class="storage-btn" id="sutraSyncOpenBtn" onclick="openSutraSyncModal()" title="Sutra Sync — optional encrypted multi-device sync">
-            <i class="fas fa-rotate"></i>
-            <span class="btn-text">Sync</span>
         </button>
     </div>
 
@@ -6354,15 +6350,22 @@
          Distinct from backups: "Saved locally", "Synced to cloud", and
          "Backed up" are three different guarantees, and this panel says which
          is which. Spec: docs/architecture/SYNC_PROTOCOL.md -->
-    <div class="modal" id="sutraSyncModal">
-        <div class="modal-content sutra-sync-modal" role="dialog" aria-modal="true" aria-labelledby="sutraSyncModalTitle" aria-describedby="sutraSyncStatusCard">
+    <div class="modal" id="sutraCloudModal">
+        <div class="modal-content sutra-cloud-modal sutra-sync-modal sutra-cloud-hub" role="dialog" aria-modal="true" aria-labelledby="sutraCloudModalTitle">
             <div class="modal-header">
-                <h3 class="modal-title" id="sutraSyncModalTitle">
-                    <i class="fas fa-rotate" aria-hidden="true"></i> Sutra Sync Beta
+                <h3 class="modal-title" id="sutraCloudModalTitle">
+                    <i class="fas fa-cloud" aria-hidden="true"></i> Sutra Cloud
                 </h3>
-                <button class="close-btn" type="button" data-modal-close onclick="closeSutraSyncModal()" aria-label="Close Sutra Sync">&times;</button>
+                <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
             </div>
             <div class="modal-body">
+                <div id="sutraCloudSummary" class="sutra-cloud-status-card" role="status" aria-live="polite"></div>
+                <nav class="sutra-cloud-sections" aria-label="Cloud sections">
+                    <button class="storage-btn" type="button" id="sutraCloudSyncTab" aria-controls="sutraSyncModal" aria-pressed="true">Sync · Beta</button>
+                    <button class="storage-btn" type="button" id="sutraCloudBackupsTab" aria-controls="sutraCloudBackupsPanel" aria-pressed="false">Backups</button>
+                </nav>
+                <section id="sutraSyncModal" aria-label="Automatic encrypted sync">
+                <p class="sutra-sync-hint">After you turn on Sync and unlock it, changes sync automatically while Sutra is open. Unlock again after reopening Sutra. Sync now is available whenever you need it.</p>
                 <div class="sutra-sync-status-card" id="sutraSyncStatusCard" aria-live="polite"></div>
 
                 <!-- Setup (sync disabled) -->
@@ -6387,7 +6390,7 @@
                         is still being validated.
                     </p>
                     <p class="sutra-sync-hint" id="sutraSyncSignInHint" hidden>
-                        Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in via Sutra Cloud</button> first, then come back here.
+                        Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in to Sutra Cloud</button> to continue.
                     </p>
                     <label class="sutra-sync-label" for="sutraSyncPassphraseInput">Sync passphrase (8+ characters)</label>
                     <input type="password" id="sutraSyncPassphraseInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
@@ -6466,20 +6469,9 @@
                     </details>
                     <p class="sutra-sync-error" id="sutraSyncRunningError" role="alert" hidden></p>
                 </section>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sutra Cloud — optional, consent-first, provider-based encrypted backup -->
-    <div class="modal" id="sutraCloudModal">
-        <div class="modal-content sutra-cloud-modal" role="dialog" aria-modal="true" aria-labelledby="sutraCloudModalTitle" aria-describedby="sutraCloudStatus">
-            <div class="modal-header">
-                <h3 class="modal-title" id="sutraCloudModalTitle">
-                    <i class="fas fa-cloud" aria-hidden="true"></i> Sutra Cloud
-                </h3>
-                <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
-            </div>
-            <div class="modal-body">
+                <div id="sutraCloudAccountSetup"></div>
+                </section>
+                <section id="sutraCloudBackupsPanel" aria-label="Encrypted backups" hidden inert>
                 <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Start with encrypted multi-device Sync, then choose a backup destination when you want a recoverable snapshot.</p>
 
                 <section class="sutra-cloud-sync-first" aria-labelledby="sutraCloudSyncFirstTitle">
@@ -6508,7 +6500,7 @@
                             <input type="checkbox" id="sutraCloudAutoToggle">
                             <span>Auto-backup (optional, off by default)</span>
                             <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
-                                <option value="close">On app close</option>
+                                <option value="close">When app is hidden (best effort)</option>
                                 <option value="daily">Once a day</option>
                                 <option value="change">On significant change</option>
                             </select>
@@ -6548,6 +6540,7 @@
                     <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">What happens if I lose my passphrase?</a> ·
                     <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">Troubleshooting</a>
                 </p>
+                </section>
             </div>
         </div>
     </div>
@@ -7868,7 +7861,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
-    <script src="src/core/app.js?v=20260914-notes-folder-state"></script>
+    <script src="src/core/app.js?v=20260915-cloud2"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
@@ -7925,7 +7918,7 @@
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
     <!-- Backup Confidence — derives a confidence level from persistence-health,
          backup, and cloud signals for the Today trust indicator. -->
-    <script src="src/features/workspace/backup-confidence.js?v=20260712-bc1"></script>
+    <script src="src/features/workspace/backup-confidence.js?v=20260915-cloud1"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
     <script src="src/core/issue-prompt.js?v=20260617-issue1"></script>
@@ -8295,7 +8288,7 @@
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/features/global-search.css?v=20260825-gsstyles3">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260913-energy-removal-mobile1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260915-cloud1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
@@ -8310,7 +8303,7 @@
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
-    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260823-credential-vault1">
+    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260915-cloud2">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">

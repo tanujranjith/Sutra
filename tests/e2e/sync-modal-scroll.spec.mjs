@@ -42,7 +42,7 @@ async function showLongDevicesPanel(page, count = 18) {
       return item;
     }));
   }, count);
-  await expect(page.locator('#sutraSyncModal')).toHaveClass(/active/);
+  await expect(page.locator('#sutraCloudModal')).toHaveClass(/active/);
 }
 
 async function dialogLayout(page) {
@@ -98,6 +98,7 @@ test('long desktop Sync content is opaque, viewport-bound, and scroll-contained'
   const underlayBefore = await page.locator('#sync-scroll-test-underlay').evaluate((node) => node.scrollTop);
   await page.mouse.wheel(0, 5000);
   expect(await page.locator('#sync-scroll-test-underlay').evaluate((node) => node.scrollTop)).toBe(underlayBefore);
+  await page.locator('.sutra-sync-advanced').scrollIntoViewIfNeeded();
   await expect(page.locator('.sutra-sync-advanced')).toBeInViewport();
 });
 

@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260914-notes-folder-state",
-    "hash": "4672acf5457cf7d1"
+    "stamp": "20260915-cloud2",
+    "hash": "19a389942d724cfd"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -272,8 +272,8 @@
     "hash": "ba3d9bcc87cd1c56"
   },
   "src/features/workspace/backup-confidence.js": {
-    "stamp": "20260712-bc1",
-    "hash": "0f1060b20127996f"
+    "stamp": "20260915-cloud1",
+    "hash": "0d31a21889c4db60"
   },
   "src/features/workspace/business-workspace.js": {
     "stamp": "20260807-opsqueue1",
@@ -572,8 +572,8 @@
     "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "6cd1c3908b2d3ebd"
+    "stamp": "20260915-cloud2",
+    "hash": "5cd5ccc11565d718"
   },
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
@@ -608,8 +608,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260913-energy-removal-mobile1",
-    "hash": "0b0383af3a47cfce"
+    "stamp": "20260915-cloud1",
+    "hash": "9e90aec52075a047"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

@@ -1,9 +1,14 @@
 # Sutra Cloud — Providers
 
-Sutra Cloud is **provider-based**: the same encrypted-backup flow can store your
+The **Backups** section of Sutra Cloud is **provider-based**: the same encrypted-backup flow can store your
 locked `.sutra` files in different destinations. This page lists every provider,
 its status, what it stores, and its limitations. For step-by-step setup see
 [SUTRA_CLOUD_SETUP.md](SUTRA_CLOUD_SETUP.md).
+
+The same Cloud hub also contains incremental **Sync · Beta**, using the
+configured Supabase account. Backup providers do not gain incremental Sync
+capabilities through this UI unification. Sync unlock and backup passwords
+remain independent; enabling one does not enable the other.
 
 > Every provider receives **ciphertext only**. The choice of provider does **not**
 > change the encryption or the passphrase model. Advanced/self-hosted providers

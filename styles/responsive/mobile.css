@@ -2176,13 +2176,12 @@
        single row, custom-select chevron room, touch-target floors.
    ========================================================================= */
 
-/* ---- 37a. Storage bar: keep save status + Save/Export/Import/Cloud/Sync in
-        one measured row. Optional Sync added a sixth child; without a sixth
-        track it wrapped underneath the phone navigation and became unreachable. ---- */
+/* ---- 37a. Storage bar: save status + Save/Export/Import/Cloud share
+        one measured row. Cloud includes Sync and backups. ---- */
 @media (max-width: 768px), (max-height: 480px) and (orientation: landscape) {
     #storageOptions,
     .storage-options {
-        grid-template-columns: auto minmax(0, 2fr) repeat(4, minmax(0, 1fr)) !important;
+        grid-template-columns: auto minmax(0, 2fr) repeat(3, minmax(0, 1fr)) !important;
     }
 }
 

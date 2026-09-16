@@ -58,7 +58,7 @@ has('Sutra.html', 'flex-wrap:wrap', 'document-background action rows wrap rather
 
 console.log('\nMobile polish pass (2026-06-11) — phone chrome + editor contract');
 // Storage bar must stay a single compact row on phones (status + 3 buttons).
-has('styles/responsive/mobile.css', 'repeat(4, minmax(0, 1fr))', 'storage bar keeps Save, backup, cloud, and Sync controls in one phone row');
+has('styles/responsive/mobile.css', 'repeat(3, minmax(0, 1fr))', 'storage bar keeps Save, Export, Import, and unified Cloud in one phone row');
 // Assistant quick-action chips scroll horizontally instead of stacking 2-3 rows.
 has('styles/responsive/mobile.css', /\.view-flow-row\s*\{[^}]*flex-wrap:\s*nowrap/, 'assistant chips are a single scrollable row on phones', true);
 // Notes: the chips row clears the fixed toolbar (prevents the chip/toolbar collision).

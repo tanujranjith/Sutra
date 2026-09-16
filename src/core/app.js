@@ -45129,7 +45129,7 @@ function buildOnboardingPlanPreview() {
                     id: 'sutra-sync',
                     title: 'Sutra Sync (Optional Encrypted Multi-Device Sync)',
                     body: `
-<p><strong>Sutra Sync</strong> keeps one workspace identical across your devices — edits made on one device appear on the others automatically. It is <strong>off by default</strong>, <strong>end-to-end encrypted</strong>, and separate from backups. Open it from <strong>Settings &rsaquo; Data &amp; Backup</strong> or the <strong>Sync</strong> button in the save bar.</p>
+<p><strong>Sutra Cloud &rsaquo; Sync · Beta</strong> keeps one workspace across your devices. It is <strong>off by default</strong> and <strong>end-to-end encrypted</strong>. Open the <strong>Sutra Cloud</strong> button in the save bar or Settings &rsaquo; Data &amp; Backup. After you explicitly enable and unlock Sync, confirmed saves sync automatically; Sync now is optional. Unlock again each session. The Backups section keeps independent encrypted snapshots with a separate password and optional daily, significant-change, or best-effort app-hidden scheduling. Automatic backups require browser Web Locks support; manual backups remain available everywhere supported.</p>
 <h3>Three different guarantees</h3>
 <ul>
   <li><strong>Saved locally</strong> — your work is durably on THIS device (always on; sync never affects it).</li>
@@ -56923,6 +56923,7 @@ function getActiveEditor() {
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;  // re-opt-in per backend
             persistSutraCloudMeta();
             const backend = loadSutraCloudBackend();
@@ -56945,16 +56946,18 @@ function getActiveEditor() {
         // provider's session (soft — keeps saved credentials + remote backups),
         // resets shared backup status, and leaves the LOCAL workspace untouched.
         async function switchSutraCloudProvider(id) {
+            if (sutraCloudRuntime.busy) throw new Error('Wait for the current backup or restore to finish before switching destinations.');
             const target = getSutraCloudProviderById(id);
             if (!target) throw new Error('Unknown backup destination.');
             const current = getActiveSutraCloudProvider();
-            if (current && current.id !== id) {
+            if (current && current.id !== id && !(current.id === 'supabase' && isSutraSyncEnabled())) {
                 try { await current.endSession(); } catch (error) { /* best effort */ }
             }
             const meta = loadSutraCloudMeta();
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;   // re-opt-in per destination
             persistSutraCloudMeta();
             sutraCloudRuntime.backupPassphrase = '';
@@ -56974,7 +56977,9 @@ function getActiveEditor() {
                 lastBackupAt: '',
                 lastError: '',
                 autoBackup: { enabled: false, frequency: 'daily' },
-                lastAutoBackupAt: ''
+                lastAutoBackupAt: '',
+                schemaVersion: 2,
+                lastAutoBackupHash: ''
             };
         }
 
@@ -56982,10 +56987,17 @@ function getActiveEditor() {
             if (sutraCloudMeta) return sutraCloudMeta;
             const raw = SutraSafeStorage.get(SUTRA_CLOUD_META_KEY, { fallback: null });
             sutraCloudMeta = { ...getDefaultSutraCloudMeta(raw), ...(raw && typeof raw === 'object' ? raw : {}) };
-            if (!sutraCloudMeta.autoBackup || typeof sutraCloudMeta.autoBackup !== 'object') {
-                sutraCloudMeta.autoBackup = { enabled: false, frequency: 'daily' };
+            const auto = sutraCloudMeta.autoBackup;
+            sutraCloudMeta.autoBackup = {
+                ...(auto && typeof auto === 'object' ? auto : {}),
+                enabled: !!auto && auto.enabled === true,
+                frequency: auto && ['daily', 'close', 'change'].includes(auto.frequency) ? auto.frequency : 'daily'
+            };
+            // Version the frozen device-local record in place, retaining unknown fields.
+            if (!raw || !raw.schemaVersion || raw.schemaVersion < 2) {
+                sutraCloudMeta.schemaVersion = 2;
+                persistSutraCloudMeta();
             }
-            sutraCloudMeta.autoBackup.enabled = sutraCloudMeta.autoBackup.enabled === true;
             return sutraCloudMeta;
         }
 
@@ -57177,6 +57189,9 @@ function getActiveEditor() {
         }
 
         async function sutraCloudSignOut() {
+            sutraCloudRuntime.operationEpoch = (sutraCloudRuntime.operationEpoch || 0) + 1;
+            sutraCloudRuntime.backupPassphrase = '';
+            if (window.SutraSync) { window.SutraSync.lock(); window.SutraSync.pause(); }
             try {
                 if (sutraCloudRuntime.accessToken) await sutraCloudFetch('/auth/v1/logout', { method: 'POST' });
             } catch (error) { /* best effort — local sign-out always succeeds */ }
@@ -58140,7 +58155,10 @@ function getActiveEditor() {
 
         // ---- Generic controller (provider-agnostic) ----
         async function sutraCloudBackupNow(options = {}) {
+            if (sutraCloudRuntime.busy) return { skipped: true, reason: 'busy' };
             const provider = getActiveSutraCloudProvider();
+            const epoch = sutraCloudRuntime.operationEpoch || 0;
+            const identity = provider && provider.getSignedInIdentity();
             if (!provider) throw new Error('Choose a backup destination first.');
             const status = provider.getSetupStatus();
             if (!status.ready) throw new Error(status.reason || `${provider.displayName} needs setup first.`);
@@ -58156,6 +58174,9 @@ function getActiveEditor() {
             updateSutraCloudUi();
             try {
                 const encrypted = await createEncryptedSutraBackupBlob({ passphrase });
+                if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()
+                    || provider !== getActiveSutraCloudProvider() || !provider.getSetupStatus().ready
+                    || (options.auto && !sutraCloudAutoReady())) return { skipped: true, reason: 'connection-changed' };
                 const meta = {
                     label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
                     size: encrypted.blob.size || encrypted.encryptedByteLength || 0,
@@ -58163,13 +58184,18 @@ function getActiveEditor() {
                     filename: encrypted.filename
                 };
                 await provider.uploadBackup(encrypted.blob, meta);
+                if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()) {
+                    return { skipped: true, reason: 'signed-out' };
+                }
                 const m = loadSutraCloudMeta();
                 m.lastBackupAt = new Date().toISOString();
                 m.lastError = '';
                 if (options.auto) m.lastAutoBackupAt = m.lastBackupAt;
+                if (options.auto) m.lastAutoBackupHash = options.workspaceHash || '';
                 persistSutraCloudMeta();
                 sutraCloudRuntime.backupPassphrase = passphrase; // session-only cache enables unattended auto-backup
-                try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); } catch (e) {}
+                try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); }
+                catch (error) { if (window.SutraReportError) window.SutraReportError(error, { where: 'sutraCloud:retention', provider: provider.id }, 'warning'); }
                 if (!options.silent) showToast(provider.id === 'manual' ? 'Encrypted backup downloaded.' : 'Encrypted backup saved to Sutra Cloud.');
                 return { uploaded: true };
             } catch (error) {
@@ -58365,15 +58391,37 @@ function getActiveEditor() {
                 && !!sutraCloudRuntime.backupPassphrase;
         }
 
-        function runSutraCloudAutoBackup() {
-            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy) return;
-            sutraCloudBackupNow({
-                passphrase: sutraCloudRuntime.backupPassphrase,
-                auto: true,
-                silent: true,
-                label: 'Auto backup'
-            }).then(() => { try { refreshSutraCloudBackupList(); } catch (e) {} })
-              .catch(() => { /* errors surface in the panel status; never disrupt the app */ });
+        async function runSutraCloudAutoBackup() {
+            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy || !navigator.onLine
+                || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+            // Without an atomic cross-tab lock, keep automatic backup paused.
+            // Manual backups remain available without opening the Sync database.
+            if (!navigator.locks) return { skipped: true, reason: 'locks-unavailable' };
+            try {
+                return await navigator.locks.request('sutra-cloud-auto-backup-v1', { ifAvailable: true }, async lock => {
+                    if (!lock) return { skipped: true, reason: 'lock-held' };
+                    sutraCloudMeta = null;
+                    const meta = loadSutraCloudMeta();
+                    if (!sutraCloudAutoReady() || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+                    // Use the existing semantic projection so save timestamps and
+                    // UI bookkeeping cannot manufacture another backup of unchanged work.
+                    const projection = window.SutraSyncProjection.buildProjection(await getSyncWorkspaceSnapshot());
+                    const hashes = await window.SutraSyncProjection.hashProjection(projection);
+                    const hash = await window.SutraSyncProtocol.hashText(window.SutraSyncProtocol.stableStringify(hashes));
+                    if (!hash || meta.lastAutoBackupHash === hash) return { skipped: true, reason: 'unchanged' };
+                    if (meta.autoBackup.frequency === 'daily' && meta.lastAutoBackupAt
+                        && Date.now() - Date.parse(meta.lastAutoBackupAt) < 20 * 60 * 60 * 1000) return { skipped: true, reason: 'not-due' };
+                    return await sutraCloudBackupNow({
+                        passphrase: sutraCloudRuntime.backupPassphrase,
+                        auto: true, silent: true, label: 'Auto backup', workspaceHash: hash
+                    });
+                });
+            } catch (error) {
+                loadSutraCloudMeta().lastError = error.message || 'Automatic backup failed.';
+                persistSutraCloudMeta();
+                updateSutraCloudUi();
+                return { error: true };
+            }
         }
 
         function scheduleSutraCloudAutoBackup(delayMs = 60000) {
@@ -58442,7 +58490,8 @@ function getActiveEditor() {
 
             buildSutraCloudStatusCard(provider, status, meta);
             buildSutraCloudCards();
-            buildSutraCloudSetup(provider);
+            buildSutraCloudSetup(sutraCloudUiState.section === 'sync' ? getSutraCloudProviderById('supabase') : provider);
+            publishSutraCloudStatus();
 
             sutraCloudSetHidden('sutraCloudPrimaryActions', !ready);
             const backupBtn = document.getElementById('sutraCloudBackupNowBtn');
@@ -58904,34 +58953,134 @@ function getActiveEditor() {
             rows.forEach(row => list.appendChild(buildSutraCloudRow(row)));
         }
 
-        function openSutraCloudModal() {
+        // Shared Cloud control plane. Status is derived locally: no provider
+        // requests, credential material, or Sync database reads belong here.
+        function getSutraCloudStatus() {
+            const sync = getSutraSyncStatus();
+            const meta = loadSutraCloudMeta();
+            const provider = getActiveSutraCloudProvider();
+            const savedAt = sutraPersistenceState && sutraPersistenceState.lastConfirmedSaveAt;
+            const automatic = meta.autoBackup.enabled;
+            const backupState = !navigator.onLine ? 'Offline'
+                : sutraCloudRuntime.busy ? 'Working'
+                : meta.lastError ? 'Needs attention'
+                : automatic && !navigator.locks ? 'Automatic backups paused: browser lock support required'
+                : automatic && !sutraCloudRuntime.backupPassphrase ? 'Unlock backups by making a backup this session'
+                : automatic ? 'Automatic backups on' : 'Automatic backups off';
+            return {
+                local: { savedAt: savedAt || null, writesBlocked: persistenceWritesBlocked,
+                    error: sutraPersistenceState && sutraPersistenceState.lastFailure || null },
+                sync: { ...sync, automatic: !!sync.enabled, label: sutraSyncStateLabel(sync.state) },
+                backups: { state: backupState, provider: provider ? provider.id : null,
+                    lastBackupAt: meta.lastBackupAt || null, lastAutoBackupAt: meta.lastAutoBackupAt || null,
+                    lastManualBackupAt: appSettings && appSettings.dataHealth && appSettings.dataHealth.lastAtelierExportAt || null,
+                    autoBackup: { ...meta.autoBackup }, error: meta.lastError || null },
+                online: navigator.onLine
+            };
+        }
+
+        function publishSutraCloudStatus() {
+            const status = getSutraCloudStatus();
+            const rows = [
+                ['Saved locally', status.local.error || status.local.writesBlocked ? 'Needs attention' : formatSutraSyncTime(status.local.savedAt)],
+                ['Synced to cloud', status.sync.label + (status.sync.lastSyncAt ? ' · ' + formatSutraSyncTime(status.sync.lastSyncAt) : '')],
+                ['Backed up', formatSutraSyncTime([status.backups.lastBackupAt, status.backups.lastManualBackupAt].filter(Boolean).sort().pop())],
+                ['Automatic backups', status.backups.state]
+            ];
+            if (status.sync.outboxDepth) rows.push(['Queued changes', String(status.sync.outboxDepth)]);
+            if (status.sync.conflictsPending) rows.push(['Conflicts to review', String(status.sync.conflictsPending)]);
+            if (status.sync.assetsPending) rows.push(['Attachments pending', String(status.sync.assetsPending)]);
+            if (status.sync.lastError) rows.push(['Sync needs attention', status.sync.lastError]);
+            if (status.backups.error) rows.push(['Backup needs attention', status.backups.error]);
+            const card = document.getElementById('sutraCloudSummary');
+            if (card) {
+                card.replaceChildren();
+                rows.forEach(([label, value]) => {
+                    const row = document.createElement('p');
+                    const name = document.createElement('strong');
+                    name.textContent = label + ': ';
+                    row.append(name, document.createTextNode(value));
+                    card.appendChild(row);
+                });
+            }
+            window.dispatchEvent(new CustomEvent('sutra:cloud-status', { detail: status }));
+        }
+
+        function selectSutraCloudSection(section) {
+            const sync = section !== 'backups';
+            sutraCloudUiState.section = sync ? 'sync' : 'backups';
+            const syncPanel = document.getElementById('sutraSyncModal');
+            const backupPanel = document.getElementById('sutraCloudBackupsPanel');
+            syncPanel.hidden = !sync;
+            syncPanel.inert = !sync;
+            backupPanel.hidden = sync;
+            backupPanel.inert = sync;
+            document.getElementById('sutraCloudSyncTab').setAttribute('aria-pressed', String(sync));
+            document.getElementById('sutraCloudBackupsTab').setAttribute('aria-pressed', String(!sync));
+            // Reuse a single account/setup form, avoiding duplicate credential inputs.
+            const setup = document.getElementById('sutraCloudSetupArea');
+            (sync ? document.getElementById('sutraCloudAccountSetup') : backupPanel).appendChild(setup);
+            sutraCloudUiState.forceSetupRebuild = true;
+            updateSutraCloudUi();
+            updateSutraSyncUi();
+        }
+
+        function setSutraCloudAutoBackup(options = {}) {
+            const frequency = options.frequency || 'daily';
+            if (!['daily', 'close', 'change'].includes(frequency)) throw new Error('Unknown automatic backup frequency.');
+            if (options.enabled && !sutraCloudRuntime.backupPassphrase) throw new Error('Make an encrypted backup first to unlock automatic backups for this session.');
+            const provider = getActiveSutraCloudProvider();
+            if (options.enabled && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready)) throw new Error('Connect a supported backup destination first.');
+            const meta = loadSutraCloudMeta();
+            meta.autoBackup = { ...meta.autoBackup, enabled: options.enabled === true, frequency };
+            if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+            persistSutraCloudMeta();
+            updateSutraCloudUi();
+            if (meta.autoBackup.enabled) maybeSutraCloudAutoBackup('enabled');
+            return { ...meta.autoBackup };
+        }
+
+        window.SutraCloud = {
+            getStatus: getSutraCloudStatus,
+            open: openSutraCloudModal,
+            syncNow: () => window.SutraSync.syncNow(),
+            pauseSync: () => window.SutraSync.pause(),
+            resumeSync: () => window.SutraSync.resume(),
+            backupNow: (...args) => window.SutraCloudSync.backupNow(...args),
+            restore: (...args) => window.SutraCloudSync.restore(...args),
+            setAutoBackup: setSutraCloudAutoBackup
+        };
+
+        function openSutraCloudModal(section = 'sync') {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
-            // The Cloud and Sync sheets are mutually exclusive save-bar
-            // surfaces: never stack one above the other. Closing the sibling
-            // first keeps exactly one .modal.active and one scroll-lock owner.
-            closeSutraSyncModal();
+            if (!modal.classList.contains('active')) sutraCloudUiState.lastFocus = document.activeElement;
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
+            bindSutraSyncUi();
+            selectSutraCloudSection(section);
             sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state
             sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
             sutraCloudSetHidden('sutraCloudManage', true);
             modal.classList.add('active');
             try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
             updateSutraCloudUi();
-            const provider = getActiveSutraCloudProvider();
-            if (provider && provider.hasBackupList && provider.getSetupStatus().ready) refreshSutraCloudBackupList();
+            updateSutraSyncUi();
         }
 
         function closeSutraCloudModal() {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
             modal.classList.remove('active');
+            clearSutraCloudPassphraseInputs();
             // Only release the scroll lock when no other modal is still open
             // (a sibling sheet may legitimately remain active).
             if (!document.querySelector('.modal.active')) {
                 try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
             }
+            const previous = sutraCloudUiState.lastFocus;
+            sutraCloudUiState.lastFocus = null;
+            if (previous && previous.isConnected) previous.focus();
         }
 
         // Opens the in-app Help & Docs page and jumps to the Sutra Cloud section.
@@ -58952,6 +59101,19 @@ function getActiveEditor() {
         function bindSutraCloudUi() {
             if (sutraCloudUiBound) return;
             sutraCloudUiBound = true;
+            document.getElementById('sutraCloudSyncTab').addEventListener('click', () => selectSutraCloudSection('sync'));
+            document.getElementById('sutraCloudBackupsTab').addEventListener('click', () => selectSutraCloudSection('backups'));
+            window.addEventListener('sutra:sync-status', publishSutraCloudStatus);
+            window.addEventListener('sutra:persistence-health-changed', publishSutraCloudStatus);
+            window.addEventListener('online', () => { publishSutraCloudStatus(); maybeSutraCloudAutoBackup('online'); });
+            window.addEventListener('offline', publishSutraCloudStatus);
+            window.addEventListener('storage', event => {
+                if (event.key === SUTRA_CLOUD_META_KEY) {
+                    sutraCloudMeta = null;
+                    if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+                    updateSutraCloudUi();
+                }
+            });
             const on = (id, event, handler) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener(event, handler);
@@ -58994,14 +59156,11 @@ function getActiveEditor() {
                         refreshSutraCloudBackupList();
                     }
                 }
-                meta.autoBackup.enabled = enabling;
-                persistSutraCloudMeta();
-                updateSutraCloudUi();
+                setSutraCloudAutoBackup({ enabled: enabling, frequency: meta.autoBackup.frequency });
             });
             on('sutraCloudAutoFrequency', 'change', (event) => {
-                const meta = loadSutraCloudMeta();
-                meta.autoBackup.frequency = (event.target && event.target.value) || 'daily';
-                persistSutraCloudMeta();
+                try { setSutraCloudAutoBackup({ enabled: loadSutraCloudMeta().autoBackup.enabled, frequency: event.target.value }); }
+                catch (error) { showToast(error.message || 'Could not change backup frequency.'); updateSutraCloudUi(); }
             });
             on('sutraCloudSwitchConfirmYes', 'click', async () => {
                 const id = sutraCloudUiState.pendingProviderSwitch;
@@ -59129,7 +59288,7 @@ function getActiveEditor() {
             deleteBackup: sutraCloudDeleteBackup,
             scanOrphans: (...args) => window.SutraStorageMaintenance.scanCloud(...args),
             cleanupOrphans: (...args) => window.SutraStorageMaintenance.cleanupCloud(...args),
-            open: openSutraCloudModal,
+            open: () => openSutraCloudModal('backups'),
             getMeta: () => ({ ...loadSutraCloudMeta() }),
             // Backend (Official Sutra Cloud vs Bring-Your-Own Supabase)
             getBackend: () => ({ ...loadSutraCloudBackend() }),
@@ -63299,12 +63458,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
             const list = document.createElement('ul');
             list.className = 'sync-guarantees';
-            const savedAt = sutraPersistenceState && sutraPersistenceState.lastConfirmedSaveAt;
-            const backupAt = appSettings && appSettings.dataHealth ? appSettings.dataHealth.lastAtelierExportAt : null;
             const rows = [
-                ['Saved on this device', formatSutraSyncTime(savedAt)],
-                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off'],
-                ['Backed up (.sutra / Sutra Cloud)', formatSutraSyncTime(backupAt)]
+                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off']
             ];
             if (status.enabled && status.outboxDepth > 0) rows.push(['Waiting to upload', String(status.outboxDepth) + ' change(s)']);
             if (status.enabled && status.conflictsPending > 0) rows.push(['Conflicts to review', String(status.conflictsPending)]);
@@ -63322,7 +63477,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function updateSutraSyncUi() {
             const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal || !modal.classList.contains('active')) return;
+            if (!modal || modal.hidden) return;
             const status = getSutraSyncStatus();
             renderSutraSyncStatusCard();
             const setup = sutraSyncEl('sutraSyncSetup');
@@ -63673,7 +63828,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const el = sutraSyncEl(id);
                 if (el) el.addEventListener('click', handler);
             };
-            on('sutraSyncOpenCloudBtn', () => { closeSutraSyncModal(); openSutraCloudModal(); });
+            on('sutraSyncOpenCloudBtn', () => {
+                selectSutraCloudSection('sync');
+                document.getElementById('sutraCloudAccountSetup').scrollIntoView({ block: 'nearest' });
+            });
             on('sutraSyncEnableBtn', async () => {
                 sutraSyncSetError('sutraSyncSetupError', '');
                 const pass = (sutraSyncEl('sutraSyncPassphraseInput') || {}).value || '';
@@ -63818,30 +63976,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function openSutraSyncModal() {
-            const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal) return;
-            // Never stack the Sync sheet above the Cloud sheet (or vice
-            // versa): close the sibling before activating this one.
-            closeSutraCloudModal();
-            sutraSyncRuntime.lastFocus = document.activeElement;
-            bindSutraSyncUi();
-            modal.classList.add('active');
-            try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
-            updateSutraSyncUi();
-            requestAnimationFrame(() => {
-                const target = modal.querySelector('section:not([hidden]) input:not([disabled]), section:not([hidden]) button:not([disabled]), [data-modal-close]');
-                if (target) try { target.focus(); } catch (error) { /* advisory */ }
-            });
+            openSutraCloudModal('sync');
         }
 
         function closeSutraSyncModal() {
-            const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal) return;
-            modal.classList.remove('active');
-            // Only release the scroll lock when no other modal is still open.
-            if (!document.querySelector('.modal.active')) {
-                try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
-            }
+            closeSutraCloudModal();
+        }
+
+        function clearSutraCloudPassphraseInputs() {
             [
                 'sutraSyncPassphraseInput', 'sutraSyncPassphraseConfirmInput',
                 'sutraSyncUnlockInput', 'sutraSyncCurrentPassInput',
@@ -63852,9 +63994,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
             const changePanel = sutraSyncEl('sutraSyncChangePassPanel');
             if (changePanel) changePanel.hidden = true;
-            const previous = sutraSyncRuntime.lastFocus;
-            sutraSyncRuntime.lastFocus = null;
-            if (previous && typeof previous.focus === 'function') try { previous.focus(); } catch (error) { /* advisory */ }
         }
 
         try {
