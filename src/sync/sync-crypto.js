@@ -24,9 +24,10 @@
   var SNAPSHOT_AAD_PREFIX = 'sutra-sync-snapshot:v1';
   var ASSET_AAD_PREFIX = 'sutra-sync-asset:v1:';
 
-  function SyncVaultUnlockError(message) {
+  function SyncVaultUnlockError(message, code) {
     var error = new Error(message || 'Could not unlock the sync vault. The passphrase is wrong or the key data is damaged.');
     error.name = 'SyncVaultUnlockError';
+    error.code = code || 'vault-unlock-failed';
     return error;
   }
 
@@ -215,7 +216,7 @@
       );
       return new Uint8Array(plain);
     } catch (error) {
-      throw SyncVaultUnlockError('Could not decrypt sync data. It was created with a different key or has been tampered with.');
+      throw SyncVaultUnlockError('Could not decrypt sync data. It was created with a different key or has been tampered with.', 'encryption-error');
     }
   }
 
@@ -246,7 +247,7 @@
       || op.lamport !== envelope.meta.lamport || op.recordKey !== envelope.meta.recordKey
       || op.kind !== envelope.meta.kind || op.protocolVersion !== envelope.meta.protocolVersion
       || op.schemaVersion !== envelope.meta.schemaVersion) {
-      throw SyncVaultUnlockError('Sync envelope metadata does not match its contents.');
+      throw SyncVaultUnlockError('Sync envelope metadata does not match its contents.', 'encryption-error');
     }
     var opErrors = protocolApi.validateOp(op);
     if (opErrors.length) throw new Error('Decrypted op failed validation: ' + opErrors.join('; '));

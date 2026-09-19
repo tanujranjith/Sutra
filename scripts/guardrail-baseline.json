@@ -1296,6 +1296,7 @@
     "sendChat",
     "serializeWorkspace",
     "setActiveView",
+    "showToast",
     "setDocBackgroundBlur",
     "setDocBackgroundDim",
     "setExamMoreDetailsState",

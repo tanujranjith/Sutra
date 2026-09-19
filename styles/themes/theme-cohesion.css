@@ -425,12 +425,31 @@ body:is([data-theme="glass"], [data-theme="liquidglass"]) .global-app-brand .app
 /* Editor surface: retain a clean writing canvas, but give it the same lit
    edge and depth as the surrounding glass chrome. */
 body:is([data-theme="glass"], [data-theme="liquidglass"]) #view-notes .editor-container {
-    background: rgba(255, 255, 255, 0.93) !important;
-    border: 1px solid rgba(255, 255, 255, 0.76) !important;
+    background: var(--glass-document-fill, rgba(255, 255, 255, 0.86)) !important;
+    border: 1px solid var(--glass-surface-edge, rgba(72, 98, 138, 0.18)) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(125%) !important;
+    backdrop-filter: blur(8px) saturate(125%) !important;
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.96),
+        inset 0 1px 0 var(--glass-surface-highlight, rgba(255, 255, 255, 0.78)),
         0 10px 30px rgba(35, 55, 90, 0.10),
         0 1px 4px rgba(35, 55, 90, 0.08) !important;
+}
+
+/* The responsive layer also contains a legacy floating-toolbar offset for
+   widths up to 1024px. Glass keeps the tablet toolbar in the Notes flow, so
+   its offset must be reset here or the document title can slide underneath
+   the toolbar at rest. */
+@media (min-width: 641px) and (max-width: 1024px) {
+    body:is([data-theme="glass"], [data-theme="liquidglass"])[data-view="notes"]:not(.notes-split-active) #view-notes .toolbar-wrapper {
+        position: sticky !important;
+        inset: 0 8px auto !important;
+        top: 0 !important;
+        transform: none !important;
+    }
+
+    body:is([data-theme="glass"], [data-theme="liquidglass"])[data-view="notes"]:not(.notes-split-active) #view-notes #notesEditorContainer {
+        margin-top: 0 !important;
+    }
 }
 
 @media (prefers-reduced-transparency: reduce) {

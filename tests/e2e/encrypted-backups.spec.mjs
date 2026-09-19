@@ -4,6 +4,61 @@ import { readFileSync } from 'node:fs';
 const PASS = 'correct horse battery staple';
 const PORTABLE_INLINE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
+test('long authored note, HTML and Homework content survives encrypted export, restore and reload', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const expected = {
+    title: 'Research journal ' + 'Long title '.repeat(160) + 'END-TITLE',
+    content: '<p>' + 'Research observations and calculations. '.repeat(5000) + 'END-NOTE</p>',
+    html: '<main><p>' + 'Laboratory portal content. '.repeat(10000) + 'END-HTML</p></main>',
+    homeworkTitle: 'Assignment ' + 'Problem set '.repeat(200) + 'END-TITLE',
+    notes: 'Homework analysis. '.repeat(5000) + 'END-HOMEWORK'
+  };
+  await page.evaluate(async data => {
+    const base = window.serializeWorkspace();
+    window.deserializeWorkspace({ ...base,
+      pages: [{ id: 'qa-long-note', title: data.title, content: data.content }],
+      homeworkWorkspace: {
+        courses: [{ id: 'qa-long-course', name: 'QA Calculus', type: 'class' }],
+        tasks: [{ id: 'qa-long-task', courseId: 'qa-long-course', title: data.homeworkTitle, notes: data.notes }]
+      }
+    });
+    window.SutraHTMLPages.createPage('QA long HTML', { source: data.html });
+    await window.saveWorkspaceLocally();
+  }, expected);
+  const inspect = () => page.evaluate(() => {
+    const ws = window.serializeWorkspace();
+    const note = ws.pages.find(p => p.id === 'qa-long-note');
+    const html = ws.pages.find(p => p.title === 'QA long HTML');
+    const task = ws.homeworkWorkspace.tasks.find(t => t.id === 'qa-long-task');
+    return { title: note?.title, content: note?.content, html: html?.htmlDocument?.source,
+      homeworkTitle: task?.title, notes: task?.notes };
+  });
+  await expect.poll(inspect).toEqual(expected);
+  await page.reload();
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+  await completeOnboarding(page);
+  await expect.poll(inspect).toEqual(expected);
+  const bytes = await page.evaluate(async pass => {
+    const result = await window.SutraEncryptedBackups.createBackupBlob(pass);
+    return Array.from(new Uint8Array(await result.blob.arrayBuffer()));
+  }, PASS);
+  const buffer = Buffer.from(bytes);
+  expect(buffer.subarray(0, 8).toString()).toBe('SUTRAENC');
+  expect(buffer.includes(Buffer.from('END-HOMEWORK'))).toBe(false);
+  await seedRichWorkspace(page, 'LONG-RESTORE-TARGET');
+  await page.setInputFiles('#fileInput', { name: 'long-content.sutra', mimeType: 'application/octet-stream', buffer });
+  await page.locator('#sutraImportPassphraseInput').fill(PASS);
+  await page.locator('#sutraImportPasswordSubmitBtn').click();
+  await expect(page.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
+  await acceptRestoreConflictChooser(page);
+  await completeSafetySnapshotDialog(page);
+  await expect.poll(inspect, { timeout: 30_000 }).toEqual(expected);
+  await page.reload();
+  await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
+  await expect.poll(inspect).toEqual(expected);
+});
+
 async function completeOnboarding(page) {
   await page.evaluate(() => {
     try {

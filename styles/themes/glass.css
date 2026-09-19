@@ -81,9 +81,14 @@ body[data-theme="liquidglass"] {
        (top == bottom) so every bar is a single uniform shade — a gradient
        fades each bar's bottom edge and reads as a stack of separate sections.
        Legibility comes from the backdrop blur+saturate, not an opaque fill. */
-    --glass-chrome-top:    rgba(255, 255, 255, 0.34);
-    --glass-chrome-bottom: rgba(255, 255, 255, 0.34);
-    --glass-chrome-edge:   rgba(255, 255, 255, 0.34);
+    --glass-chrome-top:    rgba(255, 255, 255, 0.54);
+    --glass-chrome-bottom: rgba(255, 255, 255, 0.54);
+    --glass-chrome-edge:   rgba(72, 98, 138, 0.20);
+    --glass-chrome-fill:   rgba(255, 255, 255, 0.54);
+    --glass-sidebar-fill:  rgba(224, 236, 250, 0.72);
+    --glass-document-fill: rgba(255, 255, 255, 0.86);
+    --glass-surface-edge:  rgba(72, 98, 138, 0.18);
+    --glass-surface-highlight: rgba(255, 255, 255, 0.78);
 
     /* Legacy skin token names (consumed by macos26-redesign.css §5+) */
     --glass-01:     var(--glass-fill);
@@ -120,10 +125,10 @@ body[data-theme="liquidglass"] {
     --button-text:     var(--text-primary);
 
     /* Skin-private surfaces (consumed by macos26-redesign.css) */
-    --mac-doc-surface:    rgba(255, 255, 255, 0.92);
-    --mac-toolbar-bg:     rgba(255, 255, 255, 0.56);
-    --mac-nav-bg:         rgba(255, 255, 255, 0.50);
-    --mac-sidebar-tint:   rgba(255, 255, 255, 0.44);
+    --mac-doc-surface:    var(--glass-document-fill);
+    --mac-toolbar-bg:     var(--glass-chrome-fill);
+    --mac-nav-bg:         var(--glass-chrome-fill);
+    --mac-sidebar-tint:   var(--glass-sidebar-fill);
     --mac-selected-bg:    rgba(10, 132, 255, 0.10);
     --mac-selected-line:  rgba(10, 132, 255, 0.34);
     --sidebar-flow-start: rgba(255, 255, 255, 0.44);
@@ -160,13 +165,13 @@ body[data-theme="liquidglass"] {
        real colour to blur and reveal. Radii are deliberately larger than
        the viewport so they blend into one continuous field. */
     background:
-        radial-gradient(1500px 1100px at 18% 12%, rgba(10, 132, 255, 0.24), transparent 60%),
-        radial-gradient(1400px 1050px at 84% 18%, rgba(255, 150, 205, 0.16), transparent 58%),
-        radial-gradient(1600px 1150px at 55% 96%, rgba(120, 205, 255, 0.28), transparent 62%),
-        radial-gradient(1300px 1000px at 92% 90%, rgba(10, 132, 255, 0.2), transparent 58%),
-        linear-gradient(176deg, #eef4ff 0%, #dfe9f7 50%, #cfdcee 100%);
+        radial-gradient(1500px 1100px at 18% 12%, rgba(10, 132, 255, 0.18), transparent 60%),
+        radial-gradient(1400px 1050px at 84% 18%, rgba(255, 150, 205, 0.11), transparent 58%),
+        radial-gradient(1600px 1150px at 55% 96%, rgba(120, 205, 255, 0.20), transparent 62%),
+        radial-gradient(1300px 1000px at 92% 90%, rgba(10, 132, 255, 0.14), transparent 58%),
+        linear-gradient(176deg, #f3f6fb 0%, #e7eef8 50%, #dbe7f5 100%);
     background-attachment: fixed;
-    background-color: #e5ebf4;
+    background-color: #e7eef8;
 }
 
 /* ─── 2c. SCROLL CONTAINMENT (double-scrollbar fix) ────────────────
@@ -240,7 +245,7 @@ body[data-theme="liquidglass"]::after {
         radial-gradient(26% 22% at 88% 82%, rgba(255, 255, 255, 0.42), transparent 60%);
     /* The watery refraction — turbulence-warped caustics. Slider-driven. */
     filter: url(#sutra-glass-distortion);
-    opacity: clamp(0, calc(var(--glass-refraction, 18) / 40 * 0.6), 0.6);
+    opacity: clamp(0, calc(var(--glass-refraction, 18) / 40 * 0.45), 0.45);
     animation: glass-caustic-drift 28s ease-in-out infinite alternate;
 }
 

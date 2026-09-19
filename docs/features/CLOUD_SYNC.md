@@ -233,6 +233,15 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   request storm; the Sync panel shows the specific action needed.
 - **Wrong passphrase** — nothing is mutated; try again or use the recovery
   kit's wrapped key with your passphrase.
+- **Encrypted cloud data could not be verified** — Sync pauses fail-closed when
+  an operation, snapshot, or attachment cannot authenticate with this vault
+  key. Your local workspace and outbox remain available. Keep an encrypted
+  `.sutra` backup, confirm the same Sutra Cloud account, and use the original
+  passphrase or recovery kit. If another trusted device still works, verify it
+  before changing the cloud vault. Do not create a replacement key or delete
+  the cloud vault just to make the warning disappear; deleting the vault is a
+  permanent, all-device action that should only happen after a separate
+  confirmed recovery copy exists.
 - **Old conflict-copy pages** — use **Clean up old conflict copies**. Sutra first
   requires a fresh encrypted `.sutra` safety backup. It consolidates only
   verified exact semantic duplicates without children; unique or contained

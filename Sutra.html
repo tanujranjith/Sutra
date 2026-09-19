@@ -81,7 +81,7 @@
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
     <script src="src/sync/sync-protocol.js?v=20260913-energy-removal-sync1"></script>
-    <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
+    <script src="src/sync/sync-crypto.js?v=20260917-sync-encryption1"></script>
     <script src="src/sync/sync-projection.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260807-duress2"></script>
@@ -89,7 +89,7 @@
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
     <script src="src/config/feature-manifest.js?v=20260913-locked-assistant-manifest2"></script>
-    <script src="src/features/feature-registry.js?v=20260709-features1"></script>
+    <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
 <script src="src/state/workspace-normalizers.js?v=20260825-oxremed1"></script>
@@ -119,6 +119,9 @@
     <link rel="stylesheet" href="styles/base/styles.css?v=20260916-integration-base1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
+    <!-- Assistant layout is critical shell chrome. The feature registry reuses
+         this link when the optional Assistant pack initializes. -->
+    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260818-cache-refresh1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -5398,7 +5401,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260916-integration-homework1"></script>
+                <script src="src/features/study/homework.js?v=20260917-homework-merge2"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7860,7 +7863,7 @@
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
-    <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
+    <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
     <script src="src/core/app.js?v=20260916-integration-app1"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
@@ -7873,7 +7876,7 @@
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20260823-combined1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
-    <script src="src/features/workspace/audit-fixes.js?v=20260825-oxremed2"></script>
+    <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
@@ -8285,17 +8288,17 @@
     </script>
     <!-- storage/taskbar measurement script removed because the taskbar was deleted -->
     <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260913-glass-surfaces1">
-    <link rel="stylesheet" href="styles/themes/glass.css?v=20260913-glass-runtime1">
+    <link rel="stylesheet" href="styles/themes/glass.css?v=20260917-glass-cohesion1">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/features/global-search.css?v=20260825-gsstyles3">
+    <link rel="stylesheet" href="styles/features/global-search.css?v=20260917-search-focus1">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260916-integration-mobile1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260916-integration-homework-redesign1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260917-homework-merge1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">
@@ -8314,7 +8317,7 @@
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
     <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260913-glass-notes1">
-    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260913-glass-cohesion1">
+    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

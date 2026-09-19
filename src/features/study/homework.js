@@ -32,10 +32,12 @@
   let courses = [];
   let tasks = [];
   let activeTaskMenuId = null;
+  let activeCourseMenuId = null;
   let editingTaskId = null;
   let setupDismissedForSession = false;
   let homeworkStoreUnsubscribe = null;
   let courseQuickModalState = { type: 'class', onCreated: null };
+  let courseMergeModalState = { sourceId: '', trigger: null, nameTouched: false };
   const homeworkViewState = {
     query: '',
     tab: 'all',
@@ -543,6 +545,149 @@
     }
     const input = $('[data-course-quick-input]', modal);
     if (input) setTimeout(() => input.focus(), 30);
+  }
+
+  function closeCourseMergeModal() {
+    const modal = $('#hwCourseMergeModal');
+    if (!modal) return;
+    modal.hidden = true;
+    modal.classList.remove('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
+    courseMergeModalState = { sourceId: '', trigger: null, nameTouched: false };
+  }
+
+  function ensureCourseMergeModal() {
+    let modal = $('#hwCourseMergeModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'hwCourseMergeModal';
+    modal.className = 'hw-course-quick-modal hw-course-merge-modal';
+    modal.hidden = true;
+    setSafeHTML(modal, `
+      <div class="hw-course-quick-card hw-course-merge-card" role="dialog" aria-modal="true" aria-labelledby="hwCourseMergeTitle">
+        <div class="hw-course-quick-head">
+          <h3 id="hwCourseMergeTitle" class="hw-course-quick-title">Merge classes</h3>
+          <button type="button" class="hw-course-quick-close" data-course-merge-close aria-label="Close">&times;</button>
+        </div>
+        <p class="hw-course-quick-copy" data-course-merge-copy>Combine two classes into one class and keep every assignment.</p>
+        <form data-course-merge-form class="hw-course-merge-form">
+          <div class="hw-course-merge-field">
+            <label for="hwCourseMergeTarget">Merge with</label>
+            <select id="hwCourseMergeTarget" data-course-merge-target required></select>
+          </div>
+          <div class="hw-course-merge-field">
+            <label for="hwCourseMergeName">Resulting class name</label>
+            <input id="hwCourseMergeName" type="text" data-course-merge-name maxlength="160" autocomplete="off" required />
+          </div>
+          <p class="hw-course-merge-summary" data-course-merge-summary role="status"></p>
+          <div class="hw-course-merge-actions">
+            <button type="button" class="hw-btn hw-btn-compact" data-course-merge-cancel>Cancel</button>
+            <button type="submit" class="hw-btn hw-btn-primary" data-course-merge-submit>Merge classes</button>
+          </div>
+        </form>
+      </div>`);
+    document.body.appendChild(modal);
+
+    const form = $('[data-course-merge-form]', modal);
+    const targetSelect = $('[data-course-merge-target]', modal);
+    const nameInput = $('[data-course-merge-name]', modal);
+    const copy = $('[data-course-merge-copy]', modal);
+    const summary = $('[data-course-merge-summary]', modal);
+    const close = () => closeCourseMergeModal();
+
+    $('[data-course-merge-close]', modal)?.addEventListener('click', close);
+    $('[data-course-merge-cancel]', modal)?.addEventListener('click', close);
+    modal.addEventListener('click', event => {
+      if (event.target === modal) close();
+    });
+    if (targetSelect) {
+      targetSelect.addEventListener('change', () => {
+        if (courseMergeModalState.nameTouched) return;
+        const source = courses.find(course => String(course.id) === String(courseMergeModalState.sourceId));
+        const target = courses.find(course => String(course.id) === String(targetSelect.value));
+        if (!source || !target || !nameInput) return;
+        nameInput.value = suggestMergedClassName(source, target);
+        if (summary) summary.textContent = mergeSummaryText(source, target);
+      });
+    }
+    if (nameInput) {
+      nameInput.addEventListener('input', () => {
+        courseMergeModalState.nameTouched = true;
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const sourceId = modal.getAttribute('data-source-course') || '';
+        const targetId = targetSelect ? targetSelect.value : '';
+        const name = nameInput ? nameInput.value : '';
+        const merged = await mergeClasses(sourceId, targetId, name);
+        if (merged) close();
+      });
+    }
+
+    modal._setContext = (source, targets) => {
+      if (!source || !targetSelect || !nameInput) return;
+      const options = Array.isArray(targets) ? targets : [];
+      setSafeHTML(targetSelect, options.map(course => (
+        `<option value="${escHtml(course.id)}">${escHtml(course.name)}</option>`
+      )).join(''));
+      const target = options[0] || null;
+      nameInput.value = target ? suggestMergedClassName(source, target) : source.name;
+      courseMergeModalState.nameTouched = false;
+      if (copy) copy.textContent = `Choose the class to keep, then name the combined class. Assignments from both classes will move to it.`;
+      if (summary) summary.textContent = target ? mergeSummaryText(source, target) : '';
+    };
+    return modal;
+  }
+
+  function suggestMergedClassName(source, target) {
+    const sourceName = String(source && source.name || '').trim();
+    const targetName = String(target && target.name || '').trim();
+    if (!sourceName) return targetName;
+    if (!targetName || sourceName.toLowerCase() === targetName.toLowerCase()) return sourceName;
+    return `${sourceName} + ${targetName}`;
+  }
+
+  function mergeSummaryText(source, target) {
+    if (!source || !target) return '';
+    const sourceCount = tasks.filter(task => String(task.courseId) === String(source.id)).length;
+    const targetCount = tasks.filter(task => String(task.courseId) === String(target.id)).length;
+    const total = sourceCount + targetCount;
+    return `${total} assignment${total === 1 ? '' : 's'} will be in the combined class (${sourceCount} from ${source.name}, ${targetCount} from ${target.name}).`;
+  }
+
+  function openCourseMergeModal(sourceId, trigger) {
+    const source = courses.find(course => String(course.id) === String(sourceId));
+    if (!source || source.type !== 'class') return;
+    const targets = courses
+      .filter(course => course.type === 'class' && String(course.id) !== String(source.id))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    closeCourseContextMenus();
+    if (!targets.length) {
+      showHomeworkAlert('Add another class before merging classes.', { title: 'Merge classes' });
+      return;
+    }
+
+    const modal = ensureCourseMergeModal();
+    courseMergeModalState = {
+      sourceId: String(source.id),
+      trigger: trigger || null,
+      nameTouched: false
+    };
+    modal.setAttribute('data-source-course', String(source.id));
+    if (trigger && typeof trigger.focus === 'function') modal.__sutraReturnFocus = trigger;
+    if (typeof modal._setContext === 'function') modal._setContext(source, targets);
+    modal.hidden = false;
+    modal.classList.add('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
+    const targetSelect = $('[data-course-merge-target]', modal);
+    if (targetSelect) setTimeout(() => targetSelect.focus(), 30);
   }
 
   function setCourseIcon(courseId, rawIcon) {
@@ -1576,6 +1721,21 @@
     return courses.find(course => String(course.id) === String(task && task.courseId)) || null;
   }
 
+  function renderCourseGroupActions(course, kind, name) {
+    if (!course) return '';
+    const courseId = escHtml(course.id);
+    const kindLabel = String(kind || 'class').toLowerCase();
+    const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${escHtml(kindLabel)}" aria-label="Remove ${escHtml(kindLabel)} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
+    if (course.type !== 'class') return removeButton;
+    const menu = `<div class="hw-course-menu-wrap">
+      <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="Class actions for ${escHtml(name)}" title="Class actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
+      <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
+        <button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>
+      </div>
+    </div>`;
+    return `<div class="hw-assignment-group-actions">${menu}${removeButton}</div>`;
+  }
+
   function taskMatchesHomeworkView(task) {
     const course = getCourseForTask(task);
     const status = getHomeworkStatus(task);
@@ -1720,10 +1880,8 @@
       .map(group => {
         const name = group.course ? group.course.name : 'Unassigned';
         const kind = group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned';
-        const removeButton = group.course
-          ? `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${escHtml(group.course.id)}" title="Remove ${escHtml(kind.toLowerCase())}" aria-label="Remove ${escHtml(kind.toLowerCase())} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`
-          : '';
-        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></span>${removeButton}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
+        const actions = renderCourseGroupActions(group.course, kind, name);
+        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></span>${actions}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
       }).join('');
   }
 
@@ -1742,7 +1900,7 @@
     const classes = courses.filter(course => course.type === 'class');
     const rows = classes.map(course => {
       const color = getCourseColor(course.id);
-      return `<li class="hw-empty-class-row"><div class="hw-empty-class-info"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></div><button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${escHtml(course.id)}" title="Remove class" aria-label="Remove class ${escHtml(course.name)}"><i class="fas fa-trash" aria-hidden="true"></i></button></li>`;
+      return `<li class="hw-empty-class-row"><div class="hw-empty-class-info"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></div>${renderCourseGroupActions(course, 'Class', course.name)}</li>`;
     }).join('');
     return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul><div class="hw-empty-actions"><button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-plus" aria-hidden="true"></i> Add an assignment</button><button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-book-open" aria-hidden="true"></i> Add a class</button></div></div>`;
   }
@@ -2196,7 +2354,10 @@
 
   function closeTaskContextMenus() {
     const board = $('#hwDataTable');
-    if (!board) return;
+    if (!board) {
+      activeTaskMenuId = null;
+      return;
+    }
 
     board.querySelectorAll('.hw-task-menu').forEach(menu => {
       menu.hidden = true;
@@ -2205,6 +2366,27 @@
       btn.setAttribute('aria-expanded', 'false');
     });
     activeTaskMenuId = null;
+  }
+
+  function closeCourseContextMenus() {
+    const board = $('#hwDataTable');
+    if (!board) {
+      activeCourseMenuId = null;
+      return;
+    }
+
+    board.querySelectorAll('.hw-course-menu').forEach(menu => {
+      menu.hidden = true;
+    });
+    board.querySelectorAll('.hw-course-menu-btn').forEach(btn => {
+      btn.setAttribute('aria-expanded', 'false');
+    });
+    activeCourseMenuId = null;
+  }
+
+  function closeHomeworkContextMenus() {
+    closeTaskContextMenus();
+    closeCourseContextMenus();
   }
 
   function toggleTaskMenu(taskId, triggerBtn) {
@@ -2216,6 +2398,7 @@
 
     const isOpening = menu.hidden;
     closeTaskContextMenus();
+    closeCourseContextMenus();
 
     if (isOpening) {
       menu.hidden = false;
@@ -2227,6 +2410,145 @@
       const firstAction = menu.querySelector('[role="menuitem"]');
       if (firstAction) setTimeout(() => { try { firstAction.focus({ preventScroll: true }); } catch (_) { firstAction.focus(); } }, 0);
     }
+  }
+
+  function toggleCourseMenu(courseId, triggerBtn) {
+    const board = $('#hwDataTable');
+    if (!board || !courseId) return;
+
+    const menu = board.querySelector(`.hw-course-menu[data-course-menu="${CSS.escape(courseId)}"]`);
+    if (!menu) return;
+
+    const isOpening = menu.hidden;
+    closeTaskContextMenus();
+    closeCourseContextMenus();
+    if (!isOpening) return;
+
+    menu.hidden = false;
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
+    activeCourseMenuId = courseId;
+    const firstAction = menu.querySelector('[role="menuitem"]');
+    if (firstAction) setTimeout(() => {
+      try { firstAction.focus({ preventScroll: true }); } catch (_) { firstAction.focus(); }
+    }, 0);
+  }
+
+  async function mergeClasses(sourceId, targetId, rawName) {
+    const source = courses.find(course => String(course.id) === String(sourceId));
+    const target = courses.find(course => String(course.id) === String(targetId));
+    if (!source || source.type !== 'class' || !target || target.type !== 'class' || String(source.id) === String(target.id)) {
+      return false;
+    }
+
+    const mergedName = String(rawName || suggestMergedClassName(source, target)).trim();
+    if (!mergedName) {
+      await showHomeworkAlert('Enter a name for the combined class.', { title: 'Merge classes' });
+      return false;
+    }
+
+    const duplicate = courses.some(course => (
+      course.type === 'class' &&
+      String(course.id) !== String(source.id) &&
+      String(course.id) !== String(target.id) &&
+      String(course.name || '').trim().toLowerCase() === mergedName.toLowerCase()
+    ));
+    if (duplicate) {
+      await showHomeworkAlert('Another class already uses that name. Choose a different resulting name.', { title: 'Merge classes' });
+      return false;
+    }
+
+    const sourceCount = tasks.filter(task => String(task.courseId) === String(source.id)).length;
+    const targetCount = tasks.filter(task => String(task.courseId) === String(target.id)).length;
+    const totalCount = sourceCount + targetCount;
+    const confirmed = await showHomeworkConfirm(
+      `Keep "${target.name}" as the class record and rename it "${mergedName}"? ${totalCount} assignment${totalCount === 1 ? '' : 's'} will be combined, and "${source.name}" will be archived.`,
+      {
+        title: 'Merge classes',
+        confirmText: 'Merge classes',
+        cancelText: 'Keep separate',
+        confirmVariant: 'primary'
+      }
+    );
+    if (!confirmed) return false;
+
+    const store = window.SutraHomeworkStore;
+    if (!store || typeof store.getSnapshot !== 'function' || typeof store.transact !== 'function') {
+      showHomeworkToast('Classes could not be merged safely. Export a backup and try again.');
+      return false;
+    }
+
+    const courseHub = window.courseHub;
+    const hubTarget = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(target.id)
+      : null;
+    const hubSource = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(source.id)
+      : null;
+    const sourceWasArchived = !!(hubSource && hubSource.archived);
+    let hubTargetRenamed = false;
+    let hubSourceArchived = false;
+
+    try {
+      // Course Hub is a richer mirror. Rename the retained record and archive
+      // the absorbed record so files, notes, and metadata remain recoverable.
+      if (hubTarget && typeof courseHub.updateCourse === 'function') {
+        const updatedTarget = courseHub.updateCourse(target.id, { name: mergedName });
+        if (!updatedTarget || String(updatedTarget.name) !== mergedName) throw new Error('Course Hub could not rename the retained class.');
+        hubTargetRenamed = true;
+      }
+      if (hubSource && !sourceWasArchived) {
+        if (typeof courseHub.archiveCourse !== 'function') throw new Error('Course Hub could not archive the absorbed class.');
+        const archivedSource = courseHub.archiveCourse(source.id, true);
+        if (!archivedSource || archivedSource.archived !== true) throw new Error('Course Hub could not archive the absorbed class.');
+        hubSourceArchived = true;
+      }
+
+      const receipt = store.transact(draft => {
+        const draftCourses = Array.isArray(draft.courses) ? draft.courses : [];
+        const draftTasks = Array.isArray(draft.tasks) ? draft.tasks : [];
+        const draftSource = draftCourses.find(course => String(course.id) === String(source.id));
+        const draftTarget = draftCourses.find(course => String(course.id) === String(target.id));
+        if (!draftSource || !draftTarget) throw new Error('The class list changed before the merge completed.');
+
+        const now = new Date().toISOString();
+        draftTarget.name = mergedName;
+        draftTarget.updatedAt = now;
+        draft.tasks = draftTasks.map(task => String(task.courseId) === String(source.id)
+          ? { ...task, courseId: String(target.id), updatedAt: now }
+          : task);
+        draft.courses = draftCourses.filter(course => String(course.id) !== String(source.id));
+        return { merged: true, movedAssignments: sourceCount };
+      }, { reason: 'homework-class-merge' });
+      if (!receipt || !receipt.result || receipt.result.merged !== true) throw new Error('The class merge did not commit.');
+    } catch (error) {
+      // Restore the richer mirror if a later step rejects. The canonical
+      // Homework transaction commits only after these checks, so no partial
+      // assignment reparenting can be left behind.
+      try {
+        if (hubTargetRenamed && courseHub && typeof courseHub.updateCourse === 'function') {
+          courseHub.updateCourse(target.id, { name: target.name });
+        }
+        if (hubSourceArchived && courseHub && typeof courseHub.archiveCourse === 'function') {
+          courseHub.archiveCourse(source.id, sourceWasArchived);
+        }
+      } catch (rollbackError) {
+        if (typeof window.SutraReportError === 'function') {
+          window.SutraReportError(rollbackError, { where: 'homework.mergeClasses.rollback' }, 'error');
+        }
+      }
+      if (typeof window.SutraReportError === 'function') {
+        window.SutraReportError(error, { where: 'homework.mergeClasses' }, 'error');
+      }
+      showHomeworkToast('Classes could not be merged safely. Export a backup and try again.');
+      load();
+      render();
+      return false;
+    }
+
+    load();
+    render();
+    showHomeworkToast(`Merged ${source.name} into ${mergedName}.`);
+    return true;
   }
 
   // The next unfinished, soonest-dated milestone for an assignment (Studio 2.0).
@@ -2992,7 +3314,24 @@
 
     board.querySelectorAll('[data-course-delete]').forEach(button => {
       button.addEventListener('click', async () => {
+        closeHomeworkContextMenus();
         await deleteCourse(button.getAttribute('data-course-delete'));
+      });
+    });
+
+    board.querySelectorAll('[data-course-menu-trigger]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        toggleCourseMenu(button.getAttribute('data-course-menu-trigger'), button);
+      });
+    });
+
+    board.querySelectorAll('[data-course-merge]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        const courseId = button.getAttribute('data-course-merge');
+        const trigger = board.querySelector(`[data-course-menu-trigger="${CSS.escape(String(courseId || ''))}"]`);
+        openCourseMergeModal(courseId, trigger);
       });
     });
 
@@ -3516,7 +3855,7 @@
       const board = $('#hwDataTable');
       if (!board) return;
       if (!board.contains(event.target)) {
-        closeTaskContextMenus();
+        closeHomeworkContextMenus();
       }
     });
 
@@ -3538,6 +3877,15 @@
         addModal.hidden = true;
         return;
       }
+      const courseMergeModal = $('#hwCourseMergeModal');
+      if (courseMergeModal && !courseMergeModal.hidden) {
+        closeCourseMergeModal();
+        return;
+      }
+      if (activeCourseMenuId) {
+        closeCourseContextMenus();
+        return;
+      }
       if (activeTaskMenuId) {
         closeTaskContextMenus();
         return;
@@ -3548,7 +3896,7 @@
     });
 
     window.addEventListener('resize', () => {
-      if (activeTaskMenuId) closeTaskContextMenus();
+      if (activeTaskMenuId || activeCourseMenuId) closeHomeworkContextMenus();
     });
 
     window.addEventListener('noteflow:view-changed', event => {
@@ -3583,6 +3931,7 @@
         return { id: String(id), name: course ? String(course.name || normalized) : normalized };
       },
       removeCourse: (id) => deleteCourse(id),
+      mergeClasses,
       // Canonical cross-feature write path. Quick Capture and future import
       // surfaces must use this instead of writing hwTasks:v2 directly so
       // quota/security failures keep the new assignment in module memory and

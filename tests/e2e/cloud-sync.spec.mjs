@@ -1814,4 +1814,41 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await A.context.close();
     }
   });
+
+  test('cloud decrypt failure never reports Sync as successfully unlocked', async ({ browser }) => {
+    const server = createSyncMockServer();
+    const A = await openDevice(browser, server, 'A-integrity-source');
+    const B = await openDevice(browser, server, 'B-integrity-check');
+    try {
+      await seedBaseline(A.page);
+      await enableSync(A.page);
+      expect(server.state.ops.length).toBeGreaterThan(0);
+
+      const envelope = server.state.ops[0].envelope;
+      envelope.ct = envelope.ct.slice(0, -4) + (envelope.ct.endsWith('AAAA') ? 'BBBB' : 'AAAA');
+
+      const enableResult = await B.page.evaluate(async ({ endpoint, passphrase }) => {
+        const result = await window.SutraSync.enable({ endpoint, passphrase });
+        return { state: result.status.state, error: result.outcome?.error?.code || '' };
+      }, { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE });
+      expect(enableResult.state).toBe('encryption-error');
+      expect(enableResult.error).toBe('encryption-error');
+      // Exercise the exact post-unlock success-toast seam used by the UI.
+      await B.page.evaluate(() => window.showToast('Sync unlocked.'));
+
+      const result = await B.page.evaluate(() => ({
+        state: window.SutraSync.status().state,
+        setupError: document.getElementById('sutraSyncSetupError')?.textContent || '',
+        runningError: document.getElementById('sutraSyncRunningError')?.textContent || '',
+        recoveryGuidance: document.getElementById('sutraSyncRecoveryGuidance')?.textContent || '',
+        toast: document.getElementById('toastMessage')?.textContent || ''
+      }));
+      expect(result.state).toBe('encryption-error');
+      expect(result.setupError + result.runningError).toMatch(/encrypted cloud data could not be verified/i);
+      expect(result.recoveryGuidance).toMatch(/Do not create a new vault key/i);
+      expect(result.toast).not.toMatch(/Sutra Sync is on|Sync unlocked/i);
+    } finally {
+      await Promise.allSettled([A.context.close(), B.context.close()]);
+    }
+  });
 });

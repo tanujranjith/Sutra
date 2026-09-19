@@ -63,7 +63,9 @@ test('Homework completion takes precedence over overdue styling and By Class exp
     'Assignment', 'Class / activity', 'Due', 'Difficulty', 'Priority', 'Status', 'Actions'
   ]);
   await expect(table.locator('.hw-assignment-group-row')).toHaveCount(3);
-  expect((await table.locator('.hw-assignment-group-row').allTextContents()).map((text) => text.trim())).toEqual([
+  // Action menus are intentionally hidden until opened; assert the visible
+  // group label rather than including hidden menu item textContent.
+  expect((await table.locator('.hw-assignment-group-heading > span').allTextContents()).map((text) => text.trim())).toEqual([
     'BiologyClass · 2 assignments',
     'UnassignedUnassigned · 1 assignment',
     'World HistoryClass · 1 assignment'
