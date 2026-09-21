@@ -1,6 +1,9 @@
 name: CI — verified artifact
 
 on:
+  push:
+    branches:
+      - "codex/**"
   pull_request:
     branches: ["main"]
   schedule:
