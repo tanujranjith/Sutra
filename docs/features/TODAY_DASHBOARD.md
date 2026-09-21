@@ -16,15 +16,15 @@ contract is:
 - `hidden`: a deduplicated allowlist of hidden widget IDs.
 - `sizes`: a bounded width choice per widget.
 
-The calm preset keeps only the daily loop's Next up, Upcoming Radar, Priorities,
-and save-confidence surfaces visible on desktop. Duplicate deadline and schedule
-snapshots, secondary signals, and advanced planners remain available through the
-Study and Everything presets or Home customization; they are not deleted. An
-older saved Calm snapshot migrates to the current essentials-only composition,
-while custom layouts retain their explicit choices. Desktop users can customize
-from the Home toolbar or More actions menu. The dedicated phone Home shell
-remains the canonical compact mobile experience and is not rearranged by desktop
-widget preferences.
+The calm preset keeps the daily loop's Next up, Upcoming Radar, quick task
+capture, Priorities, and save-confidence surfaces visible on desktop. Duplicate
+deadline and schedule snapshots, secondary signals, and advanced planners remain
+available through the Study and Everything presets or Home customization; they
+are not deleted. An older saved Calm snapshot migrates to the current
+essentials-only composition, while custom layouts retain their explicit choices.
+Desktop users can customize from the Home toolbar or More actions menu. The
+dedicated phone Home shell remains the canonical compact mobile experience and
+is not rearranged by desktop widget preferences.
 
 Reordering uses visible buttons in addition to pointer controls, presets are
 real buttons with pressed state, and the modal delegates focus containment,

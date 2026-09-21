@@ -20,7 +20,7 @@ async function openApp(page) {
     }
   });
   await waitForAppReady(page);
-  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks);
+  await page.waitForFunction(() => !!window.__sutraPublicBetaTestHooks && typeof window.getSutraAssistantContext === 'function');
 }
 
 async function seedLockedTree(page, { withChild = true } = {}) {

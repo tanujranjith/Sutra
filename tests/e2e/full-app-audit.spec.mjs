@@ -471,7 +471,9 @@ test('mobile Sync dialog fits the dynamic viewport and keeps actions touchable',
   await page.setViewportSize({ width: 320, height: 640 });
   await openApp(page);
   await page.evaluate(() => window.openSutraSyncModal());
-  const dialog = page.locator('#sutraSyncModal .sutra-sync-modal');
+  // Sync now lives inside the unified Sutra Cloud hub. Keep this audit focused
+  // on the actual dialog shell rather than the inner Sync section.
+  const dialog = page.locator('#sutraCloudModal .sutra-cloud-modal');
   await expect(dialog).toBeVisible();
   const layout = await dialog.evaluate((node) => {
     const rect = node.getBoundingClientRect();

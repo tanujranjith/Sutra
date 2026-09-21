@@ -19,12 +19,13 @@ test('Calm Home shows the essential workflow without duplicate cards', async ({ 
   await expect(page.locator('#view-today .today-radar-card')).toBeVisible();
   await expect(page.locator('#view-today .today-plan-section')).toBeVisible();
   await expect(page.locator('#view-today #tccBackupHealth')).toBeVisible();
+  await expect(page.locator('#view-today #tccAttentionTasks')).toBeVisible();
+  await expect(page.locator('#homeQuickTaskInput')).toBeVisible();
 
   for (const selector of [
     '#tccPlanCard',
     '#tccAttentionAssignments',
     '#tccAttentionCalendar',
-    '#tccAttentionTasks',
     '#todayReviewCard',
     '#tccUpcomingTests',
     '#tccTonightPlan',

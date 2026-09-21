@@ -10,7 +10,7 @@
 (function () {
     'use strict';
 
-    var VERSION = 2;
+    var VERSION = 3;
     var SIZE_KEYS = ['compact', 'standard', 'wide'];
 
     var WIDGETS = [
@@ -42,9 +42,9 @@
     var PRESETS = {
         calm: {
             label: 'Calm',
-            description: 'Next up, Radar, priorities, and save confidence without duplicate cards.',
+            description: 'Next up, Radar, priorities, quick task capture, and save confidence without duplicate cards.',
             order: WIDGET_IDS.slice(),
-            hidden: ['today-plan', 'assignments', 'calendar', 'tasks', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
+            hidden: ['today-plan', 'assignments', 'calendar', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum'],
             sizes: { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' }
         },
         study: {

@@ -13,7 +13,7 @@ function loadDashboard() {
 test('Today dashboard ships a calm, complete, deterministic default', () => {
   const dashboard = loadDashboard();
   const value = dashboard.getDefaultPreferences();
-  assert.equal(value.version, 2);
+  assert.equal(value.version, 3);
   assert.equal(value.preset, 'calm');
   assert.equal(value.order.length, dashboard.WIDGETS.length);
   assert.equal(new Set(value.order).size, dashboard.WIDGETS.length);
@@ -56,7 +56,7 @@ test('Today dashboard normalization removes unknowns, deduplicates, and appends 
     hidden: ['unknown', 'tasks', 'tasks'],
     sizes: { review: 'wide', tasks: 'enormous' }
   });
-  assert.equal(value.version, 2);
+  assert.equal(value.version, 3);
   assert.equal(value.preset, 'custom');
   assert.deepEqual(Array.from(value.order.slice(0, 2)), ['review', 'next-up']);
   assert.equal(value.order.length, dashboard.WIDGETS.length);

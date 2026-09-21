@@ -22,8 +22,8 @@ function loadPresets() {
 test('Today offers a calm preset that hides secondary signals by default', () => {
   const presets = loadPresets();
   assert.equal(presets.calm.label, 'Calm');
-  assert.equal(presets.calm.description, 'Next up, Radar, priorities, and save confidence without duplicate cards.');
-  assert.deepEqual(presets.calm.hidden, ['today-plan', 'assignments', 'calendar', 'tasks', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum']);
+  assert.equal(presets.calm.description, 'Next up, Radar, priorities, quick task capture, and save confidence without duplicate cards.');
+  assert.deepEqual(presets.calm.hidden, ['today-plan', 'assignments', 'calendar', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum']);
   assert.deepEqual(presets.calm.sizes, { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' });
 });
 
