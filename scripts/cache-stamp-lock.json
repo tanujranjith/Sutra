@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260916-integration-app1",
-    "hash": "fbaceca40c9b2e34"
+    "stamp": "20260921-backup-snapshot3",
+    "hash": "57a8c0286137d1bd"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

@@ -56611,9 +56611,9 @@ function getActiveEditor() {
         }
 
         async function buildCanonicalSutraPackageBytes(options = {}) {
-            // Flush editor to pages[] synchronously before any async work so the
-            // snapshot is taken from the latest in-editor state, not a debounced save.
+            // Commit the local snapshot before provider work.
             savePage();
+            await flushAppSaveNow('backup');
             // Course-file binaries live in a separate IndexedDB and are only read
             // into the in-memory courseAttachmentCache on demand. The export
             // snapshot (buildCourseWorkspaceExportSnapshot) is synchronous and can
