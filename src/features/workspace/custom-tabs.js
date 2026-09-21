@@ -20,6 +20,7 @@
     var TAB_ICON_CYCLE = ['fa-star', 'fa-compass', 'fa-layer-group', 'fa-seedling', 'fa-rocket', 'fa-heart', 'fa-fire', 'fa-cube'];
 
     var bridge = null;
+    var rawBridgeSetTabs = null;
     var initialized = false;
     var editingTabs = {}; // tabId -> bool (session-only edit mode)
     var scratchpadTimers = {};
@@ -2727,6 +2728,12 @@
         if (initialized) return;
         bridge = window.SutraCustomTabsBridge;
         if (!bridge || !document.querySelector('.view-tabs') || !document.querySelector('section.view')) return;
+        if (typeof bridge.setTabs === 'function') {
+            rawBridgeSetTabs = bridge.setTabs;
+            bridge.setTabs = function (nextTabs) {
+                return rawBridgeSetTabs.call(bridge, normalizeCustomTabsForFeature(nextTabs));
+            };
+        }
         initialized = true;
         bindGlobalHandlers();
         rebuildNav();

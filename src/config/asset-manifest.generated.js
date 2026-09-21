@@ -255,7 +255,7 @@
     "./src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1",
     "./src/features/workspace/canvas-workbench.js?v=20260807-canvas2",
     "./src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1",
-    "./src/features/workspace/custom-tabs.js?v=20260913-energy-removal-custom-tabs1",
+    "./src/features/workspace/custom-tabs.js?v=20260921-html-widget-mode2",
     "./src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1",
     "./src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2",
     "./src/features/workspace/handwriting.js?v=20260601-handwriting",
