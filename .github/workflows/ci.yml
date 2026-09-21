@@ -80,7 +80,10 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
           SUTRA_SERVE_ROOT: .deploy
-        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # The static app is intentionally boot-tested from a clean browser
+        # context. Two workers keep the three shards parallel without
+        # overloading the shared GitHub runner during cold startup.
+        run: npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
