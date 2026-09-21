@@ -32,10 +32,12 @@
   let courses = [];
   let tasks = [];
   let activeTaskMenuId = null;
+  let activeCourseMenuId = null;
   let editingTaskId = null;
   let setupDismissedForSession = false;
   let homeworkStoreUnsubscribe = null;
   let courseQuickModalState = { type: 'class', onCreated: null };
+  let courseMergeModalState = { sourceId: '', trigger: null, nameTouched: false };
   const homeworkViewState = {
     query: '',
     tab: 'all',
@@ -462,7 +464,7 @@
         </div>
         <p class="hw-course-quick-copy" id="hwCourseQuickCopy">Type a class name, then press Enter or click Add.</p>
         <form data-course-quick-form class="hw-course-quick-form" style="display:flex; gap:8px; align-items:center;">
-          <input type="text" data-course-quick-input maxlength="120" placeholder="Type a class name…" autocomplete="off" style="flex:1 1 auto;" />
+          <input type="text" data-course-quick-input placeholder="Type a class name…" autocomplete="off" style="flex:1 1 auto;" />
           <button type="submit" class="neumo-btn btn-primary hw-course-quick-add" data-course-quick-add aria-label="Add">Add</button>
         </form>
       </div>
@@ -543,6 +545,149 @@
     }
     const input = $('[data-course-quick-input]', modal);
     if (input) setTimeout(() => input.focus(), 30);
+  }
+
+  function closeCourseMergeModal() {
+    const modal = $('#hwCourseMergeModal');
+    if (!modal) return;
+    modal.hidden = true;
+    modal.classList.remove('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
+    courseMergeModalState = { sourceId: '', trigger: null, nameTouched: false };
+  }
+
+  function ensureCourseMergeModal() {
+    let modal = $('#hwCourseMergeModal');
+    if (modal) return modal;
+
+    modal = document.createElement('div');
+    modal.id = 'hwCourseMergeModal';
+    modal.className = 'hw-course-quick-modal hw-course-merge-modal';
+    modal.hidden = true;
+    setSafeHTML(modal, `
+      <div class="hw-course-quick-card hw-course-merge-card" role="dialog" aria-modal="true" aria-labelledby="hwCourseMergeTitle">
+        <div class="hw-course-quick-head">
+          <h3 id="hwCourseMergeTitle" class="hw-course-quick-title">Merge classes</h3>
+          <button type="button" class="hw-course-quick-close" data-course-merge-close aria-label="Close">&times;</button>
+        </div>
+        <p class="hw-course-quick-copy" data-course-merge-copy>Combine two classes into one class and keep every assignment.</p>
+        <form data-course-merge-form class="hw-course-merge-form">
+          <div class="hw-course-merge-field">
+            <label for="hwCourseMergeTarget">Merge with</label>
+            <select id="hwCourseMergeTarget" data-course-merge-target required></select>
+          </div>
+          <div class="hw-course-merge-field">
+            <label for="hwCourseMergeName">Resulting class name</label>
+            <input id="hwCourseMergeName" type="text" data-course-merge-name maxlength="160" autocomplete="off" required />
+          </div>
+          <p class="hw-course-merge-summary" data-course-merge-summary role="status"></p>
+          <div class="hw-course-merge-actions">
+            <button type="button" class="hw-btn hw-btn-compact" data-course-merge-cancel>Cancel</button>
+            <button type="submit" class="hw-btn hw-btn-primary" data-course-merge-submit>Merge classes</button>
+          </div>
+        </form>
+      </div>`);
+    document.body.appendChild(modal);
+
+    const form = $('[data-course-merge-form]', modal);
+    const targetSelect = $('[data-course-merge-target]', modal);
+    const nameInput = $('[data-course-merge-name]', modal);
+    const copy = $('[data-course-merge-copy]', modal);
+    const summary = $('[data-course-merge-summary]', modal);
+    const close = () => closeCourseMergeModal();
+
+    $('[data-course-merge-close]', modal)?.addEventListener('click', close);
+    $('[data-course-merge-cancel]', modal)?.addEventListener('click', close);
+    modal.addEventListener('click', event => {
+      if (event.target === modal) close();
+    });
+    if (targetSelect) {
+      targetSelect.addEventListener('change', () => {
+        if (courseMergeModalState.nameTouched) return;
+        const source = courses.find(course => String(course.id) === String(courseMergeModalState.sourceId));
+        const target = courses.find(course => String(course.id) === String(targetSelect.value));
+        if (!source || !target || !nameInput) return;
+        nameInput.value = suggestMergedClassName(source, target);
+        if (summary) summary.textContent = mergeSummaryText(source, target);
+      });
+    }
+    if (nameInput) {
+      nameInput.addEventListener('input', () => {
+        courseMergeModalState.nameTouched = true;
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const sourceId = modal.getAttribute('data-source-course') || '';
+        const targetId = targetSelect ? targetSelect.value : '';
+        const name = nameInput ? nameInput.value : '';
+        const merged = await mergeClasses(sourceId, targetId, name);
+        if (merged) close();
+      });
+    }
+
+    modal._setContext = (source, targets) => {
+      if (!source || !targetSelect || !nameInput) return;
+      const options = Array.isArray(targets) ? targets : [];
+      setSafeHTML(targetSelect, options.map(course => (
+        `<option value="${escHtml(course.id)}">${escHtml(course.name)}</option>`
+      )).join(''));
+      const target = options[0] || null;
+      nameInput.value = target ? suggestMergedClassName(source, target) : source.name;
+      courseMergeModalState.nameTouched = false;
+      if (copy) copy.textContent = `Choose the class to keep, then name the combined class. Assignments from both classes will move to it.`;
+      if (summary) summary.textContent = target ? mergeSummaryText(source, target) : '';
+    };
+    return modal;
+  }
+
+  function suggestMergedClassName(source, target) {
+    const sourceName = String(source && source.name || '').trim();
+    const targetName = String(target && target.name || '').trim();
+    if (!sourceName) return targetName;
+    if (!targetName || sourceName.toLowerCase() === targetName.toLowerCase()) return sourceName;
+    return `${sourceName} + ${targetName}`;
+  }
+
+  function mergeSummaryText(source, target) {
+    if (!source || !target) return '';
+    const sourceCount = tasks.filter(task => String(task.courseId) === String(source.id)).length;
+    const targetCount = tasks.filter(task => String(task.courseId) === String(target.id)).length;
+    const total = sourceCount + targetCount;
+    return `${total} assignment${total === 1 ? '' : 's'} will be in the combined class (${sourceCount} from ${source.name}, ${targetCount} from ${target.name}).`;
+  }
+
+  function openCourseMergeModal(sourceId, trigger) {
+    const source = courses.find(course => String(course.id) === String(sourceId));
+    if (!source || source.type !== 'class') return;
+    const targets = courses
+      .filter(course => course.type === 'class' && String(course.id) !== String(source.id))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    closeCourseContextMenus();
+    if (!targets.length) {
+      showHomeworkAlert('Add another class before merging classes.', { title: 'Merge classes' });
+      return;
+    }
+
+    const modal = ensureCourseMergeModal();
+    courseMergeModalState = {
+      sourceId: String(source.id),
+      trigger: trigger || null,
+      nameTouched: false
+    };
+    modal.setAttribute('data-source-course', String(source.id));
+    if (trigger && typeof trigger.focus === 'function') modal.__sutraReturnFocus = trigger;
+    if (typeof modal._setContext === 'function') modal._setContext(source, targets);
+    modal.hidden = false;
+    modal.classList.add('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
+    const targetSelect = $('[data-course-merge-target]', modal);
+    if (targetSelect) setTimeout(() => targetSelect.focus(), 30);
   }
 
   function setCourseIcon(courseId, rawIcon) {
@@ -762,9 +907,9 @@
   }
 
   // =====================================================================
-  // Redesign layer: selectable layouts, add methods, and pinned countdowns.
-  // Layout + add method are read from body[data-homework-*] (driven by the
-  // Settings → Homework prefs in app.js). All renderers below emit the same
+  // Redesign layer: selectable layouts and pinned countdowns. The legacy
+  // layout/add-method helpers below remain isolated for compatibility paths;
+  // the active workspace uses the shared Quick Capture composer. All renderers
   // data-task-* / .hw-task-menu markup the original board used, so the
   // existing bindBoardInteractions() keeps wiring every action for free.
   // =====================================================================
@@ -823,6 +968,21 @@
   function getHwAddMethod() {
     const value = document.body && document.body.dataset ? document.body.dataset.homeworkAddMethod : '';
     return ['inline', 'quick', 'panel'].includes(value) ? value : 'inline';
+  }
+
+  // Single-assignment creation belongs to Quick Capture so Homework, Home and
+  // Course Hub share one parser, class picker and persistence path. Bulk import
+  // and programmatic callers still use the canonical Homework API directly.
+  function openHomeworkCapture(options = {}) {
+    if (typeof window.openQuickCaptureModal !== 'function') {
+      showHomeworkToast('Homework capture is still loading — try again in a moment.');
+      return false;
+    }
+    window.openQuickCaptureModal(String(options.prefillText || ''), {
+      type: 'homework',
+      courseId: options.courseId ? String(options.courseId) : ''
+    });
+    return true;
   }
 
   function studioPctOf(task) {
@@ -1145,8 +1305,8 @@
 
   function renderEmptyStateRedesign(message) {
     // One surface, one primary action: teach the fastest way to capture work.
-    // "Paste or type your homework" opens Quick Capture (which parses class,
-    // due date and type); "Add a class" is the lighter secondary path.
+    // "Paste or type your homework" opens the shared Homework composer (which
+    // parses class and due date); "Add a class" is the lighter secondary path.
     return `<div class="hw-empty-redesign">
       <i class="fas fa-clipboard-check" aria-hidden="true"></i>
       <p class="hw-empty-title">${escHtml(message || 'No homework yet.')}</p>
@@ -1158,7 +1318,7 @@
     </div>`;
   }
 
-  // ---- inline add composer (default add method) -------------------------
+  // ---- legacy inline composer (compatibility path) ----------------------
 
   function buildCourseOptions(selectedId) {
     const cls = courses.filter(c => c.type === 'class');
@@ -1175,7 +1335,7 @@
       <div class="hw-inline-add" data-inline-add>
         <button type="button" class="hw-inline-add-trigger" data-inline-trigger><i class="fas fa-plus" aria-hidden="true"></i><span>Add a task&hellip;</span></button>
         <form class="hw-inline-add-form" data-inline-form hidden autocomplete="off">
-          <input type="text" class="hw-inline-title" data-inline-title placeholder="What needs doing?" maxlength="180" />
+          <input type="text" class="hw-inline-title" data-inline-title placeholder="What needs doing?" />
           <div class="hw-inline-chips">
             <select class="hw-inline-course" data-inline-course aria-label="Subject">${buildCourseOptions('')}</select>
             <input type="date" class="hw-inline-date" data-inline-date value="${escHtml(presetDate || '')}" aria-label="Due date" />
@@ -1247,7 +1407,7 @@
     });
   }
 
-  // ---- quick add (natural language) -------------------------------------
+  // ---- legacy quick add (compatibility path) ----------------------------
 
   const QUICK_WEEKDAYS = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
 
@@ -1338,7 +1498,7 @@
         <div class="hw-quick-add-row">
           <div class="hw-quick-add-field">
             <i class="fas fa-bolt" aria-hidden="true"></i>
-            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" maxlength="200" autocomplete="off" />
+            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" autocomplete="off" />
           </div>
           <button type="button" class="hw-quick-add-submit" data-quick-add-submit>Add</button>
         </div>
@@ -1528,6 +1688,19 @@
     const time = normalizeDueTime(task && task.dueTime);
     if (dayOffset == null) return { relation: 'undated', label: 'No due date', date: '', time: '', className: 'is-undated' };
 
+    // Completion is a separate state from the calendar relation. A finished
+    // assignment keeps its original due date, but it must never look overdue
+    // after the student has completed it.
+    if (task && task.done) {
+      return {
+        relation: 'completed',
+        label: formatDueDateLabel(task.dueDate),
+        date: '',
+        time: time ? formatDueTimeLabel(time) : '',
+        className: 'is-completed'
+      };
+    }
+
     let relation = 'upcoming';
     let label = formatDueDateLabel(task.dueDate);
     if (dayOffset < 0) { relation = 'overdue'; label = 'Overdue'; }
@@ -1546,6 +1719,21 @@
 
   function getCourseForTask(task) {
     return courses.find(course => String(course.id) === String(task && task.courseId)) || null;
+  }
+
+  function renderCourseGroupActions(course, kind, name) {
+    if (!course) return '';
+    const courseId = escHtml(course.id);
+    const kindLabel = String(kind || 'class').toLowerCase();
+    const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${escHtml(kindLabel)}" aria-label="Remove ${escHtml(kindLabel)} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
+    if (course.type !== 'class') return removeButton;
+    const menu = `<div class="hw-course-menu-wrap">
+      <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="Class actions for ${escHtml(name)}" title="Class actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
+      <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
+        <button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>
+      </div>
+    </div>`;
+    return `<div class="hw-assignment-group-actions">${menu}${removeButton}</div>`;
   }
 
   function taskMatchesHomeworkView(task) {
@@ -1630,17 +1818,26 @@
     return nextMilestone ? `Next: ${String(nextMilestone.title || 'Milestone')}` : '';
   }
 
-  function renderHomeworkWorkspaceRow(task) {
+  function renderHomeworkWorkspaceRow(task, options = {}) {
     const course = getCourseForTask(task);
-    const courseName = course ? course.name : 'No class';
+    const courseName = course ? course.name : (options.includeDifficulty ? 'Unassigned' : 'No class');
     const color = getCourseColor(task.courseId);
     const due = getTaskDuePresentation(task);
     const status = getHomeworkStatus(task);
     const statusLabel = homeworkStatusLabel(status);
     const priority = normalizePriority(task.priority);
+    const difficulty = normalizeDifficulty(task.difficulty);
     const description = getTaskDescription(task);
     const progress = studioPctOf(task);
     const toggleLabel = task.done ? 'Mark assignment as incomplete' : 'Mark assignment complete';
+    const courseCell = course
+      ? `<button type="button" class="hw-course-badge ${course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`
+      : (options.includeDifficulty
+        ? `<span class="hw-course-badge is-unassigned" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</span>`
+        : `<button type="button" class="hw-course-badge" data-filter-course="" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`);
+    const difficultyCell = options.includeDifficulty
+      ? `<td class="hw-difficulty-cell" data-label="Difficulty"><span class="hw-difficulty-badge is-${escHtml(difficulty)}">${escHtml(difficulty.charAt(0).toUpperCase() + difficulty.slice(1))}</span></td>`
+      : '';
     return `
       <tr class="hw-assignment-row ${task.done ? 'is-completed' : ''}" data-task-id="${escHtml(task.id)}" draggable="true" data-drag-title="${escHtml(task.title)}" data-drag-source="homework" data-drag-source-id="${escHtml(task.id)}" data-drag-due-date="${escHtml(task.dueDate || '')}">
         <td class="hw-assignment-name-cell" data-label="Assignment">
@@ -1649,13 +1846,14 @@
           ${progress != null ? `<span class="hw-assignment-progress-copy">${progress}% planned work complete</span>` : ''}
         </td>
         <td data-label="Class / activity">
-          <button type="button" class="hw-course-badge ${course && course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>
+          ${courseCell}
         </td>
         <td class="hw-due-cell ${due.className}" data-label="Due">
           <span class="hw-due-relation">${escHtml(due.label)}</span>
           ${due.date && due.date !== due.label ? `<span>${escHtml(due.date)}</span>` : ''}
           ${due.time ? `<span>${escHtml(due.time)}</span>` : ''}
         </td>
+        ${difficultyCell}
         <td data-label="Priority"><span class="hw-priority-badge is-${escHtml(priority)}"><i class="fas fa-angles-up" aria-hidden="true"></i>${escHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span></td>
         <td data-label="Status"><span class="hw-work-status is-${escHtml(status)}"><i class="fas ${status === 'completed' ? 'fa-check' : status === 'in-progress' ? 'fa-circle-half-stroke' : 'fa-diamond'}" aria-hidden="true"></i>${escHtml(statusLabel)}</span></td>
         <td class="hw-quick-actions-cell" data-label="Actions">
@@ -1667,7 +1865,8 @@
   }
 
   function renderHomeworkWorkspaceRows(filteredTasks) {
-    if (homeworkViewState.tab !== 'class') return filteredTasks.map(renderHomeworkWorkspaceRow).join('');
+    const includeDifficulty = homeworkViewState.tab === 'class';
+    if (!includeDifficulty) return filteredTasks.map(task => renderHomeworkWorkspaceRow(task)).join('');
 
     const grouped = new Map();
     filteredTasks.forEach(task => {
@@ -1677,11 +1876,12 @@
       grouped.get(key).tasks.push(task);
     });
     return Array.from(grouped.values())
-      .sort((a, b) => String(a.course && a.course.name || 'No class').localeCompare(String(b.course && b.course.name || 'No class')))
+      .sort((a, b) => String(a.course && a.course.name || 'Unassigned').localeCompare(String(b.course && b.course.name || 'Unassigned')))
       .map(group => {
-        const name = group.course ? group.course.name : 'No class';
-        const kind = group.course && group.course.type === 'misc' ? 'Activity' : 'Class';
-        return `<tr class="hw-assignment-group-row"><th colspan="6" scope="rowgroup"><span>${escHtml(name)}</span><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></th></tr>${group.tasks.map(renderHomeworkWorkspaceRow).join('')}`;
+        const name = group.course ? group.course.name : 'Unassigned';
+        const kind = group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned';
+        const actions = renderCourseGroupActions(group.course, kind, name);
+        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></span>${actions}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
       }).join('');
   }
 
@@ -1700,15 +1900,15 @@
     const classes = courses.filter(course => course.type === 'class');
     const rows = classes.map(course => {
       const color = getCourseColor(course.id);
-      return `<li class="hw-empty-class-row"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></li>`;
+      return `<li class="hw-empty-class-row"><div class="hw-empty-class-info"><span class="hw-course-badge" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(course.name)}</span><span>No assignments yet</span></div>${renderCourseGroupActions(course, 'Class', course.name)}</li>`;
     }).join('');
     return `<div class="hw-filter-empty hw-empty-class-state"><i class="fas fa-book-open" aria-hidden="true"></i><h4>Your classes are ready</h4><p>Add an assignment when you are ready to plan work for it.</p><ul class="hw-empty-class-list" aria-label="Classes with no assignments">${rows}</ul><div class="hw-empty-actions"><button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-plus" aria-hidden="true"></i> Add an assignment</button><button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-book-open" aria-hidden="true"></i> Add a class</button></div></div>`;
   }
 
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
+    const byClass = homeworkViewState.tab === 'class';
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
-    const addMethod = getHwAddMethod();
     let content = '';
 
     if (!tasks.length && !courses.length) {
@@ -1724,9 +1924,9 @@
     } else {
       content = `
         <div class="hw-assignment-table-wrap">
-          <table class="hw-assignment-table">
+          <table class="hw-assignment-table${byClass ? ' is-by-class' : ''}">
             <caption class="sr-only">Homework assignments</caption>
-            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
             <tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>
           </table>
         </div>`;
@@ -1738,9 +1938,7 @@
           <div><span class="hw-panel-eyebrow">Assignments</span><h3 id="hwAssignmentsTitle">${homeworkViewState.tab === 'class' ? 'Assignments by class' : 'Assignment list'}</h3></div>
           <span class="hw-result-count">${escHtml(totalLabel)}</span>
         </div>
-        ${addMethod === 'quick' ? renderQuickAddBar() : ''}
         ${content}
-        ${addMethod === 'inline' && (courses.length || tasks.length) ? `<div class="hw-panel-inline-add">${renderInlineComposer('')}</div>` : ''}
       </section>`;
   }
 
@@ -1771,6 +1969,7 @@
           <div class="hw-activity-actions">
             ${nearest ? `<button type="button" data-task-schedule="${escHtml(nearest.id)}" aria-label="Schedule ${escHtml(nearest.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>` : ''}
             <button type="button" data-open-add-assignment="${escHtml(course.id)}" aria-label="Add a task to ${escHtml(course.name)}" title="Add activity task"><i class="fas fa-plus" aria-hidden="true"></i></button>
+            <button type="button" class="hw-course-remove-action" data-course-delete="${escHtml(course.id)}" aria-label="Remove activity ${escHtml(course.name)}" title="Remove activity"><i class="fas fa-trash" aria-hidden="true"></i></button>
           </div>
         </article>`;
     }).join('');
@@ -1811,6 +2010,7 @@
           ${renderUpcomingDeadlinesPanel()}
         </aside>
       </div>
+      <!-- The legacy form remains available for editing existing assignments. -->
       ${renderGlobalAssignmentComposer()}`;
   }
 
@@ -2154,7 +2354,10 @@
 
   function closeTaskContextMenus() {
     const board = $('#hwDataTable');
-    if (!board) return;
+    if (!board) {
+      activeTaskMenuId = null;
+      return;
+    }
 
     board.querySelectorAll('.hw-task-menu').forEach(menu => {
       menu.hidden = true;
@@ -2163,6 +2366,27 @@
       btn.setAttribute('aria-expanded', 'false');
     });
     activeTaskMenuId = null;
+  }
+
+  function closeCourseContextMenus() {
+    const board = $('#hwDataTable');
+    if (!board) {
+      activeCourseMenuId = null;
+      return;
+    }
+
+    board.querySelectorAll('.hw-course-menu').forEach(menu => {
+      menu.hidden = true;
+    });
+    board.querySelectorAll('.hw-course-menu-btn').forEach(btn => {
+      btn.setAttribute('aria-expanded', 'false');
+    });
+    activeCourseMenuId = null;
+  }
+
+  function closeHomeworkContextMenus() {
+    closeTaskContextMenus();
+    closeCourseContextMenus();
   }
 
   function toggleTaskMenu(taskId, triggerBtn) {
@@ -2174,6 +2398,7 @@
 
     const isOpening = menu.hidden;
     closeTaskContextMenus();
+    closeCourseContextMenus();
 
     if (isOpening) {
       menu.hidden = false;
@@ -2185,6 +2410,145 @@
       const firstAction = menu.querySelector('[role="menuitem"]');
       if (firstAction) setTimeout(() => { try { firstAction.focus({ preventScroll: true }); } catch (_) { firstAction.focus(); } }, 0);
     }
+  }
+
+  function toggleCourseMenu(courseId, triggerBtn) {
+    const board = $('#hwDataTable');
+    if (!board || !courseId) return;
+
+    const menu = board.querySelector(`.hw-course-menu[data-course-menu="${CSS.escape(courseId)}"]`);
+    if (!menu) return;
+
+    const isOpening = menu.hidden;
+    closeTaskContextMenus();
+    closeCourseContextMenus();
+    if (!isOpening) return;
+
+    menu.hidden = false;
+    if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'true');
+    activeCourseMenuId = courseId;
+    const firstAction = menu.querySelector('[role="menuitem"]');
+    if (firstAction) setTimeout(() => {
+      try { firstAction.focus({ preventScroll: true }); } catch (_) { firstAction.focus(); }
+    }, 0);
+  }
+
+  async function mergeClasses(sourceId, targetId, rawName) {
+    const source = courses.find(course => String(course.id) === String(sourceId));
+    const target = courses.find(course => String(course.id) === String(targetId));
+    if (!source || source.type !== 'class' || !target || target.type !== 'class' || String(source.id) === String(target.id)) {
+      return false;
+    }
+
+    const mergedName = String(rawName || suggestMergedClassName(source, target)).trim();
+    if (!mergedName) {
+      await showHomeworkAlert('Enter a name for the combined class.', { title: 'Merge classes' });
+      return false;
+    }
+
+    const duplicate = courses.some(course => (
+      course.type === 'class' &&
+      String(course.id) !== String(source.id) &&
+      String(course.id) !== String(target.id) &&
+      String(course.name || '').trim().toLowerCase() === mergedName.toLowerCase()
+    ));
+    if (duplicate) {
+      await showHomeworkAlert('Another class already uses that name. Choose a different resulting name.', { title: 'Merge classes' });
+      return false;
+    }
+
+    const sourceCount = tasks.filter(task => String(task.courseId) === String(source.id)).length;
+    const targetCount = tasks.filter(task => String(task.courseId) === String(target.id)).length;
+    const totalCount = sourceCount + targetCount;
+    const confirmed = await showHomeworkConfirm(
+      `Keep "${target.name}" as the class record and rename it "${mergedName}"? ${totalCount} assignment${totalCount === 1 ? '' : 's'} will be combined, and "${source.name}" will be archived.`,
+      {
+        title: 'Merge classes',
+        confirmText: 'Merge classes',
+        cancelText: 'Keep separate',
+        confirmVariant: 'primary'
+      }
+    );
+    if (!confirmed) return false;
+
+    const store = window.SutraHomeworkStore;
+    if (!store || typeof store.getSnapshot !== 'function' || typeof store.transact !== 'function') {
+      showHomeworkToast('Classes could not be merged safely. Export a backup and try again.');
+      return false;
+    }
+
+    const courseHub = window.courseHub;
+    const hubTarget = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(target.id)
+      : null;
+    const hubSource = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(source.id)
+      : null;
+    const sourceWasArchived = !!(hubSource && hubSource.archived);
+    let hubTargetRenamed = false;
+    let hubSourceArchived = false;
+
+    try {
+      // Course Hub is a richer mirror. Rename the retained record and archive
+      // the absorbed record so files, notes, and metadata remain recoverable.
+      if (hubTarget && typeof courseHub.updateCourse === 'function') {
+        const updatedTarget = courseHub.updateCourse(target.id, { name: mergedName });
+        if (!updatedTarget || String(updatedTarget.name) !== mergedName) throw new Error('Course Hub could not rename the retained class.');
+        hubTargetRenamed = true;
+      }
+      if (hubSource && !sourceWasArchived) {
+        if (typeof courseHub.archiveCourse !== 'function') throw new Error('Course Hub could not archive the absorbed class.');
+        const archivedSource = courseHub.archiveCourse(source.id, true);
+        if (!archivedSource || archivedSource.archived !== true) throw new Error('Course Hub could not archive the absorbed class.');
+        hubSourceArchived = true;
+      }
+
+      const receipt = store.transact(draft => {
+        const draftCourses = Array.isArray(draft.courses) ? draft.courses : [];
+        const draftTasks = Array.isArray(draft.tasks) ? draft.tasks : [];
+        const draftSource = draftCourses.find(course => String(course.id) === String(source.id));
+        const draftTarget = draftCourses.find(course => String(course.id) === String(target.id));
+        if (!draftSource || !draftTarget) throw new Error('The class list changed before the merge completed.');
+
+        const now = new Date().toISOString();
+        draftTarget.name = mergedName;
+        draftTarget.updatedAt = now;
+        draft.tasks = draftTasks.map(task => String(task.courseId) === String(source.id)
+          ? { ...task, courseId: String(target.id), updatedAt: now }
+          : task);
+        draft.courses = draftCourses.filter(course => String(course.id) !== String(source.id));
+        return { merged: true, movedAssignments: sourceCount };
+      }, { reason: 'homework-class-merge' });
+      if (!receipt || !receipt.result || receipt.result.merged !== true) throw new Error('The class merge did not commit.');
+    } catch (error) {
+      // Restore the richer mirror if a later step rejects. The canonical
+      // Homework transaction commits only after these checks, so no partial
+      // assignment reparenting can be left behind.
+      try {
+        if (hubTargetRenamed && courseHub && typeof courseHub.updateCourse === 'function') {
+          courseHub.updateCourse(target.id, { name: target.name });
+        }
+        if (hubSourceArchived && courseHub && typeof courseHub.archiveCourse === 'function') {
+          courseHub.archiveCourse(source.id, sourceWasArchived);
+        }
+      } catch (rollbackError) {
+        if (typeof window.SutraReportError === 'function') {
+          window.SutraReportError(rollbackError, { where: 'homework.mergeClasses.rollback' }, 'error');
+        }
+      }
+      if (typeof window.SutraReportError === 'function') {
+        window.SutraReportError(error, { where: 'homework.mergeClasses' }, 'error');
+      }
+      showHomeworkToast('Classes could not be merged safely. Export a backup and try again.');
+      load();
+      render();
+      return false;
+    }
+
+    load();
+    render();
+    showHomeworkToast(`Merged ${source.name} into ${mergedName}.`);
+    return true;
   }
 
   // The next unfinished, soonest-dated milestone for an assignment (Studio 2.0).
@@ -2305,7 +2669,7 @@
               <form id="hwGlobalAddForm" class="hw-global-add-form" autocomplete="off">
                 <label for="hwCourseSelect" data-course-label class="hw-add-field-label">Class</label>
                 <select id="hwCourseSelect" data-field="courseId"></select>
-                <input type="text" data-field="title" placeholder="Assignment title" maxlength="180" />
+                <input type="text" data-field="title" placeholder="Assignment title" />
                 <div class="hw-global-meta-row">
                   <input type="date" data-field="dueDate" placeholder="Due date" />
                   <input type="time" data-field="dueTime" placeholder="Due time" />
@@ -2512,8 +2876,6 @@
     setSafeHTML(board, renderHomeworkWorkspace());
 
     bindBoardInteractions(board);
-    bindInlineComposers(board);
-    bindQuickAdd(board);
     bindExtraInteractions(board);
     renderPins();
   }
@@ -2562,27 +2924,74 @@
 
   async function deleteCourse(courseId) {
     const target = courses.find(course => String(course.id) === String(courseId));
-    if (!target) return;
+    if (!target) return false;
 
-    const confirmed = await showHomeworkConfirm(`Remove "${target.name}" and all assignments in it?`, {
-      title: 'Delete Subject',
-      confirmText: 'Delete Subject',
-      cancelText: 'Keep Subject',
+    const kindLabel = target.type === 'misc' ? 'activity' : 'class';
+    const showRemovalFailure = () => {
+      showHomeworkToast(`This ${kindLabel} could not be removed safely. Export a backup and try again.`);
+      return false;
+    };
+    const linkedCount = tasks.filter(task => String(task.courseId) === String(courseId)).length;
+    const linkedCopy = linkedCount
+      ? ` Its ${linkedCount} linked assignment${linkedCount === 1 ? '' : 's'} will move to Trash.`
+      : '';
+    const confirmed = await showHomeworkConfirm(`Remove "${target.name}"?${linkedCopy}`, {
+      title: `Remove ${kindLabel}`,
+      confirmText: `Remove ${kindLabel}`,
+      cancelText: `Keep ${kindLabel}`,
       confirmVariant: 'danger'
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
 
-    // Every assignment in the deleted subject goes to Trash so a mis-click
-    // on "Delete Subject" can be walked back one row at a time.
+    const store = window.SutraHomeworkStore;
+    if (!store || typeof store.removeCourse !== 'function') {
+      return showRemovalFailure();
+    }
+
+    // The Course Hub mirror is intentionally archived before the Homework
+    // lane is removed. Its bridge skips archived courses on the next hydrate,
+    // so legacy Course Hub metadata cannot recreate an explicit removal.
+    const courseHub = window.courseHub;
+    const hubCourse = courseHub && typeof courseHub.getCourseById === 'function'
+      ? courseHub.getCourseById(courseId)
+      : null;
+    const hubWasArchived = !!(hubCourse && hubCourse.archived);
+    let archivedHubForRemoval = false;
+    if (hubCourse && !hubWasArchived) {
+      if (typeof courseHub.archiveCourse !== 'function') return showRemovalFailure();
+      const archivedHubCourse = courseHub.archiveCourse(courseId, true);
+      if (!archivedHubCourse || archivedHubCourse.archived !== true) return showRemovalFailure();
+      archivedHubForRemoval = true;
+    }
+
+    const restoreHubArchive = () => {
+      if (!archivedHubForRemoval) return;
+      try { courseHub.archiveCourse(courseId, false); } catch (_) {}
+    };
+
+    let removal;
+    try {
+      removal = store.removeCourse(courseId, { reason: 'homework-course-remove' });
+    } catch (error) {
+      restoreHubArchive();
+      if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.deleteCourse' }, 'error');
+      return showRemovalFailure();
+    }
+    const removed = removal && removal.result;
+    if (!removed || !removed.removed) {
+      restoreHubArchive();
+      return showRemovalFailure();
+    }
+
+    // Every linked assignment goes to Trash so removal remains recoverable.
     if (window.SutraTrash && typeof window.SutraTrash.add === 'function') {
-      tasks.filter(task => String(task.courseId) === String(courseId)).forEach(task => {
+      (removed.tasks || []).forEach(task => {
         try { window.SutraTrash.add('homework', task.title || task.text, serializeTask(task)); } catch (err) { /* non-critical */ }
       });
     }
-    courses = courses.filter(course => String(course.id) !== String(courseId));
-    tasks = tasks.filter(task => String(task.courseId) !== String(courseId));
-    save();
+    load();
     render();
+    return true;
   }
 
   function toggleTaskDone(taskId) {
@@ -2802,7 +3211,7 @@
           setFormMode('add');
         };
 
-        if (openAddBtn) openAddBtn.onclick = () => openModal();
+        if (openAddBtn) openAddBtn.onclick = () => openHomeworkCapture();
         if (closeAddBtn) closeAddBtn.addEventListener('click', closeModal);
         addModal.addEventListener('click', event => {
           if (event.target === addModal) closeModal();
@@ -2821,7 +3230,7 @@
 
         board.querySelectorAll('[data-open-add-assignment]').forEach(button => {
           button.addEventListener('click', () => {
-            openModal(button.getAttribute('data-open-add-assignment'));
+            openHomeworkCapture({ courseId: button.getAttribute('data-open-add-assignment') });
           });
         });
 
@@ -2899,17 +3308,30 @@
     // type homework straight away (it parses class, due date and type).
     board.querySelectorAll('[data-hw-empty-capture]').forEach(button => {
       button.addEventListener('click', () => {
-        if (typeof window !== 'undefined' && typeof window.openQuickCaptureModal === 'function') {
-          window.openQuickCaptureModal('');
-        } else {
-          promptAddCourse('class', { returnFocus: button });
-        }
+        if (!openHomeworkCapture()) promptAddCourse('class', { returnFocus: button });
       });
     });
 
     board.querySelectorAll('[data-course-delete]').forEach(button => {
       button.addEventListener('click', async () => {
+        closeHomeworkContextMenus();
         await deleteCourse(button.getAttribute('data-course-delete'));
+      });
+    });
+
+    board.querySelectorAll('[data-course-menu-trigger]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        toggleCourseMenu(button.getAttribute('data-course-menu-trigger'), button);
+      });
+    });
+
+    board.querySelectorAll('[data-course-merge]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        const courseId = button.getAttribute('data-course-merge');
+        const trigger = board.querySelector(`[data-course-menu-trigger="${CSS.escape(String(courseId || ''))}"]`);
+        openCourseMergeModal(courseId, trigger);
       });
     });
 
@@ -3433,7 +3855,7 @@
       const board = $('#hwDataTable');
       if (!board) return;
       if (!board.contains(event.target)) {
-        closeTaskContextMenus();
+        closeHomeworkContextMenus();
       }
     });
 
@@ -3455,6 +3877,15 @@
         addModal.hidden = true;
         return;
       }
+      const courseMergeModal = $('#hwCourseMergeModal');
+      if (courseMergeModal && !courseMergeModal.hidden) {
+        closeCourseMergeModal();
+        return;
+      }
+      if (activeCourseMenuId) {
+        closeCourseContextMenus();
+        return;
+      }
       if (activeTaskMenuId) {
         closeTaskContextMenus();
         return;
@@ -3465,7 +3896,7 @@
     });
 
     window.addEventListener('resize', () => {
-      if (activeTaskMenuId) closeTaskContextMenus();
+      if (activeTaskMenuId || activeCourseMenuId) closeHomeworkContextMenus();
     });
 
     window.addEventListener('noteflow:view-changed', event => {
@@ -3476,11 +3907,6 @@
     window.addEventListener('homework:updated', () => {
       load();
       renderPins();
-      if (isHomeworkViewActive()) render();
-    });
-
-    // Re-render when the add-method preference changes in Settings.
-    window.addEventListener('sutra:homework-prefs', () => {
       if (isHomeworkViewActive()) render();
     });
 
@@ -3504,6 +3930,8 @@
         const course = courses.find(c => String(c.id) === String(id));
         return { id: String(id), name: course ? String(course.name || normalized) : normalized };
       },
+      removeCourse: (id) => deleteCourse(id),
+      mergeClasses,
       // Canonical cross-feature write path. Quick Capture and future import
       // surfaces must use this instead of writing hwTasks:v2 directly so
       // quota/security failures keep the new assignment in module memory and

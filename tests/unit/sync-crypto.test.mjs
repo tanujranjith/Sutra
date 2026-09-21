@@ -52,7 +52,7 @@ test('wrong passphrase throws typed SyncVaultUnlockError and never returns a key
   const wrapped = await syncCrypto.wrapVaultKey(syncCrypto.generateVaultKeyBytes(), 'right', { iterations: 1000 });
   await assert.rejects(
     () => syncCrypto.unwrapVaultKey(wrapped, 'wrong'),
-    (error) => error.name === 'SyncVaultUnlockError'
+    (error) => error.name === 'SyncVaultUnlockError' && error.code === 'vault-unlock-failed'
   );
 });
 
@@ -82,14 +82,14 @@ test('op envelope round-trips; ciphertext and metadata are AAD-bound', async () 
 
   // Tampered ciphertext fails.
   const badCt = { ...envelope, ct: envelope.ct.slice(0, -4) + 'AAAA' };
-  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, badCt), (e) => e.name === 'SyncVaultUnlockError');
+  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, badCt), (e) => e.name === 'SyncVaultUnlockError' && e.code === 'encryption-error');
 
   // Relabelled routing metadata (server-side reroute) fails via AAD.
   const relabelled = { ...envelope, meta: { ...envelope.meta, recordKey: protocol.collectionKey('pages', 'other-page') } };
-  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, relabelled), (e) => e.name === 'SyncVaultUnlockError');
+  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, relabelled), (e) => e.name === 'SyncVaultUnlockError' && e.code === 'encryption-error');
 
   const invalidIv = { ...envelope, iv: 'AAAA' };
-  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, invalidIv), (e) => e.name === 'SyncVaultUnlockError');
+  await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, invalidIv), (e) => e.name === 'SyncVaultUnlockError' && e.code === 'encryption-error');
   const futureProtocol = { ...envelope, meta: { ...envelope.meta, protocolVersion: 99 } };
   await assert.rejects(() => syncCrypto.decryptOpEnvelope(key, futureProtocol), /Malformed sync envelope/);
 });
@@ -127,7 +127,7 @@ test('snapshot envelope round-trips and binds its cursor metadata', async () => 
   assert.ok(!JSON.stringify(envelope).includes('secret title'));
   assert.deepEqual(await syncCrypto.decryptSnapshotEnvelope(key, envelope), snapshot);
   const moved = { ...envelope, meta: { ...envelope.meta, cursor: 43 } };
-  await assert.rejects(() => syncCrypto.decryptSnapshotEnvelope(key, moved), (e) => e.name === 'SyncVaultUnlockError');
+  await assert.rejects(() => syncCrypto.decryptSnapshotEnvelope(key, moved), (e) => e.name === 'SyncVaultUnlockError' && e.code === 'encryption-error');
   await assert.rejects(
     () => syncCrypto.decryptSnapshotEnvelope(key, { ...envelope, v: 2 }),
     /Malformed snapshot envelope/
@@ -145,7 +145,7 @@ test('asset bytes round-trip and are bound to their content hash', async () => {
   const envelope = await syncCrypto.encryptAssetBytes(key, bytes, hash);
   assert.deepEqual(Array.from(await syncCrypto.decryptAssetBytes(key, envelope)), Array.from(bytes));
   const swapped = { ...envelope, hash: await protocol.hashText('different') };
-  await assert.rejects(() => syncCrypto.decryptAssetBytes(key, swapped), (e) => e.name === 'SyncVaultUnlockError');
+  await assert.rejects(() => syncCrypto.decryptAssetBytes(key, swapped), (e) => e.name === 'SyncVaultUnlockError' && e.code === 'encryption-error');
 });
 
 test('remote envelopes expose bounded routing metadata but no synthetic workspace, conflict, filename, key, or passphrase plaintext', async () => {

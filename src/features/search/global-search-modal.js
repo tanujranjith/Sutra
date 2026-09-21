@@ -350,10 +350,25 @@
     if (state.bound) return;
     var input = el('globalSearchInput');
     var box = el('globalSearchResults');
+    var root = panel();
     if (!input || !box) return;
     state.bound = true;
 
+    // Keep the fast keyboard workflow (the input still receives focus), but
+    // do not show a focus ring merely because the modal opened. The ring
+    // returns as soon as the student interacts with the search surface.
+    var markUserInteraction = function () {
+      if (root) root.classList.remove('is-auto-focused');
+    };
+    if (root) {
+      root.addEventListener('pointerdown', markUserInteraction, true);
+      root.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') markUserInteraction();
+      }, true);
+    }
+
     input.addEventListener('input', function () {
+      markUserInteraction();
       syncClearButton();
       runSearch(false);
     });
@@ -399,6 +414,7 @@
 
     var clear = el('globalSearchClear');
     if (clear) clear.addEventListener('click', function () {
+      markUserInteraction();
       var inputField = el('globalSearchInput');
       if (inputField) inputField.value = '';
       syncClearButton();
@@ -459,6 +475,7 @@
     }
     syncClearButton();
 
+    root.classList.add('is-auto-focused');
     root.classList.add('active');
     root.setAttribute('aria-hidden', 'false');
     if (global.SutraModalManager) global.SutraModalManager.sync();
@@ -479,6 +496,7 @@
     if (state.debounceTimer) { clearTimeout(state.debounceTimer); state.debounceTimer = null; }
     if (!root) return;
     root.classList.remove('active');
+    root.classList.remove('is-auto-focused');
     root.setAttribute('aria-hidden', 'true');
     if (global.SutraModalManager) global.SutraModalManager.sync();
   }

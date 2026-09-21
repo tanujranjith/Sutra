@@ -56,40 +56,40 @@
            - dom-safety.js:     central sanitize/escape/sandbox helpers (no raw user HTML)
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
     <script src="src/core/error-reporter.js?v=20260812-error1"></script>
-    <script src="src/core/dom-safety.js?v=20260613-harden1"></script>
+    <script src="src/core/dom-safety.js?v=20260913-custom-html-safety1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
-    <script src="src/core/migrations.js?v=20260813-pdf2"></script>
+    <script src="src/core/migrations.js?v=20260913-energy-removal-migrations1"></script>
     <script src="src/core/recovery-mode.js?v=20260710-recovery1"></script>
     <script src="src/persistence/revocation-wipe.js?v=20260831-revoke5"></script>
     <script src="src/core/credential-vault.js?v=20260831-revoke4"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
-    <script src="src/domain/homework-store.js?v=20260825-sol1-1"></script>
-    <script src="src/domain/student-engine.js?v=20260710-student-engine1"></script>
+    <script src="src/domain/homework-store.js?v=20260916-integration-homework-store1"></script>
+    <script src="src/domain/student-engine.js?v=20260913-energy-removal-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
     <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
     <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
-    <script src="src/domain/student-life.js?v=20260710-student-life1"></script>
+    <script src="src/domain/student-life.js?v=20260913-energy-removal-life1"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
-    <script src="src/domain/import-engine.js?v=20260807-ics2"></script>
-    <script src="src/domain/assistant-permissions.js?v=20260825-sol2-1"></script>
+    <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
+    <script src="src/domain/assistant-permissions.js?v=20260913-locked-assistant-permissions1"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
-    <script src="src/boot/legacy-workspace-migration.js?v=20260830-revoke2"></script>
+    <script src="src/boot/legacy-workspace-migration.js?v=20260913-energy-removal-legacy1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
-    <script src="src/sync/sync-protocol.js?v=20260906-notificationlocal1"></script>
-    <script src="src/sync/sync-crypto.js?v=20260716-sync6"></script>
+    <script src="src/sync/sync-protocol.js?v=20260913-energy-removal-sync1"></script>
+    <script src="src/sync/sync-crypto.js?v=20260917-sync-encryption1"></script>
     <script src="src/sync/sync-projection.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260807-duress2"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20260907-locked-context-1"></script>
-    <script src="src/features/feature-registry.js?v=20260709-features1"></script>
+    <script src="src/config/feature-manifest.js?v=20260913-locked-assistant-manifest2"></script>
+    <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
 <script src="src/state/workspace-normalizers.js?v=20260825-oxremed1"></script>
@@ -116,9 +116,12 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260825-oxremed4">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20260916-integration-base1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
+    <!-- Assistant layout is critical shell chrome. The feature registry reuses
+         this link when the optional Assistant pack initializes. -->
+    <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260818-cache-refresh1">
     <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260807-agentplans1">
     <style id="view-visibility-fallback">
         .view { display: none; }
@@ -126,7 +129,7 @@
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
     <script src="src/boot/startup-intro.js?v=20260821-skipfallback1" defer></script>
-    <script src="src/ui/select-enhancer.js?v=20260708-toolbar-compact" defer></script>
+    <script src="src/ui/select-enhancer.js?v=20260914-export-modal" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
     <script src="src/data/emoji-keywords.generated.js" defer></script>
@@ -2723,9 +2726,9 @@
                             <div class="summary-meta" id="lifeSleepConsistencyMeta">Goal streak: 0 nights</div>
                         </div>
                         <div class="glass-card summary-card">
-                            <div class="summary-label">Quality / Energy</div>
-                            <div class="summary-value" id="lifeSleepQualityEnergyValue">&mdash;</div>
-                            <div class="summary-meta" id="lifeSleepQualityEnergyMeta">Under-goal nights are tracked over the last 30 days.</div>
+                            <div class="summary-label">Sleep Quality</div>
+                            <div class="summary-value" id="lifeSleepQualityValue">&mdash;</div>
+                            <div class="summary-meta" id="lifeSleepQualityMeta">Average rating over the last 30 days.</div>
                         </div>
                         <div class="glass-card summary-card">
                             <div class="summary-label">Avg Bedtime / Wake</div>
@@ -2757,7 +2760,6 @@
                                         <th>Wake</th>
                                         <th>Duration</th>
                                         <th>Quality (1-5)</th>
-                                        <th>Energy (1-5)</th>
                                         <th>Wake-Ups</th>
                                         <th>Tags</th>
                                         <th>Notes</th>
@@ -2915,7 +2917,7 @@
                     <div class="wellness-header">
                         <div>
                             <div class="eyebrow">Wellness</div>
-                            <h2>Mind &amp; Energy</h2>
+                            <h2>Mind &amp; Wellness</h2>
                             <p class="wellness-subcopy">A calm space for a quick check-in, a guided reset, and private reflection.</p>
                         </div>
                     </div>
@@ -2944,12 +2946,6 @@
                                 <label for="wellnessStressInput" class="wellness-label">Stress level <span class="wellness-slider-value" id="wellnessStressValue">5</span></label>
                                 <input id="wellnessStressInput" class="wellness-slider" type="range" min="0" max="10" step="1" value="5" aria-label="Stress level from 0 to 10">
                                 <div class="wellness-slider-marks"><span>Calm</span><span>Tense</span></div>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label for="wellnessEnergyInput" class="wellness-label">Energy level <span class="wellness-slider-value" id="wellnessEnergyValue">5</span></label>
-                                <input id="wellnessEnergyInput" class="wellness-slider" type="range" min="0" max="10" step="1" value="5" aria-label="Energy level from 0 to 10">
-                                <div class="wellness-slider-marks"><span>Drained</span><span>Energized</span></div>
                             </div>
 
                             <div class="wellness-field">
@@ -4069,23 +4065,10 @@
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
                             <h2 class="cc-section-title">Homework</h2>
-                            <p class="cc-section-copy">How assignments are shown and added.</p>
+                            <p class="cc-section-copy">How assignments are shown. Add work through the shared Homework composer.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
-                    <div class="cc-group">
-                        <span class="cc-group-title">Adding tasks</span>
-                        <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Add method</span><span class="cc-row-help">How the &ldquo;add a task&rdquo; experience works.</span></div>
-                            <div class="cc-row-control">
-                                <select class="modal-input cc-select" data-pref-path="study.homeworkAddMethod">
-                                    <option value="inline">Inline row — add in place</option>
-                                    <option value="quick">Quick add — type naturally</option>
-                                    <option value="panel">Panel — full add dialog</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
                     <div class="cc-group">
                         <span class="cc-group-title">Display</span>
                         <div class="cc-row" data-setting-item>
@@ -5349,7 +5332,7 @@
                                 </select>
                             </label>
                             <button id="hwOpenAddAssignment" class="hw-toolbar-btn hw-toolbar-primary" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add task</span>
+                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add homework</span>
                             </button>
                             <label class="hw-toolbar-btn hw-file-action" for="hwImportFile">
                                 <i class="fas fa-file-import" aria-hidden="true"></i><span>Import</span>
@@ -5418,7 +5401,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260826-classless-edit1"></script>
+                <script src="src/features/study/homework.js?v=20260917-homework-merge2"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -6338,13 +6321,9 @@
             <i class="fas fa-download"></i>
             <span class="btn-text">Import</span>
         </button>
-        <button class="storage-btn" id="sutraCloudOpenBtn" onclick="openSutraCloudModal()" title="Sutra Cloud — optional encrypted cloud backup">
+        <button class="storage-btn" id="sutraCloudOpenBtn" onclick="openSutraCloudModal()" title="Sutra Cloud — encrypted sync and backups">
             <i class="fas fa-cloud"></i>
             <span class="btn-text">Sutra Cloud</span>
-        </button>
-        <button class="storage-btn" id="sutraSyncOpenBtn" onclick="openSutraSyncModal()" title="Sutra Sync — optional encrypted multi-device sync">
-            <i class="fas fa-rotate"></i>
-            <span class="btn-text">Sync</span>
         </button>
     </div>
 
@@ -6374,15 +6353,22 @@
          Distinct from backups: "Saved locally", "Synced to cloud", and
          "Backed up" are three different guarantees, and this panel says which
          is which. Spec: docs/architecture/SYNC_PROTOCOL.md -->
-    <div class="modal" id="sutraSyncModal">
-        <div class="modal-content sutra-sync-modal" role="dialog" aria-modal="true" aria-labelledby="sutraSyncModalTitle" aria-describedby="sutraSyncStatusCard">
+    <div class="modal" id="sutraCloudModal">
+        <div class="modal-content sutra-cloud-modal sutra-sync-modal sutra-cloud-hub" role="dialog" aria-modal="true" aria-labelledby="sutraCloudModalTitle">
             <div class="modal-header">
-                <h3 class="modal-title" id="sutraSyncModalTitle">
-                    <i class="fas fa-rotate" aria-hidden="true"></i> Sutra Sync Beta
+                <h3 class="modal-title" id="sutraCloudModalTitle">
+                    <i class="fas fa-cloud" aria-hidden="true"></i> Sutra Cloud
                 </h3>
-                <button class="close-btn" type="button" data-modal-close onclick="closeSutraSyncModal()" aria-label="Close Sutra Sync">&times;</button>
+                <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
             </div>
             <div class="modal-body">
+                <div id="sutraCloudSummary" class="sutra-cloud-status-card" role="status" aria-live="polite"></div>
+                <nav class="sutra-cloud-sections" aria-label="Cloud sections">
+                    <button class="storage-btn" type="button" id="sutraCloudSyncTab" aria-controls="sutraSyncModal" aria-pressed="true">Sync · Beta</button>
+                    <button class="storage-btn" type="button" id="sutraCloudBackupsTab" aria-controls="sutraCloudBackupsPanel" aria-pressed="false">Backups</button>
+                </nav>
+                <section id="sutraSyncModal" aria-label="Automatic encrypted sync">
+                <p class="sutra-sync-hint">After you turn on Sync and unlock it, changes sync automatically while Sutra is open. Unlock again after reopening Sutra. Sync now is available whenever you need it.</p>
                 <div class="sutra-sync-status-card" id="sutraSyncStatusCard" aria-live="polite"></div>
 
                 <!-- Setup (sync disabled) -->
@@ -6407,7 +6393,7 @@
                         is still being validated.
                     </p>
                     <p class="sutra-sync-hint" id="sutraSyncSignInHint" hidden>
-                        Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in via Sutra Cloud</button> first, then come back here.
+                        Sync uses your Sutra Cloud account. <button type="button" class="sutra-sync-link-btn" id="sutraSyncOpenCloudBtn">Sign in to Sutra Cloud</button> to continue.
                     </p>
                     <label class="sutra-sync-label" for="sutraSyncPassphraseInput">Sync passphrase (8+ characters)</label>
                     <input type="password" id="sutraSyncPassphraseInput" class="sutra-sync-input" autocomplete="new-password" minlength="8" />
@@ -6486,20 +6472,9 @@
                     </details>
                     <p class="sutra-sync-error" id="sutraSyncRunningError" role="alert" hidden></p>
                 </section>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sutra Cloud — optional, consent-first, provider-based encrypted backup -->
-    <div class="modal" id="sutraCloudModal">
-        <div class="modal-content sutra-cloud-modal" role="dialog" aria-modal="true" aria-labelledby="sutraCloudModalTitle" aria-describedby="sutraCloudStatus">
-            <div class="modal-header">
-                <h3 class="modal-title" id="sutraCloudModalTitle">
-                    <i class="fas fa-cloud" aria-hidden="true"></i> Sutra Cloud
-                </h3>
-                <button class="close-btn" type="button" data-modal-close onclick="closeSutraCloudModal()" aria-label="Close Sutra Cloud">&times;</button>
-            </div>
-            <div class="modal-body">
+                <div id="sutraCloudAccountSetup"></div>
+                </section>
+                <section id="sutraCloudBackupsPanel" aria-label="Encrypted backups" hidden inert>
                 <p class="sutra-cloud-powered" id="sutraCloudPoweredBy">Start with encrypted multi-device Sync, then choose a backup destination when you want a recoverable snapshot.</p>
 
                 <section class="sutra-cloud-sync-first" aria-labelledby="sutraCloudSyncFirstTitle">
@@ -6528,7 +6503,7 @@
                             <input type="checkbox" id="sutraCloudAutoToggle">
                             <span>Auto-backup (optional, off by default)</span>
                             <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
-                                <option value="close">On app close</option>
+                                <option value="close">When app is hidden (best effort)</option>
                                 <option value="daily">Once a day</option>
                                 <option value="change">On significant change</option>
                             </select>
@@ -6568,6 +6543,7 @@
                     <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">What happens if I lose my passphrase?</a> ·
                     <a href="#" class="sutra-cloud-link" onclick="openSutraCloudHelpDocs(); return false;">Troubleshooting</a>
                 </p>
+                </section>
             </div>
         </div>
     </div>
@@ -7609,7 +7585,7 @@
             </div>
             <div class="emoji-header-actions">
                 <button type="button" class="emoji-remove-btn" onclick="removePageIcon();hideEmojiPicker();">Remove</button>
-                <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close emoji picker">
+                <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -7840,7 +7816,7 @@
     <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20260807-ics1"></script>
+    <script src="src/features/academic/semester-setup.js?v=20260913-content-limits-semester1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -7865,7 +7841,7 @@
     <!-- Today dashboard composition — pure preference normalization + accessible
          widget customizer. Loaded before app.js so Today preferences normalize
          through the canonical workspace state. -->
-    <script src="src/features/workspace/today-dashboard.js?v=20260816-home-labels1"></script>
+    <script src="src/features/workspace/today-dashboard.js?v=20260920-home-calm4"></script>
     <script src="src/features/workspace/canvas-workbench.js?v=20260807-canvas2"></script>
     <script src="src/features/workspace/surface-assistant-actions.js?v=20260807-surfaces2"></script>
     <script src="src/config/sutra-runtime-config.js?v=20260716-sync6"></script>
@@ -7874,8 +7850,8 @@
          Loads before app.js so the flag can mount at boot; app.js only touches it
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
-    <script src="src/features/notes/editor-v2.js?v=20260807-pagelinks1"></script>
-    <script src="src/features/workspace/contextual-shell.js?v=20260808-contextual-ui10"></script>
+    <script src="src/features/notes/editor-v2.js?v=20260912-imagepaste1"></script>
+    <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
          Other served/PWA browsers use the smaller module + real worker path. -->
@@ -7887,15 +7863,20 @@
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
-    <script src="src/features/search/global-search-modal.js?v=20260905-search-focus1"></script>
-    <script src="src/core/app.js?v=20260905-habitread1"></script>
+    <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
+    <script src="src/core/app.js?v=20260921-backup-snapshot3"></script>
+    <!-- Convert explicit pre-htmlDocument page records before the canonical
+         migration/normalization seam handles startup and workspace imports. -->
+    <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
+    <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
+    <script src="src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20260815-pdf26"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20260823-combined1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
-    <script src="src/features/workspace/audit-fixes.js?v=20260825-oxremed2"></script>
+    <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
     <script src="src/features/workspace/canvas-pen-input-guard.js?v=20260808-peninput1"></script>
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
@@ -7915,8 +7896,8 @@
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
     <script src="src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1"></script>
-    <script src="src/features/study/ap-study.js?v=20260707-batch1"></script>
-    <script src="src/features/study/review.js?v=20260905-review-focus2"></script>
+    <script src="src/features/study/ap-study.js?v=20260913-content-limits-ap1"></script>
+    <script src="src/features/study/review.js?v=20260913-content-limits-review1"></script>
     <script src="src/features/study/math-render.js?v=20260620-math1"></script>
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
@@ -7928,20 +7909,20 @@
     <script src="src/features/workspace/mobile-nav.js?v=20260905-more-actions1"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260816-home-labels1"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20260921-html-widget-mode2"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
-    <script src="src/features/workspace/timeline-drag.js?v=20260730-pushTime1"></script>
+    <script src="src/features/workspace/timeline-drag.js?v=20260913-content-limits-timeline1"></script>
     <script src="src/features/workspace/timeline-calendar.js?v=20260904-compactevents4"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
     <!-- Backup Confidence — derives a confidence level from persistence-health,
          backup, and cloud signals for the Today trust indicator. -->
-    <script src="src/features/workspace/backup-confidence.js?v=20260712-bc1"></script>
+    <script src="src/features/workspace/backup-confidence.js?v=20260915-cloud1"></script>
     <!-- Runtime self-checks + "file an issue" nudge: on an error, prompt the user
          to report it via the feedback button and highlight that button. -->
     <script src="src/core/issue-prompt.js?v=20260617-issue1"></script>
@@ -8306,37 +8287,37 @@
         })();
     </script>
     <!-- storage/taskbar measurement script removed because the taskbar was deleted -->
-    <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260712-glass-fix">
-    <link rel="stylesheet" href="styles/themes/glass.css?v=20260712-glass-fix">
+    <link rel="stylesheet" href="styles/themes/macos26-redesign.css?v=20260913-glass-surfaces1">
+    <link rel="stylesheet" href="styles/themes/glass.css?v=20260917-glass-cohesion1">
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
-    <link rel="stylesheet" href="styles/features/global-search.css?v=20260825-gsstyles3">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260824-mobile-gs1">
+    <link rel="stylesheet" href="styles/features/global-search.css?v=20260917-search-focus1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260916-integration-mobile1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260807-cohesion2">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260917-homework-merge1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">
-    <link rel="stylesheet" href="styles/features/html-pages.css?v=20260821-htmlpages3">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20260912-html-layout1">
     <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260815-pdf7">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
-    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260823-credential-vault1">
+    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260915-cloud2">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
     <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
-    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260706-ctabs3">
+    <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260904-nav-overflow1">
-    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260820-liquidglass-toolbar2">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260913-glass-notes1">
+    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

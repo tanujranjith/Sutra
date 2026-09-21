@@ -13,12 +13,38 @@ function loadDashboard() {
 test('Today dashboard ships a calm, complete, deterministic default', () => {
   const dashboard = loadDashboard();
   const value = dashboard.getDefaultPreferences();
-  assert.equal(value.version, 1);
+  assert.equal(value.version, 3);
   assert.equal(value.preset, 'calm');
   assert.equal(value.order.length, dashboard.WIDGETS.length);
   assert.equal(new Set(value.order).size, dashboard.WIDGETS.length);
   assert.ok(value.hidden.includes('momentum'));
   assert.ok(!value.hidden.includes('next-up'));
+});
+
+test('older Calm preferences migrate to the essentials-only composition', () => {
+  const dashboard = loadDashboard();
+  const value = dashboard.normalizePreferences({
+    version: 1,
+    preset: 'calm',
+    order: dashboard.WIDGETS.map(widget => widget.id),
+    hidden: ['tonight', 'habits', 'tracker', 'life-signals', 'academic-planner', 'momentum'],
+    sizes: { priorities: 'wide' }
+  });
+  assert.deepEqual(Array.from(value.hidden), Array.from(dashboard.getDefaultPreferences().hidden));
+  assert.equal(value.version, dashboard.VERSION);
+});
+
+test('custom layouts retain their explicit visibility when the Calm preset evolves', () => {
+  const dashboard = loadDashboard();
+  const value = dashboard.normalizePreferences({
+    version: 1,
+    preset: 'custom',
+    order: dashboard.WIDGETS.map(widget => widget.id),
+    hidden: ['tasks'],
+    sizes: {}
+  });
+  assert.equal(value.preset, 'custom');
+  assert.deepEqual(Array.from(value.hidden), ['tasks']);
 });
 
 test('Today dashboard normalization removes unknowns, deduplicates, and appends new widgets', () => {
@@ -30,7 +56,7 @@ test('Today dashboard normalization removes unknowns, deduplicates, and appends 
     hidden: ['unknown', 'tasks', 'tasks'],
     sizes: { review: 'wide', tasks: 'enormous' }
   });
-  assert.equal(value.version, 1);
+  assert.equal(value.version, 3);
   assert.equal(value.preset, 'custom');
   assert.deepEqual(Array.from(value.order.slice(0, 2)), ['review', 'next-up']);
   assert.equal(value.order.length, dashboard.WIDGETS.length);

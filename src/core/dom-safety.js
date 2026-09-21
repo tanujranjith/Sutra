@@ -446,6 +446,11 @@
       warning: 'Active embedded content is running in an isolated, offline sandbox.',
       csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; child-src 'none'; form-action 'none'; navigate-to 'none'"
     },
+    'network-embeds': {
+      sandbox: 'allow-scripts allow-popups',
+      warning: 'Remote images, links, and approved embeds can contact external services. No app data is shared with them.',
+      csp: "default-src 'none'; base-uri 'none'; object-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; font-src data: https:; media-src https:; connect-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://open.spotify.com https://w.soundcloud.com https://docs.google.com https://codepen.io https://www.figma.com https://embed.figma.com https://codesandbox.io; child-src 'none'; form-action 'none'; navigate-to https:"
+    },
     'network-media': {
       sandbox: '',
       warning: 'This embedded content may load remote images or media. Your IP address may be shared with those hosts.',

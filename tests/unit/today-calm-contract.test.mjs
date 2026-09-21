@@ -22,8 +22,8 @@ function loadPresets() {
 test('Today offers a calm preset that hides secondary signals by default', () => {
   const presets = loadPresets();
   assert.equal(presets.calm.label, 'Calm');
-  assert.equal(presets.calm.description, 'The daily loop first, with secondary signals tucked away.');
-  assert.deepEqual(presets.calm.hidden, ['tonight', 'habits', 'tracker', 'life-signals', 'academic-planner', 'momentum']);
+  assert.equal(presets.calm.description, 'Next up, Radar, priorities, quick task capture, and save confidence without duplicate cards.');
+  assert.deepEqual(presets.calm.hidden, ['today-plan', 'assignments', 'calendar', 'review', 'tests', 'tonight', 'habits', 'tracker', 'completed', 'life-signals', 'academic-planner', 'momentum']);
   assert.deepEqual(presets.calm.sizes, { 'next-up': 'standard', 'upcoming-radar': 'standard', 'priorities': 'wide' });
 });
 
@@ -37,7 +37,7 @@ test('the calm preset only hides widgets that actually exist', () => {
   }
 });
 
-test('the daily-loop hero and backup confidence widgets are part of the catalog', () => {
+test('the calm layout keeps the daily-loop hero, Radar, priorities, and backup confidence visible', () => {
   const widgetsStart = source.indexOf('var WIDGETS = [');
   const widgetsEnd = source.indexOf('];', widgetsStart);
   const widgetsRegion = source.slice(widgetsStart, widgetsEnd);
@@ -47,6 +47,8 @@ test('the daily-loop hero and backup confidence widgets are part of the catalog'
   assert.ok(widgetsRegion.includes('Local save and backup confidence.'), 'backup confidence is a visible widget');
   const presets = loadPresets();
   assert.ok(!presets.calm.hidden.includes('next-up'), 'Next up is never hidden in calm mode');
+  assert.ok(!presets.calm.hidden.includes('upcoming-radar'), 'Radar is never hidden in calm mode');
+  assert.ok(!presets.calm.hidden.includes('priorities'), 'Priorities are never hidden in calm mode');
   assert.ok(!presets.calm.hidden.includes('backup'), 'backup confidence is never hidden in calm mode');
 });
 

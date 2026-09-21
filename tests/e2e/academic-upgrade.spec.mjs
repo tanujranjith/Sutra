@@ -201,6 +201,23 @@ test('Semester Setup extracts locally and applies only approved items', async ({
   expect(after.planner.courses[apBioId].categories.length).toBe(2);
 });
 
+test('Testing Hub custom exam content survives normalization and workspace restore', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const name = 'Custom exam ' + 'N'.repeat(160);
+    const description = 'Description ' + 'D'.repeat(800);
+    const hub = window.flowAtelier.testingHub;
+    hub.custom = [{ id: 'custom-long-content', name, description, sections: [] }];
+    window.flowAtelier.persistAppData();
+    const payload = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
+    window.deserializeWorkspace(payload);
+    const restored = window.flowAtelier.testingHub.custom.find((exam) => exam.id === 'custom-long-content');
+    return { name: restored && restored.name, description: restored && restored.description };
+  });
+  expect(result.name).toBe('Custom exam ' + 'N'.repeat(160));
+  expect(result.description).toBe('Description ' + 'D'.repeat(800));
+});
+
 test('Assignment Studio milestones persist and surface as deadlines', async ({ page }) => {
   await openApp(page);
 

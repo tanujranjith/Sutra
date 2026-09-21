@@ -109,6 +109,52 @@ async function syncNow(page) {
   });
 }
 
+test('Cloud automatically sends saved edits, resumes offline work, and honors pause and lock', async ({ browser }) => {
+  test.setTimeout(180000);
+  const server = createSyncMockServer();
+  const A = await openDevice(browser, server, 'A');
+  const B = await openDevice(browser, server, 'B');
+  const rename = (page, title) => page.evaluate(async next => {
+    const workspace = window.serializeWorkspace();
+    workspace.pages.find(p => p.id === 'page-shared').title = next;
+    window.deserializeWorkspace(workspace);
+    await window.saveWorkspaceLocally();
+  }, title);
+  const titleOn = page => page.evaluate(() => window.serializeWorkspace().pages.find(p => p.id === 'page-shared').title);
+  const foreground = page => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  try {
+    await seedBaseline(A.page);
+    await seedBaseline(B.page);
+    await enableSync(A.page);
+    await enableSync(B.page);
+    await rename(A.page, 'Automatically saved');
+    await expect.poll(() => A.page.evaluate(() => window.SutraCloud.getStatus().sync.state), { timeout: 15000 }).toBe('idle');
+    await expect.poll(async () => { await foreground(B.page); return titleOn(B.page); }, { timeout: 30000, intervals: [3500] }).toBe('Automatically saved');
+    A.net.down = true;
+    await rename(A.page, 'Saved offline');
+    await expect.poll(() => A.page.evaluate(() => window.SutraCloud.getStatus().sync.state), { timeout: 15000 }).toBe('offline');
+    A.net.down = false;
+    await A.page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(async () => { await foreground(B.page); return titleOn(B.page); }, { timeout: 30000, intervals: [3500] }).toBe('Saved offline');
+    await A.page.evaluate(() => window.SutraCloud.pauseSync());
+    await rename(A.page, 'Paused edit');
+    const count = server.state.ops.length;
+    await A.page.waitForTimeout(3500);
+    expect(server.state.ops.length).toBe(count);
+    await A.page.evaluate(() => window.SutraCloud.resumeSync());
+    await expect.poll(async () => { await foreground(B.page); return titleOn(B.page); }, { timeout: 30000, intervals: [3500] }).toBe('Paused edit');
+    await A.page.evaluate(() => window.SutraSync.lock());
+    await rename(A.page, 'Locked edit');
+    const lockedCount = server.state.ops.length;
+    await A.page.waitForTimeout(3500);
+    expect(server.state.ops.length).toBe(lockedCount);
+    expect(await A.page.evaluate(() => window.SutraCloud.getStatus().sync.state)).toBe('locked');
+  } finally {
+    await A.context.close();
+    await B.context.close();
+  }
+});
+
 test.describe('Sutra Sync Beta opt-in boundaries', () => {
   test.describe.configure({ timeout: 180_000 });
 
@@ -139,11 +185,11 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     const noticeRow = device.page.getByRole('article', { name: /Sutra Sync Beta is available/i });
     await expect(noticeRow).toBeVisible();
     await noticeRow.press('Enter');
-    await expect(device.page.getByRole('dialog', { name: /Sutra Sync Beta/i })).toBeVisible();
+    await expect(device.page.getByRole('dialog', { name: 'Sutra Cloud', exact: true })).toBeVisible();
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('Optional and currently off');
     await expect(device.page.locator('#sutraSyncSetup')).toContainText('recent encrypted .sutra backup');
     expect((await device.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
-    await device.page.locator('#sutraSyncModal [data-modal-close]').click();
+    await device.page.locator('#sutraCloudModal [data-modal-close]').click();
 
     // Use a second fresh profile to exercise the explicit Not now/dismiss path,
     // since opening the first notice intentionally acknowledges it as read.
@@ -163,7 +209,7 @@ test.describe('Sutra Sync Beta opt-in boundaries', () => {
     expect(await dismissed.page.evaluate(() => window.SutraNotifications
       .getNotifications().some(item => item.source === 'syncBeta'))).toBe(false);
     expect((await dismissed.page.evaluate(() => window.SutraSync.status())).enabled).toBe(false);
-    await expect(dismissed.page.locator('#sutraSyncOpenBtn')).toBeAttached();
+    await expect(dismissed.page.locator('#sutraCloudOpenBtn')).toBeAttached();
 
     // A restore containing another device's opt-in cannot override this
     // device's explicit local off state.
@@ -1479,6 +1525,25 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
     }
   });
 
+  test('changing backup destination preserves the enabled incremental Sync account', async ({ browser }) => {
+    const server = createSyncMockServer({ userId: 'mock-user-1' });
+    const device = await openAuthedDevice(browser, server, 'separate-backup-provider');
+    try {
+      await seedBaseline(device.page);
+      await enableSync(device.page);
+      await device.page.evaluate(() => window.SutraCloudSync.switchProvider('manual'));
+      expect(await device.page.evaluate(() => window.SutraCloudSync.isSignedIn())).toBe(true);
+      expect(await device.page.evaluate(() => window.SutraSync.status().state)).toBe('idle');
+      expect(await device.page.evaluate(() => window.SutraCloud.getStatus().backups.provider)).toBe('manual');
+      await editPage(device.page, 'page-shared', '<p>sync remains independent of backup destination</p>');
+      const result = await device.page.evaluate(() => window.SutraCloud.syncNow());
+      expect(result.error).toBeFalsy();
+      expect(await device.page.evaluate(() => window.SutraSync.status().state)).toBe('idle');
+    } finally {
+      await device.context.close();
+    }
+  });
+
   test('ordinary cloud sign-out pauses sync but keeps the complete local workspace', async ({ browser }) => {
     const server = createSyncMockServer({ userId: 'mock-user-1' });
     const device = await openAuthedDevice(browser, server, 'signed-out-device');
@@ -1673,7 +1738,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
       // Enable through the ACTUAL panel.
       await page.evaluate(() => window.openSutraSyncModal());
-      await expect(page.locator('#sutraSyncModal')).toHaveClass(/active/);
+      await expect(page.locator('#sutraCloudModal')).toHaveClass(/active/);
       await expect(page.locator('#sutraSyncSetup')).toBeVisible();
       await expect(page.locator('#sutraSyncStatusCard')).toContainText('Sync is off');
       await page.fill('#sutraSyncPassphraseInput', PASSPHRASE);
@@ -1714,7 +1779,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
 
       // Escape closes the panel (modal contract).
       await page.keyboard.press('Escape');
-      await expect(page.locator('#sutraSyncModal')).not.toHaveClass(/active/);
+      await expect(page.locator('#sutraCloudModal')).not.toHaveClass(/active/);
     } finally {
       await context.close();
     }
@@ -1747,6 +1812,43 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       expect(unlocked).toBe('idle');
     } finally {
       await A.context.close();
+    }
+  });
+
+  test('cloud decrypt failure never reports Sync as successfully unlocked', async ({ browser }) => {
+    const server = createSyncMockServer();
+    const A = await openDevice(browser, server, 'A-integrity-source');
+    const B = await openDevice(browser, server, 'B-integrity-check');
+    try {
+      await seedBaseline(A.page);
+      await enableSync(A.page);
+      expect(server.state.ops.length).toBeGreaterThan(0);
+
+      const envelope = server.state.ops[0].envelope;
+      envelope.ct = envelope.ct.slice(0, -4) + (envelope.ct.endsWith('AAAA') ? 'BBBB' : 'AAAA');
+
+      const enableResult = await B.page.evaluate(async ({ endpoint, passphrase }) => {
+        const result = await window.SutraSync.enable({ endpoint, passphrase });
+        return { state: result.status.state, error: result.outcome?.error?.code || '' };
+      }, { endpoint: SYNC_MOCK_ORIGIN, passphrase: PASSPHRASE });
+      expect(enableResult.state).toBe('encryption-error');
+      expect(enableResult.error).toBe('encryption-error');
+      // Exercise the exact post-unlock success-toast seam used by the UI.
+      await B.page.evaluate(() => window.showToast('Sync unlocked.'));
+
+      const result = await B.page.evaluate(() => ({
+        state: window.SutraSync.status().state,
+        setupError: document.getElementById('sutraSyncSetupError')?.textContent || '',
+        runningError: document.getElementById('sutraSyncRunningError')?.textContent || '',
+        recoveryGuidance: document.getElementById('sutraSyncRecoveryGuidance')?.textContent || '',
+        toast: document.getElementById('toastMessage')?.textContent || ''
+      }));
+      expect(result.state).toBe('encryption-error');
+      expect(result.setupError + result.runningError).toMatch(/encrypted cloud data could not be verified/i);
+      expect(result.recoveryGuidance).toMatch(/Do not create a new vault key/i);
+      expect(result.toast).not.toMatch(/Sutra Sync is on|Sync unlocked/i);
+    } finally {
+      await Promise.allSettled([A.context.close(), B.context.close()]);
     }
   });
 });

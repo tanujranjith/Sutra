@@ -129,6 +129,35 @@ test('course and assignments commit as one transaction and rollback on persisten
   assert.deepEqual(persisted, before);
 });
 
+test('removeCourse atomically removes its lane and returns recoverable assignments', () => {
+  const store = canonical.createStore({
+    courses: [{ id: 'remove-me', name: 'Biology' }, { id: 'keep-me', name: 'History' }],
+    tasks: [
+      { id: 'bio-task', title: 'Lab report', courseId: 'remove-me' },
+      { id: 'history-task', title: 'Reading', courseId: 'keep-me' }
+    ]
+  });
+  let persisted = store.getSnapshot();
+  store.configure({
+    getWorkspace: () => persisted,
+    setWorkspace: (next) => { persisted = next; },
+    readLegacy: () => ({ courses: [], tasks: [] }),
+    persist: () => undefined
+  });
+
+  const receipt = store.removeCourse('remove-me', { reason: 'homework-course-remove' });
+  assert.equal(receipt.result.removed, true);
+  assert.equal(receipt.result.course.id, 'remove-me');
+  assert.deepEqual(receipt.result.tasks.map((task) => task.id), ['bio-task']);
+  assert.deepEqual(store.getSnapshot().courses.map((course) => course.id), ['keep-me']);
+  assert.deepEqual(store.getSnapshot().tasks.map((task) => task.id), ['history-task']);
+  assert.deepEqual(persisted.tasks.map((task) => task.id), ['history-task']);
+
+  const missing = store.removeCourse('missing-course');
+  assert.equal(missing.result.removed, false);
+  assert.deepEqual(store.getSnapshot().courses.map((course) => course.id), ['keep-me']);
+});
+
 test('durable Homework mutations await the real persistence promise', async () => {
   const store = canonical.createStore({ courses: [{ id: 'c', name: 'Calculus' }], tasks: [] });
   let release;

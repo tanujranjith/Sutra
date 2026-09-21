@@ -13,7 +13,10 @@
     } catch (error) { return fallback; }
   }
 
-  function text(value, max) { return String(value == null ? '' : value).trim().slice(0, max); }
+  function text(value, max) {
+    var normalized = String(value == null ? '' : value).trim();
+    return max == null ? normalized : normalized.slice(0, max);
+  }
   function stableHash(value) {
     var source = String(value || '');
     var hash = 2166136261;
@@ -52,7 +55,7 @@
 
   function normalizeCourse(raw, index, now) {
     if (!raw || typeof raw !== 'object') return null;
-    var name = text(raw.name || raw.subject || raw.title, 240);
+    var name = text(raw.name || raw.subject || raw.title);
     if (!name) return null;
     var id = text(raw.id, 160) || ('course-' + stableHash(name.toLowerCase() + '|' + index));
     return Object.assign({}, raw, {
@@ -66,12 +69,12 @@
 
   function normalizeTask(raw, index, courseIds, courseNames, now) {
     if (!raw || typeof raw !== 'object') return null;
-    var title = text(raw.title || raw.text || raw.task, 1000);
+    var title = text(raw.title || raw.text || raw.task);
     if (!title) return null;
     var dueDate = safeDate(raw.dueDate || raw.date || raw.due);
     var dueTime = safeTime(raw.dueTime || raw.time || raw.due);
     var courseId = text(raw.courseId, 160);
-    var courseName = text(raw.courseName || raw.course || raw.subject || raw.className, 240).toLowerCase();
+    var courseName = text(raw.courseName || raw.course || raw.subject || raw.className).toLowerCase();
     if (!courseId && courseName && courseNames[courseName]) courseId = courseNames[courseName];
     var orphanedCourseId = '';
     if (courseId && !courseIds[courseId]) { orphanedCourseId = courseId; courseId = ''; }
@@ -90,7 +93,7 @@
       priority: ['high', 'medium', 'low'].indexOf(String(raw.priority || '').toLowerCase()) >= 0 ? String(raw.priority).toLowerCase() : 'medium',
       difficulty: ['easy', 'medium', 'hard'].indexOf(String(raw.difficulty || '').toLowerCase()) >= 0 ? String(raw.difficulty).toLowerCase() : 'medium',
       recurrence: ['none', 'daily', 'weekly', 'monthly'].indexOf(String(raw.recurrence || '').toLowerCase()) >= 0 ? String(raw.recurrence).toLowerCase() : 'none',
-      notes: text(raw.notes, 20000),
+      notes: text(raw.notes),
       createdAt: createdAt,
       updatedAt: timestamp(raw.updatedAt, createdAt)
     });
@@ -279,6 +282,19 @@
       },
       getSnapshot: getSnapshot,
       replace: function (next, meta) { return commit(Object.assign({}, state, next || {}), meta || {}); },
+      removeCourse: function (courseId, meta) {
+        var id = text(courseId, 160);
+        var target = state.courses.find(function (course) { return String(course.id) === id; });
+        if (!target) return { result: { removed: false, course: null, tasks: [] }, workspace: getSnapshot() };
+        var removedCourse = clone(target, {});
+        var removedTasks = state.tasks.filter(function (task) { return String(task.courseId || '') === id; });
+        var next = Object.assign({}, state, {
+          courses: state.courses.filter(function (course) { return String(course.id) !== id; }),
+          tasks: state.tasks.filter(function (task) { return String(task.courseId || '') !== id; })
+        });
+        var snapshot = commit(next, Object.assign({ reason: 'homework-course-remove' }, meta || {}));
+        return { result: { removed: true, course: removedCourse, tasks: clone(removedTasks, []) }, workspace: snapshot };
+      },
       replaceDurably: function (next, meta) {
         var replacement = clone(next || {}, {});
         return commitDurably(function (draft) { return Object.assign({}, draft, replacement); }, meta || {})

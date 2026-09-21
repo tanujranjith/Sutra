@@ -12,7 +12,8 @@ const shell = readFileSync(new URL('../../Sutra.html', import.meta.url), 'utf8')
 function loadAppFunction(name, stubNames) {
   const extract = extractFunction(app, name);
   assert.ok(extract, `${name} must be a top-level declaration`);
-  return new Function(...stubNames, `${extract.body}; return ${name};`);
+  const prefix = app.includes(`async function ${name}(`) ? 'async ' : '';
+  return new Function(...stubNames, `${prefix}${extract.body}; return ${name};`);
 }
 
 function readyProvider() {
@@ -57,19 +58,42 @@ test('auto-backup respects frequency: close-only, daily window, and change sched
   assert.equal(calls.schedule, 0, 'hidden events never schedule a debounced upload');
 });
 
-test('runSutraCloudAutoBackup is single-flight and passes the session passphrase', async () => {
-  const runBackup = loadAppFunction('runSutraCloudAutoBackup', ['sutraCloudAutoReady', 'sutraCloudRuntime', 'sutraCloudBackupNow', 'refreshSutraCloudBackupList']);
+test('automatic backup takes an atomic cross-tab lock and rechecks the receipt', async () => {
+  const runBackup = loadAppFunction('runSutraCloudAutoBackup', [
+    'sutraCloudAutoReady', 'sutraCloudRuntime', 'sutraCloudBackupNow', 'navigator',
+    'sutraRemoteCommitPending', 'persistenceWritesBlocked', 'loadSutraCloudMeta',
+    'window', 'persistSutraCloudMeta', 'updateSutraCloudUi', 'sutraCloudMeta', 'getSyncWorkspaceSnapshot'
+  ]);
   const attempts = [];
-  const backupNow = (opts) => { attempts.push(opts); return Promise.resolve(); };
-  let refreshCalls = 0;
-  await runBackup(() => false, { backupPassphrase: 'x' }, backupNow, () => { refreshCalls += 1; })();
-  assert.equal(attempts.length, 0, 'not ready never uploads');
-  await runBackup(() => true, { backupPassphrase: 'session-key', busy: false }, backupNow, () => { refreshCalls += 1; })();
-  assert.deepEqual(attempts[0], { passphrase: 'session-key', auto: true, silent: true, label: 'Auto backup' });
-  assert.equal(refreshCalls, 1, 'list refreshes after a successful auto-backup');
-  let busyCalls = 0;
-  await runBackup(() => true, { backupPassphrase: 'x', busy: true }, () => { busyCalls += 1; return Promise.resolve(); }, () => {})();
-  assert.equal(busyCalls, 0, 'busy runtime skips the cycle (single-flight)');
+  const meta = { autoBackup: { enabled: true, frequency: 'daily' } };
+  let lockHeld = false;
+  const navigator = { onLine: true, locks: { request: async (_key, _opts, work) => {
+    if (lockHeld) return work(null);
+    lockHeld = true;
+    try { return await work({}); } finally { lockHeld = false; }
+  } } };
+  const runtime = { backupPassphrase: 'session-key', busy: false };
+  const run = runBackup(() => true, runtime, async opts => {
+    attempts.push(opts);
+    await Promise.resolve();
+    meta.lastAutoBackupHash = opts.workspaceHash;
+    return { uploaded: true };
+  }, navigator, false, false, () => meta, {
+    SutraSyncProjection: { buildProjection: value => value, hashProjection: async () => ({ page: 'content' }) },
+    SutraSyncProtocol: { stableStringify: JSON.stringify, hashText: async () => 'confirmed-root' }
+  }, () => {}, () => {}, null, async () => ({}));
+  await Promise.all([run(), run()]);
+  await run();
+  assert.equal(attempts.length, 1, 'concurrent and repeated schedules upload once');
+  assert.equal(attempts[0].passphrase, 'session-key');
+  assert.equal(attempts[0].auto, true);
+  navigator.onLine = false;
+  meta.lastAutoBackupHash = '';
+  await run();
+  assert.equal(attempts.length, 1, 'offline scheduling never uploads');
+  navigator.onLine = true;
+  navigator.locks = undefined;
+  assert.equal((await run()).reason, 'locks-unavailable');
 });
 
 test('folder backup is gated on picker support and explains the permission', () => {

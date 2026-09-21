@@ -1,4 +1,4 @@
-# Sutra Sync — encrypted multi-device sync
+# Sutra Cloud — encrypted sync and backups
 
 **Sutra Sync** keeps one workspace identical across devices: record-level,
 end-to-end-encrypted, offline-tolerant replication. It is **off by default**,
@@ -6,13 +6,30 @@ requires explicit setup, and is a **separate system from backups** — encrypted
 `.sutra` exports, Sutra Cloud provider backups, and Google Drive snapshot sync
 all keep working unchanged.
 
-Open **Sutra Sync Beta** from its one-time in-app availability notice,
-**Settings → Data & Backup**, or the **Sync** button in the save bar. The
+Open **Sutra Cloud → Sync · Beta** from its one-time in-app availability notice,
+**Settings → Data & Backup**, or the **Sutra Cloud** button in the save bar. The
 notice is informational and dismissible: opening Settings, signing in,
 restoring a workspace, or acknowledging the notice does not enable Sync or
 upload workspace data. Only **Turn on sync**, followed by the passphrase setup,
 opts this device in. The explicit enable or disable choice survives reloads,
 while an imported workspace can never force-enable Sync on this device.
+
+The Cloud hub has Sync and Backups sections under one account/setup surface.
+Its summary reports local saving, replication, and snapshots independently.
+After enable/unlock, Sync automatically debounces confirmed saves (2.5 seconds),
+retries after reconnect, checks when the app returns to the foreground, and
+polls periodically while an engine is active. You do not need to press Sync now
+after editing. The vault must be unlocked again each session. Closing the app
+stops its timers; this is not an operating-system background service.
+
+Backups remain separately encrypted `.sutra` snapshots, with their own session
+passphrase and provider choice. Optional automatic backups default to daily
+and run only while the app can reach a ready provider with a session password.
+The app-hidden option is best effort, not a guarantee that an upload finishes
+after closing the browser. Web Locks serialize scheduled uploads across tabs;
+a durable receipt suppresses repeat uploads of the same confirmed workspace.
+Browsers without Web Locks leave automatic backups paused and still support
+manual backups. Sync's existing IndexedDB lease fallback is unchanged.
 
 Before the first merge, Sutra downloads an encrypted
 `sutra-before-sync-*.sutra` safety backup; setup stops if required attachment
@@ -35,6 +52,10 @@ replication, but it is not the only copy you should rely on for recovery.
 | **Saved locally** | Work is durably on THIS device | Always on; the canonical write→readback pipeline |
 | **Synced to cloud** | Latest changes are encrypted + replicated for other devices | Sutra Sync (this feature) |
 | **Backed up** | A restorable point-in-time snapshot exists | `.sutra` export / Sutra Cloud / Drive sync |
+
+Switching backup destinations preserves an enabled incremental Sync account.
+The shared account is signed out only by an explicit account sign-out or
+backend change; backup-only connections retain their existing session behavior.
 
 Sync replicates *changes* — including mistakes. Backups preserve *moments*.
 Keep both.
@@ -212,6 +233,15 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   request storm; the Sync panel shows the specific action needed.
 - **Wrong passphrase** — nothing is mutated; try again or use the recovery
   kit's wrapped key with your passphrase.
+- **Encrypted cloud data could not be verified** — Sync pauses fail-closed when
+  an operation, snapshot, or attachment cannot authenticate with this vault
+  key. Your local workspace and outbox remain available. Keep an encrypted
+  `.sutra` backup, confirm the same Sutra Cloud account, and use the original
+  passphrase or recovery kit. If another trusted device still works, verify it
+  before changing the cloud vault. Do not create a replacement key or delete
+  the cloud vault just to make the warning disappear; deleting the vault is a
+  permanent, all-device action that should only happen after a separate
+  confirmed recovery copy exists.
 - **Old conflict-copy pages** — use **Clean up old conflict copies**. Sutra first
   requires a fresh encrypted `.sutra` safety backup. It consolidates only
   verified exact semantic duplicates without children; unique or contained

@@ -10,6 +10,7 @@
 
     var originalSetActiveView = null;
     var originalStartFocusSession = null;
+    var originalShowToast = null;
     var historyReady = false;
     var historyBound = false;
     var focusPreflightPending = false;
@@ -118,7 +119,13 @@
                     window.history.pushState({ ...(window.history.state || {}), sutraView: next }, '', url.href);
                 } catch (_) { /* progressive enhancement */ }
             }
-            return originalSetActiveView(view, options);
+            var result = originalSetActiveView(view, options);
+            [0, 120, 260, 500, 700].forEach(function (delay) {
+                window.setTimeout(function () {
+                    try { syncGlassNotesClearance(); } catch (_) { /* layout repair is best effort */ }
+                }, delay);
+            });
+            return result;
         };
         var initial = readView();
         if (initial && document.getElementById('view-' + initial)) originalSetActiveView(initial, { fromHistory: true, allowDisabled: true });
@@ -180,11 +187,121 @@
         } catch (_) { /* bridge is optional during degraded startup */ }
     }
 
+    function installSyncOutcomeGuard() {
+        if (originalShowToast || typeof window.showToast !== 'function') return;
+        originalShowToast = window.showToast;
+        function renderSyncRecoveryGuidance() {
+            var errorEl = document.getElementById('sutraSyncRunningError');
+            if (!errorEl) return;
+            errorEl.textContent = 'Sync is paused because encrypted cloud data could not be verified. Your local workspace and local saves remain available.';
+            errorEl.hidden = false;
+            var existing = document.getElementById('sutraSyncRecoveryGuidance');
+            if (existing) return;
+            var guidance = document.createElement('div');
+            guidance.id = 'sutraSyncRecoveryGuidance';
+            guidance.className = 'sutra-sync-panel sutra-sync-recovery-guidance';
+            guidance.setAttribute('role', 'status');
+            var heading = document.createElement('h5');
+            heading.textContent = 'Safe recovery steps';
+            var list = document.createElement('ol');
+            [
+                'Keep the encrypted .sutra backup you just made before changing Sync settings.',
+                'Confirm this browser is signed in to the same Sutra Cloud account and use the original Sync passphrase or recovery kit.',
+                'If another trusted device still syncs, leave its cloud history intact and verify the vault there before changing anything.',
+                'Do not create a new vault key or keep retrying an unknown passphrase; Sync stays fail-closed to protect the workspace.',
+                'Deleting the cloud vault is a last-resort, permanent action for every device. It is not required to preserve local work.'
+            ].forEach(function (item) {
+                var row = document.createElement('li');
+                row.textContent = item;
+                list.appendChild(row);
+            });
+            guidance.append(heading, list);
+            errorEl.insertAdjacentElement('afterend', guidance);
+        }
+        window.addEventListener('sutra:sync-status', function (event) {
+            var detail = event && event.detail;
+            if (!detail || detail.state !== 'encryption-error') return;
+            renderSyncRecoveryGuidance();
+        });
+        window.showToast = function (message, options) {
+            var text = String(message || '');
+            var isUnlockSuccess = text === 'Sync unlocked.' || text.indexOf('Sutra Sync is on.') === 0;
+            var state = null;
+            try {
+                state = window.SutraSync && typeof window.SutraSync.status === 'function'
+                    ? window.SutraSync.status()
+                    : null;
+            } catch (_) { state = null; }
+            if (isUnlockSuccess && state && state.state === 'encryption-error') {
+                renderSyncRecoveryGuidance();
+                return originalShowToast(
+                    'Sync is paused: encrypted cloud data could not be verified. See the recovery steps in Sync.',
+                    { ...(options || {}), durationMs: 8000 }
+                );
+            }
+            return originalShowToast(message, options);
+        };
+        try {
+            if (window.SutraSync && typeof window.SutraSync.status === 'function'
+                && window.SutraSync.status().state === 'encryption-error') renderSyncRecoveryGuidance();
+        } catch (_) { /* status is optional during degraded startup */ }
+    }
+
+    function syncGlassNotesClearance() {
+        if (window.innerWidth < 641 || window.innerWidth > 1024) return;
+        var body = document.body;
+        if (!body || body.dataset.view !== 'notes' || body.classList.contains('notes-split-active')) return;
+        if (!body.matches('[data-theme="glass"], [data-theme="liquidglass"]')) return;
+        var toolbar = document.querySelector('#view-notes .toolbar-wrapper');
+        var editor = document.getElementById('notesEditorContainer');
+        if (!toolbar || !editor) return;
+        var toolbarStyle = window.getComputedStyle(toolbar);
+        if (toolbarStyle.display === 'none' || toolbarStyle.visibility === 'hidden') return;
+        if (toolbarStyle.position === 'fixed' || toolbarStyle.position === 'absolute') return;
+
+        var toolbarRect = toolbar.getBoundingClientRect();
+        var editorRect = editor.getBoundingClientRect();
+        var visualOverlap = toolbarRect.bottom - editorRect.top;
+        var baselinePadding = 26;
+        var requiredPadding = visualOverlap > 0 ? Math.ceil(visualOverlap + 12) : baselinePadding;
+        var nextPadding = Math.max(baselinePadding, requiredPadding);
+        var editorPadding = parseFloat(window.getComputedStyle(editor).paddingTop) || 0;
+        if (editorPadding + 0.5 < nextPadding) {
+            editor.style.setProperty('padding-top', nextPadding + 'px', 'important');
+        }
+    }
+
+    function installGlassNotesClearance() {
+        var scheduled = false;
+        var schedule = function () {
+            if (scheduled) return;
+            scheduled = true;
+            window.requestAnimationFrame(function () {
+                scheduled = false;
+                try { syncGlassNotesClearance(); } catch (_) { /* layout repair is best effort */ }
+            });
+        };
+        window.addEventListener('resize', schedule);
+        document.addEventListener('animationend', function (event) {
+            if (event && event.target && event.target.closest && event.target.closest('#view-notes')) schedule();
+        });
+        var body = document.body;
+        if (body && typeof MutationObserver !== 'undefined') {
+            new MutationObserver(schedule).observe(body, {
+                attributes: true,
+                attributeFilter: ['class', 'data-theme', 'data-theme-key', 'data-view']
+            });
+        }
+        [0, 120, 260, 500, 700].forEach(function (delay) { window.setTimeout(schedule, delay); });
+    }
+
     function install() {
         originalSetActiveView = window.setActiveView;
         originalStartFocusSession = window.startFocusSession;
+        installSyncOutcomeGuard();
         installHistory();
         installFocusPreflight();
+        installGlassNotesClearance();
         var overlay = document.getElementById('studentOnboardingOverlay');
         var panel = document.getElementById('onboardingMainPanel');
         if (panel) new MutationObserver(installOnboardingExit).observe(panel, { childList: true, subtree: true });

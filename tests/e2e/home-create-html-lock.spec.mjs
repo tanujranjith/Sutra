@@ -124,6 +124,78 @@ test('HTML Pages keep Preview first and switch Code/Preview on phones', async ({
   await expect(editor.locator('.html-page-preview')).toBeVisible();
 });
 
+test('HTML Pages fill Create, isolate preview scrolling, and restore the Notes toolbar', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const shortPageId = await page.evaluate(() => window.SutraHTMLPages.createPage('Geometry HTML', { source: '<h1>Short HTML</h1>' }).id);
+  const editor = page.locator('#htmlPageEditor');
+  const frameElement = editor.locator('[data-html-preview] iframe');
+  await expect(editor).toBeVisible();
+  await expect(frameElement).toBeVisible();
+
+  const shortMetrics = await page.evaluate(() => {
+    const getRect = (selector) => document.querySelector(selector).getBoundingClientRect();
+    const view = getRect('#view-notes');
+    const html = getRect('#htmlPageEditor');
+    const host = getRect('#htmlPageEditor [data-html-preview]');
+    const iframe = getRect('#htmlPageEditor [data-html-preview] iframe');
+    return {
+      view,
+      html,
+      host,
+      iframe,
+      toolbarDisplay: getComputedStyle(document.querySelector('#view-notes .toolbar-wrapper')).display
+    };
+  });
+  expect(shortMetrics.toolbarDisplay).toBe('none');
+  expect(shortMetrics.html.top).toBeGreaterThanOrEqual(shortMetrics.view.top + 70);
+  expect(shortMetrics.html.bottom).toBeGreaterThanOrEqual(shortMetrics.view.bottom - 2);
+  expect(shortMetrics.html.height).toBeGreaterThan(800);
+  expect(Math.abs(shortMetrics.iframe.width - shortMetrics.host.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(shortMetrics.iframe.bottom - shortMetrics.host.bottom)).toBeLessThanOrEqual(1);
+
+  const source = '<!doctype html><html><head><style>body{margin:0}main{height:1800px}</style></head><body><main>Long HTML</main></body></html>';
+  await editor.locator('[data-html-edit-source]').click();
+  await editor.locator('[data-html-source]').fill(source);
+  await editor.locator('[data-html-edit-source]').click();
+  await expect(frameElement).toBeVisible();
+  const previewFrame = page.frameLocator('#htmlPageEditor [data-html-preview] iframe');
+  await expect(previewFrame.locator('main')).toHaveText('Long HTML');
+  const longMetrics = {
+    frameHeight: await frameElement.evaluate((node) => node.clientHeight),
+    bodyHeight: await previewFrame.locator('html').evaluate((node) => node.scrollHeight)
+  };
+  expect(longMetrics.bodyHeight).toBeGreaterThan(longMetrics.frameHeight);
+
+  await page.evaluate((id) => {
+    const normalPage = window.flowAtelier.pages.find((item) => item.id !== id && !item.htmlDocument);
+    window.loadPage(normalPage.id);
+  }, shortPageId);
+  await expect(editor).toBeHidden();
+  await expect(page.locator('#view-notes .toolbar-wrapper')).toBeVisible();
+  await page.evaluate((id) => window.loadPage(id), shortPageId);
+  await expect(editor).toBeVisible();
+  await expect(page.locator('#view-notes .toolbar-wrapper')).toBeHidden();
+});
+
+test('HTML Pages keep a bounded preview at the compact desktop breakpoint', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openApp(page);
+  await page.evaluate(() => window.SutraHTMLPages.createPage('Compact HTML', { source: '<h1>Compact preview</h1>' }));
+  const editor = page.locator('#htmlPageEditor');
+  const frame = editor.locator('[data-html-preview] iframe');
+  await expect(editor).toBeVisible();
+  await expect(frame).toBeVisible();
+  const metrics = await page.evaluate(() => {
+    const rect = (selector) => document.querySelector(selector).getBoundingClientRect();
+    return { view: rect('#view-notes'), html: rect('#htmlPageEditor'), iframe: rect('#htmlPageEditor [data-html-preview] iframe'), toolbar: getComputedStyle(document.querySelector('#view-notes .toolbar-wrapper')).display, documentWidth: document.documentElement.scrollWidth };
+  });
+  expect(metrics.toolbar).toBe('none');
+  expect(metrics.html.height).toBeGreaterThan(metrics.view.height * 0.75);
+  expect(metrics.iframe.bottom).toBeLessThanOrEqual(metrics.html.bottom + 1);
+  expect(metrics.documentWidth).toBeLessThanOrEqual(1024);
+});
+
 test('Create notes scroll underneath the frosted desktop tab bar', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const api = require('../../src/features/workspace/timeline-drag.js');
 
-function setup(initial = [], flush = async () => {}) {
+function setup(initial = [], flush = async () => {}, homeworkTitle = 'Canonical essay') {
     const timeBlocks = structuredClone(initial);
     globalThis.flowAtelier = {
         timeBlocks,
@@ -17,7 +17,7 @@ function setup(initial = [], flush = async () => {}) {
             return {
                 tasks: [{
                     id: 'hw-1',
-                    title: 'Canonical essay',
+                    title: homeworkTitle,
                     courseId: 'english',
                     priority: 'high',
                     dueDate: '2026-07-20',
@@ -29,6 +29,17 @@ function setup(initial = [], flush = async () => {}) {
     };
     return timeBlocks;
 }
+
+test('preview keeps a long canonical Homework title for the Timeline block', () => {
+    const title = 'Canonical assignment ' + 'T'.repeat(1400);
+    setup([], async () => {}, title);
+    const preview = api.previewSchedule(
+        { source: 'homework', sourceId: 'hw-1' },
+        { date: '2026-07-18', start: '16:00', durationMinutes: 45 }
+    );
+    assert.equal(preview.item.title, title);
+    assert.equal(preview.item.title.length, title.length);
+});
 
 test('preview rejects occupied time and allows an exact adjacent fit', () => {
     const rows = setup([{ id: 'busy', date: '2026-07-14', start: '10:00', end: '11:00', name: 'Class' }]);

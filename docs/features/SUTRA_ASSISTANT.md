@@ -166,8 +166,11 @@ unlocked notes and retrieves ranked quoted spans using text, fuzzy, metadata,
 backlink, and recency signals. Grounded replies show a **Sources used** panel
 with note title, heading path, exact excerpt, update date, confidence, and why
 the source matched. Source links open the note directly. Locked-note bodies are
-always excluded from Assistant context; safe metadata may identify a locked
-source without quoting or linking its contents.
+excluded by default; if you explicitly ask about an identified locked page,
+Assistant asks for one-time permission and the page PIN before including that
+page in the current request. The grant does not unlock the editor, change saved
+privacy settings, or authorize later requests. Without that grant, safe metadata
+may identify a locked source without quoting or linking its contents.
 Context collection also preserves the canonical locked document: the blank
 editor privacy surface must never be copied back into the protected note.
 
@@ -199,7 +202,9 @@ Provider context is selected deterministically in this order: explicit targets,
 current screen, selected text, linked notes/assignments, course context, due or
 active work, enabled relevant memories, then recent conversation when enabled.
 Locked sources, disabled/expired memories, secrets, credentials, unrelated areas,
-and unnecessary history are excluded. Model-aware budgets reserve answer capacity
+and unnecessary history are excluded. An explicitly requested locked page is the
+exception only after the one-time permission and page-PIN flow for that request;
+the grant is page-scoped and is not persisted. Model-aware budgets reserve answer capacity
 and account for attachments. Oversized structured records are compressed locally
 while retaining identifiers, titles, dates, relationships, and source links; Sutra
 does not split a record mid-object. The receipt discloses reductions and offers a

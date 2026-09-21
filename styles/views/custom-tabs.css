@@ -236,6 +236,32 @@
     flex: 1;
 }
 
+.ctab-html-runtime {
+    width: 100%;
+    min-height: 240px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border, rgba(127, 127, 127, 0.2));
+    border-radius: 10px;
+    background: var(--bg-primary, #fff);
+}
+
+.ctab-html-runtime iframe,
+.ctab-html-preview-surface iframe {
+    width: 100%;
+    border: 0;
+    display: block;
+    background: #fff;
+}
+
+.ctab-html-runtime .sutra-embed-capability-warning,
+.ctab-html-preview-surface .sutra-embed-capability-warning {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--surface-border, rgba(127, 127, 127, 0.2));
+    color: var(--text-secondary, #888);
+    font-size: 0.7rem;
+    line-height: 1.35;
+}
+
 .ctab-empty-msg {
     color: var(--text-muted, var(--text-secondary, #888));
     font-size: 0.86rem;
@@ -679,6 +705,112 @@
 
 .ctab-picker-cat:first-of-type {
     margin-top: 4px;
+}
+
+/* ---------- custom HTML editor ---------- */
+
+body.ctab-html-editor-open { overflow: hidden; }
+
+.ctab-html-editor-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 4100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(10, 10, 16, 0.58);
+    backdrop-filter: blur(3px);
+}
+
+.ctab-html-editor-panel {
+    width: min(980px, 100%);
+    max-height: min(88vh, 800px);
+    overflow-y: auto;
+    padding: 18px 20px 20px;
+    border: 1px solid var(--surface-border, rgba(127, 127, 127, 0.25));
+    border-radius: var(--radius, 16px);
+    background: var(--bg-elevated, #fff);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.ctab-html-editor-head,
+.ctab-html-editor-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ctab-html-editor-head { margin-bottom: 4px; }
+.ctab-html-editor-subtitle,
+.ctab-html-editor-help,
+.ctab-html-network-note,
+.ctab-html-editor-status {
+    color: var(--text-secondary, #888);
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+.ctab-html-editor-subtitle { margin: 0 0 14px; }
+.ctab-html-editor-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.9fr);
+    gap: 16px;
+}
+.ctab-html-editor-source,
+.ctab-html-editor-preview { min-width: 0; }
+.ctab-html-editor-label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--text-primary, inherit);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+.ctab-html-editor-input {
+    display: block;
+    width: 100%;
+    min-height: 260px;
+    resize: vertical;
+    padding: 11px 12px;
+    border: 1px solid var(--surface-border, rgba(127, 127, 127, 0.25));
+    border-radius: 10px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, inherit);
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+.ctab-html-editor-input:focus {
+    outline: 2px solid var(--accent, #6c5ce7);
+    outline-offset: -1px;
+}
+.ctab-html-editor-help,
+.ctab-html-network-note { margin: 7px 0 0; }
+.ctab-html-network-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 14px;
+    color: var(--text-primary, inherit);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+.ctab-html-network-choice input { margin-top: 2px; accent-color: var(--accent, #6c5ce7); }
+.ctab-html-network-note { color: var(--text-secondary, #888); }
+.ctab-html-preview-surface {
+    min-height: 240px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border, rgba(127, 127, 127, 0.2));
+    border-radius: 10px;
+    background: var(--bg-primary, #fff);
+}
+.ctab-html-editor-status { min-height: 1.4em; margin: 12px 0; }
+.ctab-html-editor-footer { justify-content: flex-end; }
+.ctab-html-editor-footer .ctab-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 700px) {
+    .ctab-html-editor-overlay { align-items: flex-start; padding: 10px; }
+    .ctab-html-editor-panel { max-height: 94vh; padding: 14px; }
+    .ctab-html-editor-layout { grid-template-columns: 1fr; }
+    .ctab-html-editor-input { min-height: 220px; }
 }
 
 .ctab-note-picker-list {

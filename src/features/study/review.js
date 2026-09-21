@@ -2500,7 +2500,7 @@ render();
             <form id="reviewCreateSetForm" class="review-create-form" autocomplete="off">
                 <section class="review-create-meta-card">
                     <label class="review-field"><span>Set title</span>
-                        <input id="reviewCreateTitle" type="text" required maxlength="120" placeholder="e.g. Cell biology vocabulary" value="${escapeHtml(draft.title)}" />
+                        <input id="reviewCreateTitle" type="text" required placeholder="e.g. Cell biology vocabulary" value="${escapeHtml(draft.title)}" />
                     </label>
                     <label class="review-field"><span>Description (optional)</span>
                         <textarea id="reviewCreateDesc" rows="2" placeholder="A short note about what this set covers">${escapeHtml(draft.description)}</textarea>

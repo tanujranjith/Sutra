@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260830-revoke2",
-    "hash": "2c25873166774cf9"
+    "stamp": "20260913-energy-removal-legacy1",
+    "hash": "30298f083707dc90"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -32,16 +32,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260907-locked-context-1",
-    "hash": "429f1424e1f789ec"
+    "stamp": "20260913-locked-assistant-manifest2",
+    "hash": "b545c07367f3df20"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260905-habitread1",
-    "hash": "bf9348773df28a66"
+    "stamp": "20260921-backup-snapshot3",
+    "hash": "57a8c0286137d1bd"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -52,8 +52,8 @@
     "hash": "40d49239acfc800c"
   },
   "src/core/dom-safety.js": {
-    "stamp": "20260613-harden1",
-    "hash": "3298453c79e87b74"
+    "stamp": "20260913-custom-html-safety1",
+    "hash": "b603e1a961a34644"
   },
   "src/core/error-reporter.js": {
     "stamp": "20260812-error1",
@@ -68,8 +68,8 @@
     "hash": "0cd88826ae6aeb3c"
   },
   "src/core/migrations.js": {
-    "stamp": "20260813-pdf2",
-    "hash": "ef85c157317a6b60"
+    "stamp": "20260913-energy-removal-migrations1",
+    "hash": "14e5d12d10823f2a"
   },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",
@@ -100,20 +100,20 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20260825-sol2-1",
-    "hash": "cd6d317f94b67645"
+    "stamp": "20260913-locked-assistant-permissions1",
+    "hash": "adcc8905d68c7e3f"
   },
   "src/domain/homework-store.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "110d121df2a62695"
+    "stamp": "20260916-integration-homework-store1",
+    "hash": "0e02a60c40c66667"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
     "hash": "f7b9eb86d508c54f"
   },
   "src/domain/import-engine.js": {
-    "stamp": "20260807-ics2",
-    "hash": "c275198eea7edbcd"
+    "stamp": "20260913-content-limits-import1",
+    "hash": "6b7ca67ec808622e"
   },
   "src/domain/learning-engine.js": {
     "stamp": "20260710-learning1",
@@ -132,12 +132,12 @@
     "hash": "d164c6f2cac51a8c"
   },
   "src/domain/student-engine.js": {
-    "stamp": "20260710-student-engine1",
-    "hash": "b3906892b42c7000"
+    "stamp": "20260913-energy-removal-engine1",
+    "hash": "8a017b92eaa6e86f"
   },
   "src/domain/student-life.js": {
-    "stamp": "20260710-student-life1",
-    "hash": "10276452f1173261"
+    "stamp": "20260913-energy-removal-life1",
+    "hash": "86973127ffdda611"
   },
   "src/domain/workspace-entity-registry.js": {
     "stamp": "20260728-entity1",
@@ -168,8 +168,8 @@
     "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20260807-ics1",
-    "hash": "095bc3670ad9c824"
+    "stamp": "20260913-content-limits-semester1",
+    "hash": "244d6d49e2babdd5"
   },
   "src/features/assistant/action-system.js": {
     "stamp": "20260807-agentplans2",
@@ -184,8 +184,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260907-locked-context-1",
-    "hash": "26861b11a3acf7c5"
+    "stamp": "20260913-locked-assistant-flow2",
+    "hash": "82b6cabc8c9ddc28"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -204,8 +204,8 @@
     "hash": "7f739452d174ca04"
   },
   "src/features/assistant/sutra-assistant-memory.js": {
-    "stamp": "20260716-syncwipe1",
-    "hash": "115268116c9d2f3d"
+    "stamp": "20260913-locked-assistant-memory1",
+    "hash": "87def3fca46ffcab"
   },
   "src/features/assistant/sutra-capability-registry.js": {
     "stamp": "20260807-surfaces2",
@@ -216,8 +216,8 @@
     "hash": "985bc2dccc287616"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "491cfe8917ae3c89"
+    "stamp": "20260913-locked-assistant-knowledge2",
+    "hash": "d6e93007ae1beb6c"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -228,52 +228,56 @@
     "hash": "16d76c3e5d3d41a8"
   },
   "src/features/feature-registry.js": {
-    "stamp": "20260709-features1",
-    "hash": "3b1743d4329b2d0a"
+    "stamp": "20260917-features-style-reuse1",
+    "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260807-pagelinks1",
-    "hash": "b1d98ccd341fd3bb"
+    "stamp": "20260912-imagepaste1",
+    "hash": "ed1044a7270f629b"
   },
   "src/features/search/global-search-engine.js": {
     "stamp": "20260825-gsengine4",
     "hash": "1f414bc61c0d7c03"
   },
   "src/features/search/global-search-modal.js": {
-    "stamp": "20260905-search-focus1",
-    "hash": "b301eca9a4b51363"
+    "stamp": "20260917-search-focus2",
+    "hash": "d38461e08fe14a83"
   },
   "src/features/study/ap-study.js": {
-    "stamp": "20260707-batch1",
-    "hash": "8e602082b3a0e4a0"
+    "stamp": "20260913-content-limits-ap1",
+    "hash": "e06b7a0b7d124014"
+  },
+  "src/features/study/class-dashboard-actions.js": {
+    "stamp": "20260916-class-ec-delete1",
+    "hash": "8579da8954653d25"
   },
   "src/features/study/code-highlight.js": {
     "stamp": "20260620-hl1",
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260826-classless-edit1",
-    "hash": "024d7acc6e783185"
+    "stamp": "20260917-homework-merge2",
+    "hash": "1f3b6446e96d1e76"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
     "hash": "9683cdb464e6b16c"
   },
   "src/features/study/review.js": {
-    "stamp": "20260905-review-focus2",
-    "hash": "6f0c68206b093b9c"
+    "stamp": "20260913-content-limits-review1",
+    "hash": "bc11c47b834a6b39"
   },
   "src/features/workspace/activation-metrics.js": {
     "stamp": "20260702-activation1",
     "hash": "987666d734d79136"
   },
   "src/features/workspace/audit-fixes.js": {
-    "stamp": "20260825-oxremed2",
-    "hash": "ba3d9bcc87cd1c56"
+    "stamp": "20260918-glass-clearance5",
+    "hash": "dd9049c797a135c3"
   },
   "src/features/workspace/backup-confidence.js": {
-    "stamp": "20260712-bc1",
-    "hash": "0f1060b20127996f"
+    "stamp": "20260915-cloud1",
+    "hash": "0d31a21889c4db60"
   },
   "src/features/workspace/business-workspace.js": {
     "stamp": "20260807-opsqueue1",
@@ -292,16 +296,20 @@
     "hash": "447a04ed9cb49a41"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20260808-contextual-ui10",
-    "hash": "838a9ef90334af9c"
+    "stamp": "20260913-page-tree-guides1",
+    "hash": "d2d01e3d4679216e"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "1bf6440c0e3f0ae5"
+    "stamp": "20260921-html-widget-mode2",
+    "hash": "5e135501adb9ba9b"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
     "hash": "88323393a0652f0b"
+  },
+  "src/features/workspace/direct-pdf-export.js": {
+    "stamp": "20260913-direct-pdf2",
+    "hash": "66cf045204ce8513"
   },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
@@ -310,6 +318,10 @@
   "src/features/workspace/help-docs-refresh.js": {
     "stamp": "20260823-combined1",
     "hash": "0ad9808ef25fcae8"
+  },
+  "src/features/workspace/html-page-transfer-compat.js": {
+    "stamp": "20260913-html-transfer2",
+    "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
     "stamp": "20260825-oxremed1",
@@ -384,16 +396,16 @@
     "hash": "ba427d1608b781d6"
   },
   "src/features/workspace/timeline-drag.js": {
-    "stamp": "20260730-pushTime1",
-    "hash": "62041ecaea7e198f"
+    "stamp": "20260913-content-limits-timeline1",
+    "hash": "70b4f0dc4533a050"
   },
   "src/features/workspace/today-command-center.js": {
     "stamp": "20260721-radar-consolidation1",
     "hash": "9000432533f4d577"
   },
   "src/features/workspace/today-dashboard.js": {
-    "stamp": "20260816-home-labels1",
-    "hash": "b8326873db0f25e2"
+    "stamp": "20260920-home-calm4",
+    "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
     "stamp": "20260809-todaytimer1",
@@ -428,8 +440,8 @@
     "hash": "9d3be0ba07f108c3"
   },
   "src/sync/sync-crypto.js": {
-    "stamp": "20260716-sync6",
-    "hash": "f1ec6a1aad7d1d83"
+    "stamp": "20260917-sync-encryption1",
+    "hash": "1f11dd3cd9f06cef"
   },
   "src/sync/sync-diff.js": {
     "stamp": "20260716-sync6",
@@ -448,8 +460,8 @@
     "hash": "49c1062cf4f287b2"
   },
   "src/sync/sync-protocol.js": {
-    "stamp": "20260906-notificationlocal1",
-    "hash": "59cb23eac0460ecf"
+    "stamp": "20260913-energy-removal-sync1",
+    "hash": "06cfa3a59c0c982d"
   },
   "src/sync/sync-store.js": {
     "stamp": "20260805-device-session1",
@@ -460,8 +472,8 @@
     "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
-    "stamp": "20260708-toolbar-compact",
-    "hash": "35abae7df9676466"
+    "stamp": "20260914-export-modal",
+    "hash": "f65f38a62c69d73b"
   },
   "src/ui/sidebar-page-actions-menu.js": {
     "stamp": "20260803-overflow1",
@@ -480,8 +492,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260825-oxremed4",
-    "hash": "63889ff2e73fad67"
+    "stamp": "20260916-integration-base1",
+    "hash": "f09fe4645df11eb2"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -512,16 +524,16 @@
     "hash": "3bcf3e999e605556"
   },
   "styles/features/global-search.css": {
-    "stamp": "20260825-gsstyles3",
-    "hash": "ec5b9fed4daf6503"
+    "stamp": "20260917-search-focus1",
+    "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260807-cohesion2",
-    "hash": "9a3783cbf7c875c1"
+    "stamp": "20260917-homework-merge1",
+    "hash": "3945e2302396321b"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20260821-htmlpages3",
-    "hash": "3d02270fdbca2fb5"
+    "stamp": "20260912-html-layout1",
+    "hash": "70f24d8f6338e0af"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -564,8 +576,8 @@
     "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
-    "stamp": "20260823-credential-vault1",
-    "hash": "6cd1c3908b2d3ebd"
+    "stamp": "20260915-cloud2",
+    "hash": "5cd5ccc11565d718"
   },
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
@@ -600,20 +612,20 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260824-mobile-gs1",
-    "hash": "a34d325349503638"
+    "stamp": "20260916-integration-mobile1",
+    "hash": "ec13fbe97cdd22ca"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
     "hash": "8b6daa5488340471"
   },
   "styles/themes/glass.css": {
-    "stamp": "20260712-glass-fix",
-    "hash": "125b698224d06332"
+    "stamp": "20260917-glass-cohesion1",
+    "hash": "b43d6d02444d22ba"
   },
   "styles/themes/macos26-redesign.css": {
-    "stamp": "20260712-glass-fix",
-    "hash": "140d902be25888a7"
+    "stamp": "20260913-glass-surfaces1",
+    "hash": "7e6662f56c7db9a1"
   },
   "styles/themes/signature-presets.css": {
     "stamp": "20260807-signaturethemes5",
@@ -624,20 +636,20 @@
     "hash": "3208734a65002e8c"
   },
   "styles/themes/theme-cohesion.css": {
-    "stamp": "20260820-liquidglass-toolbar2",
-    "hash": "36dc993f217c64a4"
+    "stamp": "20260917-glass-cohesion4",
+    "hash": "2f862a9fc10083c5"
   },
   "styles/views/assistant-view.css": {
     "stamp": "20260818-cache-refresh1",
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260904-nav-overflow1",
-    "hash": "754b1899b7573544"
+    "stamp": "20260913-glass-notes1",
+    "hash": "a1746177f7db8aa0"
   },
   "styles/views/custom-tabs.css": {
-    "stamp": "20260706-ctabs3",
-    "hash": "af0b8bb807caf0f3"
+    "stamp": "20260913-custom-html-widget1",
+    "hash": "15051464153a295b"
   },
   "styles/views/focus-session.css": {
     "stamp": "20260807-atmospheres1",

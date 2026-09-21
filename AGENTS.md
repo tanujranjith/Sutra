@@ -204,6 +204,14 @@ For provider status and adapter rules, use [`docs/SUTRA_CLOUD_PROVIDERS.md`](doc
 
 ## Multi-device sync (Sutra Sync)
 
+Sutra Cloud is the shared user-facing hub for Sync and encrypted backups.
+Its coordinator derives separate local-save, replication, and backup status;
+the underlying engines, vaults, passphrases and recovery contracts remain
+independent. The canonical control API is `window.SutraCloud`; legacy
+`SutraSync` and `SutraCloudSync` APIs remain supported. Opening the hub does
+not enable networking. Sync runs automatically after explicit enable/unlock;
+scheduled backups require separate opt-in and a session backup passphrase.
+
 Sutra Sync is incremental, end-to-end-encrypted multi-device sync — a system
 **separate from backups** (sync replicates changes; backups preserve moments;
 both must keep working independently). The normative spec is

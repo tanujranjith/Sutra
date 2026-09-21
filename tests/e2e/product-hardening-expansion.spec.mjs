@@ -227,6 +227,81 @@ test('folders group note pages, collapse their children, and round-trip', async 
   expect(result.childTitles).toEqual(expect.arrayContaining([`${folderName}::Chapter 1`, `${folderName}::Chapter 2`]));
 });
 
+test('nested page rows expose non-interactive indentation guides across rerenders and themes', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
+  const folderName = 'QA Guide Folder';
+  await page.evaluate(() => window.createNewFolder());
+  await page.locator('#newPageName').fill(folderName);
+  await page.locator('#newPageConfirmBtn').click();
+
+  const ids = await page.evaluate((name) => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const folder = hooks.getPagesForSpace(hooks.getActiveSpaceId()).find(item => item.title === name);
+    const child = hooks.createNoteInActiveSpace(`${name}::Chapter 1`, '<p>Child page</p>');
+    const grandchild = hooks.createNoteInActiveSpace(`${name}::Chapter 1::Topic`, '<p>Grandchild page</p>');
+    return { folder: folder.id, child: child.id, grandchild: grandchild.id };
+  }, folderName);
+
+  const row = (id) => page.locator(`#pagesList > .page-item[data-page-id="${id}"]`);
+  await expect(row(ids.grandchild)).toHaveAttribute('data-page-tree-depth', '2');
+  const metrics = await page.evaluate((pageIds) => pageIds.map((id) => {
+    const rowNode = document.querySelector(`#pagesList > .page-item[data-page-id="${id}"]`);
+    const guides = Array.from(rowNode.children).find(child => child.classList.contains('page-tree-guides'));
+    const lines = guides ? Array.from(guides.children) : [];
+    return {
+      depth: rowNode.dataset.pageTreeDepth,
+      guideHidden: guides.hidden,
+      guideAriaHidden: guides.getAttribute('aria-hidden'),
+      guidePointerEvents: getComputedStyle(guides).pointerEvents,
+      lineCount: lines.length,
+      lineLeft: lines.map(line => line.style.left),
+      lineHeight: lines.map(line => line.getBoundingClientRect().height),
+      lineColor: lines[0] ? getComputedStyle(lines[0]).backgroundColor : ''
+    };
+  }), [ids.folder, ids.child, ids.grandchild]);
+
+  expect(metrics).toEqual([
+    expect.objectContaining({ depth: '0', guideHidden: true, lineCount: 0 }),
+    expect.objectContaining({
+      depth: '1',
+      guideHidden: false,
+      guideAriaHidden: 'true',
+      guidePointerEvents: 'none',
+      lineCount: 1,
+      lineLeft: ['12px']
+    }),
+    expect.objectContaining({
+      depth: '2',
+      guideHidden: false,
+      guideAriaHidden: 'true',
+      guidePointerEvents: 'none',
+      lineCount: 2,
+      lineLeft: ['12px', '32px']
+    })
+  ]);
+  expect(metrics[1].lineHeight[0]).toBeGreaterThan(0);
+  expect(metrics[1].lineColor).not.toBe('rgba(0, 0, 0, 0)');
+
+  const snapshot = await page.evaluate(() => window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false }));
+  await page.evaluate((payload) => window.deserializeWorkspace(payload), snapshot);
+  await expect(row(ids.grandchild)).toHaveAttribute('data-page-tree-depth', '2');
+  await expect(row(ids.grandchild)).toBeVisible();
+  await expect(row(ids.grandchild).locator('.page-tree-guides')).toBeVisible();
+
+  await page.evaluate(async () => {
+    await window.applyAtelierTheme('dark', { persist: false });
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const line = document.querySelector('#pagesList .page-tree-guide-line');
+    return line ? getComputedStyle(line).backgroundColor : '';
+  })).not.toBe('rgba(0, 0, 0, 0)');
+
+  await page.locator('#sidebarToggle').click();
+  await expect(page.locator('#sidebar')).toHaveClass(/collapsed/);
+  await expect(row(ids.grandchild).locator('.page-tree-guides')).toBeHidden();
+});
+
 test('Canvas pages are space-scoped, editable, searchable, assistant-bounded, and persistent', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(async () => {

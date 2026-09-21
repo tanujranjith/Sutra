@@ -143,6 +143,8 @@ test('life: cockpit, goal drawer milestones, and budgets persist', async ({ page
     const cockpit = document.getElementById('lifeCockpit');
     const checkin = document.getElementById('lifeCheckInCard');
     const budgetsCard = document.getElementById('lifeBudgetsCard');
+    const wellness = document.getElementById('lifePage-wellness');
+    const sleepTable = document.getElementById('lifeSleepTableBody')?.closest('table');
 
     const goalId = window.getLifeRows('goals')[0].id;
     window.openLifeGoalDrawer(goalId);
@@ -156,6 +158,9 @@ test('life: cockpit, goal drawer milestones, and budgets persist', async ({ page
     return {
       cockpitCards: cockpit ? cockpit.querySelectorAll('.cc-signal-card').length : 0,
       checkinPresent: checkin ? !!checkin.querySelector('#lifeCheckInMood') : false,
+      retiredEnergyControls: document.querySelectorAll('#lifeCheckInEnergy, #wellnessEnergyInput, [data-life-sleep-field="nextDayEnergy"]').length,
+      wellnessMentionsEnergy: wellness ? /\benergy\b/i.test(wellness.textContent || '') : false,
+      sleepTableMentionsEnergy: sleepTable ? /\benergy\b/i.test(sleepTable.textContent || '') : false,
       budgetRows: budgetsCard ? budgetsCard.querySelectorAll('.life-budget-row').length : 0,
       drawerOpen,
       milestoneInputs,
@@ -166,6 +171,9 @@ test('life: cockpit, goal drawer milestones, and budgets persist', async ({ page
   });
   expect(result.cockpitCards).toBeGreaterThanOrEqual(3);
   expect(result.checkinPresent).toBe(true);
+  expect(result.retiredEnergyControls).toBe(0);
+  expect(result.wellnessMentionsEnergy).toBe(false);
+  expect(result.sleepTableMentionsEnergy).toBe(false);
   expect(result.budgetRows).toBeGreaterThanOrEqual(1);
   expect(result.drawerOpen).toBe(true);
   expect(result.milestoneInputs).toBeGreaterThanOrEqual(2);

@@ -71,6 +71,24 @@ test('Review-card generation parses mixed material and de-dupes within a batch',
   expect(result.prompts.filter((p) => p === 'Photosynthesis').length).toBe(1);
 });
 
+test('Review extraction and deck creation preserve long authored content', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const question = 'Question ' + 'Q'.repeat(260);
+    const answer = 'Answer ' + 'A'.repeat(460);
+    const pairs = window.SutraReviewGenerator.extractPairs(`<h2>${question}</h2><p>${answer}</p>`);
+    const deck = window.createReviewDeck({ name: 'Deck ' + 'D'.repeat(180) });
+    return {
+      question: pairs[0] && pairs[0].q,
+      answer: pairs[0] && pairs[0].a,
+      deckName: deck && deck.name
+    };
+  });
+  expect(result.question).toBe('Question ' + 'Q'.repeat(260));
+  expect(result.answer).toBe('Answer ' + 'A'.repeat(460));
+  expect(result.deckName).toBe('Deck ' + 'D'.repeat(180));
+});
+
 test('Duplicate detection flags candidates that already exist in a deck', async ({ page }) => {
   await openApp(page);
 

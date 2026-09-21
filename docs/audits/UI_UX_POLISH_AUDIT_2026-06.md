@@ -22,7 +22,7 @@ Ranked by impact ÷ effort. Detail and evidence are in the sections that follow.
 | 5 | **Establish a real token spine** — spacing, type, and z-index scales | A `--space-1..7` scale exists but is used ~14 times against **~2,000 hardcoded px** values; **zero** font-size tokens; **zero** z-index tokens (one value is `2147483000`). This unblocks every other polish item. | P1 / L |
 | 6 | **Unify the modal contract** | `SutraModalManager` hand-registers ~27 selectors with **5** different "open" signals and **7** close-button conventions (`app.js:32026-32143`); the `[aria-label^="Close"]` Escape match can fire a destructive control. | P1 / M |
 | 7 | **Consolidate button families** | 8+ parallel families each re-inventing primary/ghost/danger — **3 different danger reds, 2 disabled opacities, near-zero loading state.** | P1 / M |
-| 8 | **Fix sub-32px touch targets** — `.acc-refresh` (17–21px) and the Life energy slider (16px) | Both fall below the 32px floor on phones (mobile-audit confirmed). Flex shrink + Settings-scoped slider CSS not reaching the Life view. | P1 / S |
+| 8 | **Fix sub-32px touch targets** — `.acc-refresh` (17–21px) | The control falls below the 32px floor on phones (mobile-audit confirmed). | P1 / S |
 | 9 | **Quiet the Today top bar** — default the live seconds clock OFF and hide the literal "⌘K" label on touch | A per-second DOM write/reflow in the top bar (`app.js:1893,2201`) + a desktop shortcut shown on phones (`Sutra.html:457`). | P1 / S |
 | 10 | **Theme robustness: derive semantic tokens per theme** | `--sutra-warning` (and scrollbar tokens) stay light-mode on dark AI/glass/macos themes — a real wrong-color bug. `applyCustomThemeVariables` (`app.js:29186`) and glass/macos theme files. | P1 / S |
 
@@ -173,7 +173,6 @@ Rubric per view: **Layout · Hierarchy · States · Mobile · Theme · A11y.** S
 - Clean stat cards (Application Completion / Deadlines / Scholarship Pipeline / SAT Countdown) with sensible empty placeholders ("--", "0%").
 
 ### Life  ·  `app.js` renderLifeWorkspace  ·  `.tmp/mobile-audit/phablet-life.png`
-- **Mobile a11y:** Daily Check-in energy slider `#lifeCheckInEnergy` is only ~16px tall — `.cc-range` has no height and the tall Settings slider CSS is `.cc-page`-scoped (`command-center.css:363` vs `settings-redesign.css:834`), so it doesn't reach Life. Add an unscoped `min-height:28px`.
 - **Mobile:** bottom content ("Stress 5/10") clipped by the storage bar (§5).
 - Nice serif hero + 2×2 action grid; stat cards consistent with other views.
 
@@ -193,7 +192,7 @@ Rubric per view: **Layout · Hierarchy · States · Mobile · Theme · A11y.** S
 
 - **No horizontal overflow** anywhere — 0 across all 12 views (full-app-audit `MOBILE_CRAWL`) and 0 overflowers in mobile-audit. Strong.
 - **Bottom-bar occlusion (P1):** the fixed Save/Export/Import bar overlaps the last content row on College/Life/Business. Clearance (`--responsive-bottom-clearance`) only targets `.view` and is overridden to 84px (`mobile.css:1738-1741`), winning over `.view{padding-bottom:8px!important}` (`styles.css:18902`) only by load order — brittle, and custom scroll mounts (`#businessDashboardRoot`, `#lifeDashboard`, `#hwMainArea`) aren't guaranteed it.
-- **Sub-32px touch targets (P1):** `button.acc-refresh` (17–21px, Courses + Semester Setup); `input#lifeCheckInEnergy` (16px tall, Life). Bottom-nav tap targets are fine (full-app-audit `MOBILE_TAP_TARGETS` clean).
+- **Sub-32px touch targets (P1):** `button.acc-refresh` (17–21px, Courses + Semester Setup). Bottom-nav tap targets are fine (full-app-audit `MOBILE_TAP_TARGETS` clean).
 - **Fixed-panel "collisions"** flagged by `--deep` (notif-panel ×3, theme-panel ×3, sidebar-drawer, spaces-dropdown ×5, new-page-modal, feedback-modal) are mostly **expected overlap** of fixed overlays with the FAB/toggle they belong to — *review* rather than fix, but the spaces-dropdown (5) and new-page-modal warrant a look on narrow widths.
 - **"⌘K" desktop shortcut** rendered on phones (`Sutra.html:457`).
 
@@ -210,7 +209,6 @@ Severity: **P0** broken/inaccessible · **P1** noticeable polish/consistency · 
 | B03 | P1 | S | Toast → `aria-live` + dismiss; drop dup toast system | global | `Sutra.html:6464,324`; `app.js:54009` |
 | B04 | P1 | M | Mobile bottom-bar clearance on all scroll mounts (tokenize bar height) | mobile | `responsive-hardening.css:51`; `mobile.css:1738`; `styles.css:18902` |
 | B05 | P1 | S | `.acc-refresh` `flex:0 0 40px;min-width` (touch floor) | Courses/SemSetup mobile | `academic-command-center.css:24` |
-| B06 | P1 | S | Life energy slider min-height (unscope `.cc-range`) | Life mobile | `command-center.css:363`; `settings-redesign.css:834` |
 | B07 | P1 | S | Default top-bar seconds OFF; throttle clock | Today | `app.js:1893,2201` |
 | B08 | P1 | S | Hide literal "⌘K" on touch breakpoint | Today mobile | `Sutra.html:457` |
 | B09 | P1 | S | Timeline empty cell: suppress "0 events" when 0 | Timeline | `app.js:60057` |

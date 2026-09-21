@@ -121,6 +121,35 @@ test('sensitive concepts and locked records are stripped recursively', () => {
   assert.deepEqual(result.courses.nested.note, { id: 'locked-1', title: 'Locked', isLocked: true });
 });
 
+test('locked note content requires a one-request page-scoped grant', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowLockedNotes: true }) });
+  const context = {
+    activeNote: { id: 'locked-1', title: 'Locked', locked: true, content: 'PIN-protected text' }
+  };
+  const denied = privacy.filterContext(context);
+  assert.equal(denied.activeNote.content, undefined);
+  assert.ok(denied.accessReport.excludedSensitiveAreas.includes('locked_notes'));
+
+  const approved = privacy.filterContext(context, { authorizedPageIds: ['locked-1'] });
+  assert.equal(approved.activeNote.content, 'PIN-protected text');
+  assert.deepEqual(approved.accessReport.lockedNotesRead, ['locked-1']);
+  assert.ok(!approved.accessReport.excludedSensitiveAreas.includes('locked_notes'));
+});
+
+test('persisted allowLockedNotes cannot authorize a locked page by itself', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {}, allowLockedNotes: true }) });
+  const result = privacy.filterContext({
+    retrievedNotes: [{ id: 'locked-1', title: 'Locked', isLocked: true, quote: 'must stay hidden' }]
+  });
+  assert.equal(result.retrievedNotes[0].quote, undefined);
+  assert.ok(result.accessReport.excludedSensitiveAreas.includes('locked_notes'));
+
+  const approved = privacy.filterContext({
+    retrievedNotes: [{ noteId: 'locked-1', title: 'Locked', locked: true, quote: 'shared for this request' }]
+  }, { authorizedPageIds: ['locked-1'] });
+  assert.equal(approved.retrievedNotes[0].quote, 'shared for this request');
+});
+
 test('summary and custom-tab content obey workspace area policy', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'ask_per_area', areas: { workspace: 'ask' } }) });
   const denied = privacy.filterContext({ summary: 'Private dashboard text', customTab: { widgets: ['secret'] } });

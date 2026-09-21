@@ -11,8 +11,8 @@ const NOW = '2026-07-10T12:00:00.000Z';
 function workspace() {
   return {
     tasks: [
-      { id: 'essay', title: 'Submit essay', dueAt: '2026-07-11T12:00:00.000Z', priority: 'high', estimatedMinutes: 90, gradeImpact: 0.8, energy: 'high' },
-      { id: 'email', title: 'Email counselor', dueAt: '2026-07-12T12:00:00.000Z', priority: 'medium', estimatedMinutes: 15, energy: 'low' },
+      { id: 'essay', title: 'Submit essay', dueAt: '2026-07-11T12:00:00.000Z', priority: 'high', estimatedMinutes: 90, gradeImpact: 0.8 },
+      { id: 'email', title: 'Email counselor', dueAt: '2026-07-12T12:00:00.000Z', priority: 'medium', estimatedMinutes: 15 },
       { id: 'done', title: 'Finished', status: 'done', dueAt: '2026-07-10T13:00:00.000Z' }
     ],
     homeworkWorkspace: { tasks: [{ id: 'chem', title: 'Chemistry problems', dueAt: '2026-07-10T18:00:00.000Z', priority: 'high', estimatedMinutes: 45, gradeImpact: 0.55 }] },
@@ -24,8 +24,8 @@ function workspace() {
 
 test('student inbox is deterministic, excludes completed work, and blocks unmet dependencies', () => {
   const ws = workspace();
-  const first = student.getInbox(ws, { now: NOW, energy: 'medium' });
-  const second = student.getInbox(ws, { now: NOW, energy: 'medium' });
+  const first = student.getInbox(ws, { now: NOW });
+  const second = student.getInbox(ws, { now: NOW });
   assert.deepEqual(first, second);
   assert.equal(first.some(row => row.sourceId === 'done'), false);
   const essay = first.find(row => row.sourceId === 'essay');
@@ -38,9 +38,12 @@ test('ranking presets, pinning, snoozing, and workload use the same action model
   const ws = workspace();
   ws.taskDependencies = [];
   ws.studentDecisionState.pinned = ['task:email'];
-  assert.equal(student.recommendNext(ws, { now: NOW, preset: 'low_energy', energy: 'low' }).sourceId, 'email');
+  const balanced = student.recommendNext(ws, { now: NOW, preset: 'balanced' });
+  const legacyEnergyPreset = student.recommendNext(ws, { now: NOW, preset: 'low_energy', energy: 'low' });
+  assert.deepEqual(legacyEnergyPreset, balanced, 'removed Energy options fall back to the balanced ranking');
+  assert.equal(Object.prototype.hasOwnProperty.call(legacyEnergyPreset, 'energy'), false);
   ws.studentDecisionState.snoozed['task:email'] = '2026-07-12T00:00:00.000Z';
-  assert.notEqual(student.recommendNext(ws, { now: NOW, preset: 'low_energy', energy: 'low' }).sourceId, 'email');
+  assert.notEqual(student.recommendNext(ws, { now: NOW }).sourceId, 'email');
   const workload = student.getWorkload(ws, { now: NOW });
   assert.ok(workload.some(day => day.minutes >= 45));
 });

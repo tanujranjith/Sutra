@@ -282,6 +282,31 @@ body.settings-anchored-mode .top-nav {
   body[data-view="notes"]:not(.notes-split-active):not(.notes-pages-mode) #view-notes #notesEditorContainer {
     margin-top: -90px !important;
   }
+
+  /* HTML Pages hide the legacy formatting toolbar and own their preview
+     scrolling. Do not retain the ordinary Create toolbar reservation or the
+     page will stop short of the available viewport. */
+  body.html-page-active[data-view="notes"] #view-notes {
+    height: 100% !important;
+    overflow: hidden !important;
+    padding-top: var(--sutra-global-nav-height) !important;
+    padding-bottom: 0 !important;
+  }
+  body.html-page-active[data-view="notes"]:not(.notes-split-active):not(.notes-pages-mode) #view-notes #notesEditorContainer {
+    margin-top: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* Tablet Notes keeps the app bar in the shell and the document below it. The
+   shared sticky toolbar lives inside that already-offset content column, so a
+   navigation-height sticky inset would reserve the header twice and let the
+   editor title slide underneath the toolbar. Desktop has its own single-scroll
+   treatment above; phones remove the global bar entirely. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  body[data-view="notes"]:not(.notes-split-active) #view-notes .toolbar-wrapper {
+    top: 0 !important;
+  }
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -419,6 +444,22 @@ body.settings-anchored-mode #view-settings .cc-page {
   border: 1px solid transparent;
   border-radius: 9px;
 }
+.sidebar .page-tree-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.sidebar .page-tree-guide-line {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  border-radius: 999px;
+  background: var(--sutra-color-border);
+  opacity: 0.72;
+}
+.sidebar.collapsed .page-tree-guides { display: none; }
 .sidebar .page-item:hover {
   border-color: color-mix(in srgb, var(--sutra-color-border) 76%, transparent);
   background: color-mix(in srgb, var(--sutra-color-accent) 6%, transparent);

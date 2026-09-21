@@ -384,8 +384,8 @@ function normalizeCanvasObject(rawObject, seenIds) {
         groupId: typeof rawObject.groupId === 'string' && rawObject.groupId ? rawObject.groupId : '',
         // Linked-note cards are references, not copies. Older builds persisted a
         // plaintext excerpt that could reveal a source after it was locked.
-        text: type === 'linked-note' ? '' : (typeof rawObject.text === 'string' ? rawObject.text.slice(0, 8000) : ''),
-        label: typeof rawObject.label === 'string' ? rawObject.label.slice(0, 500) : '',
+        text: type === 'linked-note' ? '' : (typeof rawObject.text === 'string' ? rawObject.text : ''),
+        label: typeof rawObject.label === 'string' ? rawObject.label : '',
         color: normalizeCanvasColor(rawObject.color, ''),
         fill: normalizeCanvasColor(rawObject.fill, ''),
         stroke: normalizeCanvasColor(rawObject.stroke, ''),
@@ -418,7 +418,7 @@ function normalizeCanvasObject(rawObject, seenIds) {
     if (rawObject.url) normalized.url = normalizeExternalUrl(rawObject.url);
     if (Array.isArray(rawObject.cells)) {
         normalized.cells = rawObject.cells.slice(0, 100).map(row => (
-            Array.isArray(row) ? row.slice(0, 24).map(cell => String(cell || '').slice(0, 1000)) : []
+            Array.isArray(row) ? row.slice(0, 24).map(cell => String(cell || '')) : []
         ));
     }
     return normalized;
@@ -437,7 +437,7 @@ function normalizeCanvasConnection(rawConnection, objectIds, seenIds) {
         id,
         fromId,
         toId,
-        label: typeof rawConnection.label === 'string' ? rawConnection.label.slice(0, 500) : '',
+        label: typeof rawConnection.label === 'string' ? rawConnection.label : '',
         direction: ['none', 'forward', 'backward', 'both'].includes(rawConnection.direction) ? rawConnection.direction : 'forward',
         color: normalizeCanvasColor(rawConnection.color, ''),
         strokeWidth: normalizeCanvasNumber(rawConnection.strokeWidth, 2, 1, 16),
@@ -458,7 +458,7 @@ function normalizeCanvasGroup(rawGroup, objectIds, seenIds) {
     return {
         ...rawGroup,
         id,
-        label: typeof rawGroup.label === 'string' ? rawGroup.label.slice(0, 500) : '',
+        label: typeof rawGroup.label === 'string' ? rawGroup.label : '',
         objectIds: Array.from(new Set(objectIdsList)),
         locked: rawGroup.locked === true,
         createdAt: typeof rawGroup.createdAt === 'string' ? rawGroup.createdAt : new Date().toISOString(),
@@ -2097,7 +2097,7 @@ function updateToolbarTimeWidget() {
                 const toolbarOverlaysEditor = toolbarPosition === 'fixed' || toolbarPosition === 'absolute';
 
                 if (!toolbarVisible) {
-                    editorContainer.style.setProperty('padding-top', `${hiddenToolbarPadding}px`, 'important');
+                    editorContainer.style.setProperty('padding-top', `${document.body.matches('.html-page-active') ? 0 : hiddenToolbarPadding}px`, 'important');
                     return;
                 }
 
@@ -2135,11 +2135,11 @@ function updateToolbarTimeWidget() {
                     const shortfall = Math.ceil((toolbarRect.bottom + flowGap) - flowRect.top);
                     // Cap the correction. toolbarRect can be read mid-animation/mid-
                     // transition (sidebar collapse, theme entrance transforms) and
-                    // briefly report a bogus, far-too-large bottom edge; unlike the
+                    // briefly report a bogus edge; unlike the
                     // padding-top calc below, this margin is stamped on with
                     // !important and nothing else bounds it, so an uncapped shortfall
-                    // here permanently shoves the chip row (and the title below it)
-                    // hundreds of pixels down the page.
+                    // here can shove the chip row and title hundreds of pixels
+                    // down the page.
                     const maxShortfall = compactViewport ? 120 : 160;
                     if (shortfall > 0) {
                         flowRow.style.setProperty('margin-top', `${baselineMarginTop + Math.min(shortfall, maxShortfall)}px`, 'important');
@@ -5599,14 +5599,12 @@ function populateProgressDashboard() {
         function createLifeJournalRow(seed = {}) {
             const s = seed && typeof seed === 'object' ? seed : {};
             const hasStress = s.stress !== undefined && s.stress !== null && String(s.stress).trim() !== '';
-            const hasEnergy = s.energy !== undefined && s.energy !== null && String(s.energy).trim() !== '';
             return {
                 id: s.id || generateId(),
                 date: s.date || '',
                 title: s.title || '',
                 mood: s.mood || '',
                 stress: hasStress ? Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(s.stress, 5)))) : null,
-                energy: hasEnergy ? Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(s.energy, 5)))) : null,
                 tags: Array.isArray(s.tags) ? s.tags.map(t => String(t).trim().slice(0, 32)).filter(Boolean).slice(0, 12) : [],
                 prompt: s.prompt || '',
                 content: s.content || ''
@@ -5676,7 +5674,6 @@ function populateProgressDashboard() {
                 wakeTime: wakeTime || '07:00',
                 totalSleepMinutes: Number.isFinite(computedDuration) ? computedDuration : fallbackDuration,
                 sleepQuality: Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(seed.sleepQuality, 3)))),
-                nextDayEnergy: Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(seed.nextDayEnergy, 3)))),
                 notes: String(seed.notes || ''),
                 targetSleepMinutes: seed.targetSleepMinutes === undefined || seed.targetSleepMinutes === null
                     ? null
@@ -5763,13 +5760,11 @@ function populateProgressDashboard() {
         function normalizeWellnessCheckIn(row) {
             const source = row && typeof row === 'object' ? row : {};
             const stress = Number(source.stress);
-            const energy = Number(source.energy);
             return {
                 id: String(source.id || `wci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
                 createdAt: String(source.createdAt || new Date().toISOString()),
                 mood: String(source.mood || ''),
                 stress: Number.isFinite(stress) ? Math.max(0, Math.min(10, Math.round(stress))) : 5,
-                energy: Number.isFinite(energy) ? Math.max(0, Math.min(10, Math.round(energy))) : 5,
                 sleep: String(source.sleep || ''),
                 note: String(source.note || '')
             };
@@ -6896,7 +6891,6 @@ function populateProgressDashboard() {
                 cramSessions: [], // Section 31 — Cram Hub sessions
                 trash: [], // Part 5 — recently-deleted items (restore / purge)
                 focusSessions: [], // Part 5 — completed focus session history
-                energyProfile: { version: 1, enabled: false, timezone: '', windows: [], sleepWindow: { start: '23:00', end: '07:00' }, protectedRecoveryMinutes: 30 },
                 protectedTime: [],
                 taskDependencies: [],
                 studySessions: [],
@@ -8834,17 +8828,6 @@ function populateProgressDashboard() {
             if (importedType === 'imp_session_log') {
                 const rows = customTabFocusSessionRows(6);
                 return { list: rows, empty: rows.length ? '' : 'No focus sessions logged yet.' };
-            }
-
-            if (importedType === 'imp_energy_checkin') {
-                const checks = lifeWorkspace && lifeWorkspace.wellness && Array.isArray(lifeWorkspace.wellness.checkIns) ? lifeWorkspace.wellness.checkIns : [];
-                const recent = checks.slice(-5).reverse();
-                const avg = recent.length ? Math.round(recent.reduce((sum, row) => sum + (Number(row.energy || row.nextDayEnergy || row.mood || 0) || 0), 0) / recent.length * 10) / 10 : 0;
-                return {
-                    hero: { value: recent.length ? avg : '-', label: 'recent energy' },
-                    list: recent.map(row => ({ title: String(row.title || row.mood || 'Check-in'), meta: String(row.date || row.createdAt || '').slice(0, 10) })),
-                    actions: [{ label: 'Open wellness', action: 'open_view', payload: { view: 'life' } }]
-                };
             }
 
             if (importedType === 'imp_overdue_recovery') {
@@ -13364,7 +13347,6 @@ function populateProgressDashboard() {
                     { key: 'timeFellAsleep', label: 'Fell Asleep (optional)', type: 'time', default: '' },
                     { key: 'wakeTime', label: 'Wake Time', type: 'time', default: '07:00' },
                     { key: 'sleepQuality', label: 'Sleep Quality (1-5)', type: 'number', min: 1, max: 5, step: 1, default: 3 },
-                    { key: 'nextDayEnergy', label: 'Next-Day Energy (1-5)', type: 'number', min: 1, max: 5, step: 1, default: 3 },
                     { key: 'wakeUpsCount', label: 'Wake-Ups', type: 'number', min: 0, max: 20, step: 1, default: 0 },
                     { key: 'tagsInput', label: 'Tags', type: 'text', placeholder: 'caffeine, stress, travel' },
                     { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional reflection...' }
@@ -15606,7 +15588,7 @@ function populateProgressDashboard() {
                 if (field === 'status') value = LIFE_GOAL_STATUS_VALUES.has(String(value)) ? String(value) : 'active';
                 if (field === 'priority') value = LIFE_PRIORITY_VALUES.has(String(value)) ? String(value) : '';
             }
-            if (collection === 'journals' && (field === 'stress' || field === 'energy')) {
+            if (collection === 'journals' && field === 'stress') {
                 value = String(target.value).trim() === '' ? null : Math.max(0, Math.min(10, Math.round(normalizeFiniteNumber(value, 5))));
             }
             if (collection === 'journals' && field === 'tags') {
@@ -16017,7 +15999,6 @@ function populateProgressDashboard() {
                     <td>
                         <input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="mood" value="${escapeHtml(String(row.mood || ''))}" placeholder="Mood">
                         <div class="life-journal-signals">
-                            <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="energy" value="${row.energy == null ? '' : escapeHtml(String(row.energy))}" placeholder="Energy" aria-label="Energy 0-10 (optional)">
                             <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="stress" value="${row.stress == null ? '' : escapeHtml(String(row.stress))}" placeholder="Stress" aria-label="Stress 0-10 (optional)">
                         </div>
                         <input class="college-input college-essay-next" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="tags" value="${escapeHtml((row.tags || []).join(', '))}" placeholder="Tags (comma-separated)" aria-label="Tags">
@@ -16129,7 +16110,7 @@ function populateProgressDashboard() {
         // ---- Journal reflection prompts + non-medical disclaimer ----
         const LIFE_JOURNAL_PROMPTS = [
             'What went well today?',
-            'What drained my energy?',
+            'What felt heavy today?',
             'One thing I am grateful for',
             'What will I do differently tomorrow?',
             'How did I take care of myself today?',
@@ -16349,9 +16330,6 @@ function populateProgressDashboard() {
             const avgSleepQuality = entries30.length
                 ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.sleepQuality, 3))), 0) / entries30.length)
                 : null;
-            const avgEnergy = entries30.length
-                ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.nextDayEnergy, 3))), 0) / entries30.length)
-                : null;
             const underGoalNights = entries30.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) < targetMinutes).length;
 
             return {
@@ -16368,7 +16346,6 @@ function populateProgressDashboard() {
                 goalProgressPercent,
                 goalStreak,
                 avgSleepQuality,
-                avgEnergy,
                 underGoalNights
             };
         }
@@ -16384,8 +16361,8 @@ function populateProgressDashboard() {
             const trendMetaEl = document.getElementById('lifeSleepTrendMeta');
             const consistencyEl = document.getElementById('lifeSleepConsistencyValue');
             const consistencyMetaEl = document.getElementById('lifeSleepConsistencyMeta');
-            const qualityEl = document.getElementById('lifeSleepQualityEnergyValue');
-            const qualityMetaEl = document.getElementById('lifeSleepQualityEnergyMeta');
+            const qualityEl = document.getElementById('lifeSleepQualityValue');
+            const qualityMetaEl = document.getElementById('lifeSleepQualityMeta');
             const bedtimeWakeEl = document.getElementById('lifeSleepBedtimeWakeValue');
             const bedtimeWakeMetaEl = document.getElementById('lifeSleepBedtimeWakeMeta');
             const goalTargetInput = document.getElementById('lifeSleepTargetMinutesInput');
@@ -16419,8 +16396,8 @@ function populateProgressDashboard() {
             if (consistencyEl) consistencyEl.textContent = `${analytics.consistencyScore}%`;
             if (consistencyMetaEl) consistencyMetaEl.textContent = `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`;
             if (qualityEl) {
-                if (Number.isFinite(analytics.avgSleepQuality) && Number.isFinite(analytics.avgEnergy)) {
-                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / ${analytics.avgEnergy.toFixed(1)}`;
+                if (Number.isFinite(analytics.avgSleepQuality)) {
+                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / 5`;
                 } else {
                     qualityEl.textContent = '\u2014';
                 }
@@ -16448,7 +16425,7 @@ function populateProgressDashboard() {
             if (!entries.length) {
                 body.innerHTML = `
                     <tr class="college-empty-row">
-                        <td colspan="11">
+                        <td colspan="10">
                             <div class="empty-state">
                                 <div class="empty-title">No sleep entries yet</div>
                                 <div class="empty-subtitle">Track bedtime, wake time, and sleep quality to build better routines.</div>
@@ -16475,7 +16452,6 @@ function populateProgressDashboard() {
                         <td data-label="Wake"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeTime" value="${escapeHtml(String(entry.wakeTime || ''))}"></td>
                         <td data-label="Duration"><span class="life-sleep-duration-badge">${escapeHtml(durationLabel)}</span></td>
                         <td data-label="Quality"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="sleepQuality">${ratingOptions(entry.sleepQuality)}</select></td>
-                        <td data-label="Energy"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="nextDayEnergy">${ratingOptions(entry.nextDayEnergy)}</select></td>
                         <td data-label="Wake-Ups"><input type="number" min="0" max="20" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeUpsCount" value="${escapeHtml(String(entry.wakeUpsCount || 0))}"></td>
                         <td data-label="Tags"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="tagsInput" value="${escapeHtml(String(tagsText))}" placeholder="caffeine, stress"></td>
                         <td data-label="Notes"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="notes" value="${escapeHtml(String(entry.notes || ''))}" placeholder="Notes"></td>
@@ -16504,7 +16480,7 @@ function populateProgressDashboard() {
                 const normalizedTime = normalizeLifeSleepTimeValue(target.value);
                 nextRow[field] = normalizedTime;
                 if (target.value !== normalizedTime) target.value = normalizedTime;
-            } else if (field === 'sleepQuality' || field === 'nextDayEnergy') {
+            } else if (field === 'sleepQuality') {
                 nextRow[field] = Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(target.value, row[field] || 3))));
             } else if (field === 'wakeUpsCount') {
                 nextRow.wakeUpsCount = Math.max(0, Math.min(20, Math.round(normalizeFiniteNumber(target.value, row.wakeUpsCount || 0))));
@@ -16609,7 +16585,7 @@ function populateProgressDashboard() {
             const payload = normalizeWellnessCheckIn({
                 id: existing ? existing.id : undefined,
                 createdAt: existing ? existing.createdAt : new Date().toISOString(),
-                mood: values.mood, stress: values.stress, energy: values.energy, sleep: values.sleep || '', note: values.note || ''
+                mood: values.mood, stress: values.stress, sleep: values.sleep || '', note: values.note || ''
             });
             if (existing) Object.assign(existing, payload);
             else lifeWorkspace.wellness.checkIns.push(payload);
@@ -16624,7 +16600,6 @@ function populateProgressDashboard() {
             if (!el) return;
             const todayCI = getLifeTodayCheckIn();
             const mood = todayCI ? todayCI.mood : 'good';
-            const energy = todayCI ? todayCI.energy : 5;
             const stress = todayCI ? todayCI.stress : 5;
             el.innerHTML = `
                 <div class="glass-card life-checkin">
@@ -16638,9 +16613,6 @@ function populateProgressDashboard() {
                     <div class="life-checkin-grid">
                         <label class="life-checkin-field"><span>Mood</span>
                             <select class="cc-input" id="lifeCheckInMood">${LIFE_MOODS.map(m => `<option value="${m.value}" ${mood === m.value ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
-                        </label>
-                        <label class="life-checkin-field"><span>Energy <b id="lifeCheckInEnergyVal">${energy}</b>/10</span>
-                            <input type="range" min="0" max="10" id="lifeCheckInEnergy" value="${energy}" class="cc-range">
                         </label>
                         <label class="life-checkin-field"><span>Stress <b id="lifeCheckInStressVal">${stress}</b>/10</span>
                             <input type="range" min="0" max="10" id="lifeCheckInStress" value="${stress}" class="cc-range">
@@ -16737,17 +16709,6 @@ function populateProgressDashboard() {
                 hasData: snap.monthTotal > 0 || upcomingTotal > 0
             };
         }
-        function getLifeEnergyTrend() {
-            const recent = getLifeRecentCheckIns(7);
-            const prior = getLifeCheckIns().filter(c => {
-                const d = new Date(c.createdAt); if (isNaN(d.getTime())) return false;
-                const cutA = new Date(); cutA.setHours(0, 0, 0, 0); cutA.setDate(cutA.getDate() - 13);
-                const cutB = new Date(); cutB.setHours(0, 0, 0, 0); cutB.setDate(cutB.getDate() - 7);
-                return d >= cutA && d < cutB;
-            });
-            const avg = (arr) => arr.length ? (arr.reduce((s, c) => s + normalizeFiniteNumber(c.energy, 5), 0) / arr.length) : null;
-            return { recentAvg: avg(recent), priorAvg: avg(prior), count: recent.length };
-        }
         // "One next life action" — a single, local heuristic suggestion.
         function getLifeNextAction() {
             if (!getLifeTodayCheckIn()) return { text: "Log today's check-in", action: 'cc-life-checkin' };
@@ -16783,22 +16744,9 @@ function populateProgressDashboard() {
             }
             const signals = [];
 
-            // Mood / energy trend
-            const trend = getLifeEnergyTrend();
+            // Check-in status
             const todayCI = getLifeTodayCheckIn();
-            if (trend.recentAvg !== null) {
-                const delta = (trend.priorAvg !== null) ? (trend.recentAvg - trend.priorAvg) : 0;
-                const arrow = delta > 0.4 ? '▲' : delta < -0.4 ? '▼' : '→';
-                signals.push({
-                    id: 'energy', icon: 'fa-bolt', label: 'Energy (7-day avg)',
-                    value: `${trend.recentAvg.toFixed(1)}/10`,
-                    meta: `${arrow} ${trend.priorAvg !== null ? (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' vs prior week' : `${trend.count} check-ins`}`,
-                    tone: trend.recentAvg >= 6 ? 'positive' : trend.recentAvg >= 4 ? 'info' : 'warn',
-                    action: 'cc-life-checkin'
-                });
-            } else {
-                signals.push({ id: 'energy', icon: 'fa-bolt', label: 'Daily check-in', value: todayCI ? 'Logged' : 'Not yet', meta: 'Track mood, energy, stress', tone: todayCI ? 'positive' : 'neutral', action: 'cc-life-checkin' });
-            }
+            signals.push({ id: "checkin", icon: "fa-heart", label: "Daily check-in", value: todayCI ? "Logged" : "Not yet", meta: "Track mood, stress, and sleep", tone: todayCI ? "positive" : "neutral", action: "cc-life-checkin" });
 
             // Sleep last night
             const sleep = (typeof getLifeSleepAnalytics === 'function') ? getLifeSleepAnalytics() : null;
@@ -17217,11 +17165,9 @@ function populateProgressDashboard() {
                     const act = lifeActionBtn.dataset.lifeAction;
                     if (act === 'save-checkin') {
                         const moodEl = document.getElementById('lifeCheckInMood');
-                        const energyEl = document.getElementById('lifeCheckInEnergy');
                         const stressEl = document.getElementById('lifeCheckInStress');
                         saveLifeCheckIn({
                             mood: moodEl ? moodEl.value : '',
-                            energy: energyEl ? energyEl.value : 5,
                             stress: stressEl ? stressEl.value : 5
                         });
                         return;
@@ -17322,10 +17268,9 @@ function populateProgressDashboard() {
                 }
             });
 
-            // Live value labels for the daily check-in sliders.
+            // Live value label for the daily check-in slider.
             root.addEventListener('input', (event) => {
-                if (event.target.id === 'lifeCheckInEnergy') { const v = document.getElementById('lifeCheckInEnergyVal'); if (v) v.textContent = event.target.value; }
-                else if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
+                if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
             });
 
             // Ensure dashboard is visible on init
@@ -18058,7 +18003,7 @@ function populateProgressDashboard() {
                                 <span class="wellness-recent-stamp">${escapeWellnessText(stamp)}</span>
                                 <span class="wellness-recent-meta">
                                     ${mood ? `<span class="wellness-recent-emoji" aria-hidden="true">${mood.emoji}</span>` : ''}
-                                    Stress ${entry.stress} · Energy ${entry.energy}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ''}
+                                    Stress ${entry.stress}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ""}
                                 </span>
                                 ${entry.note ? `<p class="wellness-recent-note">${escapeWellnessText(entry.note)}</p>` : ''}
                             </li>`;
@@ -18135,7 +18080,6 @@ function populateProgressDashboard() {
                 total,
                 lastWeekCount: lastWeek.length,
                 avgStressWeek: avg(lastWeek, 'stress'),
-                avgEnergyWeek: avg(lastWeek, 'energy'),
                 avgStressAll: avg(checkIns, 'stress'),
                 topMood,
                 topSleep
@@ -18156,7 +18100,6 @@ function populateProgressDashboard() {
             const cells = [
                 { label: 'Check-ins logged', value: String(p.total), sub: `${p.lastWeekCount} in last 7 days` },
                 { label: 'Avg stress (7d)', value: p.avgStressWeek, sub: `Overall ${p.avgStressAll}` },
-                { label: 'Avg energy (7d)', value: p.avgEnergyWeek, sub: 'Higher is better' },
                 {
                     label: 'Most common mood',
                     value: p.topMood ? `${p.topMood.emoji} ${p.topMood.label}` : '—',
@@ -18245,7 +18188,6 @@ function populateProgressDashboard() {
             const moodRow = document.getElementById('wellnessMoodRow');
             const sleepRow = document.getElementById('wellnessSleepRow');
             const stressInput = document.getElementById('wellnessStressInput');
-            const energyInput = document.getElementById('wellnessEnergyInput');
             const noteInput = document.getElementById('wellnessNoteInput');
             const w = getWellnessData();
             const entry = normalizeWellnessCheckIn({
@@ -18253,7 +18195,6 @@ function populateProgressDashboard() {
                 createdAt: new Date().toISOString(),
                 mood: moodRow ? (moodRow.dataset.selectedMood || '') : '',
                 stress: stressInput ? Number(stressInput.value) : 5,
-                energy: energyInput ? Number(energyInput.value) : 5,
                 sleep: sleepRow ? (sleepRow.dataset.selectedSleep || '') : '',
                 note: noteInput ? noteInput.value.trim() : ''
             });
@@ -18590,12 +18531,6 @@ function populateProgressDashboard() {
                 if (stress) {
                     const out = document.getElementById('wellnessStressValue');
                     if (out) out.textContent = String(stress.value);
-                    return;
-                }
-                const energy = event.target.closest('#wellnessEnergyInput');
-                if (energy) {
-                    const out = document.getElementById('wellnessEnergyValue');
-                    if (out) out.textContent = String(energy.value);
                     return;
                 }
                 const volume = event.target.closest('#wellnessVolumeInput');
@@ -24900,7 +24835,6 @@ function populateProgressDashboard() {
                 if (window.SutraStudentEngine && typeof window.SutraStudentEngine.rankActions === 'function') {
                     const ranked = window.SutraStudentEngine.rankActions(getSutra2DomainSnapshot(), candidates, {
                         now: now.toISOString(),
-                        energy: String(appData && appData.energyProfile && appData.energyProfile.currentEnergy || 'medium')
                     });
                     if (ranked.length) return { item: ranked[0].raw, reason: ranked[0].rankReason };
                 }
@@ -30220,7 +30154,6 @@ function buildOnboardingPlanPreview() {
                 if (window.SutraStudentEngine && typeof window.SutraStudentEngine.rankActions === 'function') {
                     sutra2Ranks = window.SutraStudentEngine.rankActions(getSutra2DomainSnapshot(), items, {
                         now: rankNow.toISOString(),
-                        energy: String(appData && appData.energyProfile && appData.energyProfile.currentEnergy || 'medium')
                     });
                 }
             } catch (error) { sutra2Ranks = null; }
@@ -30600,33 +30533,11 @@ function buildOnboardingPlanPreview() {
             const courses = getCourses({ filter: 'active' });
             const targetId = courseId || (courseWorkspace.settings.activeCourseId) || (courses[0] && courses[0].id) || '';
             if (!courses.length) { showToast('Create a course first.'); cwOpenNewCourseModal(); return; }
-            cwOpenFormModal({
-                title: 'Add Assignment',
-                submitLabel: 'Add Assignment',
-                fields: [
-                    { key: 'courseId', label: 'Course', type: 'select', value: targetId, options: courses.map(c => ({ value: c.id, label: c.name })) },
-                    { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Rotational motion lab', required: true },
-                    { key: 'dueDate', label: 'Due date', type: 'date' },
-                    { key: 'dueTime', label: 'Due time', type: 'time' },
-                    { key: 'priority', label: 'Urgency', type: 'select', value: 'medium', options: [
-                        { value: 'high', label: 'High' }, { value: 'medium', label: 'Medium' }, { value: 'low', label: 'Low' }
-                    ] },
-                    { key: 'difficulty', label: 'Difficulty', type: 'select', value: 'medium', options: [
-                        { value: 'easy', label: 'Easy' }, { value: 'medium', label: 'Medium' }, { value: 'hard', label: 'Hard' }
-                    ] },
-                    { key: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Optional details' }
-                ],
-                onSubmit: (v) => {
-                    const created = createAssignmentForCourse(v.courseId, v);
-                    if (!created) { showToast('Add an assignment title.'); return; }
-                    if (String(courseWorkspace.settings.activeCourseId) !== String(v.courseId)) {
-                        courseWorkspace.settings.activeCourseId = v.courseId;
-                    }
-                    renderCourseHubView();
-                    renderAllDueView();
-                    showToast('Assignment added.');
-                }
-            });
+            if (typeof openQuickCaptureModal !== 'function') {
+                showToast('Homework capture is still loading — try again in a moment.');
+                return;
+            }
+            openQuickCaptureModal('', { type: 'homework', courseId: String(targetId) });
         }
 
         function cwSelectCourse(courseId) {
@@ -31882,8 +31793,6 @@ function buildOnboardingPlanPreview() {
                 let q = sutraReviewDecodeText(qRaw);
                 let a = sutraReviewDecodeText(aRaw);
                 if (!q || q.length < 3 || !a) return;
-                if (q.length > 200) q = q.slice(0, 200);
-                if (a.length > 400) a = a.slice(0, 400);
                 const key = q.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
                 if (!key || seen.has(key)) return;
                 seen.add(key);
@@ -39041,7 +38950,7 @@ function buildOnboardingPlanPreview() {
                 '.google-feedback-modal',
                 '.doc-stats-modal',
                 '.acad-modal-overlay',
-                '.emoji-modal-overlay',
+                '.emoji-modal-overlay', '.emoji-picker',
                 '.hw-paste-modal',
                 '.class-dashboard-drawer',
                 '.atelier-onboarding',
@@ -39185,7 +39094,7 @@ function buildOnboardingPlanPreview() {
                 releaseBackgroundInert();
                 if (!state.active.length) return;
                 const top = state.active[state.active.length - 1];
-                const protectedRoots = [top];
+                const protectedRoots = top.id.startsWith('emoji') ? [...document.querySelectorAll('#emojiModalOverlay,#emojiPicker')] : [top];
                 document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"], .sutra-save-failure-banner, [aria-modal="true"]:not([data-sutra-modal-enhanced])').forEach(el => {
                     if (!state.active.some(root => root.contains(el))) protectedRoots.push(el);
                 });
@@ -43089,8 +42998,8 @@ function buildOnboardingPlanPreview() {
             testingHub.custom = testingHub.custom || [];
             const exam = normalizeCustomExam({
                 id: 'cx_' + generateId(),
-                name: name.slice(0, 80),
-                description: description.slice(0, 200),
+                name,
+                description,
                 examDate,
                 targetScore
             });
@@ -43124,9 +43033,9 @@ function buildOnboardingPlanPreview() {
             if (!exam) return;
             const newName = await atelierPrompt('Edit name:', exam.name, { title: 'Edit Custom Exam' });
             if (newName === null) return;
-            exam.name = newName.slice(0, 80);
+            exam.name = newName;
             const newDesc = await atelierPrompt('Edit description:', exam.description, { title: 'Description', multiline: true });
-            if (newDesc !== null) exam.description = newDesc.slice(0, 200);
+            if (newDesc !== null) exam.description = newDesc;
             persistAppData();
             _refreshAfterExamMutation('custom:' + id);
         }
@@ -45220,7 +45129,7 @@ function buildOnboardingPlanPreview() {
                     id: 'sutra-sync',
                     title: 'Sutra Sync (Optional Encrypted Multi-Device Sync)',
                     body: `
-<p><strong>Sutra Sync</strong> keeps one workspace identical across your devices — edits made on one device appear on the others automatically. It is <strong>off by default</strong>, <strong>end-to-end encrypted</strong>, and separate from backups. Open it from <strong>Settings &rsaquo; Data &amp; Backup</strong> or the <strong>Sync</strong> button in the save bar.</p>
+<p><strong>Sutra Cloud &rsaquo; Sync · Beta</strong> keeps one workspace across your devices. It is <strong>off by default</strong> and <strong>end-to-end encrypted</strong>. Open the <strong>Sutra Cloud</strong> button in the save bar or Settings &rsaquo; Data &amp; Backup. After you explicitly enable and unlock Sync, confirmed saves sync automatically; Sync now is optional. Unlock again each session. The Backups section keeps independent encrypted snapshots with a separate password and optional daily, significant-change, or best-effort app-hidden scheduling. Automatic backups require browser Web Locks support; manual backups remain available everywhere supported.</p>
 <h3>Three different guarantees</h3>
 <ul>
   <li><strong>Saved locally</strong> — your work is durably on THIS device (always on; sync never affects it).</li>
@@ -48812,7 +48721,7 @@ function getActiveEditor() {
                 showToast('Select Canvas text first');
                 return null;
             }
-            const title = String(text.split(/\n/)[0] || 'Canvas note').slice(0, 80);
+            const title = String(text.split(/\n/)[0] || 'Canvas note');
             const ok = await showCustomConfirmDialog({
                 title: 'Create Note From Canvas',
                 message: `Create a standard note from the selected Canvas text?`,
@@ -48850,7 +48759,7 @@ function getActiveEditor() {
             }
             const task = {
                 id: generateId(),
-                title: text.split(/\n/)[0].slice(0, 200),
+                title: text.split(/\n/)[0],
                 notes: text,
                 completed: false,
                 isActive: true,
@@ -49727,9 +49636,9 @@ function getActiveEditor() {
                         const runtime = ensureCanvasRuntime(page);
                         if (!page || !runtime) return null;
                         runtime.selectedObjectIds = [fromId, toId].filter(Boolean);
-                        const connection = canvasAddConnector();
+                        let connection = canvasAddConnector();
                         if (connection && fields && typeof fields === 'object') {
-                            Object.assign(connection, fields);
+                            connection = page.canvas.connections.find(item=>item.id===connection.id)||connection; Object.assign(connection,fields);
                             saveCanvasPage(page, { persist: true });
                             renderCanvasPage(page);
                         }
@@ -49751,9 +49660,11 @@ function getActiveEditor() {
                         if (ids) setCanvasSelection(Array.isArray(ids) ? ids : [ids]);
                         const group = canvasGroupSelected();
                         if (group && label) {
-                            group.label = String(label).slice(0, 120);
                             const page = getPrimaryCanvasPage();
+                            const persistedGroup = page && page.canvas && page.canvas.groups.find(item => item.id === group.id); const labeledGroup = persistedGroup || group;
+                            labeledGroup.label = String(label);
                             if (page) saveCanvasPage(page, { persist: true });
+                            return labeledGroup;
                         }
                         return group;
                     },
@@ -50290,7 +50201,7 @@ function getActiveEditor() {
                 const currentSpace = activeSpaceId || 'default';
                 const helpPage = ensureHelpPageForSpace(currentSpace);
                 if (pages.length > 0) {
-                    const nextPage = pages.find(p => (p.spaceId || 'default') === currentSpace && !isHelpDocsPage(p))
+                    const nextPage = pages.find(p => (p.spaceId || 'default') === currentSpace && !isHelpDocsPage(p) && !isFolderPage(p))
                         || helpPage
                         || pages[0];
                     loadPage(nextPage.id);
@@ -50934,6 +50845,40 @@ function getActiveEditor() {
             return false;
         }
 
+        // Assistant access is read-only, separate from the editor unlock set, and returns only a non-secret one-request capability result.
+        async function requestAssistantPageAccess(pageId) {
+            const id = String(pageId || '');
+            const page = pages.find(entry => entry && String(entry.id) === id);
+            if (!page || !page.isLocked || !page.lockHash || !page.lockSalt) {
+                return { ok: false, status: 'not_locked', message: 'This page is not currently PIN-locked.' };
+            }
+            let label = `Enter the page PIN for "${page.title || 'this note'}" to let Assistant read it once.`;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const pin = await showCustomPromptDialog({
+                    title: 'Verify page PIN for Assistant',
+                    label,
+                    placeholder: 'Page PIN',
+                    confirmText: 'Allow once',
+                    cancelText: 'Cancel',
+                    inputType: 'password'
+                });
+                if (pin === null) return { ok: false, status: 'cancelled', message: 'Cancelled — the locked page was not shared with Assistant.' };
+                const validation = validatePinInput(pin);
+                if (validation) {
+                    label = validation;
+                    continue;
+                }
+                const current = pages.find(entry => entry && String(entry.id) === id);
+                if (!current || !current.isLocked || !current.lockHash || !current.lockSalt) {
+                    return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
+                }
+                if (await verifyPagePin(pin, current.lockHash, current.lockSalt)) {
+                    return { ok: true, pageId: id };
+                }
+                label = 'Incorrect PIN. Try again to allow Assistant to read this page once.';
+            }
+            return { ok: false, status: 'failed', message: 'Assistant access was not granted because the correct page PIN was not entered.' };
+        }
         // A locked note (or a locked sub-page swept up in a parent's deletion)
         // must not be deletable without the PIN. Verifies every still-locked page
         // in the deletion set; aborts the whole delete if any verification fails.
@@ -51941,7 +51886,7 @@ function getActiveEditor() {
             journal: {
                 name: 'Daily Journal',
                 icon: PAGE_ICONS.JOURNAL,
-                description: 'Capture intention, energy, gratitude, and learning with a repeatable daily structure.',
+                description: 'Capture intention, gratitude, and learning with a repeatable daily structure.',
                 sections: ['Morning intention', 'Focus blocks', 'Events and notes', 'Gratitude', 'Evening reflection'],
                 category: 'general',
                 connectsTo: ['createsTasks'],
@@ -51987,7 +51932,7 @@ function getActiveEditor() {
 <table><thead><tr><th>Metric</th><th>Target</th><th>Actual</th><th>Status</th></tr></thead><tbody>
 <tr><td>Top priority completion</td><td></td><td></td><td></td></tr>
 <tr><td>Deep work hours</td><td></td><td></td><td></td></tr>
-<tr><td>Health / energy</td><td></td><td></td><td></td></tr></tbody></table>
+<tr><td>Health / wellbeing</td><td></td><td></td><td></td></tr></tbody></table>
 <h3>Wins</h3>
 <ul><li></li></ul>
 <h3>Misses / Slippage</h3>
@@ -56221,7 +56166,6 @@ function getActiveEditor() {
                 // Part 5 — recently-deleted items + focus session history travel in backups.
                 trash: Array.isArray(trash) ? cloneSerializable(trash, []) : [],
                 focusSessions: Array.isArray(focusSessions) ? cloneSerializable(focusSessions, []) : [],
-                energyProfile: cloneSerializable(appData && appData.energyProfile, getDefaultAppData().energyProfile),
                 protectedTime: cloneSerializable(appData && appData.protectedTime, []),
                 taskDependencies: cloneSerializable(appData && appData.taskDependencies, []),
                 studySessions: cloneSerializable(appData && appData.studySessions, []),
@@ -56289,7 +56233,6 @@ function getActiveEditor() {
                     cramSessions: payload.cramSessions,
                     trash: payload.trash,
                     focusSessions: payload.focusSessions,
-                    energyProfile: payload.energyProfile,
                     protectedTime: payload.protectedTime,
                     taskDependencies: payload.taskDependencies,
                     studySessions: payload.studySessions,
@@ -56668,9 +56611,9 @@ function getActiveEditor() {
         }
 
         async function buildCanonicalSutraPackageBytes(options = {}) {
-            // Flush editor to pages[] synchronously before any async work so the
-            // snapshot is taken from the latest in-editor state, not a debounced save.
+            // Commit the local snapshot before provider work.
             savePage();
+            await flushAppSaveNow('backup');
             // Course-file binaries live in a separate IndexedDB and are only read
             // into the in-memory courseAttachmentCache on demand. The export
             // snapshot (buildCourseWorkspaceExportSnapshot) is synchronous and can
@@ -56980,6 +56923,7 @@ function getActiveEditor() {
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;  // re-opt-in per backend
             persistSutraCloudMeta();
             const backend = loadSutraCloudBackend();
@@ -57002,16 +56946,18 @@ function getActiveEditor() {
         // provider's session (soft — keeps saved credentials + remote backups),
         // resets shared backup status, and leaves the LOCAL workspace untouched.
         async function switchSutraCloudProvider(id) {
+            if (sutraCloudRuntime.busy) throw new Error('Wait for the current backup or restore to finish before switching destinations.');
             const target = getSutraCloudProviderById(id);
             if (!target) throw new Error('Unknown backup destination.');
             const current = getActiveSutraCloudProvider();
-            if (current && current.id !== id) {
+            if (current && current.id !== id && !(current.id === 'supabase' && isSutraSyncEnabled())) {
                 try { await current.endSession(); } catch (error) { /* best effort */ }
             }
             const meta = loadSutraCloudMeta();
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;   // re-opt-in per destination
             persistSutraCloudMeta();
             sutraCloudRuntime.backupPassphrase = '';
@@ -57031,7 +56977,9 @@ function getActiveEditor() {
                 lastBackupAt: '',
                 lastError: '',
                 autoBackup: { enabled: false, frequency: 'daily' },
-                lastAutoBackupAt: ''
+                lastAutoBackupAt: '',
+                schemaVersion: 2,
+                lastAutoBackupHash: ''
             };
         }
 
@@ -57039,10 +56987,17 @@ function getActiveEditor() {
             if (sutraCloudMeta) return sutraCloudMeta;
             const raw = SutraSafeStorage.get(SUTRA_CLOUD_META_KEY, { fallback: null });
             sutraCloudMeta = { ...getDefaultSutraCloudMeta(raw), ...(raw && typeof raw === 'object' ? raw : {}) };
-            if (!sutraCloudMeta.autoBackup || typeof sutraCloudMeta.autoBackup !== 'object') {
-                sutraCloudMeta.autoBackup = { enabled: false, frequency: 'daily' };
+            const auto = sutraCloudMeta.autoBackup;
+            sutraCloudMeta.autoBackup = {
+                ...(auto && typeof auto === 'object' ? auto : {}),
+                enabled: !!auto && auto.enabled === true,
+                frequency: auto && ['daily', 'close', 'change'].includes(auto.frequency) ? auto.frequency : 'daily'
+            };
+            // Version the frozen device-local record in place, retaining unknown fields.
+            if (!raw || !raw.schemaVersion || raw.schemaVersion < 2) {
+                sutraCloudMeta.schemaVersion = 2;
+                persistSutraCloudMeta();
             }
-            sutraCloudMeta.autoBackup.enabled = sutraCloudMeta.autoBackup.enabled === true;
             return sutraCloudMeta;
         }
 
@@ -57234,6 +57189,9 @@ function getActiveEditor() {
         }
 
         async function sutraCloudSignOut() {
+            sutraCloudRuntime.operationEpoch = (sutraCloudRuntime.operationEpoch || 0) + 1;
+            sutraCloudRuntime.backupPassphrase = '';
+            if (window.SutraSync) { window.SutraSync.lock(); window.SutraSync.pause(); }
             try {
                 if (sutraCloudRuntime.accessToken) await sutraCloudFetch('/auth/v1/logout', { method: 'POST' });
             } catch (error) { /* best effort — local sign-out always succeeds */ }
@@ -58197,7 +58155,10 @@ function getActiveEditor() {
 
         // ---- Generic controller (provider-agnostic) ----
         async function sutraCloudBackupNow(options = {}) {
+            if (sutraCloudRuntime.busy) return { skipped: true, reason: 'busy' };
             const provider = getActiveSutraCloudProvider();
+            const epoch = sutraCloudRuntime.operationEpoch || 0;
+            const identity = provider && provider.getSignedInIdentity();
             if (!provider) throw new Error('Choose a backup destination first.');
             const status = provider.getSetupStatus();
             if (!status.ready) throw new Error(status.reason || `${provider.displayName} needs setup first.`);
@@ -58213,6 +58174,9 @@ function getActiveEditor() {
             updateSutraCloudUi();
             try {
                 const encrypted = await createEncryptedSutraBackupBlob({ passphrase });
+                if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()
+                    || provider !== getActiveSutraCloudProvider() || !provider.getSetupStatus().ready
+                    || (options.auto && !sutraCloudAutoReady())) return { skipped: true, reason: 'connection-changed' };
                 const meta = {
                     label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
                     size: encrypted.blob.size || encrypted.encryptedByteLength || 0,
@@ -58220,13 +58184,18 @@ function getActiveEditor() {
                     filename: encrypted.filename
                 };
                 await provider.uploadBackup(encrypted.blob, meta);
+                if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()) {
+                    return { skipped: true, reason: 'signed-out' };
+                }
                 const m = loadSutraCloudMeta();
                 m.lastBackupAt = new Date().toISOString();
                 m.lastError = '';
                 if (options.auto) m.lastAutoBackupAt = m.lastBackupAt;
+                if (options.auto) m.lastAutoBackupHash = options.workspaceHash || '';
                 persistSutraCloudMeta();
                 sutraCloudRuntime.backupPassphrase = passphrase; // session-only cache enables unattended auto-backup
-                try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); } catch (e) {}
+                try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); }
+                catch (error) { if (window.SutraReportError) window.SutraReportError(error, { where: 'sutraCloud:retention', provider: provider.id }, 'warning'); }
                 if (!options.silent) showToast(provider.id === 'manual' ? 'Encrypted backup downloaded.' : 'Encrypted backup saved to Sutra Cloud.');
                 return { uploaded: true };
             } catch (error) {
@@ -58422,15 +58391,37 @@ function getActiveEditor() {
                 && !!sutraCloudRuntime.backupPassphrase;
         }
 
-        function runSutraCloudAutoBackup() {
-            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy) return;
-            sutraCloudBackupNow({
-                passphrase: sutraCloudRuntime.backupPassphrase,
-                auto: true,
-                silent: true,
-                label: 'Auto backup'
-            }).then(() => { try { refreshSutraCloudBackupList(); } catch (e) {} })
-              .catch(() => { /* errors surface in the panel status; never disrupt the app */ });
+        async function runSutraCloudAutoBackup() {
+            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy || !navigator.onLine
+                || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+            // Without an atomic cross-tab lock, keep automatic backup paused.
+            // Manual backups remain available without opening the Sync database.
+            if (!navigator.locks) return { skipped: true, reason: 'locks-unavailable' };
+            try {
+                return await navigator.locks.request('sutra-cloud-auto-backup-v1', { ifAvailable: true }, async lock => {
+                    if (!lock) return { skipped: true, reason: 'lock-held' };
+                    sutraCloudMeta = null;
+                    const meta = loadSutraCloudMeta();
+                    if (!sutraCloudAutoReady() || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+                    // Use the existing semantic projection so save timestamps and
+                    // UI bookkeeping cannot manufacture another backup of unchanged work.
+                    const projection = window.SutraSyncProjection.buildProjection(await getSyncWorkspaceSnapshot());
+                    const hashes = await window.SutraSyncProjection.hashProjection(projection);
+                    const hash = await window.SutraSyncProtocol.hashText(window.SutraSyncProtocol.stableStringify(hashes));
+                    if (!hash || meta.lastAutoBackupHash === hash) return { skipped: true, reason: 'unchanged' };
+                    if (meta.autoBackup.frequency === 'daily' && meta.lastAutoBackupAt
+                        && Date.now() - Date.parse(meta.lastAutoBackupAt) < 20 * 60 * 60 * 1000) return { skipped: true, reason: 'not-due' };
+                    return await sutraCloudBackupNow({
+                        passphrase: sutraCloudRuntime.backupPassphrase,
+                        auto: true, silent: true, label: 'Auto backup', workspaceHash: hash
+                    });
+                });
+            } catch (error) {
+                loadSutraCloudMeta().lastError = error.message || 'Automatic backup failed.';
+                persistSutraCloudMeta();
+                updateSutraCloudUi();
+                return { error: true };
+            }
         }
 
         function scheduleSutraCloudAutoBackup(delayMs = 60000) {
@@ -58499,7 +58490,8 @@ function getActiveEditor() {
 
             buildSutraCloudStatusCard(provider, status, meta);
             buildSutraCloudCards();
-            buildSutraCloudSetup(provider);
+            buildSutraCloudSetup(sutraCloudUiState.section === 'sync' ? getSutraCloudProviderById('supabase') : provider);
+            publishSutraCloudStatus();
 
             sutraCloudSetHidden('sutraCloudPrimaryActions', !ready);
             const backupBtn = document.getElementById('sutraCloudBackupNowBtn');
@@ -58961,34 +58953,134 @@ function getActiveEditor() {
             rows.forEach(row => list.appendChild(buildSutraCloudRow(row)));
         }
 
-        function openSutraCloudModal() {
+        // Shared Cloud control plane. Status is derived locally: no provider
+        // requests, credential material, or Sync database reads belong here.
+        function getSutraCloudStatus() {
+            const sync = getSutraSyncStatus();
+            const meta = loadSutraCloudMeta();
+            const provider = getActiveSutraCloudProvider();
+            const savedAt = sutraPersistenceState && sutraPersistenceState.lastConfirmedSaveAt;
+            const automatic = meta.autoBackup.enabled;
+            const backupState = !navigator.onLine ? 'Offline'
+                : sutraCloudRuntime.busy ? 'Working'
+                : meta.lastError ? 'Needs attention'
+                : automatic && !navigator.locks ? 'Automatic backups paused: browser lock support required'
+                : automatic && !sutraCloudRuntime.backupPassphrase ? 'Unlock backups by making a backup this session'
+                : automatic ? 'Automatic backups on' : 'Automatic backups off';
+            return {
+                local: { savedAt: savedAt || null, writesBlocked: persistenceWritesBlocked,
+                    error: sutraPersistenceState && sutraPersistenceState.lastFailure || null },
+                sync: { ...sync, automatic: !!sync.enabled, label: sutraSyncStateLabel(sync.state) },
+                backups: { state: backupState, provider: provider ? provider.id : null,
+                    lastBackupAt: meta.lastBackupAt || null, lastAutoBackupAt: meta.lastAutoBackupAt || null,
+                    lastManualBackupAt: appSettings && appSettings.dataHealth && appSettings.dataHealth.lastAtelierExportAt || null,
+                    autoBackup: { ...meta.autoBackup }, error: meta.lastError || null },
+                online: navigator.onLine
+            };
+        }
+
+        function publishSutraCloudStatus() {
+            const status = getSutraCloudStatus();
+            const rows = [
+                ['Saved locally', status.local.error || status.local.writesBlocked ? 'Needs attention' : formatSutraSyncTime(status.local.savedAt)],
+                ['Synced to cloud', status.sync.label + (status.sync.lastSyncAt ? ' · ' + formatSutraSyncTime(status.sync.lastSyncAt) : '')],
+                ['Backed up', formatSutraSyncTime([status.backups.lastBackupAt, status.backups.lastManualBackupAt].filter(Boolean).sort().pop())],
+                ['Automatic backups', status.backups.state]
+            ];
+            if (status.sync.outboxDepth) rows.push(['Queued changes', String(status.sync.outboxDepth)]);
+            if (status.sync.conflictsPending) rows.push(['Conflicts to review', String(status.sync.conflictsPending)]);
+            if (status.sync.assetsPending) rows.push(['Attachments pending', String(status.sync.assetsPending)]);
+            if (status.sync.lastError) rows.push(['Sync needs attention', status.sync.lastError]);
+            if (status.backups.error) rows.push(['Backup needs attention', status.backups.error]);
+            const card = document.getElementById('sutraCloudSummary');
+            if (card) {
+                card.replaceChildren();
+                rows.forEach(([label, value]) => {
+                    const row = document.createElement('p');
+                    const name = document.createElement('strong');
+                    name.textContent = label + ': ';
+                    row.append(name, document.createTextNode(value));
+                    card.appendChild(row);
+                });
+            }
+            window.dispatchEvent(new CustomEvent('sutra:cloud-status', { detail: status }));
+        }
+
+        function selectSutraCloudSection(section) {
+            const sync = section !== 'backups';
+            sutraCloudUiState.section = sync ? 'sync' : 'backups';
+            const syncPanel = document.getElementById('sutraSyncModal');
+            const backupPanel = document.getElementById('sutraCloudBackupsPanel');
+            syncPanel.hidden = !sync;
+            syncPanel.inert = !sync;
+            backupPanel.hidden = sync;
+            backupPanel.inert = sync;
+            document.getElementById('sutraCloudSyncTab').setAttribute('aria-pressed', String(sync));
+            document.getElementById('sutraCloudBackupsTab').setAttribute('aria-pressed', String(!sync));
+            // Reuse a single account/setup form, avoiding duplicate credential inputs.
+            const setup = document.getElementById('sutraCloudSetupArea');
+            (sync ? document.getElementById('sutraCloudAccountSetup') : backupPanel).appendChild(setup);
+            sutraCloudUiState.forceSetupRebuild = true;
+            updateSutraCloudUi();
+            updateSutraSyncUi();
+        }
+
+        function setSutraCloudAutoBackup(options = {}) {
+            const frequency = options.frequency || 'daily';
+            if (!['daily', 'close', 'change'].includes(frequency)) throw new Error('Unknown automatic backup frequency.');
+            if (options.enabled && !sutraCloudRuntime.backupPassphrase) throw new Error('Make an encrypted backup first to unlock automatic backups for this session.');
+            const provider = getActiveSutraCloudProvider();
+            if (options.enabled && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready)) throw new Error('Connect a supported backup destination first.');
+            const meta = loadSutraCloudMeta();
+            meta.autoBackup = { ...meta.autoBackup, enabled: options.enabled === true, frequency };
+            if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+            persistSutraCloudMeta();
+            updateSutraCloudUi();
+            if (meta.autoBackup.enabled) maybeSutraCloudAutoBackup('enabled');
+            return { ...meta.autoBackup };
+        }
+
+        window.SutraCloud = {
+            getStatus: getSutraCloudStatus,
+            open: openSutraCloudModal,
+            syncNow: () => window.SutraSync.syncNow(),
+            pauseSync: () => window.SutraSync.pause(),
+            resumeSync: () => window.SutraSync.resume(),
+            backupNow: (...args) => window.SutraCloudSync.backupNow(...args),
+            restore: (...args) => window.SutraCloudSync.restore(...args),
+            setAutoBackup: setSutraCloudAutoBackup
+        };
+
+        function openSutraCloudModal(section = 'sync') {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
-            // The Cloud and Sync sheets are mutually exclusive save-bar
-            // surfaces: never stack one above the other. Closing the sibling
-            // first keeps exactly one .modal.active and one scroll-lock owner.
-            closeSutraSyncModal();
+            if (!modal.classList.contains('active')) sutraCloudUiState.lastFocus = document.activeElement;
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
+            bindSutraSyncUi();
+            selectSutraCloudSection(section);
             sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state
             sutraCloudSetHidden('sutraCloudSwitchConfirm', true);
             sutraCloudSetHidden('sutraCloudManage', true);
             modal.classList.add('active');
             try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
             updateSutraCloudUi();
-            const provider = getActiveSutraCloudProvider();
-            if (provider && provider.hasBackupList && provider.getSetupStatus().ready) refreshSutraCloudBackupList();
+            updateSutraSyncUi();
         }
 
         function closeSutraCloudModal() {
             const modal = document.getElementById('sutraCloudModal');
             if (!modal) return;
             modal.classList.remove('active');
+            clearSutraCloudPassphraseInputs();
             // Only release the scroll lock when no other modal is still open
             // (a sibling sheet may legitimately remain active).
             if (!document.querySelector('.modal.active')) {
                 try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
             }
+            const previous = sutraCloudUiState.lastFocus;
+            sutraCloudUiState.lastFocus = null;
+            if (previous && previous.isConnected) previous.focus();
         }
 
         // Opens the in-app Help & Docs page and jumps to the Sutra Cloud section.
@@ -59009,6 +59101,19 @@ function getActiveEditor() {
         function bindSutraCloudUi() {
             if (sutraCloudUiBound) return;
             sutraCloudUiBound = true;
+            document.getElementById('sutraCloudSyncTab').addEventListener('click', () => selectSutraCloudSection('sync'));
+            document.getElementById('sutraCloudBackupsTab').addEventListener('click', () => selectSutraCloudSection('backups'));
+            window.addEventListener('sutra:sync-status', publishSutraCloudStatus);
+            window.addEventListener('sutra:persistence-health-changed', publishSutraCloudStatus);
+            window.addEventListener('online', () => { publishSutraCloudStatus(); maybeSutraCloudAutoBackup('online'); });
+            window.addEventListener('offline', publishSutraCloudStatus);
+            window.addEventListener('storage', event => {
+                if (event.key === SUTRA_CLOUD_META_KEY) {
+                    sutraCloudMeta = null;
+                    if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+                    updateSutraCloudUi();
+                }
+            });
             const on = (id, event, handler) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener(event, handler);
@@ -59051,14 +59156,11 @@ function getActiveEditor() {
                         refreshSutraCloudBackupList();
                     }
                 }
-                meta.autoBackup.enabled = enabling;
-                persistSutraCloudMeta();
-                updateSutraCloudUi();
+                setSutraCloudAutoBackup({ enabled: enabling, frequency: meta.autoBackup.frequency });
             });
             on('sutraCloudAutoFrequency', 'change', (event) => {
-                const meta = loadSutraCloudMeta();
-                meta.autoBackup.frequency = (event.target && event.target.value) || 'daily';
-                persistSutraCloudMeta();
+                try { setSutraCloudAutoBackup({ enabled: loadSutraCloudMeta().autoBackup.enabled, frequency: event.target.value }); }
+                catch (error) { showToast(error.message || 'Could not change backup frequency.'); updateSutraCloudUi(); }
             });
             on('sutraCloudSwitchConfirmYes', 'click', async () => {
                 const id = sutraCloudUiState.pendingProviderSwitch;
@@ -59186,7 +59288,7 @@ function getActiveEditor() {
             deleteBackup: sutraCloudDeleteBackup,
             scanOrphans: (...args) => window.SutraStorageMaintenance.scanCloud(...args),
             cleanupOrphans: (...args) => window.SutraStorageMaintenance.cleanupCloud(...args),
-            open: openSutraCloudModal,
+            open: () => openSutraCloudModal('backups'),
             getMeta: () => ({ ...loadSutraCloudMeta() }),
             // Backend (Official Sutra Cloud vs Bring-Your-Own Supabase)
             getBackend: () => ({ ...loadSutraCloudBackend() }),
@@ -61206,7 +61308,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 'reviewWorkspace', 'courseWorkspace', 'testingHub', 'splitPaneContexts', 'pinnedPages',
                 'schoolSchedule', 'gradePlanner', 'semesterSetup',
                 'notificationsState', 'assistantChatHistory',
-                'settings', 'ui', 'localStorageSnapshot', 'energyProfile', 'studentDecisionState',
+                'settings', 'ui', 'localStorageSnapshot', 'studentDecisionState',
                 'assistantPermissions', 'assistantMemory', 'workspaceMeta', 'operatingManual', 'portfolioWorkspace'
             ];
             objectFields.forEach(field => {
@@ -61571,7 +61673,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
             stripSensitiveSettingFields(importedUnknownWorkspaceFields, [], []);
             const sutra2WorkspaceFields = [
-                'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions', 'masteryRecords',
+                'protectedTime', 'taskDependencies', 'studySessions', 'masteryRecords',
                 'confidenceObservations', 'studentDecisionState', 'assistantPermissions', 'assistantMemory',
                 'syncAuditLog', 'workspaceMeta', 'privateDocuments', 'sharedStudySessions',
                 'operatingManual', 'portfolioWorkspace', 'schema', 'migrationHistory',
@@ -61987,7 +62089,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     'schoolSchedule', 'gradePlanner', 'semesterSetup',
                     'cramSessions', 'trash', 'focusSessions', 'testingHub', 'focusTemplates',
                     'customTabs', 'splitPaneContexts', 'pinnedPages', 'notificationsState',
-                    'energyProfile', 'protectedTime', 'taskDependencies', 'studySessions',
+                    'protectedTime', 'taskDependencies', 'studySessions',
                     'masteryRecords', 'confidenceObservations', 'studentDecisionState',
                     'assistantPermissions', 'assistantMemory', 'syncAuditLog', 'workspaceMeta',
                     'privateDocuments', 'sharedStudySessions', 'operatingManual', 'portfolioWorkspace',
@@ -63356,12 +63458,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
             const list = document.createElement('ul');
             list.className = 'sync-guarantees';
-            const savedAt = sutraPersistenceState && sutraPersistenceState.lastConfirmedSaveAt;
-            const backupAt = appSettings && appSettings.dataHealth ? appSettings.dataHealth.lastAtelierExportAt : null;
             const rows = [
-                ['Saved on this device', formatSutraSyncTime(savedAt)],
-                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off'],
-                ['Backed up (.sutra / Sutra Cloud)', formatSutraSyncTime(backupAt)]
+                ['Synced to cloud', status.enabled ? formatSutraSyncTime(status.lastSyncAt) : 'Sync is off']
             ];
             if (status.enabled && status.outboxDepth > 0) rows.push(['Waiting to upload', String(status.outboxDepth) + ' change(s)']);
             if (status.enabled && status.conflictsPending > 0) rows.push(['Conflicts to review', String(status.conflictsPending)]);
@@ -63379,7 +63477,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function updateSutraSyncUi() {
             const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal || !modal.classList.contains('active')) return;
+            if (!modal || modal.hidden) return;
             const status = getSutraSyncStatus();
             renderSutraSyncStatusCard();
             const setup = sutraSyncEl('sutraSyncSetup');
@@ -63730,7 +63828,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const el = sutraSyncEl(id);
                 if (el) el.addEventListener('click', handler);
             };
-            on('sutraSyncOpenCloudBtn', () => { closeSutraSyncModal(); openSutraCloudModal(); });
+            on('sutraSyncOpenCloudBtn', () => {
+                selectSutraCloudSection('sync');
+                document.getElementById('sutraCloudAccountSetup').scrollIntoView({ block: 'nearest' });
+            });
             on('sutraSyncEnableBtn', async () => {
                 sutraSyncSetError('sutraSyncSetupError', '');
                 const pass = (sutraSyncEl('sutraSyncPassphraseInput') || {}).value || '';
@@ -63875,30 +63976,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function openSutraSyncModal() {
-            const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal) return;
-            // Never stack the Sync sheet above the Cloud sheet (or vice
-            // versa): close the sibling before activating this one.
-            closeSutraCloudModal();
-            sutraSyncRuntime.lastFocus = document.activeElement;
-            bindSutraSyncUi();
-            modal.classList.add('active');
-            try { document.body.classList.add('modal-open'); } catch (error) { /* noop */ }
-            updateSutraSyncUi();
-            requestAnimationFrame(() => {
-                const target = modal.querySelector('section:not([hidden]) input:not([disabled]), section:not([hidden]) button:not([disabled]), [data-modal-close]');
-                if (target) try { target.focus(); } catch (error) { /* advisory */ }
-            });
+            openSutraCloudModal('sync');
         }
 
         function closeSutraSyncModal() {
-            const modal = sutraSyncEl('sutraSyncModal');
-            if (!modal) return;
-            modal.classList.remove('active');
-            // Only release the scroll lock when no other modal is still open.
-            if (!document.querySelector('.modal.active')) {
-                try { document.body.classList.remove('modal-open'); } catch (error) { /* noop */ }
-            }
+            closeSutraCloudModal();
+        }
+
+        function clearSutraCloudPassphraseInputs() {
             [
                 'sutraSyncPassphraseInput', 'sutraSyncPassphraseConfirmInput',
                 'sutraSyncUnlockInput', 'sutraSyncCurrentPassInput',
@@ -63909,9 +63994,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
             const changePanel = sutraSyncEl('sutraSyncChangePassPanel');
             if (changePanel) changePanel.hidden = true;
-            const previous = sutraSyncRuntime.lastFocus;
-            sutraSyncRuntime.lastFocus = null;
-            if (previous && typeof previous.focus === 'function') try { previous.focus(); } catch (error) { /* advisory */ }
         }
 
         try {
@@ -65210,7 +65292,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             html += '  </div>';
             html += '  <div class="emoji-header-actions">';
             html += '    <button type="button" class="emoji-remove-btn" onclick="removePageIcon();hideEmojiPicker();">Remove</button>';
-            html += '    <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close emoji picker"><i class="fas fa-times"></i></button>';
+            html += '    <button type="button" class="emoji-close-btn" onclick="hideEmojiPicker()" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>';
             html += '  </div>';
             html += '</div>';
             html += '<div class="emoji-search-container">';
@@ -77743,6 +77825,15 @@ ${cspMeta}
                 chatInput.value = '';
             }
 
+            let lockedPageAccess = { ok: true, needed: false, ticket: null };
+            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    appendChatNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             // Sutra Assistant command layer: if the text is a recognized natural-
             // language command (open note, run deadline radar, start focus, etc.)
             // execute it locally and skip the model call entirely.
@@ -77844,8 +77935,9 @@ ${cspMeta}
             // Build the exact, budgeted context before the disclosure. This is
             // local-only work and lets the user inspect what would be sent.
             const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(text, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope })
+                ? window.flowAssistant.buildRequestEnrichment(text, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
+            try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: false, status: 'pre-send' });
 
             // Phase 2D — first remote request privacy disclosure. Nothing leaves
@@ -78131,6 +78223,7 @@ ${cspMeta}
                 renderPagesList: () => { if (_origRenderPagesList) _origRenderPagesList(); },
                 getPageById: (id) => (Array.isArray(pages) ? pages.find(page => page && String(page.id) === String(id)) : null),
                 isPageContentAuthorized: (pageOrId) => isPageContentAuthorized(pageOrId),
+                requestAssistantPageAccess: (pageId) => requestAssistantPageAccess(pageId),
                 checkpointPage: (page, label) => {
                     if (!page || typeof createVersionSnapshot !== 'function') return null;
                     return createVersionSnapshot(page, label || 'Before Assistant change', { force: true });
@@ -79918,6 +80011,15 @@ ${cspMeta}
                 asstScrollToBottom();
             }
 
+            let lockedPageAccess = { ok: true, needed: false, ticket: null };
+            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    asstNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             // Command layer — natural-language commands run locally, no model call.
             try {
                 if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
@@ -79944,13 +80046,22 @@ ${cspMeta}
                 }
             } catch (e) { /* fall through to model */ }
 
-            await asstSendCore(text, sendText, { pushUser: true, contextTags });
+            await asstSendCore(text, sendText, { pushUser: true, contextTags, lockedAccessChecked: true, lockedPageAccessTicket: lockedPageAccess.ticket });
         }
 
         // Shared send pipeline. `displayText` is what the user sees/persists,
         // `sendText` is what the model receives (may carry a context block).
         // opts.pushUser=false is used by Regenerate (user turn already present).
         async function asstSendCore(displayText, sendText, opts = {}) {
+            let lockedPageAccess = { ok: true, needed: false, ticket: opts.lockedPageAccessTicket || null };
+            if (!opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+                lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(displayText);
+                if (!lockedPageAccess || lockedPageAccess.ok !== true) {
+                    window.flowAssistant.consumeLockedPageAccess();
+                    asstNotice((lockedPageAccess && lockedPageAccess.message) || 'Cancelled — the locked page was not shared with Assistant.');
+                    return;
+                }
+            }
             const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
             const provider = getCurrentChatProvider();
             const providerConfig = CHAT_PROVIDER_CONFIG[provider];
@@ -80001,8 +80112,9 @@ ${cspMeta}
             } catch (e) { /* non-blocking */ }
 
             const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
-                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope })
+                ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
+            try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
             const preSendReceipt = buildAssistantResponseReceipt(flowEnrichment, {
                 local: false, provider: providerConfig.label, model: selectedModel, status: 'pre-send', dataTransmitted: false
             });
@@ -82553,9 +82665,13 @@ function syncQuickCaptureCourseField(parsed, modal) {
     return { selectedCourse, isNew };
 }
 
-function openQuickCaptureModal(prefillText) {
+function openQuickCaptureModal(prefillText, options) {
     const modal = document.getElementById('quickCaptureModal');
     if (!modal) return;
+    const captureOptions = options && typeof options === 'object' ? options : {};
+    const allowedTypes = ['task', 'homework', 'test', 'note', 'review', 'block', 'apsession', 'college', 'grade'];
+    const requestedType = allowedTypes.includes(String(captureOptions.type || '')) ? String(captureOptions.type) : '';
+    const requestedCourseId = captureOptions.courseId ? String(captureOptions.courseId) : '';
     const input = modal.querySelector('#quickCaptureInput');
     const previewEl = modal.querySelector('#quickCapturePreview');
     const typeSelect = modal.querySelector('#quickCaptureType');
@@ -82568,11 +82684,17 @@ function openQuickCaptureModal(prefillText) {
     const notesInput = modal.querySelector('#quickCaptureNotes');
     const courseSelect = modal.querySelector('#quickCaptureCourse');
     const newCourseInput = modal.querySelector('#quickCaptureNewCourse');
+    const titleEl = modal.querySelector('#quickCaptureTitle');
+    const submitLabel = modal.querySelector('#quickCaptureSubmitBtn');
     if (!input || !previewEl || !typeSelect || !dateInput || !timeInput || !apSubjectSelect) return;
+
+    if (titleEl) titleEl.textContent = requestedType === 'homework' ? 'Add homework' : 'Quick Capture';
+    if (submitLabel) submitLabel.textContent = requestedType === 'homework' ? 'Add homework' : 'Capture';
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
     if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+    if (!requestedType) typeSelect.value = 'task';
     [prioritySelect, difficultySelect, estimateInput].forEach(field => {
         if (field && field.dataset) field.dataset.userTouched = '0';
     });
@@ -82667,7 +82789,7 @@ function openQuickCaptureModal(prefillText) {
         previewEl.textContent = `“${parsed.title}” · ${bits.join(' · ')}`;
     };
     input.oninput = () => {
-        if (typeSelect.dataset) typeSelect.dataset.manualType = '';
+        if (!requestedType && typeSelect.dataset) typeSelect.dataset.manualType = '';
         updatePreview();
     };
     typeSelect.onchange = () => {
@@ -82713,6 +82835,19 @@ function openQuickCaptureModal(prefillText) {
             if (event.key === 'Escape') { event.preventDefault(); closeQuickCaptureModal(); }
             if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submitQuickCapture(); }
         });
+    }
+
+    if (requestedType) {
+        typeSelect.value = requestedType;
+        if (typeSelect.dataset) typeSelect.dataset.manualType = requestedType;
+        syncQuickCaptureApSubjectField({ type: requestedType }, modal);
+        syncQuickCaptureCourseField({ type: requestedType, courseId: requestedCourseId, classHint: '' }, modal);
+        if (requestedCourseId && courseSelect && Array.from(courseSelect.options).some(option => option.value === requestedCourseId)) {
+            courseSelect.value = requestedCourseId;
+            courseSelect.dataset.userTouched = '1';
+        }
+        const blockField = modal.querySelector('#quickCaptureBlockTimeField');
+        if (blockField) blockField.hidden = !['homework', 'task', 'test', 'college', 'apsession'].includes(requestedType);
     }
     updatePreview();
 
@@ -83785,7 +83920,7 @@ function getCommandPaletteCommands() {
         { id: 'add-college-scholarship', label: 'Add scholarship', hint: 'New scholarship in College', hidden: modeHides('collegeapp'), run: () => { closeCommandPalette(); try { setActiveView('collegeapp'); showCollegeAppPage('scholarships'); addCollegeAppRow('scholarships'); } catch (err) {} } },
         { id: 'add-life-goal', label: 'Add life goal', hint: 'New SMART goal in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('goals'); } catch (err) {} } },
         { id: 'add-life-habit', label: 'Add habit', hint: 'New habit in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('habits'); } catch (err) {} } },
-        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, energy, and stress', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
+        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, stress, and sleep', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
         { id: 'add-business-project', label: 'Add business project', hint: 'New project in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('project'); } catch (err) {} } },
         { id: 'add-business-invoice', label: 'Add invoice', hint: 'New invoice in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('invoice'); } catch (err) {} } },
         { id: 'add-business-meeting', label: 'Add meeting', hint: 'New meeting in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('meeting'); } catch (err) {} } },
@@ -84494,7 +84629,7 @@ function scheduleDeadlineItemAsBlock(item) {
             date: iso,
             start: defaultStart,
             end: (function(){ const [h,m] = defaultStart.split(':').map(Number); const nh=(h+1)%24; return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`; })(),
-            name: `Prep: ${item.title || ''}`.slice(0, 120),
+            name: `Prep: ${item.title || ''}`,
             category: item.source === 'apexam' ? 'study' : 'general'
         });
         saveTimeBlocks && saveTimeBlocks();
@@ -84522,7 +84657,7 @@ function scheduleGenericItemAsBlock(item) {
             date: iso,
             start,
             end,
-            name: `Prep: ${String(item.title || item.name || 'Work').slice(0, 120)}`,
+            name: `Prep: ${String(item.title || item.name || 'Work')}`,
             category: item.category || 'general',
             ...linkage
         });

@@ -264,11 +264,20 @@ test('iframe capabilities are explicit, warned, and never grant popup escape', a
       '<form action="https://example.com"><button>go</button></form>',
       { mode: 'interactive', capabilityAcknowledged: true }
     );
+    const networkHost = document.createElement('div');
+    const network = window.SutraDOMSafety.renderUserHTMLToFrame(
+      networkHost,
+      '<iframe src="https://open.spotify.com/embed/track/example"></iframe><iframe src="https://evil.example/widget"></iframe>',
+      { mode: 'network-embeds', capabilityAcknowledged: true }
+    );
     return {
       unacknowledgedSandbox: unacknowledged.getAttribute('sandbox'),
       acknowledgedSandbox: acknowledged.getAttribute('sandbox'),
       warning: acknowledgedHost.querySelector('.sutra-embed-capability-warning')?.textContent || '',
-      doc: acknowledged.getAttribute('srcdoc') || ''
+      doc: acknowledged.getAttribute('srcdoc') || '',
+      networkSandbox: network.getAttribute('sandbox'),
+      networkWarning: networkHost.querySelector('.sutra-embed-capability-warning')?.textContent || '',
+      networkDoc: network.getAttribute('srcdoc') || ''
     };
   });
   expect(res.unacknowledgedSandbox).toBe('');
@@ -279,4 +288,10 @@ test('iframe capabilities are explicit, warned, and never grant popup escape', a
   expect(res.warning).toMatch(/scripts|requests|forms/i);
   expect(res.doc).toContain("frame-src 'none'");
   expect(res.doc).toContain("navigate-to 'none'");
+  expect(res.networkSandbox).toBe('allow-scripts allow-popups');
+  expect(res.networkWarning).toMatch(/remote|external/i);
+  expect(res.networkDoc).toContain('frame-src https://www.youtube.com');
+  expect(res.networkDoc).toContain('https://open.spotify.com');
+  expect(res.networkDoc).toContain("connect-src 'none'");
+  expect(res.networkDoc).toContain("script-src 'unsafe-inline'");
 });

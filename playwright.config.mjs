@@ -10,7 +10,8 @@ const responsiveTestMatch = [
   /.*homework-course-icons\.spec\.mjs$/,
   /.*quick-capture-student-flow\.spec\.mjs$/,
   /.*today-redesign\.spec\.mjs$/,
-  /.*onboarding-redesign\.spec\.mjs$/
+  /.*onboarding-redesign\.spec\.mjs$/,
+  /.*export-options-modal\.spec\.mjs$/
 ];
 
 const playwrightPort = Number(process.env.PLAYWRIGHT_PORT || 5173);

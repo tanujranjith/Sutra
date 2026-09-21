@@ -96,7 +96,7 @@
         }
         var merged = Object.assign({}, canonical || {}, original);
         var normalized = {
-            title: text(merged.title || merged.name || merged.text || 'Scheduled item').trim().slice(0, 120) || 'Scheduled item',
+            title: text(merged.title || merged.name || merged.text || 'Scheduled item').trim() || 'Scheduled item',
             sourceType: sourceType,
             source: sourceType,
             sourceId: sourceId,
@@ -637,7 +637,7 @@
 
     function itemFromElement(element) {
         return enrichCanonicalSource({
-            title: element.getAttribute('data-drag-title') || element.textContent.trim().slice(0, 120),
+            title: element.getAttribute('data-drag-title') || element.textContent.trim(),
             source: element.getAttribute('data-drag-source') || 'workspace',
             sourceId: element.getAttribute('data-drag-source-id') || '',
             dueDate: element.getAttribute('data-drag-due-date') || '',

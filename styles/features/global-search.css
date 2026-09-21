@@ -75,6 +75,10 @@
   border-color: color-mix(in srgb, var(--accent) 55%, var(--surface-border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
+.global-search-panel.is-auto-focused .global-search-inputrow:focus-within {
+  border-color: color-mix(in srgb, var(--surface-border) 80%, transparent);
+  box-shadow: none;
+}
 .global-search-input-icon { color: var(--text-muted); font-size: 0.95rem; flex: none; }
 .global-search-field {
   flex: 1 1 auto;

@@ -14,6 +14,32 @@ async function openHomeCustomizer(page) {
   await page.getByRole('menuitem', { name: 'Customize Home' }).click();
 }
 
+test('Calm Home shows the essential workflow without duplicate cards', async ({ page }) => {
+  await expect(page.locator('#view-today .today-nextup-card')).toBeVisible();
+  await expect(page.locator('#view-today .today-radar-card')).toBeVisible();
+  await expect(page.locator('#view-today .today-plan-section')).toBeVisible();
+  await expect(page.locator('#view-today #tccBackupHealth')).toBeVisible();
+  await expect(page.locator('#view-today #tccAttentionTasks')).toBeVisible();
+  await expect(page.locator('#homeQuickTaskInput')).toBeVisible();
+
+  for (const selector of [
+    '#tccPlanCard',
+    '#tccAttentionAssignments',
+    '#tccAttentionCalendar',
+    '#todayReviewCard',
+    '#tccUpcomingTests',
+    '#tccTonightPlan',
+    '.today-panel-habits',
+    '#todayTrackerSummary',
+    '.today-completed-strip',
+    '#todayJumpCollapsible',
+    '#todayAcademicCollapsible',
+    '#todayAnalyticsCollapsible'
+  ]) {
+    await expect(page.locator(`#view-today ${selector}`)).toBeHidden();
+  }
+});
+
 test('Today widgets can be shown, resized, reordered, and persisted', async ({ page }) => {
   await openHomeCustomizer(page);
   const modal = page.getByRole('dialog', { name: 'Make Home yours' });

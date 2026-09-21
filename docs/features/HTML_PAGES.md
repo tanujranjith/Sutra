@@ -15,6 +15,12 @@ HTML Pages are a dedicated Create surface for one local HTML source document. A 
 
 Selection, scroll position, preview DOM, and script runtime state are session-only. The document follows the normal page persistence, version-history, encrypted backup, restore, and Sutra Sync paths. Missing `htmlDocument` fields normalize to `null`, so existing pages need no migration.
 
+The import boundary also recognizes early HTML Page records whose explicit page
+type was `html`, `html-page`, or `html_page` and whose source was stored in the
+legacy `content`, `html`, or `source` field. Those records are converted to the
+canonical `htmlDocument` shape during migration; ordinary `note` pages are not
+inferred from HTML-looking content.
+
 ## Editing and import
 
 - New Page → HTML Page creates a normal page with starter HTML.

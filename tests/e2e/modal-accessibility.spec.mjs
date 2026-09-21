@@ -227,6 +227,99 @@ test('open modal isolates background content with inert and releases it on close
   }))).toEqual({ active: 0, marked: 0, appBackgroundStillInert: false });
 });
 
+test('emoji picker keeps its sibling surfaces interactive while open', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => window.setActiveView && window.setActiveView('notes'));
+  await page.waitForFunction(() => document.getElementById('view-notes')?.classList.contains('active'));
+
+  await page.locator('button.new-page-btn:visible').first().click();
+  await page.fill('#newPageName', 'Emoji picker modal QA');
+  await page.locator('#newPageModal button.btn-primary').click();
+  await page.waitForFunction(() => document.getElementById('pageTitle')?.value === 'Emoji picker modal QA');
+  const pageId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  const icon = page.locator(`.page-item[data-page-id="${pageId}"] .page-icon`);
+  await expect(icon).toBeVisible();
+  await icon.click();
+
+  const picker = page.locator('#emojiPicker');
+  const overlay = page.locator('#emojiModalOverlay');
+  await expect(picker).toHaveClass(/active/);
+  await expect(overlay).toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(2);
+  await expect(page.locator('#emojiSearch')).toBeFocused();
+
+  const protectedState = await page.evaluate(() => {
+    const picker = document.getElementById('emojiPicker');
+    const overlay = document.getElementById('emojiModalOverlay');
+    return {
+      pickerInert: picker?.inert === true,
+      pickerMarkedInert: picker?.hasAttribute('data-sutra-modal-inert') === true,
+      pickerAriaHidden: picker?.getAttribute('aria-hidden'),
+      overlayInert: overlay?.inert === true,
+      overlayMarkedInert: overlay?.hasAttribute('data-sutra-modal-inert') === true,
+      backgroundIsolated: Array.from(document.querySelectorAll('[data-sutra-modal-inert]')).some((branch) =>
+        branch.querySelector('button, input, select, textarea, a[href]')
+      )
+    };
+  });
+  expect(protectedState).toEqual({
+    pickerInert: false,
+    pickerMarkedInert: false,
+    pickerAriaHidden: null,
+    overlayInert: false,
+    overlayMarkedInert: false,
+    backgroundIsolated: true
+  });
+
+  const allGrid = page.locator('#emojiGrid');
+  const allScrollTop = await allGrid.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  expect(allScrollTop).toBeGreaterThan(0);
+
+  const search = page.locator('#emojiSearch');
+  await search.fill('heart');
+  await expect(search).toBeFocused();
+  await expect(page.locator('#emojiGrid .emoji-option').first()).toBeVisible();
+
+  const category = page.locator('#emojiPicker .emoji-cat-btn').nth(1);
+  await category.click();
+  await expect(category).toHaveClass(/active/);
+  await expect(search).toHaveValue('');
+  await expect(picker).toHaveClass(/active/);
+
+  const choice = page.locator('#emojiGrid .emoji-option').first();
+  const selectedEmoji = await choice.textContent();
+  await choice.click();
+  await expect(picker).not.toHaveClass(/active/);
+  await expect(overlay).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(0);
+  await expect.poll(() => page.evaluate((id) => window.flowAtelier.pages.find((entry) => entry.id === id)?.icon || '', pageId)).toBe(selectedEmoji);
+
+  await icon.click();
+  await expect(picker).toHaveClass(/active/);
+  await page.locator('#emojiPicker .emoji-close-btn').click();
+  await expect(picker).not.toHaveClass(/active/);
+
+  await icon.click();
+  await expect(picker).toHaveClass(/active/);
+  await page.evaluate(() => document.getElementById('emojiModalOverlay').click());
+  await expect(picker).not.toHaveClass(/active/);
+
+  await icon.click();
+  await expect(picker).toHaveClass(/active/);
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(0);
+
+  await icon.click();
+  await expect(picker).toHaveClass(/active/);
+  await page.locator('#emojiPicker .emoji-remove-btn').click();
+  await expect(picker).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate((id) => window.flowAtelier.pages.find((entry) => entry.id === id)?.icon, pageId)).toBeUndefined();
+});
+
 test('stacked modals isolate the lower dialog and restore focus when the top closes', async ({ page }) => {
   await openApp(page);
   const opened = await page.evaluate(async () => {

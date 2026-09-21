@@ -379,6 +379,7 @@
                 extraExtensions: buildPreservedNodes(eng),
                 editorProps: {
                     transformPastedHTML: stripForeignPasteStyles,
+                    handlePaste: handleImagePaste,
                     handleDrop: handleImageDrop,
                     handleDOMEvents: { contextmenu: handleTableContextMenu }
                 },
@@ -1250,6 +1251,85 @@
             };
             reader.readAsDataURL(file);
         });
+        return true;
+    }
+
+    function reportImagePasteFailure(error) {
+        if (typeof window.SutraReportError !== 'function') return;
+        try {
+            window.SutraReportError(error, {
+                feature: 'notes-editor-v2',
+                where: 'image-paste',
+                userMessage: 'That image could not be pasted.'
+            }, 'warning');
+        } catch (reportError) { /* diagnostics must not interrupt editor input */ }
+    }
+
+    function insertPastedImage(view, file, onComplete) {
+        var reader = new FileReader();
+        reader.onload = function () {
+            var src = String(reader.result || '');
+            if (!/^data:image\//i.test(src)) {
+                reportImagePasteFailure(new Error('Clipboard image did not produce an image data URL.'));
+                if (typeof onComplete === 'function') onComplete();
+                return;
+            }
+            try {
+                if (!view || view.destroyed || !view.state) return;
+                var imageType = view.state.schema.nodes.image;
+                if (!imageType) throw new Error('The notes editor image node is unavailable.');
+                var image = imageType.create({
+                    src: src,
+                    alt: file && file.name ? String(file.name) : 'Pasted image'
+                });
+                view.dispatch(view.state.tr.replaceSelectionWith(image).scrollIntoView());
+            } catch (error) {
+                reportImagePasteFailure(error);
+            } finally {
+                if (typeof onComplete === 'function') onComplete();
+            }
+        };
+        reader.onerror = function () {
+            reportImagePasteFailure(new Error('Unable to read the pasted image.'));
+            if (typeof onComplete === 'function') onComplete();
+        };
+        try {
+            reader.readAsDataURL(file);
+        } catch (error) {
+            reportImagePasteFailure(error);
+            if (typeof onComplete === 'function') onComplete();
+        }
+    }
+
+    function handleImagePaste(view, event) {
+        var data = event && event.clipboardData;
+        if (!data) return false;
+
+        var files = [];
+        var items = data.items;
+        if (items && items.length) {
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                if (!item || item.kind !== 'file' || !/^image\//i.test(item.type || '')) continue;
+                var itemFile = item.getAsFile && item.getAsFile();
+                if (itemFile) files.push(itemFile);
+            }
+        }
+        if (!files.length && data.files && data.files.length) {
+            files = Array.prototype.slice.call(data.files).filter(function (file) {
+                return file && /^image\//i.test(file.type || '');
+            });
+        }
+        if (!files.length) return false;
+
+        event.preventDefault();
+        var index = 0;
+        var insertNext = function () {
+            if (index >= files.length) return;
+            var file = files[index++];
+            insertPastedImage(view, file, insertNext);
+        };
+        insertNext();
         return true;
     }
 

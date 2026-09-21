@@ -171,14 +171,14 @@
             list.replaceChildren();
             appendStatusRow(list, 'Local save: ' + status.local.state.replace(/_/g, ' '), status.local.age);
             appendStatusRow(list, 'Manual backup: ' + status.manualBackup.state.replace(/_/g, ' '), status.manualBackup.age);
-            appendStatusRow(list, 'Cloud: ' + status.cloud.state.replace(/_/g, ' '), status.cloud.error || status.cloud.age);
+            appendStatusRow(list, 'Cloud backups: ' + status.cloud.state.replace(/_/g, ' '), status.cloud.error || status.cloud.age);
             if (status.offline) appendStatusRow(list, 'Offline', 'Local saving remains available; cloud backup cannot run.');
             if (status.attachmentWarnings || status.missingAssets) appendStatusRow(list, 'Backup completeness', status.attachmentWarnings + ' attachment warning(s)');
         }
     }
 
     function init() {
-        ['sutra:persistence-health-changed', 'online', 'offline', 'visibilitychange'].forEach(function (name) {
+        ['sutra:persistence-health-changed', 'sutra:cloud-status', 'online', 'offline', 'visibilitychange'].forEach(function (name) {
             global.addEventListener(name, updateTodayBackupCard);
         });
         global.setInterval(updateTodayBackupCard, 300000);

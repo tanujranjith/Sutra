@@ -46,17 +46,17 @@
         return {
             id: String(raw.id || uid('item')),
             kind: kind,
-            title: title.slice(0, 200),
-            courseName: String(raw.courseName || '').trim().slice(0, 120),
+            title: title,
+            courseName: String(raw.courseName || '').trim(),
             date: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date || '')) ? String(raw.date) : '',
             time: /^\d{2}:\d{2}$/.test(String(raw.time || '')) ? String(raw.time) : '',
             endTime: /^\d{2}:\d{2}$/.test(String(raw.endTime || '')) ? String(raw.endTime) : '',
             days: Array.isArray(raw.days) ? raw.days.filter(function (d) { return Number.isInteger(d) && d >= 0 && d <= 6; }) : [],
             weight: Number.isFinite(Number(raw.weight)) ? Math.max(0, Math.min(100, Number(raw.weight))) : null,
-            teacher: String(raw.teacher || '').trim().slice(0, 120),
-            teacherEmail: String(raw.teacherEmail || '').trim().slice(0, 160),
-            room: String(raw.room || '').trim().slice(0, 80),
-            details: String(raw.details || '').trim().slice(0, 400),
+            teacher: String(raw.teacher || '').trim(),
+            teacherEmail: String(raw.teacherEmail || '').trim(),
+            room: String(raw.room || '').trim(),
+            details: String(raw.details || '').trim(),
             confidence: ['high', 'medium', 'low'].indexOf(String(raw.confidence)) !== -1 ? String(raw.confidence) : 'medium',
             provenance: raw.provenance === 'ai' ? 'ai' : 'local',
             sourceId: String(raw.sourceId || ''),
@@ -185,8 +185,8 @@
     var EXAM_RE = /\b(exam|test|quiz|midterm|final|assessment)\b/i;
     var ASSIGNMENT_RE = /\b(due|assignment|homework|hw|essay|project|lab(?:\s+report)?|read(?:ing)?|worksheet|problem set|pset|draft|presentation|paper)\b/i;
     var NO_SCHOOL_RE = /\b(no school|holiday|break|day off|teacher work\s?day|in-?service|staff development|closed)\b/i;
-    var COURSE_LINE_RE = /^(?:[Pp]eriod\s*(\d+)\s*[:\-–]\s*)?([A-Z][A-Za-z0-9&\/\- ]{2,60})(?:\s*[—\-–:]\s*(?:Mr\.?|Mrs\.?|Ms\.?|Mx\.?|Dr\.?|Prof\.?)\s*([A-Za-z'\- ]{2,40}))?\s*(?:\(?\s*(?:[Rr]oom|[Rr][Mm]|ROOM)\.?\s*#?\s*([A-Za-z0-9\-]{1,8})\s*\)?)?\s*$/;
-    var GRADING_RE = /^([A-Za-z][A-Za-z &\/\-]{2,40}?)\s*[:\-–]?\s*(\d{1,3})\s*%/;
+    var COURSE_LINE_RE = /^(?:[Pp]eriod\s*(\d+)\s*[:\-–]\s*)?([A-Z][A-Za-z0-9&\/\- ]+?)(?:\s*[—\-–:]\s*(?:Mr\.?|Mrs\.?|Ms\.?|Mx\.?|Dr\.?|Prof\.?)\s*([A-Za-z'\- ]+?))?\s*(?:\(?\s*(?:[Rr]oom|[Rr][Mm]|ROOM)\.?\s*#?\s*([A-Za-z0-9\-]+)\s*\)?)?\s*$/;
+    var GRADING_RE = /^([A-Za-z][A-Za-z &\/\-]+?)\s*[:\-–]?\s*(\d{1,3})\s*%/;
     var TEACHER_EMAIL_RE = /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i;
 
     /**
@@ -230,7 +230,7 @@
             // No-school days.
             if (NO_SCHOOL_RE.test(lower) && date) {
                 items.push(normalizeItem({
-                    kind: 'no_school', title: line.replace(/\s+/g, ' ').slice(0, 80), date: date,
+                    kind: 'no_school', title: line.replace(/\s+/g, ' '), date: date,
                     confidence: 'high', sourceId: sourceId, sourceSnippet: snippet
                 }));
                 return;
@@ -239,7 +239,7 @@
             // Exams.
             if (EXAM_RE.test(lower) && date) {
                 items.push(normalizeItem({
-                    kind: 'exam', title: line.replace(/\s+/g, ' ').slice(0, 120), date: date, time: time,
+                    kind: 'exam', title: line.replace(/\s+/g, ' '), date: date, time: time,
                     courseName: currentCourse, confidence: 'high', sourceId: sourceId, sourceSnippet: snippet
                 }));
                 return;
@@ -248,7 +248,7 @@
             // Assignments.
             if (ASSIGNMENT_RE.test(lower) && date) {
                 items.push(normalizeItem({
-                    kind: 'assignment', title: line.replace(/\s+/g, ' ').slice(0, 140), date: date, time: time,
+                    kind: 'assignment', title: line.replace(/\s+/g, ' '), date: date, time: time,
                     courseName: currentCourse, confidence: EXAM_RE.test(lower) ? 'medium' : 'high',
                     sourceId: sourceId, sourceSnippet: snippet
                 }));
@@ -278,7 +278,7 @@
                 || courseMatch[4]
                 || /\b(biology|chem|physics|history|math|calc|algebra|geometry|english|literature|spanish|french|german|latin|economics|gov|computer|science|art|music|band|orchestra|psych)\w*\b/i.test(lower)
             );
-            if (looksLikeCourse && !date && line.length < 80 && !/[.!?]$/.test(line)) {
+            if (looksLikeCourse && !date && !/[.!?]$/.test(line)) {
                 currentCourse = courseMatch[2].trim();
                 inGradingSection = false;
                 items.push(normalizeItem({
@@ -329,7 +329,7 @@
             var lower = summary.toLowerCase();
             var kind = NO_SCHOOL_RE.test(lower) ? 'no_school' : (EXAM_RE.test(lower) ? 'exam' : (ASSIGNMENT_RE.test(lower) ? 'assignment' : 'event'));
             items.push(normalizeItem({
-                kind: kind, title: summary.slice(0, 140), date: startInfo.dateKey,
+                kind: kind, title: summary, date: startInfo.dateKey,
                 time: startInfo.time || '', confidence: 'high', provenance: 'local',
                 sourceId: source && source.id, sourceSnippet: summary.slice(0, 200)
             }));

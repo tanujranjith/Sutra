@@ -12,6 +12,38 @@
   function browserLoader() {
     var loadedScripts = Object.create(null);
     var loadedStyles = Object.create(null);
+
+    function findExistingStyle(href) {
+      var absoluteHref;
+      try {
+        absoluteHref = new URL(href, document.baseURI).href;
+      } catch (error) {
+        absoluteHref = href;
+      }
+      var nodes = document.querySelectorAll('link[rel="stylesheet"]');
+      for (var i = 0; i < nodes.length; i += 1) {
+        if (nodes[i].href === absoluteHref || nodes[i].getAttribute('href') === href) return nodes[i];
+      }
+      return null;
+    }
+
+    function waitForExistingStyle(node, href) {
+      if (node.sheet) return Promise.resolve(href);
+      return new Promise(function (resolve, reject) {
+        function cleanup() {
+          node.removeEventListener('load', onload);
+          node.removeEventListener('error', onerror);
+        }
+        function onload() { cleanup(); resolve(href); }
+        function onerror() {
+          cleanup();
+          reject(new Error('Optional feature style failed: ' + href));
+        }
+        node.addEventListener('load', onload, { once: true });
+        node.addEventListener('error', onerror, { once: true });
+      });
+    }
+
     return {
       script: function (src) {
         if (loadedScripts[src]) return loadedScripts[src];
@@ -31,15 +63,21 @@
           return loadedStyles[href].promise;
         }
         var record = {};
-        record.promise = new Promise(function (resolve, reject) {
-          var node = document.createElement('link');
-          record.node = node;
-          node.rel = 'stylesheet';
-          node.href = href;
-          node.onload = function () { resolve(href); };
-          node.onerror = function () { reject(new Error('Optional feature style failed: ' + href)); };
-          document.head.appendChild(node);
-        });
+        var existing = findExistingStyle(href);
+        if (existing) {
+          record.node = existing;
+          record.promise = waitForExistingStyle(existing, href);
+        } else {
+          record.promise = new Promise(function (resolve, reject) {
+            var node = document.createElement('link');
+            record.node = node;
+            node.rel = 'stylesheet';
+            node.href = href;
+            node.onload = function () { resolve(href); };
+            node.onerror = function () { reject(new Error('Optional feature style failed: ' + href)); };
+            document.head.appendChild(node);
+          });
+        }
         loadedStyles[href] = record;
         return record.promise;
       },

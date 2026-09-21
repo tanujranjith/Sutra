@@ -14,7 +14,10 @@
     if (typeof structuredClone === 'function') return structuredClone(value);
     return JSON.parse(JSON.stringify(value));
   }
-  function clean(value, max) { return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max || 4000); }
+  function clean(value, max) {
+    var normalized = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+    return max == null ? normalized : normalized.slice(0, max);
+  }
   function keyText(value) { return clean(value, 500).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
   function hash(value) {
     var text = typeof value === 'string' ? value : JSON.stringify(value);
@@ -64,7 +67,9 @@
       else value += ch;
     }
     cells.push(value);
-    return cells.map(function (cell) { return clean(cell, 10000); });
+    // The complete source is bounded by MAX_SOURCE_CHARS; do not impose a
+    // second silent per-cell truncation on authored assignment details.
+    return cells.map(function (cell) { return clean(cell); });
   }
   function normalizeKind(value, title) {
     var raw = keyText(value || title).replace(/ /g, '_');
@@ -83,14 +88,14 @@
     var item = {
       id: 'import_item_' + hash([source.sourceId, index, raw.kind, raw.title, raw.date]),
       kind: normalizeKind(raw.kind, raw.title),
-      title: clean(raw.title || raw.summary || raw.feedback || 'Untitled imported item', 240),
-      courseName: clean(raw.courseName || raw.course || raw.className, 160),
+      title: clean(raw.title || raw.summary || raw.feedback || 'Untitled imported item'),
+      courseName: clean(raw.courseName || raw.course || raw.className),
       date: parseDate(raw.date || raw.due || raw.title, source.now),
       time: parseTime(raw.time || raw.start || raw.title),
       endTime: parseTime(raw.endTime || raw.end),
       weight: Number.isFinite(Number(raw.weight)) && raw.weight !== '' ? Math.max(0, Math.min(100, Number(raw.weight))) : null,
-      teacher: clean(raw.teacher, 160),
-      details: clean(raw.details || raw.description || raw.feedback, 12000),
+      teacher: clean(raw.teacher),
+      details: clean(raw.details || raw.description || raw.feedback),
       sourceRef: { sourceId: source.sourceId, sourceName: source.name, format: source.format, row: index + 1 },
       provenance: source.provenance || 'local_deterministic',
       confidence: Number.isFinite(Number(raw.confidence)) ? Math.max(0, Math.min(1, Number(raw.confidence))) : 0.78,
@@ -150,7 +155,7 @@
     var lines = text.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean).slice(0, MAX_ITEMS), courseName = '', items = [];
     lines.forEach(function (line, index) {
       var date = parseDate(line, source.now), lower = line.toLowerCase(), raw = null;
-      if (mode === 'teacher_feedback' && (/^[-*•]/.test(line) || /\b(feedback|comment|rubric)\b/i.test(line))) raw = { kind: 'teacher_feedback', title: line.replace(/^[-*•]\s*/, '').slice(0, 180), details: line, courseName: courseName, confidence: 0.88, confidenceReasons: ['Feedback import mode'] };
+      if (mode === 'teacher_feedback' && (/^[-*•]/.test(line) || /\b(feedback|comment|rubric)\b/i.test(line))) raw = { kind: 'teacher_feedback', title: line.replace(/^[-*•]\s*/, ''), details: line, courseName: courseName, confidence: 0.88, confidenceReasons: ['Feedback import mode'] };
       else if (/\blate\b.*\b(policy|penalty|deduct|accepted|days?)\b/i.test(line)) raw = { kind: 'late_policy', title: 'Late work policy', details: line, courseName: courseName, confidence: 0.92, confidenceReasons: ['Late-policy language'] };
       else if (/\boffice hours?\b/i.test(line)) raw = { kind: 'office_hours', title: 'Office hours', details: line, courseName: courseName, time: parseTime(line), confidence: 0.92, confidenceReasons: ['Office-hours label'] };
       else {

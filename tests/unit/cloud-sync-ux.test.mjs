@@ -14,32 +14,23 @@ test('Cloud leads with encrypted multi-device Sync while preserving backup disti
   assert.match(shell, /<h4 class="sutra-cloud-h">Backup destinations<\/h4>/);
 });
 
-test('opening the Cloud sheet never stacks it above the Sync sheet', () => {
+test('opening Cloud uses the shared section selector', () => {
   const open = extractFunction(app, 'openSutraCloudModal');
   assert.ok(open, 'openSutraCloudModal exists');
-  const siblingCloseAt = open.body.indexOf('closeSutraSyncModal()');
-  const activateAt = open.body.indexOf("modal.classList.add('active')");
-  assert.ok(siblingCloseAt !== -1 && activateAt !== -1,
-    'openSutraCloudModal must close the Sync sheet before activating');
-  assert.ok(siblingCloseAt < activateAt,
-    'the sibling Sync sheet must close before the Cloud sheet activates');
+  assert.match(open.body, /selectSutraCloudSection\(section\)/);
+  assert.equal((shell.match(/class="modal" id="sutraCloudModal"/g) || []).length, 1);
+  assert.doesNotMatch(shell, /class="modal" id="sutraSyncModal"/);
+  assert.doesNotMatch(shell, /id="sutraSyncOpenBtn"/);
 });
 
-test('opening the Sync sheet never stacks it above the Cloud sheet', () => {
+test('legacy Sync navigation opens the same Cloud hub', () => {
   const open = extractFunction(app, 'openSutraSyncModal');
   assert.ok(open, 'openSutraSyncModal exists');
-  const siblingCloseAt = open.body.indexOf('closeSutraCloudModal()');
-  const activateAt = open.body.indexOf("modal.classList.add('active')");
-  assert.ok(siblingCloseAt !== -1 && activateAt !== -1,
-    'openSutraSyncModal must close the Cloud sheet before activating');
-  assert.ok(siblingCloseAt < activateAt,
-    'the sibling Cloud sheet must close before the Sync sheet activates');
-  // Focus handling stays intact alongside the sibling close.
-  assert.match(open.body, /sutraSyncRuntime\.lastFocus = document\.activeElement/);
+  assert.match(open.body, /openSutraCloudModal\('sync'\)/);
 });
 
 test('closing either sheet releases the scroll lock only when nothing else is open', () => {
-  for (const name of ['closeSutraCloudModal', 'closeSutraSyncModal']) {
+  for (const name of ['closeSutraCloudModal']) {
     const close = extractFunction(app, name);
     assert.ok(close, `${name} exists`);
     assert.match(close.body, /modal\.classList\.remove\('active'\)/);

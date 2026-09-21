@@ -34,6 +34,11 @@ reproducible (no model call).
 Open a course from Homework, All Due (course rows), the Course Hub list, linked
 notes, and global search.
 
+From Homework, the class/activity row and its dashboard both expose a confirmed
+Remove action. Linked assignments are removed atomically with the lane and
+placed in shared Trash so the workspace does not keep a stale Homework mirror
+or silently recreate the removed class/activity.
+
 ## Persistence
 
 The course object and its relationships live in `courseWorkspace`, a top-level

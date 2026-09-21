@@ -20,6 +20,7 @@
     var TAB_ICON_CYCLE = ['fa-star', 'fa-compass', 'fa-layer-group', 'fa-seedling', 'fa-rocket', 'fa-heart', 'fa-fire', 'fa-cube'];
 
     var bridge = null;
+    var rawBridgeSetTabs = null;
     var initialized = false;
     var editingTabs = {}; // tabId -> bool (session-only edit mode)
     var scratchpadTimers = {};
@@ -27,6 +28,14 @@
     // Cleared per-widget on re-render and wholesale on view change so hidden or
     // torn-down widgets never leak intervals.
     var liveTimers = {};
+
+    // HTML widgets are intentionally much smaller than HTML Pages. This keeps
+    // a dashboard card responsive and prevents a pasted page from becoming a
+    // stealth second application inside a custom tab.
+    var MAX_HTML_WIDGET_SOURCE_BYTES = 512 * 1024;
+    var MAX_HTML_WIDGET_SOURCE_CHARS = 500000;
+    var HTML_WIDGET_LOCAL_MODE = 'active-local';
+    var HTML_WIDGET_NETWORK_MODE = 'network-embeds';
 
     var STICKY_COLORS = ['#ffd97d', '#a0e7a0', '#9ad0f0', '#f5a3c7', '#c9b6f5', '#ffb38a'];
 
@@ -71,6 +80,37 @@
 
     function clone(value) {
         try { return JSON.parse(JSON.stringify(value)); } catch (e) { return null; }
+    }
+
+    function normalizeHtmlWidgetConfig(raw) {
+        var config = raw && typeof raw === 'object' ? raw : {};
+        var source = typeof config.source === 'string'
+            ? config.source
+            : (typeof config.html === 'string' ? config.html : '');
+        return {
+            source: source,
+            mode: config.mode === HTML_WIDGET_NETWORK_MODE ? HTML_WIDGET_NETWORK_MODE : HTML_WIDGET_LOCAL_MODE
+        };
+    }
+
+    function htmlSourceByteLength(source) {
+        try { return new Blob([String(source || '')]).size; } catch (e) { return String(source || '').length; }
+    }
+
+    function normalizeCustomTabsForFeature(tabs) {
+        if (!Array.isArray(tabs)) return [];
+        return tabs.map(function (tab) {
+            if (!tab || !Array.isArray(tab.widgets)) return tab;
+            var changed = false;
+            var widgets = tab.widgets.map(function (widget) {
+                if (!widget || widget.type !== 'html') return widget;
+                var config = normalizeHtmlWidgetConfig(widget.config);
+                var previous = widget.config && typeof widget.config === 'object' ? widget.config : {};
+                if (previous.source !== config.source || previous.html !== undefined || previous.mode !== config.mode) changed = true;
+                return Object.assign({}, widget, { config: config });
+            });
+            return changed ? Object.assign({}, tab, { widgets: widgets }) : tab;
+        });
     }
 
     function makeId(prefix) {
@@ -194,13 +234,13 @@
     function getTabs() {
         try {
             var tabs = bridge && typeof bridge.getTabs === 'function' ? bridge.getTabs() : [];
-            return Array.isArray(tabs) ? tabs : [];
+            return normalizeCustomTabsForFeature(tabs);
         } catch (e) { return []; }
     }
 
     function saveTabs(nextTabs, opts) {
         opts = opts || {};
-        try { bridge.setTabs(nextTabs); } catch (e) {
+        try { bridge.setTabs(normalizeCustomTabsForFeature(nextTabs)); } catch (e) {
             console.warn('SutraCustomTabs: save failed', e);
             return;
         }
@@ -432,6 +472,12 @@
             desc: 'Shortcuts to sites you use a lot.',
             render: renderLinksWidget
         },
+        html: {
+            label: 'Custom HTML', icon: 'fa-code', cat: 'tools',
+            desc: 'Build a local HTML card, with optional approved remote embeds.',
+            render: renderHtmlWidget,
+            setup: setupHtmlWidget
+        },
         quote: {
             label: 'Motivation', icon: 'fa-quote-left', cat: 'tools',
             desc: 'A rotating motivational quote.',
@@ -479,7 +525,6 @@
         ['imp_streak_ribbon', 'Streak Ribbon', 'fa-fire-flame-curved', 'import_focus', 'Current and best streak.'],
         ['imp_pomodoro', 'Pomodoro', 'fa-hourglass-start', 'import_focus', 'Fixed 25/5 focus cycle.'],
         ['imp_session_log', 'Session Log', 'fa-clock-rotate-left', 'import_focus', 'Recent focus sessions.'],
-        ['imp_energy_checkin', 'Energy Check-in', 'fa-battery-three-quarters', 'import_focus', 'Recent energy summary.'],
         ['imp_overdue_recovery', 'Overdue Recovery', 'fa-life-ring', 'import_tasks', 'Recovery-first overdue list.'],
         ['imp_task_burndown', 'Task Burndown', 'fa-chart-column', 'import_tasks', 'Remaining work over time.'],
         ['imp_task_load', 'Task Load', 'fa-weight-hanging', 'import_tasks', 'Open task volume.'],
@@ -722,7 +767,6 @@
         input.type = 'text';
         input.className = 'ctab-add-input';
         input.placeholder = 'Add an item…';
-        input.maxLength = 200;
         var commit = function () {
             var text = input.value.trim();
             if (!text) return;
@@ -746,7 +790,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-scratchpad';
         area.placeholder = 'Jot anything…';
-        area.maxLength = 20000;
         area.value = widget.config && typeof widget.config.text === 'string' ? widget.config.text : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -757,7 +800,7 @@
                     var w = findWidget(t, widget.id);
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
-                    w.config.text = area.value.slice(0, 20000);
+                    w.config.text = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1132,7 +1175,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-sticky-text';
         area.placeholder = 'Sticky note…';
-        area.maxLength = 2000;
         area.value = typeof cfg.text === 'string' ? cfg.text : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -1143,7 +1185,7 @@
                     var w = findWidget(t, widget.id);
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
-                    w.config.text = area.value.slice(0, 2000);
+                    w.config.text = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1264,6 +1306,222 @@
     }
 
     // ---------- Tools widgets ----------
+
+    function renderHtmlWidget(body, tab, widget) {
+        var config = normalizeHtmlWidgetConfig(widget.config);
+        var source = config.source;
+        if (!source.trim()) {
+            body.appendChild(emptyMsg('This HTML widget is empty. Edit it to add markup.'));
+            return;
+        }
+        if (htmlSourceByteLength(source) > MAX_HTML_WIDGET_SOURCE_BYTES) {
+            body.appendChild(emptyMsg('This HTML widget is larger than the 512 KB safety limit. Edit or remove it.'));
+            return;
+        }
+
+        var safety = window.SutraDOMSafety;
+        if (!safety || typeof safety.renderUserHTMLToFrame !== 'function') {
+            body.appendChild(emptyMsg('The HTML widget safety layer is unavailable.'));
+            return;
+        }
+
+        var host = el('div', 'ctab-html-runtime');
+        body.appendChild(host);
+        try {
+            safety.renderUserHTMLToFrame(host, source, {
+                title: 'Custom HTML widget',
+                mode: config.mode,
+                capabilityAcknowledged: true,
+                referrerPolicy: 'no-referrer',
+                height: '240px'
+            });
+        } catch (error) {
+            while (host.firstChild) host.removeChild(host.firstChild);
+            host.appendChild(emptyMsg('This HTML widget could not be rendered safely.'));
+            console.warn('SutraCustomTabs: HTML widget render failed', error);
+        }
+    }
+
+    function setupHtmlWidget(existing) {
+        var initial = normalizeHtmlWidgetConfig(existing);
+        return new Promise(function (resolve) {
+            var previouslyFocused = document.activeElement;
+            var overlay = el('div', 'ctab-html-editor-overlay');
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            var titleId = makeId('html-widget-title');
+            overlay.setAttribute('aria-labelledby', titleId);
+
+            var panel = el('div', 'ctab-html-editor-panel');
+            var header = el('header', 'ctab-html-editor-head');
+            var title = el('h3', 'ctab-picker-title', existing ? 'Edit Custom HTML' : 'Add Custom HTML');
+            title.id = titleId;
+            header.appendChild(title);
+            var closeButton = btn('ctab-picker-close', '', close, { title: 'Close', icon: 'fa-xmark' });
+            header.appendChild(closeButton);
+            panel.appendChild(header);
+
+            var subtitle = el('p', 'ctab-html-editor-subtitle', 'Paste a small HTML card. It runs in an isolated iframe and cannot access Sutra or its workspace data.');
+            panel.appendChild(subtitle);
+
+            var editor = el('div', 'ctab-html-editor-layout');
+            var sourceColumn = el('section', 'ctab-html-editor-source');
+            var sourceId = makeId('html-widget-source');
+            var sourceLabel = el('label', 'ctab-html-editor-label', 'HTML markup');
+            sourceLabel.htmlFor = sourceId;
+            sourceColumn.appendChild(sourceLabel);
+            var textarea = document.createElement('textarea');
+            textarea.id = sourceId;
+            textarea.className = 'ctab-html-editor-input';
+            textarea.rows = 12;
+            textarea.maxLength = MAX_HTML_WIDGET_SOURCE_CHARS;
+            textarea.spellcheck = false;
+            textarea.autocomplete = 'off';
+            textarea.placeholder = '<section><h2>My card</h2><p>...</p></section>';
+            textarea.value = initial.source;
+            sourceColumn.appendChild(textarea);
+            sourceColumn.appendChild(el('p', 'ctab-html-editor-help', 'Scripts are allowed only inside the isolated frame. Forms, downloads, parent access, and app navigation stay blocked.'));
+
+            var networkLabel = document.createElement('label');
+            networkLabel.className = 'ctab-html-network-choice';
+            var networkInput = document.createElement('input');
+            networkInput.type = 'checkbox';
+            networkInput.checked = initial.mode === HTML_WIDGET_NETWORK_MODE;
+            networkLabel.appendChild(networkInput);
+            networkLabel.appendChild(document.createTextNode(' Allow remote embeds and external images'));
+            sourceColumn.appendChild(networkLabel);
+            sourceColumn.appendChild(el('p', 'ctab-html-network-note', 'When enabled, approved providers such as Spotify, YouTube, Vimeo, and SoundCloud may load. Remote links open only from an explicit click; no network requests are made by Sutra itself.'));
+            editor.appendChild(sourceColumn);
+
+            var previewColumn = el('section', 'ctab-html-editor-preview');
+            previewColumn.appendChild(el('div', 'ctab-html-editor-label', 'Preview'));
+            var preview = el('div', 'ctab-html-preview-surface');
+            previewColumn.appendChild(preview);
+            editor.appendChild(previewColumn);
+            panel.appendChild(editor);
+
+            var status = el('p', 'ctab-html-editor-status');
+            status.setAttribute('role', 'status');
+            panel.appendChild(status);
+
+            var footer = el('footer', 'ctab-html-editor-footer');
+            var cancelButton = btn('ctab-action', 'Cancel', close);
+            var confirmButton = btn('ctab-action is-active', existing ? 'Save widget' : 'Add widget', confirm);
+            footer.appendChild(cancelButton);
+            footer.appendChild(confirmButton);
+            panel.appendChild(footer);
+            overlay.appendChild(panel);
+
+            function selectedMode() {
+                return networkInput.checked ? HTML_WIDGET_NETWORK_MODE : HTML_WIDGET_LOCAL_MODE;
+            }
+
+            function renderPreview() {
+                while (preview.firstChild) preview.removeChild(preview.firstChild);
+                var source = String(textarea.value || '');
+                if (!source.trim()) {
+                    preview.appendChild(emptyMsg('Paste HTML to preview it.'));
+                    return;
+                }
+                if (htmlSourceByteLength(source) > MAX_HTML_WIDGET_SOURCE_BYTES) {
+                    preview.appendChild(emptyMsg('Preview unavailable above the 512 KB safety limit.'));
+                    return;
+                }
+                var safety = window.SutraDOMSafety;
+                if (!safety || typeof safety.renderUserHTMLToFrame !== 'function') {
+                    preview.appendChild(emptyMsg('Preview safety layer unavailable.'));
+                    return;
+                }
+                try {
+                    safety.renderUserHTMLToFrame(preview, source, {
+                        title: 'Custom HTML widget preview',
+                        mode: selectedMode(),
+                        capabilityAcknowledged: true,
+                        referrerPolicy: 'no-referrer',
+                        height: '220px'
+                    });
+                } catch (error) {
+                    preview.appendChild(emptyMsg('Preview could not be rendered safely.'));
+                    console.warn('SutraCustomTabs: HTML widget preview failed', error);
+                }
+            }
+
+            function validate() {
+                var source = String(textarea.value || '');
+                var bytes = htmlSourceByteLength(source);
+                confirmButton.disabled = !source.trim() || bytes > MAX_HTML_WIDGET_SOURCE_BYTES;
+                if (!source.trim()) status.textContent = 'Add HTML markup to continue.';
+                else if (bytes > MAX_HTML_WIDGET_SOURCE_BYTES) status.textContent = 'HTML is larger than the 512 KB safety limit.';
+                else if (networkInput.checked) status.textContent = 'Remote capability enabled for this widget; external services may receive your IP address.';
+                else status.textContent = 'Offline mode: no network requests from this widget.';
+            }
+
+            function onInput() { validate(); renderPreview(); }
+            function onKeydown(event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close();
+                } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                    event.preventDefault();
+                    confirm();
+                }
+            }
+
+            function close() {
+                textarea.removeEventListener('input', onInput);
+                networkInput.removeEventListener('change', onInput);
+                document.removeEventListener('keydown', onKeydown, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                document.body.classList.remove('ctab-html-editor-open');
+                if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                    try { previouslyFocused.focus(); } catch (e) { /* non-critical */ }
+                }
+                resolve(null);
+            }
+
+            function confirm() {
+                var source = String(textarea.value || '');
+                if (!source.trim() || htmlSourceByteLength(source) > MAX_HTML_WIDGET_SOURCE_BYTES) return;
+                closeWithResult({ source: source, mode: selectedMode() });
+            }
+
+            function closeWithResult(result) {
+                textarea.removeEventListener('input', onInput);
+                networkInput.removeEventListener('change', onInput);
+                document.removeEventListener('keydown', onKeydown, true);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                document.body.classList.remove('ctab-html-editor-open');
+                if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                    try { previouslyFocused.focus(); } catch (e) { /* non-critical */ }
+                }
+                resolve(result);
+            }
+
+            textarea.addEventListener('input', onInput);
+            networkInput.addEventListener('change', onInput);
+            document.addEventListener('keydown', onKeydown, true);
+            document.body.appendChild(overlay);
+            document.body.classList.add('ctab-html-editor-open');
+            validate();
+            renderPreview();
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        });
+    }
+
+    function editHtmlWidget(tabId, widgetId) {
+        var tabs = getTabs();
+        var tab = tabs.find(function (item) { return item && item.id === tabId; });
+        var widget = tab && findWidget(tab, widgetId);
+        if (!widget) return;
+        setupHtmlWidget(widget.config).then(function (config) {
+            if (config === null) return;
+            mutateTab(tabId, function (nextTab) {
+                var nextWidget = findWidget(nextTab, widgetId);
+                if (nextWidget) nextWidget.config = config;
+            });
+        });
+    }
 
     function renderCalculatorWidget(body) {
         var expr = '';
@@ -1639,7 +1897,6 @@
         var area = document.createElement('textarea');
         area.className = 'ctab-scratchpad ctab-gratitude-text';
         area.placeholder = 'Write a line…';
-        area.maxLength = 500;
         area.value = typeof entries[todayK] === 'string' ? entries[todayK] : '';
         area.addEventListener('input', function () {
             var key = tab.id + ':' + widget.id;
@@ -1651,7 +1908,7 @@
                     if (!w) return;
                     if (!w.config || typeof w.config !== 'object') w.config = {};
                     if (!w.config.entries || typeof w.config.entries !== 'object') w.config.entries = {};
-                    w.config.entries[todayK] = area.value.slice(0, 500);
+                    w.config.entries[todayK] = area.value;
                 }, { rerender: false });
             }, 600);
         });
@@ -1673,7 +1930,7 @@
         var cfg = { title: '', currentPage: 0, totalPages: 0 };
         return promptText({ title: 'Currently reading', label: 'Book or material title', placeholder: 'e.g. The Great Gatsby' }).then(function (title) {
             if (title == null) return null;
-            cfg.title = String(title).trim().slice(0, 80) || 'Reading';
+            cfg.title = String(title).trim() || 'Reading';
             return promptText({ title: 'Total pages', label: 'How many pages?', placeholder: '180', inputType: 'number' }).then(function (pages) {
                 if (pages == null) return null;
                 cfg.totalPages = Math.max(1, Math.round(Number(pages) || 100));
@@ -1957,7 +2214,6 @@
         input.type = 'text';
         input.className = 'ctab-add-input';
         input.placeholder = 'e.g. What should I do next?';
-        input.maxLength = 300;
         var send = function () {
             var q = input.value.trim();
             if (!q) return;
@@ -2094,6 +2350,11 @@
         head.appendChild(title);
 
         var controls = el('span', 'ctab-widget-controls');
+        if (widget.type === 'html') {
+            controls.appendChild(btn('ctab-ctrl', '', function () {
+                editHtmlWidget(tab.id, widget.id);
+            }, { title: 'Edit HTML widget', icon: 'fa-pen' }));
+        }
         controls.appendChild(btn('ctab-ctrl', '', function () { moveWidget(tab.id, widget.id, -1); }, { title: 'Move earlier', icon: 'fa-arrow-left' }));
         controls.appendChild(btn('ctab-ctrl', '', function () { moveWidget(tab.id, widget.id, 1); }, { title: 'Move later', icon: 'fa-arrow-right' }));
         controls.appendChild(btn('ctab-ctrl', '', function () {
@@ -2467,6 +2728,12 @@
         if (initialized) return;
         bridge = window.SutraCustomTabsBridge;
         if (!bridge || !document.querySelector('.view-tabs') || !document.querySelector('section.view')) return;
+        if (typeof bridge.setTabs === 'function') {
+            rawBridgeSetTabs = bridge.setTabs;
+            bridge.setTabs = function (nextTabs) {
+                return rawBridgeSetTabs.call(bridge, normalizeCustomTabsForFeature(nextTabs));
+            };
+        }
         initialized = true;
         bindGlobalHandlers();
         rebuildNav();
