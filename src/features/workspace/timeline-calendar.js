@@ -43,7 +43,10 @@
         if (typeof global.openBlockModal === 'function') global.openBlockModal(null);
         setTimeout(function () {
             var dateField = document.getElementById('blockDateInput'); var startField = document.getElementById('blockStartInput'); var endField = document.getElementById('blockEndInput');
-            if (dateField && date) dateField.value = date;
+            if (dateField && date) {
+                dateField.value = date;
+                if (typeof global.refreshCustomDates === 'function') global.refreshCustomDates(dateField);
+            }
             if (startField && start != null) startField.value = time(start);
             if (endField && start != null) endField.value = time(Math.min(1439, start + 60));
             if (modal && !modal.classList.contains('active') && typeof global.openBlockModal !== 'function') modal.classList.add('active');

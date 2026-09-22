@@ -53,6 +53,11 @@
   const $$ = (selector, root = document) => root.querySelectorAll(selector);
   const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
+  function refreshHomeworkDateTimeInputs(root) {
+    if (typeof window.refreshCustomDates === 'function') window.refreshCustomDates(root);
+    if (typeof window.refreshCustomTimes === 'function') window.refreshCustomTimes(root);
+  }
+
   function showHomeworkToast(message) {
     if (typeof window.showToast === 'function') {
       window.showToast(message);
@@ -3161,6 +3166,7 @@
           titleInput.value = '';
           dueDateInput.value = '';
           dueTimeInput.value = '';
+          refreshHomeworkDateTimeInputs(globalAddForm);
           difficultySelect.value = 'medium';
           if (recurrenceSelect) recurrenceSelect.value = 'none';
           if (prioritySelect) prioritySelect.value = 'medium';
@@ -3199,6 +3205,7 @@
           titleInput.value = task.title || task.text || '';
           dueDateInput.value = normalizeDueDate(task.dueDate);
           dueTimeInput.value = normalizeDueTime(task.dueTime);
+          refreshHomeworkDateTimeInputs(globalAddForm);
           difficultySelect.value = normalizeDifficulty(task.difficulty);
           if (recurrenceSelect) recurrenceSelect.value = normalizeRecurrence(task.recurrence);
           if (prioritySelect) prioritySelect.value = normalizePriority(task.priority);

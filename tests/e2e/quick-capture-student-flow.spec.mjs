@@ -104,6 +104,18 @@ test('Quick Capture offers test and review choices, and Word export labels disti
   formats.doc.forEach((label) => expect(label).toMatch(/^Word 97.?2003 \(\.doc\)$/));
 });
 
+test('Quick Capture keeps parsed dates and times visible in enhanced controls', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => window.openQuickCaptureModal('chem lab due 09/16/2026 at 11:59 pm', { type: 'homework' }));
+  const modal = page.locator('#quickCaptureModal');
+  await expect(modal).toBeVisible();
+  await expect(modal.locator('#quickCaptureDate')).toHaveValue('2026-09-16');
+  await expect(modal.locator('#quickCaptureTime')).toHaveValue('23:59');
+  await expect(modal.locator('#quickCaptureDate').locator('xpath=..').locator('.nf-date-label')).toHaveText('09/16/2026');
+  await expect(modal.locator('#quickCaptureTime').locator('xpath=..').locator('.nf-time-label')).toHaveText('11:59 PM');
+});
+
 test('empty Homework teaches one primary action: paste or type your homework', async ({ page }) => {
   await openApp(page);
   const ui = await page.evaluate(() => {
