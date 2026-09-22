@@ -1,12 +1,4 @@
 {
-  "assets/vendor/editor/sutra-editor.min.js": {
-    "stamp": "3.27.3-b5",
-    "hash": "3172f78f3f59a865"
-  },
-  "assets/vendor/jszip/jszip.min.js": {
-    "stamp": "3.10.1",
-    "hash": "acc7e41455a80765"
-  },
   "src/boot/legacy-workspace-migration.js": {
     "stamp": "20260913-energy-removal-legacy1",
     "hash": "30298f083707dc90"
@@ -492,8 +484,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260916-integration-base1",
-    "hash": "f09fe4645df11eb2"
+    "stamp": "20260921-homework-date-picker1",
+    "hash": "22d2345d54b8e7e7"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
