@@ -104,6 +104,65 @@ test('Homework completion takes precedence over overdue styling and By Class exp
   await expect(table.locator('.hw-assignment-title-btn')).toContainText('long history assignment');
 });
 
+test('Homework effort prompt follows the active theme surface and button tokens', async ({ page }) => {
+  await openSeededHomework(page);
+
+  for (const theme of ['default', 'dark', 'sutra', 'dune']) {
+    await page.evaluate((themeKey) => window.applyAtelierTheme(themeKey), theme);
+    const taskId = await page.evaluate((themeKey) => {
+      const task = window.SutraHomework.createTask({
+        title: `Theme prompt ${themeKey}`,
+        dueDate: '2099-02-03'
+      });
+      window.SutraHomework.markDone(task.id);
+      return task.id;
+    }, theme);
+
+    const toast = page.locator('.hw-time-log-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(`Theme prompt ${theme}`);
+    const colors = await page.evaluate(() => {
+      const toast = document.querySelector('.hw-time-log-toast');
+      const button = toast && toast.querySelector('.hw-time-log-btn');
+      const probe = document.createElement('div');
+      const buttonProbe = document.createElement('button');
+      probe.style.cssText = [
+        'position:fixed', 'visibility:hidden',
+        'background:var(--bg-elevated)', 'color:var(--text-primary)',
+        'border:1px solid var(--button-border)',
+        'box-shadow:var(--shadow-soft)'
+      ].join(';');
+      buttonProbe.style.cssText = 'position:fixed;visibility:hidden;background:var(--button-bg);color:var(--button-text)';
+      document.body.appendChild(probe);
+      document.body.appendChild(buttonProbe);
+      const expected = getComputedStyle(probe);
+      const expectedButton = getComputedStyle(buttonProbe);
+      const actual = getComputedStyle(toast);
+      const actualButton = getComputedStyle(button);
+      const result = {
+        toastBackground: actual.backgroundColor,
+        expectedBackground: expected.backgroundColor,
+        toastColor: actual.color,
+        expectedColor: expected.color,
+        buttonBackground: actualButton.backgroundColor,
+        expectedButtonBackground: expectedButton.backgroundColor,
+        buttonColor: actualButton.color,
+        expectedButtonColor: expectedButton.color
+      };
+      probe.remove();
+      buttonProbe.remove();
+      return result;
+    });
+    expect(colors.toastBackground, `${theme} toast background`).toBe(colors.expectedBackground);
+    expect(colors.toastColor, `${theme} toast text`).toBe(colors.expectedColor);
+    expect(colors.buttonBackground, `${theme} button background`).toBe(colors.expectedButtonBackground);
+    expect(colors.buttonColor, `${theme} button text`).toBe(colors.expectedButtonColor);
+    await toast.locator('.hw-time-log-skip').click();
+    await expect(toast).toBeHidden();
+    await page.evaluate((id) => window.SutraHomework.setDone(id, false), taskId);
+  }
+});
+
 test('Homework By Class keeps grouped structure and assignment details on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openSeededHomework(page);

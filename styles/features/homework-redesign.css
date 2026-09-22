@@ -448,10 +448,10 @@ body.dark .hw-card-meta.hw-meta-conflict { color: #f5c97a; background: rgba(245,
   max-width: min(480px, calc(100vw - 32px));
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid var(--surface-border-strong, rgba(0,0,0,0.14));
-  background: var(--surface-raised, var(--surface, #fff));
-  color: var(--text-primary, #1c1c1e);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--surface-border-strong, var(--border));
+  background: var(--bg-elevated, var(--bg-secondary));
+  color: var(--text-primary);
+  box-shadow: var(--shadow-soft, 0 12px 32px rgba(0, 0, 0, 0.18));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -461,15 +461,19 @@ body.dark .hw-card-meta.hw-meta-conflict { color: #f5c97a; background: rgba(245,
 .hw-time-log-btn {
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid var(--surface-border-strong, rgba(0,0,0,0.14));
-  background: var(--accent-soft, rgba(0,0,0,0.05));
-  color: inherit;
+  border: 1px solid var(--button-border, var(--surface-border-strong, var(--border)));
+  background: var(--button-bg, var(--surface-bg));
+  color: var(--button-text, var(--text-primary));
   font: inherit;
   font-size: 0.85em;
   font-weight: 600;
   cursor: pointer;
 }
-.hw-time-log-btn:hover { background: var(--accent, #4f7cff); color: #fff; }
+.hw-time-log-btn:hover {
+  background: var(--button-bg-hover, var(--surface-bg-hover));
+  color: var(--button-text, var(--text-primary));
+  border-color: var(--accent-strong, var(--accent));
+}
 .hw-time-log-skip { background: transparent; border-style: dashed; font-weight: 500; }
 .hw-meta-estimate-adj { opacity: 0.75; font-weight: 700; }
 @media (max-width: 760px) {
