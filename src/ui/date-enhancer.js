@@ -34,7 +34,13 @@
             if (Number.isFinite(raw)) maxZ = Math.max(maxZ, raw);
             node = node.parentElement;
         }
-        return Math.max(13000, maxZ + 20);
+        // Portaled date panels can be opened from inside a modal. Keep them
+        // above the modal's backdrop/card, while still allowing a more deeply
+        // nested high-z-index surface to win when one exists.
+        const rootStyles = window.getComputedStyle(document.documentElement);
+        const modalLayer = Number.parseInt(rootStyles.getPropertyValue('--z-modal'), 10);
+        const baseLayer = Number.isFinite(modalLayer) ? modalLayer : 14000;
+        return Math.max(baseLayer + 20, maxZ + 20);
     }
 
     function parseDateValue(value) {
@@ -144,6 +150,29 @@
         component.trigger.setAttribute('aria-expanded', 'false');
         component.panel.classList.remove('is-open');
         component.panel.classList.remove('nf-date-panel--open-up');
+        syncModalManager();
+    }
+
+    function syncModalManager() {
+        try {
+            const manager = window.SutraModalManager;
+            if (manager && typeof manager.sync === 'function') manager.sync();
+            const dialog = openComponent && openComponent.input.closest('[aria-modal="true"]');
+            if (dialog && openComponent.usePortal && openComponent.panel.classList.contains('is-open')) {
+                // SutraModalManager isolates body-level portal branches while a
+                // dialog is open. The active date panel is part of that dialog's
+                // interaction surface, so release only its temporary isolation.
+                const panel = openComponent.panel;
+                if (panel.getAttribute('data-sutra-modal-inert') === '1') {
+                    panel.removeAttribute('aria-hidden');
+                    if ('inert' in panel) panel.inert = false;
+                }
+            }
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') {
+                window.SutraReportError(error, { where: 'date-enhancer.modal-sync' }, 'warning');
+            }
+        }
     }
 
     function isDateAllowed(component, date) {
@@ -229,6 +258,7 @@
             setPanelDirection(component);
         }
         openComponent = component;
+        syncModalManager();
         window.requestAnimationFrame(function () {
             if (component.usePortal) {
                 positionPortalPanel(component);
