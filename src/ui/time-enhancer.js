@@ -37,14 +37,39 @@
     }
 
     function getPortalZ(trigger) {
+        if (!(trigger instanceof Element)) return 14020;
         let maxZ = 0;
         let node = trigger;
         while (node && node !== document.documentElement) {
-            const z = parseInt(getComputedStyle(node).zIndex, 10);
-            if (!isNaN(z)) maxZ = Math.max(maxZ, z);
+            const style = window.getComputedStyle(node);
+            const z = style ? Number.parseInt(style.zIndex, 10) : NaN;
+            if (Number.isFinite(z)) maxZ = Math.max(maxZ, z);
             node = node.parentElement;
         }
-        return Math.max(13100, maxZ + 20);
+        const rootStyles = window.getComputedStyle(document.documentElement);
+        const modalLayer = Number.parseInt(rootStyles.getPropertyValue('--z-modal'), 10);
+        const baseLayer = Number.isFinite(modalLayer) ? modalLayer : 14000;
+        return Math.max(baseLayer + 20, maxZ + 20);
+    }
+
+    function syncModalManager() {
+        try {
+            const manager = window.SutraModalManager;
+            if (manager && typeof manager.sync === 'function') manager.sync();
+            const dialog = openComponent && openComponent.input.closest('[aria-modal="true"]');
+            if (dialog && openComponent.panel.classList.contains('is-open')) {
+                // SutraModalManager isolates body-level portal branches while a
+                // dialog is open. The active time panel is part of that dialog's
+                // interaction surface, so release only its temporary isolation.
+                const panel = openComponent.panel;
+                panel.removeAttribute('aria-hidden');
+                if ('inert' in panel) panel.inert = false;
+            }
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') {
+                window.SutraReportError(error, { where: 'time-enhancer.modal-sync' }, 'warning');
+            }
+        }
     }
 
     function positionPanel(c) {
@@ -81,6 +106,7 @@
         c.panel.classList.add('is-open');
         positionPanel(c);
         openComponent = c;
+        syncModalManager();
         requestAnimationFrame(function () { positionPanel(c); });
     }
 
@@ -89,7 +115,10 @@
         c.wrapper.classList.remove('open');
         c.trigger.setAttribute('aria-expanded', 'false');
         c.panel.classList.remove('is-open');
-        if (openComponent === c) openComponent = null;
+        if (openComponent === c) {
+            openComponent = null;
+            syncModalManager();
+        }
     }
 
     function updateTrigger(c) {

@@ -186,3 +186,50 @@ test('Homework add modal date picker accepts a real pointer selection', async ({
   await expect(dateInput).toHaveValue(selectedDate);
   await expect(panel).toBeHidden();
 });
+
+test('Homework add modal time picker accepts real pointer spinner changes', async ({ page }) => {
+  await openHomework(page);
+
+  await page.locator('#hwOpenAddAssignment').click();
+  const modal = page.locator('#quickCaptureModal');
+  await expect(modal).toBeVisible();
+
+  const timeInput = modal.locator('#quickCaptureTime');
+  await timeInput.locator('xpath=..').locator('.nf-time-trigger').click();
+
+  const panel = page.locator('.nf-time-panel.is-open');
+  await expect(panel).toBeVisible();
+  const hitState = await page.evaluate(() => {
+    const panelElement = document.querySelector('.nf-time-panel.is-open');
+    const modalElement = document.querySelector('#quickCaptureModal');
+    const button = panelElement?.querySelector('.nf-time-spin-btn');
+    const rect = button?.getBoundingClientRect();
+    const hit = rect ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) : null;
+    return {
+      panel: Number.parseInt(getComputedStyle(panelElement).zIndex, 10),
+      modal: Number.parseInt(getComputedStyle(modalElement).zIndex, 10),
+      ariaHidden: panelElement?.getAttribute('aria-hidden'),
+      inert: panelElement?.inert === true || panelElement?.hasAttribute('inert'),
+      hitIsButton: !!button && (hit === button || button.contains(hit))
+    };
+  });
+  expect(hitState.panel).toBeGreaterThan(hitState.modal);
+  expect(hitState.ariaHidden).not.toBe('true');
+  expect(hitState.inert).toBe(false);
+  expect(hitState.hitIsButton).toBe(true);
+
+  const hour = panel.locator('.nf-time-spinner').nth(0);
+  const minute = panel.locator('.nf-time-spinner').nth(1);
+  const hourBefore = await hour.locator('.nf-time-num').innerText();
+  const minuteBefore = await minute.locator('.nf-time-num').innerText();
+
+  for (const button of [hour.locator('.nf-time-spin-btn').first(), minute.locator('.nf-time-spin-btn').last()]) {
+    const box = await button.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  }
+
+  await expect(hour.locator('.nf-time-num')).not.toHaveText(hourBefore);
+  await expect(minute.locator('.nf-time-num')).not.toHaveText(minuteBefore);
+  await expect(timeInput).toHaveValue(/^\d{2}:\d{2}$/);
+});
