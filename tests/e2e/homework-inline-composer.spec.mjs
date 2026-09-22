@@ -135,19 +135,40 @@ test('each Homework assignment immediately has exactly one connected Todo task',
 test('Homework assignment actions provide a dedicated edit form', async ({ page }) => {
   await openHomework(page);
 
-  const row = page.locator('.hw-assignment-row').first();
+  await page.evaluate(() => {
+    window.SutraHomework.createTask({
+      courseName: 'Composer layout course',
+      title: 'Timed existing assignment',
+      dueDate: '2026-09-16',
+      dueTime: '23:59',
+      priority: 'low',
+      difficulty: 'hard',
+      recurrence: 'weekly'
+    });
+    window.SutraHomework.render();
+  });
+
+  const row = page.locator('.hw-assignment-row', { hasText: 'Timed existing assignment' });
   await row.locator('[data-task-menu-trigger]').click();
   await row.getByRole('menuitem', { name: 'Edit assignment' }).click();
 
   const modal = page.locator('#hwGlobalAddModal');
   await expect(modal).toBeVisible();
   await expect(modal.locator('#hwGlobalAddTitle')).toHaveText('Edit Assignment');
+  await expect(modal.locator('[data-field="dueDate"]')).toHaveValue('2026-09-16');
+  await expect(modal.locator('[data-field="dueTime"]')).toHaveValue('23:59');
+  await expect(modal.locator('[data-field="dueDate"]').locator('xpath=..').locator('.nf-date-label')).toHaveText('09/16/2026');
+  await expect(modal.locator('[data-field="dueTime"]').locator('xpath=..').locator('.nf-time-label')).toHaveText('11:59 PM');
+  await expect(modal.locator('[data-field="difficulty"]')).toHaveValue('hard');
+  await expect(modal.locator('[data-field="recurrence"]')).toHaveValue('weekly');
+  await expect(modal.locator('[data-field="priority"]')).toHaveValue('low');
   await modal.locator('[data-field="title"]').fill('Renamed assignment');
   await modal.locator('[data-field="dueDate"]').fill('2026-08-31');
   await modal.locator('button[type="submit"]').click();
 
-  await expect(page.locator('.hw-assignment-title-btn')).toHaveText('Renamed assignment');
-  await expect(page.locator('.hw-assignment-row .hw-due-cell')).toContainText('Aug 31');
+  const renamedRow = page.locator('.hw-assignment-row', { hasText: 'Renamed assignment' });
+  await expect(renamedRow.locator('.hw-assignment-title-btn')).toHaveText('Renamed assignment');
+  await expect(renamedRow.locator('.hw-due-cell')).toContainText('Aug 31');
   await expect.poll(() => page.evaluate(() => {
     const mirrors = window.flowAtelier.tasks.filter((task) => task.origin === 'homework' && task.title.includes('Renamed assignment'));
     return { count: mirrors.length, dueDate: mirrors[0]?.dueDate };

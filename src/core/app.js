@@ -11,6 +11,7 @@ const PLANNER_DEFAULT_LOOKAHEAD_DAYS = 3;
 const MAX_TRACKED_PAGE_SCROLL_POSITIONS = 300;
 const UI_SCROLL_SESSION_STORAGE_KEY = 'noteflow_ui_scroll_state_v1';
 
+function refreshEnhancedDateTimeInputs(root) { if (typeof window.refreshCustomDates === 'function') window.refreshCustomDates(root); if (typeof window.refreshCustomTimes === 'function') window.refreshCustomTimes(root); }
 const SHORTCUT_PLACEMENTS = new Set(['tabs', 'sidebar']);
 const SHORTCUT_TARGET_TYPES = new Set(['url', 'page']);
 const MAX_CUSTOM_SHORTCUTS = 30;
@@ -23685,7 +23686,7 @@ function populateProgressDashboard() {
             document.getElementById('taskTitleInput').value = task?.title || preset.title || '';
             document.getElementById('taskNotesInput').value = task?.notes || preset.notes || '';
             document.getElementById('taskScheduleInput').value = task?.scheduleType || preset.scheduleType || 'once';
-            document.getElementById('taskDueDateInput').value = task?.dueDate || preset.dueDate || '';
+            document.getElementById('taskDueDateInput').value = task?.dueDate || preset.dueDate || ''; refreshEnhancedDateTimeInputs(document.getElementById('taskDueDateInput'));
             document.getElementById('taskCategoryInput').value = task?.category || preset.category || 'none';
             document.getElementById('taskPriorityInput').value = task?.priority || preset.priority || 'medium';
             const taskDifficultyInput = document.getElementById('taskDifficultyInput');
@@ -81876,7 +81877,7 @@ function openBlockModal(block) {
     const recurrenceInput = document.getElementById('blockRecurrenceInput');
     if (recurrenceInput) recurrenceInput.value = recurrenceValue;
     const dateInput = document.getElementById('blockDateInput');
-    if (dateInput) dateInput.value = block ? (normalizeBlockDate(block.date) || '') : dateKey(getTimelineViewDate());
+    if (dateInput) { dateInput.value = block ? (normalizeBlockDate(block.date) || '') : dateKey(getTimelineViewDate()); refreshEnhancedDateTimeInputs(dateInput); }
     const refInput = document.getElementById('blockReferenceInput');
     if (refInput) {
         refInput.value = block ? (block.referenceUrl || '') : '';
@@ -82714,8 +82715,7 @@ function openQuickCaptureModal(prefillText, options) {
         if (difficultySelect && difficultySelect.dataset.userTouched === '1') parsed.difficulty = difficultySelect.value || 'medium';
         if (estimateInput && estimateInput.dataset.userTouched === '1') parsed.estimateMinutes = Math.max(0, Math.round(Number(estimateInput.value) || 0));
         typeSelect.value = parsed.type;
-        dateInput.value = parsed.dueDate || '';
-        timeInput.value = parsed.dueTime || '';
+        dateInput.value = parsed.dueDate || ''; timeInput.value = parsed.dueTime || ''; refreshEnhancedDateTimeInputs(modal);
         if (prioritySelect && prioritySelect.dataset.userTouched !== '1') prioritySelect.value = parsed.priority || 'medium';
         if (difficultySelect && difficultySelect.dataset.userTouched !== '1') difficultySelect.value = parsed.difficulty || 'medium';
         const apMeta = syncQuickCaptureApSubjectField(parsed, modal);

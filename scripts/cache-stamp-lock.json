@@ -40,8 +40,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260921-backup-snapshot3",
-    "hash": "57a8c0286137d1bd"
+    "stamp": "20260922-prefill1",
+    "hash": "8fe117e4027b6c94"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -256,8 +256,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260917-homework-merge2",
-    "hash": "1f3b6446e96d1e76"
+    "stamp": "20260922-prefill1",
+    "hash": "cb6f3592b22223fe"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -392,8 +392,8 @@
     "hash": "ac88591cfa5f81c7"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260904-compactevents4",
-    "hash": "ba427d1608b781d6"
+    "stamp": "20260922-prefill1",
+    "hash": "2313a30dc1d968d9"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260913-content-limits-timeline1",
