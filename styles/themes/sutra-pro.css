@@ -5692,7 +5692,7 @@ body.theme-retro .th2-resource-card {
 /* Panel */
 .nf-time-panel {
     position: fixed;
-    z-index: 13100;
+    z-index: calc(var(--z-modal, 14000) + 20);
     background: var(--bg-elevated, var(--bg-primary));
     border: 1px solid var(--surface-border, var(--border));
     border-radius: 16px;
