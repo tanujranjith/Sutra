@@ -153,3 +153,36 @@ test('Homework assignment actions provide a dedicated edit form', async ({ page 
     return { count: mirrors.length, dueDate: mirrors[0]?.dueDate };
   })).toEqual({ count: 1, dueDate: '2026-08-31' });
 });
+
+test('Homework add modal date picker accepts a real pointer selection', async ({ page }) => {
+  await openHomework(page);
+
+  await page.locator('#hwOpenAddAssignment').click();
+  const modal = page.locator('#quickCaptureModal');
+  await expect(modal).toBeVisible();
+
+  const dateInput = modal.locator('#quickCaptureDate');
+  await dateInput.locator('xpath=..').locator('.nf-date-trigger').click();
+
+  const panel = page.locator('.nf-date-panel.is-open');
+  await expect(panel).toBeVisible();
+  const layerOrder = await page.evaluate(() => {
+    const panelElement = document.querySelector('.nf-date-panel.is-open');
+    const modalElement = document.querySelector('#quickCaptureModal');
+    return {
+      panel: Number.parseInt(getComputedStyle(panelElement).zIndex, 10),
+      modal: Number.parseInt(getComputedStyle(modalElement).zIndex, 10)
+    };
+  });
+  expect(layerOrder.panel).toBeGreaterThan(layerOrder.modal);
+
+  const target = panel.locator('.nf-date-day:not(.is-other):not([disabled])').filter({ hasText: /^15$/ }).first();
+  await expect(target).toBeVisible();
+  const selectedDate = await target.getAttribute('data-date');
+  const box = await target.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+  await expect(dateInput).toHaveValue(selectedDate);
+  await expect(panel).toBeHidden();
+});

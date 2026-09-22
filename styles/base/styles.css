@@ -1134,7 +1134,7 @@
         .nf-date-panel--portal {
             position: fixed;
             right: auto;
-            z-index: 13020;
+            z-index: calc(var(--z-modal, 14000) + 20);
         }
 
         .nf-date-panel--portal.nf-date-panel--open-up {
