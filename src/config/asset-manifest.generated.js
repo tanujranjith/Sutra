@@ -269,7 +269,7 @@
     "./src/features/workspace/office-interoperability.js?v=20260822-office4",
     "./src/features/workspace/pdf-engine.js?v=20260823-pdf4",
     "./src/features/workspace/pdf-runtime-loader.js?v=20260813-pdf1",
-    "./src/features/workspace/pdf-workspace.js?v=20260815-pdf26",
+    "./src/features/workspace/pdf-workspace.js?v=20260926-pdf28",
     "./src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3",
     "./src/features/workspace/share-target.js?v=20260712-share1",
     "./src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3",

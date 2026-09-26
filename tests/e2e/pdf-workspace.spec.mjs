@@ -90,6 +90,149 @@ test('native PDF workspace stores once, renders locally, persists annotations, a
   expect(exportedForm).toBe('Grace Hopper');
 });
 
+test('embedded Notes toolbar controls work and the PDF workspace tears down on note or view changes', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await expect(page.locator('#view-today')).toBeVisible();
+  await page.waitForFunction(() => localStorage.getItem('sutra_startup_sound') !== null);
+  await page.waitForFunction(() => window.SutraAttachments && window.SutraPdfWorkspace && window.__sutraPublicBetaTestHooks);
+  await page.evaluate(() => {
+    if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true);
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; overlay.setAttribute('aria-hidden', 'true'); overlay.style.setProperty('display', 'none', 'important'); }
+  });
+  await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
+  await loadFixturePdfLib(page);
+
+  const fixture = await page.evaluate(async () => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const first = hooks.createNoteInActiveSpace('PDF toolbar note', '<p>First note.</p>');
+    const second = hooks.createNoteInActiveSpace('PDF toolbar destination', '<p>Second note.</p>');
+    window.loadPage(first.id);
+    const pdf = await window.PDFLib.PDFDocument.create();
+    const pdfPage = pdf.addPage([612, 792]);
+    pdfPage.drawText('Embedded Notes toolbar fixture', { x: 72, y: 710, size: 18 });
+    const [file] = await window.SutraAttachments.addFiles([
+      new File([await pdf.save()], 'embedded-notes.pdf', { type: 'application/pdf' })
+    ], { entityType: 'note', entityId: first.id });
+    return { noteId: first.id, destinationId: second.id, fileId: file.id };
+  });
+
+  await page.evaluate(async ({ fileId, noteId }) => {
+    await window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: noteId });
+  }, fixture);
+  await expect(page.locator('.pdfw-root')).toBeVisible();
+  await expect(page.locator('#view-notes .toolbar-wrapper > .pdfw-topbar')).toHaveCount(1);
+  await expect(page.locator('#view-notes .toolbar-wrapper > .pdfw-toolbar')).toHaveCount(1);
+  await page.locator('#view-notes .pdfw-toolbar [data-action="tool-highlight"]').click();
+  await expect(page.locator('#view-notes .pdfw-toolbar [data-action="tool-highlight"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#view-notes .pdfw-topbar [data-action="zoom-in"]').click();
+  await expect(page.locator('.pdfw-zoom')).toHaveText('140%');
+
+  await page.evaluate(noteId => window.loadPage(noteId), fixture.destinationId);
+  await expect(page.locator('.pdfw-root, #view-notes .pdfw-topbar, #view-notes .pdfw-toolbar')).toHaveCount(0);
+  await expect(page.locator('#view-notes .toolbar-wrapper')).not.toHaveClass(/pdf-toolbar-active/);
+  await expect(page.locator('#view-notes .toolbar')).not.toHaveClass(/pdf-notes-toolbar-hidden/);
+
+  await page.evaluate(async ({ fileId, noteId }) => {
+    await window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: noteId });
+  }, fixture);
+  await expect(page.locator('.pdfw-root')).toBeVisible();
+  await page.locator('.view-tabs > .view-tab[data-view="today"]').click();
+  await expect(page.locator('.pdfw-root, #view-notes .pdfw-topbar, #view-notes .pdfw-toolbar')).toHaveCount(0);
+  await expect(page.locator('body')).not.toHaveClass(/pdf-page-active/);
+});
+
+test('PDF open generations prevent stale opens and navigation from remounting the workspace', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await expect(page.locator('#view-today')).toBeVisible();
+  await page.waitForFunction(() => localStorage.getItem('sutra_startup_sound') !== null);
+  await page.waitForFunction(() => window.SutraAttachments && window.SutraPdfWorkspace && window.__sutraPublicBetaTestHooks);
+  await page.evaluate(() => {
+    if (typeof window.markStudentOnboardingCompleted === 'function') window.markStudentOnboardingCompleted(true);
+    const overlay = document.getElementById('studentOnboardingOverlay');
+    if (overlay) { overlay.classList.remove('active'); overlay.hidden = true; overlay.setAttribute('aria-hidden', 'true'); overlay.style.setProperty('display', 'none', 'important'); }
+  });
+  await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
+  await loadFixturePdfLib(page);
+
+  const fixture = await page.evaluate(async () => {
+    const note = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('PDF open generation', '<p>Workspace owner.</p>');
+    window.loadPage(note.id);
+    async function addPdf(name) {
+      const pdf = await window.PDFLib.PDFDocument.create();
+      pdf.addPage([320, 480]).drawText(name, { x: 30, y: 420, size: 14 });
+      const [file] = await window.SutraAttachments.addFiles([
+        new File([await pdf.save()], name + '.pdf', { type: 'application/pdf' })
+      ], { entityType: 'note', entityId: note.id });
+      return file.id;
+    }
+    return { noteId: note.id, firstId: await addPdf('slow'), secondId: await addPdf('latest') };
+  });
+
+  await page.evaluate(({ firstId, noteId }) => {
+    const originalRead = window.SutraAttachments.readBytes.bind(window.SutraAttachments);
+    let release;
+    let shouldDelay = true;
+    window.__releaseSlowPdfRead = () => release();
+    window.SutraAttachments.readBytes = async fileId => {
+      if (shouldDelay && fileId === firstId) {
+        shouldDelay = false;
+        await new Promise(resolve => { release = resolve; });
+      }
+      return originalRead(fileId);
+    };
+    window.__slowPdfOpen = window.SutraPdfWorkspace.open(firstId, { entityType: 'note', entityId: noteId });
+  }, fixture);
+  await page.evaluate(async ({ secondId, noteId }) => {
+    await window.SutraPdfWorkspace.open(secondId, { entityType: 'note', entityId: noteId });
+  }, fixture);
+  await page.evaluate(() => window.__releaseSlowPdfRead());
+  await page.evaluate(() => window.__slowPdfOpen);
+  await expect(page.locator('.pdfw-root')).toHaveCount(1);
+  expect(await page.evaluate(() => window.SutraPdfWorkspace.getContext().fileId)).toBe(fixture.secondId);
+
+  await page.evaluate(({ firstId, noteId }) => {
+    let release;
+    window.__releaseNavigatingPdfRead = () => release();
+    const originalRead = window.SutraAttachments.readBytes.bind(window.SutraAttachments);
+    window.SutraAttachments.readBytes = async fileId => {
+      if (fileId === firstId) await new Promise(resolve => { release = resolve; });
+      return originalRead(fileId);
+    };
+    window.__navigatingPdfOpen = window.SutraPdfWorkspace.open(firstId, { entityType: 'note', entityId: noteId });
+  }, fixture);
+  await page.locator('.view-tabs > .view-tab[data-view="today"]').click();
+  await expect(page.locator('.pdfw-root')).toHaveCount(0);
+  await page.evaluate(() => window.__releaseNavigatingPdfRead());
+  await page.evaluate(() => window.__navigatingPdfOpen);
+  expect(await page.evaluate(() => window.SutraPdfWorkspace.getContext())).toBeNull();
+  await expect(page.locator('.pdfw-root, .pdfw-topbar, .pdfw-toolbar')).toHaveCount(0);
+});
+
+test('blank PDF canvases render with an opaque white background', async ({ page }) => {
+  await page.goto('/Sutra.html');
+  await expect(page.locator('#view-today')).toBeVisible();
+  await page.waitForFunction(() => localStorage.getItem('sutra_startup_sound') !== null);
+  await page.waitForFunction(() => window.SutraAttachments && window.SutraPdfWorkspace);
+  await loadFixturePdfLib(page);
+  await page.evaluate(async () => {
+    const pdf = await window.PDFLib.PDFDocument.create();
+    pdf.addPage([612, 792]);
+    const [file] = await window.SutraAttachments.addFiles([
+      new File([await pdf.save()], 'blank-canvas.pdf', { type: 'application/pdf' })
+    ], {});
+    await window.SutraPdfWorkspace.open(file.id, {});
+  });
+  await expect(page.locator('.pdfw-page canvas')).toHaveCount(1);
+  const pixel = await page.locator('.pdfw-page canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    return Array.from(context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data);
+  });
+  expect(pixel[0]).toBeGreaterThan(245);
+  expect(pixel[1]).toBeGreaterThan(245);
+  expect(pixel[2]).toBeGreaterThan(245);
+});
+
 test('PDF page organizer keeps source bytes and requires references to be removed before deletion', async ({ page }) => {
   await page.goto('/Sutra.html');
   await expect(page.locator('#view-today')).toBeVisible();
