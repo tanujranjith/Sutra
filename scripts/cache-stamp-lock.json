@@ -19,6 +19,10 @@
     "stamp": "20260709-safeupdate1",
     "hash": "447f7d017b57fed7"
   },
+  "src/boot/workspace-startup.js": {
+    "stamp": "20260925-hydration3",
+    "hash": "958336aa54678da6"
+  },
   "src/compat/legacy-homework.js": {
     "stamp": "20260709-compat1",
     "hash": "bdaba42ae73dc103"
@@ -40,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260922-prefill1",
-    "hash": "8fe117e4027b6c94"
+    "stamp": "20260925-hydration2",
+    "hash": "f71b0f15892ed3f2"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -586,6 +590,10 @@
   "styles/features/workspace-lock.css": {
     "stamp": "20260816-lock2",
     "hash": "980ff43561f79838"
+  },
+  "styles/features/workspace-startup.css": {
+    "stamp": "20260925-hydration1",
+    "hash": "b4cc90cb5818a473"
   },
   "styles/legacy/app-shell-base.css": {
     "stamp": "20260616-cssextract1",

@@ -74,6 +74,14 @@ incremental **extraction** of cross-cutting utilities out of `app.js`:
   no network/storage writes, exposes no workspace data, and never blocks normal
   use. Complements `issue-prompt.js` (which is reporting-oriented).
 
+The app shell starts concealed and inert behind the neutral workspace startup
+gate (`src/boot/workspace-startup.js`, `styles/features/workspace-startup.css`).
+The gate is independent of the optional session intro. `app.js` releases it only
+after the canonical IndexedDB workspace is confirmed, hydration completes, and
+the initial core UI and routing render succeed. A failed read or first write
+keeps placeholder Home data concealed and offers reload, Safe Mode, and
+diagnostics without treating the workspace as empty.
+
 New unsafe patterns (raw `innerHTML =`, direct `localStorage.setItem`,
 unregistered `window.*`, un-inventoried workspace fields) are blocked in CI by
 `scripts/sutra-guardrails-check.mjs` — see [section 9](#9-test-scripts).

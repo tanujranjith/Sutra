@@ -40,6 +40,7 @@
     <!-- Device-local privacy gate. Its critical stylesheet and script load
          before the body so an enabled lock suppresses workspace paint. -->
     <link rel="stylesheet" href="styles/features/workspace-lock.css?v=20260816-lock2">
+    <link rel="stylesheet" href="styles/features/workspace-startup.css?v=20260925-hydration1">
 
     
     <!-- Atelier offline icon system (replaces Font Awesome CDN). -->
@@ -143,7 +144,7 @@
          opt-in analytics is ever reintroduced, it must load nothing before
          the user explicitly consents. -->
 </head>
-<body class="no-parallax">
+<body class="no-parallax" data-sutra-workspace-boot="loading">
     <section id="sutraWorkspaceLockScreen" class="sutra-workspace-lock-screen" role="dialog" aria-modal="true" aria-labelledby="sutraWorkspaceLockTitle" aria-hidden="true">
         <div class="sutra-workspace-lock-card">
             <img src="assets/brand/sutra/generated/sutra-icon-96.png" alt="" width="64" height="64" aria-hidden="true">
@@ -264,7 +265,21 @@
       })();
     </script>
 
-    <div class="app-container">
+    <section id="sutraWorkspaceStartup" role="status" aria-live="polite" aria-labelledby="sutraWorkspaceStartupTitle">
+      <div class="sutra-workspace-startup-card">
+        <img src="assets/brand/sutra/generated/sutra-icon-256.png" alt="" width="56" height="56">
+        <h1 id="sutraWorkspaceStartupTitle">Opening your workspace</h1>
+        <p id="sutraWorkspaceStartupMessage">Checking your saved work on this device…</p>
+        <div id="sutraWorkspaceStartupActions" hidden>
+          <button type="button" id="sutraWorkspaceStartupReload">Reload Sutra</button>
+          <button type="button" id="sutraWorkspaceStartupSafeMode">Try Safe Mode</button>
+          <button type="button" id="sutraWorkspaceStartupDiagnostics">Download diagnostics</button>
+        </div>
+      </div>
+    </section>
+    <script src="src/boot/workspace-startup.js?v=20260925-hydration3"></script>
+
+    <div class="app-container" inert aria-hidden="true">
         <!-- Mobile Sidebar Overlay -->
         <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
         
@@ -7864,7 +7879,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20260922-prefill1"></script>
+    <script src="src/core/app.js?v=20260925-hydration2"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
