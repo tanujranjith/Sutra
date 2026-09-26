@@ -70516,6 +70516,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
+            const finishWorkspaceBoot = (ok, message) => {
+                window.dispatchEvent(new CustomEvent('sutra:workspace-boot-result', { detail: { ok, message } }));
+            };
             if (sutraRevocationLockActive) {
                 mountSutraRevokedScreen(
                     sutraRevocationGuard && sutraRevocationGuard.status === 'complete-unverified'
@@ -70540,7 +70543,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
             // Canonical workspace load keeps its own failure pipeline (the core
             // IndexedDB save-failure UI), so it is intentionally not guarded here.
-            await initAppData();
+            try {
+                await initAppData();
+            } catch (error) {
+                try { window.SutraReportError && window.SutraReportError(error, { where: 'workspace-startup' }, 'critical'); } catch (_) {}
+                finishWorkspaceBoot(false, 'Sutra could not finish loading your saved workspace. It will not show an unverified empty workspace. Reload to try again.');
+                return;
+            }
             guard('workspace-state', () => {
                 hydrateStateFromAppData();
                 workspaceHydrationComplete = true;
@@ -70565,17 +70574,28 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 window.SutraTodayDashboard.init();
             }, { label: 'Today dashboard', badge: false });
             const recoveryModeActive = !!(window.SutraRecoveryMode && typeof window.SutraRecoveryMode.isActive === 'function' && window.SutraRecoveryMode.isActive());
+            let coreUiReady = false;
+            let workspaceRoutingReady = false;
+            const initializeCoreUi = () => { initApp(); coreUiReady = true; };
+            const initializeWorkspaceRouting = () => { initWorkspaceUI(); workspaceRoutingReady = true; };
+            const revealWorkspaceIfReady = () => {
+                const ready = workspaceHydrationComplete && workspaceStartupPersistenceConfirmed
+                    && !persistenceWritesBlocked && coreUiReady && workspaceRoutingReady;
+                finishWorkspaceBoot(ready, ready ? '' :
+                    'Sutra could not confirm your saved workspace or finish opening it. It will not show an unverified empty workspace. Reload to try again.');
+            };
             if (recoveryModeActive) {
-                guard('core-ui', initApp, { label: 'Workspace', severity: 'critical' });
-                guard('workspace-routing', initWorkspaceUI, { label: 'Navigation' });
+                guard('core-ui', initializeCoreUi, { label: 'Workspace', severity: 'critical' });
+                guard('workspace-routing', initializeWorkspaceRouting, { label: 'Navigation' });
                 try { setActiveView('notes'); } catch (error) { /* recovery banner remains usable */ }
                 try { window.SutraRecoveryMode.mountBanner(); } catch (error) { /* non-critical */ }
+                revealWorkspaceIfReady();
                 return;
             }
             guard('focus-restore', restoreFocusSessionIfActive, { label: 'Focus session', badge: false });
             guard('focus-keyboard', initFocusSessionKeyboard, { label: 'Focus shortcuts', badge: false });
-            guard('core-ui', initApp, { label: 'Workspace', severity: 'critical' });
-            guard('workspace-routing', initWorkspaceUI, { label: 'Navigation' });
+            guard('core-ui', initializeCoreUi, { label: 'Workspace', severity: 'critical' });
+            guard('workspace-routing', initializeWorkspaceRouting, { label: 'Navigation' });
             guard('timeline', initTimeline, { label: 'Timeline' });
             if (typeof window.hydrateApStudyWorkspaceState === 'function') {
                 guard('ap-study', window.hydrateApStudyWorkspaceState, { label: 'AP Study' });
@@ -70591,6 +70611,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             guard('tutorial', maybeStartInteractiveTutorial, { label: 'Tutorial', badge: false });
             // Inspirational quote rotation (Sections 25 + user request)
             if (typeof rotateAtelierQuote === 'function') guard('daily-quote', rotateAtelierQuote, { label: 'Daily quote', badge: false });
+            revealWorkspaceIfReady();
         });
 
         window.addEventListener('beforeunload', () => {

@@ -231,7 +231,11 @@ test('a failed canonical startup read never masquerades as first-run onboarding'
   // The first-run gate has a delayed open path. Wait past it so this proves
   // both the immediate boot reconciliation and the timer re-check stay closed.
   await page.waitForTimeout(1200);
-  await expect(page.locator('#sutraSaveFailureBanner')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-sutra-workspace-boot', 'error');
+  await expect(page.locator('#sutraWorkspaceStartup')).toBeVisible();
+  await expect(page.locator('#sutraWorkspaceStartupReload')).toBeVisible();
+  await expect(page.locator('#sutraWorkspaceStartupSafeMode')).toBeVisible();
+  await expect(page.locator('.app-container')).toBeHidden();
   await expect(page.locator('#sutraSaveFailureMessage')).toContainText(/read|indexeddb|storage/i);
   await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
   await expect(page.locator('body')).not.toHaveClass(/onboarding-open/);
@@ -256,7 +260,9 @@ test('a failed initial canonical write never opens unsavable onboarding', async 
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await page.waitForTimeout(1200);
 
-  await expect(page.locator('#sutraSaveFailureBanner')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-sutra-workspace-boot', 'error');
+  await expect(page.locator('#sutraWorkspaceStartup')).toBeVisible();
+  await expect(page.locator('.app-container')).toBeHidden();
   await expect(page.locator('#sutraSaveFailureMessage')).toContainText(/quota|save|storage/i);
   await expect(page.locator('#studentOnboardingOverlay')).not.toBeVisible();
   await expect(page.locator('body')).not.toHaveClass(/onboarding-open/);
