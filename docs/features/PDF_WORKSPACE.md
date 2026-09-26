@@ -6,6 +6,8 @@ The PDF workspace is a contextual surface, not a top-level Files section. A PDF 
 
 The feature is default-on and gated by `settings.preferences.workspace.pdfWorkspaceEnabled`. When a user disables it or when the native runtime cannot start, Sutra retains its safe browser preview and download path.
 
+An open PDF owns its toolbar, observers, PDF.js documents, and in-flight render tasks. Starting another open makes the newest request the only one allowed to mount; leaving Notes or loading a different note cancels a pending or active embedded workspace. Teardown removes the PDF controls, restores the Notes toolbar, cancels rendering, and releases opened PDF.js documents. Canvas and thumbnail surfaces start with an opaque white background so transparent PDF regions render consistently.
+
 ## Local runtime
 
 - PDF.js 6.1.200 is vendored under `assets/vendor/pdfjs` and handles rendering, text extraction, outlines, search, forms, and metadata.

@@ -128,7 +128,11 @@ test('simultaneous first-use vault writes in two tabs share one decryptable encr
   const context = await browser.newContext();
   const first = await context.newPage();
   const second = await context.newPage();
-  await Promise.all([openApp(first), openApp(second)]);
+  // Let workspace hydration settle in one tab before starting the second.
+  // The credential writes below remain concurrent; booting both workspaces
+  // simultaneously can intentionally trip the cross-tab stale-save guard.
+  await openApp(first);
+  await openApp(second);
 
   await Promise.all([
     first.evaluate(() => window.SutraCredentialVault.set('race:first', 'first-secret')),
