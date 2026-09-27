@@ -594,7 +594,7 @@ Behavior:
 
 - Encrypted `.sutra` backups ask for the password, decrypt in the browser, then run the existing internal package validation and checksums.
 - Older unencrypted `.sutra`, legacy `.atelier`, and workspace `.json` payloads **replace** workspace state - but Sutra writes a **pre-import safety snapshot** first.
-- Document-type imports become a new `Imported::...` note page.
+- Document and image imports become new Notes in the active Space, titled from the filename without its extension.
 - `.doc` (legacy Word) is best-effort in-browser; convert to `.docx` or `.pdf` if it looks off.
 
 ### Recover from a bad import
