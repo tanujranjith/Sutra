@@ -686,7 +686,10 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   await installInspectableBlobRequests(second, [`${SUPA_URL}/`]);
   await installSupabaseMock(second, supa);
   await second.goto('/Sutra.html');
-  await waitForAppReady(second);
+  // Opening a second tab can receive a newer commit from the first tab while
+  // this page hydrates. Keep setup read-only; an eager fixture save would
+  // correctly trip the cross-tab stale-workspace guard before this test starts.
+  await waitForAppHydrated(second);
   await completeOnboarding(second);
   await second.evaluate(async ({ email, passphrase }) => {
     await window.SutraCloudSync.verifyCode(email, '123456');
