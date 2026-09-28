@@ -61271,7 +61271,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function getBaseFileName(name) {
             const n = String(name || 'Imported File');
             const idx = n.lastIndexOf('.');
-            return (idx > 0 ? n.slice(0, idx) : n).trim() || 'Imported File';
+            return ((idx > 0 ? n.slice(0, idx) : n).trim() || 'Imported File').replace(/:{2,}/g, ':');
         }
 
         function isWorkspacePayload(data) {
@@ -64137,7 +64137,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         async function attachPdfIntoNewNote(file, context = {}) {
             const added = await addWorkspaceAttachmentFromBlob(file, { source: context.source || 'notes_upload' });
             if (!added) throw new Error('The PDF could not be attached.');
-            const title = String(context.title || '').trim().slice(0, 200) || `PDF::${getBaseFileName(file.name)}`;
+            const title = String(context.title || '').trim().slice(0, 200) || getBaseFileName(file.name);
             const pageId = generateId();
             const sourceParts = [];
             if (context.url) sourceParts.push(`<p><strong>Source URL:</strong> ${escapeHtml(String(context.url).slice(0, 8000))}</p>`);
@@ -64307,8 +64307,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function importDocumentIntoNewPage(file) {
             const ext = getFileExtension(file.name);
-            const baseName = getBaseFileName(file.name);
-            const importedTitle = `Imported::${baseName}`;
+            const importedTitle = getBaseFileName(file.name);
             let contentHtml = '';
             let icon = PAGE_ICONS.IMPORT;
 
@@ -64826,7 +64825,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (context.url) sourceParts.push(`<p><strong>Source URL:</strong> ${escapeHtml(String(context.url).slice(0, 8000))}</p>`);
                 if (context.text) sourceParts.push(`<blockquote>${normalizeTextToHtml(String(context.text).slice(0, 80000))}</blockquote>`);
                 if (!isPdf && sourceParts.length) page.content = sanitizeEditorHtml(sourceParts.join('') + String(page.content || ''));
-                if (!isPdf && candidates.length === 1 && context.title) page.title = String(context.title).trim().slice(0, 200) || page.title;
+                if (!isPdf && candidates.length === 1 && context.title) {
+                    page.title = String(context.title).trim().slice(0, 200) || page.title;
+                    if (currentPageId === page.id) {
+                        const titleInput = document.getElementById('pageTitle');
+                        if (titleInput) titleInput.value = page.title.split('::').pop();
+                    }
+                }
                 page.updatedAt = new Date().toISOString();
                 importedPages.push(page);
             }

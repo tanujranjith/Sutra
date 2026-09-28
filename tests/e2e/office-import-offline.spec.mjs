@@ -80,8 +80,13 @@ test('a fresh installed app can import DOCX and XLSX after going offline', async
         malformedOk,
         malformedCreatedPage: pages.length !== pageCountBeforeMalformed,
         binaryProbe,
-        docxContent: pages.find((item) => item.title === 'Imported::offline-evidence')?.content || '',
-        importedBodies: pages.filter((item) => item.title === 'Imported::offline-evidence').map((item) => item.content)
+        importedNotes: pages.filter((item) => item.title === 'offline-evidence').map((item) => ({
+          id: item.id,
+          content: item.content,
+          spaceId: item.spaceId
+        })),
+        activeSpaceId: window.flowAtelier.activeSpaceId,
+        syntheticImportedParents: pages.filter((item) => item.title === 'Imported' || item.title.startsWith('Imported::')).length
       };
     });
     expect(result.binaryProbe.fileBytes).toBeGreaterThan(0);
@@ -89,8 +94,12 @@ test('a fresh installed app can import DOCX and XLSX after going offline', async
     expect(result.xlsxOk).toBe(true);
     expect(result.malformedOk).toBe(false);
     expect(result.malformedCreatedPage).toBe(false);
-    expect(result.importedBodies.some((body) => body.includes('Offline DOCX evidence'))).toBe(true);
-    expect(result.importedBodies.some((body) => body.includes('Offline XLSX evidence'))).toBe(true);
+    expect(result.importedNotes).toHaveLength(2);
+    expect(new Set(result.importedNotes.map((item) => item.id)).size).toBe(2);
+    expect(result.importedNotes.every((item) => item.spaceId === result.activeSpaceId)).toBe(true);
+    expect(result.syntheticImportedParents).toBe(0);
+    expect(result.importedNotes.some((item) => item.content.includes('Offline DOCX evidence'))).toBe(true);
+    expect(result.importedNotes.some((item) => item.content.includes('Offline XLSX evidence'))).toBe(true);
     expect(unexpectedParserRequests).toEqual([]);
   } finally {
     await context.unroute('**/*');

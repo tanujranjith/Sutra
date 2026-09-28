@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260925-hydration2",
-    "hash": "f71b0f15892ed3f2"
+    "stamp": "20260927-file-imports1",
+    "hash": "e48436d5078e456d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

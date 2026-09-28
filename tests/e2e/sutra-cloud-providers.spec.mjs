@@ -686,13 +686,13 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   await installInspectableBlobRequests(second, [`${SUPA_URL}/`]);
   await installSupabaseMock(second, supa);
   await second.goto('/Sutra.html');
-  await waitForAppReady(second);
-  await completeOnboarding(second);
-  await second.evaluate(async ({ email, passphrase }) => {
-    await window.SutraCloudSync.verifyCode(email, '123456');
-    await window.SutraCloud.backupNow({ passphrase });
-    window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' });
-  }, { email: EMAIL, passphrase: PASS });
+  // Opening a second tab can receive a newer commit from the first tab while
+  // this page hydrates. Keep setup read-only; an eager fixture save would
+  // correctly trip the cross-tab stale-workspace guard before this test starts.
+  await waitForAppHydrated(second);
+  await second.evaluate(({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
+  await second.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
+  await second.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' }));
   const before = supa.uploads.length;
   const hide = tab => tab.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
