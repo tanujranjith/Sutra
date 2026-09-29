@@ -67,6 +67,7 @@ test('a fresh browser context (new tab/window) does NOT inherit the session key'
     document.getElementById('saveChatKeysBtn').click();
   });
   await expect.poll(() => pageA.evaluate(() => sessionStorage.getItem('groq_api_key'))).toBe('sk-should-not-leak');
+  await ctxA.close();
 
   // A separate context simulates an unrelated new tab/window: no inherited key.
   const ctxB = await browser.newContext();
@@ -75,7 +76,6 @@ test('a fresh browser context (new tab/window) does NOT inherit the session key'
   expect(await pageB.evaluate(() => sessionStorage.getItem('groq_api_key'))).toBeNull();
   expect(await pageB.evaluate(() => localStorage.getItem('groq_api_key'))).toBeNull();
 
-  await ctxA.close();
   await ctxB.close();
 });
 

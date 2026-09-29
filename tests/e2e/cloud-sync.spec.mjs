@@ -71,7 +71,7 @@ async function openAuthedDevice(browser, server, label) {
 // initial enable converges instead of unioning two different default
 // workspaces. Real second-device bootstrap lands in Phase B.
 async function seedBaseline(page) {
-  await page.evaluate(async ({ now }) => {
+  await page.evaluate(({ now }) => {
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     window.deserializeWorkspace({
       ...base,
@@ -82,8 +82,10 @@ async function seedBaseline(page) {
       tasks: [{ id: 'task-shared', title: 'Shared task', status: 'todo', priority: 'high' }],
       taskOrder: ['task-shared']
     });
-    await window.saveWorkspaceLocally();
   }, { now: BASE_STAMP });
+  // Let the direct fixture import finish its browser task before requesting
+  // a durable save. The user-facing restore path uses the same ordering.
+  await page.evaluate(() => window.saveWorkspaceLocally());
 }
 
 async function enableSync(page) {
@@ -592,7 +594,10 @@ async function readEverythingState(page) {
 test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
   // WebCrypto + IndexedDB workloads are intentionally serialized and can
   // exceed two minutes on Windows CI/desktop hosts without being stuck.
-  test.describe.configure({ timeout: 300_000 });
+  // Each encrypted two-device case owns fresh browser/worker state. Reusing a
+  // worker across the large parity fixture and earlier crypto/IndexedDB cases
+  // can leave the browser stalled during a later syncNow readback on Windows.
+  test.describe.configure({ mode: 'parallel', timeout: 300_000 });
 
   test('create + edit propagate, double-push is idempotent, applies never echo', async ({ browser }) => {
     const server = createSyncMockServer();

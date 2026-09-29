@@ -11,11 +11,9 @@
  *    editor: on every change v2 serializes back to storage form and mirrors it
  *    into the hidden legacy #editor element, so every existing save / export /
  *    version-history / assistant path keeps reading the DOM it always read.
- *  - Sutra block components (html-embed / drawing anchors, media wrappers,
- *    math blocks, countdown chips, page breaks…) are preserved VERBATIM as
- *    atom nodes so their [data-block-id] contract — and therefore page.blocks
- *    — survives round-trips byte-compatibly. They render as static cards in
- *    v2 for now (live hydration arrives with dedicated NodeViews).
+ *  - HTML embeds and drawings use live NodeViews backed by page.blocks while
+ *    serializing to their original positional anchors. Other media and widgets
+ *    retain their compatible preserved-node representation.
  *  - Legacy checklists (<div class="checklist-item">) convert to real TipTap
  *    task items on the way in and BACK to the legacy markup on the way out,
  *    so storage format never forks.
@@ -29,6 +27,7 @@
 
     if (window.SutraNotesEditorV2) return;
 
+    function createEditorInstance() {
     var state = {
         editor: null,        // TipTap Editor instance
         hostEl: null,        // element the editor is mounted into
@@ -38,7 +37,8 @@
         applyingExternal: 0, // >0 while setContent runs (suppresses onUpdate)
         mirrorTimer: null,
         selectionTimer: null,
-        extensionsCache: null
+        extensionsCache: null,
+        blockBridge: null
     };
 
     var MIRROR_DEBOUNCE_MS = 150;
@@ -199,11 +199,7 @@
      * Preserved Sutra components — verbatim atom nodes
      * ---------------------------------------------------------------- */
     var PRESERVED_BLOCK_SELECTORS = [
-        // Block-anchor contract (embeds / drawings) — page.blocks depends on
-        // these [data-block-id] elements surviving byte-compatibly.
-        'div[data-note-block-type][data-block-id]',
-        'div.html-embed-anchor', 'div.html-embed-block',
-        'div.drawing-anchor', 'div.drawing-block',
+        // Structured embeds and drawings have dedicated live nodes below.
         // Widget/media wrappers and other non-editable components.
         'div.media-wrapper',
         'div.atelier-page-break',
@@ -258,6 +254,83 @@
         var fallback = document.createElement(inline ? 'span' : 'div');
         fallback.setAttribute('data-sutra-preserved-empty', 'true');
         return fallback;
+    }
+
+    function buildStructuredNodes(eng) {
+        return [
+            { name: 'sutraHtmlEmbed', type: 'htmlEmbed', kind: 'html-embed', selectors: ['div.html-embed-anchor[data-block-id]', 'div.html-embed-block[data-block-id]', 'div[data-note-block-type="html-embed"][data-block-id]'] },
+            { name: 'sutraDrawing', type: 'drawing', kind: 'drawing', selectors: ['div.drawing-anchor[data-block-id]', 'div.drawing-block[data-block-id]', 'div[data-note-block-type="drawing"][data-block-id]'] }
+        ].map(function (definition) {
+            return eng.Node.create({
+                name: definition.name,
+                group: 'block',
+                atom: true,
+                selectable: true,
+                draggable: true,
+                addAttributes: function () { return { id: { default: '' }, payload: { default: null } }; },
+                parseHTML: function () {
+                    return definition.selectors.map(function (selector) {
+                        return { tag: selector, priority: 1100, getAttrs: function (dom) {
+                            var id = dom.getAttribute('data-block-id') || '';
+                            var bridge = state.blockBridge;
+                            return { id: id, payload: bridge && bridge.getBlock ? bridge.getBlock(definition.type, id) : null };
+                        } };
+                    });
+                },
+                renderHTML: function (props) {
+                    var anchor = document.createElement('div');
+                    anchor.className = definition.kind + '-anchor';
+                    anchor.setAttribute('data-note-block-type', definition.kind);
+                    anchor.setAttribute('data-block-id', props.node.attrs.id || '');
+                    anchor.setAttribute('contenteditable', 'false');
+                    return anchor;
+                },
+                addNodeView: function () {
+                    return function (props) {
+                        var node = props.node;
+                        var root = document.createElement('div');
+                        root.className = 'editor-v2-structured-block';
+                        var ownChange = false;
+                        var view = null;
+                        function updatePayload(payload) {
+                            if (!state.editor || typeof props.getPos !== 'function') return;
+                            var pos = props.getPos();
+                            if (typeof pos !== 'number') return;
+                            ownChange = true;
+                            var tr = state.editor.state.tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { payload: payload }));
+                            state.editor.view.dispatch(tr);
+                        }
+                        function removeNode() {
+                            if (!state.editor || typeof props.getPos !== 'function') return;
+                            var pos = props.getPos();
+                            if (typeof pos !== 'number') return;
+                            state.editor.view.dispatch(state.editor.state.tr.delete(pos, pos + node.nodeSize));
+                        }
+                        function render() {
+                            var bridge = state.blockBridge;
+                            if (view && view.dispose) view.dispose();
+                            view = bridge && bridge.createView ? bridge.createView(definition.type, node.attrs.id, node.attrs.payload, updatePayload, removeNode) : null;
+                            root.replaceChildren(view && view.dom ? view.dom : document.createTextNode(definition.type === 'drawing' ? 'Handwriting block unavailable' : 'HTML embed unavailable'));
+                        }
+                        render();
+                        return {
+                            dom: root,
+                            update: function (next) {
+                                if (next.type !== node.type || next.attrs.id !== node.attrs.id) return false;
+                                var previousPayload = node.attrs.payload;
+                                node = next;
+                                if (previousPayload !== next.attrs.payload && (!ownChange || definition.type === 'htmlEmbed')) render();
+                                ownChange = false;
+                                return true;
+                            },
+                            stopEvent: function (event) { return !!(event.target && event.target.closest && event.target.closest('.html-embed-block, .drawing-block')); },
+                            ignoreMutation: function () { return true; },
+                            destroy: function () { if (view && view.dispose) view.dispose(); }
+                        };
+                    };
+                }
+            });
+        });
     }
 
     function buildPreservedNodes(eng) {
@@ -354,6 +427,47 @@
         }, MIRROR_DEBOUNCE_MS);
     }
 
+    // Page switches and Split View teardown are document boundaries. Complete
+    // the pending edit against the old page before its context changes.
+    function flushPendingEdit() {
+        if (!state.editor || !state.mirrorTimer) return false;
+        clearTimeout(state.mirrorTimer);
+        state.mirrorTimer = null;
+        flushToMirror();
+        if (typeof state.callbacks.onUserEdit === 'function') state.callbacks.onUserEdit();
+        return true;
+    }
+
+    function getStructuredBlocks() {
+        var blocks = [];
+        if (!state.editor) return blocks;
+        state.editor.state.doc.descendants(function (node) {
+            if (node.type.name !== 'sutraHtmlEmbed' && node.type.name !== 'sutraDrawing') return;
+            blocks.push({ type: node.type.name === 'sutraHtmlEmbed' ? 'htmlEmbed' : 'drawing', id: node.attrs.id, payload: node.attrs.payload });
+        });
+        return blocks;
+    }
+
+    function normalizeStructuredIds() {
+        if (!state.editor || !state.blockBridge || !state.blockBridge.newId) return false;
+        var seen = Object.create(null);
+        var tr = state.editor.state.tr;
+        state.editor.state.doc.descendants(function (node, pos) {
+            if (node.type.name !== 'sutraHtmlEmbed' && node.type.name !== 'sutraDrawing') return;
+            var id = String(node.attrs.id || '');
+            if (id && !seen[id]) { seen[id] = true; return; }
+            var type = node.type.name === 'sutraHtmlEmbed' ? 'htmlEmbed' : 'drawing';
+            var nextId = state.blockBridge.newId(type);
+            var payload = Object.assign({}, node.attrs.payload || {}, { id: nextId });
+            tr.setNodeMarkup(pos, undefined, Object.assign({}, node.attrs, { id: nextId, payload: payload }));
+            seen[nextId] = true;
+        });
+        if (!tr.docChanged) return false;
+        tr.setMeta('addToHistory', false);
+        state.editor.view.dispatch(tr);
+        return true;
+    }
+
     function mount(options) {
         options = options || {};
         if (!isAvailable()) return false;
@@ -363,6 +477,7 @@
 
         state.hostEl = host;
         state.mirrorEl = options.mirror || null;
+        state.blockBridge = options.blockBridge || null;
         state.callbacks = {
             onUserEdit: options.onUserEdit,
             onSelectionChange: options.onSelectionChange
@@ -376,7 +491,7 @@
                 content: Object.prototype.hasOwnProperty.call(options, 'content')
                     ? normalizeLegacyHtml(options.content || '')
                     : '',
-                extraExtensions: buildPreservedNodes(eng),
+                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng)),
                 editorProps: {
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
@@ -385,6 +500,7 @@
                 },
                 onUpdate: function () {
                     if (state.applyingExternal > 0) return;
+                    if (normalizeStructuredIds()) return;
                     polishPreservedCards();
                     scheduleSelectionState();
                     scheduleMirrorFlush();
@@ -435,6 +551,7 @@
         state.editor = null;
         state.hostEl = null;
         state.mirrorEl = null;
+        state.blockBridge = null;
         state.callbacks = {};
         state.placeholder = '';
     }
@@ -465,6 +582,7 @@
             placeholder: state.placeholder || 'Start writing\u2026',
             onUserEdit: state.callbacks.onUserEdit,
             onSelectionChange: state.callbacks.onSelectionChange,
+            blockBridge: state.blockBridge,
             content: html || ''
         };
         if (!mount(options)) return false;
@@ -615,18 +733,6 @@
 
     function polishPreservedCards() {
         if (!state.hostEl) return;
-        Array.prototype.slice.call(state.hostEl.querySelectorAll('.html-embed-anchor[data-block-id], .html-embed-block[data-block-id]')).forEach(function (el) {
-            var label = 'Embedded block. Switch off the modern editor to edit it.';
-            el.setAttribute('role', 'group');
-            el.setAttribute('aria-label', label);
-            el.setAttribute('title', label);
-        });
-        Array.prototype.slice.call(state.hostEl.querySelectorAll('.drawing-anchor[data-block-id], .drawing-block[data-block-id]')).forEach(function (el) {
-            var label = 'Handwriting block. Switch off the modern editor to edit it.';
-            el.setAttribute('role', 'group');
-            el.setAttribute('aria-label', label);
-            el.setAttribute('title', label);
-        });
         Array.prototype.slice.call(state.hostEl.querySelectorAll('.page-link[data-page-id]')).forEach(function (el) {
             var pageId = String(el.getAttribute('data-page-id') || '').trim();
             var label = String(el.getAttribute('aria-label') || '').trim();
@@ -1111,6 +1217,7 @@
         if (ctx.handle) return ctx.handle;
         var el = document.createElement('div');
         el.className = 'editor-v2-drag-handle';
+        el.dataset.editorV2Owner = state.hostEl ? state.hostEl.id : '';
         el.setAttribute('aria-hidden', 'true');
         writeTrustedHtml(el, '<i class="fas fa-grip-vertical"></i>'); // sutra-allow-html: static icon
         el.style.display = 'none';
@@ -1126,11 +1233,10 @@
         var found = view.posAtCoords({ left: clientX, top: clientY });
         if (!found) return null;
         var doc = view.state.doc;
-        var $pos = doc.resolve(Math.min(found.pos, doc.content.size));
-        if ($pos.depth === 0) {
-            // Between blocks — pick nearest child by index.
-            return null;
-        }
+        // A top-level atom resolves at depth 0, unlike a paragraph. Prefer
+        // posAtCoords.inside so its hover still exposes the block move handle.
+        var inside = typeof found.inside === 'number' && found.inside >= 0 ? found.inside : found.pos;
+        var $pos = doc.resolve(Math.min(inside, doc.content.size));
         var index = $pos.index(0);
         if (index < 0 || index >= doc.childCount) return null;
         var before = 0;
@@ -1385,7 +1491,12 @@
         hideBubble();
         hideTableMenu();
         hideImageMenu();
-        if (ctx.handle) ctx.handle.style.display = 'none';
+        document.removeEventListener('mousemove', onDragMove, true);
+        document.removeEventListener('mouseup', onDragEnd, true);
+        if (ctx.drag && ctx.drag.indicator && ctx.drag.indicator.parentNode) ctx.drag.indicator.parentNode.removeChild(ctx.drag.indicator);
+        ctx.drag = null;
+        if (ctx.handle && ctx.handle.parentNode) ctx.handle.parentNode.removeChild(ctx.handle);
+        ctx.handle = null;
         ctx.keydownBound = ctx.mousemoveBound = ctx.scrollBound = null;
     }
 
@@ -1493,7 +1604,7 @@
         return ok;
     }
 
-    window.SutraNotesEditorV2 = {
+    return {
         isAvailable: isAvailable,
         isMounted: isMounted,
         mount: mount,
@@ -1502,7 +1613,9 @@
         loadDocument: loadDocument,
         getStorageHtml: getStorageHtml,
         flushToMirror: flushToMirror,
+        flushPendingEdit: flushPendingEdit,
         insertHtml: insertHtml,
+        getStructuredBlocks: getStructuredBlocks,
         exec: exec,
         focus: focus,
         isFocused: isFocused,
@@ -1511,4 +1624,8 @@
         // Exposed for tests.
         _normalizeLegacyHtml: normalizeLegacyHtml
     };
+    }
+    var primaryEditor = createEditorInstance();
+    primaryEditor.createInstance = createEditorInstance;
+    window.SutraNotesEditorV2 = primaryEditor;
 })();

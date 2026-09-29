@@ -1,19 +1,17 @@
 import { expect, test } from '@playwright/test';
 
-// Notes Editor v2 (TipTap engine, shipped 2026-07-07, opt-in flag
-// editor.editorV2Enabled). Regression coverage:
+// Modern Notes Editor (TipTap engine, shipped 2026-07-07; enabled by default
+// with editor.editorV2Enabled as a compatibility toggle). Regression coverage:
 //   1. THE bug: typing "1. item" produces ONE ordered-list marker — the typed
 //      "1. " is consumed by the input rule, never left as literal text, and no
 //      phantom empty <li> appears (the user's "1. 1. sim racing wheel" report).
 //   2. Storage round-trip: content saves through the legacy mirror in the
 //      classic storage format and reloads into v2 intact.
-//   3. Legacy component preservation: embed/drawing anchors ([data-block-id]),
-//      math blocks, and checklist-item markup survive a v2 round-trip
-//      byte-compatibly (page.blocks depends on the anchors surviving).
+//   3. Structured HTML embed and drawing nodes remain live while their anchors,
+//      math blocks, and checklist-item markup keep the classic storage contract.
 //   4. Toolbar bridge: the execCommand-era globals (formatText/formatBlock)
 //      drive schema commands when v2 is active.
-//   5. Flag off by default; toggling off unmounts and restores the classic
-//      contenteditable editor.
+//   5. Toggling Modern Editor off restores the classic contenteditable editor.
 
 async function completeOnboarding(page) {
   await page.evaluate(() => {
@@ -350,7 +348,7 @@ test('toolbar pressed states mirror the v2 cursor formatting', async ({ page }) 
   await expect(page.locator('[data-notes-v2-state="bulletList"]')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('task lists render checkbox and text on one row and preserved cards stay visible', async ({ page }) => {
+test('task lists render beside checkboxes and structured embeds mount a live view', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);
   await openNotesView(page);
@@ -368,7 +366,7 @@ test('task lists render checkbox and text on one row and preserved cards stay vi
     const item = host.querySelector('ul[data-type="taskList"] > li[data-checked]');
     const label = item.querySelector(':scope > label');
     const content = item.querySelector(':scope > div');
-    const card = host.querySelector('.html-embed-anchor[data-block-id="blk-visible"]');
+    const card = host.querySelector('.html-embed-block[data-block-id="blk-visible"]');
     const itemStyle = getComputedStyle(item);
     const cardStyle = getComputedStyle(card);
     const labelBox = label.getBoundingClientRect();
@@ -380,7 +378,7 @@ test('task lists render checkbox and text on one row and preserved cards stay vi
       labelTop: Math.round(labelBox.top),
       contentTop: Math.round(contentBox.top),
       cardDisplay: cardStyle.display,
-      cardAria: card.getAttribute('aria-label'),
+      cardHasEdit: !!card.querySelector('[data-html-embed-action="edit"]'),
       storageHasAria: storage.includes('aria-label'),
       storageHasAnchor: storage.includes('data-block-id="blk-visible"'),
       storageHasNestedInputInsideSpan: /<span contenteditable="true">[^<]*<input/i.test(storage)
@@ -390,11 +388,302 @@ test('task lists render checkbox and text on one row and preserved cards stay vi
   expect(result.itemDisplay).toBe('flex');
   expect(result.itemGap).not.toBe('normal');
   expect(Math.abs(result.labelTop - result.contentTop)).toBeLessThanOrEqual(6);
-  expect(result.cardDisplay).toBe('flex');
-  expect(result.cardAria).toContain('Embedded block');
+  expect(result.cardDisplay).not.toBe('none');
+  expect(result.cardHasEdit).toBe(true);
   expect(result.storageHasAria).toBe(false);
   expect(result.storageHasAnchor).toBe(true);
   expect(result.storageHasNestedInputInsideSpan).toBe(false);
+});
+
+test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 live HTML embed');
+  await page.locator(PM_SELECTOR).click();
+  await page.evaluate(() => { window.insertHtmlEmbed(); });
+  await expect(page.locator('#htmlEmbedModal')).toHaveClass(/active/);
+  await page.locator('#htmlEmbedModalInput').fill('<section><h2>First embed</h2></section>');
+  await page.locator('#htmlEmbedModalConfirmBtn').click();
+  const embed = page.locator('#editorV2Host .html-embed-block');
+  await expect(embed).toHaveCount(1);
+  await expect(embed.locator('.html-embed-block-surface h2')).toHaveText('First embed');
+  const initial = await page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    return { html: window.SutraNotesEditorV2.getStorageHtml(), blocks: current.blocks };
+  });
+  expect(initial.html).toContain('html-embed-anchor');
+  expect(initial.html).not.toContain('html-embed-block-header');
+  expect(initial.blocks.filter(block => block.type === 'htmlEmbed')).toHaveLength(1);
+
+  await embed.locator('.html-embed-menu-btn').click();
+  await embed.locator('[data-html-embed-action="edit"]').click();
+  await expect(page.locator('#htmlEmbedModalInput')).toHaveValue(/First embed/);
+  await page.locator('#htmlEmbedModalInput').fill('<section><h2>Edited embed</h2></section>');
+  await page.locator('#htmlEmbedModalConfirmBtn').click();
+  await expect(embed.locator('.html-embed-block-surface h2')).toHaveText('Edited embed');
+  const beforeSize = await page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    const block = current.blocks.find(entry => entry.type === 'htmlEmbed');
+    return { width: block.widthPct, height: block.heightPx };
+  });
+  for (const [axis, dx, dy] of [['x', -50, 0], ['y', 0, 60]]) {
+    const later = page.locator('#sutraUpdateBanner').getByRole('button', { name: 'Later' });
+    if (await later.isVisible()) await later.click();
+    const handle = embed.locator(`[data-html-embed-resize-axis="${axis}"]`);
+    await handle.scrollIntoViewIfNeeded();
+    const box = await handle.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 6 });
+    await page.mouse.up();
+  }
+  await expect.poll(() => page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    const block = current.blocks.find(entry => entry.type === 'htmlEmbed');
+    return block.widthPct;
+  })).toBeLessThan(beforeSize.width);
+  await expect.poll(() => page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    const block = current.blocks.find(entry => entry.type === 'htmlEmbed');
+    return block.heightPx;
+  })).toBeGreaterThan(beforeSize.height);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-live-embed'));
+  await page.reload();
+  await openNotesView(page);
+  await expect(page.locator('#editorV2Host .html-embed-block-surface h2')).toHaveText('Edited embed');
+  const reloadedSize = await page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    const block = current.blocks.find(entry => entry.type === 'htmlEmbed');
+    return { width: block.widthPct, height: block.heightPx };
+  });
+  expect(reloadedSize.width).toBeLessThan(beforeSize.width);
+  expect(reloadedSize.height).toBeGreaterThan(beforeSize.height);
+});
+
+test('Modern Editor removes and undoes an HTML embed without orphaning its payload', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 embed history');
+  await page.locator(PM_SELECTOR).click();
+  await page.evaluate(() => { window.insertHtmlEmbed(); });
+  await page.locator('#htmlEmbedModalInput').fill('<p>Undoable embed</p>');
+  await page.locator('#htmlEmbedModalConfirmBtn').click();
+  const embed = page.locator('#editorV2Host .html-embed-block');
+  await expect(embed).toHaveCount(1);
+  await embed.locator('.html-embed-menu-btn').click();
+  await embed.locator('[data-html-embed-action="remove"]').click();
+  await expect(embed).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.pages
+    .find(p => p.id === window.flowAtelier.currentPageId).blocks
+    .filter(block => block.type === 'htmlEmbed').length)).toBe(0);
+  await page.locator(PM_SELECTOR).focus();
+  await page.keyboard.press('Control+z');
+  await expect(embed).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.pages
+    .find(p => p.id === window.flowAtelier.currentPageId).blocks
+    .filter(block => block.type === 'htmlEmbed').length)).toBe(1);
+  await page.keyboard.press('Control+y');
+  await expect(embed).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.pages
+    .find(p => p.id === window.flowAtelier.currentPageId).blocks
+    .filter(block => block.type === 'htmlEmbed').length)).toBe(0);
+});
+
+test('multiple live HTML embeds move with their anchors and remain classic compatible', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 embed move');
+  const ids = [];
+  for (const label of ['First live embed', 'Second live embed']) {
+    await page.locator(PM_SELECTOR).click();
+    await page.evaluate(() => { window.insertHtmlEmbed(); });
+    await page.locator('#htmlEmbedModalInput').fill(`<p>${label}</p>`);
+    await page.locator('#htmlEmbedModalConfirmBtn').click();
+    ids.push(await page.evaluate(() => window.flowAtelier.pages
+      .find(p => p.id === window.flowAtelier.currentPageId).blocks
+      .filter(block => block.type === 'htmlEmbed').at(-1)?.id));
+  }
+  expect(new Set(ids).size).toBe(2);
+  await page.evaluate(([first, second]) => window.SutraNotesEditorV2.setContent(
+    `<p>Before</p><div class="html-embed-anchor" data-note-block-type="html-embed" data-block-id="${first}" contenteditable="false"></div>` +
+    `<p>Middle</p><div class="html-embed-anchor" data-note-block-type="html-embed" data-block-id="${second}" contenteditable="false"></div><p>After</p>`
+  ), ids);
+  const nodes = page.locator('#editorV2Host .editor-v2-structured-block');
+  await expect(nodes).toHaveCount(2);
+  await nodes.first().hover();
+  await expect(page.locator('.editor-v2-drag-handle')).toBeVisible();
+  await page.evaluate(async () => {
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const pm = document.querySelector('#editorV2Host .ProseMirror');
+    const nodes = () => pm.querySelectorAll(':scope > .editor-v2-structured-block');
+    const first = nodes()[0].getBoundingClientRect();
+    const last = nodes()[1].getBoundingClientRect();
+    pm.dispatchEvent(new MouseEvent('mousemove', { clientX: first.left + 16, clientY: first.top + 12, bubbles: true }));
+    await sleep(40);
+    const handle = [...document.querySelectorAll('.editor-v2-drag-handle')].find(el => getComputedStyle(el).display !== 'none');
+    const grip = handle.getBoundingClientRect();
+    handle.dispatchEvent(new MouseEvent('mousedown', { clientX: grip.left + 2, clientY: grip.top + 2, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: last.left + 16, clientY: last.bottom + 6, bubbles: true }));
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: last.left + 16, clientY: last.bottom + 6, bubbles: true }));
+  });
+  const moved = await page.evaluate(() => {
+    const current = window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId);
+    return { html: window.SutraNotesEditorV2.getStorageHtml(), ids: current.blocks.filter(block => block.type === 'htmlEmbed').map(block => block.id) };
+  });
+  expect(moved.html.indexOf(ids[1])).toBeLessThan(moved.html.indexOf(ids[0]));
+  expect(moved.ids).toHaveLength(2);
+  expect(new Set(moved.ids)).toEqual(new Set(ids));
+  expect(moved.html).not.toContain('html-embed-block-header');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-moved-embeds'));
+  const saved = await page.evaluate(() => window.flowAtelier.pages.find(p => p.id === window.flowAtelier.currentPageId));
+  expect(saved.content.indexOf(ids[1])).toBeLessThan(saved.content.indexOf(ids[0]));
+  expect(saved.blocks.filter(block => block.type === 'htmlEmbed')).toHaveLength(2);
+  await page.reload();
+  await page.waitForFunction(() => window.flowAtelier?.pages?.some(p => p.title === 'v2 embed move') && window.SutraNotesEditorV2?.isMounted());
+  await completeOnboarding(page);
+  await openNotesView(page);
+  await expect(page.locator('#editorV2Host .html-embed-block')).toHaveCount(2);
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+  });
+  await expect(page.locator('#editor .html-embed-block')).toHaveCount(2);
+});
+
+test('Modern Editor keeps handwriting live and durable', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 handwriting');
+  await page.locator(PM_SELECTOR).click();
+  await page.evaluate(() => window.insertDrawingBlock());
+  const drawing = page.locator('#editorV2Host .drawing-block');
+  await expect(drawing).toHaveCount(1);
+  const canvas = drawing.locator('canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 25, box.y + 25);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 85, box.y + 65, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.flowAtelier.pages
+    .find(p => p.id === window.flowAtelier.currentPageId).blocks
+    .find(block => block.type === 'drawing')?.strokes.length)).toBe(1);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-live-drawing'));
+  await page.reload();
+  await page.waitForFunction(() => window.SutraNotesEditorV2?.isMounted() && window.flowAtelier?.pages?.length);
+  await openNotesView(page);
+  await expect(page.locator('#editorV2Host .drawing-block canvas')).toBeVisible();
+});
+
+test('locking a live embed clears its preview until the page is unlocked', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 private embed');
+  await page.locator(PM_SELECTOR).click();
+  await page.evaluate(() => { window.insertHtmlEmbed(); });
+  await page.locator('#htmlEmbedModalInput').fill('<p>Private embed sentinel</p>');
+  await page.locator('#htmlEmbedModalConfirmBtn').click();
+  await expect(page.locator('#editorV2Host .html-embed-block')).toHaveCount(1);
+  await page.evaluate(async () => {
+    const id = window.flowAtelier.currentPageId;
+    await window.__sutraPublicBetaTestHooks.lockPageWithPin(id, '4826');
+    window.loadPage(id);
+  });
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  const lockedSurface = await page.evaluate(() => ({
+    text: document.getElementById('editorV2Host')?.textContent || '',
+    iframeCount: document.querySelectorAll('#editorV2Host iframe').length,
+    mirror: document.getElementById('editor')?.textContent || ''
+  }));
+  expect(lockedSurface.text + lockedSurface.mirror).not.toContain('Private embed sentinel');
+  expect(lockedSurface.iframeCount).toBe(0);
+  await page.locator('#lockScreenPinInput').fill('4826');
+  await page.locator('#lockScreenForm button[type="submit"]').click();
+  await expect(page.locator('#editorV2Host .html-embed-block-surface')).toContainText('Private embed sentinel');
+});
+
+test('Split View mounts independent Modern Editor instances', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'v2 split left');
+  await createBlankNote(page, 'v2 split right');
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  const left = page.locator('#editorV2Host .ProseMirror');
+  const right = page.locator('#editorV2SecondaryHost .ProseMirror');
+  await expect(left).toBeVisible();
+  await expect(right).toBeVisible();
+  await left.click();
+  await page.keyboard.type('Left pane text');
+  await right.click();
+  await page.keyboard.type('Right pane text');
+  await expect(left).toContainText('Left pane text');
+  await expect(right).toContainText('Right pane text');
+  await expect(left).not.toContainText('Right pane text');
+  await expect(right).not.toContainText('Left pane text');
+  await page.evaluate(() => {
+    const pm = document.querySelector('#editorV2SecondaryHost .ProseMirror');
+    pm.editor.commands.selectAll();
+    window.formatText('bold');
+  });
+  await expect(right.locator('strong')).toContainText('Right pane text');
+  await expect(left.locator('strong')).toHaveCount(0);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-split-modern'));
+  await expect.poll(() => page.evaluate(() => {
+    const pages = window.flowAtelier.pages;
+    return ['v2 split left', 'v2 split right'].map(name => pages.find(p => p.title.split('::').pop() === name)?.content || '');
+  })).toEqual([expect.stringContaining('Right pane text'), expect.stringContaining('Left pane text')]);
+  await right.locator('p').first().hover();
+  const secondaryHandle = page.locator('.editor-v2-drag-handle[data-editor-v2-owner="editorV2SecondaryHost"]');
+  await expect(secondaryHandle).toHaveCount(1);
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  await expect(page.locator('#editorV2SecondaryHost')).toHaveCount(0);
+  await expect(secondaryHandle).toHaveCount(0);
+});
+
+test('secondary pane saves its pending edit before switching pages or closing Split View', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  for (const name of ['split boundary one', 'split boundary two', 'split boundary three']) {
+    await createBlankNote(page, name);
+  }
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toBeVisible();
+  const pages = await page.evaluate(() => ({
+    oldId: document.querySelector('#splitNoteSelect').value,
+    options: [...document.querySelector('#splitNoteSelect').options].map(option => option.value)
+  }));
+  const nextId = pages.options.find(id => id && id !== pages.oldId);
+  expect(nextId).toBeTruthy();
+
+  await page.evaluate(targetId => {
+    document.querySelector('#editorV2SecondaryHost .ProseMirror').editor.commands.insertContent('Saved before switch');
+    const select = document.getElementById('splitNoteSelect');
+    select.value = targetId;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, nextId);
+  await expect.poll(() => page.evaluate(oldId => window.flowAtelier.pages.find(p => p.id === oldId)?.content, pages.oldId))
+    .toContain('Saved before switch');
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).not.toContainText('Saved before switch');
+
+  await page.evaluate(() => {
+    document.querySelector('#editorV2SecondaryHost .ProseMirror').editor.commands.insertContent('Saved before close');
+    document.getElementById('splitNotesToggleBtn').click();
+  });
+  await expect(page.locator('#editorV2SecondaryHost')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(id => window.flowAtelier.pages.find(p => p.id === id)?.content, nextId))
+    .toContain('Saved before close');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-split-boundary'));
+  await page.reload();
+  await page.waitForFunction(() => window.flowAtelier?.pages?.length >= 4);
+  const restored = await page.evaluate(ids => ids.map(id => window.flowAtelier.pages.find(p => p.id === id)?.content || ''), [pages.oldId, nextId]);
+  expect(restored[0]).toContain('Saved before switch');
+  expect(restored[1]).toContain('Saved before close');
 });
 
 test('empty Enter exits ordered lists without leaving a phantom list item', async ({ page }) => {

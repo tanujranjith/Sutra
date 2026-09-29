@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260927-file-imports1",
-    "hash": "e48436d5078e456d"
+    "stamp": "20260929-issues51-59-64-save2",
+    "hash": "acd81992cee51590"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -236,8 +236,8 @@
     "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260912-imagepaste1",
-    "hash": "ed1044a7270f629b"
+    "stamp": "20260929-issues51-59-64-boundary1",
+    "hash": "dd0815729603283b"
   },
   "src/features/search/global-search-engine.js": {
     "stamp": "20260825-gsengine4",
@@ -260,8 +260,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260922-prefill1",
-    "hash": "cb6f3592b22223fe"
+    "stamp": "20260928-issues51-59-64-icons2",
+    "hash": "f4fec8cb2fe6ca47"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -496,8 +496,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260921-homework-date-picker1",
-    "hash": "22d2345d54b8e7e7"
+    "stamp": "20260928-issues51-59-64",
+    "hash": "8c50b404fe34cc27"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -532,8 +532,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260922-theme1",
-    "hash": "0117079fe219f256"
+    "stamp": "20260929-issues51-59-64-touch",
+    "hash": "6c8f4d44555647eb"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",
@@ -548,8 +548,8 @@
     "hash": "3e852556c6ccee3b"
   },
   "styles/features/notes-editor-v2.css": {
-    "stamp": "20260807-themefocus1",
-    "hash": "1d33076448de7c46"
+    "stamp": "20260928-issues51-59-64",
+    "hash": "5a79f65cb8589630"
   },
   "styles/features/notes-toolbar.css": {
     "stamp": "20260709-toolbar-fields",

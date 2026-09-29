@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-09-27T05:13:40.916Z",
-  "reviewedReason": "Preserve explicit Share Target title through import refresh save",
-  "maxBytes": 4896699,
-  "maxLines": 86115
+  "blessedAt": "2026-09-29T13:34:48.484Z",
+  "reviewedReason": "Flush visible Modern Editor pages at confirmed save and view exit without reentering Sync cycles",
+  "maxBytes": 4910918,
+  "maxLines": 86352
 }

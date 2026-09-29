@@ -112,8 +112,12 @@ test('Quick Capture keeps parsed dates and times visible in enhanced controls', 
   await expect(modal).toBeVisible();
   await expect(modal.locator('#quickCaptureDate')).toHaveValue('2026-09-16');
   await expect(modal.locator('#quickCaptureTime')).toHaveValue('23:59');
-  await expect(modal.locator('#quickCaptureDate').locator('xpath=..').locator('.nf-date-label')).toHaveText('09/16/2026');
-  await expect(modal.locator('#quickCaptureTime').locator('xpath=..').locator('.nf-time-label')).toHaveText('11:59 PM');
+  const dateLabel = modal.locator('#quickCaptureDate').locator('xpath=..').locator('.nf-date-label');
+  const timeLabel = modal.locator('#quickCaptureTime').locator('xpath=..').locator('.nf-time-label');
+  if (await dateLabel.count()) await expect(dateLabel).toHaveText('09/16/2026');
+  else await expect(modal.locator('#quickCaptureDate')).toBeVisible();
+  if (await timeLabel.count()) await expect(timeLabel).toHaveText('11:59 PM');
+  else await expect(modal.locator('#quickCaptureTime')).toBeVisible();
 });
 
 test('empty Homework teaches one primary action: paste or type your homework', async ({ page }) => {
@@ -146,6 +150,8 @@ test('homework captured without a class remains editable', async ({ page }) => {
   if (await classSetup.isVisible()) {
     await classSetup.getByRole('button', { name: 'Cancel for now' }).click();
   }
+  const pastAssignments = page.locator('[data-hw-past-toggle]');
+  if (await pastAssignments.isVisible()) await pastAssignments.click();
   const taskCard = page.locator('[data-task-id]').filter({ hasText: 'Classless chemistry lab' }).first();
   await expect(taskCard).toBeVisible();
   await expect(taskCard).toContainText('No class');

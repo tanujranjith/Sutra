@@ -46,7 +46,8 @@
     priority: 'all',
     completion: 'all',
     due: 'all',
-    sort: 'due'
+    sort: 'due',
+    pastExpanded: false
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -1862,9 +1863,11 @@
         <td data-label="Priority"><span class="hw-priority-badge is-${escHtml(priority)}"><i class="fas fa-angles-up" aria-hidden="true"></i>${escHtml(priority.charAt(0).toUpperCase() + priority.slice(1))}</span></td>
         <td data-label="Status"><span class="hw-work-status is-${escHtml(status)}"><i class="fas ${status === 'completed' ? 'fa-check' : status === 'in-progress' ? 'fa-circle-half-stroke' : 'fa-diamond'}" aria-hidden="true"></i>${escHtml(statusLabel)}</span></td>
         <td class="hw-quick-actions-cell" data-label="Actions">
-          <button type="button" class="hw-row-action" data-task-schedule="${escHtml(task.id)}" aria-label="Schedule ${escHtml(task.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>
-          <button type="button" class="hw-row-action" data-task-toggle="${escHtml(task.id)}" aria-label="${escHtml(toggleLabel)}" title="${escHtml(toggleLabel)}"><i class="fas ${task.done ? 'fa-rotate-left' : 'fa-circle-check'}" aria-hidden="true"></i></button>
-          ${renderTaskMenu(task)}
+          <div class="hw-row-actions">
+            <button type="button" class="hw-row-action" data-task-schedule="${escHtml(task.id)}" aria-label="Schedule ${escHtml(task.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>
+            <button type="button" class="hw-row-action" data-task-toggle="${escHtml(task.id)}" aria-label="${escHtml(toggleLabel)}" title="${escHtml(toggleLabel)}"><i class="fas ${task.done ? 'fa-rotate-left' : 'fa-circle-check'}" aria-hidden="true"></i></button>
+            ${renderTaskMenu(task)}
+          </div>
         </td>
       </tr>`;
   }
@@ -1913,6 +1916,13 @@
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
     const byClass = homeworkViewState.tab === 'class';
+    const groupPast = homeworkViewState.tab === 'all' && !hasActiveHomeworkTaskFilters();
+    const currentTasks = groupPast ? filteredTasks.filter(task => getTaskDayOffset(task) == null || getTaskDayOffset(task) >= 0) : filteredTasks;
+    const pastTasks = groupPast ? filteredTasks.filter(task => getTaskDayOffset(task) < 0) : [];
+    const rows = groupPast && pastTasks.length ? `
+      <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
+      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Past assignments <span>(${pastTasks.length})</span></button></th></tr></tbody>
+      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${renderHomeworkWorkspaceRows(pastTasks)}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
     let content = '';
 
@@ -1932,7 +1942,7 @@
           <table class="hw-assignment-table${byClass ? ' is-by-class' : ''}">
             <caption class="sr-only">Homework assignments</caption>
             <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
-            <tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>
+            ${rows}
           </table>
         </div>`;
     }
@@ -3364,6 +3374,12 @@
         const taskId = button.getAttribute('data-task-menu-trigger');
         toggleTaskMenu(taskId, button);
       });
+    });
+
+    const pastToggle = board.querySelector('[data-hw-past-toggle]');
+    if (pastToggle) pastToggle.addEventListener('click', () => {
+      homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
+      render();
     });
 
     board.querySelectorAll('[data-task-toggle], [data-task-menu-toggle]').forEach(button => {

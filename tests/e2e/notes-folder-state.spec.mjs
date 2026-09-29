@@ -36,6 +36,37 @@ async function createFolder(page, name) {
   }, name);
 }
 
+test('Page Setup keeps all six types visible through narrow widths and zoom', async ({ page }) => {
+  await openApp(page);
+  await page.locator('.new-page-btn').click();
+  const toggle = page.locator('#newPageTypeToggle');
+  await expect(toggle.locator('button')).toHaveCount(6);
+  for (const width of [1280, 1024, 870, 840, 600, 375]) {
+    await page.setViewportSize({ width, height: 850 });
+    for (const zoom of ['100%', '150%', '200%']) {
+      await page.evaluate(value => { document.body.style.zoom = value; }, zoom);
+      await expect.poll(() => page.evaluate(() => {
+        const group = document.getElementById('newPageTypeToggle');
+        const column = group.closest('.new-page-setup-column');
+        const bounds = column.getBoundingClientRect();
+        return Array.from(group.querySelectorAll('button')).every(button => {
+          const rect = button.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
+        });
+      })).toBe(true);
+    }
+  }
+  await page.evaluate(() => { document.body.style.zoom = ''; });
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.locator('#newPageTypeBtn_folder').click();
+  await expect(page.locator('#newPageTypeBtn_folder')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#newPageName').fill('QA Selector Folder');
+  await page.locator('#newPageConfirmBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__sutraPublicBetaTestHooks
+    .getPagesForSpace(window.__sutraPublicBetaTestHooks.getActiveSpaceId())
+    .some(item => item.title === 'QA Selector Folder' && item.type === 'folder'))).toBe(true);
+});
+
 async function captureFolderState(page, folderIds, childIds) {
   return page.evaluate(({ folderIds: ids, childIds: children }) => {
     const hooks = window.__sutraPublicBetaTestHooks;
