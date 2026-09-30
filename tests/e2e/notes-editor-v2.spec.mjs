@@ -436,6 +436,7 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
     if (await later.isVisible()) await later.click();
     const handle = embed.locator(`[data-html-embed-resize-axis="${axis}"]`);
     await handle.scrollIntoViewIfNeeded();
+    await handle.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
     const box = await handle.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();

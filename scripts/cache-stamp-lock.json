@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260929-issues51-59-64-embed-size",
-    "hash": "fe1473595eefa2e8"
+    "stamp": "20260930-issues51-59-64-resize",
+    "hash": "5fff644d4add6654"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -652,8 +652,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260913-glass-notes1",
-    "hash": "a1746177f7db8aa0"
+    "stamp": "20260930-drawer-layer",
+    "hash": "66235663a5f0f623"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

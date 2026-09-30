@@ -66702,6 +66702,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         const handle = event.target.closest('[data-html-embed-resize-handle]');
                         if (!handle) return;
                         event.preventDefault();
+                        if (cleanupResize) cleanupResize();
+                        handle.setPointerCapture(event.pointerId);
+                        dom.classList.add('is-resizing');
                         const axis = handle.dataset.htmlEmbedResizeAxis;
                         const stage = dom.querySelector('.html-embed-block-stage');
                         const start = { x: event.clientX, y: event.clientY, width: dom.getBoundingClientRect().width, height: stage.getBoundingClientRect().height };
@@ -66715,9 +66718,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                             applyHtmlEmbedBlockSize(dom, width, height);
                         };
                         const cleanup = () => {
-                            document.removeEventListener('pointermove', move);
-                            document.removeEventListener('pointerup', end);
-                            document.removeEventListener('pointercancel', end);
+                            document.removeEventListener('pointermove', move, true);
+                            document.removeEventListener('pointerup', end, true);
+                            document.removeEventListener('pointercancel', end, true);
+                            dom.classList.remove('is-resizing');
+                            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
                             cleanupResize = null;
                         };
                         const end = () => {
@@ -66725,9 +66730,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                             commit({ ...block, widthPct: width, heightPx: height });
                         };
                         cleanupResize = cleanup;
-                        document.addEventListener('pointermove', move);
-                        document.addEventListener('pointerup', end);
-                        document.addEventListener('pointercancel', end);
+                        document.addEventListener('pointermove', move, true);
+                        document.addEventListener('pointerup', end, true);
+                        document.addEventListener('pointercancel', end, true);
                     });
                     return { dom, dispose: () => { if (cleanupResize) cleanupResize(); } };
                 }

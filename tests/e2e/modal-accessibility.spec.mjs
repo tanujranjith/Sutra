@@ -322,6 +322,7 @@ test('emoji picker keeps its sibling surfaces interactive while open', async ({ 
   await expect(picker).not.toHaveClass(/active/);
   await expect.poll(() => page.evaluate(() => window.SutraModalManager.getActiveCount())).toBe(0);
 
+  await openSidebar();
   await icon.click();
   await expect(picker).toHaveClass(/active/);
   await page.locator('#emojiPicker .emoji-remove-btn').click();

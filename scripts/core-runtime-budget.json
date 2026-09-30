@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-09-29T13:34:48.484Z",
-  "reviewedReason": "Flush visible Modern Editor pages at confirmed save and view exit without reentering Sync cycles",
-  "maxBytes": 4910918,
-  "maxLines": 86352
+  "blessedAt": "2026-09-30T04:54:20.789Z",
+  "reviewedReason": "Capture live embed resize pointers and remove listeners during cleanup",
+  "maxBytes": 4911326,
+  "maxLines": 86357
 }

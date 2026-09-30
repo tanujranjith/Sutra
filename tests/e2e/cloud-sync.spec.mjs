@@ -1543,7 +1543,9 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
       await editPage(device.page, 'page-shared', '<p>sync remains independent of backup destination</p>');
       const result = await device.page.evaluate(() => window.SutraCloud.syncNow());
       expect(result.error).toBeFalsy();
-      expect(await device.page.evaluate(() => window.SutraSync.status().state)).toBe('idle');
+      // The save can start the automatic cycle before this explicit request;
+      // syncNow then returns skipped while that existing cycle completes.
+      await expect.poll(() => device.page.evaluate(() => window.SutraSync.status().state), { timeout: 15000 }).toBe('idle');
     } finally {
       await device.context.close();
     }
