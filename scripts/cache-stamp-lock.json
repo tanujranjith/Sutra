@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260930-issues51-59-64-resize",
-    "hash": "5fff644d4add6654"
+    "stamp": "20260930-openai-token-compat",
+    "hash": "06055f2995c4925b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -260,8 +260,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260928-issues51-59-64-icons2",
-    "hash": "f4fec8cb2fe6ca47"
+    "stamp": "20260930-homework-completion-grouping",
+    "hash": "ba64a1b79b536c92"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
