@@ -25,6 +25,9 @@ async function completeOnboarding(page) {
 }
 
 async function openApp(page) {
+  // Modal keyboard tests start after the optional startup intro. Otherwise
+  // their first Enter can dismiss the intro instead of activating the trigger.
+  await page.addInitScript(() => sessionStorage.setItem('sutra_intro_played', '1'));
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });
   await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
