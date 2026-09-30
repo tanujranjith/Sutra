@@ -115,6 +115,11 @@ test('marking Homework done on Home immediately updates the Homework board', asy
   await expect(row).toHaveClass(/is-completed/);
   await expect(row.locator('.hw-work-status')).toContainText('Completed');
 
+  const completedToggle = page.locator('[data-hw-past-toggle]');
+  await expect(completedToggle).toContainText('Completed assignments (1)');
+  await expect(row).toBeHidden();
+  await completedToggle.click();
+  await expect(row).toBeVisible();
   await row.locator('[data-task-toggle]').click();
   await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
     .find((task) => task.title === 'Existing task')?.done)).toBe(false);
@@ -148,8 +153,7 @@ test('Homework assignment actions provide a dedicated edit form', async ({ page 
     window.SutraHomework.render();
   });
 
-  // The date is in the past, so expand the session-only history section.
-  await page.locator('[data-hw-past-toggle]').click();
+  // Overdue unfinished work stays in the active list until it is completed.
   const row = page.locator('.hw-assignment-row', { hasText: 'Timed existing assignment' });
   await row.locator('[data-task-menu-trigger]').click();
   await row.getByRole('menuitem', { name: 'Edit assignment' }).click();
