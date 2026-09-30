@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-09-30T21:58:30.015Z",
-  "reviewedReason": "Add a bounded provider-request token parameter compatibility retry",
-  "maxBytes": 4912865,
-  "maxLines": 86378
+  "blessedAt": "2026-09-30T22:28:40.206Z",
+  "reviewedReason": "Set Homework tonight deadlines to local end-of-day and document Quick Capture behavior",
+  "maxBytes": 4913747,
+  "maxLines": 86391
 }

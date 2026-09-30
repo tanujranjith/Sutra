@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260930-openai-token-compat",
-    "hash": "06055f2995c4925b"
+    "stamp": "20260930-homework-tonight-2359",
+    "hash": "6f16c9021ac29b3a"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
