@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260929-issues51-59-64-save2",
-    "hash": "acd81992cee51590"
+    "stamp": "20260929-issues51-59-64-embed-size",
+    "hash": "fe1473595eefa2e8"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

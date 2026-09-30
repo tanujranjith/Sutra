@@ -204,7 +204,7 @@
     "./src/components/icons/index.js?v=20260809-audit-icons1",
     "./src/config/feature-manifest.js?v=20260913-locked-assistant-manifest2",
     "./src/config/sutra-runtime-config.js?v=20260716-sync6",
-    "./src/core/app.js?v=20260929-issues51-59-64-save2",
+    "./src/core/app.js?v=20260929-issues51-59-64-embed-size",
     "./src/core/credential-vault-bridge.js?v=20260831-revoke4",
     "./src/core/credential-vault.js?v=20260831-revoke4",
     "./src/core/dom-safety.js?v=20260913-custom-html-safety1",

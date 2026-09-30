@@ -66845,8 +66845,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             sizeBadge.className = 'html-embed-size-badge';
             header.insertBefore(sizeBadge, header.querySelector('.html-embed-block-menu-wrap'));
 
-            applyHtmlEmbedBlockSize(wrapper, block.widthPct, block.heightPx);
             wrapper.appendChild(body);
+            applyHtmlEmbedBlockSize(wrapper, block.widthPct, block.heightPx);
 
             var resizeBottom = document.createElement('button');
             resizeBottom.type = 'button';

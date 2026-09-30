@@ -232,10 +232,19 @@ test('emoji picker keeps its sibling surfaces interactive while open', async ({ 
   await page.evaluate(() => window.setActiveView && window.setActiveView('notes'));
   await page.waitForFunction(() => document.getElementById('view-notes')?.classList.contains('active'));
 
+  const sidebar = page.locator('#sidebar');
+  const openSidebar = async () => {
+    if (await sidebar.evaluate(element => element.classList.contains('collapsed'))) {
+      await page.locator('#sidebarToggle').click();
+    }
+  };
+  await openSidebar();
+
   await page.locator('button.new-page-btn:visible').first().click();
   await page.fill('#newPageName', 'Emoji picker modal QA');
   await page.locator('#newPageModal button.btn-primary').click();
   await page.waitForFunction(() => document.getElementById('pageTitle')?.value === 'Emoji picker modal QA');
+  await openSidebar();
   const pageId = await page.evaluate(() => window.flowAtelier.currentPageId);
   const icon = page.locator(`.page-item[data-page-id="${pageId}"] .page-icon`);
   await expect(icon).toBeVisible();

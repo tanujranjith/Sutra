@@ -427,6 +427,10 @@ test('Modern Editor inserts, edits, saves, and restores live HTML embeds', async
     const block = current.blocks.find(entry => entry.type === 'htmlEmbed');
     return { width: block.widthPct, height: block.heightPx };
   });
+  await expect.poll(async () => {
+    const rect = await embed.locator('.html-embed-block-stage').boundingBox();
+    return Math.abs(rect.height - beforeSize.height);
+  }).toBeLessThanOrEqual(2);
   for (const [axis, dx, dy] of [['x', -50, 0], ['y', 0, 60]]) {
     const later = page.locator('#sutraUpdateBanner').getByRole('button', { name: 'Later' });
     if (await later.isVisible()) await later.click();
