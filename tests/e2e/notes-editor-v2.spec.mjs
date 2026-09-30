@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
 // Modern Notes Editor (TipTap engine, shipped 2026-07-07; enabled by default
 // with editor.editorV2Enabled as a compatibility toggle). Regression coverage:
@@ -61,10 +62,11 @@ async function enableEditorV2(page) {
 }
 
 async function openNotesView(page) {
-  await page.evaluate(() => {
-    const nav = document.querySelector('[data-view="notes"]');
-    if (nav) nav.click();
-  });
+  // Reload exposes shell markup before navigation handlers are installed.
+  // Target the canonical button after hydration, rather than the body whose
+  // data-view attribute may also match the old generic selector.
+  await waitForAppHydrated(page);
+  await page.locator('.view-tab[data-view="notes"]:visible').first().click();
   await page.waitForFunction(() => {
     const view = document.getElementById('view-notes');
     return view && getComputedStyle(view).display !== 'none';
