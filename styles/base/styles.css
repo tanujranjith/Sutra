@@ -8466,8 +8466,10 @@
 
         /* Page / Canvas segmented toggle */
         .new-page-type-toggle {
-            display: flex;
-            gap: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
+            gap: 3px;
+            min-width: 0;
             background: color-mix(in srgb, var(--glass-border) 30%, transparent);
             border-radius: 10px;
             padding: 3px;
@@ -8475,7 +8477,8 @@
         }
 
         .new-page-type-toggle-btn {
-            flex: 1;
+            min-width: 0;
+            min-height: 44px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -8490,7 +8493,8 @@
             cursor: pointer;
             transition: background 0.13s ease, color 0.13s ease, box-shadow 0.13s ease;
             line-height: 1;
-            white-space: nowrap;
+            white-space: normal;
+            text-align: center;
         }
 
         .new-page-type-toggle-btn.nptt-active {

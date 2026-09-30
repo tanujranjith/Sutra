@@ -7481,6 +7481,12 @@ function populateProgressDashboard() {
                 saveRequestedBeforeHydration = true;
                 await workspaceHydrationReady;
             }
+            // Only a visible Notes workspace can have unsaved editor input.
+            // Sync/import saves must not pull stale editor DOM into a remote
+            // apply or start another local mutation inside the current cycle.
+            if (activeView === 'notes' && !workspaceImportInProgress && !/^sync-/i.test(String(reason))) {
+                flushVisibleNotesEditorsBeforeLeaving();
+            }
             if (pendingAppSave) {
                 clearTimeout(pendingAppSave);
                 pendingAppSave = null;
@@ -32744,6 +32750,7 @@ function buildOnboardingPlanPreview() {
                 ? requestedView
                 : getFallbackView('notes');
             if (activeView === 'notes' && resolvedView !== 'notes') {
+                flushVisibleNotesEditorsBeforeLeaving();
                 syncCurrentPrimaryScrollState({ persist: true });
             }
             activeView = resolvedView;
@@ -39120,7 +39127,9 @@ function buildOnboardingPlanPreview() {
                 }
                 syncScrollLock();
                 syncBackgroundInert();
-                setTimeout(() => focusInitial(root), 0);
+                setTimeout(() => {
+                    if (state.active[state.active.length - 1] === root && isElementOpen(root)) focusInitial(root);
+                }, 0);
             }
 
             function restoreFocusTo(previous, closedRoot = null) {
@@ -40008,15 +40017,12 @@ function buildOnboardingPlanPreview() {
             }
         }
 
-        // When the modern editor owns the primary pane, find/replace must run
+        // When the modern editor owns the active pane, find/replace must run
         // over the ProseMirror document (via the SutraSearch decoration engine)
         // — the legacy TreeWalker path would mutate the hidden mirror and get
         // clobbered by the next flush.
         function findReplaceUsesV2() {
-            return isNotesEditorV2Active() &&
-                activeEditorPane !== 'secondary' &&
-                window.SutraNotesEditorV2 &&
-                window.SutraNotesEditorV2.search;
+            return !!activeNotesEditorV2()?.search;
         }
 
         function updateFindReplaceInfoFromV2(result) {
@@ -40034,7 +40040,7 @@ function buildOnboardingPlanPreview() {
             if (!input || !editor) return;
             const query = input.value;
             if (findReplaceUsesV2()) {
-                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.set(query));
+                updateFindReplaceInfoFromV2(activeNotesEditorV2().search.set(query));
                 return;
             }
             clearFindHighlights();
@@ -40084,7 +40090,7 @@ function buildOnboardingPlanPreview() {
 
         function clearFindHighlights() {
             if (findReplaceUsesV2()) {
-                window.SutraNotesEditorV2.search.clear();
+                activeNotesEditorV2().search.clear();
                 return;
             }
             const editor = document.getElementById('editor');
@@ -40110,7 +40116,7 @@ function buildOnboardingPlanPreview() {
 
         function findNext() {
             if (findReplaceUsesV2()) {
-                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.next());
+                updateFindReplaceInfoFromV2(activeNotesEditorV2().search.next());
                 return;
             }
             if (!findMatches.length) return;
@@ -40120,7 +40126,7 @@ function buildOnboardingPlanPreview() {
 
         function findPrev() {
             if (findReplaceUsesV2()) {
-                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.prev());
+                updateFindReplaceInfoFromV2(activeNotesEditorV2().search.prev());
                 return;
             }
             if (!findMatches.length) return;
@@ -40132,8 +40138,8 @@ function buildOnboardingPlanPreview() {
             const replaceInput = document.getElementById('replaceInput');
             if (!replaceInput) return;
             if (findReplaceUsesV2()) {
-                updateFindReplaceInfoFromV2(window.SutraNotesEditorV2.search.replaceOne(replaceInput.value));
-                if (typeof queueSavePrimaryPage === 'function') { try { queueSavePrimaryPage(); } catch(e) {} }
+                updateFindReplaceInfoFromV2(activeNotesEditorV2().search.replaceOne(replaceInput.value));
+                queueSaveForEditor(getActiveEditor());
                 return;
             }
             if (!findMatches.length || currentFindIndex < 0) return;
@@ -40154,12 +40160,12 @@ function buildOnboardingPlanPreview() {
             const replaceInput = document.getElementById('replaceInput');
             if (!replaceInput) return;
             if (findReplaceUsesV2()) {
-                const before = window.SutraNotesEditorV2.search.getState();
+                const before = activeNotesEditorV2().search.getState();
                 const count = before.count;
-                window.SutraNotesEditorV2.search.replaceAll(replaceInput.value);
+                activeNotesEditorV2().search.replaceAll(replaceInput.value);
                 const info = document.getElementById('findReplaceInfo');
                 if (info) info.textContent = `Replaced ${count} occurrence${count === 1 ? '' : 's'}`;
-                if (typeof queueSavePrimaryPage === 'function') { try { queueSavePrimaryPage(); } catch(e) {} }
+                queueSaveForEditor(getActiveEditor());
                 return;
             }
             const replacement = replaceInput.value;
@@ -44776,6 +44782,7 @@ function buildOnboardingPlanPreview() {
   <li>Tools: <strong>pen</strong>, <strong>highlighter</strong>, and a stroke-based <strong>eraser</strong>; multiple colors and widths; blank, lined, grid, or dotted paper.</li>
   <li>Per-block <strong>undo / redo</strong> (separate from typed-text undo), clear-with-confirmation, export as PNG, and resize the block height. Width is always full so nothing overflows on phones.</li>
   <li>Drawings are saved as vector strokes — they stay crisp, scale with the note, are theme-aware, and round-trip through JSON backup, <code>.atelier</code> export/import, and Version History.</li>
+  <li>The Modern Editor keeps drawing blocks live in the note. Move or remove a block with the surrounding text; the classic editor remains available in Settings.</li>
 </ul>
                     `
                 },
@@ -44822,6 +44829,8 @@ function buildOnboardingPlanPreview() {
 <ul>
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
+  <li>In Modern Editor Split View, each pane has its own note, caret, and undo history. Toolbar actions apply to the active pane.</li>
+  <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
   <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Home + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
   <li>On phones, Split View degrades gracefully into stacked panes — the desktop Notes split is the only layout where both panes are visible side by side today.</li>
@@ -44904,6 +44913,8 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>Homework organizes work into class and extracurricular lanes.</li>
+  <li>All Assignments shows current work first. Open <strong>Past assignments</strong> to see older work; search and filters show matches immediately.</li>
+  <li>Schedule, Complete, and More sit together on each assignment row.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
   <li>The Class Dashboard shows open homework, upcoming class deadlines, linked notes, and any AP subject tied to that class.</li>
@@ -45403,13 +45414,55 @@ ${renderedSections}
         }
 
         /* ================================================================
-         * NOTES EDITOR V2 (TipTap engine) — opt-in via Settings → Editor.
-         * The classic contenteditable #editor stays in the DOM as a hidden
-         * mirror that v2 keeps in sync, so every existing save / export /
-         * version-history path keeps working unchanged. Applies to the
-         * PRIMARY pane only; the split-view secondary pane stays classic.
+         * Modern Notes editor. Each visible Notes pane owns a TipTap instance;
+         * hidden classic elements remain storage compatibility mirrors.
          * ============================================================== */
         let notesEditorV2ToolbarPointerGuardBound = false;
+        let notesSecondaryEditorV2 = null;
+
+        function syncNotesSecondaryEditorV2() {
+            const mirror = getSecondaryEditor();
+            const enabled = !!(mirror && appSettings && appSettings.notesEditorV2Enabled && appSettings.notesSplitViewEnabled && window.SutraNotesEditorV2?.isAvailable());
+            let host = document.getElementById('editorV2SecondaryHost');
+            if (!enabled) {
+                flushSecondaryPageBeforeContextChange();
+                if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.destroy();
+                if (host) host.remove();
+                if (mirror) { mirror.style.display = ''; mirror.contentEditable = 'true'; }
+                return;
+            }
+            if (notesSecondaryEditorV2?.isMounted()) return;
+            if (!host) {
+                host = document.createElement('div');
+                host.id = 'editorV2SecondaryHost';
+                host.className = 'editor editor-v2-host';
+                mirror.insertAdjacentElement('afterend', host);
+            }
+            notesSecondaryEditorV2 = window.SutraNotesEditorV2.createInstance();
+            if (!notesSecondaryEditorV2.mount({
+                host,
+                mirror,
+                blockBridge: createModernStructuredBlockBridge(mirror),
+                placeholder: 'Start writing…',
+                onUserEdit: () => {
+                    const page = getPageForEditor(mirror);
+                    if (page) syncModernStructuredBlocks(mirror, page, notesSecondaryEditorV2);
+                    queueSaveSecondaryPage();
+                },
+                onSelectionChange: state => {
+                    if (notesSecondaryEditorV2?.isFocused()) {
+                        setActiveEditorPane('secondary');
+                        syncNotesEditorV2ToolbarState(state);
+                    }
+                }
+            })) {
+                notesSecondaryEditorV2 = null;
+                host.remove();
+                return;
+            }
+            mirror.style.display = 'none';
+            mirror.contentEditable = 'false';
+        }
 
         function isNotesEditorV2Active() {
             return !!(
@@ -45420,12 +45473,17 @@ ${renderedSections}
             );
         }
 
+        function activeNotesEditorV2() {
+            if (activeEditorPane === 'secondary' && notesSecondaryEditorV2?.isMounted()) return notesSecondaryEditorV2;
+            return isNotesEditorV2Active() ? window.SutraNotesEditorV2 : null;
+        }
+
         function getNotesEditorV2Host() {
             return document.getElementById('editorV2Host');
         }
 
         function isTargetInsideNotesEditorV2(target) {
-            return !!(target && target.closest && target.closest('#editorV2Host'));
+            return !!(target && target.closest && target.closest('#editorV2Host, #editorV2SecondaryHost'));
         }
 
         function clearNotesEditorV2ToolbarState() {
@@ -45511,6 +45569,7 @@ ${renderedSections}
             if (!legacyEditor) return;
 
             if (!wantsV2 || !bridge || !bridge.isAvailable()) {
+                syncNotesSecondaryEditorV2();
                 if (bridge && bridge.isMounted()) {
                     bridge.destroy();
                     const host = getNotesEditorV2Host();
@@ -45542,12 +45601,18 @@ ${renderedSections}
             const mounted = bridge.mount({
                 host,
                 mirror: legacyEditor,
+                blockBridge: createModernStructuredBlockBridge(legacyEditor),
                 placeholder: 'Start writing…',
                 onUserEdit: () => {
+                    const page = getPageForEditor(legacyEditor);
+                    if (page) syncModernStructuredBlocks(legacyEditor, page, bridge);
                     updateWordCount();
                     queueSavePrimaryPage();
                 },
-                onSelectionChange: syncNotesEditorV2ToolbarState
+                onSelectionChange: state => {
+                    if (bridge.isFocused()) setActiveEditorPane('primary');
+                    syncNotesEditorV2ToolbarState(state);
+                }
             });
             if (!mounted) {
                 host.remove();
@@ -45561,21 +45626,20 @@ ${renderedSections}
             if (typeof bridge.getToolbarState === 'function') {
                 syncNotesEditorV2ToolbarState(bridge.getToolbarState());
             }
+            syncNotesSecondaryEditorV2();
         }
 
         // Toolbar/shortcut bridge: returns true when v2 handled the command,
         // in which case the legacy execCommand path must be skipped.
         function notesEditorV2Exec(kind, arg) {
-            if (!isNotesEditorV2Active()) return false;
-            // Commands act on the primary pane; if the user is focused in the
-            // classic secondary pane, let the legacy path handle it.
-            if (activeEditorPane === 'secondary') return false;
-            const handled = window.SutraNotesEditorV2.exec(kind, arg);
+            const bridge = activeNotesEditorV2();
+            if (!bridge) return false;
+            const handled = bridge.exec(kind, arg);
             if (handled) {
                 updateWordCount();
-                queueSavePrimaryPage();
-                if (typeof window.SutraNotesEditorV2.getToolbarState === 'function') {
-                    syncNotesEditorV2ToolbarState(window.SutraNotesEditorV2.getToolbarState());
+                queueSaveForEditor(getActiveEditor());
+                if (typeof bridge.getToolbarState === 'function') {
+                    syncNotesEditorV2ToolbarState(bridge.getToolbarState());
                 }
             }
             return handled;
@@ -46233,10 +46297,10 @@ function getActiveEditor() {
             return candidates[0] ? candidates[0].id : null;
         }
 
-        function saveSecondaryPageNow() {
+        function saveSecondaryPageNow(allowDisabled = false) {
             const editor = getSecondaryEditor();
             if (!editor || !secondaryPageId || !secondaryEditorDirty) return false;
-            if (!(appSettings && appSettings.notesSplitViewEnabled)) return false;
+            if (!allowDisabled && !(appSettings && appSettings.notesSplitViewEnabled)) return false;
             const page = pages.find(p => p.id === secondaryPageId);
             if (!page) return false;
             if (page.isLocked && page.lockHash && !unlockedPageIds.has(secondaryPageId)) return false;
@@ -46258,6 +46322,28 @@ function getActiveEditor() {
                 splitSecondaryDebounceTimer = null;
                 saveSecondaryPageNow();
             }, 800);
+        }
+
+        function flushSecondaryPageBeforeContextChange() {
+            if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.flushPendingEdit();
+            if (splitSecondaryDebounceTimer) {
+                clearTimeout(splitSecondaryDebounceTimer);
+                splitSecondaryDebounceTimer = null;
+            }
+            if (secondaryEditorDirty) saveSecondaryPageNow(true);
+        }
+
+        function flushVisibleNotesEditorsBeforeLeaving() {
+            if (workspaceImportInProgress) return;
+            if (isNotesEditorV2Active() && window.SutraNotesEditorV2?.flushPendingEdit) {
+                window.SutraNotesEditorV2.flushPendingEdit();
+            }
+            if (primaryEditorDirty) {
+                if (primarySaveDebounceTimer) clearTimeout(primarySaveDebounceTimer);
+                primarySaveDebounceTimer = null;
+                savePage();
+            }
+            flushSecondaryPageBeforeContextChange();
         }
 
         function getEditorAutosaveDelayMs() {
@@ -46312,6 +46398,7 @@ function getActiveEditor() {
             const editor = getSecondaryEditor();
             const select = document.getElementById('splitNoteSelect');
             if (!editor) return;
+            flushSecondaryPageBeforeContextChange();
             const page = pages.find(p => p.id === pageId && p.id !== currentPageId);
             if (!page) {
                 editor.innerHTML = '<p>(No note selected)</p>';
@@ -46332,8 +46419,15 @@ function getActiveEditor() {
             if (_secondaryLocked) {
                 editor.contentEditable = 'false';
                 editor.innerHTML = `<div class="split-locked-placeholder"><i class="fas fa-lock"></i><p>This page is PIN-protected.</p><p>Open it in the main pane to unlock it first.</p></div>`;
+                if (notesSecondaryEditorV2?.isMounted()) editor.style.display = '';
+                if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.setContent('');
+                const v2Host = document.getElementById('editorV2SecondaryHost');
+                if (v2Host) { v2Host.hidden = true; v2Host.inert = true; }
             } else {
                 editor.contentEditable = 'true';
+                if (notesSecondaryEditorV2?.isMounted()) editor.style.display = 'none';
+                const v2Host = document.getElementById('editorV2SecondaryHost');
+                if (v2Host) { v2Host.hidden = false; v2Host.inert = false; }
                 loadPageContentIntoEditor(editor, page);
             }
             if (typeof splitScrollPositions[page.id] === 'number') {
@@ -46381,9 +46475,11 @@ function getActiveEditor() {
             if (toggleBtn) toggleBtn.classList.toggle('active', enabled);
 
             if (!enabled) {
+                syncNotesSecondaryEditorV2();
                 setActiveEditorPane('primary');
                 return;
             }
+            syncNotesSecondaryEditorV2();
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
             const fallbackId = getFallbackSecondaryPageId();
@@ -46414,10 +46510,8 @@ function getActiveEditor() {
                 if (!secondaryPageId || secondaryPageId === currentPageId) {
                     secondaryPageId = appSettings.notesSplitSecondaryPageId || fallbackId;
                 }
-            } else if (splitSecondaryDebounceTimer) {
-                clearTimeout(splitSecondaryDebounceTimer);
-                splitSecondaryDebounceTimer = null;
-                saveSecondaryPageNow();
+            } else {
+                flushSecondaryPageBeforeContextChange();
             }
 
             appSettings.notesSplitViewEnabled = nextEnabled;
@@ -46428,6 +46522,7 @@ function getActiveEditor() {
 
         function swapSplitSecondaryIntoPrimary() {
             if (!secondaryPageId) return;
+            flushSecondaryPageBeforeContextChange();
             const target = secondaryPageId;
             const oldPrimaryId = currentPageId;
             loadPage(target);
@@ -65302,7 +65397,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             html += '  </div>';
             html += '</div>';
             html += '<div class="emoji-search-container">';
-            html += '<input type="text" class="emoji-search" id="emojiSearch" placeholder="Search emojis..." oninput="searchEmojis(this.value)">';
+            html += '<input type="text" class="emoji-search" id="emojiSearch" data-autofocus placeholder="Search emojis..." oninput="searchEmojis(this.value)">';
             html += '</div>';
             const categories = ['All', ...Object.keys(emojiCategories)];
             html += '<div class="emoji-categories">';
@@ -65704,8 +65799,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Current editor font size in px, for the +/- stepper.
         function getCurrentEditorFontSizePx() {
-            if (isNotesEditorV2Active() && window.SutraNotesEditorV2.getToolbarState) {
-                const size = parseInt(window.SutraNotesEditorV2.getToolbarState().fontSize, 10);
+            const bridge = activeNotesEditorV2();
+            if (bridge?.getToolbarState) {
+                const size = parseInt(bridge.getToolbarState().fontSize, 10);
                 if (Number.isFinite(size)) return size;
             }
             const input = document.getElementById('toolbarFontSize');
@@ -66222,8 +66318,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // In the modern editor a plain <img> becomes a resizable/alignable
             // image node (Docs-grade). The classic editor keeps its media-wrapper.
             const insertImageSrc = (src, alt) => {
-                if (isNotesEditorV2Active() && window.SutraNotesEditorV2) {
-                    window.SutraNotesEditorV2.insertHtml(`<img src="${src}" alt="${escapeHtml(alt || '')}">`);
+                const bridge = activeNotesEditorV2();
+                if (bridge) {
+                    bridge.insertHtml(`<img src="${src}" alt="${escapeHtml(alt || '')}">`);
                 } else {
                     const imgHtml = `<img src="${src}" alt="${escapeHtml(alt || '')}" style="max-width: 100%; border-radius: 8px;">`;
                     restoreEditorSelectionState(selectionState);
@@ -66531,10 +66628,130 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function getPageForEditor(editor) {
             if (!editor) return null;
-            if (editor.id === 'editorSecondary') {
+            if (editor.id === 'editorSecondary' || editor.id === 'editorV2SecondaryHost') {
                 return pages.find(p => p.id === secondaryPageId) || null;
             }
             return pages.find(p => p.id === currentPageId) || null;
+        }
+
+        function createModernStructuredBlockBridge(mirror) {
+            const pageForMirror = () => getPageForEditor(mirror);
+            const copy = value => JSON.parse(JSON.stringify(value));
+            const replaceBlock = block => {
+                const page = pageForMirror();
+                if (!page || !isPageContentAuthorized(page)) return;
+                const blocks = ensurePageBlocksCollection(page);
+                const index = blocks.findIndex(entry => entry.type === block.type && entry.id === block.id);
+                if (index >= 0) blocks[index] = copy(block);
+                else blocks.push(copy(block));
+            };
+            return {
+                getBlock(type, id) {
+                    const page = pageForMirror();
+                    if (!page || !isPageContentAuthorized(page)) return null;
+                    const block = ensurePageBlocksCollection(page).find(entry => entry.type === type && entry.id === id);
+                    return block ? copy(block) : null;
+                },
+                newId(type) { return type === NOTE_BLOCK_TYPES.DRAWING ? createDrawingBlock().id : createHtmlEmbedBlock().id; },
+                createView(type, id, payload, updatePayload, removeNode) {
+                    const page = pageForMirror();
+                    if (!page || !isPageContentAuthorized(page)) return null;
+                    const replaceOwnedBlock = next => { if (page === pageForMirror()) replaceBlock(next); };
+                    let block = payload ? copy(payload) : (this.getBlock(type, id) || (type === NOTE_BLOCK_TYPES.DRAWING ? createDrawingBlock({ id }) : createHtmlEmbedBlock({ id })));
+                    block.id = id;
+                    replaceOwnedBlock(block);
+                    if (type === NOTE_BLOCK_TYPES.DRAWING) {
+                        const dom = createDrawingEditorBlockElement(block);
+                        bindDrawingBlock(dom, block, mirror, changed => { if (page !== pageForMirror()) return; replaceOwnedBlock(changed); updatePayload(copy(changed)); }, () => {
+                            removeNode();
+                            queueSaveForEditor(mirror);
+                        });
+                        return { dom, dispose: () => disposeDrawingController(id, page) };
+                    }
+                    const dom = createHtmlEmbedEditorBlockElement(block);
+                    let cleanupResize = null;
+                    const commit = next => {
+                        next.updatedAt = new Date().toISOString();
+                        block = next;
+                        replaceOwnedBlock(next);
+                        updatePayload(copy(next));
+                        queueSaveForEditor(mirror);
+                    };
+                    dom.addEventListener('click', async event => {
+                        const menu = event.target.closest('.html-embed-menu-btn');
+                        if (menu) {
+                            event.preventDefault();
+                            dom.querySelector('.html-embed-block-dropdown')?.classList.toggle('active');
+                            return;
+                        }
+                        const action = event.target.closest('[data-html-embed-action]');
+                        if (!action) return;
+                        event.preventDefault();
+                        dom.querySelector('.html-embed-block-dropdown')?.classList.remove('active');
+                        if (action.dataset.htmlEmbedAction === 'remove') {
+                            removeNode();
+                            queueSaveForEditor(mirror);
+                            return;
+                        }
+                        if (action.dataset.htmlEmbedAction !== 'edit') return;
+                        const result = await showHtmlEmbedDialog({ title: 'Edit HTML Embed', subtitle: 'Update the markup. Unsafe content is removed automatically.', defaultValue: block.html, confirmText: 'Save Embed', cancelText: 'Cancel' });
+                        if (!result || page !== pageForMirror() || !isPageContentAuthorized(page)) return;
+                        commit({ ...block, html: sanitizeHtmlEmbedContent(result.html, { allowEmpty: true }) });
+                    });
+                    dom.addEventListener('pointerdown', event => {
+                        const handle = event.target.closest('[data-html-embed-resize-handle]');
+                        if (!handle) return;
+                        event.preventDefault();
+                        if (cleanupResize) cleanupResize();
+                        handle.setPointerCapture(event.pointerId);
+                        dom.classList.add('is-resizing');
+                        const axis = handle.dataset.htmlEmbedResizeAxis;
+                        const stage = dom.querySelector('.html-embed-block-stage');
+                        const start = { x: event.clientX, y: event.clientY, width: dom.getBoundingClientRect().width, height: stage.getBoundingClientRect().height };
+                        const host = mirror.id === 'editorSecondary' ? document.getElementById('editorV2SecondaryHost') : getNotesEditorV2Host();
+                        const available = Math.max(1, host?.querySelector('.ProseMirror')?.clientWidth || host?.clientWidth || 1);
+                        let width = block.widthPct;
+                        let height = block.heightPx;
+                        const move = e => {
+                            if (axis !== 'y') width = normalizeHtmlEmbedWidthPct(((start.width + e.clientX - start.x) / available) * 100);
+                            if (axis !== 'x') height = normalizeHtmlEmbedHeightPx(start.height + e.clientY - start.y);
+                            applyHtmlEmbedBlockSize(dom, width, height);
+                        };
+                        const cleanup = () => {
+                            document.removeEventListener('pointermove', move, true);
+                            document.removeEventListener('pointerup', end, true);
+                            document.removeEventListener('pointercancel', end, true);
+                            dom.classList.remove('is-resizing');
+                            if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+                            cleanupResize = null;
+                        };
+                        const end = () => {
+                            cleanup();
+                            commit({ ...block, widthPct: width, heightPx: height });
+                        };
+                        cleanupResize = cleanup;
+                        document.addEventListener('pointermove', move, true);
+                        document.addEventListener('pointerup', end, true);
+                        document.addEventListener('pointercancel', end, true);
+                    });
+                    return { dom, dispose: () => { if (cleanupResize) cleanupResize(); } };
+                }
+            };
+        }
+
+        function syncModernStructuredBlocks(editor, page, instance) {
+            if (!instance || !instance.isMounted() || !page || !isPageContentAuthorized(page)) return;
+            const nodes = instance.getStructuredBlocks();
+            const ids = new Set(nodes.map(node => node.id));
+            const others = ensurePageBlocksCollection(page).filter(block =>
+                (block.type !== NOTE_BLOCK_TYPES.HTML_EMBED && block.type !== NOTE_BLOCK_TYPES.DRAWING) || ids.has(block.id));
+            nodes.forEach(node => {
+                if (!node.id || !node.payload) return;
+                const index = others.findIndex(block => block.type === node.type && block.id === node.id);
+                if (index >= 0) others[index] = JSON.parse(JSON.stringify(node.payload));
+                else others.push(JSON.parse(JSON.stringify(node.payload)));
+            });
+            page.blocks = others;
         }
 
         function getHtmlEmbedBlockById(page, blockId) {
@@ -66633,8 +66850,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             sizeBadge.className = 'html-embed-size-badge';
             header.insertBefore(sizeBadge, header.querySelector('.html-embed-block-menu-wrap'));
 
-            applyHtmlEmbedBlockSize(wrapper, block.widthPct, block.heightPx);
             wrapper.appendChild(body);
+            applyHtmlEmbedBlockSize(wrapper, block.widthPct, block.heightPx);
 
             var resizeBottom = document.createElement('button');
             resizeBottom.type = 'button';
@@ -66974,8 +67191,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (editor.id === 'editor' && isNotesEditorV2Active()) {
                 try { window.SutraNotesEditorV2.flushToMirror(); } catch (e) { /* non-critical */ }
             }
+            const modernInstance = editor.id === 'editor' && isNotesEditorV2Active()
+                ? window.SutraNotesEditorV2
+                : editor.id === 'editorSecondary' && notesSecondaryEditorV2 && notesSecondaryEditorV2.isMounted()
+                    ? notesSecondaryEditorV2 : null;
+            if (modernInstance) modernInstance.flushToMirror();
             syncHtmlEmbedBlocksFromEditor(editor, page);
             syncDrawingBlocksFromEditor(editor, page);
+            if (modernInstance) syncModernStructuredBlocks(editor, page, modernInstance);
             page.content = serializeEditorContentForStorage(editor, page);
         }
 
@@ -67454,29 +67677,30 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 disposeDrawingControllersForEditor(editor);
                 editor.contentEditable = 'false';
                 editor.replaceChildren();
-                if (editor.id === 'editor' && isNotesEditorV2Active()) {
+                const modern = editor.id === 'editor' && isNotesEditorV2Active() ? window.SutraNotesEditorV2
+                    : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
+                if (modern) {
                     try {
-                        if (typeof window.SutraNotesEditorV2.setContent === 'function') window.SutraNotesEditorV2.setContent('');
+                        modern.setContent('');
                     } catch (err) { /* privacy surface is already cleared */ }
                 }
                 return;
             }
-            // Notes editor v2: the primary #editor is a hidden mirror. Fill it
-            // with canonical storage HTML (anchors, not hydrated blocks) and
-            // hand the same HTML to the TipTap document. Skip hydration — the
-            // mirror is never shown, and v2 preserves block anchors verbatim.
-            if (editor.id === 'editor' && isNotesEditorV2Active()) {
+            const modern = editor.id === 'editor' && isNotesEditorV2Active() ? window.SutraNotesEditorV2
+                : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
+            if (modern) {
                 disposeDrawingControllersForEditor(editor);
                 const storageHtml = sanitizeEditorHtml(page.content || '');
                 editor.contentEditable = 'false';
                 editor.innerHTML = storageHtml; // sutra-allow-html: sanitized canonical note content into the hidden v2 mirror
-                if (typeof window.SutraNotesEditorV2.loadDocument === 'function') {
-                    window.SutraNotesEditorV2.loadDocument(storageHtml);
+                if (typeof modern.loadDocument === 'function') {
+                    modern.loadDocument(storageHtml);
                 } else {
-                    window.SutraNotesEditorV2.setContent(storageHtml);
+                    modern.setContent(storageHtml);
                 }
-                const v2Host = getNotesEditorV2Host();
+                const v2Host = editor.id === 'editor' ? getNotesEditorV2Host() : document.getElementById('editorV2SecondaryHost');
                 if (v2Host) v2Host.dataset.pageId = String(page.id || '');
+                syncModernStructuredBlocks(editor, page, modern);
                 enhanceEditorPageLinks(v2Host);
                 applyDocumentBackgroundForEditor(editor, page);
                 return;
@@ -67938,11 +68162,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Attach a live AtelierHandwriting controller + wire the toolbar for one
         // block element that is already in the live DOM.
-        function bindDrawingBlock(wrapper, block, editor) {
+        function bindDrawingBlock(wrapper, block, editor, onModernChange, onModernRemove) {
             if (!wrapper || !block || !hasHandwritingEngine()) return;
-            if (drawingControllers.has(block.id)) {
+            const ownerPage = getPageForEditor(editor);
+            const controllerKey = `${ownerPage?.id || ''}:${block.id}`;
+            if (drawingControllers.has(controllerKey)) {
                 // Already bound (re-hydrate guard) — dispose the stale one first.
-                disposeDrawingController(block.id);
+                disposeDrawingController(block.id, ownerPage);
             }
             const canvas = wrapper.querySelector('.drawing-canvas');
             const stage = wrapper.querySelector('.drawing-block-stage');
@@ -67960,12 +68186,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 // block object, then the normal page save. Never per pointermove.
                 persistTimer = setTimeout(() => {
                     persistTimer = null;
-                    const page = getPageForEditor(editor);
+                    const page = ownerPage;
                     if (page) {
                         const target = getDrawingBlockById(page, block.id) || block;
                         target.strokes = controller.getStrokes();
                         target.background = controller.getBackground();
                         target.updatedAt = new Date().toISOString();
+                        if (onModernChange) onModernChange(target);
                         queueSaveForEditor(editor);
                     }
                 }, 420);
@@ -68078,7 +68305,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         const ok = await atelierConfirm('Delete this handwriting block and its strokes?', { destructive: true, confirmText: 'Delete' });
                         if (!ok) return;
                     }
-                    removeDrawingBlock(wrapper, block.id, editor);
+                    if (onModernRemove) onModernRemove();
+                    else removeDrawingBlock(wrapper, block.id, editor);
                 }
             };
             wrapper.addEventListener('click', onClick);
@@ -68101,9 +68329,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (!resizing) return;
                 resizing = null;
                 try { resizeHandle.releasePointerCapture(ev.pointerId); } catch (e) {}
-                const page = getPageForEditor(editor);
+                const page = ownerPage;
                 const target = page ? (getDrawingBlockById(page, block.id) || block) : block;
                 target.heightPx = normalizeDrawingHeightPx(stage.getBoundingClientRect().height);
+                if (onModernChange) onModernChange(target);
                 queueSaveForEditor(editor);
             }
             if (resizeHandle) {
@@ -68125,15 +68354,15 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // First paint + initial control state.
             requestAnimationFrame(() => { controller.refresh(); refreshControls(); syncColorChip(); syncBackgroundButtons(); });
 
-            drawingControllers.set(block.id, {
-                controller, editor, resizeObserver: ro,
+            drawingControllers.set(controllerKey, {
+                controller, editor, page: ownerPage, blockId: block.id, resizeObserver: ro,
                 cleanup() {
                     // ALWAYS flush the latest strokes into the block on teardown — not
                     // just when a debounce timer is pending — so a stroke drawn right
                     // before navigating away can never be lost, regardless of timing.
                     if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
                     try {
-                        const page = getPageForEditor(editor);
+                        const page = ownerPage;
                         const target = page ? (getDrawingBlockById(page, block.id) || block) : block;
                         target.strokes = controller.getStrokes();
                         target.background = controller.getBackground();
@@ -68152,11 +68381,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             });
         }
 
-        function disposeDrawingController(blockId) {
-            const entry = drawingControllers.get(blockId);
+        function disposeDrawingController(blockId, page) {
+            const key = page ? `${page.id}:${blockId}` : blockId;
+            const entry = drawingControllers.get(key);
             if (!entry) return;
             try { entry.cleanup(); } catch (e) {}
-            drawingControllers.delete(blockId);
+            drawingControllers.delete(key);
         }
 
         function disposeDrawingControllersForEditor(editor) {
@@ -68171,10 +68401,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function flushAllDrawingControllers() {
             drawingControllers.forEach((entry) => {
                 try {
-                    const page = getPageForEditor(entry.editor);
+                    const page = entry.page;
                     if (!page) return;
                     (page.blocks || []).forEach(b => {
-                        if (b.type === NOTE_BLOCK_TYPES.DRAWING && drawingControllers.has(b.id) && drawingControllers.get(b.id) === entry) {
+                        if (b.type === NOTE_BLOCK_TYPES.DRAWING && b.id === entry.blockId) {
                             b.strokes = entry.controller.getStrokes();
                             b.background = entry.controller.getBackground();
                         }
@@ -68204,7 +68434,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function removeDrawingBlock(wrapper, blockId, editor) {
-            disposeDrawingController(blockId);
+            disposeDrawingController(blockId, getPageForEditor(editor));
             if (wrapper && wrapper.parentNode) wrapper.remove();
             const page = getPageForEditor(editor);
             if (page) {
@@ -68289,6 +68519,15 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!hasHandwritingEngine()) { showToast('Handwriting engine unavailable.'); return; }
             const page = getPageForEditor(editor);
             if (!page) { showToast('Open a note first.'); return; }
+            const modern = editor.id === 'editor' && isNotesEditorV2Active() ? window.SutraNotesEditorV2
+                : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
+            if (modern) {
+                const block = createDrawingBlock({});
+                ensurePageBlocksCollection(page).push(block);
+                modern.insertHtml(createDrawingAnchorElement(block.id).outerHTML + '<p></p>');
+                queueSaveForEditor(editor);
+                return;
+            }
             editor.focus();
             const block = createDrawingBlock({});
             ensurePageBlocksCollection(page).push(block);
@@ -69415,9 +69654,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const block = createHtmlEmbedBlock({ html: result.html });
             blocks.push(block);
 
-            restoreEditorSelectionState(selectionState);
+            const modern = editor.id === 'editor' && isNotesEditorV2Active() ? window.SutraNotesEditorV2
+                : editor.id === 'editorSecondary' && notesSecondaryEditorV2?.isMounted() ? notesSecondaryEditorV2 : null;
+            if (!modern) restoreEditorSelectionState(selectionState);
             insertHtmlAtCursor(`${buildHtmlEmbedAnchorHtml(block.id)}<p></p>`);
-            hydrateHtmlEmbedBlocksInContainer(editor, page, { mode: 'editor' });
+            if (!modern) hydrateHtmlEmbedBlocksInContainer(editor, page, { mode: 'editor' });
             queueSaveForEditor(editor);
             updateWordCount(editor);
             showToast('HTML embed inserted.');
@@ -69465,13 +69706,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
             // Notes editor v2: real task-list nodes (toggle state lives in the
             // document model) instead of media-wrapper checklist markup.
-            if (isNotesEditorV2Active() && activeEditorPane !== 'secondary') {
+            const bridge = activeNotesEditorV2();
+            if (bridge) {
                 const legacyItemsHtml = itemList.map(item =>
                     `<div class="checklist-item"><input type="checkbox"><span contenteditable="true">${escapeHtml(item)}</span></div>`
                 ).join('');
-                if (window.SutraNotesEditorV2.insertHtml(legacyItemsHtml)) {
+                if (bridge.insertHtml(legacyItemsHtml)) {
                     updateWordCount();
-                    queueSavePrimaryPage();
+                    queueSaveForEditor(getActiveEditor());
                     showToast('Checklist inserted!');
                     return;
                 }
@@ -69615,12 +69857,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Helper function to insert HTML at cursor
         function insertHtmlAtCursor(html) {
-            // Notes editor v2 owns insertion for the primary pane: content is
-            // parsed through the document schema (never raw execCommand HTML).
-            if (isNotesEditorV2Active() && activeEditorPane !== 'secondary') {
-                if (window.SutraNotesEditorV2.insertHtml(html)) {
+            const modern = activeEditorPane === 'secondary' && notesSecondaryEditorV2?.isMounted()
+                ? notesSecondaryEditorV2 : isNotesEditorV2Active() ? window.SutraNotesEditorV2 : null;
+            if (modern) {
+                if (modern.insertHtml(html)) {
                     updateWordCount();
-                    queueSavePrimaryPage();
+                    queueSaveForEditor(getActiveEditor());
                     return;
                 }
             }

@@ -15,6 +15,8 @@ and round-trip through backups.
 
 Each handwriting block is a self-contained canvas with its own compact toolbar.
 You can add several blocks to one note and mix them freely with typed text.
+In the Modern Editor, the canvas is a live node at the insertion point. It can
+be moved or removed with the surrounding document, including undo and redo.
 
 ## Tools
 

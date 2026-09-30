@@ -145,9 +145,9 @@
     .editor-v2-host .ProseMirror-gapcursor::after { animation: none; }
 }
 
-/* --- Preserved Sutra components (embeds, drawings, media wrappers) ---
- * Rendered verbatim but not live in v2 yet: present them as calm cards so
- * they are visible, selectable, and clearly not broken. */
+/* --- Structured Notes blocks and preserved media --- */
+.editor-v2-host[hidden] { display: none !important; }
+.editor-v2-host .editor-v2-structured-block { min-width: 0; margin: 1em 0; }
 .editor-v2-host .html-embed-anchor,
 .editor-v2-host .drawing-anchor {
     display: flex;
@@ -161,12 +161,6 @@
     background: var(--surface-bg, rgba(255, 255, 255, 0.04));
     color: var(--text-secondary, #bbb);
     font-size: 0.82rem;
-}
-.editor-v2-host .html-embed-anchor::before {
-    content: "Embedded block — switch off the modern editor to edit it";
-}
-.editor-v2-host .drawing-anchor::before {
-    content: "Handwriting block — switch off the modern editor to edit it";
 }
 
 /* Atom selection ring (preserved cards, images, horizontal rules) */
@@ -496,13 +490,6 @@
     cursor: default;
 }
 
-.editor-v2-host .html-embed-anchor::before {
-    content: "Embedded block - switch off the modern editor to edit it";
-}
-
-.editor-v2-host .drawing-anchor::before {
-    content: "Handwriting block - switch off the modern editor to edit it";
-}
 
 .editor-v2-host .media-wrapper,
 .editor-v2-host .atelier-page-break,

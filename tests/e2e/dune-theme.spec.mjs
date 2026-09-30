@@ -121,6 +121,7 @@ test('Dune is an authored, accessible, persistent desktop and mobile theme', asy
 
   await page.reload();
   await page.waitForFunction(() => !!window.flowAtelier);
+  await waitForAppReady(page);
   await expect(page.locator('body')).toHaveAttribute('data-theme-key', 'dune');
   expect(browserErrors).toEqual([]);
 });

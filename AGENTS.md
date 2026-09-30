@@ -420,7 +420,7 @@ The governing rule remains: the Assistant proposes and explains; users approve c
 
 ## Create and notes evolution
 
-The established Create system supports hierarchical note pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, linked content, Canvas, Slides, Sheets, and HTML Pages. A newer vendored Notes Editor v2 exists behind an `editor.editorV2Enabled` feature flag. Treat flagged editor work as an incremental migration path, not permission to break the stable editor or stored note content.
+The established Create system supports hierarchical note pages, rich editing, page mode, split view, version history, locked pages, document backgrounds, handwriting, templates, linked content, Canvas, Slides, Sheets, and HTML Pages. The Modern Editor is the default Notes editor; `editor.editorV2Enabled` retains the classic editor as a compatibility choice. Each Split View Notes pane has an independent Modern Editor instance. HTML embeds and drawings use live nodes backed by the existing `page.content` anchors and `page.blocks` records. Preserve this storage contract and the classic compatibility path. See [`docs/features/MODERN_NOTES_EDITOR.md`](docs/features/MODERN_NOTES_EDITOR.md).
 
 Slides is a third native Notes surface beside Notepad and Canvas. A deck belongs to a normal Note page and is stored in the versioned `page.slides` record; ordinary note content and unknown page fields must remain intact. The runtime lives in `src/features/workspace/slides.js`, its scoped styles live in `styles/features/slides.css`, and its full behavioral contract is documented in [`docs/features/SLIDES.md`](docs/features/SLIDES.md).
 
@@ -629,7 +629,7 @@ A task is complete only when:
 7. **Homework has historical storage behavior.** Do not create another assignment store or remove mirroring without a dedicated migration plan.
 8. **CSP limits optional providers.** A transport being implemented does not mean every hosted build can reach an arbitrary origin.
 9. **The service worker and generated asset manifest must match shipped files.** Use the existing generators and checks.
-10. **Flagged systems are migration seams.** Notes Editor v2 and preview cloud providers must not silently replace stable paths before compatibility is proven.
+10. **Compatibility paths protect stored content.** The Modern Editor's classic toggle and preview cloud providers must not silently break stable data or recovery paths.
 11. **Archive documents are not current instructions.** Use them for history, not path or implementation truth.
 12. **The app can appear functional while losing data.** Persistence and export round-trip testing is mandatory for stateful changes.
 13. **Canvas pages visually leak note content through the V2 editor host.** When Notes Editor V2 is active (default-on), the visible note surface is `#editorV2Host`, not `#editor`. The `showCanvasEditorForPage`/`hideCanvasEditor` functions (and their `body.canvas-page-active` CSS backstop) must toggle BOTH the V2 host and the secondary split pane to prevent the previous note's content from displaying above the canvas. Never assume that hiding `#editor` alone is sufficient. The CSS rules at `styles/base/styles.css:33154` already handle `.toolbar-wrapper`, `.view-flow-row`, `.breadcrumbs`, and `.tags-container` but were missing `.editor-v2-host` and `#notesSecondaryPane` before the 2026-07-17 Canvas isolation fix.

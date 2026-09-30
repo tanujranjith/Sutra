@@ -53,6 +53,50 @@ async function openSeededHomework(page) {
   });
 }
 
+test('All Assignments collapses past work and aligns its three row actions', async ({ page }) => {
+  await openSeededHomework(page);
+  await page.locator('[data-homework-tab="all"]').click();
+  const table = page.locator('.hw-assignment-table:not(.is-by-class)');
+  const past = table.locator('#hwPastAssignmentRows');
+  const toggle = table.locator('[data-hw-past-toggle]');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toContainText('Past assignments (2)');
+  await expect(past).toBeHidden();
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(2);
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(2);
+
+  const actions = table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('.hw-row-actions');
+  const geometry = await actions.evaluate(group => Array.from(group.children).map(child => {
+    const button = child.matches('button') ? child : child.querySelector('button');
+    const rect = button.getBoundingClientRect();
+    return { width: rect.width, height: rect.height, centerY: rect.top + rect.height / 2 };
+  }));
+  expect(geometry).toHaveLength(3);
+  expect(Math.max(...geometry.map(item => item.centerY)) - Math.min(...geometry.map(item => item.centerY))).toBeLessThanOrEqual(1);
+  expect(new Set(geometry.map(item => item.width))).toEqual(new Set([geometry[0].width]));
+  expect(new Set(geometry.map(item => item.height))).toEqual(new Set([geometry[0].height]));
+  expect(Math.min(...geometry.map(item => Math.min(item.width, item.height)))).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileSizes = await actions.evaluate(group => Array.from(group.children).map(child => {
+    const button = child.matches('button') ? child : child.querySelector('button');
+    const rect = button.getBoundingClientRect();
+    return Math.min(rect.width, rect.height);
+  }));
+  expect(Math.min(...mobileSizes)).toBeGreaterThanOrEqual(44);
+
+  await toggle.click();
+  await page.locator('#hwSearchInput').fill('overdue quiz');
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
+  await expect(table.locator('[data-hw-past-toggle]')).toHaveCount(0);
+  await page.locator('#hwSearchInput').fill('');
+  await expect(table.locator('[data-hw-past-toggle]')).toHaveAttribute('aria-expanded', 'false');
+  await page.locator('[data-homework-tab="completed"]').click();
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' })).toBeVisible();
+});
+
 test('Homework completion takes precedence over overdue styling and By Class exposes difficulty', async ({ page }) => {
   await openSeededHomework(page);
 
@@ -157,6 +201,8 @@ test('Homework effort prompt follows the active theme surface and button tokens'
     expect(colors.toastColor, `${theme} toast text`).toBe(colors.expectedColor);
     expect(colors.buttonBackground, `${theme} button background`).toBe(colors.expectedButtonBackground);
     expect(colors.buttonColor, `${theme} button text`).toBe(colors.expectedButtonColor);
+    const later = page.locator('#sutraUpdateBanner').getByRole('button', { name: 'Later' });
+    if (await later.isVisible()) await later.click();
     await toast.locator('.hw-time-log-skip').click();
     await expect(toast).toBeHidden();
     await page.evaluate((id) => window.SutraHomework.setDone(id, false), taskId);

@@ -54,6 +54,9 @@ test('long authored note, HTML and Homework content survives encrypted export, r
   await acceptRestoreConflictChooser(page);
   await completeSafetySnapshotDialog(page);
   await expect.poll(inspect, { timeout: 30_000 }).toEqual(expected);
+  // Applying the workspace precedes the restore's asynchronous durability
+  // gate. Wait for its IndexedDB commit before simulating an immediate reload.
+  await expect.poll(() => readPersistedPageTitle(page, 'qa-long-note'), { timeout: 30_000 }).toBe(expected.title);
   await page.reload();
   await page.waitForFunction(() => window.__hwDueDateDelegateBound === true);
   await expect.poll(inspect).toEqual(expected);
@@ -86,8 +89,8 @@ async function openApp(page) {
   await expect(page.locator('[data-sutra-component="brand-mark"]').first()).toBeVisible();
 }
 
-async function readPersistedPageTitle(page) {
-  return page.evaluate(() => new Promise((resolve, reject) => {
+async function readPersistedPageTitle(page, pageId = null) {
+  return page.evaluate(pageId => new Promise((resolve, reject) => {
     const request = indexedDB.open('noteflow_atelier_db');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
@@ -99,12 +102,13 @@ async function readPersistedPageTitle(page) {
         reject(get.error || tx.error);
       };
       get.onsuccess = () => {
-        const title = get.result?.pages?.[0]?.title || '';
+        const pages = get.result?.pages || [];
+        const title = (pageId ? pages.find(entry => entry.id === pageId) : pages[0])?.title || '';
         db.close();
         resolve(title);
       };
     };
-  }));
+  }), pageId);
 }
 
 async function seedRichWorkspace(page, marker) {

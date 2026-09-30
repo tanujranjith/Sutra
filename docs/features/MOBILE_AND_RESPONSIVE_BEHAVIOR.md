@@ -82,6 +82,9 @@ The notes list/tree and editor stack on mobile rather than sitting side by side.
 drawings never cause horizontal page overflow. The formatting **toolbar scrolls
 horizontally** when it can't fit, keeping all tools available without wrapping the
 layout. The page title input and breadcrumbs collapse gracefully.
+Page Setup keeps all six page types visible in a grid that follows the width
+of its own column, including on tablets and at browser zoom. Each type remains
+keyboard reachable, and Folder creation uses the same selection flow.
 
 ### Page Mode
 
@@ -130,6 +133,10 @@ underlying Homework records. Search, tabs, filters, sorting, quick completion, a
 scheduling remain reachable at touch-target size. Add/edit flows open as modals that
 scroll internally. **Import from School Portal** (paste import) works on mobile via
 the same modal pattern.
+Schedule, Complete, and More form one aligned action group. In unfiltered All
+Assignments, current work appears first and past assignments sit in a collapsed
+section. Its disclosure stays open for the current session; searching or filtering
+shows matching overdue work immediately.
 
 ### AP Study
 

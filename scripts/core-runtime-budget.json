@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-09-27T05:13:40.916Z",
-  "reviewedReason": "Preserve explicit Share Target title through import refresh save",
-  "maxBytes": 4896699,
-  "maxLines": 86115
+  "blessedAt": "2026-09-30T04:54:20.789Z",
+  "reviewedReason": "Capture live embed resize pointers and remove listeners during cleanup",
+  "maxBytes": 4911326,
+  "maxLines": 86357
 }

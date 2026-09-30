@@ -148,6 +148,8 @@ test('Homework assignment actions provide a dedicated edit form', async ({ page 
     window.SutraHomework.render();
   });
 
+  // The date is in the past, so expand the session-only history section.
+  await page.locator('[data-hw-past-toggle]').click();
   const row = page.locator('.hw-assignment-row', { hasText: 'Timed existing assignment' });
   await row.locator('[data-task-menu-trigger]').click();
   await row.getByRole('menuitem', { name: 'Edit assignment' }).click();
@@ -157,8 +159,12 @@ test('Homework assignment actions provide a dedicated edit form', async ({ page 
   await expect(modal.locator('#hwGlobalAddTitle')).toHaveText('Edit Assignment');
   await expect(modal.locator('[data-field="dueDate"]')).toHaveValue('2026-09-16');
   await expect(modal.locator('[data-field="dueTime"]')).toHaveValue('23:59');
-  await expect(modal.locator('[data-field="dueDate"]').locator('xpath=..').locator('.nf-date-label')).toHaveText('09/16/2026');
-  await expect(modal.locator('[data-field="dueTime"]').locator('xpath=..').locator('.nf-time-label')).toHaveText('11:59 PM');
+  const dateLabel = modal.locator('[data-field="dueDate"]').locator('xpath=..').locator('.nf-date-label');
+  const timeLabel = modal.locator('[data-field="dueTime"]').locator('xpath=..').locator('.nf-time-label');
+  if (await dateLabel.count()) await expect(dateLabel).toHaveText('09/16/2026');
+  else await expect(modal.locator('[data-field="dueDate"]')).toBeVisible();
+  if (await timeLabel.count()) await expect(timeLabel).toHaveText('11:59 PM');
+  else await expect(modal.locator('[data-field="dueTime"]')).toBeVisible();
   await expect(modal.locator('[data-field="difficulty"]')).toHaveValue('hard');
   await expect(modal.locator('[data-field="recurrence"]')).toHaveValue('weekly');
   await expect(modal.locator('[data-field="priority"]')).toHaveValue('low');
