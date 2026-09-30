@@ -53,20 +53,23 @@ async function openSeededHomework(page) {
   });
 }
 
-test('All Assignments collapses past work and aligns its three row actions', async ({ page }) => {
+test('All Assignments keeps open overdue work visible and groups completed assignments', async ({ page }) => {
   await openSeededHomework(page);
   await page.locator('[data-homework-tab="all"]').click();
   const table = page.locator('.hw-assignment-table:not(.is-by-class)');
   const past = table.locator('#hwPastAssignmentRows');
   const toggle = table.locator('[data-hw-past-toggle]');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(toggle).toContainText('Past assignments (2)');
+  await expect(toggle).toContainText('Completed assignments (1)');
   await expect(past).toBeHidden();
-  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(2);
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(3);
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
   await toggle.focus();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(past.locator('.hw-assignment-row')).toHaveCount(2);
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(1);
+  await expect(past.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' })).toBeVisible();
+  await expect(past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(0);
 
   const actions = table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('.hw-row-actions');
   const geometry = await actions.evaluate(group => Array.from(group.children).map(child => {
@@ -87,6 +90,16 @@ test('All Assignments collapses past work and aligns its three row actions', asy
   }));
   expect(Math.min(...mobileSizes)).toBeGreaterThanOrEqual(44);
 
+  await toggle.click();
+  const openOverdue = table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' });
+  await openOverdue.locator('[data-task-toggle]').click();
+  await expect(toggle).toContainText('Completed assignments (2)');
+  await toggle.click();
+  await expect(past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(0);
+  await past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('[data-task-toggle]').click();
+  await expect(toggle).toContainText('Completed assignments (1)');
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
   await toggle.click();
   await page.locator('#hwSearchInput').fill('overdue quiz');
   await expect(table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();

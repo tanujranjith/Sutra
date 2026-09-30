@@ -75392,6 +75392,27 @@ ${cspMeta}
                     const durationMs = Date.now() - startedAt;
 
                     if (!resp.ok) {
+                        // Some newer OpenAI-compatible models reject the legacy
+                        // max_tokens field and explicitly name
+                        // max_completion_tokens as its replacement. Adapt only
+                        // to that exact provider response, only before any
+                        // visible output, and within the existing retry budget.
+                        // This keeps ordinary OpenAI-compatible providers and
+                        // the Anthropic/Gemini adapters on their own wire shapes.
+                        const outputTokenAliasRejected = providerType === 'openai_compatible'
+                            && resp.status === 400
+                            && Object.prototype.hasOwnProperty.call(body, 'max_tokens')
+                            && !Object.prototype.hasOwnProperty.call(body, 'max_completion_tokens')
+                            && /unsupported\s+parameter\s*:\s*['"`]?max_tokens['"`]?\s+is\s+not\s+supported\b/i.test(extracted)
+                            && /\buse\s+['"`]?max_completion_tokens['"`]?\s+instead\b/i.test(extracted);
+                        if (outputTokenAliasRejected && retryCount < maxRetries && !emittedText
+                            && !controller.signal.aborted && remainingMs() > minRetryBudgetMs) {
+                            body.max_completion_tokens = body.max_tokens;
+                            delete body.max_tokens;
+                            retryCount += 1;
+                            continue;
+                        }
+
                         const category = classifyIntelligenceHttpError(resp.status, extracted);
                         const retryable = Diag ? Diag.isRetryable({ status: resp.status, category }) : false;
                         if (retryCount < maxRetries && retryable && !emittedText

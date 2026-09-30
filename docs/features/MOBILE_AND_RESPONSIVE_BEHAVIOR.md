@@ -134,9 +134,10 @@ scheduling remain reachable at touch-target size. Add/edit flows open as modals 
 scroll internally. **Import from School Portal** (paste import) works on mobile via
 the same modal pattern.
 Schedule, Complete, and More form one aligned action group. In unfiltered All
-Assignments, current work appears first and past assignments sit in a collapsed
-section. Its disclosure stays open for the current session; searching or filtering
-shows matching overdue work immediately.
+Assignments, open work appears first and completed assignments sit in a collapsed
+section, regardless of due date. Overdue unfinished work stays in the main list
+until it is marked complete. Its disclosure stays open for the current session;
+searching or filtering shows matching work immediately.
 
 ### AP Study
 

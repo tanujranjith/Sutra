@@ -746,6 +746,13 @@ Access or remove an attachment."*) instead of the generic `unsupported-endpoint`
 not broad). `context-length` and `stream-stalled` are first-class members of
 `ERROR_CATEGORIES` and never fall through to `unknown`.
 
+For an OpenAI-compatible adapter, a 400 response that explicitly rejects
+`max_tokens` and tells Sutra to use `max_completion_tokens` gets one bounded
+compatibility retry: Sutra moves the existing output limit to the named field
+and resends the same request. This is response-driven rather than inferred from
+model names, and it consumes the existing retry budget. Unrelated 400s are not
+retried. Anthropic and Gemini keep their separate request formats.
+
 ### Usage normalization (missing ≠ zero)
 
 `extractUsage(providerType, data)` normalizes provider usage to
