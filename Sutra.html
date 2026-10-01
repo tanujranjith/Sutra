@@ -1417,13 +1417,31 @@
                 <label class="toolbar-field toolbar-color-field" title="Text colour" aria-label="Text colour">
                     <i class="fas fa-font" aria-hidden="true"></i>
                     <span class="toolbar-color-bar" id="toolbarTextColorBar"></span>
-                    <input type="color" id="toolbarTextColor" value="#111111" oninput="applyTextColor(this.value)">
+                    <input type="color" id="toolbarTextColor" value="#111111" list="toolbarTextColorPresets" oninput="applyTextColor(this.value)">
                 </label>
                 <label class="toolbar-field toolbar-color-field" title="Highlight colour" aria-label="Highlight colour">
                     <i class="fas fa-highlighter" aria-hidden="true"></i>
                     <span class="toolbar-color-bar" id="toolbarHighlightBar" style="background:#ffe066"></span>
-                    <input type="color" id="toolbarHighlightColor" value="#ffe066" oninput="applyHighlight(this.value)">
+                    <input type="color" id="toolbarHighlightColor" value="#ffe066" list="toolbarHighlightColorPresets" oninput="applyHighlight(this.value)">
                 </label>
+                <datalist id="toolbarTextColorPresets">
+                    <option value="#111111" label="Black"></option>
+                    <option value="#5f6368" label="Gray"></option>
+                    <option value="#d93025" label="Red"></option>
+                    <option value="#f29900" label="Orange"></option>
+                    <option value="#188038" label="Green"></option>
+                    <option value="#1a73e8" label="Blue"></option>
+                    <option value="#9334e6" label="Purple"></option>
+                    <option value="#ffffff" label="White"></option>
+                </datalist>
+                <datalist id="toolbarHighlightColorPresets">
+                    <option value="#fff59d" label="Yellow"></option>
+                    <option value="#c8e6c9" label="Green"></option>
+                    <option value="#bbdefb" label="Blue"></option>
+                    <option value="#f8bbd0" label="Pink"></option>
+                    <option value="#ffe0b2" label="Orange"></option>
+                    <option value="#d1c4e9" label="Purple"></option>
+                </datalist>
 
                 <div class="toolbar-separator"></div>
 
@@ -7906,7 +7924,7 @@
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
-    <script src="src/features/workspace/today-focus-timer.js?v=20260809-todaytimer1"></script>
+    <script src="src/features/workspace/today-focus-timer.js?v=20260930-home-timer-focus-mode2"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
@@ -8313,7 +8331,7 @@
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260929-issues51-59-64-touch">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260930-homework-title-wrap1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">

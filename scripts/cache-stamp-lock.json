@@ -412,8 +412,8 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20260809-todaytimer1",
-    "hash": "5c735de71c6c5c96"
+    "stamp": "20260930-home-timer-focus-mode2",
+    "hash": "a0b17167f117c237"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20260728-entity1",
@@ -532,8 +532,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260929-issues51-59-64-touch",
-    "hash": "6c8f4d44555647eb"
+    "stamp": "20260930-homework-title-wrap1",
+    "hash": "f5e7b88d2788cce3"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",

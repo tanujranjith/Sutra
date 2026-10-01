@@ -862,9 +862,10 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 }
 .hw-assignment-title-btn:hover,
 .hw-activity-name:hover { color: var(--accent); }
-.hw-assignment-table.is-by-class .hw-assignment-title-btn {
+.hw-assignment-title-btn {
   display: block;
   width: 100%;
+  min-width: 0;
   overflow-wrap: anywhere;
   white-space: normal;
 }
