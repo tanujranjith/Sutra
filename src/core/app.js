@@ -43374,6 +43374,7 @@ function buildOnboardingPlanPreview() {
             });
             const mobileSelect = document.getElementById('th2NavMobileSelect');
             if (mobileSelect && mobileSelect.value !== sectionId) mobileSelect.value = sectionId;
+            if (mobileSelect && typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(mobileSelect.parentElement);
 
             // The minimal-chrome state only applies while an exam detail is open
             // inside the Exams section. Every other section shows full chrome.
@@ -43957,6 +43958,7 @@ function buildOnboardingPlanPreview() {
             });
             const mobileSelect = document.getElementById('th2NavMobileSelect');
             if (mobileSelect && mobileSelect.value !== 'exams') mobileSelect.value = 'exams';
+            if (mobileSelect && typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(mobileSelect.parentElement);
 
             const listMount = document.getElementById('th2ExamsListMount');
             const detailMount = document.getElementById('th2ExamDetailMount');

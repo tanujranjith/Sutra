@@ -265,6 +265,9 @@
     }
 
     #view-apstudy .th2-practice-row-actions .th2-row-btn,
+    #view-apstudy .th2-btn-primary,
+    #view-apstudy .th2-btn-ghost,
+    #view-apstudy .th2-nav-mobile .nf-select-trigger,
     #view-apstudy .th2-filter-select,
     #view-apstudy .th2-nav-mobile .th2-select {
         box-sizing: border-box;

@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-01T16:49:05.039Z",
-  "reviewedReason": "Manual QA fix: refresh Capture picker labels after initializing its type even when the title is empty",
-  "maxBytes": 4946710,
-  "maxLines": 86841
+  "blessedAt": "2026-10-01T17:10:07.444Z",
+  "reviewedReason": "Manual mobile QA found Testing Hub keeps a stale enhanced section label after programmatic navigation; refresh that canonical select at both navigation sites. No timer or persistent schema change.",
+  "maxBytes": 4946990,
+  "maxLines": 86843
 }
