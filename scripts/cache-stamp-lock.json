@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-backup-progress1",
-    "hash": "05a3e757c4c248f4"
+    "stamp": "20261001-help-icons2",
+    "hash": "7d8031006b8d7533"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -260,8 +260,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260930-homework-completion-grouping",
-    "hash": "ba64a1b79b536c92"
+    "stamp": "20261001-course-icons2",
+    "hash": "36436d1d8c3dc468"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -324,8 +324,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261001-backup-help1",
-    "hash": "0f4065b3254446e8"
+    "stamp": "20261001-icons-agenda-help1",
+    "hash": "87a6332d2f301abc"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -400,8 +400,8 @@
     "hash": "ac88591cfa5f81c7"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260922-prefill1",
-    "hash": "2313a30dc1d968d9"
+    "stamp": "20261001-mobile-agenda1",
+    "hash": "cb8e67aa7adf257d"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260913-content-limits-timeline1",
@@ -500,8 +500,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261001-page-tags1",
-    "hash": "7fcd50d8d7d13b2c"
+    "stamp": "20261001-help-icons1",
+    "hash": "8ac0438de695da1a"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -540,8 +540,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260930-homework-title-wrap1",
-    "hash": "f5e7b88d2788cce3"
+    "stamp": "20261001-course-icons1",
+    "hash": "89c01c9a5d7704e5"
   },
   "styles/features/html-pages.css": {
     "stamp": "20260912-html-layout1",
@@ -676,8 +676,8 @@
     "hash": "220440ec48d87134"
   },
   "styles/views/timeline-calendar.css": {
-    "stamp": "20260904-compactevents2",
-    "hash": "d9f941bdc3f01ed2"
+    "stamp": "20261001-mobile-agenda1",
+    "hash": "0c12386cb8c9bacd"
   },
   "styles/views/today-focus-timer.css": {
     "stamp": "20261001-focus-player2",

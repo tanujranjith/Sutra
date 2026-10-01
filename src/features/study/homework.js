@@ -22,6 +22,7 @@
     { key: 'flag', label: 'Team', className: 'fa-flag' }
   ]);
   const COURSE_ICON_KEYS = new Set(COURSE_ICON_OPTIONS.map(option => option.key));
+  const COURSE_EMOJI_PATTERN = /^(?:\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\p{Emoji_Modifier})?)*|\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3)$/u;
 
   const dateFormatter = new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -99,14 +100,24 @@
     return el.innerHTML;
   }
 
+  function normalizeCustomCourseEmoji(rawValue) {
+    if (typeof rawValue !== 'string') return '';
+    const value = rawValue.trim();
+    if (!value || Array.from(value).length > 16 || !COURSE_EMOJI_PATTERN.test(value)) return '';
+    return value;
+  }
+
   function normalizeCourseIcon(rawValue) {
-    const source = String(rawValue || '').trim().toLowerCase();
-    const value = source === 'people-group' ? 'users' : source;
-    return COURSE_ICON_KEYS.has(value) ? value : '';
+    if (typeof rawValue !== 'string') return '';
+    const source = rawValue.trim();
+    const lower = source.toLowerCase();
+    const value = lower === 'people-group' ? 'users' : lower;
+    return COURSE_ICON_KEYS.has(value) ? value : normalizeCustomCourseEmoji(source);
   }
 
   function getCourseIconOption(course) {
     const key = normalizeCourseIcon(course && course.icon);
+    if (key && !COURSE_ICON_KEYS.has(key)) return { key: 'custom-emoji', label: 'Custom emoji', className: '', emoji: key };
     return COURSE_ICON_OPTIONS.find(option => option.key === key)
       || COURSE_ICON_OPTIONS.find(option => option.key === (course && course.type === 'misc' ? 'users' : 'book-open'));
   }
@@ -320,7 +331,11 @@
 
       const type = rawCourse.type === 'misc' ? 'misc' : 'class';
       const icon = normalizeCourseIcon(rawCourse.icon);
-      normalizedCourses.push(icon ? { id, name, type, icon } : { id, name, type });
+      const normalizedCourse = { ...rawCourse, id, name, type };
+      if (icon) normalizedCourse.icon = icon;
+      // Keep unsupported legacy/future values in the model. Rendering uses a
+      // safe default until the user explicitly chooses or resets the icon.
+      normalizedCourses.push(normalizedCourse);
       courseIds.add(id);
     });
 
@@ -699,7 +714,7 @@
   function setCourseIcon(courseId, rawIcon) {
     const course = courses.find(item => String(item.id) === String(courseId));
     if (!course) return false;
-    const requested = String(rawIcon || '').trim().toLowerCase();
+    const requested = String(rawIcon == null ? '' : rawIcon).trim();
     const icon = normalizeCourseIcon(requested);
     if (requested && !icon) return false;
     if (icon) course.icon = icon;
@@ -709,13 +724,35 @@
     return true;
   }
 
+  function closeCourseIconModal(modal) {
+    if (!modal) return;
+    modal.hidden = true;
+    modal.classList.remove('is-visible');
+    if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
+      try { window.SutraModalManager.sync(); } catch (_) {}
+    }
+  }
+
+  function commitCourseIconChoice(modal, rawIcon) {
+    const courseId = modal && modal.getAttribute('data-course-id') || '';
+    const icon = String(rawIcon == null ? '' : rawIcon).trim();
+    closeCourseIconModal(modal);
+    if (!setCourseIcon(courseId, icon)) return false;
+    showHomeworkToast(icon ? 'Icon updated.' : 'Default icon restored.');
+    setTimeout(() => {
+      const nextTrigger = document.querySelector(`[data-course-icon="${CSS.escape(String(courseId))}"]`);
+      if (nextTrigger) nextTrigger.focus();
+    }, 0);
+    return true;
+  }
+
   function ensureCourseIconModal() {
     let modal = $('#hwCourseIconModal');
     if (modal) return modal;
 
     modal = document.createElement('div');
     modal.id = 'hwCourseIconModal';
-    modal.className = 'hw-course-quick-modal hw-course-icon-modal';
+    modal.className = 'modal hw-course-quick-modal hw-course-icon-modal';
     modal.hidden = true;
     setSafeHTML(modal, `
       <div class="hw-course-quick-card hw-course-icon-card" role="dialog" aria-modal="true" aria-labelledby="hwCourseIconTitle">
@@ -727,17 +764,21 @@
           <button type="button" class="hw-course-quick-close" data-course-icon-close data-modal-close aria-label="Close icon picker">&times;</button>
         </div>
         <div class="hw-course-icon-grid" role="radiogroup" aria-label="Course icons"></div>
+        <form class="hw-course-icon-custom" data-course-icon-custom-form>
+          <label for="hwCourseIconCustomInput">Custom emoji</label>
+          <div class="hw-course-icon-custom-row">
+            <input id="hwCourseIconCustomInput" data-course-icon-custom-input type="text" maxlength="16" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Enter one emoji for this course" aria-describedby="hwCourseIconCustomStatus" />
+            <button type="submit" class="hw-course-icon-custom-submit">Use emoji</button>
+          </div>
+          <p id="hwCourseIconCustomStatus" class="hw-course-icon-custom-status" data-course-icon-custom-status role="status" aria-live="polite">Enter one emoji, such as 🧪.</p>
+        </form>
         <button type="button" class="neumo-btn hw-course-icon-reset" data-course-icon-choice="">Use default icon</button>
       </div>
     `);
     document.body.appendChild(modal);
 
     const closeModal = () => {
-      modal.hidden = true;
-      modal.classList.remove('is-visible');
-      if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') {
-        try { window.SutraModalManager.sync(); } catch (_) {}
-      }
+      closeCourseIconModal(modal);
     };
 
     $('[data-course-icon-close]', modal)?.addEventListener('click', closeModal);
@@ -747,16 +788,28 @@
     modal.addEventListener('click', event => {
       const choice = event.target.closest('[data-course-icon-choice]');
       if (!choice) return;
-      const courseId = modal.getAttribute('data-course-id') || '';
       const icon = choice.getAttribute('data-course-icon-choice') || '';
-      closeModal();
-      if (!setCourseIcon(courseId, icon)) return;
-      showHomeworkToast(icon ? 'Icon updated.' : 'Default icon restored.');
-      setTimeout(() => {
-        const nextTrigger = document.querySelector(`[data-course-icon="${CSS.escape(String(courseId))}"]`);
-        if (nextTrigger) nextTrigger.focus();
-      }, 0);
+      commitCourseIconChoice(modal, icon);
     });
+
+    const customForm = $('[data-course-icon-custom-form]', modal);
+    const customInput = $('[data-course-icon-custom-input]', modal);
+    const customStatus = $('[data-course-icon-custom-status]', modal);
+    if (customForm && customInput) {
+      customInput.addEventListener('input', () => {
+        if (customStatus) customStatus.textContent = '';
+      });
+      customForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const emoji = normalizeCustomCourseEmoji(customInput.value);
+        if (!emoji) {
+          if (customStatus) customStatus.textContent = 'Enter one emoji, such as 🧪.';
+          customInput.focus();
+          return;
+        }
+        commitCourseIconChoice(modal, emoji);
+      });
+    }
 
     modal._close = closeModal;
     return modal;
@@ -769,8 +822,12 @@
     const selected = normalizeCourseIcon(course.icon);
     const grid = $('.hw-course-icon-grid', modal);
     const copy = $('[data-course-icon-copy]', modal);
+    const customInput = $('[data-course-icon-custom-input]', modal);
+    const customStatus = $('[data-course-icon-custom-status]', modal);
     modal.setAttribute('data-course-id', String(course.id));
-    if (copy) copy.textContent = `Pick an icon for ${course.name}.`;
+    if (copy) copy.textContent = `Pick an icon for ${course.name}, or enter one custom emoji.`;
+    if (customInput) customInput.value = normalizeCustomCourseEmoji(course.icon);
+    if (customStatus) customStatus.textContent = 'Enter one emoji, such as 🧪.';
     if (grid) {
       setSafeHTML(grid, COURSE_ICON_OPTIONS.map(option => `
         <button type="button" class="hw-course-icon-choice${option.key === selected ? ' is-selected' : ''}" data-course-icon-choice="${escHtml(option.key)}" role="radio" aria-checked="${option.key === selected ? 'true' : 'false'}" aria-label="${escHtml(option.label)}" title="${escHtml(option.label)}">
@@ -1727,19 +1784,58 @@
     return courses.find(course => String(course.id) === String(task && task.courseId)) || null;
   }
 
+  function renderCourseIconButton(course, color, className) {
+    if (!course) return '';
+    const palette = color || getCourseColor(course.id);
+    const icon = getCourseIconOption(course);
+    const isEmoji = !!icon.emoji;
+    return `<button type="button" class="${escHtml(className || 'hw-course-icon-trigger')} hw-course-icon-trigger${course.type === 'misc' ? ' is-activity' : ''}" data-course-icon="${escHtml(course.id)}" style="--hw-course-bg:${palette.bg};--hw-course-text:${palette.text}" aria-label="Choose icon for ${escHtml(course.name)}" aria-haspopup="dialog" aria-controls="hwCourseIconModal" title="Choose icon for ${escHtml(course.name)}">
+      <i class="fas hw-course-icon-font" data-course-icon-font aria-hidden="true"${isEmoji ? ' hidden' : ''}></i>
+      <span class="hw-course-custom-emoji" data-course-icon-emoji aria-hidden="true"${isEmoji ? '' : ' hidden'}></span>
+    </button>`;
+  }
+
+  function hydrateCourseIconButtons(root) {
+    $$('[data-course-icon]', root).forEach(button => {
+      const course = courses.find(item => String(item.id) === String(button.getAttribute('data-course-icon')));
+      if (!course) return;
+      const option = getCourseIconOption(course);
+      const fontIcon = button.querySelector('[data-course-icon-font]');
+      const emoji = button.querySelector('[data-course-icon-emoji]');
+      if (option.emoji) {
+        if (fontIcon) fontIcon.hidden = true;
+        if (emoji) {
+          emoji.textContent = option.emoji;
+          emoji.hidden = false;
+        }
+      } else {
+        if (fontIcon) {
+          // `className` comes from the fixed allowlist above, never workspace data.
+          fontIcon.className = `fas ${option.className}`;
+          fontIcon.hidden = false;
+        }
+        if (emoji) {
+          emoji.textContent = '';
+          emoji.hidden = true;
+        }
+      }
+    });
+  }
+
   function renderCourseGroupActions(course, kind, name) {
     if (!course) return '';
     const courseId = escHtml(course.id);
     const kindLabel = String(kind || 'class').toLowerCase();
+    const iconButton = renderCourseIconButton(course, getCourseColor(course.id), 'hw-row-action');
     const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${escHtml(kindLabel)}" aria-label="Remove ${escHtml(kindLabel)} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
-    if (course.type !== 'class') return removeButton;
+    if (course.type !== 'class') return `<div class="hw-assignment-group-actions">${iconButton}${removeButton}</div>`;
     const menu = `<div class="hw-course-menu-wrap">
       <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="Class actions for ${escHtml(name)}" title="Class actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
       <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
         <button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>
       </div>
     </div>`;
-    return `<div class="hw-assignment-group-actions">${menu}${removeButton}</div>`;
+    return `<div class="hw-assignment-group-actions">${iconButton}${menu}${removeButton}</div>`;
   }
 
   function taskMatchesHomeworkView(task) {
@@ -1966,13 +2062,10 @@
       const complete = activityTasks.filter(task => task.done).length;
       const progress = activityTasks.length ? Math.round((complete / activityTasks.length) * 100) : 0;
       const color = getCourseColor(course.id);
-      const icon = getCourseIconOption(course);
       const due = nearest ? getTaskDuePresentation(nearest) : null;
       return `
         <article class="hw-activity-row">
-          <button type="button" class="hw-activity-icon" data-course-icon="${escHtml(course.id)}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}" aria-label="Choose icon for ${escHtml(course.name)}" aria-haspopup="dialog" aria-controls="hwCourseIconModal" title="Choose icon">
-            <i class="fas ${escHtml(icon.className)}" aria-hidden="true"></i>
-          </button>
+          ${renderCourseIconButton(course, color, 'hw-activity-icon')}
           <div class="hw-activity-main">
             <button type="button" class="hw-activity-name" data-course-dashboard="${escHtml(course.id)}">${escHtml(course.name)}</button>
             <span class="hw-activity-category">Extracurricular · ${openTasks.length} open</span>
@@ -2889,6 +2982,7 @@
 
     updateHomeworkStaticChrome();
     setSafeHTML(board, renderHomeworkWorkspace());
+    hydrateCourseIconButtons(board);
 
     bindBoardInteractions(board);
     bindExtraInteractions(board);

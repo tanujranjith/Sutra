@@ -4,7 +4,7 @@ Prepared September 30, 2026. Task numbers refer to the reorganized list agreed i
 
 **Branch:** `codex/overnight-improvements`
 
-**Current status:** Research completed and recorded in [overnight findings](OVERNIGHT_RESEARCH.md). Implementation is starting in the isolated candidate; every product task remains subject to its three reviews and the user's later local verification.
+**Current status:** Research completed and recorded in [overnight findings](OVERNIGHT_RESEARCH.md). Implementation is underway in the isolated candidate. Reviewed checkpoints cover tags, the Focus player, backup progress, custom icons, and the phone Week agenda; the remaining workstreams are still active.
 
 **Candidate directory:** `D:\Desktop\Engineering\Coding\Active projects\Sutra\.tmp\overnight-clean-main\.tmp\worktrees\overnight-improvements`. The original checkout is `codex/overnight-plan`; the desired implementation branch lives in the prescribed core candidate. Both the existing dirty main worktree and the user's original changes are preserved.
 
@@ -16,7 +16,7 @@ Prepared September 30, 2026. Task numbers refer to the reorganized list agreed i
 
 - Research all ten tasks and the expanded Create workstream before changing product code. Inspect current behavior, relevant source, existing tests without executing them, feature documentation, and recent history. Use authoritative external sources for behavior and browser/platform constraints that need research.
 - Preserve existing user changes and untracked files. Stage and commit only task-owned files or explicitly reviewed hunks; do not bundle unrelated work.
-- Delegate bounded tasks to **Luna xhigh** (`gpt-6-luna`, reasoning effort `xhigh`). Give each assignment a clear contract and file ownership. Use at most one Luna worker at a time to limit resource use; the primary agent owns integration and commits.
+- Delegate bounded tasks exclusively to **Luna xhigh** (`gpt-6-luna`, reasoning effort `xhigh`). The user explicitly permits multiple Luna workers when useful. Keep concurrency modest and file ownership independent; the primary agent owns integration, three reviews, and commits.
 - The primary agent personally reviews every coherent change three times, including subagent changes. Record each pass and any corrections; repeat affected reviews after substantive corrections.
 - Commit locally after coherent, reviewed changes and permitted validation. Keep commits small enough to inspect and revert, without leaving a checkpoint knowingly broken.
 - Do not run local unit/E2E suites, automated browser tests, self-tests, benchmark suites, or aggregate commands that invoke them. Do not install dependencies or run resource-heavy builds by default.
@@ -193,10 +193,10 @@ Update a row after research, an implementation milestone, a review pass, a commi
 | #8 | Page tags | Primary | Reviewed; awaiting user validation | Done / Done / Done | Legacy normalization, input ownership, persistent filter, restored phone controls |
 | #9 | To-do section | Primary | Researched | Pending / Pending / Pending | Existing canonical row with general task kind |
 | #10 | Completion animation | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Actual completed transition; include Home bridge |
-| #11 | Custom icons | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Extend course picker; preserve Help icon reconciliation |
+| #11 | Custom icons | Luna xhigh; primary integration | Reviewed; awaiting user validation | Done / Done / Done | Course emoji/presets and Help page icons; existing fields and local Sync preference preserved |
 | #13 | Embedded custom timeline | Primary | Researched | Pending / Pending / Pending | One authored model, host adapters, inventory/fallbacks; exclude Sheets |
 | #15 | Timer mini-player | Luna xhigh; primary integration | Reviewed; awaiting user validation | Done / Done / Done | Canonical commands, paused-session preservation, focus restoration, overlay suppression |
-| #17 | Mobile overhaul | Primary | Shared utilities reviewed; screen overhaul pending | Foundation: Done / Done / Done | Phone persistence/report actions in More; comprehensive screens/widths still pending |
+| #17 | Mobile overhaul | Primary; scoped Luna help | Foundation and Week agenda reviewed; other screens pending | Foundation and agenda: Done / Done / Done | More utilities and phone date-strip agenda; comprehensive screens/widths still pending |
 | Added | Non-Notes Create upgrades | Primary; scoped Luna help | Researched | Pending / Pending / Pending | Per-surface audit in research artifact; shared type selection bug observed |
 
 For each active task, append a brief entry with date, files, findings/decisions, three review records, permitted checks actually run, checks deferred, commit, and the next concrete action. Record delegation ownership before starting a worker.
@@ -242,6 +242,16 @@ For each active task, append a brief entry with date, files, findings/decisions,
 - Sequential manual observation at 390 × 844 in the disposable localhost workspace: after password confirmation, the overlay was focused and showed “Backing up…”, an indeterminate progress indicator, and the actual packaging stage. A later observation showed it hidden and the workspace accessible again. No claim of browser-file durability or successful restore is made from this observation.
 - Permitted checks passed: backup-module syntax, leaf core integrity (27 assertions), architecture guardrails, manifest freshness, and cache freshness. The owning core budget generator recorded the 3,418-byte / 63-line seam. The staged-runtime hook remains enabled.
 - Deferred: suites/self-tests, encrypted round-trip/required-file failure coverage, provider integration, retention failures, concurrent exports, physical devices, and aggregate runtime/deploy validation. These must be checked before integration; no production/network account was used.
+
+### October 1 — Custom icons and phone Week agenda
+
+- Luna xhigh contributions are restricted to Homework icon presentation and the calendar presentation module/styles. Primary owns Help page reconciliation, authorization, Sync-local preference preservation, cache stamps, documentation, and commits.
+- Icons use the existing course/page icon fields. Course presets and the legacy `people-group` alias remain supported; one custom emoji is rendered with `textContent`. Unsupported stored icons and other unknown course fields remain in the model with a safe display fallback. Help content/identity remains protected; its icon can be changed or reset to books and is preserved through local reload/full backups. Sync regenerates Help pages while retaining this device's prior icon preference.
+- Review 1: primary read every contribution and traced normalization, canonical Homework storage/mirroring, backup/Sync projection, Help reconciliation, and page authorization. Corrected Luna's normalization so unsupported icon values survive. The calendar now uses canonical day/recurrence/source helpers rather than its parallel interpretation.
+- Review 2: primary reread the final core/module/style diffs for DOM safety, unknown-field preservation, locked pages, write blocking, keyboard/touch controls, modal ownership, focus restoration, viewport changes, and desktop behavior. Added the course picker's missing modal registration class and restored focus to a rerendered page icon. Those corrections received fresh source review and manual inspection.
+- Manual inspection in the disposable local preview at 390 × 844: Help's rocket icon survived reload; resetting restored books and keyboard focus. Invalid course text stayed in the picker; a test-tube emoji saved, survived reload, and returned focus after selection/Escape. Selecting Friday changed the canonical date input and preserved focus. Adding a long-title time block used the existing form; the agenda wrapped its full title and reopened the existing editor. At 360 × 800 the agenda caused no document overflow. Resizing to 1280 × 900 retained the selected date and restored seven desktop Week columns; Day and Month controls still changed the rendered view.
+- Review 3: primary read the complete final staged source/style/shell/docs/generated diffs in bounded chunks, checked the observations against the implemented paths, and excluded unrelated instruction copies. Leaf core integrity (27 assertions), script syntax, architecture guardrails, cache freshness, and manifest freshness passed. The owning core budget records a narrow 2,413-byte / 41-line increase. No suites, self-tests, encrypted restore, provider integration, Sync round-trip, physical-device, or software-keyboard checks have run.
+- The phone Week agenda is one milestone of #17; Home, To-do, protected pages, Settings, Review, Create surfaces, and the full width/state matrix remain active work.
 
 ## Morning handoff and user verification
 

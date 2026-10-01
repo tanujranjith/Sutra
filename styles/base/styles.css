@@ -2608,6 +2608,12 @@
             transform: scale(1.2);
         }
 
+        .page-icon[role="button"]:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+
         .page-icon-empty {
             opacity: 0.5;
         }
@@ -13741,8 +13747,12 @@ body[data-time-mode="night"] {
 }
 
 .emoji-option {
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -13755,6 +13765,12 @@ body[data-time-mode="night"] {
 
 .emoji-option:hover {
     transform: translateY(-1px) scale(1.08);
+    background: var(--bg-hover);
+}
+
+.emoji-option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
     background: var(--bg-hover);
 }
 
@@ -13819,14 +13835,14 @@ body[data-time-mode="night"] {
     }
 
     .emoji-grid {
-        grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
         gap: 7px;
         max-height: 46vh;
     }
 
     .emoji-option {
-        width: 38px;
-        height: 38px;
+        width: 44px;
+        height: 44px;
         font-size: 22px;
         border-radius: 8px;
     }

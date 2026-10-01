@@ -42,6 +42,20 @@ Choose **All** to clear the tag filter. Tag entry belongs to the page that opene
 it, so changing pages cannot attach an unfinished tag to another page. Locked
 pages and blocked persistence writes do not accept tag edits.
 
+## Page icons
+
+Choose **Change icon** in a page's actions, or activate its icon in the Create
+sidebar with a click, Enter, or Space. The emoji choices are keyboard buttons.
+This also works for **Help & Docs**. Its content, identity, name, and deletion
+protection stay built in; refreshing Help preserves its chosen icon. Remove
+restores Help's books icon.
+
+Icons use the existing `page.icon` field and travel in workspace backups. Help
+pages are generated resources excluded from Sync, so their icon is a local
+choice; a remote apply preserves that device's Help icon per space. Locked page
+content must be authorized before changing its icon, and blocked workspace
+writes prevent icon edits.
+
 ## Compatibility
 
 Stored anchors and block records remain readable in the classic editor. Keep

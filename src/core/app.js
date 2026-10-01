@@ -1563,6 +1563,11 @@ function getPageActionsConfig(pageId) {
 
     return [
         {
+            className: 'fas fa-smile',
+            label: 'Change icon',
+            onClick: () => window.openEmojiPicker(page.id)
+        },
+        {
             className: `fas fa-thumbtack${isNotePagePinned(page.id, page.spaceId || activeSpaceId || 'default') ? ' starred' : ''}`,
             label: isNotePagePinned(page.id, page.spaceId || activeSpaceId || 'default') ? 'Unpin page' : 'Pin page',
             onClick: () => toggleNotePagePin(page.id, page.spaceId || activeSpaceId || 'default')
@@ -45294,7 +45299,7 @@ ${renderedSections}
             page.collapsed = false;
             page.content = buildHelpPageContent();
             page.blocks = normalizePageBlocks(page.blocks);
-            page.icon = PAGE_ICONS.BOOKS;
+            page.icon = normalizePageIcon(page.icon) || PAGE_ICONS.BOOKS;
             page.spaceId = String(spaceId || 'default').trim() || 'default';
             page.theme = normalizeStoredThemeKey(page.theme, globalTheme || 'default', true);
             page.isSystemPage = true;
@@ -53013,11 +53018,19 @@ function getActiveEditor() {
                 const iconDisplay = normalizePageIcon(page.icon) || (isFolderPage(page) ? PAGE_ICONS.FOLDER : (normalizePageType(page.type) === PAGE_TYPES.CANVAS ? PAGE_ICONS.CANVAS : PAGE_ICONS.DOC));
                 const pageIcon = document.createElement('span');
                 pageIcon.className = 'page-icon';
-                pageIcon.title = isSystemPage ? 'Built-in page' : 'Click to change icon';
+                pageIcon.title = 'Change icon';
+                pageIcon.setAttribute('role', 'button');
+                pageIcon.setAttribute('aria-label', `Change icon for ${displayTitle}`);
+                pageIcon.tabIndex = 0;
                 pageIcon.textContent = iconDisplay;
                 pageIcon.addEventListener('click', (event) => {
                     event.stopPropagation();
-                    if (isSystemPage) return;
+                    openEmojiPicker(page.id);
+                });
+                pageIcon.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    event.stopPropagation();
                     openEmojiPicker(page.id);
                 });
                 pageItem.appendChild(pageIcon);
@@ -61764,6 +61777,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function importWorkspacePayloadInner(data, options = {}) {
+            // Generated Help pages are intentionally excluded from Sync. Keep
+            // this device's icon preference when a remote apply regenerates them.
+            const localHelpIcons = options.sync === true
+                ? new Map(pages.filter(page => page && isHelpDocsPage(page))
+                    .map(page => [page.spaceId || 'default', normalizePageIcon(page.icon)]))
+                : null;
             const localSyncPreference = appSettings && appSettings.preferences && appSettings.preferences.sync
                 ? cloneSerializable(appSettings.preferences.sync, { enabled: false, endpoint: '' })
                 : null;
@@ -61985,6 +62004,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // apply/bootstrap) replaces `pages`, so restore one canonical Help
             // page per imported space before rendering or persisting the model.
             ensureHelpPagesForAllSpaces();
+
+            if (localHelpIcons) {
+                pages.forEach(page => {
+                    if (!isHelpDocsPage(page)) return;
+                    const icon = localHelpIcons.get(page.spaceId || 'default');
+                    if (icon) page.icon = icon;
+                });
+            }
 
             if (importedHomeworkWorkspace) {
                 restoreHomeworkWorkspaceFromSnapshot(importedHomeworkWorkspace);
@@ -65455,11 +65482,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function openEmojiPicker(pageId) {
+            const page = pages.find(entry => entry.id === pageId);
+            if (!page || !isPageContentAuthorized(page) || persistenceWritesBlocked) return;
+            const picker = document.getElementById('emojiPicker');
+            const overlay = document.getElementById('emojiModalOverlay');
+            if (!picker) return;
             currentEmojiPageId = pageId;
             currentEmojiCategory = 'All';
             emojiSearchQuery = '';
-            const picker = document.getElementById('emojiPicker');
-            const overlay = document.getElementById('emojiModalOverlay');
             // Build search bar, category tabs and grid
             let html = '';
             html += '<div class="emoji-picker-header">';
@@ -65551,21 +65581,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         function hideEmojiPicker() {
-            // alias used in markup; ensure overlay and picker are closed
-            const picker = document.getElementById('emojiPicker');
-            const overlay = document.getElementById('emojiModalOverlay');
-            if (picker) picker.classList.remove('active');
-            if (overlay) overlay.classList.remove('active');
-            try { document.body.classList.remove('modal-open'); } catch(e) {}
-            // reset inline styles (avoid leaving it anchored)
-            if (picker) {
-                picker.style.left = '';
-                picker.style.right = '';
-                picker.style.top = '';
-                picker.style.bottom = '';
-                picker.style.transform = '';
-            }
-            currentEmojiPageId = null;
+            // Retain the legacy inline alias with the same cleanup/focus path.
+            closeEmojiPicker();
         }
 
         // Reposition emoji picker on resize if open
@@ -65752,20 +65769,35 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
             }
             
+            grid.replaceChildren();
             if (emojis.length === 0) {
-                grid.innerHTML = '<div class="emoji-empty">No emojis found</div>';
+                const empty = document.createElement('div');
+                empty.className = 'emoji-empty';
+                empty.textContent = 'No emojis found';
+                grid.appendChild(empty);
             } else {
-                grid.innerHTML = emojis.map(emoji => 
-                    `<span class="emoji-option" onclick="setPageIcon('${emoji}')">${emoji}</span>`
-                ).join('');
+                const fragment = document.createDocumentFragment();
+                emojis.forEach(emoji => {
+                    const option = document.createElement('button');
+                    option.type = 'button';
+                    option.className = 'emoji-option';
+                    option.textContent = emoji;
+                    option.setAttribute('aria-label', `Use ${emoji} as page icon`);
+                    option.addEventListener('click', () => setPageIcon(emoji));
+                    fragment.appendChild(option);
+                });
+                grid.appendChild(fragment);
             }
         }
 
         function setPageIcon(emoji) {
             if (!currentEmojiPageId) return;
             const page = pages.find(p => p.id === currentEmojiPageId);
-            if (page) {
-                page.icon = emoji;
+            if (page && isPageContentAuthorized(page) && !persistenceWritesBlocked) {
+                const icon = normalizePageIcon(emoji);
+                if (!getAllEmojis().includes(icon)) return;
+                page.icon = icon;
+                page.updatedAt = new Date().toISOString();
                 savePagesToLocal();
                 renderPagesList();
                 closeEmojiPicker();
@@ -65776,8 +65808,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function removePageIcon() {
             if (!currentEmojiPageId) return;
             const page = pages.find(p => p.id === currentEmojiPageId);
-            if (page) {
-                delete page.icon;
+            if (page && isPageContentAuthorized(page) && !persistenceWritesBlocked) {
+                if (isHelpDocsPage(page)) page.icon = PAGE_ICONS.BOOKS;
+                else delete page.icon;
+                page.updatedAt = new Date().toISOString();
                 savePagesToLocal();
                 renderPagesList();
                 closeEmojiPicker();
@@ -65788,6 +65822,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function closeEmojiPicker() {
             const picker = document.getElementById('emojiPicker');
             const overlay = document.getElementById('emojiModalOverlay');
+            const pageId = currentEmojiPageId;
+            const restoreIconFocus = picker && picker.contains(document.activeElement);
             if (picker) {
                 picker.classList.remove('active');
                 picker.style.left = '';
@@ -65801,6 +65837,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (overlay) overlay.classList.remove('active');
             try { document.body.classList.remove('modal-open'); } catch(e) {}
             currentEmojiPageId = null;
+            if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') window.SutraModalManager.sync();
+            if (restoreIconFocus && pageId) {
+                const icon = document.querySelector(`.page-item[data-page-id="${CSS.escape(String(pageId))}"] .page-icon`);
+                if (icon && !icon.closest('[inert]') && icon.getClientRects().length) icon.focus({ preventScroll: true });
+            }
         }
 
         // Keep inline picker handlers callable from dynamic HTML.

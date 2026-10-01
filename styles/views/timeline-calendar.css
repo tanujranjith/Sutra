@@ -48,6 +48,35 @@
 .sutra-calendar-event { position: absolute; z-index: 2; display: grid; align-content: start; gap: 2px; overflow: hidden; padding: 4px 6px; border: 1px solid color-mix(in srgb, var(--sutra-calendar-event-color) 65%, var(--surface-border)); border-left: 3px solid var(--sutra-calendar-event-color); border-radius: 5px; background: color-mix(in srgb, var(--sutra-calendar-event-color) 22%, var(--surface-bg)); color: var(--text-primary); text-align: left; font: inherit; cursor: pointer; }
 .sutra-calendar-event:hover { z-index: 3; background: color-mix(in srgb, var(--sutra-calendar-event-color) 32%, var(--surface-bg)); }
 .sutra-calendar-event-time { font-size: 10px; font-weight: 700; line-height: 1.1; white-space: nowrap; }.sutra-calendar-event-title { overflow: hidden; font-size: 12px; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }.sutra-calendar-event-source { overflow: hidden; color: var(--text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.sutra-calendar-mobile-week { display: grid; align-content: start; gap: 16px; min-height: 0; padding: 16px; color: var(--text-primary); }
+.sutra-calendar-mobile-week-header { display: grid; gap: 3px; }
+.sutra-calendar-mobile-week-heading { margin: 0; font-size: 16px; line-height: 1.3; }
+.sutra-calendar-mobile-week-hint { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.sutra-calendar-week-strip { display: grid; grid-template-columns: repeat(7, minmax(44px, 1fr)); gap: 2px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.sutra-calendar-week-day { display: grid; align-content: center; justify-items: center; gap: 3px; min-width: 44px; min-height: 60px; padding: 5px 2px; border: 1px solid var(--surface-border, var(--border)); border-radius: 10px; background: var(--surface-bg, var(--bg-secondary)); color: var(--text-secondary); font: inherit; cursor: pointer; transition: border-color .15s ease, background-color .15s ease, color .15s ease; }
+.sutra-calendar-week-day:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface-bg, var(--bg-secondary))); }
+.sutra-calendar-week-day:focus-visible, .sutra-calendar-agenda-event:focus-visible, .sutra-calendar-agenda-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sutra-calendar-week-day.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-bg, var(--bg-secondary))); color: var(--accent-strong, var(--accent)); box-shadow: inset 0 0 0 1px var(--accent); }
+.sutra-calendar-week-day-name { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.sutra-calendar-week-day-number { display: grid; place-items: center; min-width: 26px; min-height: 26px; border-radius: 50%; color: var(--text-primary); font-size: 14px; }
+.sutra-calendar-week-day.is-today .sutra-calendar-week-day-number { background: var(--accent); color: var(--button-text, #fff); }
+.sutra-calendar-week-day-count { min-height: 12px; color: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; line-height: 1; }
+.sutra-calendar-week-day-count.is-empty { visibility: hidden; }
+.sutra-calendar-agenda { display: grid; align-content: start; gap: 10px; }
+.sutra-calendar-agenda-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sutra-calendar-agenda-heading { margin: 0; font-size: 18px; line-height: 1.25; }
+.sutra-calendar-agenda-count { flex: none; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.sutra-calendar-agenda-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.sutra-calendar-agenda-event { display: grid; grid-template-columns: minmax(92px, auto) minmax(0, 1fr); align-items: start; gap: 12px; width: 100%; min-height: 64px; padding: 12px; border: 1px solid color-mix(in srgb, var(--sutra-calendar-event-color) 55%, var(--surface-border, var(--border))); border-left: 4px solid var(--sutra-calendar-event-color); border-radius: 10px; background: color-mix(in srgb, var(--sutra-calendar-event-color) 13%, var(--surface-bg, var(--bg-secondary))); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.sutra-calendar-agenda-event:hover { background: color-mix(in srgb, var(--sutra-calendar-event-color) 20%, var(--surface-bg, var(--bg-secondary))); }
+.sutra-calendar-agenda-time { padding-top: 2px; color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.sutra-calendar-agenda-details { display: grid; gap: 3px; min-width: 0; }
+.sutra-calendar-agenda-title { overflow-wrap: anywhere; font-size: 14px; font-weight: 700; line-height: 1.3; }
+.sutra-calendar-agenda-source { overflow-wrap: anywhere; color: var(--text-secondary); font-size: 12px; line-height: 1.3; }
+.sutra-calendar-agenda-empty { display: grid; justify-items: start; gap: 12px; padding: 16px; border: 1px dashed var(--surface-border, var(--border)); border-radius: 10px; color: var(--text-secondary); }
+.sutra-calendar-agenda-empty p { margin: 0; font-size: 14px; }
+.sutra-calendar-agenda-add { min-height: 48px; padding: 8px 14px; border: 1px solid var(--accent); border-radius: 9px; background: color-mix(in srgb, var(--accent) 10%, var(--surface-bg, var(--bg-secondary))); color: var(--accent-strong, var(--accent)); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.sutra-calendar-agenda-add:hover { background: color-mix(in srgb, var(--accent) 17%, var(--surface-bg, var(--bg-secondary))); }
 .view-timeline .sutra-calendar-event.is-compact { align-content: center; padding: 3px 6px; }
 .sutra-calendar-event.is-compact .sutra-calendar-event-title { font-size: 11px; }
 .sutra-calendar-now-line { position: absolute; z-index: 3; right: 0; left: 0; height: 2px; background: var(--accent-strong, #e16363); pointer-events: none; }.sutra-calendar-now-line span { position: absolute; top: -8px; left: -2px; padding: 2px 5px; border-radius: 5px; background: var(--accent-strong, #e16363); color: #fff; font-size: 9px; font-weight: 700; }
@@ -55,6 +84,9 @@
 @media (max-width: 768px) {
     .view-timeline.timeline-redesign { min-height: 0; }
     .sutra-calendar-shell { min-height: 0; grid-template-rows: auto minmax(420px, 68dvh) auto; }
+    #view-timeline .sutra-calendar-shell.is-mobile-week { grid-template-rows: auto auto auto; }
+    #view-timeline .sutra-calendar-body.is-mobile-week { min-height: 0; }
+    #view-timeline .timeline-calendar-view.is-mobile-week { min-height: 0; height: auto; }
     .view-timeline.timeline-redesign .timeline-hero-header.sutra-calendar-toolbar { align-items: flex-start; }
     .view-timeline.timeline-redesign .timeline-hero-controls { justify-content: flex-start; }
     .sutra-calendar-month { min-height: 420px; height: 68dvh; }
@@ -109,5 +141,5 @@
     .sutra-calendar-time-day.sutra-calendar-time-view .sutra-calendar-time-grid { min-width: 100%; grid-template-columns: 48px minmax(0, 1fr); }
     .sutra-calendar-time-column { cursor: pointer; }
 }
-@media (prefers-reduced-motion: reduce) { .sutra-calendar-day, .sutra-calendar-event, .sutra-calendar-month-event { transition: none !important; } }
-@media (forced-colors: active) { .sutra-calendar-event, .sutra-calendar-month-event { border: 1px solid CanvasText; } }
+@media (prefers-reduced-motion: reduce) { .sutra-calendar-day, .sutra-calendar-event, .sutra-calendar-month-event, .sutra-calendar-week-day, .sutra-calendar-agenda-event, .sutra-calendar-agenda-add { transition: none !important; } }
+@media (forced-colors: active) { .sutra-calendar-event, .sutra-calendar-month-event, .sutra-calendar-week-day, .sutra-calendar-agenda-event, .sutra-calendar-agenda-add { border: 1px solid CanvasText; } }
