@@ -299,16 +299,17 @@ For each active task, append a brief entry with date, files, findings/decisions,
 - Mobile observations used 360 × 800 (Home/To-do), 375 × 812 (Review/Practice), 390 × 844 (Capture/Create/earlier core workflows), 393 × 852 (Settings/search/pending Save/Revert), 414 × 896 (folder/Sheets/HTML/saved timeline Note), 430 × 932 (More/Week), and 844 × 390 (landscape calendar/Review drawer). Desktop checks used 1280 × 900. Primary fixed the Review drawer's transformed ancestor, phone and landscape viewport clearance, squeezed Settings panels, pending-save/player overlap, and Create header/page-list overlap. No document-width overflow was observed on those screens. Native keyboard, physical devices, dark themes, protected-page flows, and every advanced destination remain for morning inspection.
 - Added deferred regression coverage for pure timeline preservation/escaping/order, canonical Sync fixture metadata, and actual-module VM lock lifecycles. The tests were reviewed as code and were **not executed**. The VM DOM stub does not prove real browser CSS, focus, or inert behavior.
 - Final static results, local commit identities, and the exact handoff checklist are in [OVERNIGHT_HANDOFF.md](OVERNIGHT_HANDOFF.md). The core recovery copy remains under ignored `.tmp/recovery/`; temporary preview files are excluded from commits and deployment.
+- Local implementation commit `a93184b` passed the retained staged-runtime hook's 27 static assertions. The candidate contains all scoped implementation checkpoints; main is unchanged. The manual preview server was stopped and its inspection tab closed. A final documentation checkpoint completes the handoff.
 
 ## Morning handoff and user verification
 
-- [ ] Branch name, commit list, and concise change summary supplied; `main` remains unmerged.
-- [ ] Existing user changes preserved and unrelated files excluded from task commits.
-- [ ] Three primary-agent reviews recorded for each delivered change, including Luna's code.
-- [ ] Relevant documentation updated; temporary/debugging artifacts removed.
-- [ ] A feature-by-feature manual verification checklist supplied for all implemented tasks.
-- [ ] Backup/tag/icon/task/link/timer/timeline/Create persistence and portability checks identified, with unobserved behavior clearly marked unverified.
-- [ ] Per-Create-surface improvements and the timeline host-support matrix supplied; Sheets has no timeline insertion action.
-- [ ] Mobile and desktop observations supplied, with exact widths/screens checked and limitations disclosed.
-- [ ] Automated checks listed as **not run**, with relevant commands/coverage suggested for the user's resource-appropriate validation. Do not claim suite results or CI results that were not observed.
-- [ ] Remaining uncertainties, incomplete tasks, regressions, and required gates explicitly listed. Integration into `main` remains a separate user-authorized step after review.
+- [x] Branch name, commit list, and concise change summary supplied; `main` remains unmerged.
+- [x] Existing user changes preserved and unrelated files excluded from task commits.
+- [x] Three primary-agent reviews recorded for each delivered change, including Luna's code.
+- [x] Relevant documentation updated; temporary/debugging artifacts excluded from commits and deployment; core recovery copies retained.
+- [x] A feature-by-feature manual verification checklist supplied for all implemented tasks.
+- [x] Backup/tag/icon/task/link/timer/timeline/Create persistence and portability checks identified, with unobserved behavior clearly marked unverified.
+- [x] Per-Create-surface improvements and the timeline host-support matrix supplied; Sheets has no timeline insertion action.
+- [x] Mobile and desktop observations supplied, with exact widths/screens checked and limitations disclosed.
+- [x] Automated checks listed as **not run**, with relevant commands/coverage suggested for the user's resource-appropriate validation. No suite or CI results are claimed.
+- [x] Remaining uncertainties and required gates explicitly listed. Integration into `main` remains a separate user-authorized step after review.

@@ -179,7 +179,14 @@ round trips before authorizing integration.
 | `d642bef` | Custom icons and phone Week agenda. |
 | `5c945fe` | Canonical To-do categories, Home/Capture and completion feedback. |
 | `5b63cc6` | Create type confirmation and Slides/Sheets/HTML/PDF editor polish. |
+| `a93184b` | Native rich links, inline AI, authored timelines, Canvas/folders, lock cleanup and final mobile refinements. |
 
-The final authoring checkpoint and static results are appended after commit.
-Browser notifications, licensing and task #18 remain excluded. Main integration
-is a separate user-authorized step after local verification.
+The final implementation commit retained the staged-runtime hook, which passed
+all 27 static assertions. A final documentation checkpoint records this handoff.
+Task-owned files are committed; only the three preserved instruction/document
+copies listed above remain outside the commits. The manual preview server was
+stopped and the inspection tab was closed.
+
+Main remains at `84cbbdf80b299cf495d3e7eefd9408ef4ceb16f0`. Browser
+notifications, licensing and task #18 remain excluded. Main integration is a
+separate user-authorized step after local verification.
