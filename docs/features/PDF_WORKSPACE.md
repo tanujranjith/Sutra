@@ -16,6 +16,23 @@ An open PDF owns its toolbar, observers, PDF.js documents, and in-flight render 
 - Served Chromium and WebKit pages use the vendored PDF.js worker. Direct `file://` use and Firefox use the tested same-thread vendored runtime because the worker path is not reliable for the current form fixture there; browser preview remains the final fallback.
 - Embedded PDF JavaScript is never evaluated. External links are not opened automatically.
 
+## Workspace context and status
+
+The top bar groups the document name and visible-page count, search, zoom, and
+document actions. The annotation toolbar groups markup, document, and selected
+text actions. When those selection actions are available, the footer reports
+the selected word count and page. The page count follows the most visible page
+while scrolling.
+
+The reader begins with a local-copy loading message. Page-render failures show
+an inline alert and a workspace status message; they do not change the original
+PDF bytes. An empty page arrangement explains that the original remains intact
+and points to the Pages organizer or reopening the exact original. On wide
+screens, the inspector stays beside the reader. On narrower screens, **Inspector**
+opens a closable bottom panel for the outline, bookmarks, comments, and reading
+text; Escape closes it and returns focus to the Inspector button. Phone layouts
+hide thumbnails and keep the current page count visible while the reader scrolls.
+
 ## Data ownership
 
 `pdfDocuments` stores page plans, stable page IDs, rotations, bookmarks, and bounded durable checkpoints. `pdfAnnotations` stores independent stable records with normalized coordinates in the unrotated page coordinate system. Form values are annotation records with `type: "form"` and a `fieldKey`.

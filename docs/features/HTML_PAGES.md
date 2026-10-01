@@ -21,13 +21,14 @@ legacy `content`, `html`, or `source` field. Those records are converted to the
 canonical `htmlDocument` shape during migration; ordinary `note` pages are not
 inferred from HTML-looking content.
 
-## Editing and import
+## Create, editing, and import
 
-- New Page → HTML Page creates a normal page with starter HTML.
-- Paste or type HTML, CSS, and JavaScript in the source editor.
-- Import local `.html` and `.htm` files up to 4 MB.
-- Desktop shows code and preview side by side; phones switch between Code and Preview tabs.
-- Source changes use the canonical confirmed-save seam and keep editor text available if persistence fails.
+- In **New Page**, choose **HTML Page**, set an optional title and parent location, and choose **Simple HTML page** or **Empty source**. Confirm with **Create HTML page**; selecting the type alone does not create a page.
+- Paste or type HTML, CSS, and JavaScript in the source editor. The layout controls show **Code**, **Split**, or **Preview**, with the current mode named in the workspace. Phones use Code and Preview tabs.
+- Insert a **Content section**, **Checklist**, or **Note callout** starter at the current selection, or before `</body>` when the editor has no selection.
+- Import local `.html` and `.htm` files up to 4 MB, or export the current source as an `.html` download up to 4 MB. That download contains the HTML source only, not the page record or workspace backup.
+- The source-size display and save status report the 4 MB limit and local save state. Source edits update the canonical page record and autosave through the workspace bridge; if saving fails, the code remains available in the editor with an error status.
+- **Refresh preview** explicitly retries rendering. Empty source, sandbox preparation failures, load failures, and slow preview loads have visible status feedback; the authored source remains available for editing or export.
 
 ## Preview security boundary
 

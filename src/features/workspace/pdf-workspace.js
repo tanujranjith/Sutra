@@ -30,8 +30,35 @@
   function clone(value, fallback) { return global.SutraPdfEngine.clone(value, fallback); }
   function message(text, kind) {
     if (!state || !state.status) return;
-    state.status.textContent = String(text || '');
+    var target = state.statusMessage || state.status;
+    target.textContent = String(text || '');
     state.status.dataset.kind = kind || 'info';
+    target.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    target.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+  }
+  function updateDocumentStatus(owner) {
+    owner = owner || state;
+    if (!isCurrentWorkspace(owner)) return;
+    var pages = owner.documentRecord && Array.isArray(owner.documentRecord.pages) ? owner.documentRecord.pages : [];
+    var index = pages.findIndex(function (page) { return page.id === owner.activePageId; });
+    if (index < 0 && pages.length) index = 0;
+    if (owner.pageStatus) {
+      owner.pageStatus.textContent = pages.length ? 'Page ' + (index + 1) + ' of ' + pages.length : 'No pages';
+      owner.pageStatus.setAttribute('aria-label', pages.length ? 'Page ' + (index + 1) + ' of ' + pages.length : 'No pages in this PDF');
+    }
+    if (owner.selectionStatus && owner.selectionDraft && owner.selectionActions && !owner.selectionActions.hidden) {
+      var selectedPageIndex = pages.findIndex(function (page) { return page.id === owner.selectionDraft.pageId; });
+      var wordCount = String(owner.selectionDraft.text || '').trim().split(/\s+/).filter(Boolean).length;
+      owner.selectionStatus.textContent = wordCount + (wordCount === 1 ? ' word selected' : ' words selected') + (selectedPageIndex >= 0 ? ' · page ' + (selectedPageIndex + 1) : '');
+      owner.selectionStatus.hidden = false;
+    } else if (owner.selectionStatus) {
+      owner.selectionStatus.textContent = '';
+      owner.selectionStatus.hidden = true;
+    }
+    if (owner.readingTextPanel) {
+      var pageId = pages[index] && pages[index].id;
+      owner.readingTextPanel.textContent = (pageId && owner.textByPage[pageId]) || 'Open a rendered page to extract its reading text.';
+    }
   }
   function report(error, feature) {
     try {
@@ -142,6 +169,7 @@
     [owner.observer, owner.thumbnailObserver].forEach(function (observer) {
       try { if (observer) observer.disconnect(); } catch (_) {}
     });
+    try { if (owner.pageStatusObserver) owner.pageStatusObserver.disconnect(); } catch (_) {}
     try { (owner.renderTasks || []).forEach(function (task) { if (task && typeof task.cancel === 'function') task.cancel(); }); } catch (_) {}
     try { (owner.sourceUrls || []).forEach(function (url) { URL.revokeObjectURL(url); }); } catch (_) {}
     var notesToolbarWrapper = owner.notesToolbarWrapper;
@@ -287,7 +315,7 @@
     if (!state) return;
     var panel = state.inspectorContent;
     panel.replaceChildren();
-    var inspectorTop = el('div', 'pdfw-inspector-top'); inspectorTop.appendChild(el('h3', '', 'Document')); panel.appendChild(inspectorTop);
+    var inspectorTop = el('div', 'pdfw-inspector-top'); inspectorTop.appendChild(el('h3', '', 'PDF inspector')); inspectorTop.appendChild(button('Close inspector', 'close-inspector')); panel.appendChild(inspectorTop);
     var outlineHeading = el('h3', '', 'Outline'); panel.appendChild(outlineHeading);
     if (!state.outline.length) panel.appendChild(el('p', 'pdfw-muted', 'No document outline.'));
     state.outline.forEach(function (item) {
@@ -306,6 +334,8 @@
     var textPanel = el('div', 'pdfw-reading-text'); textPanel.tabIndex = 0; textPanel.setAttribute('aria-label', 'Accessible extracted PDF text');
     var page = state.textByPage[state.activePageId];
     textPanel.textContent = page || 'Open a rendered page to extract its reading text.'; panel.appendChild(textPanel);
+    state.readingTextPanel = textPanel;
+    updateDocumentStatus(state);
   }
   async function renderTextLayer(pdfPage, viewport, shell, pageRecord, owner) {
     var textLayer = shell.querySelector('.pdfw-text-layer');
@@ -313,6 +343,7 @@
     var content = await pdfPage.getTextContent({ includeMarkedContent: true, disableNormalization: false });
     if (!isCurrentWorkspace(owner) || !textLayer.isConnected) return;
     owner.textByPage[pageRecord.id] = content.items.map(function (item) { return item.str || ''; }).join(' ').replace(/\s+/g, ' ').trim();
+    updateDocumentStatus(owner);
     var lib = await loadPdfJs();
     if (!isCurrentWorkspace(owner) || !textLayer.isConnected) return;
     content.items.forEach(function (item) {
@@ -374,6 +405,8 @@
     var key = sourceKey(pageRecord) + ':' + pageRecord.id + ':' + currentState.zoom;
     if (currentState.rendered[key]) return currentState.rendered[key] === true ? undefined : currentState.rendered[key];
     var shell = currentState.pageNodes[pageRecord.id]; if (!shell) return;
+    var pageWrap = shell.closest('.pdfw-page-wrap');
+    if (pageWrap) { pageWrap.setAttribute('aria-busy', 'true'); pageWrap.querySelectorAll('.pdfw-page-render-error').forEach(function (node) { node.remove(); }); }
     var job = (async function () {
       var source = await ensureSource(pageRecord.sourceFileId, currentState);
       if (!source || !isCurrentWorkspace(currentState) || currentState.renderGeneration !== generation) return;
@@ -401,6 +434,11 @@
       } finally { clearTimeout(timeoutId); currentState.renderTasks.delete(renderTask); }
       if (!isCurrentWorkspace(currentState) || currentState.renderGeneration !== generation) return;
       currentState.rendered[key] = true;
+      var pageWrap = shell.closest('.pdfw-page-wrap');
+      if (pageWrap) {
+        pageWrap.setAttribute('aria-busy', 'false');
+        pageWrap.querySelectorAll('.pdfw-page-render-error').forEach(function (node) { node.remove(); });
+      }
       message('Page ' + (currentState.documentRecord.pages.indexOf(pageRecord) + 1) + ' ready.');
       renderAnnotations(pageRecord.id); renderInspector();
       Promise.all([renderTextLayer(pdfPage, viewport, shell, pageRecord, currentState), renderForms(pdfPage, viewport, shell, pageRecord, currentState)])
@@ -428,7 +466,7 @@
     } finally { owner.renderTasks.delete(renderTask); }
   }
   function createPageShell(pageRecord, index) {
-    var wrap = el('section', 'pdfw-page-wrap'); wrap.dataset.pageId = pageRecord.id; wrap.setAttribute('aria-label', 'Page ' + (index + 1));
+    var wrap = el('section', 'pdfw-page-wrap'); wrap.dataset.pageId = pageRecord.id; wrap.setAttribute('aria-label', 'Page ' + (index + 1)); wrap.setAttribute('aria-busy', 'false');
     var label = el('div', 'pdfw-page-number', String(index + 1)); wrap.appendChild(label);
     var page = el('div', 'pdfw-page'); page.appendChild(document.createElement('canvas'));
     page.appendChild(el('div', 'pdfw-text-layer')); page.appendChild(el('div', 'pdfw-form-layer')); page.appendChild(el('div', 'pdfw-annotations'));
@@ -437,26 +475,67 @@
   }
   function observePages(owner) {
     if (owner.observer) owner.observer.disconnect();
+    if (owner.pageStatusObserver) owner.pageStatusObserver.disconnect();
+    owner.pageRatios = new Map();
     owner.observer = new IntersectionObserver(function (entries) {
       if (!isCurrentWorkspace(owner)) return;
       entries.forEach(function (entry) {
         if (!entry.isIntersecting) return;
         var id = entry.target.dataset.pageId; var record = owner.documentRecord.pages.find(function (page) { return page.id === id; });
-        if (record) { owner.activePageId = id; renderPage(record, owner).catch(function (error) { if (isCurrentWorkspace(owner)) { report(error, 'pdf-page-render'); message('Could not render a page.', 'error'); } }); }
+        var generation = owner.renderGeneration;
+        if (record) renderPage(record, owner).catch(function (error) {
+          if (!isCurrentWorkspace(owner) || owner.renderGeneration !== generation) return;
+          report(error, 'pdf-page-render');
+          var wrap = owner.pageNodes[record.id] && owner.pageNodes[record.id].closest('.pdfw-page-wrap');
+          if (wrap) {
+            wrap.setAttribute('aria-busy', 'false');
+            var pageIndex = owner.documentRecord.pages.indexOf(record) + 1;
+            var errorNode = el('p', 'pdfw-page-render-error', 'Page ' + pageIndex + ' could not be rendered. The original PDF is unchanged; close and reopen to retry.');
+            errorNode.setAttribute('role', 'alert');
+            wrap.querySelectorAll('.pdfw-page-render-error').forEach(function (node) { node.remove(); });
+            wrap.appendChild(errorNode);
+          }
+          message('A page could not be rendered. The original PDF is unchanged.', 'error');
+        });
       });
     }, { root: owner.reader, rootMargin: '1000px 0px', threshold: 0.01 });
-    owner.reader.querySelectorAll('.pdfw-page-wrap').forEach(function (node) { owner.observer.observe(node); });
+    owner.pageStatusObserver = new IntersectionObserver(function (entries) {
+      if (!isCurrentWorkspace(owner)) return;
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) owner.pageRatios.set(entry.target.dataset.pageId, entry.intersectionRatio);
+        else owner.pageRatios.delete(entry.target.dataset.pageId);
+      });
+      var mostVisible = Array.from(owner.pageRatios.entries()).sort(function (a, b) { return b[1] - a[1]; })[0];
+      if (mostVisible && mostVisible[0] !== owner.activePageId) {
+        owner.activePageId = mostVisible[0];
+        updateDocumentStatus(owner);
+      }
+    }, { root: owner.reader, threshold: [0, 0.1, 0.25, 0.5, 0.75] });
+    owner.reader.querySelectorAll('.pdfw-page-wrap').forEach(function (node) {
+      owner.observer.observe(node);
+      owner.pageStatusObserver.observe(node);
+    });
   }
   async function rebuildPages(owner) {
     owner = owner || state;
     if (!isCurrentWorkspace(owner)) return;
     owner.renderGeneration = (owner.renderGeneration || 0) + 1;
     owner.renderTasks.forEach(function (task) { try { if (task && typeof task.cancel === 'function') task.cancel(); } catch (_) {} });
+    if (owner.pageStatusObserver) owner.pageStatusObserver.disconnect();
+    owner.pageRatios = new Map();
     owner.reader.replaceChildren(); owner.thumbnails.replaceChildren(); owner.pageNodes = {}; owner.rendered = {};
     owner.documentRecord.pages.forEach(function (record, index) {
       owner.reader.appendChild(createPageShell(record, index));
       var thumb = button('', 'page'); thumb.dataset.pageId = record.id; thumb.classList.add('pdfw-thumbnail'); var thumbCanvas = document.createElement('canvas'); thumb.appendChild(thumbCanvas); thumb.appendChild(el('span', '', String(index + 1))); owner.thumbnails.appendChild(thumb);
     });
+    if (!owner.documentRecord.pages.length) {
+      var emptyState = el('div', 'pdfw-empty-state', 'This PDF page arrangement is empty. Use Pages to insert a page or reopen the exact original.');
+      emptyState.setAttribute('role', 'status');
+      owner.reader.appendChild(emptyState);
+      message('No pages in the current arrangement. The original PDF is unchanged.', 'warning');
+    }
+    if (!owner.documentRecord.pages.some(function (page) { return page.id === owner.activePageId; })) owner.activePageId = owner.documentRecord.pages[0] ? owner.documentRecord.pages[0].id : '';
+    updateDocumentStatus(owner);
     observePages(owner);
     if (owner.thumbnailObserver) owner.thumbnailObserver.disconnect();
     var generation = owner.renderGeneration;
@@ -490,11 +569,13 @@
     var geometry = selectionGeometry(page); var selectedText = selection.toString().trim(); if (!geometry || !selectedText) return null;
     state.selectionDraft = { pageId: page.dataset.pageId, geometry: storedGeometry(page.dataset.pageId, geometry), text: selectedText.slice(0, 50000) };
     setSelectionActionsVisible(true);
+    updateDocumentStatus(state);
     return state.selectionDraft;
   }
   function setSelectionActionsVisible(visible) {
     if (!state || !state.selectionActions) return;
     state.selectionActions.hidden = !visible;
+    updateDocumentStatus(state);
   }
   function saveAnnotation(annotation) {
     var normalized = global.SutraPdfData.upsertAnnotation(annotation);
@@ -575,7 +656,7 @@
   }
   function goToPage(pageId) {
     var node = state.reader.querySelector('.pdfw-page-wrap[data-page-id="' + CSS.escape(String(pageId)) + '"]');
-    if (node) { node.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); state.activePageId = pageId; renderInspector(); }
+    if (node) { node.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); state.activePageId = pageId; updateDocumentStatus(state); renderInspector(); }
   }
   async function goToOutline(rawDestination, owner) {
     owner = owner || state;
@@ -801,17 +882,26 @@
     root.setAttribute('role', state.embedded ? 'region' : 'dialog');
     if (!state.embedded) root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-label', 'Sutra PDF workspace');
-    var topbar = el('header', 'pdfw-topbar'); var title = el('strong', 'pdfw-title', state.file.name || 'PDF'); topbar.appendChild(title);
-    var search = el('input', 'pdfw-search'); search.type = 'search'; search.placeholder = 'Search PDF'; search.setAttribute('aria-label', 'Search PDF'); topbar.appendChild(search);
-    topbar.appendChild(button('−', 'zoom-out', 'Zoom out')); var zoom = el('output', 'pdfw-zoom', '100%'); topbar.appendChild(zoom); topbar.appendChild(button('+', 'zoom-in', 'Zoom in'));
-    topbar.appendChild(button('Print', 'print')); topbar.appendChild(button('Pages', 'organizer')); topbar.appendChild(button('Export', 'export')); topbar.appendChild(button(state.embedded ? 'Back to note' : 'Close', 'close'));
+    var topbar = el('header', 'pdfw-topbar');
+    function topbarGroup(label, className) { var node = el('div', 'pdfw-topbar-group ' + className); node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); return node; }
+    var documentInfo = topbarGroup('PDF document and page', 'pdfw-document-info');
+    var title = el('strong', 'pdfw-title', state.file.name || 'PDF'); documentInfo.appendChild(title);
+    var pageStatus = el('output', 'pdfw-page-status', 'Preparing pages…'); pageStatus.setAttribute('aria-live', 'polite'); documentInfo.appendChild(pageStatus); topbar.appendChild(documentInfo);
+    var searchGroup = topbarGroup('Find in this PDF', 'pdfw-search-group');
+    var search = el('input', 'pdfw-search'); search.type = 'search'; search.placeholder = 'Search PDF'; search.setAttribute('aria-label', 'Search PDF'); searchGroup.appendChild(search); topbar.appendChild(searchGroup);
+    var viewControls = topbarGroup('PDF zoom', 'pdfw-view-controls');
+    viewControls.appendChild(button('−', 'zoom-out', 'Zoom out')); var zoom = el('output', 'pdfw-zoom', '100%'); viewControls.appendChild(zoom); viewControls.appendChild(button('+', 'zoom-in', 'Zoom in')); topbar.appendChild(viewControls);
+    var documentActions = topbarGroup('PDF document actions', 'pdfw-document-actions');
+    var inspectorToggle = button('Inspector', 'inspector', 'Open document outline, bookmarks, comments, and reading text'); inspectorToggle.setAttribute('aria-expanded', 'false'); documentActions.appendChild(inspectorToggle);
+    documentActions.appendChild(button('Print', 'print')); documentActions.appendChild(button('Pages', 'organizer')); documentActions.appendChild(button('Export', 'export')); documentActions.appendChild(button(state.embedded ? 'Back to note' : 'Close', 'close')); topbar.appendChild(documentActions);
     var tools = el('nav', 'pdfw-toolbar'); tools.setAttribute('aria-label', 'PDF annotation tools');
     function group(label, className) { var node = el('div', 'pdfw-tool-group' + (className ? ' ' + className : '')); node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); return node; }
     var primary = group('Markup tools', 'pdfw-tool-group-primary');
     [['select', 'Select'], ['highlight', 'Highlight'], ['underline', 'Underline'], ['strikeout', 'Strike'], ['ink', 'Ink'], ['text', 'Text'], ['comment', 'Comment'], ['erase', 'Erase']].forEach(function (entry) { primary.appendChild(button(entry[1], 'tool-' + entry[0])); });
     tools.appendChild(primary);
     var documentTools = group('Document tools', 'pdfw-tool-group-secondary');
-    [['signature', 'Signature'], ['stamp', 'Stamp'], ['bookmark', 'Bookmark'], ['inspector', 'Comments'], ['undo', 'Undo'], ['redo', 'Redo']].forEach(function (entry) { documentTools.appendChild(button(entry[1], entry[0] === 'signature' || entry[0] === 'stamp' ? 'tool-' + entry[0] : entry[0])); });
+    [['signature', 'Signature'], ['stamp', 'Stamp'], ['bookmark', 'Bookmark']].forEach(function (entry) { documentTools.appendChild(button(entry[1], entry[0] === 'signature' || entry[0] === 'stamp' ? 'tool-' + entry[0] : entry[0])); });
+    [['undo', 'Undo'], ['redo', 'Redo']].forEach(function (entry) { documentTools.appendChild(button(entry[1], entry[0])); });
     tools.appendChild(documentTools);
     tools.appendChild(el('span', 'pdfw-toolbar-divider'));
     var selectionActions = group('Actions for selected text', 'pdfw-tool-group-selection'); selectionActions.hidden = true;
@@ -826,11 +916,14 @@
       toolbarWrapper.appendChild(topbar); toolbarWrapper.appendChild(tools);
     } else { root.appendChild(topbar); root.appendChild(tools); }
     var body = el('div', 'pdfw-body'); var thumbs = el('aside', 'pdfw-thumbnails'); thumbs.setAttribute('aria-label', 'Page thumbnails'); body.appendChild(thumbs);
-    var reader = el('main', 'pdfw-reader'); reader.tabIndex = 0; body.appendChild(reader);
+    var reader = el('main', 'pdfw-reader'); reader.tabIndex = 0; var readerLoading = el('div', 'pdfw-empty-state', 'Preparing this PDF from its saved device copy…'); readerLoading.setAttribute('role', 'status'); reader.appendChild(readerLoading); body.appendChild(reader);
     var inspector = el('aside', 'pdfw-inspector'); inspector.setAttribute('aria-label', 'PDF outline, bookmarks, comments, and reading text'); var inspectorContent = el('div'); inspector.appendChild(inspectorContent); body.appendChild(inspector); root.appendChild(body);
-    var status = el('div', 'pdfw-status', 'Opening PDF…'); status.setAttribute('role', 'status'); root.appendChild(status);
+    var status = el('div', 'pdfw-status');
+    var statusMessage = el('span', 'pdfw-status-message', 'Opening PDF…'); statusMessage.setAttribute('role', 'status'); statusMessage.setAttribute('aria-live', 'polite'); status.appendChild(statusMessage);
+    var selectionStatusFooter = el('output', 'pdfw-selection-status-footer'); selectionStatusFooter.hidden = true; selectionStatusFooter.setAttribute('aria-live', 'polite'); status.appendChild(selectionStatusFooter);
+    root.appendChild(status);
     var organizer = el('section', 'pdfw-sheet pdfw-organizer'); organizer.hidden = true; organizer.setAttribute('role', 'dialog'); organizer.setAttribute('aria-label', 'Page organizer'); root.appendChild(organizer);
-    Object.assign(state, { root: root, thumbnails: thumbs, reader: reader, inspector: inspector, inspectorContent: inspectorContent, status: status, organizer: organizer, zoomOutput: zoom, searchInput: search, colorInput: color, selectionActions: selectionActions, notesToolbarWrapper: toolbarWrapper, notesToolbar: notesToolbar, pdfToolbarNodes: toolbarWrapper ? [topbar, tools] : [] });
+    Object.assign(state, { root: root, thumbnails: thumbs, reader: reader, inspector: inspector, inspectorContent: inspectorContent, status: status, statusMessage: statusMessage, pageStatus: pageStatus, selectionStatus: selectionStatusFooter, selectionActions: selectionActions, inspectorToggle: inspectorToggle, organizer: organizer, zoomOutput: zoom, searchInput: search, colorInput: color, notesToolbarWrapper: toolbarWrapper, notesToolbar: notesToolbar, pdfToolbarNodes: toolbarWrapper ? [topbar, tools] : [] });
     var mount = state.embedded && document.getElementById('notesPrimaryPane');
     (mount || document.body).appendChild(root);
     document.documentElement.classList.add('pdf-workspace-open');
@@ -867,7 +960,17 @@
       else if (action === 'print') { var url = URL.createObjectURL(new Blob([owner.bytes], { type: 'application/pdf' })); owner.sourceUrls.push(url); var opened = global.open(url, '_blank', 'noopener,noreferrer'); if (!opened) message('Your browser blocked the print preview.', 'error'); }
       else if (action === 'organizer') { renderOrganizer(owner); owner.organizer.hidden = false; }
       else if (action === 'close-organizer') owner.organizer.hidden = true;
-      else if (action === 'inspector') owner.inspector.classList.toggle('pdfw-inspector-open');
+      else if (action === 'inspector') {
+        var inspectorOpen = !owner.inspector.classList.contains('pdfw-inspector-open');
+        owner.inspector.classList.toggle('pdfw-inspector-open', inspectorOpen);
+        owner.inspectorToggle.setAttribute('aria-expanded', inspectorOpen ? 'true' : 'false');
+        if (inspectorOpen) { owner.inspector.tabIndex = -1; owner.inspector.focus(); }
+      }
+      else if (action === 'close-inspector') {
+        owner.inspector.classList.remove('pdfw-inspector-open');
+        owner.inspectorToggle.setAttribute('aria-expanded', 'false');
+        owner.inspectorToggle.focus();
+      }
       else if (action === 'insert-files') { var picker = owner.organizer.querySelector('.pdfw-file-input'); if (picker) picker.click(); }
       else if (action === 'page' || action === 'jump-annotation') goToPage(control.dataset.pageId);
       else if (action === 'outline') { try { await goToOutline(JSON.parse(control.dataset.dest || 'null'), owner); } catch (error) { if (isCurrentWorkspace(owner)) report(error, 'pdf-outline'); } }
@@ -885,7 +988,21 @@
       var query = owner.searchInput.value.trim().toLowerCase(); owner.root.querySelectorAll('.pdfw-page-wrap').forEach(function (wrap) { wrap.classList.toggle('pdfw-search-match', !!query && String(owner.textByPage[wrap.dataset.pageId] || '').toLowerCase().includes(query)); });
       if (query) { var first = owner.documentRecord.pages.find(function (page) { return String(owner.textByPage[page.id] || '').toLowerCase().includes(query); }); if (first) goToPage(first.id); }
     });
-    owner.root.addEventListener('keydown', function (event) { if (!isCurrentWorkspace(owner)) return; if (event.key === 'Escape' && owner.organizer.hidden) close(); else if (event.key === 'Escape') owner.organizer.hidden = true; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo(owner) : undo(owner); } });
+    owner.root.addEventListener('keydown', function (event) {
+      if (!isCurrentWorkspace(owner)) return;
+      if (event.key === 'Escape') {
+        if (event.target.closest && event.target.closest('dialog')) return;
+        event.preventDefault();
+        if (!owner.organizer.hidden) owner.organizer.hidden = true;
+        else if (owner.inspector.classList.contains('pdfw-inspector-open')) {
+          owner.inspector.classList.remove('pdfw-inspector-open');
+          owner.inspectorToggle.setAttribute('aria-expanded', 'false');
+          owner.inspectorToggle.focus();
+        } else close();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo(owner) : undo(owner); }
+    });
     updateToolButtons(owner);
   }
   global.addEventListener('noteflow:view-changed', function (event) {

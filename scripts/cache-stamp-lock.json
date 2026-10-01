@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-todo-completion4",
-    "hash": "5fa2e4c959e938cb"
+    "stamp": "20261001-create-polish2",
+    "hash": "4b4ec56b5fb7f8ef"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -324,16 +324,16 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "9b89502175c6f855"
+    "stamp": "20261001-create-polish4",
+    "hash": "5c96fc7da312e048"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "f90a17f531a988fe"
+    "stamp": "20261001-create-polish5",
+    "hash": "7616d9993d5797da"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -360,8 +360,8 @@
     "hash": "b071d76dfdbb4537"
   },
   "src/features/workspace/pdf-workspace.js": {
-    "stamp": "20260926-pdf28",
-    "hash": "d8b49bb3109100d8"
+    "stamp": "20261001-create-polish4",
+    "hash": "313e87651ae7c22b"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -376,12 +376,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "afa05f9c91491c83"
+    "stamp": "20261001-create-polish3",
+    "hash": "ad7ef47bfa0a32da"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "ca917c577e4b2222"
+    "stamp": "20261001-create-polish5",
+    "hash": "1dad55f9175cf238"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -504,8 +504,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261001-help-icons1",
-    "hash": "8ac0438de695da1a"
+    "stamp": "20261001-create-polish4",
+    "hash": "0db9cd9dfada2f13"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -548,8 +548,8 @@
     "hash": "24eb3719c1ba2831"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20260912-html-layout1",
-    "hash": "70f24d8f6338e0af"
+    "stamp": "20261001-create-polish2",
+    "hash": "e3ec2a8290f6170c"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -572,20 +572,20 @@
     "hash": "9ab16713e512d32f"
   },
   "styles/features/pdf-workspace.css": {
-    "stamp": "20260815-pdf7",
-    "hash": "18271099686c5736"
+    "stamp": "20261001-create-polish2",
+    "hash": "e9603bfbc3548734"
   },
   "styles/features/sheets.css": {
-    "stamp": "20260904-editorlayout2",
-    "hash": "fd46dbbdfe960239"
+    "stamp": "20261001-create-polish3",
+    "hash": "58cf6ffba82aa1f4"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260904-editorlayout2",
-    "hash": "f18180e3a13e0503"
+    "stamp": "20261001-create-polish3",
+    "hash": "e9fbeb1c72a7ea97"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",

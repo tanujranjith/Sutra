@@ -1,7 +1,7 @@
 # Sutra Sheets
 
 Sutra Sheets is a local-first spreadsheet surface inside a normal Create page.
-It is for grade trackers, lab tables, budgets, study logs, and compact class data—not a hosted collaboration product. Create a Sheets page from Create and the workbook is stored at `page.spreadsheet`; no account, network request, or second database is required.
+It is for grade trackers, lab tables, budgets, study logs, and compact class data—not a hosted collaboration product. From **New Page**, choose **Sheets**, set an optional title and parent location, and select **Blank workbook** or **Study tracker** before confirming with **Create spreadsheet**. The Study tracker starts with **Task**, **Due date**, and **Status** columns. Choosing Sheets alone does not create a page. The workbook is stored at `page.spreadsheet`; no account, network request, or second database is required.
 
 ## Durable model and privacy
 
@@ -20,6 +20,16 @@ The formula library covers arithmetic, `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT`, 
 ## Editor and limitations
 
 The native editor virtualizes the visible grid and a small overscan region; it does not create thousands of off-screen cells. It supports direct/formula-bar editing, arrows, Shift selection, Tab, Enter, Delete, F2, command copy/paste, session undo/redo, formula-aware row/column insertion and deletion, hiding, merge/unmerge, frozen rows and columns, fill-down with relative-reference translation, and adding, switching, and renaming sheets. Clipboard transport is TSV, so regular tabular paste from Excel or Google Sheets works offline.
+
+The toolbar keeps common actions visible and groups **Format**, **Data**,
+**Structure**, and **File** controls in disclosures. Above the grid, the formula
+area identifies the selected cell or range, selection size, and current value
+or formula result. Editing shows **Draft not applied** with **Apply** and
+**Cancel** actions; Enter applies and Escape cancels. Moving focus away from the
+formula field to another control can also commit the edit on blur. Rename the
+active sheet with **Rename** or double-click its tab; the Save/Cancel form
+checks for duplicate or unsupported names and updates recognized cross-sheet
+A1 references and named ranges when the sheet is renamed.
 
 Formatting applies to the full selected range and includes bold, italic, number/percent/currency/date formats, alignment, text and fill colors, and borders. The editor also provides row and column sizing/hiding, range sorting, value filters, local dropdown validation, basic threshold conditional formatting, named ranges, and simple persistent column charts. These controls operate directly on the V2 workbook rather than maintaining a second UI-only model.
 

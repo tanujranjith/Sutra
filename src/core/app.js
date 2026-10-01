@@ -47072,8 +47072,9 @@ function getActiveEditor() {
             const action = String(secondaryBtn && secondaryBtn.dataset && secondaryBtn.dataset.action || 'cancel');
             if (action === 'start-blank') {
                 const nameInput = document.getElementById('newPageName');
-                setTemplateCategoryFilter('blank');
-                setNewPageTemplateSelection('blank', { fireChange: true, focusCard: true });
+                const canvasSelected = getNewPageTypeSelection() === PAGE_TYPES.CANVAS;
+                setTemplateCategoryFilter(canvasSelected ? 'all' : 'blank');
+                setNewPageTemplateSelection(canvasSelected ? 'canvas_blank' : 'blank', { fireChange: true, focusCard: true });
                 if (nameInput && !nameInput.value.trim()) {
                     nameInput.placeholder = 'Enter page name (use :: for hierarchy)...';
                 }
@@ -47205,7 +47206,7 @@ function getActiveEditor() {
             const search = (document.getElementById('templatePickerSearch') || { value: '' }).value.toLowerCase().trim();
             const activeFilter = getTemplateCategoryFilter();
             const isStudent = ctx.kind === 'class' || ctx.kind === 'ap';
-            const entries = Object.keys(pageTemplates).map((id) => {
+            const entries = Object.keys(pageTemplates).filter(id => getNewPageTypeSelection() !== PAGE_TYPES.CANVAS || isCanvasTemplateId(id)).map((id) => {
                 const tpl = resolvePageTemplate(id);
                 let priority = tpl.studentPriority;
                 if (isStudent && tpl.category === 'student') priority -= 10;
@@ -47461,7 +47462,10 @@ function getActiveEditor() {
             if (nameInput) clearInlineFieldError(nameInput);
 
             if (!name) {
-                if (pageType === PAGE_TYPES.FOLDER) {
+                if (['slides', 'sheets', 'html'].includes(pageType)) {
+                    name = getUniqueGeneratedPageTitle({ slides: 'Presentation', sheets: 'Spreadsheet', html: 'HTML Page' }[pageType]);
+                    if (nameInput) nameInput.value = name;
+                } else if (pageType === PAGE_TYPES.FOLDER) {
                     name = getUniqueGeneratedPageTitle('New folder');
                     if (nameInput) nameInput.value = name;
                 } else if (template.id === 'blank') {
@@ -47480,6 +47484,11 @@ function getActiveEditor() {
             const parentSelect = document.getElementById('newPageParentPage');
             const parentId = parentSelect ? String(parentSelect.value || '').trim() : '';
             const parentPage = parentId ? pages.find(page => page && page.id === parentId && (page.spaceId || 'default') === (activeSpaceId || 'default')) : null;
+            if (parentId && (!parentPage || isHelpDocsPage(parentPage) || !isPageContentAuthorized(parentPage))) {
+                showToast('Choose an available, unlocked parent location.');
+                if (parentSelect) parentSelect.focus();
+                return;
+            }
             if (parentPage && !String(name || '').includes('::')) {
                 name = `${parentPage.title}::${name}`;
             }
@@ -47514,6 +47523,33 @@ function getActiveEditor() {
                 closeModal('newPageModal');
                 showToast('Canvas created');
                 return canvasPage;
+            }
+
+            if (['slides', 'sheets', 'html'].includes(pageType)) {
+                const feature = { slides: window.SutraSlides, sheets: window.SutraSheets, html: window.SutraHTMLPages }[pageType];
+                if (!feature || typeof feature.createPage !== 'function') { showToast('This editor is unavailable. Your page has not been created.'); return; }
+                const starter = document.getElementById('newPageContentStarter');
+                const selectedStarter = starter ? starter.value : '';
+                const options = {};
+                if (pageType === 'slides') options.layout = selectedStarter === 'blank' ? 'blank' : 'title';
+                if (pageType === 'html' && selectedStarter === 'blank') options.source = '';
+                if (pageType === 'sheets' && selectedStarter === 'study') {
+                    if (!window.SutraSheetsEngine) { showToast('The spreadsheet engine is unavailable.'); return; }
+                    const workbook = window.SutraSheetsEngine.createWorkbook(name);
+                    ['Task', 'Due date', 'Status'].forEach((value, column) => window.SutraSheetsEngine.setCell(workbook.sheets[0], 0, column, { value }));
+                    options.workbook = workbook;
+                }
+                try {
+                    const created = feature.createPage(name, options);
+                    if (!created) { showToast('The page could not be created.'); return; }
+                    closeModal('newPageModal');
+                    showToast('Created ' + ({ slides: 'slides', sheets: 'spreadsheet', html: 'HTML page' }[pageType]));
+                    return created;
+                } catch (error) {
+                    reportError(error, { feature: 'create-content-page' });
+                    showToast('Could not create the page. Check the page list before trying again.');
+                    return;
+                }
             }
 
             // Resolve context fields → ids and labels.
@@ -52793,7 +52829,8 @@ function getActiveEditor() {
 
         function getNewPageTypeSelection() {
             const typeSelect = document.getElementById('newPageType');
-            return normalizePageType(typeSelect ? typeSelect.value : PAGE_TYPES.NOTE);
+            const selected = typeSelect ? typeSelect.value : PAGE_TYPES.NOTE;
+            return ['slides', 'sheets', 'html'].includes(selected) ? selected : normalizePageType(selected);
         }
 
         function isCanvasTemplateId(templateId) {
@@ -52824,6 +52861,8 @@ function getActiveEditor() {
         function applyNewPageTypeUi() {
             const pageType = getNewPageTypeSelection();
             const isFolder = pageType === PAGE_TYPES.FOLDER;
+            const isContentType = ['slides', 'sheets', 'html'].includes(pageType);
+            const usesTemplates = !isFolder && !isContentType;
             const templateSelect = document.getElementById('newPageTemplate');
             const taskOptions = document.getElementById('templateTaskOptions');
             const temporaryPanel = document.getElementById('temporaryPagePanel');
@@ -52834,37 +52873,55 @@ function getActiveEditor() {
                 templateSelect.value = 'blank';
                 updateTemplatePreview('blank');
             }
-            if (taskOptions) taskOptions.hidden = pageType === PAGE_TYPES.CANVAS || isFolder;
-            if (temporaryPanel) temporaryPanel.hidden = pageType === PAGE_TYPES.CANVAS || isFolder;
+            if (taskOptions) taskOptions.hidden = pageType !== PAGE_TYPES.NOTE;
+            if (temporaryPanel) temporaryPanel.hidden = pageType !== PAGE_TYPES.NOTE;
             const templateColumn = document.querySelector('.new-page-template-column');
-            if (templateColumn) templateColumn.hidden = isFolder;
+            if (templateColumn) templateColumn.hidden = !usesTemplates;
+            const modalMain = document.querySelector('.new-page-modal-main');
+            if (modalMain) modalMain.classList.toggle('new-page-modal-main-single', !usesTemplates);
+            const categories = document.getElementById('templatePickerCategoryTabs');
+            if (categories) categories.hidden = !usesTemplates;
+            const searchWrap = document.querySelector('.template-picker-search-wrap');
+            if (searchWrap) searchWrap.hidden = !usesTemplates;
+            const advanced = document.getElementById('newPageAdvancedOptions');
+            if (advanced) advanced.hidden = !usesTemplates;
+            const suggestedTitle = document.getElementById('templateUseNameBtn');
+            if (suggestedTitle) suggestedTitle.hidden = !usesTemplates;
             const contextClassRow = document.getElementById('newPageContextRow_class');
-            if (contextClassRow) contextClassRow.hidden = isFolder;
+            if (contextClassRow) contextClassRow.hidden = isFolder || isContentType;
             const previewPanel = document.getElementById('templatePreviewPanel');
-            if (previewPanel) previewPanel.hidden = isFolder;
+            if (previewPanel) previewPanel.hidden = !usesTemplates;
             const nameLabel = document.getElementById('newPageNameLabel');
             if (nameLabel) nameLabel.textContent = isFolder ? 'Folder name' : 'Page title';
             const confirmButton = document.getElementById('newPageConfirmBtn');
-            if (confirmButton) confirmButton.textContent = isFolder ? 'Create folder' : 'Create page';
+            const typeLabels = { note: 'note', canvas: 'canvas', folder: 'folder', slides: 'slides', sheets: 'spreadsheet', html: 'HTML page' };
+            if (confirmButton) confirmButton.textContent = 'Create ' + (typeLabels[pageType] || 'page');
             const subtitle = document.getElementById('newPageModalSubtitle');
-            if (subtitle) subtitle.textContent = isFolder ? 'Group related pages together and collapse them when you are done.' : 'Start blank or choose a student workflow template.';
+            if (subtitle) subtitle.textContent = isFolder ? 'Group related pages together and collapse them when you are done.' : (isContentType ? 'Set a title, location, and starter before creating.' : 'Start blank or choose a student workflow template.');
+            const description = document.getElementById('newPageTypeDescription');
+            const descriptions = { note: 'Write and format notes, with tables, links, and study tools.', canvas: 'Arrange ideas on a freeform board and connect them visually.', slides: 'Build a presentation with editable objects and speaker notes.', sheets: 'Organize tables, calculate with formulas, and create charts.', html: 'Edit HTML, CSS, and JavaScript in an isolated offline preview.', folder: 'Keep related pages together in a collapsible folder.' };
+            if (description) description.textContent = descriptions[pageType] || descriptions.note;
+            const starterRow = document.getElementById('newPageContentStarterRow');
+            const starterSelect = document.getElementById('newPageContentStarter');
+            if (starterRow) starterRow.hidden = !isContentType;
+            if (starterSelect && starterSelect.dataset.type !== pageType) {
+                starterSelect.replaceChildren();
+                const choices = pageType === 'slides' ? [['title', 'Title slide'], ['blank', 'Blank slide']] : (pageType === 'sheets' ? [['blank', 'Blank workbook'], ['study', 'Study tracker']] : [['default', 'Simple HTML page'], ['blank', 'Empty source']]);
+                choices.forEach(([value, label]) => { const option = document.createElement('option'); option.value = value; option.textContent = label; starterSelect.appendChild(option); });
+                starterSelect.dataset.type = pageType;
+                if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(starterSelect);
+            }
             syncPageTypeToggleState(pageType);
             renderTemplatePickerCards(getActiveCreationContext());
+            syncNewPageSecondaryAction(usesTemplates && templateSelect ? templateSelect.value : 'blank');
         }
 
         function syncPageTypeToggleState(type) {
-            const noteBtn = document.getElementById('newPageTypeBtn_note');
-            const canvasBtn = document.getElementById('newPageTypeBtn_canvas');
-            const folderBtn = document.getElementById('newPageTypeBtn_folder');
-            if (!noteBtn || !canvasBtn || !folderBtn) return;
-            const isCanvas = type === PAGE_TYPES.CANVAS;
-            const isFolder = type === PAGE_TYPES.FOLDER;
-            noteBtn.classList.toggle('nptt-active', !isCanvas && !isFolder);
-            noteBtn.setAttribute('aria-pressed', String(!isCanvas && !isFolder));
-            canvasBtn.classList.toggle('nptt-active', isCanvas);
-            canvasBtn.setAttribute('aria-pressed', String(isCanvas));
-            folderBtn.classList.toggle('nptt-active', isFolder);
-            folderBtn.setAttribute('aria-pressed', String(isFolder));
+            document.querySelectorAll('#newPageTypeToggle [data-type]').forEach(button => {
+                const selected = button.dataset.type === type;
+                button.classList.toggle('nptt-active', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
         }
         function handleNewPageTypeToggle(type) {
             const typeSelect = document.getElementById('newPageType');

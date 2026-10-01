@@ -117,7 +117,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261001-help-icons1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261001-create-polish4">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -6798,6 +6798,32 @@
                 </div>
             </div>
 
+            <div class="new-page-type-chooser"><!-- Selecting a type prepares the explicit Create confirmation. -->
+                        <div class="new-page-type-toggle" id="newPageTypeToggle" role="group" aria-label="Page type">
+                            <button type="button" class="new-page-type-toggle-btn nptt-active" id="newPageTypeBtn_note" data-type="note" onclick="handleNewPageTypeToggle('note')" aria-pressed="true">
+                                <i class="fas fa-file-alt" aria-hidden="true"></i> Notes
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_canvas" data-type="canvas" onclick="handleNewPageTypeToggle('canvas')" aria-pressed="false">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                Canvas
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_slides" data-type="slides" onclick="handleNewPageTypeToggle('slides')" aria-pressed="false">
+                                <i class="fas fa-chalkboard" aria-hidden="true"></i>
+                                Slides
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_sheets" data-type="sheets" onclick="handleNewPageTypeToggle('sheets')" aria-pressed="false">
+                                <i class="fas fa-table" aria-hidden="true"></i>
+                                Sheets
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_html" data-type="html" onclick="handleNewPageTypeToggle('html')" aria-pressed="false">
+                                <i class="fas fa-code" aria-hidden="true"></i>
+                                HTML Page
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
+                                <i class="fas fa-folder" aria-hidden="true"></i>
+                                Folder
+                            </button>
+                        </div><p id="newPageTypeDescription" class="new-page-type-description" aria-live="polite">Write and format notes, with tables, links, and study tools.</p></div>
             <div class="template-picker-category-tabs" id="templatePickerCategoryTabs" role="tablist" aria-label="Template categories">
                 <button type="button" class="template-category-pill active" data-template-category="all" role="tab" aria-selected="true">All</button>
                 <button type="button" class="template-category-pill" data-template-category="student" role="tab" aria-selected="false">Student Workflows</button>
@@ -6819,39 +6845,17 @@
                     <aside class="new-page-setup-column" aria-label="Template setup">
                         <div class="new-page-setup-heading">Page setup</div>
 
-                        <!-- Page / Canvas type toggle -->
-                        <div class="new-page-type-toggle" id="newPageTypeToggle" role="group" aria-label="Page type">
-                            <button type="button" class="new-page-type-toggle-btn nptt-active" id="newPageTypeBtn_note" data-type="note" onclick="handleNewPageTypeToggle('note')" aria-pressed="true">
-                                <i class="fas fa-file-alt" aria-hidden="true"></i> Page
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_canvas" data-type="canvas" onclick="handleNewPageTypeToggle('canvas')" aria-pressed="false">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                Canvas
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_slides" data-type="slides" onclick="SutraSlides.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-chalkboard" aria-hidden="true"></i>
-                                Slides
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_sheets" data-type="sheets" onclick="SutraSheets.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-table" aria-hidden="true"></i>
-                                Sheets
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_html" data-type="html" onclick="SutraHTMLPages.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-code" aria-hidden="true"></i>
-                                HTML Page
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
-                                <i class="fas fa-folder" aria-hidden="true"></i>
-                                Folder
-                            </button>
-                        </div>
-
                         <div class="new-page-name-field">
                             <label class="new-page-field-label" id="newPageNameLabel" for="newPageName">Page title</label>
                             <div class="new-page-name-row">
                                 <input type="text" class="modal-input" id="newPageName" placeholder="Enter page title..." />
                                 <button type="button" class="btn btn-secondary template-suggest-btn" id="templateUseNameBtn" onclick="applyTemplateSuggestedName()">Use suggested title</button>
                             </div>
+                        </div>
+
+                        <div id="newPageContentStarterRow" class="new-page-starter-field" hidden>
+                            <label class="new-page-field-label" for="newPageContentStarter">Start with</label>
+                            <select id="newPageContentStarter" aria-label="Content starter"></select>
                         </div>
 
                         <div class="new-page-parent-field">
@@ -6978,6 +6982,8 @@
                             <option value="canvas">Canvas</option>
                             <option value="folder">Folder</option>
                             <option value="slides">Slides</option>
+                            <option value="sheets">Sheets</option>
+                            <option value="html">HTML Page</option>
                         </select>
 
                     </aside>
@@ -7902,7 +7908,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261001-todo-completion4"></script>
+    <script src="src/core/app.js?v=20261001-create-polish2"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
     <script src="src/ui/task-completion-effects.js?v=20261001-task-completion1"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
@@ -7911,10 +7917,10 @@
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
     <script src="src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
-    <script src="src/features/workspace/pdf-workspace.js?v=20260926-pdf28"></script>
+    <script src="src/features/workspace/pdf-workspace.js?v=20261001-create-polish4"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-todo-completion1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-create-polish4"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7924,10 +7930,10 @@
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20261001-todo-completion1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
-    <script src="src/features/workspace/slides.js?v=20260825-oxremed1"></script>
+    <script src="src/features/workspace/slides.js?v=20261001-create-polish5"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
-    <script src="src/features/workspace/sheets.js?v=20260825-oxremed1"></script>
-    <script src="src/features/workspace/html-pages.js?v=20260825-oxremed1"></script>
+    <script src="src/features/workspace/sheets.js?v=20261001-create-polish3"></script>
+    <script src="src/features/workspace/html-pages.js?v=20261001-create-polish5"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
@@ -8341,10 +8347,10 @@
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
     <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-completion1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
-    <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">
-    <link rel="stylesheet" href="styles/features/html-pages.css?v=20260912-html-layout1">
-    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260815-pdf7">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20261001-create-polish3">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20261001-create-polish3">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261001-create-polish2">
+    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20261001-create-polish2">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">

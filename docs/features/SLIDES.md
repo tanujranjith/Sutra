@@ -1,9 +1,12 @@
 # Slides mode
 
 Slides is a local Create surface for building short class presentations without
-leaving Sutra. A Slides deck belongs to one normal Note page and is selected
-from the New Page dialog. The deck lives at `page.slides`, which deliberately
-keeps ordinary note content and unknown page fields intact.
+leaving Sutra. A Slides deck belongs to one normal Note page and is created from
+the New Page dialog. Choose **Slides**, set an optional title and parent
+location, choose **Title slide** or **Blank slide**, then confirm with **Create
+slides**. Selecting a type only prepares the dialog; it does not create a page.
+The deck lives at `page.slides`, which deliberately keeps ordinary note content
+and unknown page fields intact.
 
 ## Durable model
 
@@ -33,6 +36,15 @@ and do not become durable fields. Presentation mode uses read-only elements,
 supports keyboard navigation, and lets a presenter toggle speaker notes with
 `N`.
 
+The workbench groups **Insert**, **History**, and **Slide** actions and keeps
+**Present** visible as the primary action. Its header and selection guidance
+identify the current presentation, slide, and selected object. An empty slide
+offers **Add text** and **Choose a layout**. Design and speaker-notes panels use
+disclosures; they start open on wide layouts and collapsed on narrow layouts.
+Use **Rename slide** to edit a title. Changing a layout that would replace
+existing slide objects asks for confirmation; the change remains undoable and
+retains the slide title, speaker notes, and background.
+
 ## Local-first behavior
 
 The deck mutates its owning page through the canonical `flowAtelier.pages`
@@ -56,9 +68,12 @@ before very large decks should be encouraged.
 
 ## Exports and presenter
 
-The Design inspector opens browser printing for PDF output; it preserves slide
-order and sets a landscape page size. The presenter uses the full viewport,
-speaker notes, arrow/space navigation, and Escape to exit.
+The **Import and export** section offers browser printing for PDF output. This
+is a simple landscape print view: it emits slide text in order, omits inline
+images, and does not preserve object placement or faithfully render native
+charts and tables. Use it as a quick print path, not a faithful deck export.
+The presenter uses the full viewport, speaker notes, arrow/space navigation,
+and Escape to exit.
 
 The PPTX command creates a standards-shaped, local PowerPoint package with a
 presentation part, slide master and layout, theme, slide relationships, DrawingML
