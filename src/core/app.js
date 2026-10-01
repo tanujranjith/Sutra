@@ -83600,6 +83600,8 @@ function openQuickCaptureModal(prefillText, options) {
         if (blockField) blockField.hidden = !['homework', 'task', 'test', 'college', 'apsession'].includes(requestedType);
     }
     updatePreview();
+    // Empty capture text still needs the programmatically selected type label.
+    if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(modal);
 
     modal.classList.add('active');
     modal.setAttribute('aria-hidden', 'false');
