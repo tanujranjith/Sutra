@@ -34,6 +34,12 @@ The top navigation is the only permanent desktop navigation chrome. Secondary na
 
 This keeps the hierarchy consistent: global navigation, then section controls, then primary content. Route-specific actions stay in their section toolbars; global utilities stay in the top shell.
 
+Desktop layouts with a precise pointer use a compact header and smaller workspace
+gutters. Create keeps note and folder rows at the same comfortable height; the
+Compact and Expanded note-list preferences still control row density. Text size
+and editor zoom stay governed by their existing preferences. Phone and touch
+layouts retain their larger controls.
+
 ## Keyboard behavior
 
 - Left/Right moves across visible top-level navigation controls.

@@ -986,3 +986,88 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   .notes-toolbar-overflow-menu,
   #view-timeline .sutra-calendar-body { border: 1px solid CanvasText !important; }
 }
+
+/* Desktop density: save space around content without scaling text or changing
+   touch layouts. The roomy preference and expanded note list remain available. */
+@media (min-width: 769px) and (pointer: fine) and (not (any-pointer: coarse)) {
+  :root {
+    --sutra-global-nav-height: 64px;
+    --sidebar-width: clamp(230px, 25vw, 264px);
+  }
+  body:not([data-ui-density="spacious"]) {
+    --sutra-workspace-gutter: clamp(16px, 2vw, 32px);
+  }
+  .sidebar-header { min-height: 60px; padding: 10px 12px !important; }
+  .sidebar-spaces-row { padding: 8px 8px 6px; }
+  .sidebar .spaces-current { min-height: 38px; }
+  .sidebar .sidebar-search-toggle { width: 36px; height: 36px; }
+  .sidebar-shortcuts { padding: 8px 8px 6px !important; }
+  .sidebar .sidebar-new-page { padding: 8px 8px 10px !important; }
+  .sidebar .new-page-btn { padding-inline: 6px; }
+  .sidebar .pages-list { padding: 4px 8px 10px !important; }
+  .sidebar .page-item { min-height: 38px; padding-block: 4px; }
+  .sidebar .page-folder-open { min-height: 28px; }
+  body[data-notes-list-style="compact"] .sidebar .page-item {
+    min-height: 34px;
+    padding-block: 2px;
+  }
+  body[data-notes-list-style="expanded"] .sidebar .page-item {
+    min-height: 46px;
+    padding-block: 8px;
+  }
+
+  body:not([data-ui-density="spacious"]) #view-today.today-redesign,
+  body:not([data-ui-density="spacious"]) #view-timeline.timeline-redesign {
+    padding-top: 20px;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-workspace-shell {
+    padding-top: 20px;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-page-header {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-summary-grid {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-summary-card {
+    min-height: 92px;
+    gap: 6px;
+    padding: 10px 14px;
+  }
+  #view-homework .hw-category-controls {
+    gap: 4px;
+    margin: 8px 0;
+  }
+  #view-homework .hw-category-controls button {
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-assignment-row td {
+    padding-block: 6px;
+  }
+  body:not([data-ui-density="spacious"]) #view-homework .hw-activity-row {
+    padding-block: 8px;
+  }
+}
+
+/* Put category and date/class views beside each other when both groups fit.
+   Smaller screens retain their existing independently scrollable controls. */
+@media (min-width: 1100px) and (pointer: fine) and (not (any-pointer: coarse)) {
+  #view-homework .hw-workspace-shell {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 12px;
+  }
+  #view-homework .hw-workspace-shell > :is(.hw-page-header, .hw-filter-panel, .hw-summary-grid, .hw-workspace-mount) {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  #view-homework .hw-category-controls {
+    align-items: center;
+    margin: 0 0 10px;
+  }
+  #view-homework .hw-list-tabs { margin: 0 0 10px; }
+}
