@@ -149,7 +149,10 @@
         if (elements.apply) elements.apply.addEventListener('click', setDurationFromInputs);
         if (elements.fullscreen) elements.fullscreen.addEventListener('click', function () {
             try {
-                if (typeof window.startFocusSession === 'function') window.startFocusSession(null, { userInitiated: true });
+                // Reuse a running timer as-is. When stopped, retain the normal
+                // duration prompt for starting a fresh focus session.
+                var options = lastSnapshot.running ? { skipPreflight: true } : { userInitiated: true };
+                if (typeof window.startFocusSession === 'function') window.startFocusSession(null, options);
             } catch (error) { /* non-critical action */ }
         });
 

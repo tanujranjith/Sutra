@@ -24,6 +24,10 @@ Each Notes pane owns an editor instance and its own selection, history, and
 page context. Toolbar actions apply to the active pane. Leaving a pane disposes
 its node views and flushes its page before the next page is loaded.
 
+The text-colour and highlight toolbar controls offer preset swatches in the
+native colour picker and still allow a custom colour. These choices format the
+current selection and do not add editor-only state to the page.
+
 ## Compatibility
 
 Stored anchors and block records remain readable in the classic editor. Keep
