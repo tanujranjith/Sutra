@@ -2166,7 +2166,9 @@
     }
     .sutra-mobile-nav-badge[hidden] { display: none !important; }
     /* Keep content clear of the fixed bar. */
-    body { padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + env(safe-area-inset-bottom, 0px)); }
+    body { padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px)); }
+    body.sutra-mobile-utilities-ready #storageOptions,
+    body.sutra-mobile-utilities-ready #feedbackFabBtn { display: none !important; }
 }
 
 /* =========================================================================
@@ -2313,9 +2315,10 @@
     .sutra-mobile-more-sheet {
         width: min(100%, 520px);
         max-height: min(82dvh, 720px);
-        display: grid;
-        grid-template-rows: auto auto minmax(0, 1fr);
-        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        overscroll-behavior: contain;
         border: 1px solid var(--surface-border, var(--border));
         border-radius: 22px 22px 0 0;
         background: var(--bg-elevated, var(--bg-primary));
@@ -2336,6 +2339,7 @@
         justify-content: space-between;
         gap: 12px;
         min-height: 60px;
+        flex: 0 0 auto;
         padding: 10px 12px 8px 18px;
         border-bottom: 1px solid var(--surface-border, var(--border));
         background: inherit;
@@ -2361,7 +2365,17 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
         padding: 12px 12px 4px;
+        flex: 0 0 auto;
     }
+    .sutra-mobile-save-status {
+        grid-column: 1 / -1;
+        margin: 0 4px 4px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--text-secondary);
+        overflow-wrap: anywhere;
+    }
+    .sutra-mobile-save-status.failed { color: var(--danger); font-weight: 700; }
     .sutra-mobile-more-action {
         position: relative;
         min-width: 0;
@@ -2405,7 +2419,8 @@
         gap: 8px;
         min-width: 0;
         padding: 12px 12px calc(16px + env(safe-area-inset-bottom, 0px));
-        overflow-y: auto;
+        overflow: visible;
+        flex: 0 0 auto;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
     }

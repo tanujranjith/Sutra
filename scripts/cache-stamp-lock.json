@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260930-homework-tonight-2359",
-    "hash": "6f16c9021ac29b3a"
+    "stamp": "20261001-page-tags1",
+    "hash": "ad940337701b3cc3"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -320,8 +320,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20260823-combined1",
-    "hash": "0ad9808ef25fcae8"
+    "stamp": "20261001-tags-focus-mobile1",
+    "hash": "f24d3986a8a64af2"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -336,8 +336,8 @@
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260905-more-actions1",
-    "hash": "2f35ac15ce9d28f4"
+    "stamp": "20261001-mobile-data-actions2",
+    "hash": "585551cfceced47a"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20260828-revocation-lock1",
@@ -412,8 +412,8 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20260930-home-timer-focus-mode2",
-    "hash": "a0b17167f117c237"
+    "stamp": "20261001-focus-player2",
+    "hash": "d06a23efd5a1b688"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20260728-entity1",
@@ -496,8 +496,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260928-issues51-59-64",
-    "hash": "8c50b404fe34cc27"
+    "stamp": "20261001-page-tags1",
+    "hash": "7fcd50d8d7d13b2c"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -620,8 +620,8 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260916-integration-mobile1",
-    "hash": "ec13fbe97cdd22ca"
+    "stamp": "20261001-mobile-data-actions1",
+    "hash": "d250ec565ffba14d"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -672,8 +672,8 @@
     "hash": "d9f941bdc3f01ed2"
   },
   "styles/views/today-focus-timer.css": {
-    "stamp": "20260809-todaytimer1",
-    "hash": "097303c40f531be5"
+    "stamp": "20261001-focus-player2",
+    "hash": "a6e18e650c33b6cd"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260816-home-quick-task1",

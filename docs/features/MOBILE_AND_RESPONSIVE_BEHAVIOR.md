@@ -57,6 +57,14 @@ workspace controls) becomes an overlay/menu rather than a fixed column; opening 
 does not shift the main content under it on small screens. All primary destinations,
 including those behind the "More" overflow, stay reachable.
 
+At phone widths up to 640px, **More** also contains the canonical local save
+status and Save locally, Export, Import, Data & Backup, Focus timer, and Report
+a problem. Once navigation initializes, the floating save strip and report
+button give way to these actions. Critical persistence warnings remain visible.
+The All sections sheet scrolls as one container with a sticky header. The
+canonical Focus player reserves room above navigation and is suppressed while
+the sheet or a modal is open; see [Focus Timer](FOCUS_TIMER.md).
+
 ### Home / Focused Home
 
 Home uses a dedicated **mobile essentials shell** (`#todayMobileShell`) rather than

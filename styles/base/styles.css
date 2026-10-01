@@ -21954,9 +21954,15 @@ body {
         pointer-events: none !important;
     }
 
-    .sidebar .focus-timer,
-    .sidebar-tags-filter {
+    .sidebar .focus-timer {
         display: none !important;
+    }
+
+    .sidebar-tag {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 10px 12px;
+        font-size: 12px;
     }
 
     .sidebar-header {

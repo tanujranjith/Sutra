@@ -28,6 +28,20 @@ The text-colour and highlight toolbar controls offer preset swatches in the
 native colour picker and still allow a custom colour. These choices format the
 current selection and do not add editor-only state to the page.
 
+## Page tags
+
+Use **Add tag** below the page title in either editor. Enter or leaving the field
+saves the name; Escape cancels. Names are trimmed and limited to 120 characters,
+and duplicate names on a page are compared without case sensitivity. Legacy
+string tags are accepted alongside tag objects; existing object fields survive.
+
+The Create sidebar lists tags from accessible pages in the current space. A tag
+filter stays active while the tree rerenders. The legacy tree-search path also
+combines text and tag constraints. Matching nested pages remain visible even under collapsed folders.
+Choose **All** to clear the tag filter. Tag entry belongs to the page that opened
+it, so changing pages cannot attach an unfinished tag to another page. Locked
+pages and blocked persistence writes do not accept tag edits.
+
 ## Compatibility
 
 Stored anchors and block records remain readable in the classic editor. Keep

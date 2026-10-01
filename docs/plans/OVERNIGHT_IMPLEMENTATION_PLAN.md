@@ -190,13 +190,13 @@ Update a row after research, an implementation milestone, a review pass, a commi
 | #1 | Backup overlay | Primary | Researched | Pending / Pending / Pending | Foreground progress callbacks; background unchanged |
 | #6 | Rich links | Primary | Researched | Pending / Pending / Pending | Opt-in local metadata helper; offline fallback |
 | #7 | Inline AI slash commands | Primary | Researched | Pending / Pending / Pending | Precise trigger range; existing provider request/review |
-| #8 | Page tags | Primary | Researched | Pending / Pending / Pending | Fresh path works; malformed legacy names/input ownership/authorization fragile |
+| #8 | Page tags | Primary | Reviewed; awaiting user validation | Done / Done / Done | Legacy normalization, input ownership, persistent filter, restored phone controls |
 | #9 | To-do section | Primary | Researched | Pending / Pending / Pending | Existing canonical row with general task kind |
 | #10 | Completion animation | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Actual completed transition; include Home bridge |
 | #11 | Custom icons | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Extend course picker; preserve Help icon reconciliation |
 | #13 | Embedded custom timeline | Primary | Researched | Pending / Pending / Pending | One authored model, host adapters, inventory/fallbacks; exclude Sheets |
-| #15 | Timer mini-player | Luna xhigh; primary integration | Researched; delegated next | Pending / Pending / Pending | Existing controller and stylesheet; no timer state fork |
-| #17 | Mobile overhaul | Primary | Researched | Pending / Pending / Pending | Baseline 390 phone, 1280 desktop; all target widths pending |
+| #15 | Timer mini-player | Luna xhigh; primary integration | Reviewed; awaiting user validation | Done / Done / Done | Canonical commands, paused-session preservation, focus restoration, overlay suppression |
+| #17 | Mobile overhaul | Primary | Shared utilities reviewed; screen overhaul pending | Foundation: Done / Done / Done | Phone persistence/report actions in More; comprehensive screens/widths still pending |
 | Added | Non-Notes Create upgrades | Primary; scoped Luna help | Researched | Pending / Pending / Pending | Per-surface audit in research artifact; shared type selection bug observed |
 
 For each active task, append a brief entry with date, files, findings/decisions, three review records, permitted checks actually run, checks deferred, commit, and the next concrete action. Record delegation ownership before starting a worker.
@@ -209,6 +209,24 @@ For each active task, append a brief entry with date, files, findings/decisions,
 - Sequential manual baseline: Home, Homework, Notes/tag add and reload, Canvas, Slides, Sheets at 390 × 844; Canvas/Slides at 1280 × 900. Fresh local origin only. No suites or self-tests run.
 - Three primary reviews: source-backed correctness, privacy/data/scope safety, final documentation/staged-diff review. Research output retains explicit uncertainty for tags, metadata availability, PDF-native timeline support, physical devices, and deferred automated validation.
 - Next ownership: Luna edits only `src/features/workspace/today-focus-timer.js` and `styles/views/today-focus-timer.css` for #15. Primary owns core tags/backup integration, all commits, shared mobile layout, and subsequent work.
+
+### October 1 — Page tags implementation
+
+- Files: `src/core/app.js`, `styles/base/styles.css`, cache stamps in `Sutra.html`, Notes feature guide, and Help & Docs refresh.
+- Findings: fresh tag entry worked in the baseline; legacy scalar/non-string names, unfinished input ownership, and independent tree filtering were fragile. Existing phone CSS also hid the entire tag filter. The patch accepts legacy strings, preserves tag-object fields, binds edits to their authorized page, ignores duplicate case variants, honors blocked writes, and shares tag/text filter constraints.
+- Review 1: primary read every core edit and traced normalization, input/blur/key events, save calls, tree rerenders, collapsed ancestors, and filter clearing. Review 2: primary reread the complete diff for unknown-field preservation, locked-page authorization, persistence health, IME, cancellation/focus, space scoping, phone visibility, and 44-pixel filter controls. Corrected the Help text to avoid promising a new search UI.
+- Sequential manual inspection at 390 × 844: duplicate `research` against `Research` was refused; Escape discarded `cancelled`; blur saved `Planning`; Planning persisted through reload; sidebar Research filtered to the tagged page; creating another blank page refreshed the tree without clearing that filter; All restored the list. The served core cache stamp was changed before checking the updated input label. No console errors observed in the inspected log snapshot.
+- Review 3: primary read the full staged core/style diff and integration changes in the shell, feature guide, Help refresh, service worker, and generated metadata. Only task-owned files are staged; instruction copies and the unreferenced backup draft are excluded.
+- Permitted checks: leaf core integrity passed all 27 static assertions; guardrails, cache-stamp freshness, manifest freshness, syntax checks for the changed feature scripts, and staged whitespace checks passed. The owning budget generator recorded the narrow 3,014-byte / 37-line increase. Tests, self-tests, portability suites, physical keyboard/device checks, and aggregate validation remain deferred.
+
+### October 1 — Focus player and mobile utility checkpoint
+
+- Luna xhigh owned the Focus presentation module and stylesheet. Primary corrected session classification, reset/first-tick behavior, focus restoration, and full Focus opening after tracing the post-load `audit-fixes.js` wrapper. Opening an active or paused session now preserves its remaining time through the existing `skipPreflight` contract.
+- Review 1: primary read the complete contribution and traced canonical command/update events, snapshot rendering, dismissal, reset, completion, and full Focus callers. Review 2: primary reread the revised diff for single timer ownership, accessibility, keyboard suppression, overlay visibility, reduced motion, and phone/desktop spacing. Review 3: primary read the full final staged module/style diff together with shell stamps, docs, and manual observations. Corrections received fresh affected review passes.
+- Manual observations: desktop Start, Pause, Hide, Restore, and full Focus preserved the displayed paused time. The full Focus dialog hid the player; Minimize restored it. At 390 × 844, Resume/Pause used the canonical timer; explicit More → Save followed by reload preserved paused 17:14. Timer completion, physical devices, and software-keyboard interaction remain unobserved.
+- Primary moved phone Save, Export, Import, Data & Backup, and Report a Problem into the existing More sheet. The sheet displays canonical save status and uses the original controls. Its scrollable layout retains every enabled destination; its initial close-button focus keeps the header/actions visible on short screens. Desktop controls remain in place.
+- Three primary reviews of this mobile foundation covered canonical routing/actions, readiness fallback, observer loops, history/focus/scroll locking, safe-area and player spacing, disabled actions, the full final staged diff, and the feature docs. Manual 390 × 844 observations confirmed the utilities, Escape dismissal, canonical Save, and the existing Export Options dialog with the player suppressed.
+- This checkpoint uses the permitted static checks listed above and retains the staged-runtime hook. Automated suites, self-tests, full aggregate runtime/deploy gates, broader mobile screens/widths, and portability checks remain deferred or outstanding. The full mobile overhaul is not yet delivered.
 
 ## Morning handoff and user verification
 

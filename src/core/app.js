@@ -864,6 +864,16 @@ function restorePageFromVersionSnapshot(page, rawSnapshot, options) {
 }
 // ===== END VERSION HISTORY SNAPSHOT MODEL =====
 
+function normalizePageTags(rawTags) {
+    return (Array.isArray(rawTags) ? rawTags : []).map(rawTag => {
+        const tag = rawTag && typeof rawTag === 'object' && !Array.isArray(rawTag)
+            ? rawTag : { name: rawTag };
+        const name = String(tag.name == null ? '' : tag.name)
+            .replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 120);
+        return { ...tag, name };
+    }).filter(tag => tag.name);
+}
+
 function normalizePagesCollection(rawPages) {
     const seenIds = new Set();
     const now = new Date().toISOString();
@@ -928,7 +938,7 @@ function normalizePagesCollection(rawPages) {
             citations: Array.isArray(page.citations) ? page.citations.filter(c => c && c.id) : [],
             // Tags (note labels) — validate the {name,color} shape so a malformed
             // entry can't break tag rendering. Previously survived only via spread.
-            tags: Array.isArray(page.tags) ? page.tags.filter(tag => tag && typeof tag === 'object' && tag.name) : [],
+            tags: normalizePageTags(page.tags),
             // Version history (Section 17) — normalized + bounded. Legacy flat
             // snapshots and malformed entries are handled safely (never deleted
             // wholesale), keeping nested history durable across save/export/import.
@@ -52820,7 +52830,7 @@ function getActiveEditor() {
             const forceExpandForSearch = new Set();
             // Wrap the entire render logic in a try/finally to ensure pages is restored
             try {
-            if (activeSearchQuery !== '') {
+            if (activeSearchQuery !== '' || activeTagFilter) {
                 const query = activeSearchQuery;
                 const pageIdByTitle = new Map(pages.map(page => [String(page.title || ''), page.id]));
                 pages.forEach(page => {
@@ -52831,7 +52841,9 @@ function getActiveEditor() {
                         ? getCanvasSearchText(page).toLowerCase()
                         : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
                             : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : '')));
-                    if (!(title.includes(query) || contentText.includes(query))) return;
+                    const matchesTag = !activeTagFilter || (isPageContentAuthorized(page)
+                        && normalizePageTags(page.tags).some(tag => tag.name === activeTagFilter));
+                    if (!matchesTag || !(title.includes(query) || contentText.includes(query))) return;
 
                     const parts = String(page.title || '').split('::').map(part => part.trim()).filter(Boolean);
                     let path = '';
@@ -52842,7 +52854,7 @@ function getActiveEditor() {
                     }
                 });
             }
-            searchForceExpanded = activeSearchQuery !== '' && forceExpandForSearch.size > 0;
+            searchForceExpanded = (activeSearchQuery !== '' || !!activeTagFilter) && forceExpandForSearch.size > 0;
             // No sort: use the order in the pages array
             const pageMap = new Map(pages.map(p => [p.id, p]));
             const pageByTitle = new Map(pages.map(page => [String(page.title || ''), page]));
@@ -53141,6 +53153,7 @@ function getActiveEditor() {
                 // Restore full pages array (Section 6 — Spaces filtering)
                 pages = _allPages;
             }
+            renderSidebarTags();
         }
 
         // Handle drop logic for nesting, un-nesting, and reordering
@@ -70367,14 +70380,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (query === '') {
                 // If search temporarily expanded branches, rebuild once to restore
                 // the user's normal collapsed tree state.
-                if (searchForceExpanded) {
+                if (searchForceExpanded && !activeTagFilter) {
                     searchForceExpanded = false;
                     renderPagesList();
                     return;
                 }
-                // Show all pages when search is empty
+                // Keep the active tag constraint when search is cleared.
                 pageItems.forEach(item => {
-                    item.style.display = 'flex';
+                    const page = pages.find(entry => entry.id === item.dataset.pageId);
+                    item.style.display = !activeTagFilter || (page && isPageContentAuthorized(page)
+                        && normalizePageTags(page.tags).some(tag => tag.name === activeTagFilter)) ? 'flex' : 'none';
                     item.style.background = '';
                 });
                 updateSidebarSearchFeedback('', pageItems.length, totalPages || pageItems.length);
@@ -70391,7 +70406,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     ? getCanvasSearchText(page).toLowerCase()
                     : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
                         : (page.content ? String(page.content).replace(/<[^>]*>/g, '').toLowerCase() : '')));
-                return (title.includes(query) || contentText.includes(query)) && !renderedPageIds.has(page.id);
+                const matchesTag = !activeTagFilter || (isPageContentAuthorized(page)
+                    && normalizePageTags(page.tags).some(tag => tag.name === activeTagFilter));
+                return matchesTag && (title.includes(query) || contentText.includes(query)) && !renderedPageIds.has(page.id);
             });
             if (hasMissingRenderedMatch) {
                 renderPagesList();
@@ -70416,7 +70433,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     : (page.htmlDocument ? getHtmlDocumentSearchText(page).toLowerCase()
                         : (page.content ? page.content.replace(/<[^>]*>/g, '').toLowerCase() : '')));
 
-                if (title.includes(query) || contentText.includes(query)) {
+                const matchesTag = !activeTagFilter || (isPageContentAuthorized(page)
+                    && normalizePageTags(page.tags).some(tag => tag.name === activeTagFilter));
+                if (matchesTag && (title.includes(query) || contentText.includes(query))) {
                     item.style.display = 'flex';
                     item.style.background = '';
                     visibleCount += 1;
@@ -71670,22 +71689,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function getAllTags() {
             const allTags = new Set();
             pages.forEach(page => {
-                if (page.tags && Array.isArray(page.tags)) {
-                    page.tags.forEach(tag => allTags.add(tag.name));
-                }
+                if ((page.spaceId || 'default') !== (activeSpaceId || 'default') || !isPageContentAuthorized(page)) return;
+                normalizePageTags(page.tags).forEach(tag => allTags.add(tag.name));
             });
             return Array.from(allTags);
         }
         
         function renderTagsContainer() {
             const container = document.getElementById('tagsContainer');
-            if (!container || !currentPageId) return;
+            if (!container) return;
+            container.replaceChildren();
             
             const page = pages.find(p => p.id === currentPageId);
-            if (!page) return;
+            if (!page || !isPageContentAuthorized(page)) return;
             
-            const tags = Array.isArray(page.tags) ? page.tags : [];
-            container.replaceChildren();
+            const tags = normalizePageTags(page.tags);
             tags.forEach((tag, index) => {
                 const chip = document.createElement('span');
                 chip.className = 'tag';
@@ -71700,11 +71718,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'tag-remove';
+                remove.disabled = persistenceWritesBlocked;
                 remove.setAttribute('aria-label', `Remove tag ${label.textContent}`);
                 remove.textContent = '×';
                 remove.addEventListener('click', event => {
                     event.stopPropagation();
-                    removeTag(index);
+                    removeTag(index, page.id);
                 });
                 chip.appendChild(remove);
                 container.appendChild(chip);
@@ -71712,6 +71731,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const add = document.createElement('button');
             add.type = 'button';
             add.className = 'add-tag-btn';
+            add.disabled = persistenceWritesBlocked;
             const icon = document.createElement('i');
             icon.className = 'fas fa-plus';
             icon.setAttribute('aria-hidden', 'true');
@@ -71722,7 +71742,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         
         function showAddTagInput() {
             const container = document.getElementById('tagsContainer');
+            const page = pages.find(entry => entry.id === currentPageId);
+            if (!container || !page || !isPageContentAuthorized(page) || persistenceWritesBlocked) return;
+            const existing = container.querySelector('.tag-input');
+            if (existing) { existing.focus(); return; }
             const addBtn = container.querySelector('.add-tag-btn');
+            if (!addBtn) return;
             
             const wrapper = document.createElement('div');
             wrapper.className = 'tag-input-wrapper';
@@ -71731,6 +71756,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             input.className = 'tag-input';
             input.id = 'tagInput';
             input.placeholder = 'Tag name...';
+            input.setAttribute('aria-label', 'Tag name');
+            input.dataset.pageId = page.id;
             input.maxLength = 120;
             input.addEventListener('keydown', handleTagInputKeydown);
             input.addEventListener('blur', handleTagInputBlur);
@@ -71741,40 +71768,56 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function handleTagInputKeydown(event) {
+            if (event.isComposing) return;
             if (event.key === 'Enter') {
                 event.preventDefault();
-                addTag(event.target.value);
-            } else if (event.key === 'Escape') {
+                const input = event.target;
+                input.dataset.finished = 'true';
+                addTag(input.value, input.dataset.pageId);
                 cancelTagInput();
+                document.querySelector('#tagsContainer .add-tag-btn')?.focus();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                event.target.dataset.finished = 'true';
+                cancelTagInput();
+                document.querySelector('#tagsContainer .add-tag-btn')?.focus();
             }
         }
         
         function handleTagInputBlur(event) {
+            if (event.target.dataset.finished === 'true' || !event.target.isConnected) return;
+            event.target.dataset.finished = 'true';
             const value = event.target.value.trim();
             if (value) {
-                addTag(value);
-            } else {
+                addTag(value, event.target.dataset.pageId);
+            }
+            if (event.target.dataset.pageId === currentPageId) {
                 cancelTagInput();
             }
         }
         
         function cancelTagInput() {
             const container = document.getElementById('tagsContainer');
+            if (!container) return;
             const wrapper = container.querySelector('.tag-input-wrapper');
             const addBtn = container.querySelector('.add-tag-btn');
             
-            if (wrapper) wrapper.remove();
+            if (wrapper) {
+                const input = wrapper.querySelector('input');
+                if (input) input.dataset.finished = 'true';
+                wrapper.remove();
+            }
             if (addBtn) addBtn.style.display = 'flex';
         }
         
-        function addTag(name) {
+        function addTag(name, pageId = currentPageId) {
             name = String(name == null ? '' : name).replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 120);
-            if (!name || !currentPageId) return;
+            if (!name || !pageId || pageId !== currentPageId || persistenceWritesBlocked) return;
             
-            const page = pages.find(p => p.id === currentPageId);
-            if (!page) return;
+            const page = pages.find(p => p.id === pageId);
+            if (!page || !isPageContentAuthorized(page)) return;
             
-            if (!page.tags) page.tags = [];
+            page.tags = normalizePageTags(page.tags);
             
             // Check for duplicate
             if (page.tags.some(t => t.name.toLowerCase() === name.toLowerCase())) {
@@ -71787,19 +71830,23 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const color = tagColors[Math.floor(Math.random() * tagColors.length)];
             
             page.tags.push({ name, color });
+            page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             renderTagsContainer();
             renderSidebarTags();
             showToast('Tag added!');
         }
         
-        function removeTag(index) {
-            if (!currentPageId) return;
+        function removeTag(index, pageId = currentPageId) {
+            if (!pageId || pageId !== currentPageId || persistenceWritesBlocked) return;
             
-            const page = pages.find(p => p.id === currentPageId);
-            if (!page || !page.tags) return;
+            const page = pages.find(p => p.id === pageId);
+            if (!page || !isPageContentAuthorized(page) || !Number.isInteger(index)) return;
+            page.tags = normalizePageTags(page.tags);
+            if (index < 0 || index >= page.tags.length) return;
             
             page.tags.splice(index, 1);
+            page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             renderTagsContainer();
             renderSidebarTags();
@@ -71812,6 +71859,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!container || !filterSection) return;
             
             const allTags = getAllTags();
+            if (activeTagFilter && !allTags.includes(activeTagFilter)) {
+                activeTagFilter = null;
+                filterPages();
+            }
             
             if (allTags.length === 0) {
                 filterSection.style.display = 'none';
@@ -71825,6 +71876,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = `sidebar-tag ${activeTagFilter === value ? 'active' : ''}`;
+                button.setAttribute('aria-pressed', String(activeTagFilter === value));
                 button.textContent = label;
                 button.addEventListener('click', () => filterByTag(value));
                 container.appendChild(button);
@@ -71835,28 +71887,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         
         function filterByTag(tagName) {
             activeTagFilter = tagName;
-            renderSidebarTags();
-            filterPagesByTag();
+            renderPagesList();
         }
         
         function filterPagesByTag() {
-            const pageItems = document.querySelectorAll('.page-item');
-            
-            pageItems.forEach(item => {
-                const pageId = item.dataset.pageId;
-                const page = pages.find(p => p.id === pageId);
-                
-                if (!activeTagFilter) {
-                    item.style.display = 'flex';
-                    return;
-                }
-                
-                if (page && page.tags && page.tags.some(t => t.name === activeTagFilter)) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
+            // Tag and text filters share one path so sidebar rerenders cannot
+            // silently undo a tag filter or reveal content excluded by search.
+            filterPages();
         }
 
 // Chatbot UI bindings
