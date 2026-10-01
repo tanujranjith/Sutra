@@ -41,6 +41,7 @@
   let courseMergeModalState = { sourceId: '', trigger: null, nameTouched: false };
   const homeworkViewState = {
     query: '',
+    category: 'all',
     tab: 'all',
     course: 'all',
     status: 'all',
@@ -71,7 +72,7 @@
   function showHomeworkAlert(message, options = {}) {
     if (typeof window.showCustomAlertDialog === 'function') {
       return window.showCustomAlertDialog({
-        title: options.title || 'Homework',
+        title: options.title || 'To-do',
         message: String(message || ''),
         confirmText: options.confirmText || 'OK'
       });
@@ -234,10 +235,11 @@
   // few student-facing distinctions that other surfaces can use. Unknown
   // legacy values normalize to assignment so old homework remains unchanged.
   function normalizeHomeworkKind(rawValue) {
-    const value = String(rawValue || '').toLowerCase();
+    const value = String(rawValue || '').trim().toLowerCase();
     if (value === 'test' || value === 'exam' || value === 'final' || value === 'midterm') return 'test';
     if (value === 'quiz') return 'quiz';
     if (value === 'review') return 'review';
+    if (value === 'task' || value === 'general') return 'task';
     return 'assignment';
   }
 
@@ -267,6 +269,7 @@
     const title = String(task.title || task.text || '').trim();
 
     const serialized = {
+      ...task,
       id: String(task.id || uid()),
       courseId: task.courseId ? String(task.courseId) : '',
       title,
@@ -289,6 +292,7 @@
 
     const kind = normalizeHomeworkKind(task.kind || task.type);
     if (kind !== 'assignment') serialized.kind = kind;
+    else if (!task.kind || ['assignment', 'homework'].includes(String(task.kind).trim().toLowerCase())) delete serialized.kind;
     const estimateMinutes = Math.round(Number(task.estimateMinutes || task.effortMinutes) || 0);
     if (estimateMinutes > 0) serialized.estimateMinutes = estimateMinutes;
 
@@ -301,7 +305,7 @@
     if (actualMinutes > 0) serialized.actualMinutes = actualMinutes;
     if (task.completedAt) serialized.completedAt = String(task.completedAt);
     const sourceUrl = sanitizeSourceUrl(task.sourceUrl);
-    if (sourceUrl) serialized.sourceUrl = sourceUrl;
+    if (task.sourceUrl !== undefined) serialized.sourceUrl = sourceUrl;
 
     // Assignment Studio payload (milestones, subtasks, rubric, links, effort)
     // rides on the homework task itself so it survives every existing
@@ -429,7 +433,7 @@
       result = store.replace({ courses, tasks: tasks.map(task => serializeTask(task)) }, { reason: 'homework-ui' });
     } catch (error) {
       if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.save' }, 'error');
-      showHomeworkToast('Homework could not be saved to the workspace. Your change remains on screen — export a backup before closing.');
+      showHomeworkToast('To-do could not be saved to the workspace. Your change remains on screen — export a backup before closing.');
     }
     // Always notify so the UI re-renders the in-memory state, even when the
     // persistence write above failed.
@@ -1038,11 +1042,11 @@
   // and programmatic callers still use the canonical Homework API directly.
   function openHomeworkCapture(options = {}) {
     if (typeof window.openQuickCaptureModal !== 'function') {
-      showHomeworkToast('Homework capture is still loading — try again in a moment.');
+      showHomeworkToast('Task capture is still loading — try again in a moment.');
       return false;
     }
     window.openQuickCaptureModal(String(options.prefillText || ''), {
-      type: 'homework',
+      type: options.courseId || homeworkViewState.category === 'homework' ? 'homework' : 'task',
       courseId: options.courseId ? String(options.courseId) : ''
     });
     return true;
@@ -1266,7 +1270,7 @@
 
   function chooseHomeworkAttachments(taskId) {
     if (!taskId || !window.SutraAttachments || typeof window.SutraAttachments.addFiles !== 'function') {
-      showHomeworkAlert('Attachment storage is unavailable.', { title: 'Homework Attachments' });
+      showHomeworkAlert('Attachment storage is unavailable.', { title: 'Task attachments' });
       return;
     }
     const input = document.createElement('input');
@@ -1277,9 +1281,9 @@
     input.addEventListener('change', async () => {
       try {
         const added = await window.SutraAttachments.addFiles(input.files, { entityType: 'homework', entityId: String(taskId), source: 'homework_upload' });
-        showHomeworkAlert(added.length === 1 ? 'Attachment saved for this homework item.' : `${added.length} attachments saved for this homework item.`, { title: 'Homework Attachments' });
+        showHomeworkAlert(added.length === 1 ? 'Attachment saved for this task.' : `${added.length} attachments saved for this task.`, { title: 'Task attachments' });
       } catch (error) {
-        showHomeworkAlert(error && error.message ? error.message : 'The attachment could not be stored.', { title: 'Homework Attachments' });
+        showHomeworkAlert(error && error.message ? error.message : 'The attachment could not be stored.', { title: 'Task attachments' });
       } finally {
         input.remove();
       }
@@ -1306,7 +1310,7 @@
       : (task.done ? 'Mark as open' : 'Mark as done');
     return `
       <div class="hw-assignment-menu-wrap">
-        <button type="button" class="hw-task-menu-btn" data-task-menu-trigger="${escHtml(task.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Assignment actions">
+        <button type="button" class="hw-task-menu-btn" data-task-menu-trigger="${escHtml(task.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Task actions">
           <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
         </button>
         <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
@@ -1373,9 +1377,9 @@
     return `<div class="hw-empty-redesign">
       <i class="fas fa-clipboard-check" aria-hidden="true"></i>
       <p class="hw-empty-title">${escHtml(message || 'No homework yet.')}</p>
-      <p class="hw-empty-sub">Paste your assignment list or type one line — Sutra files it by class and due date.</p>
+      <p class="hw-empty-sub">${homeworkViewState.category === 'homework' ? 'Paste homework or type one line with its class and due date.' : 'Add homework or a general task. General tasks do not need a class.'}</p>
       <div class="hw-empty-actions">
-        <button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-bolt" aria-hidden="true"></i> Paste or type your homework</button>
+        <button type="button" class="hw-btn hw-btn-primary" data-hw-empty-capture><i class="fas fa-bolt" aria-hidden="true"></i> ${homeworkViewState.category === 'homework' ? 'Add homework' : 'Add a task'}</button>
         <button type="button" class="hw-btn hw-btn-compact" data-course-add="class"><i class="fas fa-plus" aria-hidden="true"></i> Add a class</button>
       </div>
     </div>`;
@@ -1387,7 +1391,7 @@
     const cls = courses.filter(c => c.type === 'class');
     const misc = courses.filter(c => c.type === 'misc');
     const optionFor = c => `<option value="${escHtml(c.id)}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${escHtml(c.name)}</option>`;
-    let html = '<option value="">Subject&hellip;</option>';
+    let html = '<option value="">General task (no class)</option>';
     if (cls.length) html += `<optgroup label="Classes">${cls.map(optionFor).join('')}</optgroup>`;
     if (misc.length) html += `<optgroup label="Activities">${misc.map(optionFor).join('')}</optgroup>`;
     return html;
@@ -1426,10 +1430,6 @@
       if (!trigger || !form) return;
 
       const openForm = () => {
-        if (!courses.length) {
-          promptAddCourse('class', { returnFocus: trigger });
-          return;
-        }
         form.hidden = false;
         trigger.hidden = true;
         setTimeout(() => { if (titleInput) titleInput.focus(); }, 20);
@@ -1441,11 +1441,8 @@
       };
       const submit = () => {
         const courseId = String(courseSel && courseSel.value || '').trim();
-        if (!courseId) {
-          if (courseSel) courseSel.focus();
-          return;
-        }
         const created = addTaskToCourse(courseId, {
+          kind: courseId ? 'assignment' : 'task',
           title: titleInput ? titleInput.value : '',
           dueDate: dateInput ? dateInput.value : '',
           dueTime: '',
@@ -1838,7 +1835,13 @@
     return `<div class="hw-assignment-group-actions">${iconButton}${menu}${removeButton}</div>`;
   }
 
+  function taskMatchesCategory(task) {
+    const general = normalizeHomeworkKind(task.kind || task.type) === 'task';
+    return homeworkViewState.category === 'all' || general === (homeworkViewState.category === 'general');
+  }
+
   function taskMatchesHomeworkView(task) {
+    if (!taskMatchesCategory(task)) return false;
     const course = getCourseForTask(task);
     const status = getHomeworkStatus(task);
     const priority = normalizePriority(task.priority);
@@ -1846,7 +1849,9 @@
     const query = homeworkViewState.query.trim().toLowerCase();
 
     if (query) {
-      const haystack = [task.title, task.text, task.notes, course && course.name, course && course.type === 'misc' ? 'extracurricular activity' : 'class']
+      const haystack = [task.title, task.text, task.notes, course && course.name,
+        normalizeHomeworkKind(task.kind || task.type) === 'task' ? 'general task' : 'homework',
+        course ? (course.type === 'misc' ? 'extracurricular activity' : 'class') : '']
         .map(value => String(value || '').toLowerCase())
         .join(' ');
       if (!haystack.includes(query)) return false;
@@ -1910,6 +1915,7 @@
     const notes = String(task && task.notes || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     if (notes) return notes.slice(0, 120);
     const kind = normalizeHomeworkKind(task && (task.kind || task.type));
+    if (kind === 'task') return 'General task';
     if (kind !== 'assignment') return `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
     const normalizedStudio = task && task.studio && window.SutraAssignmentStudio
       ? window.SutraAssignmentStudio.normalizeStudio(task.studio)
@@ -1922,7 +1928,8 @@
 
   function renderHomeworkWorkspaceRow(task, options = {}) {
     const course = getCourseForTask(task);
-    const courseName = course ? course.name : (options.includeDifficulty ? 'Unassigned' : 'No class');
+    const general = normalizeHomeworkKind(task.kind || task.type) === 'task';
+    const courseName = course ? course.name : (general ? 'General' : (options.includeDifficulty ? 'Unassigned' : 'No class'));
     const color = getCourseColor(task.courseId);
     const due = getTaskDuePresentation(task);
     const status = getHomeworkStatus(task);
@@ -1931,10 +1938,10 @@
     const difficulty = normalizeDifficulty(task.difficulty);
     const description = getTaskDescription(task);
     const progress = studioPctOf(task);
-    const toggleLabel = task.done ? 'Mark assignment as incomplete' : 'Mark assignment complete';
+    const toggleLabel = task.done ? 'Mark task as incomplete' : 'Mark task complete';
     const courseCell = course
       ? `<button type="button" class="hw-course-badge ${course.type === 'misc' ? 'is-activity' : ''}" data-filter-course="${escHtml(task.courseId || '')}" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`
-      : (options.includeDifficulty
+      : (general || options.includeDifficulty
         ? `<span class="hw-course-badge is-unassigned" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</span>`
         : `<button type="button" class="hw-course-badge" data-filter-course="" style="--hw-course-bg:${color.bg};--hw-course-text:${color.text}">${escHtml(courseName)}</button>`);
     const difficultyCell = options.includeDifficulty
@@ -1942,7 +1949,7 @@
       : '';
     return `
       <tr class="hw-assignment-row ${task.done ? 'is-completed' : ''}" data-task-id="${escHtml(task.id)}" draggable="true" data-drag-title="${escHtml(task.title)}" data-drag-source="homework" data-drag-source-id="${escHtml(task.id)}" data-drag-due-date="${escHtml(task.dueDate || '')}">
-        <td class="hw-assignment-name-cell" data-label="Assignment">
+        <td class="hw-assignment-name-cell" data-label="Task">
           <button type="button" class="hw-assignment-title-btn" data-task-open="${escHtml(task.id)}">${escHtml(task.title)}</button>
           ${description ? `<span class="hw-assignment-description">${escHtml(description)}</span>` : ''}
           ${progress != null ? `<span class="hw-assignment-progress-copy">${progress}% planned work complete</span>` : ''}
@@ -1975,17 +1982,18 @@
     const grouped = new Map();
     filteredTasks.forEach(task => {
       const course = getCourseForTask(task);
-      const key = course ? String(course.id) : '';
-      if (!grouped.has(key)) grouped.set(key, { course, tasks: [] });
+      const general = normalizeHomeworkKind(task.kind || task.type) === 'task';
+      const key = `${general ? 'general' : 'homework'}:${course ? String(course.id) : ''}`;
+      if (!grouped.has(key)) grouped.set(key, { course, general, tasks: [] });
       grouped.get(key).tasks.push(task);
     });
     return Array.from(grouped.values())
       .sort((a, b) => String(a.course && a.course.name || 'Unassigned').localeCompare(String(b.course && b.course.name || 'Unassigned')))
       .map(group => {
-        const name = group.course ? group.course.name : 'Unassigned';
-        const kind = group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned';
+        const name = group.course ? group.course.name : (group.general ? 'General' : 'Unassigned');
+        const kind = group.general ? 'General' : (group.course ? (group.course.type === 'misc' ? 'Activity' : 'Class') : 'Unassigned');
         const actions = renderCourseGroupActions(group.course, kind, name);
-        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} assignment${group.tasks.length === 1 ? '' : 's'}</small></span>${actions}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
+        return `<tr class="hw-assignment-group-row"><th colspan="7" scope="rowgroup"><div class="hw-assignment-group-heading"><span><strong>${escHtml(name)}</strong><small>${escHtml(kind)} · ${group.tasks.length} task${group.tasks.length === 1 ? '' : 's'}</small></span>${actions}</div></th></tr>${group.tasks.map(task => renderHomeworkWorkspaceRow(task, { includeDifficulty })).join('')}`;
       }).join('');
   }
 
@@ -2017,27 +2025,27 @@
     const completedTasks = groupCompleted ? filteredTasks.filter(task => task.done) : [];
     const rows = groupCompleted && completedTasks.length ? `
       <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
-      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed assignments <span>(${completedTasks.length})</span></button></th></tr></tbody>
+      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
       <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${renderHomeworkWorkspaceRows(completedTasks)}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
-    const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
+    const categoryTasks = tasks.filter(taskMatchesCategory);
+    const totalLabel = `${filteredTasks.length} of ${categoryTasks.length} task${categoryTasks.length === 1 ? '' : 's'}`;
     let content = '';
 
-    if (!tasks.length && !courses.length) {
-      content = renderEmptyStateRedesign('No homework yet.');
-    } else if (!tasks.length && courses.length) {
-      // A class list with zero assignments is a real empty state, not an
-      // impossible filter result. Keep the next action visible on every tab.
-      content = renderEmptyClassState();
+    if (!categoryTasks.length) {
+      content = homeworkViewState.category === 'homework' && courses.length
+        ? renderEmptyClassState()
+        : renderEmptyStateRedesign(homeworkViewState.category === 'homework' ? 'No homework yet.'
+          : homeworkViewState.category === 'general' ? 'No general tasks yet.' : 'Nothing on your list yet.');
     } else if (!filteredTasks.length && homeworkViewState.tab === 'class' && !hasActiveHomeworkTaskFilters()) {
       content = renderEmptyClassState();
     } else if (!filteredTasks.length) {
-      content = `<div class="hw-filter-empty"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><h4>No assignments match</h4><p>Try a different search or clear the current filters.</p><button type="button" class="hw-toolbar-btn" data-clear-task-filters>Clear filters</button></div>`;
+      content = `<div class="hw-filter-empty"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><h4>No tasks match</h4><p>Try a different search or clear the current filters.</p><button type="button" class="hw-toolbar-btn" data-clear-task-filters>Clear filters</button></div>`;
     } else {
       content = `
         <div class="hw-assignment-table-wrap">
           <table class="hw-assignment-table${byClass ? ' is-by-class' : ''}">
-            <caption class="sr-only">Homework assignments</caption>
-            <thead><tr><th scope="col">Assignment</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+            <caption class="sr-only">To-do tasks</caption>
+            <thead><tr><th scope="col">Task</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
             ${rows}
           </table>
         </div>`;
@@ -2046,7 +2054,7 @@
     return `
       <section class="hw-assignments-panel" aria-labelledby="hwAssignmentsTitle">
         <div class="hw-panel-heading">
-          <div><span class="hw-panel-eyebrow">Assignments</span><h3 id="hwAssignmentsTitle">${homeworkViewState.tab === 'class' ? 'Assignments by class' : 'Assignment list'}</h3></div>
+          <div><span class="hw-panel-eyebrow">${homeworkViewState.category === 'homework' ? 'Homework' : homeworkViewState.category === 'general' ? 'General' : 'To-do'}</span><h3 id="hwAssignmentsTitle">${homeworkViewState.tab === 'class' ? 'Tasks by class' : 'Task list'}</h3></div>
           <span class="hw-result-count">${escHtml(totalLabel)}</span>
         </div>
         ${content}
@@ -2091,7 +2099,7 @@
   }
 
   function renderUpcomingDeadlinesPanel() {
-    const open = tasks.filter(task => !task.done);
+    const open = tasks.filter(task => taskMatchesCategory(task) && !task.done);
     const counts = {
       overdue: open.filter(task => { const offset = getTaskDayOffset(task); return offset != null && offset < 0; }).length,
       today: open.filter(task => getTaskDayOffset(task) === 0).length,
@@ -2113,7 +2121,7 @@
     return `
       <div class="hw-workspace-grid">
         ${renderHomeworkAssignmentsPanel()}
-        <aside class="hw-workspace-sidebar" aria-label="Homework supporting information">
+        <aside class="hw-workspace-sidebar" aria-label="To-do supporting information">
           ${renderExtracurricularPanel()}
           ${renderUpcomingDeadlinesPanel()}
         </aside>
@@ -2191,7 +2199,7 @@
     }
     const error = new Error('SutraSafeStorage is unavailable.');
     if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'homework.writeArrayToStorage', key }, 'error');
-    showHomeworkToast('Homework could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
+    showHomeworkToast('To-do could not be saved to this browser. Your change is kept for now — export a backup to be safe.');
     return { ok: false, error };
   }
 
@@ -2391,7 +2399,7 @@
 
   function insertCountdownIntoNote(taskId) {
     const task = getTaskByIdInternal(taskId);
-    if (!task) { showHomeworkToast('Assignment not found.'); return; }
+    if (!task) { showHomeworkToast('Task not found.'); return; }
     const due = getTaskDueDateTime(task);
     if (typeof window.SutraInsertCountdownIntoNote === 'function') {
       window.SutraInsertCountdownIntoNote({ taskId: String(task.id), label: task.title, targetIso: due ? due.toISOString() : '' });
@@ -2403,7 +2411,7 @@
   // Slash-command entry point (from app.js): pick a deadline to embed.
   function pickForNote(selectionState) {
     const open = tasks.filter(t => getTaskDueDateTime(t)).slice().sort(compareHomeworkTasks);
-    if (!open.length) { showHomeworkToast('Add a homework deadline first, then insert it.'); return; }
+    if (!open.length) { showHomeworkToast('Add a task deadline first, then insert it.'); return; }
     cdNoteSelection = selectionState || null;
 
     let modal = document.getElementById('hwCountdownNoteModal');
@@ -2690,7 +2698,7 @@
             <div class="hw-assignment-title">${escHtml(task.title)}</div>
           </div>
           <div class="hw-assignment-menu-wrap">
-            <button type="button" class="hw-task-menu-btn" data-task-menu-trigger="${escHtml(task.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Assignment actions">
+            <button type="button" class="hw-task-menu-btn" data-task-menu-trigger="${escHtml(task.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Task actions">
               <i class="fas fa-ellipsis-h" aria-hidden="true"></i>
             </button>
             <div class="hw-task-menu" data-task-menu="${escHtml(task.id)}" role="menu" hidden>
@@ -2904,12 +2912,13 @@
   }
 
   function updateHomeworkStaticChrome() {
-    const open = tasks.filter(task => !task.done);
+    const categoryTasks = tasks.filter(taskMatchesCategory);
+    const open = categoryTasks.filter(task => !task.done);
     const dueToday = open.filter(task => getTaskDayOffset(task) === 0);
     const dueThisWeek = open.filter(task => { const offset = getTaskDayOffset(task); return offset != null && offset >= 0 && offset <= 7; });
     const dueTomorrow = open.filter(task => getTaskDayOffset(task) === 1);
     const inProgress = open.filter(task => getHomeworkStatus(task) === 'in-progress');
-    const completed = tasks.filter(task => task.done);
+    const completed = categoryTasks.filter(task => task.done);
     const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const completedThisWeek = completed.filter(task => Date.parse(task.completedAt || '') >= weekAgo);
     const activities = courses.filter(course => course.type === 'misc');
@@ -2931,6 +2940,14 @@
     setDashboardStat('#hwStatActivitiesNote', activityDueThisWeek.length ? `${activityDueThisWeek.length} due this week` : 'Clubs and other work');
     setDashboardStat('#hwTabTodayCount', dueToday.length);
     setDashboardStat('#hwTabWeekCount', dueThisWeek.length);
+    $$('[data-todo-category]').forEach(button => {
+      const selected = button.getAttribute('data-todo-category') === homeworkViewState.category;
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+    const addLabel = $('#hwOpenAddAssignment span');
+    if (addLabel) addLabel.textContent = homeworkViewState.category === 'homework' ? 'Add homework' : 'Add task';
+    const allTab = $('[data-homework-tab="all"]');
+    if (allTab) allTab.textContent = homeworkViewState.category === 'homework' ? 'All Assignments' : 'All Tasks';
 
     updateHomeworkCourseFilter();
 
@@ -3103,6 +3120,39 @@
     return true;
   }
 
+  function captureCompletionAnchor(taskId) {
+    const row = Array.from(document.querySelectorAll('[data-task-id]')).find(node =>
+      node.getAttribute('data-task-id') === String(taskId) && node.getClientRects().length);
+    const homeButton = Array.from(document.querySelectorAll('[data-donow-done]')).find(button =>
+      button.getAttribute('data-donow-done') === `hw:${taskId}` && button.getClientRects().length);
+    const node = row && row.contains(document.activeElement) ? row : homeButton || row;
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, focused: node.contains(document.activeElement) };
+  }
+
+  function restoreCompletionFocus(taskId, anchor) {
+    if (!anchor || !anchor.focused || document.body.dataset.view !== 'homework') return;
+    const control = Array.from(document.querySelectorAll('[data-task-toggle]')).find(button =>
+      button.getAttribute('data-task-toggle') === String(taskId) && button.getClientRects().length);
+    const fallback = control || document.querySelector('[data-hw-past-toggle]') || $('#hwOpenAddAssignment');
+    if (fallback && fallback.getClientRects().length) fallback.focus({ preventScroll: true });
+  }
+
+  function showSavedCompletion(task, anchor, persistence) {
+    const store = window.SutraHomeworkStore;
+    if (!anchor || !persistence || !persistence.ok || !store || typeof store.whenPersisted !== 'function') return;
+    const completedAt = task.completedAt;
+    const view = document.body.dataset.view;
+    const startedAt = Date.now();
+    store.whenPersisted().then(saved => {
+      if (!saved || Date.now() - startedAt > 2000 || document.body.dataset.view !== view) return;
+      const current = store.getSnapshot().tasks.find(row => String(row.id) === String(task.id));
+      if (!current || !current.done || current.completedAt !== completedAt) return;
+      document.dispatchEvent(new CustomEvent('sutra:task-completed', { detail: { taskId: String(task.id), rect: anchor } }));
+    }).catch(() => { /* save failures already appear in canonical persistence health */ });
+  }
+
   function toggleTaskDone(taskId) {
     const task = tasks.find(row => String(row.id) === String(taskId));
     if (!task) return;
@@ -3117,6 +3167,7 @@
       return;
     }
 
+    const anchor = captureCompletionAnchor(taskId);
     task.done = !task.done;
     if (task.done) {
       task.completedAt = new Date().toISOString();
@@ -3128,9 +3179,13 @@
       delete task.completedAt;
     }
     task.updatedAt = new Date().toISOString();
-    save();
+    const persistence = save();
     render();
-    if (task.done) promptActualMinutes(task);
+    restoreCompletionFocus(taskId, anchor);
+    if (task.done) {
+      showSavedCompletion(task, anchor, persistence);
+      promptActualMinutes(task);
+    }
   }
 
   function stopRecurrence(taskId) {
@@ -3159,12 +3214,15 @@
     const nextDone = !!done;
     if (!task || task.done === nextDone) return false;
 
+    const anchor = captureCompletionAnchor(taskId);
     task.done = nextDone;
     if (nextDone) task.completedAt = new Date().toISOString();
     else delete task.completedAt;
     task.updatedAt = new Date().toISOString();
-    save();
+    const persistence = save();
     render();
+    restoreCompletionFocus(taskId, anchor);
+    if (nextDone) showSavedCompletion(task, anchor, persistence);
     return true;
   }
 
@@ -3419,7 +3477,7 @@
     // type homework straight away (it parses class, due date and type).
     board.querySelectorAll('[data-hw-empty-capture]').forEach(button => {
       button.addEventListener('click', () => {
-        if (!openHomeworkCapture()) promptAddCourse('class', { returnFocus: button });
+        openHomeworkCapture();
       });
     });
 
@@ -3492,10 +3550,10 @@
 
     board.querySelectorAll('[data-task-delete]').forEach(button => {
       button.addEventListener('click', async () => {
-        const confirmed = await showHomeworkConfirm('Delete this assignment?', {
-          title: 'Delete Assignment',
-          confirmText: 'Delete Assignment',
-          cancelText: 'Keep Assignment',
+        const confirmed = await showHomeworkConfirm('Delete this task?', {
+          title: 'Delete task',
+          confirmText: 'Delete task',
+          cancelText: 'Keep task',
           confirmVariant: 'danger'
         });
         if (!confirmed) return;
@@ -3545,7 +3603,7 @@
         const task = tasks.find(t => String(t.id) === String(taskId));
         if (!task) return;
         if (typeof window.scheduleGenericItemAsBlock === 'function') {
-          window.scheduleGenericItemAsBlock({ title: task.title || task.text, dueDate: task.dueDate, dueTime: task.dueTime, category: 'study' });
+          window.scheduleGenericItemAsBlock({ title: task.title || task.text, dueDate: task.dueDate, dueTime: task.dueTime, category: normalizeHomeworkKind(task.kind || task.type) === 'task' ? 'general' : 'study' });
         } else {
           showHomeworkToast('Scheduling not available.');
         }
@@ -3555,6 +3613,7 @@
     board.querySelectorAll('[data-filter-course]').forEach(button => {
       button.addEventListener('click', () => {
         const courseId = String(button.getAttribute('data-filter-course') || '');
+        if (courseId && homeworkViewState.category === 'general') homeworkViewState.category = 'all';
         homeworkViewState.tab = 'all';
         homeworkViewState.course = courseId ? `course:${courseId}` : 'all';
         render();
@@ -3580,6 +3639,7 @@
     board.querySelectorAll('[data-view-activities]').forEach(button => {
       button.addEventListener('click', () => {
         resetHomeworkViewFilters();
+        homeworkViewState.category = 'all';
         homeworkViewState.course = 'track:misc';
         render();
       });
@@ -3602,7 +3662,10 @@
     else if (shortcut === 'week') homeworkViewState.tab = 'week';
     else if (shortcut === 'completed') homeworkViewState.tab = 'completed';
     else if (shortcut === 'in-progress') homeworkViewState.status = 'in-progress';
-    else if (shortcut === 'activities') homeworkViewState.course = 'track:misc';
+    else if (shortcut === 'activities') {
+      homeworkViewState.category = 'all';
+      homeworkViewState.course = 'track:misc';
+    }
     render();
   }
 
@@ -3660,6 +3723,18 @@
           homeworkViewState.completion = 'all';
           homeworkViewState.due = 'all';
         }
+        render();
+      });
+    });
+
+    $$('[data-todo-category]').forEach(button => {
+      button.addEventListener('click', () => {
+        const category = button.getAttribute('data-todo-category');
+        if (!['all', 'homework', 'general'].includes(category)) return;
+        homeworkViewState.category = category;
+        // A class-specific filter must not make General appear empty.
+        homeworkViewState.course = 'all';
+        closeHomeworkContextMenus();
         render();
       });
     });
@@ -3756,9 +3831,9 @@
         normalizeState();
         save();
         render();
-        showHomeworkAlert('Homework imported.', { title: 'Homework Import' });
+        showHomeworkAlert('To-do tasks and classes imported.', { title: 'To-do import' });
       } catch (error) {
-        showHomeworkAlert('Invalid homework JSON file.', { title: 'Homework Import' });
+        showHomeworkAlert('Invalid To-do / homework JSON file.', { title: 'To-do import' });
       }
     };
     reader.readAsText(file);
@@ -3861,7 +3936,7 @@
   }
 
   function shouldPromptSetup() {
-    return courses.length === 0 && !setupDismissedForSession;
+    return homeworkViewState.category === 'homework' && courses.length === 0 && !setupDismissedForSession;
   }
 
   function handleHomeworkViewChange(nextView) {
@@ -3911,10 +3986,10 @@
 
     if (resetBtn) {
       resetBtn.addEventListener('click', async () => {
-        const confirmed = await showHomeworkConfirm('Clear all homework subjects and assignments?', {
-          title: 'Reset Homework',
-          confirmText: 'Clear Homework',
-          cancelText: 'Keep Homework',
+        const confirmed = await showHomeworkConfirm('Clear all classes, homework, and general tasks? This resets every To-do category.', {
+          title: 'Reset To-do',
+          confirmText: 'Clear To-do',
+          cancelText: 'Keep To-do',
           confirmVariant: 'danger'
         });
         if (!confirmed) return;

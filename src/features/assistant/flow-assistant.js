@@ -2728,7 +2728,7 @@
                 if (match) taskId = String(match.id);
             } catch (e) { /* fall through */ }
         }
-        if (!taskId) return { ok: false, message: 'Could not find that assignment in Homework.' };
+        if (!taskId) return { ok: false, message: 'Could not find that assignment in To-do.' };
         const milestones = (Array.isArray(action.milestones) ? action.milestones : []).map(m => ({
             title: m && (m.title || m.name),
             dueDate: m && (m.dueDate || m.date),
@@ -3760,7 +3760,7 @@
                 const n = describeTaskTargets(action);
                 rows.push(`<div class="flow-preview-what">Mark ${esc(n)} as <strong>${esc(verb)}</strong>:</div>`);
                 rows.push(taskList());
-                rows.push(`<div class="flow-preview-where">Updates Today, All Due, Homework, and overdue counts immediately.</div>`);
+                rows.push(`<div class="flow-preview-where">Updates Home, All Due, To-do, and overdue counts immediately.</div>`);
                 if (action.reason) rows.push(`<div class="flow-preview-why">Why: ${esc(truncate(action.reason, 160))}</div>`);
                 break;
             }
@@ -4036,7 +4036,7 @@
             const meta = reg && typeof reg.get === 'function' ? reg.get(type) : null;
             const DOMAIN_VIEWS = {
                 tasks: { label: 'Open Home', view: 'today' },
-                homework: { label: 'Open Homework', view: 'homework' },
+                homework: { label: 'Open To-do', view: 'homework' },
                 timeline: { label: 'Open Timeline', view: 'timeline' },
                 review: { label: 'Open Review', view: 'review' },
                 study: { label: 'Open AP Study', view: 'apstudy' },
@@ -7753,7 +7753,7 @@
     // All rendering uses live workspace state — never demo data.
     // --------------------------------------------------------------
     const VIEW_LABELS = {
-        today: 'Today', notes: 'Notes', homework: 'Homework', timeline: 'Timeline',
+        today: 'Today', notes: 'Notes', homework: 'To-do', timeline: 'Timeline',
         review: 'Review', cramhub: 'Cram Hub', apstudy: 'AP Study', collegeapp: 'College',
         courses: 'Courses', alldue: 'All Due', life: 'Life', business: 'Business',
         testing: 'Testing Hub', settings: 'Settings'

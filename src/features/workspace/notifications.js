@@ -63,7 +63,7 @@
 
     var CATEGORY_LABELS = {
         tasks: 'Tasks',
-        homework: 'Homework',
+        homework: 'To-do',
         timeline: 'Timeline events',
         apexam: 'AP exams',
         college: 'College deadlines',
@@ -1649,7 +1649,7 @@
         var courses = _listCoursesSafe();
         if (!courses.length) {
             return '<div class="cc-row cc-row--indent">'
-                + '<div class="cc-row-label"><span class="cc-row-sub">Add classes in Homework to create course rules.</span></div></div>';
+                + '<div class="cc-row-label"><span class="cc-row-sub">Add classes in To-do to create course rules.</span></div></div>';
         }
         var courseOpts = courses.map(function (c) {
             return '<option value="' + _esc(String(c.id)) + '">' + _esc(String(c.name)) + '</option>';

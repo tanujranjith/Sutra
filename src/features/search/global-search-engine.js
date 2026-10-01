@@ -27,7 +27,7 @@
   var TYPE_LABELS = {
     page: 'Page',
     note: 'Note',
-    homework: 'Homework',
+    homework: 'To-do',
     task: 'Task',
     timeline: 'Timeline event',
     attachment: 'Attachment',

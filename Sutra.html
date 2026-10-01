@@ -64,7 +64,7 @@
     <script src="src/persistence/revocation-wipe.js?v=20260831-revoke5"></script>
     <script src="src/core/credential-vault.js?v=20260831-revoke4"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
-    <script src="src/domain/homework-store.js?v=20260916-integration-homework-store1"></script>
+    <script src="src/domain/homework-store.js?v=20261001-todo-completion1"></script>
     <script src="src/domain/student-engine.js?v=20260913-energy-removal-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
@@ -89,7 +89,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20260913-locked-assistant-manifest2"></script>
+    <script src="src/config/feature-manifest.js?v=20261001-todo-completion1"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -465,7 +465,7 @@
                                         <div class="tabs-shell">
                                             <div class="view-tabs" role="group" aria-label="Workspace navigation and utilities">
                                                     <button class="view-tab active" data-view="today">Home</button>
-                                                    <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
+                                                    <button id="tabHomework" class="view-tab" data-view="homework">To-do</button>
                                                     <button class="view-tab" data-view="notes">Create</button>
                                                     <button class="view-tab" data-view="timeline">Timeline</button>
                                                     <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
@@ -492,7 +492,7 @@
                                                             <div class="view-more-group" data-nav-group="daily" role="group" aria-labelledby="moreViewsDailyLabel">
                                                                 <span class="view-more-group-label" id="moreViewsDailyLabel">Daily loop</span>
                                                                 <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Home</span></button>
-                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>Homework</span></button>
+                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>To-do</span></button>
                                                                 <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Create</span></button>
                                                                 <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-calendar-days" aria-hidden="true"></i><span>Timeline</span></button>
                                                             </div>
@@ -930,7 +930,7 @@
                                     <span class="student-hub-metric-note" id="studentHubActiveTasksNote">Across all planners</span>
                                 </article>
                                 <article class="student-hub-metric">
-                                    <span class="student-hub-metric-label">Homework</span>
+                                    <span class="student-hub-metric-label">To-do</span>
                                     <strong class="student-hub-metric-value" id="studentHubHomeworkOpen">0</strong>
                                     <span class="student-hub-metric-note">Synced to tasks</span>
                                 </article>
@@ -961,7 +961,7 @@
                                 </article>
                             </div>
                             <div class="today-student-hub-actions">
-                                <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> Homework</button>
+                                <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> To-do</button>
                                 <button class="neumo-btn" type="button" data-hub-view="apstudy"><i class="fas fa-graduation-cap"></i> Review &amp; Tests</button>
                                 <button class="neumo-btn" type="button" data-hub-view="timeline"><i class="fas fa-calendar-days"></i> Calendar</button>
                                 <button class="neumo-btn" type="button" data-hub-view="notes"><i class="fas fa-note-sticky"></i> Create</button>
@@ -3217,7 +3217,7 @@
                 <optgroup label="Planning &amp; learning">
                     <option value="tasks">Tasks</option>
                     <option value="calendar">Calendar</option>
-                    <option value="homework">Homework</option>
+                    <option value="homework">To-do</option>
                     <option value="study">Study</option>
                 </optgroup>
                 <optgroup label="Services &amp; safety">
@@ -3289,7 +3289,7 @@
                         <button type="button" class="cc-sidebar-item" data-settings-nav="homework">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-book-open"></i></span>
                             <span class="cc-sidebar-item-text">
-                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Homework</span>
+                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">To-do</span>
                                 <span class="cc-sidebar-item-copy">Layout &amp; adding</span>
                             </span>
                         </button>
@@ -3580,7 +3580,7 @@
                                     <option value="today">Home</option>
                                     <option value="timeline">Timeline</option>
                                     <option value="notes">Create</option>
-                                    <option value="homework">Homework</option>
+                                    <option value="homework">To-do</option>
                                     <option value="apstudy">AP Study</option>
                                     <option value="collegeapp">College</option>
                                     <option value="life">Life</option>
@@ -3649,7 +3649,7 @@
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text">
                                 <span class="cc-row-name">Course Hub &amp; All Due workspace</span>
-                                <span class="cc-row-help">Adds two tabs: a per-class cockpit (assignments, files, notes, grades) and a global "everything due" command center. Off by default — your existing Homework setup is unchanged either way.</span>
+                                <span class="cc-row-help">Adds two tabs: a per-class cockpit (assignments, files, notes, grades) and a global "everything due" command center. Off by default — your existing To-do setup is unchanged either way.</span>
                             </span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="layout.courseHubEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
@@ -4097,15 +4097,15 @@
                 <section class="cc-section" data-settings-section="homework">
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
-                            <h2 class="cc-section-title">Homework</h2>
-                            <p class="cc-section-copy">How assignments are shown. Add work through the shared Homework composer.</p>
+                            <h2 class="cc-section-title">To-do</h2>
+                            <p class="cc-section-copy">How homework and general tasks are shown. Add work through Capture.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
                     <div class="cc-group">
                         <span class="cc-group-title">Display</span>
                         <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Homework density</span><span class="cc-row-help">Spacing of homework rows.</span></div>
+                            <div class="cc-row-text"><span class="cc-row-name">Task density</span><span class="cc-row-help">Spacing of task rows.</span></div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="study.homeworkDensity">
                                     <option value="compact">Compact</option>
@@ -4133,9 +4133,9 @@
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="study">Reset</button>
                     </header>
                     <div class="cc-group">
-                        <span class="cc-group-title">Homework</span>
+                        <span class="cc-group-title">To-do</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Homework in student hub</span><span class="cc-row-help">Surface homework in the student hub.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">To-do in student hub</span><span class="cc-row-help">Surface homework and general tasks in the student hub.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="study.showHomeworkInStudentHub"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                     </div>
@@ -4813,12 +4813,12 @@
                     </header>
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Feature packs</span></div>
-                        <p class="cc-foot-help">Your Student Setup keeps Today, Capture, Homework, Notes, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
+                        <p class="cc-foot-help">Your Student Setup keeps Home, Capture, To-do, Create, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
                         <div class="cc-feature-grid" id="featureToggleListSettings">
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="today"><span>Home</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="timeline"><span>Timeline</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="notes"><span>Create</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>Homework</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>To-do</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="apstudy"><span>Academic Pack: Review &amp; Tests</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="collegeapp"><span>College Pack</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="life"><span>Life Pack</span></label>
@@ -5343,10 +5343,10 @@
                 <div id="hwMainArea" class="hw-workspace-shell">
                     <header class="hw-page-header">
                         <div class="hw-page-heading">
-                            <h2>Homework</h2>
-                            <p>Plan, track, and complete your assignments.</p>
+                            <h2>To-do</h2>
+                            <p>Homework and general tasks, together in one list.</p>
                         </div>
-                        <div class="hw-page-actions" aria-label="Homework actions">
+                        <div class="hw-page-actions" aria-label="To-do actions">
                             <label class="hw-search-field" for="hwSearchInput">
                                 <i class="fas fa-search" aria-hidden="true"></i>
                                 <input id="hwSearchInput" type="search" placeholder="Search" autocomplete="off" />
@@ -5356,7 +5356,7 @@
                             </button>
                             <label class="hw-sort-control" for="hwSortSelect">
                                 <span>Sort:</span>
-                                <select id="hwSortSelect" aria-label="Sort homework">
+                                <select id="hwSortSelect" aria-label="Sort tasks">
                                     <option value="due">Due date</option>
                                     <option value="priority">Priority</option>
                                     <option value="course">Class / activity</option>
@@ -5365,7 +5365,7 @@
                                 </select>
                             </label>
                             <button id="hwOpenAddAssignment" class="hw-toolbar-btn hw-toolbar-primary" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add homework</span>
+                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add task</span>
                             </button>
                             <label class="hw-toolbar-btn hw-file-action" for="hwImportFile">
                                 <i class="fas fa-file-import" aria-hidden="true"></i><span>Import</span>
@@ -5375,13 +5375,13 @@
                                 <i class="fas fa-file-export" aria-hidden="true"></i><span>Export</span>
                             </button>
                             <details id="hwOverflowMenu" class="hw-overflow-menu">
-                                <summary class="hw-toolbar-btn hw-icon-only" aria-label="More homework actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
+                                <summary class="hw-toolbar-btn hw-icon-only" aria-label="More To-do actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
                                 <div class="hw-overflow-popover" role="menu">
                                     <button id="hwPasteImportBtn" type="button" role="menuitem" onclick="openHomeworkPasteImport('')"><i class="fas fa-paste" aria-hidden="true"></i>Paste import</button>
                                     <button id="hwSemesterSetupBtn" type="button" role="menuitem"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>Semester setup</button>
                                     <button id="hwHeaderAddClass" type="button" role="menuitem"><i class="fas fa-graduation-cap" aria-hidden="true"></i>Add class</button>
                                     <button id="hwHeaderAddActivity" type="button" role="menuitem"><i class="fas fa-people-group" aria-hidden="true"></i>Add activity</button>
-                                    <button id="hwResetBtn" class="danger" type="button" role="menuitem"><i class="fas fa-rotate-right" aria-hidden="true"></i>Reset Homework</button>
+                                    <button id="hwResetBtn" class="danger" type="button" role="menuitem"><i class="fas fa-rotate-right" aria-hidden="true"></i>Reset To-do</button>
                                 </div>
                             </details>
                         </div>
@@ -5396,7 +5396,7 @@
                         <button id="hwClearFilters" class="hw-filter-clear" type="button">Clear filters</button>
                     </div>
 
-                    <section class="hw-summary-grid" aria-label="Homework summary" aria-live="polite">
+                    <section class="hw-summary-grid" aria-label="To-do summary" aria-live="polite">
                         <button class="hw-summary-card is-urgent" type="button" data-summary-filter="today">
                             <span class="hw-summary-top"><i class="fas fa-calendar-day" aria-hidden="true"></i><span>Due Today</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
                             <span class="hw-summary-value"><strong id="hwStatToday">0</strong> <span>tasks</span></span>
@@ -5424,8 +5424,13 @@
                         </button>
                     </section>
 
-                    <nav class="hw-list-tabs" aria-label="Assignment views">
-                        <button type="button" class="is-active" data-homework-tab="all" aria-current="page">All Assignments</button>
+                    <div class="hw-category-controls" role="group" aria-label="Task category">
+                        <button type="button" data-todo-category="all" aria-pressed="true">All</button>
+                        <button type="button" data-todo-category="homework" aria-pressed="false">Homework</button>
+                        <button type="button" data-todo-category="general" aria-pressed="false">General</button>
+                    </div>
+                    <nav class="hw-list-tabs" aria-label="Task views">
+                        <button type="button" class="is-active" data-homework-tab="all" aria-current="page">All Tasks</button>
                         <button type="button" data-homework-tab="class">By Class</button>
                         <button type="button" data-homework-tab="today">Due Today <span id="hwTabTodayCount" class="hw-tab-count">0</span></button>
                         <button type="button" data-homework-tab="week">This Week <span id="hwTabWeekCount" class="hw-tab-count">0</span></button>
@@ -5434,7 +5439,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20261001-course-icons2"></script>
+                <script src="src/features/study/homework.js?v=20261001-todo-completion4"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5518,11 +5523,11 @@
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
                 <label class="feature-toggle-item feature-toggle-card" data-feature-card="homework">
-                    <input type="checkbox" class="feature-toggle-input" data-feature-view="homework" aria-label="Enable Homework tab for startup">
+                    <input type="checkbox" class="feature-toggle-input" data-feature-view="homework" aria-label="Enable To-do tab for startup">
                     <span class="feature-toggle-icon"><i class="fas fa-book-open" aria-hidden="true"></i></span>
                     <span class="feature-toggle-copy">
-                        <span class="feature-toggle-title">Homework</span>
-                        <span class="feature-toggle-description">Classes, assignments, and school planning board.</span>
+                        <span class="feature-toggle-title">To-do</span>
+                        <span class="feature-toggle-description">Homework, general tasks, and class planning.</span>
                     </span>
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
@@ -5564,7 +5569,7 @@
                 <label class="quick-capture-field">
                     <span>Type</span>
                     <select id="quickCaptureType" class="modal-input">
-                        <option value="task">Task</option>
+                        <option value="task">General task</option>
                         <option value="homework">Homework</option>
                         <option value="test">Test / quiz</option>
                         <option value="note">Note</option>
@@ -5636,7 +5641,7 @@
                 <button type="button" class="neumo-btn" id="quickCaptureCancelBtn" data-modal-close>Cancel</button>
                 <button type="button" class="neumo-btn active" id="quickCaptureSubmitBtn">Capture</button>
             </div>
-            <p class="quick-capture-note">Examples: homework, tests, essays, review, notes, and study blocks. Sutra only saves after you tap Capture.</p>
+            <p class="quick-capture-note">Examples: homework, general tasks, tests, review, notes, and study blocks. Sutra only saves after you confirm.</p>
         </div>
     </div>
 
@@ -5696,7 +5701,7 @@
                     <button type="button" class="global-search-chip is-active" data-gs-filter="all" aria-pressed="true">All</button>
                     <button type="button" class="global-search-chip" data-gs-filter="pages" aria-pressed="false">Pages</button>
                     <button type="button" class="global-search-chip" data-gs-filter="notes" aria-pressed="false">Notes</button>
-                    <button type="button" class="global-search-chip" data-gs-filter="homework" aria-pressed="false">Homework</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="homework" aria-pressed="false">To-do</button>
                     <button type="button" class="global-search-chip" data-gs-filter="tasks" aria-pressed="false">Tasks</button>
                     <button type="button" class="global-search-chip" data-gs-filter="timeline" aria-pressed="false">Timeline</button>
                     <button type="button" class="global-search-chip" data-gs-filter="attachments" aria-pressed="false">Attachments</button>
@@ -7849,7 +7854,7 @@
     <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20260913-content-limits-semester1"></script>
+    <script src="src/features/academic/semester-setup.js?v=20261001-todo-completion1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -7895,10 +7900,11 @@
     <!-- Workspace-wide search: pure ranking engine + modal controller. Both are
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
-    <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
+    <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261001-help-icons2"></script>
+    <script src="src/core/app.js?v=20261001-todo-completion4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
+    <script src="src/ui/task-completion-effects.js?v=20261001-task-completion1"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
@@ -7908,7 +7914,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20260926-pdf28"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-icons-agenda-help1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-todo-completion1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7916,7 +7922,7 @@
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
-    <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
+    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261001-todo-completion1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
     <script src="src/features/workspace/slides.js?v=20260825-oxremed1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
@@ -7936,7 +7942,7 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1"></script>
-    <script src="src/features/workspace/notifications.js?v=20260828-revocation-lock1"></script>
+    <script src="src/features/workspace/notifications.js?v=20261001-todo-completion1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
@@ -8332,7 +8338,8 @@
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-course-icons1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
+    <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-completion1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
     <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">

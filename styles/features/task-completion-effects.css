@@ -1,0 +1,52 @@
+.sutra-task-completion-effect {
+  position: fixed;
+  z-index: calc(var(--z-nav, 2400) + 4);
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none !important;
+}
+
+.sutra-task-completion-effect__origin {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.sutra-task-completion-effect__piece {
+  position: absolute;
+  display: block;
+  border-radius: 2px;
+  background: var(--task-effect-color, var(--accent, #7c6dff));
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center;
+  animation: sutra-task-completion-shred var(--task-effect-duration, 700ms) cubic-bezier(0.18, 0.72, 0.28, 1) var(--task-effect-delay, 0ms) both;
+}
+
+.sutra-task-completion-effect__piece--shred {
+  clip-path: polygon(0 0, 100% 8%, 88% 100%, 12% 90%);
+}
+
+.sutra-task-completion-effect__piece--particle {
+  border-radius: 50%;
+}
+
+@keyframes sutra-task-completion-shred {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0) scale(0.72);
+  }
+  12% { opacity: 0.96; }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--task-effect-dx, 0), var(--task-effect-dy, 0), 0) rotate(var(--task-effect-rotate, 0)) scale(0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sutra-task-completion-effect { display: none !important; }
+}
+
+body.motion-off .sutra-task-completion-effect {
+  display: none !important;
+}

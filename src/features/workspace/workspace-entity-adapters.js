@@ -333,8 +333,8 @@
       },
       {
         id: 'homework',
-        label: 'Homework',
-        singularLabel: 'assignment',
+        label: 'To-do',
+        singularLabel: 'task',
         priority: 25,
         collect: function () {
           var workspace = sources().homeworkWorkspace || {};
@@ -344,9 +344,9 @@
             var course = coursesById[String(task.courseId || '')] || {};
             return {
               id: task.id,
-              title: task.title || task.text || 'Untitled assignment',
+              title: task.title || task.text || 'Untitled task',
               text: recordText(task, [course.name]),
-              keywords: ['homework', 'assignment', course.name, task.type, task.priority, task.status],
+              keywords: ['to-do', task.kind === 'task' || task.kind === 'general' ? 'general task' : 'homework assignment', course.name, task.kind, task.type, task.priority, task.status],
               courseId: task.courseId || '',
               status: task.done ? 'completed' : (task.status || 'open'),
               dates: dateFields(task),

@@ -160,6 +160,7 @@
     "settings.preferences.quotes": ["showInSidebar", "showInCustomTabs", "sourceMode", "enabledCategories", "customQuotes"],
     "settings.preferences.quotes.customQuotes[]": ["id", "text", "author", "category", "createdAt", "updatedAt"],
     "homeworkWorkspace": ["schemaVersion", "revision", "courses", "tasks", "quarantine", "updatedAt", "lastMutation"],
+    "homeworkWorkspace.tasks[]": ["id", "courseId", "title", "text", "done", "dueDate", "dueTime", "due", "priority", "difficulty", "recurrence", "notes", "kind", "estimateMinutes", "actualMinutes", "completedAt", "sourceUrl", "studio", "createdAt", "updatedAt"],
     "reviewWorkspace": ["decks", "items", "sessions", "settings"]
   },
   "assetContracts": {

@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-01T05:31:59.732Z",
-  "reviewedReason": "Preserve Help icons in existing page data and Sync regeneration, with authorized keyboard selection and focus return after tree replacement",
-  "maxBytes": 4922592,
-  "maxLines": 86532
+  "blessedAt": "2026-10-01T06:32:54.430Z",
+  "reviewedReason": "Canonical Home and To-do shared capture; completion anchors and keyboard focus",
+  "maxBytes": 4927229,
+  "maxLines": 86591
 }

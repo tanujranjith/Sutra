@@ -9045,7 +9045,7 @@ function populateProgressDashboard() {
                         { value: openCount, label: 'still open' }
                     ],
                     empty: imported.length ? '' : 'Nothing imported from Canvas yet.',
-                    actions: imported.length ? [{ label: 'Open Homework', action: 'open_view', payload: { view: 'homework' } }] : []
+                    actions: imported.length ? [{ label: 'Open To-do', action: 'open_view', payload: { view: 'homework' } }] : []
                 };
             }
 
@@ -20447,6 +20447,20 @@ function populateProgressDashboard() {
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
 
+            const completionIds = [String(taskId), `task:${taskId}`, `hw:${task.homeworkSourceId || ''}`];
+            const homeButton = Array.from(document.querySelectorAll('[data-donow-done]')).find(node =>
+                completionIds.includes(node.getAttribute('data-donow-done')) && node.getClientRects().length);
+            const row = Array.from(document.querySelectorAll('[data-task-id]')).find(node => {
+                const rect = node.getBoundingClientRect();
+                return node.getAttribute('data-task-id') === String(taskId) && rect.width > 0 && rect.height > 0
+                    && rect.bottom > 0 && rect.top < window.innerHeight;
+            });
+            const focusedRow = row && row.contains(document.activeElement);
+            const anchorNode = focusedRow ? row : homeButton || row;
+            const anchor = anchorNode ? anchorNode.getBoundingClientRect() : null;
+            const completionRect = anchor ? { left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height } : null;
+            const completionView = activeView;
+
             const dayState = getDayState(todayKey);
             const index = dayState.completedTaskIds.indexOf(taskId);
             const wasCompleted = index !== -1;
@@ -20474,6 +20488,26 @@ function populateProgressDashboard() {
             persistAppData();
             renderTaskViews();
             safePopulateProgressDashboard('toggle complete');
+            if (focusedRow && activeView === completionView) {
+                const nextAction = document.getElementById('todayNextActionBtn');
+                if (nextAction && nextAction.getClientRects().length) nextAction.focus({ preventScroll: true });
+            }
+            if (!wasCompleted && completionRect) {
+                const startedAt = Date.now();
+                const homeworkRow = task.origin === 'homework'
+                    ? readLocalArraySafe('hwTasks:v2').find(item => String(item.id) === String(task.homeworkSourceId))
+                    : null;
+                const completedAt = homeworkRow && homeworkRow.completedAt;
+                // Decorative feedback waits for the canonical readback-verified save.
+                flushAppSaveNow('task-completion').then(() => {
+                    if (Date.now() - startedAt > 2000 || activeView !== completionView || !getDayState(todayKey).completedTaskIds.includes(taskId)) return;
+                    if (homeworkRow) {
+                        const current = readLocalArraySafe('hwTasks:v2').find(item => String(item.id) === String(task.homeworkSourceId));
+                        if (!current || !current.done || current.completedAt !== completedAt) return;
+                    } else if (task.origin === 'homework') return;
+                    document.dispatchEvent(new CustomEvent('sutra:task-completed', { detail: { taskId: String(taskId), rect: completionRect } }));
+                }).catch(() => { /* canonical persistence health already reports failed saves */ });
+            }
         }
 
         function deleteTask(taskId) {
@@ -21405,6 +21439,7 @@ function populateProgressDashboard() {
                     source: 'v2',
                     sourceId,
                     title: courseName ? `${courseName}: ${label}` : label,
+                    kind: item.kind === 'task' || item.kind === 'general' ? 'task' : 'assignment',
                     dueDate: dueParts.dueDate,
                     dueTime: dueParts.dueTime,
                     priority: normalizePriorityValue(item.priority || inferHomeworkPriority(item)),
@@ -22141,10 +22176,10 @@ function populateProgressDashboard() {
                     .join(' ');
                 const nextData = {
                     title: item.title,
-                    notes: dueSummary ? `Synced from Homework - ${dueSummary}` : 'Synced from Homework',
+                    notes: dueSummary ? `From To-do - ${dueSummary}` : 'From To-do',
                     scheduleType: 'once',
                     weeklyDays: [],
-                    category: 'school',
+                    category: item.kind === 'task' ? 'general' : 'school',
                     priority: normalizePriorityValue(item.priority),
                     difficulty: normalizeDifficultyValue(item.difficulty),
                     estimate: 0,
@@ -22246,7 +22281,7 @@ function populateProgressDashboard() {
                     start: startTime,
                     end: endTime,
                     name: `${item.title} — Due`,
-                    category: 'school',
+                    category: item.kind === 'task' ? 'general' : 'school',
                     source: 'hw_due',
                     color: '#e85d75'
                 });
@@ -22275,6 +22310,7 @@ function populateProgressDashboard() {
                     // cleared on reopen; actualMinutes always preserved).
                     if (done) list[idx].completedAt = new Date().toISOString();
                     else delete list[idx].completedAt;
+                    list[idx].updatedAt = new Date().toISOString();
                     writeLocalArraySafe('hwTasks:v2', list);
                 }
                 return;
@@ -22395,7 +22431,7 @@ function populateProgressDashboard() {
             const metaParts = [getScheduleLabel(task)];
             if (noteTitle) metaParts.push(noteTitle.split('::').pop());
             if (task.category && task.category !== 'none') metaParts.push(task.category);
-            if (task.origin === 'homework') metaParts.push('Homework');
+            if (task.origin === 'homework') metaParts.push(task.category === 'general' ? 'General' : 'Homework');
             if (task.origin === 'ap_study') metaParts.push('AP Study');
             if (
                 task.origin === 'homework'
@@ -23792,36 +23828,47 @@ function populateProgressDashboard() {
             form.dataset.bound = 'true';
             form.addEventListener('submit', event => {
                 event.preventDefault();
+                if (form.dataset.saving === 'true') return;
                 const submittedTitle = input.value.trim();
-                const result = createCanonicalTask({
-                    title: submittedTitle,
-                    scheduleType: 'once',
-                    dueDate: today(),
-                    priority: 'medium',
-                    difficulty: 'medium'
-                }, { confirmPersistence: true, saveReason: 'home-quick-task' });
-                if (!result.ok) {
+                if (!submittedTitle) {
                     if (status) status.textContent = 'Enter a task title.';
                     input.focus();
                     return;
                 }
+                const homework = window.SutraHomework;
+                const store = window.SutraHomeworkStore;
+                const created = homework && typeof homework.createTask === 'function'
+                    ? homework.createTask({
+                        title: submittedTitle.slice(0, 180), kind: 'task',
+                        dueDate: today(), priority: 'medium', difficulty: 'medium'
+                    }) : null;
+                if (!created) {
+                    if (status) status.textContent = 'To-do is unavailable. Your task text is still here.';
+                    input.focus();
+                    return;
+                }
+                const showSaveFailure = () => {
+                    if (!input.value.trim()) input.value = submittedTitle;
+                    if (status) status.textContent = 'Added in this session, but saving needs attention. Your task text is still here; export a backup before closing.';
+                };
+                if (!created.persistence || created.persistence.ok === false || !store || typeof store.whenPersisted !== 'function') {
+                    showSaveFailure();
+                    return;
+                }
+                form.dataset.saving = 'true';
+                const submit = form.querySelector('[type="submit"]');
+                if (submit) submit.disabled = true;
                 if (status) status.textContent = `Saving ${submittedTitle}…`;
-                showToast('Task added for today');
-                if (result.persistence && typeof result.persistence.then === 'function') {
-                    result.persistence.then(() => {
+                store.whenPersisted().then(saved => {
+                    if (saved) {
                         if (input.value.trim() === submittedTitle) input.value = '';
                         if (status) status.textContent = `Added ${submittedTitle} for today.`;
-                    }).catch(() => {
-                        // Keep the submitted text available for copy/retry if the
-                        // confirmed IndexedDB write fails.
-                        if (!input.value.trim()) input.value = submittedTitle;
-                        if (status) status.textContent = 'Could not save. Your task text is still here.';
-                        input.focus();
-                    });
-                } else {
-                    input.value = '';
-                    if (status) status.textContent = `Added ${submittedTitle} for today.`;
-                }
+                        showToast('Task added for today');
+                    } else showSaveFailure();
+                }).catch(showSaveFailure).finally(() => {
+                    delete form.dataset.saving;
+                    if (submit) submit.disabled = false;
+                });
             });
         }
 
@@ -25532,6 +25579,7 @@ function populateProgressDashboard() {
             });
             const doneBtn = container.querySelector('[data-donow-done]');
             if (doneBtn) doneBtn.addEventListener('click', () => {
+                const hadFocus = document.activeElement === doneBtn;
                 const id = doneBtn.getAttribute('data-donow-done');
                 const target = items.find(i => i.id === id);
                 if (!target) return;
@@ -25556,6 +25604,10 @@ function populateProgressDashboard() {
                     if (changed) {
                         showToast('Marked done. Nice work.');
                         renderTodayDailyBrief();
+                        if (hadFocus && activeView === 'today') {
+                            const nextControl = container.querySelector('[data-donow-done], [data-donow-focus], button');
+                            if (nextControl) nextControl.focus({ preventScroll: true });
+                        }
                     }
                 } catch (err) { window.SutraReportError && window.SutraReportError(err, 'today:donow-done', 'warning'); }
             });
@@ -26452,7 +26504,7 @@ function populateProgressDashboard() {
         const ONBOARDING_CORE_SURFACES = [
             { view: 'today',    title: 'Home',      icon: 'fa-house',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
             { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
-            { view: 'homework', title: 'Homework',  icon: 'fa-book-open',     description: 'All your classes and assignments in one place.' },
+            { view: 'homework', title: 'To-do',     icon: 'fa-book-open',     description: 'Homework, general tasks, and classes in one place.' },
             { view: 'notes',    title: 'Create',    icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
             { view: 'timeline', title: 'Timeline',  icon: 'fa-calendar-days', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
             { view: 'review',   title: 'Review',    icon: 'fa-layer-group',   description: 'Active recall with flashcards, learn, write, and test modes.' },
@@ -26464,7 +26516,7 @@ function populateProgressDashboard() {
             { view: 'today',      title: 'Home',         icon: 'fa-house',         description: 'Daily Thread, streaks, and quick focus.' },
             { view: 'timeline',   title: 'Timeline',     icon: 'fa-calendar-days', description: 'Plan blocks, track events, review by date.' },
             { view: 'notes',      title: 'Create',       icon: 'fa-note-sticky',   description: 'Rich editor, pages, and workspace docs.' },
-            { view: 'homework',   title: 'Homework',     icon: 'fa-book-open',     description: 'Classes, assignments, school planning.' },
+            { view: 'homework',   title: 'To-do',        icon: 'fa-book-open',     description: 'Homework, general tasks, and class planning.' },
             { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-graduation-cap', description: 'AP exam prep, units, practice logs.' },
             { view: 'collegeapp', title: 'College',      icon: 'fa-university',    description: 'Schools, deadlines, essays, scholarships.' },
             { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'SMART goals, habits, journals, fitness.' },
@@ -29890,7 +29942,7 @@ function buildOnboardingPlanPreview() {
 
         function cwInboxSourceLabel(source) {
             const labels = {
-                homework: 'Homework',
+                homework: 'To-do',
                 planner: 'Planner',
                 milestone: 'Milestone',
                 ap: 'AP',
@@ -31170,7 +31222,7 @@ function buildOnboardingPlanPreview() {
                 { label: 'Next 7 days', rows: items.filter(i => !i.overdue && i.due <= weekEnd) },
                 { label: 'Later', rows: items.filter(i => !i.overdue && i.due > weekEnd) }
             ];
-            const srcLabel = { homework: 'Homework', task: 'Task', tasks: 'Task', timeline: 'Event', milestone: 'Milestone', apexam: 'AP exam', college: 'College', life: 'Life' };
+            const srcLabel = { homework: 'To-do', task: 'Task', tasks: 'Task', timeline: 'Event', milestone: 'Milestone', apexam: 'AP exam', college: 'College', life: 'Life' };
             const groupHtml = groups.map(g => {
                 if (!g.rows.length) return '';
                 return `<h4 class="cw-subhead">${cwEsc(g.label)} <span class="gp-head-hint">(${g.rows.length})</span></h4>`
@@ -34573,7 +34625,7 @@ function buildOnboardingPlanPreview() {
                 /* ---------- 46-48 Homework ---------- */
                 { selector: '#view-homework, #hwMainArea',
                   before: () => safeRunTutorial(() => setActiveView('homework')),
-                  title: 'Homework',
+                  title: 'To-do',
                   body: 'A dedicated assignment planner that syncs into Tasks and Today. Each row has class, due date, time, priority, difficulty, completion state, and an optional linked note.' },
 
                 { selector: '#hwPasteImportBtn',
@@ -34701,7 +34753,7 @@ function buildOnboardingPlanPreview() {
 
                 { selector: '#view-homework, .view-tabs',
                   before: () => safeRunTutorial(() => setActiveView('homework')),
-                  title: '3 · Homework, organized',
+                  title: '3 · To-do, organized',
                   body: 'Every assignment lives here grouped by class and due date, with effort estimates and a chip when a day gets crowded. Paste a whole syllabus with “Paste Import”.' },
 
                 { selector: '#view-apstudy, .view-tabs',
@@ -35348,7 +35400,7 @@ function buildOnboardingPlanPreview() {
                     });
                 }
                 if (closeAll && drawer) closeAll.addEventListener('click', () => drawer.setAttribute('aria-hidden', 'true'));
-                if (topAdd) topAdd.addEventListener('click', () => openTaskModal());
+                if (topAdd) topAdd.addEventListener('click', () => openQuickCaptureModal('', { type: 'task' }));
             } catch (e) { /* non-critical */ }
 
             document.querySelectorAll('#view-settings .cc-segment[data-theme]').forEach(btn => {
@@ -44743,7 +44795,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ol>
   <li>Open or rerun <strong>Sutra Setup</strong> from Settings if this is a fresh workspace.</li>
-  <li>Add your classes in Homework, then link AP subjects and any college deadlines you already know.</li>
+  <li>Add your classes in To-do, then link AP subjects and any college deadlines you already know.</li>
   <li>Create one main note page for the week and use <strong>Quick Capture</strong> for everything else.</li>
   <li>Open <strong>Home</strong> to review the Daily Thread and the new <em>Review due</em> + <em>Tracker summary</em> cards, then schedule real work blocks into Timeline.</li>
   <li>Open the <strong>Review</strong> tab and create one deck (e.g. "AP Bio · Unit 3") plus a couple of cards. They will show up on Home as soon as they are due.</li>
@@ -44900,7 +44952,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
-  <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, Homework, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
+  <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, To-do, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
   <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items. For homework, “tonight” means today at 11:59 PM unless you state a specific time.</li>
   <li>If more than one AP subject exists, Quick Capture requires you to choose the destination subject before it saves.</li>
@@ -44924,12 +44976,12 @@ function buildOnboardingPlanPreview() {
                 },
                 {
                     id: 'homework',
-                    title: 'Homework And Class Dashboard',
+                    title: 'To-do And Class Dashboard',
                     body: `
 <ul>
-  <li>Homework organizes work into class and extracurricular lanes.</li>
-  <li>All Assignments shows current work first. Open <strong>Past assignments</strong> to see older work; search and filters show matches immediately.</li>
-  <li>Schedule, Complete, and More sit together on each assignment row.</li>
+  <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
+  <li>All Tasks shows current work first. Open <strong>Completed tasks</strong> to see finished work; search and filters show matches immediately.</li>
+  <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
   <li>The Class Dashboard shows open homework, upcoming class deadlines, linked notes, and any AP subject tied to that class.</li>
@@ -83131,8 +83183,12 @@ function openQuickCaptureModal(prefillText, options) {
     const submitLabel = modal.querySelector('#quickCaptureSubmitBtn');
     if (!input || !previewEl || !typeSelect || !dateInput || !timeInput || !apSubjectSelect) return;
 
-    if (titleEl) titleEl.textContent = requestedType === 'homework' ? 'Add homework' : 'Quick Capture';
-    if (submitLabel) submitLabel.textContent = requestedType === 'homework' ? 'Add homework' : 'Capture';
+    const setCaptureLabels = captureType => {
+        const label = captureType === 'homework' ? 'Add homework' : captureType === 'task' ? 'Add task' : 'Capture';
+        if (titleEl) titleEl.textContent = label === 'Capture' ? 'Quick Capture' : label;
+        if (submitLabel) submitLabel.textContent = label;
+    };
+    setCaptureLabels(requestedType);
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
@@ -83157,6 +83213,8 @@ function openQuickCaptureModal(prefillText, options) {
         if (difficultySelect && difficultySelect.dataset.userTouched === '1') parsed.difficulty = difficultySelect.value || 'medium';
         if (estimateInput && estimateInput.dataset.userTouched === '1') parsed.estimateMinutes = Math.max(0, Math.round(Number(estimateInput.value) || 0));
         typeSelect.value = parsed.type;
+        setCaptureLabels(parsed.type);
+        if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(typeSelect);
         dateInput.value = parsed.dueDate || ''; timeInput.value = parsed.dueTime || ''; refreshEnhancedDateTimeInputs(modal);
         if (prioritySelect && prioritySelect.dataset.userTouched !== '1') prioritySelect.value = parsed.priority || 'medium';
         if (difficultySelect && difficultySelect.dataset.userTouched !== '1') difficultySelect.value = parsed.difficulty || 'medium';
@@ -83205,7 +83263,7 @@ function openQuickCaptureModal(prefillText, options) {
             }
             case 'note': destination = 'Note'; break;
             case 'block': destination = 'Timeline block'; break;
-            default: destination = 'Task';
+            default: destination = 'To-do · General';
         }
         bits.push(`→ ${destination}`);
         if (parsed.type === 'grade' && parsed.score !== null && parsed.maxScore) {
@@ -83215,7 +83273,7 @@ function openQuickCaptureModal(prefillText, options) {
         if (parsed.dueTime) bits.push(`time: ${parsed.dueTime}`);
         if (parsed.priority && parsed.priority !== 'medium') bits.push(`priority: ${parsed.priority}`);
         if (parsed.difficulty && parsed.difficulty !== 'medium') bits.push(`difficulty: ${parsed.difficulty}`);
-        if (parsed.type !== 'homework' && !parsed.courseName && parsed.classHint) bits.push(`class hint: ${parsed.classHint}`);
+        if (parsed.type !== 'homework' && parsed.type !== 'task' && !parsed.courseName && parsed.classHint) bits.push(`class hint: ${parsed.classHint}`);
         // Effort estimate + optional "block focus time" nudge (the plan step).
         const estMinutes = estimateQuickCaptureMinutes({ ...parsed, type: parsed.type });
         if (estimateInput && estimateInput.dataset.userTouched !== '1') estimateInput.value = parsed.estimateMinutes > 0 ? String(parsed.estimateMinutes) : '';
@@ -83236,6 +83294,7 @@ function openQuickCaptureModal(prefillText, options) {
     };
     typeSelect.onchange = () => {
         const manualType = String(typeSelect.value || 'task');
+        setCaptureLabels(manualType);
         if (typeSelect.dataset) typeSelect.dataset.manualType = manualType;
         syncQuickCaptureApSubjectField({ type: manualType }, modal);
         syncQuickCaptureCourseField({ type: manualType, courseId: '', classHint: '' }, modal);
@@ -83416,7 +83475,7 @@ function submitQuickCapture() {
     const type = String(typeSelect.value || 'task');
     const dueDate = String((dateInput && dateInput.value) || '');
     const dueTime = String((timeInput && timeInput.value) || '');
-    const parsedCapture = parseQuickCaptureText(input.value) || {};
+    const parsedCapture = parseQuickCaptureText(input.value, { type }) || {};
     const priority = String((prioritySelect && prioritySelect.value) || parsedCapture.priority || 'medium');
     const difficulty = String((difficultySelect && difficultySelect.value) || parsedCapture.difficulty || 'medium');
     const estimateMinutes = Math.max(0, Math.round(Number((estimateInput && estimateInput.value) || parsedCapture.estimateMinutes) || 0));
@@ -83424,6 +83483,7 @@ function submitQuickCapture() {
 
     try {
         switch (type) {
+            case 'task':
             case 'homework':
             case 'test': {
                 // Route through the Homework module rather than writing hwTasks:v2
@@ -83437,9 +83497,9 @@ function submitQuickCapture() {
                 // is only the default the dropdown was seeded with.
                 const courseSel = modal.querySelector('#quickCaptureCourse');
                 const newCourseEl = modal.querySelector('#quickCaptureNewCourse');
-                let hwCourseId = String(parsedHw.courseId || '');
-                let hwCourseName = String(parsedHw.courseName || '');
-                if (courseSel) {
+                let hwCourseId = type === 'task' ? '' : String(parsedHw.courseId || '');
+                let hwCourseName = type === 'task' ? '' : String(parsedHw.courseName || '');
+                if (courseSel && type !== 'task') {
                     const selVal = String(courseSel.value || '');
                     if (selVal === '__new__') {
                         hwCourseId = '';
@@ -83474,16 +83534,16 @@ function submitQuickCapture() {
                         difficulty,
                         estimateMinutes,
                         notes: captureNotes,
-                        kind: type === 'test' ? (/\bquiz\b/i.test(hwTitle) ? 'quiz' : 'test') : 'assignment'
+                        kind: type === 'task' ? 'task' : type === 'test' ? (/\bquiz\b/i.test(hwTitle) ? 'quiz' : 'test') : 'assignment'
                     })
                     : null;
                 if (!created) {
-                    if (typeof showToast === 'function') showToast('Homework is unavailable right now — nothing was added.');
+                    if (typeof showToast === 'function') showToast('To-do is unavailable right now — nothing was added.');
                     return;
                 }
                 try { window.SutraActivation && window.SutraActivation.record('capture'); } catch (err) {}
                 if (typeof showToast === 'function') {
-                    const label = type === 'test' ? 'Test / quiz' : 'Homework';
+                    const label = type === 'task' ? 'General task' : type === 'test' ? 'Test / quiz' : 'Homework';
                     showToast(created.persistence && created.persistence.ok === false
                         ? `${label} captured in this session. Browser storage needs attention — export a backup before closing.`
                         : (hwCourseName ? `${label} captured in ${hwCourseName}.` : `${label} captured.`));
@@ -83730,7 +83790,6 @@ function submitQuickCapture() {
                 }
                 break;
             }
-            case 'task':
             default: {
                 if (typeof tasks !== 'undefined' && Array.isArray(tasks)) {
                     tasks.push({
@@ -84330,7 +84389,7 @@ function getCommandPaletteCommands() {
         { id: 'open-today', label: 'Open Home', hint: 'Go to the Home dashboard', run: () => setActiveView('today') },
         { id: 'open-timeline', label: 'Open Timeline / Calendar', hint: 'Timeline view', hidden: modeHides('timeline'), run: () => setActiveView('timeline') },
         { id: 'open-notes', label: 'Open Create', hint: 'Create workspace', hidden: modeHides('notes'), run: () => setActiveView('notes') },
-        { id: 'open-homework', label: 'Open Homework', hint: 'Homework organizer', hidden: modeHides('homework'), run: () => setActiveView('homework') },
+        { id: 'open-homework', label: 'Open To-do', hint: 'Homework and general tasks', hidden: modeHides('homework'), run: () => setActiveView('homework') },
         { id: 'open-apstudy', label: 'Open Testing Hub', hint: 'Dashboard, exams, review, cram', hidden: modeHides('apstudy'), run: () => setActiveView('apstudy') },
         { id: 'open-testing-dashboard', label: 'Testing Hub: Dashboard', hint: 'Next step + KPIs', hidden: modeHides('apstudy'), run: () => { try { setActiveView('apstudy'); if (typeof switchTestingHubSection === 'function') switchTestingHubSection('dashboard'); } catch (err) {} } },
         { id: 'open-testing-exams', label: 'Testing Hub: Exams', hint: 'AP, SAT, ACT, MCAT, and more', hidden: modeHides('apstudy'), run: () => { try { setActiveView('apstudy'); if (typeof switchTestingHubSection === 'function') switchTestingHubSection('exams'); } catch (err) {} } },
@@ -84367,7 +84426,7 @@ function getCommandPaletteCommands() {
         { id: 'add-business-project', label: 'Add business project', hint: 'New project in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('project'); } catch (err) {} } },
         { id: 'add-business-invoice', label: 'Add invoice', hint: 'New invoice in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('invoice'); } catch (err) {} } },
         { id: 'add-business-meeting', label: 'Add meeting', hint: 'New meeting in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('meeting'); } catch (err) {} } },
-        { id: 'add-homework', label: 'Add homework (open Homework)', hint: 'Homework add flow', hidden: modeHides('homework'), run: () => setActiveView('homework') },
+        { id: 'add-homework', label: 'Add homework (open To-do)', hint: 'Homework add flow', hidden: modeHides('homework'), run: () => setActiveView('homework') },
         { id: 'add-ap-subject', label: 'Add AP subject', hint: 'AP Study add subject', hidden: modeHides('apstudy'), run: () => { try { setActiveView('apstudy'); if (typeof window.openApStudyAddSubject === 'function') window.openApStudyAddSubject(); } catch (err) {} } },
         { id: 'start-focus', label: 'Start focus timer', hint: 'Focus timer', run: () => { try { startTimer && startTimer(); } catch (err) {} } },
         { id: 'toggle-theme-panel', label: 'Toggle theme panel', hint: 'Theme switcher', run: () => { try { toggleThemePanel && toggleThemePanel(); } catch (err) {} } },
@@ -84516,7 +84575,7 @@ function renderCommandPalette(query) {
         };
         html += renderGroup('Notes', results.notes);
         html += renderGroup('Tasks', results.tasks);
-        html += renderGroup('Homework', results.homework);
+        html += renderGroup('To-do', results.homework);
         html += renderGroup('Courses', results.courses);
         html += renderGroup('Resources', results.resources);
         html += renderGroup('AP Study', results.apstudy);
@@ -84557,7 +84616,7 @@ function renderCommandPalette(query) {
             const groupMap = {
                 'Notes': 'notes',
                 'Tasks': 'tasks',
-                'Homework': 'homework',
+                'To-do': 'homework',
                 'Courses': 'courses',
                 'Resources': 'resources',
                 'AP Study': 'apstudy',
@@ -84982,7 +85041,7 @@ function openClassDashboardDrawer(courseId) {
             </div>
         </div>
         <div class="class-dash-actions">
-            <button type="button" class="neumo-btn class-dash-primary" id="classDashOpenHwBtn">Open Homework</button>
+            <button type="button" class="neumo-btn class-dash-primary" id="classDashOpenHwBtn">Open To-do</button>
             <button type="button" class="neumo-btn" id="classDashFocusBtn">Start focus timer</button>
         </div>
     `;
@@ -85909,7 +85968,7 @@ function applyNotesSplitPreset(presetId) {
             const open = (Array.isArray(hwList) ? hwList : []).filter(t => !t.done).sort((a,b) => String(a.dueDate||'').localeCompare(String(b.dueDate||'')));
             const first = open[0];
             const title = first ? `Working on: ${first.title || first.text || 'Assignment'}` : 'Assignment notes';
-            const body = first ? `<p><strong>Due:</strong> ${first.dueDate || 'TBD'}</p><p><em>Paste or type assignment details, then draft your work here.</em></p>` : '<p><em>Create or open an assignment in Homework to pair it here.</em></p>';
+            const body = first ? `<p><strong>Due:</strong> ${first.dueDate || 'TBD'}</p><p><em>Paste or type assignment details, then draft your work here.</em></p>` : '<p><em>Create or open an assignment in To-do to pair it here.</em></p>';
             secondary = mkPage(title, body, { splitPresetId: preset.id });
             break;
         }

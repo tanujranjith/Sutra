@@ -42,6 +42,10 @@ test('Home/Create labels and Home quick task use the canonical task path', async
   const task = await page.evaluate(() => window.flowAtelier.tasks.find((item) => item.title === 'Read chapter seven'));
   expect(task).toMatchObject({ scheduleType: 'once', priority: 'medium', difficulty: 'medium', isActive: true });
   expect(task.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const canonical = await page.evaluate(() => window.SutraHomeworkStore.getSnapshot().tasks.filter(item => item.title === 'Read chapter seven'));
+  expect(canonical).toHaveLength(1);
+  expect(canonical[0]).toMatchObject({ kind: 'task', courseId: '', done: false });
+  expect(task.homeworkSourceId).toBe(canonical[0].id);
 });
 
 test('HTML Pages import, execute locally, persist source, and clear locked content', async ({ page }) => {

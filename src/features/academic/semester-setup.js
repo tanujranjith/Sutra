@@ -528,8 +528,8 @@
         course: { label: 'Classes', icon: 'fa-graduation-cap', target: 'Course Hub' },
         recurring_class: { label: 'Class meetings', icon: 'fa-clock', target: 'Course schedule' },
         grading_category: { label: 'Grading weights', icon: 'fa-percent', target: 'Grade Planner' },
-        assignment: { label: 'Assignments', icon: 'fa-list-check', target: 'Homework' },
-        exam: { label: 'Tests & exams', icon: 'fa-file-pen', target: 'Homework (high priority)' },
+        assignment: { label: 'Assignments', icon: 'fa-list-check', target: 'To-do' },
+        exam: { label: 'Tests & exams', icon: 'fa-file-pen', target: 'To-do (high priority)' },
         event: { label: 'Events', icon: 'fa-calendar-day', target: 'Timeline' },
         no_school: { label: 'No-school days', icon: 'fa-umbrella-beach', target: 'School Schedule' }
     };

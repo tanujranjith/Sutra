@@ -282,3 +282,36 @@ test('normalization rejects unsafe URLs, repairs duplicate IDs, and records orph
   assert.equal(workspace.tasks[0].sourceUrl, '');
   assert.equal(workspace.tasks[0].orphanedCourseId, 'missing');
 });
+
+test('scheduled save receipt waits for persistence and reports rejection', async () => {
+  const store = canonical.createStore({ tasks: [] });
+  let finish;
+  let fail;
+  store.configure({
+    getWorkspace: () => ({ tasks: [] }),
+    setWorkspace: () => {},
+    persist: (reason) => reason === 'homework-migration' ? Promise.resolve()
+      : new Promise((resolve, reject) => { finish = resolve; fail = reject; })
+  });
+  store.transact(workspace => workspace.tasks.push({ id: 'general', title: 'Laundry', kind: 'task' }));
+  let settled = false;
+  const saved = store.whenPersisted().then(result => { settled = true; return result; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  finish();
+  assert.equal(await saved, true);
+  assert.equal(store.getSnapshot().tasks[0].kind, 'task');
+
+  store.transact(workspace => { workspace.tasks[0].done = true; });
+  const rejected = store.whenPersisted();
+  fail(new Error('disk full'));
+  await assert.rejects(rejected, /disk full/);
+  assert.equal(store.getSnapshot().tasks[0].done, true);
+});
+
+test('a synchronous adapter cannot confirm a durable scheduled save', async () => {
+  const store = canonical.createStore({ tasks: [] });
+  store.configure({ persist: () => undefined });
+  store.transact(workspace => workspace.tasks.push({ id: 'local', title: 'Accepted only' }));
+  assert.equal(await store.whenPersisted(), false);
+});
