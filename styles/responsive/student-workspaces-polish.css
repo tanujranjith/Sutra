@@ -42,6 +42,11 @@
 }
 
 @media (max-width: 640px) {
+    /* The shared Create chooser uses the same footer for every page type. */
+    #newPageModal .new-page-modal-footer .btn {
+        min-height: 44px;
+    }
+
     /* Content hosts hide the Notes toolbar. Keep its page-list control in the
        top corner and reserve space in compact host headers. */
     body[data-view="notes"]:not(.sidebar-open):is(.sheets-page-active, .slides-page-active, .html-page-active, .folder-page-active) #sidebarToggle {
