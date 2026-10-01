@@ -49902,9 +49902,12 @@ function getActiveEditor() {
 
         function updateCanvasContentTimeline(token, model) {
             if (!isCanvasContentTimelineTokenCurrent(token) || !window.SutraContentTimeline?.inspect(model).supported) return false;
-            const object = token.page.canvas.objects.find(item => item.id === token.objectId && item.type === 'content-timeline');
+            let object = token.page.canvas.objects.find(item => item.id === token.objectId && item.type === 'content-timeline');
             if (!object || object.locked || !window.SutraContentTimeline.inspect(object.contentTimeline).supported) return false;
             pushCanvasUndo(token.page);
+            // Undo preparation normalizes the Canvas and replaces its object records.
+            object = token.page.canvas.objects.find(item => item.id === token.objectId && item.type === 'content-timeline');
+            if (!object || object.locked) return false;
             object.contentTimeline = window.SutraContentTimeline.normalize(model);
             object.label = model.title || 'Custom timeline'; object.text = window.SutraContentTimeline.toPlainText(model);
             object.updatedAt = new Date().toISOString();

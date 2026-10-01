@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-authoring4",
-    "hash": "9058d60fc65ec970"
+    "stamp": "20261001-qa-canvas1",
+    "hash": "95ef90a49342488e"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
