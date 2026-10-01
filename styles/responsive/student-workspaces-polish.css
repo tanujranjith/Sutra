@@ -19,9 +19,23 @@
     --review-on-accent: var(--accent-text, #fff);
 }
 
-/* Override the anchored desktop height so Settings uses one page scroll on
-   tablets and phones, rather than squeezing settings and preview into rows. */
+/* Keep calendar actions touch-sized and give Settings one page scroll on
+   tablets and phones without squeezing its controls and preview into rows. */
 @media (max-width: 1024px) {
+    #view-timeline .timeline-today-btn,
+    #view-timeline .timeline-step-btn,
+    #view-timeline .timeline-date-input,
+    #view-timeline .timeline-mode-tab,
+    #view-timeline #addBlockBtn,
+    #view-timeline .timeline-more-btn {
+        min-height: 44px;
+    }
+
+    #view-timeline .timeline-step-btn,
+    #view-timeline .timeline-more-btn {
+        min-width: 44px;
+    }
+
     body.settings-anchored-mode #view-settings.view-settings {
         height: auto;
         min-height: 0;
@@ -502,6 +516,20 @@
 }
 
 @media (max-width: 1024px) and (max-height: 480px) and (orientation: landscape) {
+    .view-tab,
+    .view-tabs-toggle,
+    .view-tab-add,
+    .view-tab-theme,
+    #notifBellBtn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    #view-settings .cc-btn,
+    #view-settings .cc-action-buttons .cc-btn {
+        min-height: 44px;
+    }
+
     #view-today .today-mobile-greeting,
     #view-today .today-mobile-appbar {
         margin-bottom: 10px;
