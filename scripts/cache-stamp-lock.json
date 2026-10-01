@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-create-polish2",
-    "hash": "4b4ec56b5fb7f8ef"
+    "stamp": "20261001-authoring4",
+    "hash": "9058d60fc65ec970"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -106,6 +106,10 @@
   "src/domain/assistant-permissions.js": {
     "stamp": "20260913-locked-assistant-permissions1",
     "hash": "adcc8905d68c7e3f"
+  },
+  "src/domain/content-timeline.js": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "35b4ffc3e530c876"
   },
   "src/domain/homework-store.js": {
     "stamp": "20261001-todo-completion1",
@@ -235,9 +239,21 @@
     "stamp": "20260917-features-style-reuse1",
     "hash": "b6d35b5d814e4343"
   },
+  "src/features/notes/authoring-tools.js": {
+    "stamp": "20261001-authoring4",
+    "hash": "9a2aaa7669d02fc7"
+  },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260929-issues51-59-64-boundary1",
-    "hash": "dd0815729603283b"
+    "stamp": "20261001-authoring4",
+    "hash": "2d14aaed9a4d8a9a"
+  },
+  "src/features/notes/inline-ai-assist.js": {
+    "stamp": "20261001-inline-ai1",
+    "hash": "771b339215d4c6de"
+  },
+  "src/features/notes/rich-links.js": {
+    "stamp": "20261001-rich-links6",
+    "hash": "ecf07f032b93b829"
   },
   "src/features/search/global-search-engine.js": {
     "stamp": "20261001-todo-completion1",
@@ -303,6 +319,14 @@
     "stamp": "20260807-canvas2",
     "hash": "447a04ed9cb49a41"
   },
+  "src/features/workspace/content-timeline-editor.js": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "97d74c2d0846c183"
+  },
+  "src/features/workspace/content-timeline-hosts.js": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "d2bcef3dff79af5d"
+  },
   "src/features/workspace/contextual-shell.js": {
     "stamp": "20260913-page-tree-guides1",
     "hash": "d2d01e3d4679216e"
@@ -319,21 +343,25 @@
     "stamp": "20260913-direct-pdf2",
     "hash": "66cf045204ce8513"
   },
+  "src/features/workspace/folder-workspace.js": {
+    "stamp": "20261001-folders4",
+    "hash": "4906b813586df373"
+  },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261001-create-polish4",
-    "hash": "5c96fc7da312e048"
+    "stamp": "20261001-authoring4",
+    "hash": "ac255a10eeaadc67"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20261001-create-polish5",
-    "hash": "7616d9993d5797da"
+    "stamp": "20261001-authoring6",
+    "hash": "f463eb73d4149397"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -360,8 +388,8 @@
     "hash": "b071d76dfdbb4537"
   },
   "src/features/workspace/pdf-workspace.js": {
-    "stamp": "20261001-create-polish4",
-    "hash": "313e87651ae7c22b"
+    "stamp": "20261001-authoring6",
+    "hash": "ba751352ef5fc163"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -376,12 +404,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20261001-create-polish3",
-    "hash": "ad7ef47bfa0a32da"
+    "stamp": "20261001-authoring6",
+    "hash": "14827808e9654fcb"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20261001-create-polish5",
-    "hash": "1dad55f9175cf238"
+    "stamp": "20261001-authoring6",
+    "hash": "f05729c9cb3eaebe"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -523,6 +551,10 @@
     "stamp": "20261001-backup-progress1",
     "hash": "2f957ae604803635"
   },
+  "styles/features/canvas-workbench-polish.css": {
+    "stamp": "20261001-canvas-polish2",
+    "hash": "7c11af4c3f5afb2f"
+  },
   "styles/features/cloud-sync.css": {
     "stamp": "20260807-syncsheet1",
     "hash": "055047fe4a69b8c3"
@@ -531,6 +563,14 @@
     "stamp": "20260705-clb2",
     "hash": "47cef56579d25652"
   },
+  "styles/features/content-timeline-hosts.css": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "61fbe3ff4003d5c9"
+  },
+  "styles/features/content-timeline.css": {
+    "stamp": "20261001-content-timeline4",
+    "hash": "d50cc5dc21e5560b"
+  },
   "styles/features/customization.css": {
     "stamp": "20260601-handwriting-mods",
     "hash": "63cb31711a6f0730"
@@ -538,6 +578,10 @@
   "styles/features/daily-quotes.css": {
     "stamp": "20260807-customquotes1",
     "hash": "3bcf3e999e605556"
+  },
+  "styles/features/folder-workspace.css": {
+    "stamp": "20261001-folders7",
+    "hash": "2ab5dd35ede79d81"
   },
   "styles/features/global-search.css": {
     "stamp": "20260917-search-focus1",
@@ -548,8 +592,12 @@
     "hash": "24eb3719c1ba2831"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20261001-create-polish2",
-    "hash": "e3ec2a8290f6170c"
+    "stamp": "20261001-authoring4",
+    "hash": "4a2b39947d0c2377"
+  },
+  "styles/features/inline-ai-assist.css": {
+    "stamp": "20261001-inline-ai1",
+    "hash": "12d9dc7fa4f2427e"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -572,8 +620,12 @@
     "hash": "9ab16713e512d32f"
   },
   "styles/features/pdf-workspace.css": {
-    "stamp": "20261001-create-polish2",
-    "hash": "e9603bfbc3548734"
+    "stamp": "20261001-authoring4",
+    "hash": "1c807a578c7b1092"
+  },
+  "styles/features/rich-links.css": {
+    "stamp": "20261001-rich-links8",
+    "hash": "35f767869d6e91fc"
   },
   "styles/features/sheets.css": {
     "stamp": "20261001-create-polish3",
@@ -584,8 +636,8 @@
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20261001-create-polish3",
-    "hash": "e9fbeb1c72a7ea97"
+    "stamp": "20261001-authoring4",
+    "hash": "f4677f80441cb909"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
@@ -638,6 +690,10 @@
   "styles/responsive/mobile.css": {
     "stamp": "20261001-mobile-data-actions1",
     "hash": "d250ec565ffba14d"
+  },
+  "styles/responsive/student-workspaces-polish.css": {
+    "stamp": "20261001-mobile-workspaces8",
+    "hash": "8a667b3bbaefb2a6"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

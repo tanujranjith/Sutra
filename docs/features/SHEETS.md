@@ -11,6 +11,10 @@ Selection, clipboard, scroll position, formula-bar edit state, and undo/redo are
 
 Like every content-bearing Create mode, Sheets checks the canonical `isPageContentAuthorized` boundary before rendering or exposing a workbook. Locked workbooks are not mounted, so their cells and formulas cannot enter the grid, formula bar, clipboard, or the `window.SutraSheets` bridge.
 
+Locking an already open page or workspace hides the editor and clears its
+rendered grid, charts, formula draft, clipboard, and session history. Unlocking
+reloads canonical values, so an old draft cannot later overwrite a cell.
+
 ## Engine
 
 `src/features/workspace/sheets-engine.js` is DOM-independent and is safe to exercise from Node tests. It normalizes the sparse model, converts A1 notation, parses formulas without `eval`, evaluates formulas deterministically, detects circular references, supports cross-sheet references, and translates relative, absolute, and mixed references for fill/copy behavior.

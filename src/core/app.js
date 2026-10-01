@@ -127,7 +127,7 @@ const CANVAS_MAX_GROUPS = 300;
 const CANVAS_ALLOWED_OBJECT_TYPES = new Set([
     'text', 'sticky', 'shape', 'freehand', 'image', 'file', 'link', 'table',
     'frame', 'linked-note', 'homework', 'task', 'timeline', 'ap-study',
-    'review', 'college'
+    'review', 'college', 'content-timeline'
 ]);
 const CANVAS_ALLOWED_BACKGROUNDS = new Set([
     'blank', 'grid', 'dots', 'lined', 'graph', 'dark-grid', 'theme'
@@ -417,6 +417,9 @@ function normalizeCanvasObject(rawObject, seenIds) {
         normalized.ref = null;
     }
     if (rawObject.url) normalized.url = normalizeExternalUrl(rawObject.url);
+    if (type === 'content-timeline' && typeof window !== 'undefined' && window.SutraContentTimeline) {
+        normalized.contentTimeline = window.SutraContentTimeline.normalize(rawObject.contentTimeline);
+    }
     if (Array.isArray(rawObject.cells)) {
         normalized.cells = rawObject.cells.slice(0, 100).map(row => (
             Array.isArray(row) ? row.slice(0, 24).map(cell => String(cell || '')) : []
@@ -39045,7 +39048,9 @@ function buildOnboardingPlanPreview() {
                 '#hwCourseQuickModal',
                 // Academic-planning modals (Semester Setup, School Schedule,
                 // Assignment Studio) share one class + the is-visible signal.
-                '.sutra-academic-modal'
+                '.sutra-academic-modal',
+                '.sutra-modal-overlay',
+                'dialog.sutra-rich-link-dialog'
             ].join(',');
             const focusableSelector = [
                 'a[href]',
@@ -39070,6 +39075,7 @@ function buildOnboardingPlanPreview() {
             function isElementOpen(el) {
                 if (!el || !el.isConnected) return false;
                 if (el.hidden) return false;
+                if (el.tagName === 'DIALOG') return el.hasAttribute('open');
                 if (el.getAttribute('aria-hidden') === 'false') return true;
                 if (el.classList.contains('active')) return true;
                 if (el.classList.contains('fs-visible')) return true;
@@ -39366,7 +39372,7 @@ function buildOnboardingPlanPreview() {
                         childList: true,
                         subtree: true,
                         attributes: true,
-                        attributeFilter: ['class', 'hidden', 'aria-hidden']
+                        attributeFilter: ['class', 'hidden', 'aria-hidden', 'open']
                     });
                 }
                 syncAll();
@@ -47817,6 +47823,7 @@ function getActiveEditor() {
             const canvas = normalizeCanvasModel(page.canvas);
             const parts = [page.title || ''];
             canvas.objects.forEach(object => {
+                if (object.type === 'content-timeline' && window.SutraContentTimeline) parts.push(window.SutraContentTimeline.toPlainText(object.contentTimeline));
                 if (object.text) parts.push(object.text);
                 if (object.label) parts.push(object.label);
                 if (object.ref && object.ref.id) {
@@ -47887,6 +47894,26 @@ function getActiveEditor() {
             loadPage(page.id);
             setActiveView('notes');
             return page;
+        }
+
+        function createContentTimelineNote(model, source = {}) {
+            if (!workspaceHydrationComplete || persistenceWritesBlocked || workspaceImportInProgress
+                || sutraRemoteCommitPending || sutraRevocationLockActive) return null;
+            const helper = window.SutraContentTimeline;
+            const hosts = window.SutraContentTimelineHosts;
+            if (!helper || !hosts || !helper.inspect(model).supported) return null;
+            const sourcePageId = String(source.sourcePageId || '');
+            const sourcePage = sourcePageId ? pages.find(page => String(page.id) === sourcePageId) : null;
+            if (sourcePageId && (!sourcePage || !canWritePageContent(sourcePage))) return null;
+            const markup = hosts.serializeMarkup(helper.normalize(model), { nonEditable: true });
+            if (!markup) return null;
+            const title = getUniqueGeneratedPageTitle(String(model.title || 'PDF timeline').replace(/::/g, ' — '));
+            const sourceLink = sourcePage
+                ? '<p>Source: <span class="page-link" data-page-id="' + escapeHtml(sourcePage.id)
+                    + '" contenteditable="false">' + escapeHtml(sourcePage.title || 'PDF source note') + '</span>'
+                    + (source.sourceTitle ? ' · ' + escapeHtml(source.sourceTitle) : '') + '</p>'
+                : source.sourceTitle ? '<p>Source: ' + escapeHtml(source.sourceTitle) + '</p>' : '';
+            return createImportedPage(title, sourceLink + markup, PAGE_ICONS.NOTE, { open: false });
         }
 
         function ensureCanvasRuntime(page) {
@@ -48010,7 +48037,33 @@ function getActiveEditor() {
             const stroke = object.stroke || object.color || '';
             if (stroke) div.style.setProperty('--canvas-object-stroke', stroke);
 
-            if (object.type === 'freehand') {
+            if (object.type === 'content-timeline') {
+                div.setAttribute('role', 'group');
+                div.removeAttribute('aria-pressed');
+                const header = document.createElement('div');
+                header.className = 'canvas-linked-card-kicker';
+                header.textContent = 'Timeline · drag here to move';
+                div.appendChild(header);
+                const body = document.createElement('div');
+                body.className = 'canvas-content-timeline-body';
+                const content = window.SutraContentTimelineHosts?.renderDOM(object.contentTimeline);
+                if (content) body.appendChild(content);
+                else body.textContent = object.text || 'Timeline content is unavailable.';
+                body.addEventListener('pointerdown', event => { event.stopPropagation(); });
+                div.appendChild(body);
+                const edit = document.createElement('button');
+                edit.type = 'button'; edit.className = 'sutra-authoring-node-action'; edit.textContent = 'Edit timeline';
+                edit.disabled = object.locked || !canWritePageContent(page);
+                edit.addEventListener('pointerdown', event => { event.stopPropagation(); });
+                edit.addEventListener('click', async () => {
+                    setCanvasSelection([object.id]);
+                    const selected = getCanvasContentTimelineSelection();
+                    if (!selected || !window.SutraContentTimelineEditor) return;
+                    const model = await window.SutraContentTimelineEditor.open({ model: selected.model, title: 'Edit timeline' });
+                    if (model) updateCanvasContentTimeline(selected.token, model);
+                });
+                div.appendChild(edit);
+            } else if (object.type === 'freehand') {
                 const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                 svg.setAttribute('viewBox', `0 0 ${Math.max(1, object.width)} ${Math.max(1, object.height)}`);
                 svg.setAttribute('preserveAspectRatio', 'none');
@@ -49818,11 +49871,56 @@ function getActiveEditor() {
             return { ok: true, pageId: page.id };
         }
 
+        function captureCanvasContentTimelineInsertion() {
+            const page = getPrimaryCanvasPage();
+            return page && canWritePageContent(page) ? { page, snapshot: JSON.stringify(page.canvas) } : null;
+        }
+
+        function isCanvasContentTimelineTokenCurrent(token) {
+            const page = getPrimaryCanvasPage();
+            return !!(token && page === token.page && canWritePageContent(page) && token.snapshot === JSON.stringify(page.canvas));
+        }
+
+        function insertCanvasContentTimeline(model, token = captureCanvasContentTimelineInsertion()) {
+            if (!isCanvasContentTimelineTokenCurrent(token) || !window.SutraContentTimeline?.inspect(model).supported) return false;
+            if (token.page.canvas.objects.length >= CANVAS_MAX_OBJECTS) { showToast('This Canvas has reached its object limit.'); return false; }
+            return !!addCanvasObject('content-timeline', {
+                contentTimeline: window.SutraContentTimeline.normalize(model),
+                label: model.title || 'Custom timeline', text: window.SutraContentTimeline.toPlainText(model),
+                width: 420, height: 340
+            });
+        }
+
+        function getCanvasContentTimelineSelection() {
+            const token = captureCanvasContentTimelineInsertion();
+            const ids = activeCanvasRuntime && activeCanvasRuntime.selectedObjectIds;
+            if (!token || !ids || ids.length !== 1) return null;
+            const object = token.page.canvas.objects.find(item => item.id === ids[0] && item.type === 'content-timeline');
+            if (!object || object.locked) return null;
+            return { model: object.contentTimeline, token: { ...token, objectId: object.id } };
+        }
+
+        function updateCanvasContentTimeline(token, model) {
+            if (!isCanvasContentTimelineTokenCurrent(token) || !window.SutraContentTimeline?.inspect(model).supported) return false;
+            const object = token.page.canvas.objects.find(item => item.id === token.objectId && item.type === 'content-timeline');
+            if (!object || object.locked || !window.SutraContentTimeline.inspect(object.contentTimeline).supported) return false;
+            pushCanvasUndo(token.page);
+            object.contentTimeline = window.SutraContentTimeline.normalize(model);
+            object.label = model.title || 'Custom timeline'; object.text = window.SutraContentTimeline.toPlainText(model);
+            object.updatedAt = new Date().toISOString();
+            saveCanvasPage(token.page, { persist: true }); renderCanvasPage(token.page);
+            return true;
+        }
+
         function installSutraCanvasApi() {
             try {
                 window.SutraCanvas = {
                     createPage: createCanvasPage,
                     getCurrentPage: () => getPrimaryCanvasPage(),
+                    captureContentTimelineInsertion: captureCanvasContentTimelineInsertion,
+                    insertContentTimeline: insertCanvasContentTimeline,
+                    getContentTimelineSelection: getCanvasContentTimelineSelection,
+                    updateContentTimeline: updateCanvasContentTimeline,
                     getContext: getCanvasAssistantContext,
                     addText: (text, fields = {}) => addCanvasObject('text', { text: String(text || 'Text'), ...fields }),
                     addSticky: (text, fields = {}) => addCanvasObject('sticky', { text: String(text || 'Sticky note'), fill: '#f6d56f', ...fields }),
@@ -49948,11 +50046,9 @@ function getActiveEditor() {
             if (currentPageId && currentPageId === pageId) savePage();
 
             const page = pages.find(p => p.id === pageId);
-            if (page && isFolderPage(page)) {
-                toggleCollapse(page.id);
-                return;
-            }
             if (page) {
+                window.SutraFolderWorkspace?.close();
+                document.body.classList.remove('folder-page-active');
                 currentPageId = pageId;
                 try { updateSplitPaneContext('left', { selectedNoteId: pageId }); } catch (err) { /* non-critical */ }
                 const uiState = ensureUiState();
@@ -49984,8 +50080,26 @@ function getActiveEditor() {
                 // The lock overlay is purely visual — show it on top if needed.
                 const primaryEditor = getPrimaryEditor();
                 const isCanvasPage = normalizePageType(page.type) === PAGE_TYPES.CANVAS;
+                const isFolder = isFolderPage(page);
                 const isLockedNow = page.isLocked && page.lockHash && !unlockedPageIds.has(pageId);
-                if (isCanvasPage) {
+                if (isFolder) {
+                    hideCanvasEditor();
+                    if (window.SutraNotesEditorV2?.isMounted()) window.SutraNotesEditorV2.loadDocument('');
+                    if (primaryEditor) primaryEditor.replaceChildren();
+                    document.body.classList.add('folder-page-active');
+                    if (!isLockedNow && window.SutraFolderWorkspace) window.SutraFolderWorkspace.open(page, document.getElementById('notesPrimaryPane'), {
+                        getPages: () => pages,
+                        getCurrentSpaceId: () => activeSpaceId || 'default',
+                        openPage: id => { loadPage(id); return true; },
+                        canWritePageContent,
+                        createChild: (id, type) => {
+                            const parent = pages.find(item => item.id === id);
+                            if (!parent || !isFolderPage(parent) || !canWritePageContent(parent)) return false;
+                            createNewPage({ type, parentId: id, templateId: type === 'canvas' ? 'canvas_blank' : 'blank' });
+                            return true;
+                        }
+                    });
+                } else if (isCanvasPage) {
                     bindCanvasSurfaceOnce();
                     if (!isLockedNow) showCanvasEditorForPage(page);
                     else {
@@ -50010,7 +50124,7 @@ function getActiveEditor() {
                 renderTagsContainer();
                 updateWordCount();
                 restorePrimaryNotesScrollTop(getStoredPageScrollTop(pageId));
-                try { renderBacklinksPanel(isCanvasPage ? null : pageId); } catch (err) { /* non-critical */ }
+                try { renderBacklinksPanel(isCanvasPage || isFolder ? null : pageId); } catch (err) { /* non-critical */ }
 
                 if (appSettings && appSettings.notesSplitViewEnabled) {
                     if (!secondaryPageId || secondaryPageId === currentPageId) {
@@ -50179,7 +50293,7 @@ function getActiveEditor() {
             // During a whole-workspace import/remote-sync apply the imported
             // model is the truth: a mid-import savePage would snapshot the
             // stale editor DOM back over freshly imported page content.
-            if (workspaceImportInProgress) return;
+            if (workspaceImportInProgress || persistenceWritesBlocked) return;
 
             const page = pages.find(p => p.id === currentPageId);
             if (page) {
@@ -50205,7 +50319,7 @@ function getActiveEditor() {
                     if (activeView === 'notes') {
                         saveStoredPageScrollTop(currentPageId, 0);
                     }
-                } else {
+                } else if (!isFolderPage(page)) {
                     const primaryEditor = getPrimaryEditor();
                     if (primaryEditor) {
                     persistEditorSnapshotToPage(primaryEditor, page);
@@ -51024,6 +51138,17 @@ function getActiveEditor() {
             return !!(page && !(page.isLocked && page.lockHash && !unlockedPageIds.has(page.id)));
         }
 
+        function canWritePageContent(pageOrId) {
+            const page = typeof pageOrId === 'object' && pageOrId
+                ? pageOrId : pages.find(entry => entry && String(entry.id) === String(pageOrId || ''));
+            return !!(page && pages.includes(page) && activeView === 'notes'
+                && (String(page.id) === String(currentPageId) || (appSettings.notesSplitViewEnabled && String(page.id) === String(secondaryPageId)))
+                && String(page.spaceId || 'default') === String(activeSpaceId || 'default')
+                && !page.isSystemPage && !isHelpDocsPage(page) && isPageContentAuthorized(page)
+                && workspaceHydrationComplete && !workspaceImportInProgress && !sutraRemoteCommitPending
+                && !persistenceWritesBlocked && !sutraRevocationLockActive);
+        }
+
         // Prompt for a locked page's PIN and verify it. Returns true once the
         // correct PIN is entered, false if the user cancels or exhausts attempts.
         async function promptAndVerifyPageLock(page) {
@@ -51184,6 +51309,7 @@ function getActiveEditor() {
             // Flush any unsaved editor content before hiding it behind the lock screen
             if (pageId === currentPageId) savePage();
             unlockedPageIds.delete(pageId);
+            window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(pageId) } }));
             // If this is the currently open page, show the lock screen
             if (pageId === currentPageId) {
                 const page = pages.find(p => p.id === pageId);
@@ -51197,7 +51323,9 @@ function getActiveEditor() {
         // =====================================================================
 
         function renderLockedPageScreen(page) {
+            window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(page && page.id || '') } }));
             const primaryPane = document.getElementById('notesPrimaryPane');
+            if (window.SutraFolderWorkspace) window.SutraFolderWorkspace.close();
             const screen = document.getElementById('lockedPageScreen');
             if (!primaryPane || !screen) return;
 
@@ -51435,6 +51563,7 @@ function getActiveEditor() {
                 // Flush unsaved editor content before the lock screen hides the editor
                 if (currentPageId === pageId) savePage();
                 unlockedPageIds.delete(pageId);
+                window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(pageId) } }));
                 if (currentPageId === pageId) {
                     const timedOutPage = pages.find(p => p.id === pageId);
                     if (timedOutPage) renderLockedPageScreen(timedOutPage);
@@ -53147,6 +53276,15 @@ function getActiveEditor() {
                 const titleEl = document.createElement('span');
                 titleEl.className = 'page-title-text';
                 titleEl.textContent = displayTitle;
+                if (isFolderPage(page)) {
+                    titleEl.classList.add('page-folder-open');
+                    titleEl.tabIndex = 0; titleEl.setAttribute('role', 'button');
+                    titleEl.setAttribute('aria-label', `Open folder ${displayTitle}`);
+                    titleEl.addEventListener('click', event => { event.stopPropagation(); loadPage(page.id); });
+                    titleEl.addEventListener('keydown', event => {
+                        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); loadPage(page.id); }
+                    });
+                }
                 pageItem.appendChild(titleEl);
 
                 if (page.theme && page.theme !== 'default') {
@@ -61830,8 +61968,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             pages.push(page);
             savePagesToLocal();
             renderPagesList();
-            loadPage(page.id);
-            setActiveView('notes');
+            if (options.open !== false) {
+                loadPage(page.id);
+                setActiveView('notes');
+            }
             return page;
         }
 
@@ -66140,6 +66280,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
 
         async function insertLink() {
+            const modern = activeNotesEditorV2();
+            if (modern && typeof modern.openRichLink === 'function') {
+                await modern.openRichLink();
+                return;
+            }
             const selectionState = captureEditorSelectionState();
             const inputUrl = await showCustomPromptDialog({
                 title: 'Insert Link',
@@ -66872,6 +67017,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 else blocks.push(copy(block));
             };
             return {
+                getPage: pageForMirror,
+                canWrite: () => canWritePageContent(pageForMirror()),
                 getBlock(type, id) {
                     const page = pageForMirror();
                     if (!page || !isPageContentAuthorized(page)) return null;
@@ -67412,6 +67559,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         function persistEditorSnapshotToPage(editor, page) {
             if (!editor || !page) return;
+            if (isFolderPage(page)) return;
             // Notes editor v2: force any pending debounced mirror write NOW so
             // the snapshot below reads the latest document state.
             if (editor.id === 'editor' && isNotesEditorV2Active()) {
@@ -75428,6 +75576,12 @@ ${cspMeta}
         async function performIntelligenceRequest(opts) {
             const requestId = `intel_${++intelligenceRequestSeq}_${Date.now().toString(36)}`;
             const controller = new AbortController();
+            const externalSignal = opts.signal;
+            const abortFromCaller = () => controller.abort();
+            if (externalSignal) {
+                if (externalSignal.aborted) abortFromCaller();
+                else externalSignal.addEventListener('abort', abortFromCaller, { once: true });
+            }
             activeIntelligenceRequests.set(requestId, { controller, kind: opts.kind || 'chat' });
             if (typeof opts.onRequestStarted === 'function') {
                 try { opts.onRequestStarted(requestId); } catch (e) { /* non-critical */ }
@@ -75501,6 +75655,7 @@ ${cspMeta}
                 try { controller.abort(new DOMException('Request timed out', 'TimeoutError')); } catch (e) { try { controller.abort(); } catch (_) {} }
             }, Math.max(0, effectiveTimeoutMs));
             try {
+                if (controller.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
                 // Last-mile scope/privacy audit. It deliberately receives no API
                 // key or authorization headers and runs before fetch construction.
                 const safety = window.SutraAssistantSafety;
@@ -75727,6 +75882,7 @@ ${cspMeta}
                 };
             } finally {
                 clearTimeout(timeoutHandle);
+                if (externalSignal) externalSignal.removeEventListener('abort', abortFromCaller);
                 activeIntelligenceRequests.delete(requestId);
             }
         }
@@ -77105,6 +77261,7 @@ ${cspMeta}
             // and through the same explicit send-disclosure as every other AI
             // path. Returns { ok, value | errorCategory/errorMessage, cancelled }.
             window.SutraIntelligenceBridge = {
+                generateText: (opts) => window.SutraIntelligenceBridge.extractStructured({ ...opts, plainText: true, kind: 'inline-note-writing' }),
                 isConfigured: () => {
                     try {
                         const provider = getCurrentChatProvider();
@@ -77113,6 +77270,8 @@ ${cspMeta}
                     } catch (e) { return false; }
                 },
                 extractStructured: async (opts) => {
+                    const cancelled = () => ({ ok: false, cancelled: true, errorCategory: 'cancelled', errorMessage: 'Request cancelled.' });
+                    if (opts && opts.signal && opts.signal.aborted) return cancelled();
                     const provider = getCurrentChatProvider();
                     const providerConfig = CHAT_PROVIDER_CONFIG[provider];
                     const isLocalProvider = provider === 'local';
@@ -77128,9 +77287,10 @@ ${cspMeta}
                     }
                     // Explicit consent before anything leaves the device.
                     if (!isLocalProvider) {
-                        const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model });
+                        const acknowledged = await ensureAiSendDisclosure({ providerLabel: providerConfig.label, model, inlineNote: opts && opts.plainText === true, signal: opts && opts.signal });
                         if (!acknowledged) return { ok: false, cancelled: true, errorCategory: 'cancelled', errorMessage: 'Cancelled — nothing was sent.' };
                     }
+                    if (opts && opts.signal && opts.signal.aborted) return cancelled();
                     const result = await performIntelligenceRequest({
                         kind: opts && opts.kind ? String(opts.kind) : 'structured-extraction',
                         provider,
@@ -77141,10 +77301,15 @@ ${cspMeta}
                         systemPrompt: String(opts && opts.systemPrompt || ''),
                         messages: [{ role: 'user', content: String(opts && opts.userText || '') }],
                         maxTokens: Math.max(512, Math.min(8192, Number(opts && opts.maxTokens) || 4096)),
-                        temperature: 0.2
+                        temperature: 0.2,
+                        signal: opts && opts.signal,
+                        allowedCategories: opts && opts.plainText ? ['message', 'notes'] : undefined,
+                        transmittedCategories: opts && opts.plainText ? ['message', 'notes'] : undefined,
+                        workspaceAccess: opts && opts.plainText ? 'displayed note text only' : undefined
                     });
                     if (result.cancelled) return { ok: false, cancelled: true, errorCategory: 'cancelled', errorMessage: 'Request cancelled.' };
                     if (!result.ok) return { ok: false, errorCategory: result.errorCategory, errorMessage: result.errorMessage || 'The provider request failed.' };
+                    if (opts && opts.plainText === true) return { ok: true, text: result.text, provider, model };
                     const parsed = parseStructuredIntelligenceJson(result.text);
                     if (!parsed.ok) {
                         return { ok: false, errorCategory: 'validation', errorMessage: 'The model returned output that was not valid JSON. Nothing was changed — try again or switch models.' };
@@ -77189,6 +77354,7 @@ ${cspMeta}
             const lastFocused = document.activeElement;
             const overlay = document.createElement('div');
             overlay.className = 'sutra-modal-overlay';
+            overlay.setAttribute('aria-hidden', 'false');
             overlay.setAttribute('style', 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(4,6,11,0.62);backdrop-filter:blur(3px);padding:18px;');
             const dialog = document.createElement('div');
             dialog.setAttribute('role', 'dialog');
@@ -77206,11 +77372,16 @@ ${cspMeta}
             actions.setAttribute('style', 'display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px;');
             let resolveFn = () => {};
             const result = new Promise((res) => { resolveFn = res; });
+            let closed = false;
             function close(value) {
+                if (closed) return;
+                closed = true;
                 document.removeEventListener('keydown', onKey, true);
                 try { document.body.style.overflow = prevOverflow; } catch (_) {}
+                overlay.setAttribute('aria-hidden', 'true');
                 overlay.remove();
-                if (lastFocused && typeof lastFocused.focus === 'function') {
+                if (window.SutraModalManager) window.SutraModalManager.sync();
+                else if (lastFocused && typeof lastFocused.focus === 'function') {
                     try { lastFocused.focus({ preventScroll: true }); } catch (_) {}
                 }
                 resolveFn(value);
@@ -77224,10 +77395,19 @@ ${cspMeta}
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.textContent = b.label;
+                if (b.value === false || String(b.label).toLowerCase() === 'close') btn.setAttribute('data-modal-close', 'true');
                 btn.setAttribute('style', `padding:9px 16px;border-radius:9px;cursor:pointer;font-size:0.86rem;font-weight:600;border:1px solid var(--surface-border,rgba(255,255,255,0.16));${b.primary ? `background:var(--accent,#5078f2);color:${primaryFg};border-color:transparent;` : 'background:transparent;color:inherit;'}`);
                 btn.addEventListener('click', () => { if (b.onClick) b.onClick(); if (!b.keepOpen) close(b.value); });
                 actions.appendChild(btn);
             });
+            if (!actions.querySelector('[data-modal-close]')) {
+                const escapeClose = document.createElement('button');
+                escapeClose.type = 'button';
+                escapeClose.hidden = true;
+                escapeClose.setAttribute('data-modal-close', 'true');
+                escapeClose.addEventListener('click', () => close(false));
+                actions.appendChild(escapeClose);
+            }
             dialog.appendChild(actions);
             overlay.appendChild(dialog);
             overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(false); });
@@ -77247,8 +77427,9 @@ ${cspMeta}
                     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
                 }
             }
-            document.addEventListener('keydown', onKey, true);
+            if (!window.SutraModalManager) document.addEventListener('keydown', onKey, true);
             document.body.appendChild(overlay);
+            if (window.SutraModalManager) window.SutraModalManager.sync();
             const f = focusables();
             const primary = f.find((el) => el.style.background && el.style.background.includes('accent')) || f[f.length - 1] || dialog;
             try { primary.focus({ preventScroll: true }); } catch (_) {}
@@ -77261,6 +77442,7 @@ ${cspMeta}
         // inspector remains available from the assistant panel at any time).
         const AI_SEND_ACK_KEY = 'sutra_ai_send_ack_v1';
         async function ensureAiSendDisclosure(detail) {
+            if (detail.signal && detail.signal.aborted) return false;
             try { if (localStorage.getItem(AI_SEND_ACK_KEY) === '1') return true; } catch (_) {}
             const depth = (typeof getWorkspacePreference === 'function')
                 ? getWorkspacePreference('assistant.contextDepth', 'currentView') : 'currentView';
@@ -77281,10 +77463,7 @@ ${cspMeta}
                 <ul style="margin:0 0 12px;padding-left:20px;">
                     <li><strong>Provider:</strong> ${escapeHtml(detail.providerLabel || 'remote provider')} (remote endpoint)</li>
                     <li><strong>Model:</strong> ${escapeHtml(detail.model || 'selected model')}</li>
-                    <li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li>
-                    <li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li>
-                    <li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages are included' : 'not included in Stateless mode'}</li>
-                    <li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>
+                    ${detail.inlineNote ? '<li><strong>Text included:</strong> your writing instruction and the passage displayed in AI writing help.</li><li>No other notes, prior chats, or attachments are included in this writing request.</li>' : `<li><strong>Context depth:</strong> ${escapeHtml(depthLabels[depth] || depth)}</li><li><strong>Selected text:</strong> ${includeSelection ? 'included when you have a selection' : 'not included by default'}</li><li><strong>Prior chat messages:</strong> ${String(chatMemoryMode).toLowerCase() === 'stateful' ? 'recent visible messages are included' : 'not included in Stateless mode'}</li><li><strong>Attached files</strong> (PDFs, images, or locally-extracted text) are included only when you attach them AND the selected model supports that file type — each file chip shows exactly how it will be processed</li>`}
                 </ul>
                 <p style="margin:0 0 10px;">Choose your AI provider and model carefully. Sutra Assistant uses the provider and model you select, so response quality, accuracy, speed, availability, and cost may vary. AI can make mistakes. Review suggestions before applying them to your workspace. You remain responsible for the model you choose and for decisions made using its responses.</p>
                 <p style="margin:0 0 10px;">Your API key is stored in this browser's <strong>session storage</strong> (cleared when the tab closes) and is never written into workspace backups. Session storage still relies on this page being free of malicious scripts.</p>
@@ -77300,7 +77479,7 @@ ${cspMeta}
                 });
                 if (receiptEl) body.appendChild(receiptEl);
             }
-            const { result } = openSutraModal({
+            const { result, close } = openSutraModal({
                 titleText: 'Before sending to a remote AI provider',
                 bodyNode: body,
                 buttons: [
@@ -77308,7 +77487,13 @@ ${cspMeta}
                     { label: 'Send & don’t ask again', value: true, primary: true, onClick: () => { try { localStorage.setItem(AI_SEND_ACK_KEY, '1'); } catch (_) {} } }
                 ]
             });
-            return result;
+            const abortDisclosure = () => close(false);
+            if (detail.signal) {
+                detail.signal.addEventListener('abort', abortDisclosure, { once: true });
+                if (detail.signal.aborted) abortDisclosure();
+            }
+            try { return await result; }
+            finally { if (detail.signal) detail.signal.removeEventListener('abort', abortDisclosure); }
         }
         try { window.ensureAiSendDisclosure = ensureAiSendDisclosure; window.openSutraModal = openSutraModal; } catch (_) {}
 
@@ -78763,6 +78948,9 @@ ${cspMeta}
                 renderPagesList: () => { if (_origRenderPagesList) _origRenderPagesList(); },
                 getPageById: (id) => (Array.isArray(pages) ? pages.find(page => page && String(page.id) === String(id)) : null),
                 isPageContentAuthorized: (pageOrId) => isPageContentAuthorized(pageOrId),
+                canWritePageContent: (pageOrId) => canWritePageContent(pageOrId),
+                createContentTimelineNote: (model, source) => createContentTimelineNote(model, source),
+                openNotesAI: () => activeNotesEditorV2()?.openAI(),
                 requestAssistantPageAccess: (pageId) => requestAssistantPageAccess(pageId),
                 checkpointPage: (page, label) => {
                     if (!page || typeof createVersionSnapshot !== 'function') return null;

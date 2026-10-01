@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-01T06:59:19.852Z",
-  "reviewedReason": "Explicit Create type confirmation and canonical starter options; preserve existing page models",
-  "maxBytes": 4932380,
-  "maxLines": 86648
+  "blessedAt": "2026-10-01T08:50:06.257Z",
+  "reviewedReason": "Reviewed authoring ownership, linked PDF source attribution, folder isolation and timeline host seams",
+  "maxBytes": 4946269,
+  "maxLines": 86836
 }

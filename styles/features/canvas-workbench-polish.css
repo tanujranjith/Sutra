@@ -1,0 +1,345 @@
+/* Canvas-only presentation overrides. The board model and interaction handlers
+   remain owned by the existing Canvas page and workbench. */
+
+.canvas-editor {
+    --canvas-control-size: 44px;
+}
+
+.canvas-object-content-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.canvas-content-timeline-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
+}
+
+.canvas-object-content-timeline > .sutra-authoring-node-action {
+    flex: 0 0 auto;
+    align-self: flex-start;
+}
+
+.canvas-toolbar {
+    gap: 8px;
+    min-height: 62px;
+    padding: 8px 12px;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 12px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.canvas-tool-group {
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--surface-border, var(--border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-bg, var(--bg-secondary)) 78%, transparent);
+}
+
+.canvas-tool-group + .canvas-tool-group {
+    margin-left: 0;
+    padding-left: 4px;
+    border-left: 1px solid var(--surface-border, var(--border));
+}
+
+.canvas-toolbar .toolbar-btn,
+.canvas-toolbar .toolbar-zoom-label {
+    min-width: var(--canvas-control-size);
+    min-height: var(--canvas-control-size);
+    border-radius: 10px;
+}
+
+.canvas-toolbar .toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 var(--canvas-control-size);
+}
+
+.canvas-toolbar .toolbar-zoom-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    padding-inline: 8px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.canvas-toolbar .toolbar-btn:hover,
+.canvas-toolbar .toolbar-zoom-label:hover {
+    background: var(--surface-bg-hover, var(--bg-hover));
+    color: var(--text-primary);
+}
+
+.canvas-toolbar .toolbar-btn.active {
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--surface-border));
+    background: var(--accent-soft, rgba(122, 160, 255, 0.18));
+    color: var(--accent);
+}
+
+.canvas-toolbar .toolbar-btn:focus-visible,
+.canvas-toolbar .toolbar-zoom-label:focus-visible,
+.canvas-brush-bar button:focus-visible,
+.canvas-selection-bar button:focus-visible,
+.canvas-statusbar button:focus-visible,
+.canvas-shape-menu-item:focus-visible {
+    outline: 2px solid var(--accent, #5d82f5);
+    outline-offset: 2px;
+    z-index: 1;
+}
+
+.canvas-shape-menu {
+    box-sizing: border-box;
+    max-height: min(60vh, 360px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.canvas-shape-menu-item {
+    min-height: 44px;
+    padding-inline: 12px;
+}
+
+.canvas-brush-bar {
+    gap: 5px;
+    min-height: 56px;
+    padding: 6px 12px;
+}
+
+.brush-type-btn,
+.brush-size-btn {
+    box-sizing: border-box;
+    width: var(--canvas-control-size);
+    min-width: var(--canvas-control-size);
+    height: var(--canvas-control-size);
+    min-height: var(--canvas-control-size);
+    border-radius: 10px;
+}
+
+.brush-size-btn {
+    width: var(--canvas-control-size);
+}
+
+.brush-color-btn {
+    box-sizing: border-box;
+    width: var(--canvas-control-size);
+    min-width: var(--canvas-control-size);
+    height: var(--canvas-control-size);
+    min-height: var(--canvas-control-size);
+    margin-inline: 0;
+    border: 3px solid transparent;
+}
+
+.brush-color-btn.active {
+    border-color: var(--accent, #5d82f5);
+}
+
+.canvas-brush-sep {
+    height: 28px;
+    margin-inline: 4px;
+}
+
+.canvas-empty-state {
+    top: 50%;
+    bottom: auto;
+    left: 50%;
+    z-index: 26;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(28rem, calc(100% - 24px));
+    padding: 16px 18px;
+    border-color: var(--surface-border-strong, var(--surface-border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-bg, #fff) 92%, transparent);
+    box-shadow: var(--shadow-soft, 0 12px 28px rgba(0, 0, 0, .14));
+    line-height: 1.45;
+    text-align: center;
+    transform: translate(-50%, -50%);
+}
+
+.canvas-empty-state strong {
+    font-size: 1rem;
+}
+
+.canvas-selection-bar {
+    top: 70px;
+    gap: 5px;
+    min-height: 54px;
+    padding: 5px 7px;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.canvas-selection-count {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--surface-border));
+    border-radius: 999px;
+    background: var(--accent-soft, rgba(122, 160, 255, .14));
+    color: var(--text-primary);
+    font-size: .8rem;
+}
+
+.canvas-selection-bar button {
+    box-sizing: border-box;
+    width: var(--canvas-control-size);
+    min-width: var(--canvas-control-size);
+    height: var(--canvas-control-size);
+    min-height: var(--canvas-control-size);
+    border: 1px solid transparent;
+    border-radius: 10px;
+}
+
+.canvas-selection-bar button:hover,
+.canvas-selection-bar button:focus-visible {
+    border-color: var(--surface-border, var(--border));
+}
+
+.canvas-minimap {
+    right: 12px;
+    bottom: max(64px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+    box-sizing: border-box;
+    width: clamp(124px, 18vw, 176px);
+    max-width: calc(100% - 24px);
+    height: clamp(88px, 14vw, 124px);
+}
+
+.canvas-minimap-map {
+    touch-action: manipulation;
+}
+
+.canvas-statusbar {
+    right: 12px;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    gap: 6px;
+    min-height: 44px;
+}
+
+.canvas-statusbar > span:first-child,
+.canvas-statusbar button {
+    box-sizing: border-box;
+    min-height: 44px;
+}
+
+.canvas-statusbar button {
+    padding-inline: 12px;
+}
+
+.canvas-editor[hidden] .canvas-empty-state,
+.canvas-empty-state[hidden],
+.canvas-minimap[hidden],
+.canvas-selection-bar[hidden] {
+    display: none !important;
+}
+
+@media (max-width: 720px) {
+    .canvas-toolbar {
+        min-height: 60px;
+        gap: 6px;
+        padding: 7px 8px;
+    }
+
+    .canvas-tool-group {
+        gap: 3px;
+        padding: 3px;
+        border-radius: 10px;
+    }
+
+    .canvas-tool-group + .canvas-tool-group {
+        padding-left: 3px;
+    }
+
+    .canvas-selection-bar {
+        top: 66px;
+        right: 8px;
+        left: 8px;
+        width: auto;
+        max-width: none;
+        transform: none;
+    }
+
+    .canvas-minimap {
+        right: 8px;
+        bottom: max(64px, calc(env(safe-area-inset-bottom, 0px) + 56px));
+        width: clamp(116px, 34vw, 138px);
+        height: clamp(82px, 24vw, 98px);
+    }
+
+    .canvas-statusbar {
+        right: 8px;
+        left: 8px;
+        align-items: flex-end;
+    }
+}
+
+@media (max-width: 420px) {
+    .canvas-toolbar {
+        gap: 4px;
+        padding-inline: 6px;
+    }
+
+    .canvas-tool-group {
+        gap: 2px;
+        padding: 2px;
+    }
+
+    .canvas-empty-state {
+        width: calc(100% - 24px);
+        padding: 13px 14px;
+    }
+
+    .canvas-minimap {
+        width: 116px;
+        height: 82px;
+    }
+
+    .canvas-statusbar > span:first-child {
+        max-width: calc(100% - 96px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .canvas-toolbar *,
+    .canvas-shape-menu-item,
+    .canvas-selection-bar button,
+    .canvas-brush-bar button,
+    .canvas-minimap {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .canvas-tool-group,
+    .canvas-empty-state,
+    .canvas-selection-bar,
+    .canvas-selection-count,
+    .canvas-minimap,
+    .canvas-statusbar > span:first-child,
+    .canvas-statusbar button {
+        border: 1px solid CanvasText;
+        forced-color-adjust: auto;
+    }
+
+    .canvas-toolbar .toolbar-btn.active,
+    .canvas-selection-count {
+        color: Highlight;
+    }
+}

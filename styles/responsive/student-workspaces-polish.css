@@ -1,0 +1,576 @@
+/*
+ * Student workspace phone polish.
+ * Loaded after feature and shared mobile styles so these narrow, view-scoped
+ * rules can refine the existing canonical controls without changing behavior.
+ */
+
+#testingHubReviewMount {
+    --bg-2: var(--bg-elevated, var(--bg-secondary, #fff));
+    --review-surface: var(--bg-elevated, var(--bg-secondary, #fff));
+    --review-surface-hover: var(--bg-hover);
+    --review-text: var(--text-primary);
+    --review-text-muted: var(--text-secondary);
+    --review-text-faint: var(--text-muted);
+    --review-border: var(--surface-border);
+    --review-border-strong: var(--surface-border-strong);
+    --review-accent: var(--accent);
+    --review-accent-strong: var(--accent-strong, var(--accent));
+    --review-accent-soft: var(--accent-soft);
+    --review-on-accent: var(--accent-text, #fff);
+}
+
+/* Override the anchored desktop height so Settings uses one page scroll on
+   tablets and phones, rather than squeezing settings and preview into rows. */
+@media (max-width: 1024px) {
+    body.settings-anchored-mode #view-settings.view-settings {
+        height: auto;
+        min-height: 0;
+    }
+
+    body.settings-anchored-mode #view-settings .cc-page {
+        height: auto;
+        grid-template-rows: auto auto auto auto;
+        overflow: visible;
+    }
+
+    #view-settings .cc-body,
+    #view-settings .cc-main {
+        grid-template-rows: none;
+        align-content: start;
+        overflow: visible;
+    }
+}
+
+@media (max-width: 640px) {
+    /* Content hosts hide the Notes toolbar. Keep its page-list control in the
+       top corner and reserve space in compact host headers. */
+    body[data-view="notes"]:not(.sidebar-open):is(.sheets-page-active, .slides-page-active, .html-page-active, .folder-page-active) #sidebarToggle {
+        top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    }
+
+    #view-notes .sheets-context,
+    #view-notes .slides-context,
+    #view-notes .html-page-toolbar {
+        padding-inline-start: 60px;
+    }
+
+    #view-today .today-mobile-shell,
+    #view-homework .hw-workspace-shell,
+    :is(#view-review, #testingHubReviewMount) .review-mount,
+    #view-settings .cc-page {
+        min-width: 0;
+    }
+
+    /* Home: preserve all agenda context by wrapping it inside the row. */
+    #view-today .today-mobile-section-heading button {
+        min-height: 44px;
+    }
+
+    #view-today .today-mobile-trust {
+        width: 100%;
+        max-width: 100%;
+        grid-template-columns: 28px minmax(0, 1fr) 12px;
+        margin-inline: 0;
+        padding-inline: 4px;
+    }
+
+    /* To-do: keep All, Homework, and General equally reachable. */
+    #view-homework .hw-workspace-shell {
+        padding-bottom: calc(
+            var(--sutra-mobile-nav-height, 4.75rem) +
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px) +
+            var(--sutra-space-4, 16px)
+        );
+    }
+
+    #view-homework .hw-category-controls {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    #view-homework .hw-category-controls button {
+        min-width: 0;
+        min-height: 44px;
+        padding-inline: 6px;
+        white-space: normal;
+    }
+
+    #view-homework .hw-toolbar-btn,
+    #view-homework .hw-list-tabs button,
+    #view-homework .hw-filter-clear,
+    #view-homework .hw-overflow-popover button {
+        min-height: 44px;
+    }
+
+    #view-homework .hw-filter-panel select {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    #view-homework .hw-inline-add-trigger {
+        min-height: 44px;
+    }
+
+    #view-homework .hw-inline-title {
+        box-sizing: border-box;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    #view-homework .hw-inline-chips {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #view-homework .hw-inline-chips select,
+    #view-homework .hw-inline-chips input {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    #view-homework .hw-quick-add-row {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    #view-homework .hw-quick-add-field {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 48px;
+        height: auto;
+    }
+
+    #view-homework .hw-quick-add-input {
+        min-width: 0;
+        min-height: 46px;
+        font-size: 16px;
+    }
+
+    #view-homework .hw-quick-add-submit {
+        min-height: 44px;
+    }
+
+    /* The retained panel animation otherwise anchors the fixed drawer to the
+       taller Testing Hub panel instead of the phone viewport. */
+    #view-apstudy .testing-hub-section-panel[data-section="review"].active {
+        animation: none;
+        transform: none;
+    }
+
+    /* Review: two-up actions at phone widths, with a single-column fallback. */
+    :is(#view-review, #testingHubReviewMount).view-review {
+        padding-bottom: calc(
+            var(--sutra-mobile-nav-height, 4.75rem) +
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px) +
+            var(--sutra-space-4, 16px)
+        );
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-page-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-set-header-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-page-actions > button,
+    :is(#view-review, #testingHubReviewMount) .review-set-header-actions > button,
+    :is(#view-review, #testingHubReviewMount) .review-section-tabs > button,
+    :is(#view-review, #testingHubReviewMount) .review-page-search-row,
+    :is(#view-review, #testingHubReviewMount) .review-search-field {
+        min-width: 0;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-btn-primary,
+    :is(#view-review, #testingHubReviewMount) .review-btn-ghost {
+        min-height: 44px;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-section-tab {
+        min-height: 44px;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-page-actions > button,
+    :is(#view-review, #testingHubReviewMount) .review-set-header-actions > button {
+        min-height: 44px;
+        width: 100%;
+        overflow-wrap: anywhere;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-page-search-row {
+        width: 100%;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-search-input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-card-drawer .review-card-form input,
+    :is(#view-review, #testingHubReviewMount) .review-card-drawer .review-card-form textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-card-form-actions-spacer {
+        flex-basis: 100%;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-card-drawer {
+        bottom: calc(
+            var(--sutra-mobile-nav-height, 4.75rem) +
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px)
+        );
+        max-height: calc(
+            100dvh - var(--sutra-mobile-nav-height, 4.75rem) -
+            var(--sutra-focus-player-height, 0px) -
+            env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 16px
+        );
+        min-height: 0;
+        padding-bottom: 16px;
+        overscroll-behavior: contain;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-card-drawer-close,
+    .review-modal-root .review-modal-close {
+        width: 44px;
+        height: 44px;
+        flex: 0 0 44px;
+    }
+
+    /* Review and Tests use the canonical Testing Hub and portaled Review mount. */
+    #view-apstudy #testingHubReviewMount .review-mount,
+    #view-apstudy #testingHubPracticeMount {
+        min-width: 0;
+        padding-bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + var(--sutra-focus-player-height, 0px) + env(safe-area-inset-bottom, 0px) + 16px);
+    }
+
+    #view-apstudy .th2-practice-row-actions .th2-row-btn,
+    #view-apstudy .th2-filter-select,
+    #view-apstudy .th2-nav-mobile .th2-select {
+        box-sizing: border-box;
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    #view-apstudy .th2-filter-select,
+    #view-apstudy .th2-nav-mobile .th2-select {
+        font-size: 16px;
+        max-width: 100%;
+    }
+
+    #testingHubReviewMount .review-set-title,
+    #testingHubPracticeMount .th2-row-source,
+    #testingHubPracticeMount .th2-row-takeaways,
+    .quick-capture-preview {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    /* Settings: use the existing category picker and page-level scroll. */
+    #view-settings .cc-page {
+        padding-bottom: calc(
+            var(--sutra-mobile-nav-height, 4.75rem) +
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px) +
+            var(--sutra-space-6, 24px)
+        ) !important;
+    }
+
+    #view-settings .cc-mobile-nav,
+    #view-settings .cc-mobile-select,
+    #view-settings .cc-search,
+    #view-settings .cc-search-input {
+        min-width: 0;
+    }
+
+    #view-settings .cc-mobile-select,
+    #view-settings .cc-search-input,
+    #view-settings .cc-search-clear,
+    #view-settings .cc-page .modal-input:not([type="range"]),
+    #view-settings .cc-page input.cc-input:not([type="range"]),
+    #view-settings .cc-page select.cc-select,
+    #view-settings .cc-page textarea.cc-input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    #view-settings .cc-btn,
+    #view-settings .cc-action-buttons .cc-btn {
+        min-height: 44px;
+    }
+
+    #view-settings .cc-search-clear {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    #view-settings .cc-action-buttons {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    #view-settings .cc-action-bar {
+        bottom: calc(
+            var(--sutra-mobile-nav-height, 4.75rem) +
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px) + 8px
+        );
+    }
+
+    /* Quick Capture: the card is the one scroll surface, including its footer. */
+    .quick-capture-modal > .quick-capture-card {
+        box-sizing: border-box;
+        width: calc(100% - 16px) !important;
+        max-width: 520px !important;
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 16px
+        ) !important;
+        margin: calc(env(safe-area-inset-top, 0px) + 8px) auto 8px !important;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .quick-capture-modal .quick-capture-field,
+    .quick-capture-modal .quick-capture-grid,
+    .quick-capture-modal .quick-capture-actions {
+        min-width: 0;
+    }
+
+    .quick-capture-modal .quick-capture-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .quick-capture-modal .quick-capture-actions > button {
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    /* Protected Notes: keep every warning and action inside the same scroll. */
+    #lockedPageScreen.locked-page-screen {
+        box-sizing: border-box;
+        min-height: 0;
+        padding: 40px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        justify-content: flex-start;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #lockedPageScreen .lock-screen-gear {
+        width: 44px;
+        height: 44px;
+    }
+
+    #lockedPageScreen .lock-form {
+        max-width: 320px;
+    }
+
+    #lockedPageScreen .lock-screen-pin-input {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    #lockedPageScreen .lock-screen-submit-btn,
+    #lockedPageScreen .lock-screen-duress-btn,
+    #lockedPageScreen .lock-screen-remove-btn {
+        min-height: 44px;
+    }
+
+    #setPageLockModal {
+        align-items: flex-end;
+        padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) !important;
+    }
+
+    #setPageLockModal .modal-content {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 560px;
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px)
+        );
+        margin: 0;
+        border-radius: 20px 20px 0 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #setPageLockModal .lock-modal-pin-input {
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    #setPageLockModal .lock-modal-manage-btn,
+    #setPageLockModal .modal-footer > button {
+        min-height: 44px;
+    }
+
+    /* More stays a complete, scrollable view of canonical destinations. */
+    .sutra-mobile-more-sheet {
+        min-height: 0;
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 8px
+        );
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media (max-width: 430px) {
+    #view-today .today-mobile-agenda-row {
+        grid-template-columns: 44px 8px minmax(0, 1fr) 12px;
+        grid-template-rows: auto auto;
+        gap: 2px 8px;
+        padding-block: 9px;
+    }
+
+    #view-today .today-mobile-agenda-time {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        align-self: start;
+        padding-top: 2px;
+    }
+
+    #view-today .today-mobile-agenda-dot {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: start;
+        margin-top: 5px;
+    }
+
+    #view-today .today-mobile-agenda-title {
+        grid-column: 3;
+        grid-row: 1;
+        overflow: visible;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    #view-today .today-mobile-agenda-meta {
+        grid-column: 3;
+        grid-row: 2;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    #view-today .today-mobile-agenda-row > i {
+        grid-column: 4;
+        grid-row: 1 / span 2;
+        align-self: center;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-page-actions {
+        gap: 8px;
+    }
+}
+
+@media (max-width: 359px) {
+    :is(#view-review, #testingHubReviewMount) .review-page-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 1024px) and (max-height: 480px) and (orientation: landscape) {
+    #view-today .today-mobile-greeting,
+    #view-today .today-mobile-appbar {
+        margin-bottom: 10px;
+    }
+
+    #view-homework .hw-workspace-shell,
+    :is(#view-review, #testingHubReviewMount).view-review,
+    #view-settings .cc-page {
+        scroll-padding-bottom: calc(
+            var(--sutra-focus-player-height, 0px) +
+            env(safe-area-inset-bottom, 0px) + 12px
+        );
+    }
+
+    .quick-capture-modal > .quick-capture-card,
+    #setPageLockModal .modal-content {
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 8px
+        ) !important;
+    }
+
+    .quick-capture-modal > .quick-capture-card {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .review-modal-root {
+        align-items: flex-end;
+        padding: max(8px, env(safe-area-inset-top, 0px)) 8px env(safe-area-inset-bottom, 0px);
+    }
+
+    .review-modal-card {
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 16px
+        );
+    }
+
+    .review-modal-root .review-modal-close,
+    .review-modal-actions > button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .review-card-drawer {
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 16px
+        );
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .sutra-mobile-more-sheet {
+        max-height: calc(
+            100dvh - env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px) - 4px
+        );
+    }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) and (max-height: 480px) and (orientation: landscape) {
+    #view-apstudy .testing-hub-section-panel[data-section="review"].active {
+        animation: none;
+        transform: none;
+    }
+
+    :is(#view-review, #testingHubReviewMount) .review-card-drawer {
+        position: fixed;
+        top: calc(var(--sutra-global-nav-height, 66px) + env(safe-area-inset-top, 0px) + 8px);
+        right: max(16px, env(safe-area-inset-right, 0px));
+        bottom: calc(max(64px, var(--sutra-focus-player-height, 0px)) + env(safe-area-inset-bottom, 0px) + 8px);
+        left: auto;
+        width: min(580px, calc(100vw - 32px));
+        min-height: 0;
+        max-height: calc(100dvh - var(--sutra-global-nav-height, 66px) - max(64px, var(--sutra-focus-player-height, 0px)) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
+    }
+}

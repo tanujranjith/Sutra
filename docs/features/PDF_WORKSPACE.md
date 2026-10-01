@@ -45,6 +45,17 @@ Target all route bytes and links through the same attachment bridge. Homework
 and Assignment Studio provide contextual upload actions; an Assignment Studio
 file can also be linked to its Homework record without duplicating bytes.
 
+The PDF document actions include **Create timeline note**. It opens the shared
+timeline editor and creates a separate Notes page through the canonical
+workspace bridge; the PDF document and its original attachment bytes are not
+changed. When the PDF is open inside a source note, the new page keeps that
+source reference and PDF title. A standalone attachment creates a timeline note
+with the PDF title as its source label and no page link. The action rechecks the
+open PDF, source page, current view, and write access after the editor closes;
+cancellation leaves the PDF unchanged and stale source context refuses the
+creation. Locking the source page or workspace closes the reader and cancels a
+pending embedded open; original attachment bytes remain unchanged.
+
 ## Editing boundary
 
 V1 supports highlights, underline, strikeout, ink, erasing, text boxes, comments, stamps, visual signatures, bookmarks, form values, page reorder/rotation/removal, splitting/merging plans, and PDF/image assembly. Visual signatures are ink; they are not cryptographic signatures. Existing page text cannot be arbitrarily replaced, and scanned PDFs are not searchable without future OCR.

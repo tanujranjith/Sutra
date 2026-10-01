@@ -893,7 +893,7 @@
     viewControls.appendChild(button('−', 'zoom-out', 'Zoom out')); var zoom = el('output', 'pdfw-zoom', '100%'); viewControls.appendChild(zoom); viewControls.appendChild(button('+', 'zoom-in', 'Zoom in')); topbar.appendChild(viewControls);
     var documentActions = topbarGroup('PDF document actions', 'pdfw-document-actions');
     var inspectorToggle = button('Inspector', 'inspector', 'Open document outline, bookmarks, comments, and reading text'); inspectorToggle.setAttribute('aria-expanded', 'false'); documentActions.appendChild(inspectorToggle);
-    documentActions.appendChild(button('Print', 'print')); documentActions.appendChild(button('Pages', 'organizer')); documentActions.appendChild(button('Export', 'export')); documentActions.appendChild(button(state.embedded ? 'Back to note' : 'Close', 'close')); topbar.appendChild(documentActions);
+    documentActions.appendChild(button('Print', 'print')); documentActions.appendChild(button('Pages', 'organizer')); documentActions.appendChild(button('Export', 'export')); documentActions.appendChild(button('Create timeline note', 'timeline-note', 'Create a timeline note from this PDF')); documentActions.appendChild(button(state.embedded ? 'Back to note' : 'Close', 'close')); topbar.appendChild(documentActions);
     var tools = el('nav', 'pdfw-toolbar'); tools.setAttribute('aria-label', 'PDF annotation tools');
     function group(label, className) { var node = el('div', 'pdfw-tool-group' + (className ? ' ' + className : '')); node.setAttribute('role', 'group'); node.setAttribute('aria-label', label); return node; }
     var primary = group('Markup tools', 'pdfw-tool-group-primary');
@@ -936,6 +936,85 @@
       root.querySelectorAll('[data-action^="tool-"]').forEach(function (node) { node.setAttribute('aria-pressed', node.dataset.action === 'tool-' + owner.tool ? 'true' : 'false'); });
     });
   }
+  function timelineSourceIsCurrent(owner, context) {
+    if (!isCurrentWorkspace(owner) || String(owner.documentRecord && owner.documentRecord.id || '') !== context.documentId ||
+        String(owner.file && owner.file.id || '') !== context.fileId || global.flowAtelier !== context.bridge) return false;
+    var bridge = context.bridge;
+    if (String(bridge.activeView || '') !== context.activeView || String(bridge.currentPageId || '') !== context.currentPageId) return false;
+    if (context.sourcePageId) {
+      if (String(owner.context && owner.context.entityId || '') !== context.sourcePageId ||
+          typeof bridge.getPageById !== 'function' || bridge.getPageById(context.sourcePageId) !== context.sourcePage) return false;
+    }
+    return true;
+  }
+  function timelineSourceCanWrite(bridge, page) {
+    if (!bridge || !page || typeof bridge.canWritePageContent !== 'function') return false;
+    try { return bridge.canWritePageContent(page) === true; }
+    catch (error) { report(error, 'pdf-timeline-note-access'); return false; }
+  }
+  async function createTimelineNote(owner, control) {
+    if (!isCurrentWorkspace(owner)) return;
+    var bridge = global.flowAtelier;
+    var sourcePageId = owner.embedded ? String(owner.context && owner.context.entityId || '') : '';
+    var sourcePage = null;
+    if (owner.embedded) {
+      if (!sourcePageId || !bridge || typeof bridge.getPageById !== 'function' || String(bridge.activeView || '') !== 'notes' || String(bridge.currentPageId || '') !== sourcePageId) {
+        message('This PDF is no longer open from its source note.', 'error');
+        return;
+      }
+      sourcePage = bridge.getPageById(sourcePageId);
+      if (!sourcePage) { message('The source note is no longer available.', 'error'); return; }
+      if (!timelineSourceCanWrite(bridge, sourcePage)) {
+        message('Unlock the source note before creating a timeline note.', 'error');
+        return;
+      }
+    }
+    if (!bridge || typeof bridge.createContentTimelineNote !== 'function' || typeof bridge.loadPage !== 'function' ||
+        !global.SutraContentTimelineEditor || typeof global.SutraContentTimelineEditor.open !== 'function') {
+      message('Timeline notes are unavailable right now.', 'error');
+      return;
+    }
+    var context = {
+      bridge: bridge,
+      sourcePageId: sourcePageId,
+      sourcePage: sourcePage,
+      sourceTitle: String(owner.file && (owner.file.originalName || owner.file.name) || 'PDF').trim() || 'PDF',
+      documentId: String(owner.documentRecord && owner.documentRecord.id || ''),
+      fileId: String(owner.file && owner.file.id || ''),
+      activeView: String(bridge.activeView || ''),
+      currentPageId: String(bridge.currentPageId || '')
+    };
+    control.disabled = true;
+    try {
+      var model = await global.SutraContentTimelineEditor.open({ title: 'Timeline from this PDF' });
+      if (!model) return;
+      if (!timelineSourceIsCurrent(owner, context)) {
+        if (isCurrentWorkspace(owner)) message('The PDF or its source changed. Reopen it before creating a timeline note.', 'error');
+        return;
+      }
+      if (context.sourcePage && !timelineSourceCanWrite(bridge, context.sourcePage)) {
+        message('Unlock the source note before creating a timeline note.', 'error');
+        return;
+      }
+      message('Creating timeline note…');
+      var created = await bridge.createContentTimelineNote(model, { sourcePageId: context.sourcePageId, sourceTitle: context.sourceTitle });
+      if (!created || !created.id) {
+        if (isCurrentWorkspace(owner)) message('The timeline note could not be created. Check access and try again.', 'error');
+        return;
+      }
+      if (!timelineSourceIsCurrent(owner, context)) {
+        if (isCurrentWorkspace(owner)) message('The timeline note was created, but this PDF context changed. Open the note from Notes.', 'warning');
+        return;
+      }
+      close();
+      bridge.loadPage(created.id);
+    } catch (error) {
+      report(error, 'pdf-timeline-note');
+      if (isCurrentWorkspace(owner)) message(error && error.message ? error.message : 'The timeline note could not be created.', 'error');
+    } finally {
+      if (isCurrentWorkspace(owner) && control.isConnected) control.disabled = false;
+    }
+  }
   function bindUi(owner) {
     var handleAction = async function (event) {
       if (!isCurrentWorkspace(owner)) return;
@@ -944,6 +1023,7 @@
       if (!belongsToWorkspace) return;
       var action = control.dataset.action;
       if (action === 'close') close();
+      else if (action === 'timeline-note') await createTimelineNote(owner, control);
       else if (action.indexOf('tool-') === 0) { owner.tool = action.slice(5); updateToolButtons(owner); }
       else if (action === 'zoom-in' || action === 'zoom-out') { owner.zoom = Math.min(3, Math.max(0.5, owner.zoom + (action === 'zoom-in' ? 0.25 : -0.25))); owner.zoomOutput.textContent = Math.round(owner.zoom * 100) + '%'; await rebuildPages(owner); }
       else if (action === 'undo') await undo(owner); else if (action === 'redo') await redo(owner); else if (action === 'export') showExport(owner);
@@ -1013,6 +1093,14 @@
     var pageId = String(event.detail.pageId);
     if (state && state.embedded && pageId !== String(state.context.entityId || '')) close();
     else if (pendingOpenEmbedded && pendingOpenContextId && pageId !== pendingOpenContextId) close();
+  });
+  global.addEventListener('sutra:note-page-locked', function (event) {
+    var pageId = String(event && event.detail && event.detail.pageId || '');
+    if ((state && state.embedded && (!pageId || pageId === String(state.context.entityId || ''))) ||
+        (pendingOpenEmbedded && (!pageId || pageId === pendingOpenContextId))) close();
+  });
+  global.addEventListener('sutra:workspace-lock-changed', function (event) {
+    if (!event || !event.detail || event.detail.locked !== false) close();
   });
   async function createRecord(fileId, pdf, candidate) {
     var record = global.SutraPdfData.findByFile(fileId);

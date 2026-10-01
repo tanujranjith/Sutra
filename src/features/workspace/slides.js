@@ -3,6 +3,8 @@
   var activePageId = '';
   var activeSlideId = '';
   var selectedElementId = '';
+  var contentTimelineTokens = new WeakMap();
+  var closePresentation = null;
   var root = null;
   var undoStack = [];
   var redoStack = [];
@@ -30,10 +32,44 @@
   function pageFrom(data) { var page = (data.pages || []).find(function (item) { return item && item.id === activePageId; }) || null; return page && pageContentAuthorized(page) ? page : null; }
   function deckFor(page) { return page && page.slides && Array.isArray(page.slides.slides) ? page.slides : null; }
   function pageContentAuthorized(page) {
+    if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
     var bridge = appBridge();
     if (typeof bridge.isPageContentAuthorized === 'function') return bridge.isPageContentAuthorized(page);
     var unlocked = bridge.unlockedPageIds;
     return !!(page && !(page.isLocked && page.lockHash && !(unlocked && unlocked.has && unlocked.has(page.id))));
+  }
+  function pageCanWrite(page) {
+    if (!page || !pageContentAuthorized(page)) return false;
+    var bridge = appBridge();
+    if (typeof bridge.canWritePageContent === 'function') {
+      try { return bridge.canWritePageContent(page) === true; } catch (_) { return false; }
+    }
+    return true;
+  }
+  function contentTimelineHelper() {
+    var helper = global.SutraContentTimeline;
+    return helper && typeof helper.inspect === 'function' && typeof helper.normalize === 'function' ? helper : null;
+  }
+  function normalizeContentTimeline(value) {
+    var helper = contentTimelineHelper();
+    if (!helper) return value;
+    try {
+      var status = helper.inspect(value);
+      return status && status.supported && !status.readOnly ? helper.normalize(value) : value;
+    } catch (_) { return value; }
+  }
+  function contentTimelineText(model) {
+    var helper = contentTimelineHelper();
+    if (!helper || typeof helper.toPlainText !== 'function') return '';
+    try { return String(helper.toPlainText(model) || ''); } catch (_) { return ''; }
+  }
+  function contentTimelineTitle(model) {
+    var helper = contentTimelineHelper();
+    if (!helper) return 'Timeline';
+    try {
+      var status = helper.inspect(model);
+      return status && status.supported ? String(model.title || 'Timeline') : 'Timeline';
+    } catch (_) { return 'Timeline'; }
   }
   function activeSlide(deck) { return deck && deck.slides.find(function (slide) { return slide.id === activeSlideId; }) || (deck && deck.slides[0]) || null; }
   function setEditorVisible(visible) {
@@ -72,14 +108,16 @@
         background: typeof slide.background === 'string' ? slide.background.slice(0, 128) : '',
         elements: (Array.isArray(slide.elements) ? slide.elements : []).map(function (rawElement) {
           var element = rawElement && typeof rawElement === 'object' ? rawElement : {};
-          return Object.assign({}, element, {
-            id: String(element.id || id()), type: ['text', 'shape', 'image', 'chart', 'table'].indexOf(element.type) >= 0 ? element.type : 'text',
+          var normalizedElement = Object.assign({}, element, {
+            id: String(element.id || id()), type: ['text', 'shape', 'image', 'chart', 'table', 'content-timeline'].indexOf(element.type) >= 0 ? element.type : 'text',
             x: Math.max(0, Math.min(100, Number(element.x) || 0)), y: Math.max(0, Math.min(100, Number(element.y) || 0)),
             width: Math.max(1, Math.min(100, Number(element.width) || 20)), height: Math.max(1, Math.min(100, Number(element.height) || 10)),
             zIndex: Number(element.zIndex) || 0, text: String(element.text || '').slice(0, 20000),
             textAlign: ['left', 'center', 'right'].indexOf(element.textAlign) >= 0 ? element.textAlign : 'left',
             imageFit: ['contain', 'cover'].indexOf(element.imageFit) >= 0 ? element.imageFit : 'contain'
           });
+          if (element.type === 'content-timeline') normalizedElement.contentTimeline = normalizeContentTimeline(element.contentTimeline);
+          return normalizedElement;
         })
       });
     });
@@ -96,8 +134,10 @@
   function duplicateSlide() { mutate(function (deck) { var current = activeSlide(deck); var copy = JSON.parse(JSON.stringify(current)); copy.id = id(); copy.title = (copy.title || 'Slide') + ' copy'; copy.elements.forEach(function (element) { element.id = id(); }); deck.slides.splice(deck.slides.indexOf(current) + 1, 0, copy); activeSlideId = copy.id; selectedElementId = ''; }); }
   function deleteSlide() { mutate(function (deck) { if (deck.slides.length < 2) { showToast('A deck needs at least one slide.'); return; } var i = deck.slides.indexOf(activeSlide(deck)); deck.slides.splice(i, 1); activeSlideId = deck.slides[Math.max(0, i - 1)].id; }); }
   function chooseImage() { var input = document.createElement('input'); input.type = 'file'; input.accept = 'image/png,image/jpeg,image/webp,image/gif'; input.addEventListener('change', function () { var file = input.files && input.files[0]; if (!file) return; if (file.size > 10 * 1024 * 1024) { showToast('Slide images must be 10MB or smaller.'); return; } var reader = new FileReader(); reader.onload = function () { mutate(function (deck) { activeSlide(deck).elements.push(makeElement('image', { x: 54, y: 15, width: 37, height: 57, dataUrl: reader.result, alt: file.name })); }); }; reader.readAsDataURL(file); }); input.click(); }
-  function printPdf() { var data = workspace(); var page = pageFrom(data); if (!page) return; var popup = global.open('', '_blank', 'noopener,noreferrer'); if (!popup) { showToast('Allow pop-ups to print Slides as PDF.'); return; } var deck = deckFor(page); popup.document.write('<!doctype html><title>' + escapeHtml(page.title) + '</title><style>@page{size:landscape;margin:0}.slide{width:13.333in;height:7.5in;page-break-after:always;padding:.5in;box-sizing:border-box;font-family:Arial;white-space:pre-wrap}</style>' + deck.slides.map(function (slide) { return '<section class="slide" style="background:' + escapeHtml(slide.background || themes[deck.theme].bg) + '">' + slide.elements.filter(function (element) { return element.type !== 'image'; }).map(function (element) { return '<div style="font-size:' + Math.max(8, Math.min(72, Number(element.fontSize || 3) * 7)) + 'pt">' + escapeHtml(element.text) + '</div>'; }).join('') + '</section>'; }).join('') + '<script>addEventListener("load",function(){print()})<\/script>'); popup.document.close(); } // sutra-allow-html: printable document is built from escaped deck text and bounded numeric styles.
-  async function exportPptx() { var page = pageFrom(workspace()); if (!page || !global.SutraOfficeInterop) { showToast('PPTX export is unavailable in this browser.'); return false; } try { await global.SutraOfficeInterop.downloadPptx(deckFor(page), page.title || 'presentation'); showToast('PowerPoint file exported.'); return true; } catch (error) { showToast(error && error.message || 'PPTX export failed.'); return false; } }
+  function escapePrintableText(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]; }); }
+  function exportElementText(element) { return element && element.type === 'content-timeline' ? contentTimelineText(element.contentTimeline) : String(element && element.text || ''); }
+  function printPdf() { var data = workspace(); var page = pageFrom(data); if (!page) return; var popup = global.open('', '_blank', 'noopener,noreferrer'); if (!popup) { showToast('Allow pop-ups to print Slides as PDF.'); return; } var deck = deckFor(page); popup.document.write('<!doctype html><title>' + escapeHtml(page.title) + '</title><style>@page{size:landscape;margin:0}.slide{width:13.333in;height:7.5in;page-break-after:always;padding:.5in;box-sizing:border-box;font-family:Arial;white-space:pre-wrap}</style>' + deck.slides.map(function (slide) { return '<section class="slide" style="background:' + escapeHtml(slide.background || themes[deck.theme].bg) + '">' + slide.elements.filter(function (element) { return element.type !== 'image'; }).map(function (element) { return '<div style="font-size:' + Math.max(8, Math.min(72, Number(element.fontSize || 3) * 7)) + 'pt">' + escapePrintableText(exportElementText(element)) + '</div>'; }).join('') + '</section>'; }).join('') + '<script>addEventListener("load",function(){print()})<\/script>'); popup.document.close(); } // sutra-allow-html: printable document is built from escaped deck text and bounded numeric styles.
+  async function exportPptx() { var page = pageFrom(workspace()); if (!page || !global.SutraOfficeInterop) { showToast('PPTX export is unavailable in this browser.'); return false; } try { var deck = cloneDeck(deckFor(page)); deck.slides.forEach(function (slide) { slide.elements.forEach(function (element) { if (element.type === 'content-timeline') element.text = contentTimelineText(element.contentTimeline); }); }); await global.SutraOfficeInterop.downloadPptx(deck, page.title || 'presentation'); showToast('PowerPoint file exported.'); return true; } catch (error) { showToast(error && error.message || 'PPTX export failed.'); return false; } }
   async function importPptx(file) { var page = pageFrom(workspace()); if (!page || !file || !global.SutraOfficeInterop) return { ok: false, error: 'Choose a PPTX file to import.' }; try { var imported = await global.SutraOfficeInterop.importPptx(file); mutate(function (_, currentPage) { currentPage.slides = normalizeDeck(imported.deck, currentPage.title); activeSlideId = currentPage.slides.slides[0].id; selectedElementId = ''; }); var warnings = imported.report && imported.report.warnings || []; if (warnings.length) global.alert('Presentation imported with warnings:\n\n• ' + warnings.join('\n• ')); else showToast('PowerPoint file imported.'); return { ok: true, deck: imported.deck, report: imported.report }; } catch (error) { showToast(error && error.message || 'PPTX import failed.'); return { ok: false, error: error && error.message || 'PPTX import failed.' }; } }
   function getContext() {
     var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page);
@@ -184,7 +224,19 @@
     try { data = workspace(); } catch (error) { return; }
     var pageId = data.ui && data.ui.lastOpenedPageId || '';
     var page = (data.pages || []).find(function (item) { return item && item.id === pageId; });
-    if (activePageId !== pageId || !page || !pageContentAuthorized(page)) closeSlideAction(false);
+    if (activePageId !== pageId || !page || !pageContentAuthorized(page)) {
+      closeSlideAction(false);
+      if (closePresentation) closePresentation(false);
+    }
+    if (!page || !pageContentAuthorized(page)) {
+      undoStack = []; redoStack = []; elementClipboard = null; dragState = null; selectedElementId = '';
+      if (root) {
+        root.querySelector('.slides-stage').replaceChildren();
+        root.querySelector('.slides-thumbnail-list').replaceChildren();
+        root.querySelector('.slides-notes-panel textarea').value = '';
+        root.querySelector('[data-element-name]').textContent = '';
+      }
+    }
     activePageId = pageId;
     var visible = !!(page && pageContentAuthorized(page) && page.slides && Array.isArray(page.slides.slides));
     if (visible) { if (page.slides.version !== 2) { page.slides = normalizeDeck(page.slides, page.title); appBridge().persistAppData(); } mount(); render(); } else setEditorVisible(false);
@@ -203,8 +255,107 @@
     var deck = ensureDeck(page); if (!options || options.history !== false) pushHistory(page);
     change(deck, page); page.updatedAt = new Date().toISOString(); scheduleSave(); if (rerender !== false) render();
   }
+  function currentContentTimelineContext() {
+    var bridge = appBridge();
+    var page = pageFrom(workspace());
+    var deck = page && deckFor(page);
+    var slide = deck && activeSlide(deck);
+    if (!page || !deck || !slide || !pageCanWrite(page) || String(bridge.currentPageId || '') !== String(page.id)) return null;
+    return { page: page, deck: deck, slide: slide };
+  }
+  function captureContentTimelineInsertion() {
+    var context = currentContentTimelineContext();
+    if (!context) return null;
+    var token = {};
+    contentTimelineTokens.set(token, {
+      kind: 'insert', page: context.page, deck: context.deck, slide: context.slide,
+      pageId: context.page.id, slideId: context.slide.id, updatedAt: context.page.updatedAt,
+      selectedElementId: selectedElementId
+    });
+    return token;
+  }
+  function captureContentTimelineSelection(element) {
+    var context = currentContentTimelineContext();
+    if (!context || !element || element.type !== 'content-timeline') return null;
+    var modelSnapshot;
+    try { modelSnapshot = JSON.stringify(element.contentTimeline); } catch (_) { return null; }
+    var token = {};
+    contentTimelineTokens.set(token, {
+      kind: 'update', page: context.page, deck: context.deck, slide: context.slide,
+      element: element, elementId: element.id, pageId: context.page.id, slideId: context.slide.id,
+      updatedAt: context.page.updatedAt, modelSnapshot: modelSnapshot
+    });
+    return token;
+  }
+  function contentTimelineTokenState(token, kind) {
+    if (!token || typeof token !== 'object' || !contentTimelineTokens.has(token)) return null;
+    var state = contentTimelineTokens.get(token);
+    if (kind && state.kind !== kind) return null;
+    var context = currentContentTimelineContext();
+    if (!context || context.page !== state.page || context.deck !== state.deck || context.slide !== state.slide ||
+        String(context.page.id) !== String(state.pageId) || String(context.slide.id) !== String(state.slideId) ||
+        context.page.updatedAt !== state.updatedAt) return null;
+    if (state.kind === 'insert' && selectedElementId !== state.selectedElementId) return null;
+    if (state.kind === 'update') {
+      var selected = selectedElement(context.deck);
+      if (selected !== state.element || !selected || selected.id !== state.elementId) return null;
+      var snapshot;
+      try { snapshot = JSON.stringify(selected.contentTimeline); } catch (_) { return null; }
+      if (snapshot !== state.modelSnapshot) return null;
+    }
+    return state;
+  }
+  function insertContentTimeline(model, token) {
+    var helper = contentTimelineHelper();
+    var state;
+    if (!helper) return false;
+    try { var status = helper.inspect(model); if (!status || !status.supported || status.readOnly) return false; } catch (_) { return false; }
+    if (token == null) token = captureContentTimelineInsertion();
+    state = contentTimelineTokenState(token, 'insert');
+    if (!state) return false;
+    contentTimelineTokens.delete(token);
+    var normalized;
+    try { normalized = helper.normalize(model); } catch (_) { return false; }
+    var inserted = false;
+    mutate(function (deck, page) {
+      var slide = activeSlide(deck);
+      if (page !== state.page || deck !== state.deck || slide !== state.slide || page.updatedAt !== state.updatedAt || !pageCanWrite(page)) return;
+      var element = makeElement('content-timeline', { x: 8, y: 18, width: 84, height: 64, text: contentTimelineTitle(normalized), contentTimeline: normalized, fill: '#ffffff', borderWidth: 1 });
+      slide.elements.push(element);
+      selectedElementId = element.id;
+      inserted = true;
+    });
+    return inserted;
+  }
+  function getContentTimelineSelection() {
+    var context = currentContentTimelineContext();
+    var element = context && selectedElement(context.deck);
+    var token = captureContentTimelineSelection(element);
+    return token ? { model: element.contentTimeline, token: token } : null;
+  }
+  function updateContentTimeline(token, model) {
+    var helper = contentTimelineHelper();
+    var state = contentTimelineTokenState(token, 'update');
+    if (!state || !helper) return false;
+    try { if (!helper.inspect(state.element.contentTimeline).supported) return false; } catch (_) { return false; }
+    try { var status = helper.inspect(model); if (!status || !status.supported || status.readOnly) return false; } catch (_) { return false; }
+    var normalized;
+    try { normalized = helper.normalize(model); } catch (_) { return false; }
+    contentTimelineTokens.delete(token);
+    var updated = false;
+    mutate(function (deck, page) {
+      var slide = activeSlide(deck);
+      var element = slide && slide.elements.find(function (item) { return item && item.id === state.elementId; });
+      if (page !== state.page || deck !== state.deck || slide !== state.slide || element !== state.element ||
+          page.updatedAt !== state.updatedAt || !pageCanWrite(page)) return;
+      element.contentTimeline = normalized;
+      element.text = contentTimelineTitle(normalized);
+      updated = true;
+    });
+    return updated;
+  }
   function restoreHistory(from, to) {
-    var page = pageFrom(workspace()); if (!page || !from.length) return false;
+    var page = pageFrom(workspace()); if (!page || !pageCanWrite(page) || !from.length) return false;
     var entry = from.pop(); if (!entry || entry.pageId !== page.id) return false;
     to.push(historySnapshot(page)); page.slides = cloneDeck(entry.deck); page.updatedAt = new Date().toISOString(); scheduleSave();
     var deck = ensureDeck(page); if (!deck.slides.some(function (slide) { return slide.id === activeSlideId; })) activeSlideId = deck.slides[0].id;
@@ -280,18 +431,50 @@
     if (element.type === 'image') { var image = document.createElement('img'); image.src = element.dataUrl || ''; image.alt = element.alt || 'Slide image'; image.style.objectFit = element.imageFit || 'contain'; node.appendChild(image); }
     else if (element.type === 'chart') { var chart = document.createElement('div'); chart.className = 'slides-chart'; var values = element.chart && element.chart.values || [5, 8, 4]; var max = Math.max.apply(Math, values.concat([1])); values.forEach(function (value) { var bar = document.createElement('span'); bar.style.height = Math.max(6, value / max * 100) + '%'; chart.appendChild(bar); }); node.appendChild(chart); }
     else if (element.type === 'table') { var table = document.createElement('table'); var tableRows = Array.isArray(element.rows) && element.rows.length ? element.rows : String(element.text || '').split(/\r?\n/).map(function (line) { return line.split('\t'); }); tableRows.forEach(function (values, rowIndex) { var tr = document.createElement('tr'); values.forEach(function (value, colIndex) { var cell = document.createElement(rowIndex === 0 ? 'th' : 'td'); cell.textContent = value; cell.contentEditable = readonly ? 'false' : 'true'; if (!readonly) cell.addEventListener('input', function () { mutate(function (currentDeck) { var found = activeSlide(currentDeck).elements.find(function (item) { return item.id === element.id; }); if (!found) return; if (!Array.isArray(found.rows)) found.rows = tableRows.map(function (row) { return row.slice(); }); if (!Array.isArray(found.rows[rowIndex])) found.rows[rowIndex] = []; found.rows[rowIndex][colIndex] = cell.textContent.slice(0, 2000); found.text = found.rows.map(function (row) { return row.join('\t'); }).join('\n'); }, false, { history: false }); }); tr.appendChild(cell); }); table.appendChild(tr); }); node.appendChild(table); }
+    else if (element.type === 'content-timeline') {
+      var timelineHost = global.SutraContentTimelineHosts;
+      var renderedTimeline = timelineHost && typeof timelineHost.renderDOM === 'function' ? timelineHost.renderDOM(element.contentTimeline) : null;
+      if (renderedTimeline) node.appendChild(renderedTimeline);
+      else { var timelineFallback = document.createElement('div'); timelineFallback.className = 'slides-element-text'; timelineFallback.textContent = contentTimelineText(element.contentTimeline) || String(element.text || 'Timeline content is unavailable.'); node.appendChild(timelineFallback); }
+      var helper = contentTimelineHelper(); var title = '';
+      try { title = helper && helper.inspect(element.contentTimeline).supported ? helper.normalize(element.contentTimeline).title : ''; } catch (_) { title = ''; }
+      node.setAttribute('role', 'group'); node.setAttribute('aria-label', 'Timeline' + (title ? ': ' + title : ''));
+      if (!readonly) {
+        node.tabIndex = 0;
+        node.addEventListener('focus', function () {
+          selectedElementId = element.id;
+          if (root) root.querySelectorAll('.slides-element.selected').forEach(function (selectedNode) { selectedNode.classList.remove('selected'); });
+          node.classList.add('selected');
+          syncElementInspector(deck);
+          var context = root && root.querySelector('[data-selection-context]');
+          if (context) context.textContent = 'Selected timeline object · use Edit selected timeline to change its events.';
+        });
+      }
+    }
     else { var text = document.createElement('div'); text.className = 'slides-element-text'; text.style.textAlign = element.textAlign || 'left'; text.contentEditable = readonly ? 'false' : 'true'; text.textContent = element.text || (element.type === 'shape' ? 'Shape' : 'Add text'); if (!readonly) text.addEventListener('input', function () { mutate(function (currentDeck) { var found = activeSlide(currentDeck).elements.find(function (item) { return item.id === element.id; }); if (found) found.text = text.textContent.slice(0, 8000); }, false, { history: false }); }); node.appendChild(text); }
     if (!readonly) { var resize = document.createElement('button'); resize.type = 'button'; resize.className = 'slides-element-resize'; resize.setAttribute('aria-label', 'Resize selected object'); node.appendChild(resize); node.addEventListener('pointerdown', function (event) { if (event.target.isContentEditable) return; event.preventDefault(); beginElementDrag(event, element, event.target.closest('.slides-element-resize') ? 'resize' : 'move'); node.classList.add('selected'); }); node.addEventListener('pointermove', moveElementDrag); node.addEventListener('pointerup', endElementDrag); node.addEventListener('pointercancel', endElementDrag); }
     return node;
   }
   function syncElementInspector(deck) {
     var panel = root.querySelector('[data-element-inspector]'); var element = selectedElement(deck); if (!panel) return; panel.hidden = !element; if (!element) return;
-    panel.querySelector('[data-element-name]').textContent = element.type === 'image' ? (element.alt || 'Image') : (element.text || element.type);
+    var isTimeline = element.type === 'content-timeline';
+    var helper = contentTimelineHelper(); var timelineTitle = '';
+    try { timelineTitle = isTimeline && helper && helper.inspect(element.contentTimeline).supported ? helper.normalize(element.contentTimeline).title : ''; } catch (_) { timelineTitle = ''; }
+    var inspectorHint = panel.querySelector('.slides-inspector-hint');
+    if (inspectorHint) inspectorHint.textContent = isTimeline
+      ? 'Drag to move or resize. Use Edit selected timeline to change its events.'
+      : 'Drag on the slide to move; use the controls below to adjust its appearance.';
+    panel.querySelector('[data-element-name]').textContent = isTimeline ? 'Timeline' + (timelineTitle ? ': ' + timelineTitle : '') : (element.type === 'image' ? (element.alt || 'Image') : (element.text || element.type));
+    panel.querySelector('[data-element-font]').closest('label').hidden = isTimeline;
+    panel.querySelector('[data-element-bold]').closest('label').hidden = isTimeline;
+    panel.querySelector('[data-element-align]').closest('label').hidden = isTimeline;
+    panel.querySelector('[data-element-fit]').closest('label').hidden = isTimeline || element.type !== 'image';
     panel.querySelector('[data-element-font]').value = Math.max(1, Math.min(10, Number(element.fontSize || 3)));
     panel.querySelector('[data-element-bold]').checked = element.fontWeight === 'bold';
     panel.querySelector('[data-element-align]').value = element.textAlign || 'left';
     panel.querySelector('[data-element-fit]').value = element.imageFit || 'contain';
-    panel.querySelector('[data-element-fit]').closest('label').hidden = element.type !== 'image';
+    panel.querySelector('[data-element-color]').closest('label').hidden = isTimeline;
+    panel.querySelector('[data-element-fill]').closest('label').hidden = isTimeline;
     panel.querySelector('[data-element-fill]').value = /^#[0-9a-f]{6}$/i.test(element.fill || '') ? element.fill : '#ffffff';
     panel.querySelector('[data-element-color]').value = /^#[0-9a-f]{6}$/i.test(element.color || '') ? element.color : '#173d2b';
   }
@@ -301,7 +484,9 @@
     var restoreThumbnailFocus = document.activeElement && document.activeElement.classList.contains('slides-thumbnail');
     if (!activeSlideId || !deck.slides.some(function (slide) { return slide.id === activeSlideId; })) activeSlideId = deck.slides[0].id;
     var slide = activeSlide(deck); var theme = themes[deck.theme] || themes.sutra; var slideIndex = deck.slides.indexOf(slide); var selected = selectedElement(deck); setEditorVisible(true); root.dataset.size = deck.size; root.querySelector('[data-deck-title]').textContent = String(page.title || 'Untitled presentation'); root.querySelector('[data-slide-heading]').textContent = 'Slide ' + (slideIndex + 1) + ' of ' + deck.slides.length + ' · ' + (slide.title || 'Untitled slide'); root.querySelector('[data-count]').textContent = (slideIndex + 1) + ' of ' + deck.slides.length; root.querySelector('[data-status-count]').textContent = deck.slides.length + ' ' + (deck.slides.length === 1 ? 'slide' : 'slides');
-    var context = selected ? 'Selected ' + selected.type + ' object · use Design to adjust it.' : (slide.elements.length ? 'Select an object on the slide to edit it.' : 'No objects yet. Add content or choose a layout.'); root.querySelector('[data-selection-context]').textContent = context;
+    var context = selected
+      ? (selected.type === 'content-timeline' ? 'Selected timeline · use Edit selected timeline to change its events.' : 'Selected ' + selected.type + ' object · use Design to adjust it.')
+      : (slide.elements.length ? 'Select an object on the slide to edit it.' : 'No objects yet. Add content or choose a layout.'); root.querySelector('[data-selection-context]').textContent = context;
     root.querySelector('[data-slide-context]').textContent = slide.title || 'Untitled slide';
     root.querySelector('[data-theme]').value = deck.theme; root.querySelector('[data-layout]').value = slide.layout || 'blank'; root.querySelector('[data-size]').value = deck.size || 'widescreen'; root.querySelector('[data-slide-background]').value = /^#[0-9a-f]{6}$/i.test(slide.background || '') ? slide.background : theme.bg;
     var list = root.querySelector('.slides-thumbnail-list'); list.replaceChildren(); deck.slides.forEach(function (item, index) { var thumb = document.createElement('button'); var title = item.title || item.elements[0] && item.elements[0].text || 'Untitled slide'; thumb.type = 'button'; thumb.className = 'slides-thumbnail' + (item.id === slide.id ? ' active' : ''); thumb.textContent = (index + 1) + '  ' + title; thumb.title = 'Slide ' + (index + 1) + ': ' + title; thumb.setAttribute('aria-label', 'Open slide ' + (index + 1) + ': ' + title); thumb.setAttribute('aria-pressed', item.id === slide.id ? 'true' : 'false'); if (item.id === slide.id) thumb.setAttribute('aria-current', 'true'); thumb.addEventListener('click', function () { activeSlideId = item.id; selectedElementId = ''; render(); }); list.appendChild(thumb); });
@@ -321,10 +506,26 @@
     if (restoreThumbnailFocus) { var activeThumbnail = root.querySelector('.slides-thumbnail.active'); if (activeThumbnail) activeThumbnail.focus(); }
   }
   function present() {
+    if (closePresentation) closePresentation(false);
+    var opener = document.activeElement;
     var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page); if (!deck) return; var overlay = document.createElement('div'); overlay.className = 'slides-present-overlay'; var stage = document.createElement('div'); stage.className = 'slides-present-stage'; stage.setAttribute('role', 'region'); stage.setAttribute('aria-label', 'Presentation slide'); var notes = document.createElement('aside'); notes.className = 'slides-present-notes'; var close = document.createElement('button'); close.type = 'button'; close.textContent = 'Exit presentation'; overlay.append(stage, notes, close); document.body.appendChild(overlay); var index = deck.slides.indexOf(activeSlide(deck)); var showNotes = true;
     function draw() { var slide = deck.slides[index]; stage.replaceChildren(); stage.style.background = slide.background || (themes[deck.theme] || themes.sutra).bg; stage.style.color = (themes[deck.theme] || themes.sutra).ink; slide.elements.forEach(function (element) { stage.appendChild(renderElement(Object.assign({}, element), deck, { readonly: true })); }); notes.hidden = !showNotes; notes.textContent = slide.speakerNotes || 'No speaker notes for this slide.'; }
     function key(event) { if (event.key === 'Escape') close.click(); if ((event.key === 'ArrowRight' || event.key === ' ') && index < deck.slides.length - 1) { index++; draw(); event.preventDefault(); } if (event.key === 'ArrowLeft' && index > 0) { index--; draw(); event.preventDefault(); } if (String(event.key || '').toLowerCase() === 'n') { showNotes = !showNotes; draw(); } }
-    close.onclick = function () { document.removeEventListener('keydown', key, true); overlay.remove(); }; document.addEventListener('keydown', key, true); draw(); close.focus();
+    var closed = false;
+    function finish(restoreFocus) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', key, true);
+      global.removeEventListener('noteflow:view-changed', onViewChanged);
+      overlay.remove();
+      if (closePresentation === finish) closePresentation = null;
+      if (restoreFocus !== false && pageContentAuthorized(page) && opener && opener.isConnected) opener.focus();
+    }
+    function onViewChanged(event) { if (!event.detail || event.detail.view !== 'notes') finish(false); }
+    closePresentation = finish;
+    close.onclick = function () { finish(true); };
+    global.addEventListener('noteflow:view-changed', onViewChanged);
+    document.addEventListener('keydown', key, true); draw(); close.focus();
   }
   function mount() {
     if (root) return root;
@@ -362,6 +563,8 @@
   // that the core now actually dispatches from loadPage()/imports, plus the
   // cross-tab commit notice — no polling interval.
   global.addEventListener('sutra:note-page-loaded', refresh);
+  global.addEventListener('sutra:note-page-locked', refresh);
+  global.addEventListener('sutra:workspace-lock-changed', refresh);
   global.addEventListener('sutra:workspace-remote-commit', refresh);
-  global.SutraSlides = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return pageFrom(workspace()); }, getContext: getContext, addSlide: function () { mutate(function (deck) { var slide = makeSlide('title-body', 'New slide'); deck.slides.push(slide); activeSlideId = slide.id; }); }, undo: slidesUndo, redo: slidesRedo, duplicateSelectedElement: duplicateElement, deleteSelectedElement: deleteElement, copySelectedElement: copyElement, pasteElement: pasteElement, moveSlide: moveSlide, validateAssistantOperations: validateAssistantOperations, createAssistantDeck: createAssistantDeck, applyAssistantOperations: applyAssistantOperations, undoAssistantMutation: undoAssistantMutation, present: present, exportPdf: printPdf, exportPptx: exportPptx, importPptx: importPptx, normalizeDeck: normalizeDeck };
+  global.SutraSlides = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return pageFrom(workspace()); }, getContext: getContext, addSlide: function () { mutate(function (deck) { var slide = makeSlide('title-body', 'New slide'); deck.slides.push(slide); activeSlideId = slide.id; }); }, captureContentTimelineInsertion: captureContentTimelineInsertion, insertContentTimeline: insertContentTimeline, getContentTimelineSelection: getContentTimelineSelection, updateContentTimeline: updateContentTimeline, undo: slidesUndo, redo: slidesRedo, duplicateSelectedElement: duplicateElement, deleteSelectedElement: deleteElement, copySelectedElement: copyElement, pasteElement: pasteElement, moveSlide: moveSlide, validateAssistantOperations: validateAssistantOperations, createAssistantDeck: createAssistantDeck, applyAssistantOperations: applyAssistantOperations, undoAssistantMutation: undoAssistantMutation, present: present, exportPdf: printPdf, exportPptx: exportPptx, importPptx: importPptx, normalizeDeck: normalizeDeck };
 }(window));

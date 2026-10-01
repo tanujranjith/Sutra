@@ -7,9 +7,22 @@
   var previewTimer = 0;
   var previewLoadTimer = 0;
   var previewRevision = 0;
+  var sourceRevision = 0;
   var previewHasLoaded = false;
   var lastPreviewSource = null;
+  var activePageReference = null;
+  var activeDocumentReference = null;
+  var contentTimelineTokens = new WeakMap();
+  var timelinePickerSource = null;
+  var timelinePickerEntries = [];
+  var selectedTimelineIndex = -1;
+  var timelineSelectionMode = 'auto';
+  var timelinePickerTimer = 0;
   var MAX_SOURCE_BYTES = 4 * 1024 * 1024;
+  var MAX_SOURCE_HISTORY_STATES = 40;
+  var MAX_SOURCE_HISTORY_BYTES = 9 * 1024 * 1024;
+  var sourceHistory = null;
+  var CONTENT_TIMELINE_ATTRIBUTE = 'data-sutra-content-timeline';
   var STARTER_SNIPPETS = {
     section: '\n<section>\n  <h2>Section title</h2>\n  <p>Add your content here.</p>\n</section>\n',
     checklist: '\n<section>\n  <h2>Checklist</h2>\n  <ul>\n    <li>First item</li>\n    <li>Second item</li>\n  </ul>\n</section>\n',
@@ -29,10 +42,203 @@
   }
 
   function authorized(page) {
+    if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
     var value = bridge();
     return typeof value.isPageContentAuthorized === 'function'
       ? value.isPageContentAuthorized(page)
       : !!(page && !(page.isLocked && page.lockHash));
+  }
+
+  function canWritePage(page) {
+    if (!page || !authorized(page)) return false;
+    var value = bridge();
+    if (typeof value.canWritePageContent === 'function') {
+      try { return value.canWritePageContent(page) === true; } catch (_) { return false; }
+    }
+    return true;
+  }
+
+  function timelineHosts() {
+    var hosts = global.SutraContentTimelineHosts;
+    return hosts && typeof hosts.serializeMarkup === 'function' && typeof hosts.readMarkup === 'function' ? hosts : null;
+  }
+
+  function timelineHelper() {
+    var helper = global.SutraContentTimeline;
+    return helper && typeof helper.inspect === 'function' && typeof helper.normalize === 'function' ? helper : null;
+  }
+
+  function readHTMLTag(source, start) {
+    var head = /^<\s*(\/?)\s*([a-z][a-z0-9:-]*)\b/i.exec(source.slice(start, start + 160));
+    if (!head) return null;
+    var quote = '';
+    for (var end = start + head[0].length; end < source.length; end += 1) {
+      var character = source.charAt(end);
+      if (quote) {
+        if (character === quote) quote = '';
+      } else if (character === '"' || character === "'") quote = character;
+      else if (character === '>') {
+        return {
+          start: start, end: end + 1, name: head[2].toLowerCase(), closing: !!head[1],
+          selfClosing: /\/\s*>$/.test(source.slice(start, end + 1)),
+          attributesStart: start + head[0].length
+        };
+      }
+    }
+    return null;
+  }
+
+  function tagHasTimelineAttribute(source, tag) {
+    var index = tag.attributesStart;
+    while (index < tag.end - 1) {
+      while (index < tag.end && /\s/.test(source.charAt(index))) index += 1;
+      if (source.charAt(index) === '/' || source.charAt(index) === '>') break;
+      var nameStart = index;
+      while (index < tag.end && !/[\s=/>]/.test(source.charAt(index))) index += 1;
+      if (index === nameStart) { index += 1; continue; }
+      var name = source.slice(nameStart, index).toLowerCase();
+      if (name === CONTENT_TIMELINE_ATTRIBUTE) return true;
+      while (index < tag.end && /\s/.test(source.charAt(index))) index += 1;
+      if (source.charAt(index) !== '=') continue;
+      index += 1;
+      while (index < tag.end && /\s/.test(source.charAt(index))) index += 1;
+      var quote = source.charAt(index);
+      if (quote === '"' || quote === "'") {
+        index += 1;
+        while (index < tag.end && source.charAt(index) !== quote) index += 1;
+        if (source.charAt(index) === quote) index += 1;
+      } else {
+        while (index < tag.end && !/[\s>]/.test(source.charAt(index))) index += 1;
+      }
+    }
+    return false;
+  }
+
+  // Locate authored wrappers lexically without evaluating or inserting the
+  // source into a live document. Raw-text and template contents are excluded.
+  function scanHTMLSource(source) {
+    var ranges = [];
+    var sections = [];
+    var safeText = [];
+    var templateDepth = 0;
+    var position = 0;
+    var textStart = 0;
+    var rawTag = '';
+    var bodyStart = -1;
+    var bodyClose = -1;
+    var htmlClose = -1;
+    var lower = source.toLowerCase();
+
+    function addSafeText(end) {
+      if (!rawTag && templateDepth === 0 && end >= textStart) safeText.push({ start: textStart, end: end });
+    }
+
+    while (position < source.length) {
+      if (rawTag) {
+        var searchFrom = position;
+        var rawClose = -1;
+        while (searchFrom >= 0) {
+          var candidateClose = lower.indexOf('</' + rawTag, searchFrom);
+          if (candidateClose < 0) break;
+          var candidateTag = readHTMLTag(source, candidateClose);
+          if (candidateTag && candidateTag.closing && candidateTag.name === rawTag) { rawClose = candidateClose; break; }
+          searchFrom = candidateClose + 2;
+        }
+        if (rawClose < 0) break;
+        addSafeText(rawClose);
+        position = rawClose;
+        textStart = rawClose;
+        rawTag = '';
+      }
+      var open = source.indexOf('<', position);
+      if (open < 0) { addSafeText(source.length); position = source.length; break; }
+      addSafeText(open);
+      if (source.slice(open, open + 4) === '<!--') {
+        var commentEnd = source.indexOf('-->', open + 4);
+        if (commentEnd < 0) { position = source.length; textStart = position; break; }
+        position = commentEnd + 3;
+        textStart = position;
+        continue;
+      }
+      if (source.slice(open, open + 2) === '<!' || source.slice(open, open + 2) === '<?') {
+        var declarationEnd = source.indexOf('>', open + 2);
+        if (declarationEnd < 0) { position = source.length; textStart = position; break; }
+        position = declarationEnd + 1;
+        textStart = position;
+        continue;
+      }
+      var tag = readHTMLTag(source, open);
+      if (!tag) {
+        position = open + 1;
+        textStart = position;
+        continue;
+      }
+      if (tag.name === 'template') {
+        if (tag.closing) templateDepth = Math.max(0, templateDepth - 1);
+        else templateDepth += 1;
+      } else if (templateDepth === 0 && tag.name === 'section') {
+        if (tag.closing) {
+          var section = sections.pop();
+          if (section && section.timeline) ranges.push({ start: section.start, end: tag.end });
+        } else {
+          sections.push({ start: tag.start, timeline: tagHasTimelineAttribute(source, tag) });
+        }
+      } else if (templateDepth === 0 && !tag.closing && tag.name === 'body' && bodyStart < 0) {
+        bodyStart = tag.end;
+      } else if (templateDepth === 0 && tag.closing && tag.name === 'body' && bodyClose < 0) {
+        bodyClose = tag.start;
+      } else if (templateDepth === 0 && tag.closing && tag.name === 'html' && htmlClose < 0) {
+        htmlClose = tag.start;
+      }
+      position = tag.end;
+      textStart = position;
+      if (!tag.closing && templateDepth === 0 && ['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript', 'plaintext'].indexOf(tag.name) >= 0) rawTag = tag.name;
+    }
+
+    if (!rawTag && templateDepth === 0 && textStart === source.length) safeText.push({ start: source.length, end: source.length });
+    ranges.sort(function (a, b) { return a.start - b.start; });
+    return { ranges: ranges, safeText: safeText, bodyStart: bodyStart, bodyClose: bodyClose, htmlClose: htmlClose };
+  }
+
+  function isSafeHTMLTextOffset(scan, offset) {
+    return scan.safeText.some(function (range) { return offset >= range.start && offset <= range.end; });
+  }
+
+  function timelineEntriesForSource(source) {
+    var hosts = timelineHosts();
+    if (!hosts || typeof global.DOMParser !== 'function') return [];
+    var scan = scanHTMLSource(source);
+    var parsed;
+    try { parsed = new global.DOMParser().parseFromString(source, 'text/html'); } catch (_) { return []; }
+    var nodes = Array.prototype.filter.call(parsed.querySelectorAll('section[' + CONTENT_TIMELINE_ATTRIBUTE + ']'), function (node) {
+      return node.tagName && node.tagName.toLowerCase() === 'section';
+    });
+    if (nodes.length !== scan.ranges.length) return [];
+    var entries = [];
+    for (var index = 0; index < nodes.length; index += 1) {
+      var read = hosts.readMarkup(nodes[index]);
+      if (!read || !scan.ranges[index]) return [];
+      var rawMarkup = source.slice(scan.ranges[index].start, scan.ranges[index].end);
+      var isolated;
+      try {
+        var isolatedDocument = new global.DOMParser().parseFromString(rawMarkup, 'text/html');
+        isolated = hosts.readMarkup(isolatedDocument.body);
+      } catch (_) { return []; }
+      var serializedRead;
+      var serializedIsolated;
+      try {
+        serializedRead = JSON.stringify(read.model);
+        serializedIsolated = JSON.stringify(isolated && isolated.model);
+      } catch (_) { return []; }
+      if (serializedRead !== serializedIsolated) return [];
+      entries.push({ model: read.model, status: read.status, start: scan.ranges[index].start, end: scan.ranges[index].end, raw: rawMarkup });
+    }
+    return entries;
+  }
+
+  function canWriteCurrentPage(page) {
+    var value = bridge();
+    return !!(page && canWritePage(page) && String(value.currentPageId || '') === String(page.id));
   }
 
   function normalizeDocument(raw) {
@@ -96,6 +302,183 @@
     var size = Number.isFinite(knownSize) ? knownSize : new Blob([String(source == null ? '' : source)]).size;
     output.textContent = formatSourceSize(size) + ' / 4 MB';
     output.dataset.state = size > MAX_SOURCE_BYTES ? 'error' : '';
+  }
+
+  function sourceHistoryState(source, editor) {
+    var start = 0;
+    var end = 0;
+    try {
+      start = editor ? Number(editor.selectionStart) || 0 : 0;
+      end = editor ? Number(editor.selectionEnd) || start : start;
+    } catch (_) {}
+    return {
+      source: String(source == null ? '' : source),
+      bytes: new Blob([String(source == null ? '' : source)]).size,
+      selectionStart: start,
+      selectionEnd: end,
+      scrollTop: editor ? Number(editor.scrollTop) || 0 : 0,
+      scrollLeft: editor ? Number(editor.scrollLeft) || 0 : 0
+    };
+  }
+
+  function currentSpaceScope(value) {
+    var spaceId = value && value.activeSpaceId;
+    try {
+      if (value && typeof value.getActiveSpaceId === 'function') spaceId = value.getActiveSpaceId();
+    } catch (_) {}
+    return String(spaceId || 'default');
+  }
+
+  function resetSourceHistory(page, source, editor) {
+    if (!page || !page.htmlDocument) {
+      sourceHistory = null;
+      syncSourceHistoryControls();
+      return;
+    }
+    var value;
+    try { value = bridge(); } catch (_) { sourceHistory = null; syncSourceHistoryControls(); return; }
+    var state = sourceHistoryState(source, editor);
+    sourceHistory = {
+      page: page,
+      document: page.htmlDocument,
+      pageId: String(page.id || ''),
+      spaceId: currentSpaceScope(value),
+      states: [state],
+      cursor: 0,
+      bytes: state.bytes
+    };
+    syncSourceHistoryControls();
+  }
+
+  function sourceHistoryMatchesPage(history, page, value) {
+    return !!(history && page && page.htmlDocument && value &&
+      history.page === page && history.document === page.htmlDocument &&
+      history.pageId === String(page.id || '') && history.spaceId === currentSpaceScope(value));
+  }
+
+  function ensureSourceHistory(page, editor) {
+    var value = bridge();
+    var baseline = String(page.htmlDocument.source == null ? '' : page.htmlDocument.source);
+    if (!sourceHistoryMatchesPage(sourceHistory, page, value) ||
+        !sourceHistory.states[sourceHistory.cursor] || sourceHistory.states[sourceHistory.cursor].source !== baseline) {
+      resetSourceHistory(page, baseline, editor);
+    }
+    return sourceHistory;
+  }
+
+  function recordSourceHistory(page, source, editor) {
+    var history = ensureSourceHistory(page, editor);
+    var current = history.states[history.cursor];
+    var next = sourceHistoryState(source, editor);
+    if (current && current.source === next.source) return;
+    if (history.cursor < history.states.length - 1) {
+      history.states.slice(history.cursor + 1).forEach(function (state) { history.bytes -= state.bytes; });
+      history.states.length = history.cursor + 1;
+    }
+    history.states.push(next);
+    history.cursor = history.states.length - 1;
+    history.bytes += next.bytes;
+    while (history.states.length > MAX_SOURCE_HISTORY_STATES || history.bytes > MAX_SOURCE_HISTORY_BYTES) {
+      if (history.cursor > 0) {
+        var removed = history.states.shift();
+        history.bytes -= removed.bytes;
+        history.cursor -= 1;
+      } else if (history.states.length > 1) {
+        var future = history.states.pop();
+        history.bytes -= future.bytes;
+      } else break;
+    }
+    syncSourceHistoryControls();
+  }
+
+  function currentSourceHistory() {
+    try {
+      var page = pageForCurrentRoute();
+      var editor = root && root.querySelector('[data-html-source]');
+      var value = bridge();
+      if (!page || !editor || !root || root.hidden || !canWriteCurrentPage(page) ||
+          !sourceHistoryMatchesPage(sourceHistory, page, value)) return null;
+      var state = sourceHistory.states[sourceHistory.cursor];
+      if (!state || String(editor.value || '') !== state.source || String(page.htmlDocument.source || '') !== state.source) return null;
+      return { page: page, editor: editor, history: sourceHistory, state: state };
+    } catch (_) { return null; }
+  }
+
+  function syncSourceHistoryControls() {
+    if (!root) return;
+    var undo = root.querySelector('[data-html-source-undo]');
+    var redo = root.querySelector('[data-html-source-redo]');
+    if (!undo || !redo) return;
+    var current = currentSourceHistory();
+    undo.disabled = !current || current.history.cursor <= 0;
+    redo.disabled = !current || current.history.cursor >= current.history.states.length - 1;
+  }
+
+  function applySourceHistory(direction, keepEditorFocus) {
+    var current = currentSourceHistory();
+    if (!current) return false;
+    var history = current.history;
+    var nextCursor = direction === 'undo' ? history.cursor - 1 : history.cursor + 1;
+    if (nextCursor < 0 || nextCursor >= history.states.length) return false;
+    var editor = current.editor;
+    var priorValue = editor.value;
+    var target = history.states[nextCursor];
+    editor.value = target.source;
+    if (!updateSource(target.source, { history: false })) {
+      editor.value = priorValue;
+      updateSourceSize(priorValue);
+      syncSourceHistoryControls();
+      return false;
+    }
+    history.cursor = nextCursor;
+    try {
+      editor.setSelectionRange(
+        Math.min(target.selectionStart, target.source.length),
+        Math.min(target.selectionEnd, target.source.length)
+      );
+      editor.scrollTop = target.scrollTop;
+      editor.scrollLeft = target.scrollLeft;
+    } catch (_) {}
+    if (keepEditorFocus) editor.focus();
+    syncSourceHistoryControls();
+    return true;
+  }
+
+  function reconcileNativeHistoryInput(source, inputType) {
+    if (!sourceHistory || (inputType !== 'historyUndo' && inputType !== 'historyRedo')) return false;
+    var page;
+    var value;
+    try { page = pageForCurrentRoute(); value = bridge(); } catch (_) { return false; }
+    if (!sourceHistoryMatchesPage(sourceHistory, page, value)) return false;
+    var step = inputType === 'historyUndo' ? -1 : 1;
+    for (var index = sourceHistory.cursor + step; index >= 0 && index < sourceHistory.states.length; index += step) {
+      if (sourceHistory.states[index].source === source) {
+        sourceHistory.cursor = index;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function handleSourceInput(event) {
+    var source = String(event.target.value || '');
+    var previousCursor = sourceHistory && sourceHistory.cursor;
+    var reconciled = reconcileNativeHistoryInput(source, event.inputType || '');
+    if (!updateSource(source, reconciled ? { history: false } : undefined)) {
+      if (reconciled && sourceHistory) sourceHistory.cursor = previousCursor;
+      syncSourceHistoryControls();
+      return;
+    }
+    syncSourceHistoryControls();
+  }
+
+  function handleSourceHistoryShortcut(event) {
+    if (event.defaultPrevented || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) ||
+        String(event.key || '').toLowerCase() !== 'z') return;
+    var current = currentSourceHistory();
+    if (!current) return;
+    event.preventDefault();
+    applySourceHistory(event.shiftKey ? 'redo' : 'undo', true);
   }
 
   function showPreviewMessage(message, state) {
@@ -226,9 +609,9 @@
     }
   }
 
-  function updateSource(source) {
+  function updateSource(source, options) {
     var page = pageForCurrentRoute();
-    if (!page || !page.htmlDocument) return false;
+    if (!page || !page.htmlDocument || !canWriteCurrentPage(page)) return false;
     var value = String(source == null ? '' : source);
     var size = new Blob([value]).size;
     updateSourceSize(value, size);
@@ -239,6 +622,15 @@
       setPreviewStatus('Source is over the 4 MB limit. Shorten it before previewing.', 'error');
       return false;
     }
+    if (!options || options.history !== false) {
+      var sourceEditor = root && root.querySelector('[data-html-source]');
+      recordSourceHistory(page, value, sourceEditor);
+    }
+    sourceRevision += 1;
+    if (!options || options.preserveTimelineSelection !== true) {
+      selectedTimelineIndex = -1;
+      timelineSelectionMode = 'auto';
+    }
     var now = new Date().toISOString();
     page.htmlDocument.source = value;
     page.htmlDocument.updatedAt = now;
@@ -248,6 +640,211 @@
     global.clearTimeout(saveTimer);
     saveTimer = global.setTimeout(persistCurrentPage, 450);
     schedulePreview();
+    scheduleTimelinePickerRefresh();
+    syncSourceHistoryControls();
+    return true;
+  }
+
+  function refreshTimelinePicker() {
+    var editor = root && root.querySelector('[data-html-source]');
+    var picker = root && root.querySelector('[data-html-timeline-picker]');
+    var wrapper = root && root.querySelector('[data-html-timeline-picker-wrap]');
+    if (!editor || !picker || !wrapper) return [];
+    var source = String(editor.value || '');
+    if (timelinePickerSource === source) return timelinePickerEntries;
+    timelinePickerSource = source;
+    timelinePickerEntries = timelineEntriesForSource(source);
+    if (selectedTimelineIndex >= timelinePickerEntries.length) selectedTimelineIndex = -1;
+    wrapper.hidden = timelinePickerEntries.length === 0;
+    picker.replaceChildren();
+    timelinePickerEntries.forEach(function (entry, index) {
+      var option = document.createElement('option');
+      option.value = String(index);
+      var model = entry.model;
+      var title = model && typeof model.title === 'string' ? model.title : '';
+      option.textContent = 'Timeline ' + (index + 1) + (title ? ' — ' + title.slice(0, 80) : '');
+      picker.appendChild(option);
+    });
+    if (selectedTimelineIndex >= 0) picker.value = String(selectedTimelineIndex);
+    else if (timelinePickerEntries.length) picker.selectedIndex = -1;
+    return timelinePickerEntries;
+  }
+
+  function scheduleTimelinePickerRefresh() {
+    global.clearTimeout(timelinePickerTimer);
+    timelinePickerTimer = global.setTimeout(function () {
+      refreshTimelinePicker();
+      inferTimelineFromSourceSelection();
+    }, 300);
+  }
+
+  function inferTimelineFromSourceSelection() {
+    var editor = root && root.querySelector('[data-html-source]');
+    var picker = root && root.querySelector('[data-html-timeline-picker]');
+    if (!editor || !picker) return -1;
+    var start = Number(editor.selectionStart);
+    var end = Number(editor.selectionEnd);
+    var matching = [];
+    timelinePickerEntries.forEach(function (entry, index) {
+      var intersects = start === end
+        ? start >= entry.start && start <= entry.end
+        : start < entry.end && end > entry.start;
+      if (intersects) matching.push(index);
+    });
+    if (matching.length === 1) {
+      selectedTimelineIndex = matching[0];
+      timelineSelectionMode = 'source';
+      picker.value = String(selectedTimelineIndex);
+      return selectedTimelineIndex;
+    }
+    return -1;
+  }
+
+  function selectedTimelineEntry() {
+    var entries = refreshTimelinePicker();
+    if (!entries.length) return null;
+    var inferred = timelineSelectionMode === 'picker' ? -1 : inferTimelineFromSourceSelection();
+    var index = inferred >= 0 ? inferred : selectedTimelineIndex;
+    if (timelineSelectionMode === 'source' && inferred < 0) return null;
+    if (index < 0 || index >= entries.length) return null;
+    return { entry: entries[index], index: index };
+  }
+
+  function captureContentTimelineToken(kind, entry) {
+    var page = pageForCurrentRoute();
+    var editor = root && root.querySelector('[data-html-source]');
+    var value = bridge();
+    if (!page || !page.htmlDocument || !editor || root.hidden || !canWriteCurrentPage(page)) return null;
+    var source = String(editor.value || '');
+    if (page.htmlDocument.source !== source) return null;
+    var scan = scanHTMLSource(source);
+    var token = {};
+    var state = {
+      kind: kind, page: page, document: page.htmlDocument, pageId: page.id,
+      spaceId: String(value.activeSpaceId || 'default'), source: source,
+      sourceRevision: sourceRevision, editor: editor,
+      selectionStart: Number(editor.selectionStart), selectionEnd: Number(editor.selectionEnd),
+      start: entry ? entry.start : -1, end: entry ? entry.end : -1,
+      raw: entry ? entry.raw : '', modelSnapshot: entry ? JSON.stringify(entry.model) : '',
+      timelineIndex: entry ? entry.index : -1,
+      insertOffset: entry ? -1 : chooseTimelineInsertionOffset(source, scan, editor)
+    };
+    if (!entry && (state.insertOffset < 0 || !isSafeHTMLTextOffset(scan, state.insertOffset))) return null;
+    contentTimelineTokens.set(token, state);
+    return token;
+  }
+
+  function chooseTimelineInsertionOffset(source, scan, editor) {
+    var start = Number(editor.selectionStart);
+    var end = Number(editor.selectionEnd);
+    var insideTimeline = scan.ranges.some(function (range) { return start > range.start && start < range.end; });
+    var insideBody = scan.bodyStart < 0 ? scan.htmlClose < 0 : start >= scan.bodyStart && (scan.bodyClose < 0 || start <= scan.bodyClose);
+    if (start === end && start > 0 && insideBody && !insideTimeline && isSafeHTMLTextOffset(scan, start)) return start;
+    if (scan.bodyClose >= 0) return scan.bodyClose;
+    if (scan.htmlClose >= 0) return scan.htmlClose;
+    if (isSafeHTMLTextOffset(scan, source.length)) return source.length;
+    return -1;
+  }
+
+  function currentTokenState(token, kind) {
+    if (!token || typeof token !== 'object' || !contentTimelineTokens.has(token)) return null;
+    var state = contentTimelineTokens.get(token);
+    if (state.kind !== kind) return null;
+    var page = pageForCurrentRoute();
+    var editor = root && root.querySelector('[data-html-source]');
+    var value = bridge();
+    if (!page || page !== state.page || page.htmlDocument !== state.document ||
+        String(page.id) !== String(state.pageId) || editor !== state.editor || root.hidden ||
+        String(value.activeSpaceId || 'default') !== state.spaceId || !canWriteCurrentPage(page) ||
+        sourceRevision !== state.sourceRevision || String(editor.value || '') !== state.source ||
+        Number(editor.selectionStart) !== state.selectionStart || Number(editor.selectionEnd) !== state.selectionEnd ||
+        page.htmlDocument.source !== state.source) return null;
+    if (kind === 'update') {
+      var entries = timelineEntriesForSource(state.source);
+      var current = entries[state.timelineIndex];
+      var snapshot;
+      try { snapshot = current && JSON.stringify(current.model); } catch (_) { return null; }
+      if (!current || current.start !== state.start || current.end !== state.end ||
+          current.raw !== state.raw || snapshot !== state.modelSnapshot) return null;
+    }
+    return state;
+  }
+
+  function captureContentTimelineInsertion() {
+    return captureContentTimelineToken('insert', null);
+  }
+
+  function insertContentTimeline(model, token) {
+    var helper = timelineHelper();
+    var hosts = timelineHosts();
+    if (!helper || !hosts) return false;
+    try { var status = helper.inspect(model); if (!status || !status.supported || status.readOnly) return false; } catch (_) { return false; }
+    if (token == null) token = captureContentTimelineInsertion();
+    var state = currentTokenState(token, 'insert');
+    if (!state || state.insertOffset < 0) return false;
+    var markup = hosts.serializeMarkup(model, { nonEditable: true });
+    if (!markup) return false;
+    var updated = state.source.slice(0, state.insertOffset) + markup + state.source.slice(state.insertOffset);
+    if (new Blob([updated]).size > MAX_SOURCE_BYTES) {
+      setStatus('This timeline would make the HTML source larger than 4 MB.', 'error');
+      return false;
+    }
+    contentTimelineTokens.delete(token);
+    var editor = state.editor;
+    editor.setRangeText(markup, state.insertOffset, state.insertOffset, 'end');
+    if (!updateSource(editor.value, { preserveTimelineSelection: true })) {
+      editor.value = state.source;
+      updateSourceSize(state.source);
+      return false;
+    }
+    refreshTimelinePicker();
+    var insertedIndex = timelinePickerEntries.findIndex(function (entry) { return entry.start === state.insertOffset; });
+    if (insertedIndex >= 0) {
+      selectedTimelineIndex = insertedIndex;
+      timelineSelectionMode = 'picker';
+      var picker = root.querySelector('[data-html-timeline-picker]');
+      if (picker) picker.value = String(insertedIndex);
+    }
+    editor.focus();
+    return true;
+  }
+
+  function getContentTimelineSelection() {
+    var selected = selectedTimelineEntry();
+    if (!selected) return null;
+    var entry = Object.assign({}, selected.entry, { index: selected.index });
+    var token = captureContentTimelineToken('update', entry);
+    return token ? { model: selected.entry.model, token: token } : null;
+  }
+
+  function updateContentTimeline(token, model) {
+    var helper = timelineHelper();
+    var hosts = timelineHosts();
+    var state = currentTokenState(token, 'update');
+    if (!state || !helper || !hosts) return false;
+    try { if (!helper.inspect(JSON.parse(state.modelSnapshot)).supported) return false; } catch (_) { return false; }
+    try { var status = helper.inspect(model); if (!status || !status.supported || status.readOnly) return false; } catch (_) { return false; }
+    var markup = hosts.serializeMarkup(model, { nonEditable: true });
+    if (!markup) return false;
+    var updated = state.source.slice(0, state.start) + markup + state.source.slice(state.end);
+    if (new Blob([updated]).size > MAX_SOURCE_BYTES) {
+      setStatus('This timeline would make the HTML source larger than 4 MB.', 'error');
+      return false;
+    }
+    contentTimelineTokens.delete(token);
+    var editor = state.editor;
+    editor.setRangeText(markup, state.start, state.end, 'end');
+    if (!updateSource(editor.value, { preserveTimelineSelection: true })) {
+      editor.value = state.source;
+      updateSourceSize(state.source);
+      return false;
+    }
+    selectedTimelineIndex = state.timelineIndex;
+    timelineSelectionMode = 'picker';
+    refreshTimelinePicker();
+    var picker = root.querySelector('[data-html-timeline-picker]');
+    if (picker && selectedTimelineIndex < timelinePickerEntries.length) picker.value = String(selectedTimelineIndex);
+    editor.focus();
     return true;
   }
 
@@ -333,8 +930,14 @@
     file.text().then(function (source) {
       if (pageForCurrentRoute() !== owner || previewRevision !== revision || !root || root.hidden) return;
       var editor = root && root.querySelector('[data-html-source]');
-      if (editor && updateSource(source)) {
+      if (editor) {
+        var previousSource = editor.value;
         editor.value = source;
+        if (!updateSource(source)) {
+          editor.value = previousSource;
+          updateSourceSize(previousSource);
+          return;
+        }
         setStatus('Imported — saving…', 'saving');
         renderPreview(true);
       }
@@ -438,6 +1041,9 @@
       + '<button type="button" data-html-panel="code" role="tab" aria-controls="htmlPageCodePanel" aria-selected="false" tabindex="-1">Code</button>'
       + '<button type="button" data-html-panel="preview" role="tab" aria-controls="htmlPagePreviewPanel" aria-selected="true" tabindex="0" class="active">Preview</button></div>'
       + '<div class="html-page-actions"><span class="html-page-layout-status" data-html-layout-status aria-live="polite">Preview only</span>'
+      + '<label class="html-page-timeline-picker" data-html-timeline-picker-wrap hidden>Timeline to edit<select data-html-timeline-picker aria-label="Choose an authored timeline"></select></label>'
+      + '<button type="button" data-html-source-undo aria-label="Undo source change" disabled>Undo</button>'
+      + '<button type="button" data-html-source-redo aria-label="Redo source change" disabled>Redo</button>'
       + '<button type="button" data-html-edit-source aria-expanded="false" aria-controls="sutraHtmlPageSource">Edit source</button>'
       + '<button type="button" data-html-refresh aria-label="Refresh the local HTML preview">Refresh preview</button>'
       + '<button type="button" data-html-export>Export .html</button></div></header>'
@@ -455,7 +1061,24 @@
       + '<output data-html-save-status role="status" aria-live="polite">Saved locally</output></footer>'; // sutra-allow-html: reviewed static editor chrome; authored HTML only enters the sandbox helper.
     var container = document.getElementById('notesPrimaryPane');
     if (container) container.appendChild(root);
-    root.querySelector('[data-html-source]').addEventListener('input', function (event) { updateSource(event.target.value); });
+    var sourceEditor = root.querySelector('[data-html-source]');
+    sourceEditor.addEventListener('input', handleSourceInput);
+    sourceEditor.addEventListener('keydown', handleSourceHistoryShortcut);
+    root.querySelector('[data-html-source-undo]').addEventListener('click', function () { applySourceHistory('undo', false); });
+    root.querySelector('[data-html-source-redo]').addEventListener('click', function () { applySourceHistory('redo', false); });
+    function onSourceSelectionChange() {
+      selectedTimelineIndex = -1;
+      timelineSelectionMode = 'source';
+      scheduleTimelinePickerRefresh();
+    }
+    sourceEditor.addEventListener('click', onSourceSelectionChange);
+    sourceEditor.addEventListener('keyup', onSourceSelectionChange);
+    sourceEditor.addEventListener('select', onSourceSelectionChange);
+    root.querySelector('[data-html-timeline-picker]').addEventListener('change', function (event) {
+      var index = Number(event.target.value);
+      selectedTimelineIndex = Number.isInteger(index) && index >= 0 && index < timelinePickerEntries.length ? index : -1;
+      timelineSelectionMode = 'picker';
+    });
     root.querySelector('[data-html-edit-source]').addEventListener('click', function () { setSourceMode(root.dataset.sourceOpen !== 'true'); });
     root.querySelector('[data-html-refresh]').addEventListener('click', function () { renderPreview(true); });
     root.querySelector('[data-html-export]').addEventListener('click', exportSource);
@@ -470,6 +1093,7 @@
     });
     updateModeControls();
     updateSourceSize('');
+    refreshTimelinePicker();
     return root;
   }
 
@@ -479,7 +1103,15 @@
     var model = documentFor(page);
     var show = !!(page && model);
     if (!show) {
+      if (activePageId || activePageReference || activeDocumentReference) sourceRevision += 1;
       activePageId = '';
+      activePageReference = null;
+      activeDocumentReference = null;
+      resetSourceHistory(null, '', null);
+      timelinePickerSource = null;
+      timelinePickerEntries = [];
+      selectedTimelineIndex = -1;
+      timelineSelectionMode = 'auto';
       lastPreviewSource = null;
       previewHasLoaded = false;
       global.clearTimeout(previewTimer);
@@ -491,6 +1123,7 @@
         if (sourceEditor) sourceEditor.value = '';
         if (previewHost) previewHost.replaceChildren();
         updateSourceSize('');
+        syncSourceHistoryControls();
         setPreviewStatus('Open an HTML Page to see its preview.', 'empty');
         setVisible(false);
       }
@@ -498,21 +1131,42 @@
       return;
     }
     mount();
-    var changedPage = activePageId !== page.id;
+    var changedPage = activePageId !== page.id || activePageReference !== page || activeDocumentReference !== page.htmlDocument;
+    if (changedPage) {
+      sourceRevision += 1;
+      timelinePickerSource = null;
+      selectedTimelineIndex = -1;
+      timelineSelectionMode = 'auto';
+    }
     activePageId = page.id;
+    activePageReference = page;
     if (!page.htmlDocument || page.htmlDocument.version !== 1) page.htmlDocument = model;
+    activeDocumentReference = page.htmlDocument;
     setVisible(true);
     updateSourceSize(model.source);
-    if (changedPage || root.querySelector('[data-html-source]').value !== model.source) {
+    var sourceChanged = root.querySelector('[data-html-source]').value !== model.source;
+    if (sourceChanged && !changedPage) {
+      sourceRevision += 1;
+      timelinePickerSource = null;
+      selectedTimelineIndex = -1;
+    }
+    if (changedPage || sourceChanged) {
       global.clearTimeout(previewTimer);
       global.clearTimeout(previewLoadTimer);
       previewRevision += 1;
-      root.querySelector('[data-html-source]').value = model.source;
+      var sourceEditor = root.querySelector('[data-html-source]');
+      sourceEditor.value = model.source;
+      resetSourceHistory(page, model.source, sourceEditor);
       lastPreviewSource = null;
       previewHasLoaded = false;
       setStatus('Saved locally', 'saved');
       setSourceMode(false);
     }
+    if (!sourceHistoryMatchesPage(sourceHistory, page, bridge())) {
+      resetSourceHistory(page, model.source, root.querySelector('[data-html-source]'));
+    }
+    refreshTimelinePicker();
+    syncSourceHistoryControls();
   }
 
   function createPage(title, options) {
@@ -548,6 +1202,8 @@
   }
 
 global.addEventListener('sutra:note-page-loaded', refresh);
+global.addEventListener('sutra:note-page-locked', refresh);
+global.addEventListener('sutra:workspace-lock-changed', refresh);
 global.addEventListener('sutra:workspace-remote-commit', refresh);
   global.SutraHTMLPages = {
     createPage: createPage,
@@ -555,6 +1211,10 @@ global.addEventListener('sutra:workspace-remote-commit', refresh);
     getCurrentPage: pageForCurrentRoute,
     getDocument: function () { return documentFor(pageForCurrentRoute()); },
     normalizeDocument: normalizeDocument,
-    renderPreview: function () { renderPreview(true); }
+    renderPreview: function () { renderPreview(true); },
+    captureContentTimelineInsertion: captureContentTimelineInsertion,
+    insertContentTimeline: insertContentTimeline,
+    getContentTimelineSelection: getContentTimelineSelection,
+    updateContentTimeline: updateContentTimeline
   };
 }(window));

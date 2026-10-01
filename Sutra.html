@@ -1488,6 +1488,9 @@
                 <button class="toolbar-btn" data-notes-v2-state="link" aria-pressed="false" onclick="insertLink()" title="Insert link (Ctrl+K)" aria-label="Insert link">
                     <i class="fas fa-link"></i>
                 </button>
+                <button class="toolbar-btn" type="button" onclick="window.flowAtelier?.openNotesAI()" title="AI writing help" aria-label="AI writing help">
+                    <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                </button>
                 <button class="toolbar-btn" onclick="insertTable()" title="Insert table" aria-label="Insert table">
                     <i class="fas fa-table"></i>
                 </button>
@@ -7894,7 +7897,11 @@
          Loads before app.js so the flag can mount at boot; app.js only touches it
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
-    <script src="src/features/notes/editor-v2.js?v=20260929-issues51-59-64-boundary1"></script>
+    <script src="src/domain/content-timeline.js?v=20261001-content-timeline3"></script>
+    <script src="src/features/notes/rich-links.js?v=20261001-rich-links6"></script>
+    <script src="src/features/notes/inline-ai-assist.js?v=20261001-inline-ai1"></script>
+    <script src="src/features/notes/authoring-tools.js?v=20261001-authoring4"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261001-authoring4"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7908,7 +7915,9 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261001-create-polish2"></script>
+    <script src="src/core/app.js?v=20261001-authoring4"></script>
+    <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
+    <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
     <script src="src/ui/task-completion-effects.js?v=20261001-task-completion1"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
@@ -7917,10 +7926,10 @@
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
     <script src="src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
-    <script src="src/features/workspace/pdf-workspace.js?v=20261001-create-polish4"></script>
+    <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-create-polish4"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261001-authoring4"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7930,10 +7939,11 @@
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20261001-todo-completion1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
-    <script src="src/features/workspace/slides.js?v=20261001-create-polish5"></script>
+    <script src="src/features/workspace/slides.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
-    <script src="src/features/workspace/sheets.js?v=20261001-create-polish3"></script>
-    <script src="src/features/workspace/html-pages.js?v=20261001-create-polish5"></script>
+    <script src="src/features/workspace/sheets.js?v=20261001-authoring6"></script>
+    <script src="src/features/workspace/html-pages.js?v=20261001-authoring6"></script>
+    <script src="src/features/workspace/content-timeline-hosts.js?v=20261001-content-timeline3"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
@@ -8347,10 +8357,10 @@
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
     <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-completion1">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20261001-create-polish3">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20261001-authoring4">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20261001-create-polish3">
-    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261001-create-polish2">
-    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20261001-create-polish2">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261001-authoring4">
+    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20261001-authoring4">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
@@ -8366,6 +8376,13 @@
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
     <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260930-drawer-layer">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
+    <link rel="stylesheet" href="styles/features/rich-links.css?v=20261001-rich-links8">
+    <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261001-inline-ai1">
+    <link rel="stylesheet" href="styles/features/content-timeline.css?v=20261001-content-timeline4">
+    <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261001-content-timeline3">
+    <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261001-canvas-polish2">
+    <link rel="stylesheet" href="styles/features/folder-workspace.css?v=20261001-folders7">
+    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261001-mobile-workspaces8">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

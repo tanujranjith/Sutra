@@ -15,6 +15,10 @@ and unknown page fields intact.
 ID. Elements use normalized percentage geometry and support text, basic shapes,
 tables, inline local images, and simple charts. Speaker notes are stored on the slide.
 
+Authored timelines are separate `content-timeline` elements; see
+[Authored content timelines](CONTENT_TIMELINES.md) for their editable model and
+portable text rendering.
+
 The current interaction state—selected slide, selected element, inspector
 visibility, and presenter position—is session-only. It is never persisted, so
 opening a deck does not cause Sync churn.
@@ -53,6 +57,11 @@ edits must never invoke whole-workspace serialize/import or restore behavior.
 As a result, deck text, themes, layouts, notes, and inline image data
 participate in normal reload, encrypted `.sutra` export/import, duplication,
 and workspace Sync without a Slides-specific server or network request.
+
+Page and workspace lock events hide the editor, clear rendered content and
+session clipboard/history, and close an active presentation. Unlocking reloads
+the canonical deck. Presentation also closes when leaving Create or changing
+the owning page; exiting normally returns focus to its opener.
 
 When Slides is the active Note page, Sutra Assistant receives a bounded local
 deck context: slide titles, text/shape labels, chart labels and values, and

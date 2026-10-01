@@ -56,6 +56,39 @@ choice; a remote apply preserves that device's Help icon per space. Locked page
 content must be authorized before changing its icon, and blocked workspace
 writes prevent icon edits.
 
+## Additional note tools
+
+Notes supports editable rich links, reviewed inline AI drafts, and authored
+timeline blocks through native editor transactions. See [Rich links](RICH_LINKS.md),
+[Inline AI writing help](INLINE_AI_WRITING.md), and [Authored timelines](CONTENT_TIMELINES.md)
+for interaction, privacy, persistence, and cancellation contracts.
+
+## Canvas
+
+Canvas is a freeform board stored on its ordinary page record. Its toolbar is
+grouped into navigation, drawing, arrangement, conversion, and view controls;
+the selected-object bar exposes the current selection count and arrangement,
+layer, and lock actions. The board status shows object and selection counts and
+the grid-snap state. Use the zoom percentage to reset the view or **Fit Canvas
+content to view** to bring the board into view. The minimap shows the current
+viewport when the board extends beyond the stage.
+
+On an empty board, the centered hint points to the available ways to begin.
+Canvas controls keep keyboard focus visible and use touch-size targets; on a
+small screen, the toolbar and selection actions can scroll horizontally within
+their own rows so the board remains usable without widening the page.
+
+Canvas objects, connections, groups, background, viewport, and grid-snap choice
+remain on the existing `page.canvas` record and use the existing page save,
+backup, and Sync paths. Object edits use the existing undo and redo history.
+Selection, active tool, and minimap visibility stay in memory; visual styling
+does not add workspace fields or change object data. Locked linked notes remain
+subject to the existing page authorization checks.
+
+An authored timeline is a separate Canvas object from scheduled-item cards.
+Read its scrollable body, drag its header to move it, or use **Edit timeline**
+to change the local draft before saving. It follows normal Canvas Undo/Redo.
+
 ## Compatibility
 
 Stored anchors and block records remain readable in the classic editor. Keep

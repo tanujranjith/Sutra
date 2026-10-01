@@ -66,6 +66,7 @@ body.pdf-page-active #notesPrimaryPane > :not(.pdfw-root) { display: none !impor
 .pdfw-view-controls { gap: 3px; }
 .pdfw-document-actions { flex: 0 0 auto; min-width: 0; max-width: 100%; margin-left: auto; overflow-x: auto; scrollbar-width: thin; }
 .pdfw-document-actions .pdfw-button { flex: 0 0 auto; min-height: 40px; }
+.pdfw-document-actions [data-action="timeline-note"] { min-height: 44px; }
 .pdfw-tool-group { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--border-color, #d8dce3) 72%, transparent); border-radius: 10px; background: var(--surface-secondary, #f9fafb); }
 .pdfw-tool-group[hidden] { display: none; }
 .pdfw-tool-group .pdfw-button { min-height: 34px; padding: 6px 9px; border-color: transparent; background: transparent; }

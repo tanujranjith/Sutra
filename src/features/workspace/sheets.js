@@ -4,7 +4,7 @@
   function engine() { return global.SutraSheetsEngine; }
   function interop() { if (!global.SutraOfficeInterop) throw new Error('Local Office interoperability is unavailable.'); return global.SutraOfficeInterop; }
   function bridge() { var value = global.flowAtelier; if (!value || !Array.isArray(value.pages) || typeof value.persistAppData !== 'function') throw new Error('Sheets requires the canonical Sutra workspace bridge.'); return value; }
-  function authorized(page) { var value = bridge(); return typeof value.isPageContentAuthorized === 'function' ? value.isPageContentAuthorized(page) : !!(page && !(page.isLocked && page.lockHash)); }
+  function authorized(page) { if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false; var value = bridge(); return typeof value.isPageContentAuthorized === 'function' ? value.isPageContentAuthorized(page) : !!(page && !(page.isLocked && page.lockHash)); }
   function activePage() { var page = bridge().pages.find(function (item) { return item && item.id === activePageId; }) || null; return page && authorized(page) ? page : null; }
   function workbookFor(page) { return page && page.spreadsheet && Array.isArray(page.spreadsheet.sheets) ? page.spreadsheet : null; }
   function activeSheet(book) { return book && book.sheets.find(function (sheet) { return sheet.id === activeSheetId; }) || (book && book.sheets[0]) || null; }
@@ -165,12 +165,37 @@
   }
   function exportCsv() { var page = activePage(); var book = workbookFor(page); var sheet = activeSheet(book); if (!page || !sheet) return false; interop().downloadDelimited(book, sheet.id, ',', page.title + '-' + sheet.name); return true; }
   async function exportXlsx() { var page = activePage(); var book = workbookFor(page); if (!page || !book) return false; try { await interop().downloadXlsx(book, page.title); if (typeof global.showToast === 'function') global.showToast('XLSX exported'); return true; } catch (error) { if (typeof global.showToast === 'function') global.showToast(error.message || 'XLSX export failed.'); return false; } }
-  function refresh() { closeSheetRename(false); var value; try { value = bridge(); } catch (err) { return; } var pageId = value.currentPageId || ''; var page = value.pages.find(function (item) { return item && item.id === pageId; }); activePageId = pageId; var show = !!(page && authorized(page) && workbookFor(page)); if (show) { if (page.spreadsheet.version !== 2) { page.spreadsheet = engine().normalizeWorkbook(page.spreadsheet, page.title); value.persistAppData(); } mount(); visible(root); render(); } else hidden(root); document.body.classList.toggle('sheets-page-active', show); }
+  function refresh() {
+    closeSheetRename(false);
+    var value; try { value = bridge(); } catch (err) { return; }
+    var pageId = value.currentPageId || '';
+    var page = value.pages.find(function (item) { return item && item.id === pageId; });
+    activePageId = pageId;
+    var pageAuthorized = !!(page && authorized(page));
+    if (!pageAuthorized) {
+      editing = false; formulaActionPointer = ''; undo = []; redo = []; clipboard = null;
+      if (root) {
+        root.querySelector('[data-formula]').value = '';
+        root.querySelector('[data-value-preview]').textContent = '';
+        root.querySelector('.sheets-grid-canvas').replaceChildren();
+        root.querySelector('[data-chart-panel]').replaceChildren();
+        formulaActionsEnabled(false);
+      }
+    }
+    var show = !!(pageAuthorized && workbookFor(page));
+    if (show) {
+      if (page.spreadsheet.version !== 2) { page.spreadsheet = engine().normalizeWorkbook(page.spreadsheet, page.title); value.persistAppData(); }
+      mount(); visible(root); render();
+    } else hidden(root);
+    document.body.classList.toggle('sheets-page-active', show);
+  }
   function createPage(title, options) { var value = bridge(); var now = new Date().toISOString(); var page = { id: engine().id('page'), title: title || 'Spreadsheet', type: 'note', content: '', blocks: [], icon: '▦', spaceId: value.getActiveSpaceId ? value.getActiveSpaceId() : 'default', createdAt: now, updatedAt: now, spreadsheet: engine().normalizeWorkbook(options && options.workbook, title) }; value.pages.push(page); value.persistAppData(); if (typeof value.renderPagesList === 'function') value.renderPagesList(); if (typeof global.loadPage === 'function') global.loadPage(page.id); return page; }
   function createFromNewPageDialog() { var input = document.getElementById('newPageName'); var modal = document.getElementById('newPageModal'); if (modal) modal.classList.remove('active'); return createPage(input && input.value || 'Spreadsheet'); }
   // Lifecycle (audit remediation): the core dispatches sutra:note-page-loaded
   // from loadPage()/imports, so refresh is event-driven — no polling interval.
   global.addEventListener('sutra:note-page-loaded', refresh);
+  global.addEventListener('sutra:note-page-locked', refresh);
+  global.addEventListener('sutra:workspace-lock-changed', refresh);
   global.addEventListener('sutra:workspace-remote-commit', refresh);
   global.SutraSheets = { createPage: createPage, createFromNewPageDialog: createFromNewPageDialog, getCurrentPage: function () { return activePage(); }, getWorkbook: function () { return workbookFor(activePage()); }, undo: undoChange, redo: redoChange, normalizeWorkbook: function (model) { return engine().normalizeWorkbook(model); }, importFile: importFile, exportCsv: exportCsv, exportXlsx: exportXlsx };
 }(window));

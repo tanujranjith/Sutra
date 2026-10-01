@@ -1,0 +1,86 @@
+/* Contextual controls shared by the writable authored-timeline hosts. */
+.sutra-content-timeline-host-toolbar {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0 12px;
+    padding: 8px 0;
+    border-block: 1px solid var(--surface-border, #d9dce6);
+    color: var(--text-primary, #1d2939);
+}
+
+.sutra-content-timeline-host-toolbar[hidden] {
+    display: none !important;
+}
+
+.html-page-toolbar > .sutra-content-timeline-host-toolbar,
+.slides-toolbar > .sutra-content-timeline-host-toolbar {
+    flex: 1 1 100%;
+    margin: 0;
+    padding-block: 6px;
+}
+
+.sutra-content-timeline-host-toolbar__button {
+    box-sizing: border-box;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--surface-border, #d9dce6);
+    border-radius: 9px;
+    background: var(--bg-elevated, #fff);
+    color: var(--text-primary, #1d2939);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sutra-content-timeline-host-toolbar__insert {
+    border-color: var(--accent, #5078f2);
+    background: var(--accent-soft, rgba(80, 120, 242, 0.1));
+}
+
+.sutra-content-timeline-host-toolbar__button:hover:not(:disabled) {
+    border-color: var(--accent, #5078f2);
+}
+
+.sutra-content-timeline-host-toolbar__button:focus-visible {
+    outline: 2px solid var(--accent, #5078f2);
+    outline-offset: 2px;
+}
+
+.sutra-content-timeline-host-toolbar__button:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+}
+
+.sutra-content-timeline-host-toolbar__status {
+    min-width: min(15rem, 100%);
+    flex: 1 1 15rem;
+    color: var(--text-secondary, #667085);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.sutra-content-timeline-host-toolbar__status[data-state="error"],
+.sutra-content-timeline-host-toolbar__status[data-state="unavailable"] {
+    color: var(--danger, #b42318);
+}
+
+@media (max-width: 540px) {
+    .sutra-content-timeline-host-toolbar {
+        gap: 6px;
+    }
+
+    .sutra-content-timeline-host-toolbar__button {
+        flex: 1 1 9rem;
+        white-space: normal;
+    }
+
+    .sutra-content-timeline-host-toolbar__status {
+        flex-basis: 100%;
+    }
+}

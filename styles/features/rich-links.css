@@ -1,0 +1,330 @@
+/* Rich links: safe cards and the URL/label editor dialog. */
+.sutra-rich-link-dialog {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    height: fit-content;
+    margin: auto;
+    width: min(560px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: min(88vh, 800px);
+    max-height: min(88dvh, 800px);
+    overflow: auto;
+    padding: 0;
+    color: var(--text-primary, #17212f);
+    background: var(--surface-primary, var(--bg-primary, #fff));
+    border: 1px solid var(--glass-border, var(--border-color, #d0d5dd));
+    border-radius: 16px;
+    box-shadow: 0 24px 72px rgb(0 0 0 / 0.28);
+}
+
+.sutra-rich-link-dialog::backdrop {
+    background: rgb(12 18 28 / 0.58);
+}
+.sutra-rich-link-preview-dialog { padding: 18px; }
+.sutra-rich-link-preview-dialog > button { margin-top: 12px; }
+.sutra-authoring-node-action { min-height: 44px; min-width: 44px; margin: 6px; padding: 8px 12px; color: var(--text-primary); background: var(--bg-elevated); border: 1px solid var(--surface-border); border-radius: 8px; cursor: pointer; }
+.sutra-authoring-node-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor-v2-content-timeline { margin-block: 16px; padding: 16px; border: 1px solid var(--surface-border); border-radius: 12px; background: var(--bg-secondary); }
+.sutra-rich-link-inline { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; vertical-align: baseline; }
+.sutra-rich-link-inline > a { min-width: 0; overflow-wrap: anywhere; }
+.sutra-rich-link-preview-button { margin: 0; font-size: 0.78rem; }
+
+.sutra-rich-link-dialog [hidden] { display: none !important; }
+
+.sutra-rich-link-dialog[data-fallback-modal="true"] {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal, 14000);
+    margin: auto;
+    box-shadow: 0 0 0 100vmax rgb(12 18 28 / 0.58), 0 24px 72px rgb(0 0 0 / 0.28);
+}
+
+body.sutra-rich-link-open { overflow: hidden; }
+
+.sutra-rich-link-form {
+    display: grid;
+    gap: 14px;
+    padding: 22px;
+}
+
+.sutra-rich-link-heading {
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1.25;
+}
+
+.sutra-rich-link-description,
+.sutra-rich-link-metadata-intro,
+.sutra-rich-link-thumbnail-note {
+    margin: 0;
+    color: var(--text-secondary, #596579);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.sutra-rich-link-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    color: var(--text-primary, #17212f);
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+.sutra-rich-link-field input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 10px 12px;
+    color: var(--text-primary, #17212f);
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px solid var(--glass-border, var(--border-color, #cbd2dc));
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 400;
+}
+
+.sutra-rich-link-field input[aria-invalid="true"] {
+    border-color: var(--sutra-color-danger, #b42318);
+}
+
+.sutra-rich-link-validation {
+    margin: -6px 0 0;
+    color: var(--sutra-color-danger, #b42318);
+    font-size: 0.85rem;
+}
+
+.sutra-rich-link-dialog-open-row { display: flex; }
+
+.sutra-rich-link-dialog button,
+.sutra-rich-link-dialog-open-row a,
+.sutra-rich-link-card-actions a,
+.sutra-rich-link-card-actions button {
+    box-sizing: border-box;
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 13px;
+    color: var(--text-primary, #17212f);
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px solid var(--glass-border, var(--border-color, #cbd2dc));
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sutra-rich-link-dialog button:hover,
+.sutra-rich-link-dialog-open-row a:hover,
+.sutra-rich-link-card-actions a:hover,
+.sutra-rich-link-card-actions button:hover {
+    border-color: var(--accent, #5078f2);
+}
+
+.sutra-rich-link-dialog button:focus-visible,
+.sutra-rich-link-dialog-open-row a:focus-visible,
+.sutra-rich-link-card-actions a:focus-visible,
+.sutra-rich-link-card-actions button:focus-visible,
+.sutra-rich-link-field input:focus-visible,
+.sutra-rich-link-thumbnail-option input:focus-visible,
+.sutra-rich-link-metadata summary:focus-visible {
+    outline: 3px solid var(--accent, #5078f2);
+    outline-offset: 2px;
+}
+
+.sutra-rich-link-dialog button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.sutra-rich-link-dialog .sutra-rich-link-save,
+.sutra-rich-link-card-actions .sutra-rich-link-open {
+    color: var(--accent-text, #fff);
+    background: var(--accent-strong, var(--accent, #365fcb));
+    border-color: var(--accent-strong, var(--accent, #365fcb));
+}
+
+.sutra-rich-link-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.sutra-rich-link-metadata {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px solid var(--glass-border, var(--border-color, #cbd2dc));
+    border-radius: 12px;
+}
+
+.sutra-rich-link-metadata summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-primary, #17212f);
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.sutra-rich-link-thumbnail-option {
+    box-sizing: border-box;
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 2px;
+    color: var(--text-primary, #17212f);
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.sutra-rich-link-thumbnail-option input {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    margin: 0;
+    accent-color: var(--accent-strong, var(--accent, #365fcb));
+}
+
+.sutra-rich-link-thumbnail-option input:focus-visible {
+    outline: 3px solid var(--accent, #5078f2);
+    outline-offset: 3px;
+}
+
+.sutra-rich-link-port-field { max-width: 220px; }
+.sutra-rich-link-port-field input { font-variant-numeric: tabular-nums; }
+
+.sutra-rich-link-disclosure,
+.sutra-rich-link-metadata-status {
+    overflow-wrap: anywhere;
+    margin: 0;
+    color: var(--text-secondary, #596579);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.sutra-rich-link-metadata-status { min-height: 1.2em; }
+.sutra-rich-link-metadata-status.is-error { color: var(--sutra-color-danger, #b42318); }
+.sutra-rich-link-use-title { justify-self: start; }
+
+.sutra-rich-link-thumbnail-preview {
+    display: grid;
+    justify-items: start;
+    gap: 7px;
+    min-width: 0;
+    margin: 0;
+}
+
+.sutra-rich-link-thumbnail-preview img {
+    display: block;
+    box-sizing: border-box;
+    max-width: 100%;
+    max-height: 260px;
+    object-fit: contain;
+    background: var(--surface-primary, var(--bg-primary, #fff));
+    border: 1px solid var(--glass-border, var(--border-color, #d0d5dd));
+    border-radius: 9px;
+}
+
+.sutra-rich-link-thumbnail-preview figcaption {
+    color: var(--text-secondary, #596579);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.sutra-rich-link-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    color: var(--text-primary, #17212f);
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px solid var(--glass-border, var(--border-color, #cbd2dc));
+    border-radius: 12px;
+}
+
+.sutra-rich-link-card-thumbnail {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    background: var(--surface-primary, var(--bg-primary, #fff));
+    border: 1px solid var(--glass-border, var(--border-color, #d0d5dd));
+    border-radius: 9px;
+}
+
+.sutra-rich-link-card-copy { min-width: 0; }
+.sutra-rich-link-card-label { margin: 0; font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+.sutra-rich-link-card-title { margin: 5px 0 0; color: var(--text-secondary, #596579); line-height: 1.45; overflow-wrap: anywhere; }
+.sutra-rich-link-card-destination { margin: 7px 0 0; color: var(--text-secondary, #596579); font-size: 0.82rem; overflow-wrap: anywhere; }
+.sutra-rich-link-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sutra-rich-link-card-actions .sutra-rich-link-remove { color: var(--sutra-color-danger, #b42318); }
+
+@media (max-width: 600px) {
+    .sutra-rich-link-dialog {
+        width: 100%;
+        max-width: none;
+        max-height: min(92vh, 900px);
+        max-height: min(92dvh, 900px);
+        margin: auto 0 0;
+        border-radius: 18px 18px 0 0;
+        border-bottom: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .sutra-rich-link-dialog[data-fallback-modal="true"] {
+        width: 100%;
+        margin: auto 0 0;
+    }
+
+    .sutra-rich-link-form { gap: 12px; padding: 18px 16px 16px; }
+    .sutra-rich-link-field input { font-size: 16px; }
+    .sutra-rich-link-dialog-actions > button { flex: 1 1 0; }
+    .sutra-rich-link-card-actions > * { flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-rich-link-dialog,
+    .sutra-rich-link-dialog *,
+    .sutra-rich-link-card,
+    .sutra-rich-link-card * {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .sutra-rich-link-dialog,
+    .sutra-rich-link-card,
+    .sutra-rich-link-metadata,
+    .sutra-rich-link-field input,
+    .sutra-rich-link-thumbnail-option,
+    .sutra-rich-link-thumbnail-preview img,
+    .sutra-rich-link-card-thumbnail,
+    .sutra-rich-link-dialog button,
+    .sutra-rich-link-dialog-open-row a,
+    .sutra-rich-link-card-actions a,
+    .sutra-rich-link-card-actions button {
+        color: CanvasText;
+        background: Canvas;
+        border-color: ButtonText;
+        forced-color-adjust: auto;
+    }
+    .sutra-rich-link-thumbnail-option input { accent-color: Highlight; }
+}
