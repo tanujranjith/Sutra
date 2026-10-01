@@ -4,7 +4,9 @@ Prepared September 30, 2026. Task numbers refer to the reorganized list agreed i
 
 **Branch:** `codex/overnight-improvements`
 
-**Current status:** Plan prepared using a preliminary repository/type inventory; product implementation and the full research phase are pending.
+**Current status:** Research completed and recorded in [overnight findings](OVERNIGHT_RESEARCH.md). Implementation is starting in the isolated candidate; every product task remains subject to its three reviews and the user's later local verification.
+
+**Candidate directory:** `D:\Desktop\Engineering\Coding\Active projects\Sutra\.tmp\overnight-clean-main\.tmp\worktrees\overnight-improvements`. The original checkout is `codex/overnight-plan`; the desired implementation branch lives in the prescribed core candidate. Both the existing dirty main worktree and the user's original changes are preserved.
 
 **Handoff:** Leave the candidate on its branch for the user's local review. Do not merge to `main`, push, deploy, or publish.
 
@@ -41,12 +43,12 @@ Start with [the agent guide](../../AGENTS.md), [architecture](../architecture/SU
 
 Research outputs:
 
-- [ ] A short findings entry for each of the ten tasks.
-- [ ] A separate audit and prioritized improvement checklist for each non-Notes Create surface, covering desktop and mobile rather than only responsive CSS.
-- [ ] A dependency map and proposed file ownership for delegation.
-- [ ] Current feature behavior and existing data paths documented before edits.
-- [ ] A host-integration and persistence design for the clarified #13: an editable custom timeline embedded in Notes and other content-bearing Create surfaces, excluding Sheets. Do not count the mobile schedule-workspace redesign as this separate task.
-- [ ] A coherent mobile layout/control approach that incorporates the backup overlay, icons, completion effect, To-do naming, inline tools, and mini-player.
+- [x] A findings entry for each of the ten tasks in [overnight findings](OVERNIGHT_RESEARCH.md).
+- [x] A separate audit and prioritized improvement checklist for each non-Notes Create surface, covering desktop and mobile rather than only responsive CSS.
+- [x] A dependency map and proposed file ownership for delegation.
+- [x] Current feature behavior and existing data paths documented before edits.
+- [x] A host-integration and persistence design for the clarified #13: an editable custom timeline embedded in Notes and other content-bearing Create surfaces, excluding Sheets. PDF adapter choice still requires host-specific implementation tracing.
+- [x] A coherent mobile layout/control approach that incorporates the backup overlay, icons, completion effect, To-do naming, inline tools, and mini-player.
 
 ## Phase 2: Implementation and completion criteria
 
@@ -185,19 +187,28 @@ Update a row after research, an implementation milestone, a review pass, a commi
 
 | ID | Task | Owner | Status | Review 1 / 2 / 3 | Commit / remaining work |
 |---|---|---|---|---|---|
-| #1 | Backup overlay | Primary | Planned | Pending / Pending / Pending | Research pending |
-| #6 | Rich links | Primary | Planned | Pending / Pending / Pending | Metadata/privacy/editor research pending |
-| #7 | Inline AI slash commands | Primary | Planned | Pending / Pending / Pending | Editor/provider research pending |
-| #8 | Page tags | Primary | Planned | Pending / Pending / Pending | Root-cause research pending |
-| #9 | To-do section | Primary | Planned | Pending / Pending / Pending | Category and compatibility research pending |
-| #10 | Completion animation | Luna xhigh; primary integration | Planned | Pending / Pending / Pending | Assignment after research |
-| #11 | Custom icons | Luna xhigh; primary integration | Planned | Pending / Pending / Pending | Assignment after research |
-| #13 | Embedded custom timeline | Primary | Planned; scope clarified | Pending / Pending / Pending | Notes/other content-bearing Create hosts; exclude Sheets |
-| #15 | Timer mini-player | Primary | Planned | Pending / Pending / Pending | Event and placement research pending |
-| #17 | Mobile overhaul | Primary | Planned | Pending / Pending / Pending | Track each major screen separately |
-| Added | Non-Notes Create upgrades | Primary; scoped Luna help | Planned | Pending / Pending / Pending | Separate Canvas/Slides/Sheets/HTML/folder/PDF audit and delivery entries |
+| #1 | Backup overlay | Primary | Researched | Pending / Pending / Pending | Foreground progress callbacks; background unchanged |
+| #6 | Rich links | Primary | Researched | Pending / Pending / Pending | Opt-in local metadata helper; offline fallback |
+| #7 | Inline AI slash commands | Primary | Researched | Pending / Pending / Pending | Precise trigger range; existing provider request/review |
+| #8 | Page tags | Primary | Researched | Pending / Pending / Pending | Fresh path works; malformed legacy names/input ownership/authorization fragile |
+| #9 | To-do section | Primary | Researched | Pending / Pending / Pending | Existing canonical row with general task kind |
+| #10 | Completion animation | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Actual completed transition; include Home bridge |
+| #11 | Custom icons | Luna xhigh; primary integration | Researched | Pending / Pending / Pending | Extend course picker; preserve Help icon reconciliation |
+| #13 | Embedded custom timeline | Primary | Researched | Pending / Pending / Pending | One authored model, host adapters, inventory/fallbacks; exclude Sheets |
+| #15 | Timer mini-player | Luna xhigh; primary integration | Researched; delegated next | Pending / Pending / Pending | Existing controller and stylesheet; no timer state fork |
+| #17 | Mobile overhaul | Primary | Researched | Pending / Pending / Pending | Baseline 390 phone, 1280 desktop; all target widths pending |
+| Added | Non-Notes Create upgrades | Primary; scoped Luna help | Researched | Pending / Pending / Pending | Per-surface audit in research artifact; shared type selection bug observed |
 
 For each active task, append a brief entry with date, files, findings/decisions, three review records, permitted checks actually run, checks deferred, commit, and the next concrete action. Record delegation ownership before starting a worker.
+
+### October 1 — Research checkpoint
+
+- Files: this plan and `OVERNIGHT_RESEARCH.md`; product source still unchanged.
+- Isolation: clean main created separately, prescribed `core:worktree` used, plan cherry-picked, core recovery copy hash verified. User instruction copies in the candidate are excluded from task commits.
+- Luna xhigh completed read-only research of #9/#10/#11. Primary checked its proposed seams against source and existing contracts.
+- Sequential manual baseline: Home, Homework, Notes/tag add and reload, Canvas, Slides, Sheets at 390 × 844; Canvas/Slides at 1280 × 900. Fresh local origin only. No suites or self-tests run.
+- Three primary reviews: source-backed correctness, privacy/data/scope safety, final documentation/staged-diff review. Research output retains explicit uncertainty for tags, metadata availability, PDF-native timeline support, physical devices, and deferred automated validation.
+- Next ownership: Luna edits only `src/features/workspace/today-focus-timer.js` and `styles/views/today-focus-timer.css` for #15. Primary owns core tags/backup integration, all commits, shared mobile layout, and subsequent work.
 
 ## Morning handoff and user verification
 
