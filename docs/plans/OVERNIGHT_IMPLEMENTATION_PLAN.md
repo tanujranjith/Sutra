@@ -187,7 +187,7 @@ Update a row after research, an implementation milestone, a review pass, a commi
 
 | ID | Task | Owner | Status | Review 1 / 2 / 3 | Commit / remaining work |
 |---|---|---|---|---|---|
-| #1 | Backup overlay | Primary | Researched | Pending / Pending / Pending | Foreground progress callbacks; background unchanged |
+| #1 | Backup overlay | Primary | Reviewed; awaiting user validation | Done / Done / Done | Real transient stages; cleanup on every exit; no automatic overlay |
 | #6 | Rich links | Primary | Researched | Pending / Pending / Pending | Opt-in local metadata helper; offline fallback |
 | #7 | Inline AI slash commands | Primary | Researched | Pending / Pending / Pending | Precise trigger range; existing provider request/review |
 | #8 | Page tags | Primary | Reviewed; awaiting user validation | Done / Done / Done | Legacy normalization, input ownership, persistent filter, restored phone controls |
@@ -227,6 +227,21 @@ For each active task, append a brief entry with date, files, findings/decisions,
 - Primary moved phone Save, Export, Import, Data & Backup, and Report a Problem into the existing More sheet. The sheet displays canonical save status and uses the original controls. Its scrollable layout retains every enabled destination; its initial close-button focus keeps the header/actions visible on short screens. Desktop controls remain in place.
 - Three primary reviews of this mobile foundation covered canonical routing/actions, readiness fallback, observer loops, history/focus/scroll locking, safe-area and player spacing, disabled actions, the full final staged diff, and the feature docs. Manual 390 × 844 observations confirmed the utilities, Escape dismissal, canonical Save, and the existing Export Options dialog with the player suppressed.
 - This checkpoint uses the permitted static checks listed above and retains the staged-runtime hook. Automated suites, self-tests, full aggregate runtime/deploy gates, broader mobile screens/widths, and portability checks remain deferred or outstanding. The full mobile overhaul is not yet delivered.
+- Local commit: `ffc9d08`; staged-runtime hook passed all 27 assertions. Main remains unmerged.
+
+### October 1 — Next bounded delegation
+
+- Luna xhigh worker `homework_research` owns only course-icon additions in `src/features/study/homework.js` and narrowly related `styles/features/homework-redesign.css`. Reuse the existing durable course icon field; primary owns Help & Docs page-icon reconciliation and subsequent task-kind changes.
+- A second Luna xhigh worker owns only mobile scheduling presentation in `src/features/workspace/timeline-calendar.js` and `styles/views/timeline-calendar.css`: readable week date strip/selected-day agenda, retained Day/Month controls and canonical block actions. This is separate from the authored timeline embed work.
+- Primary owns backup core/lifecycle integration, shell load order/cache stamps, docs/generated metadata, all commits, and three personal reviews of both contributions. Workers do not run tests, install dependencies, mutate Git, or touch other files.
+
+### October 1 — Foreground backup overlay
+
+- Files: core progress seams, `backup-progress.js`/CSS, shell load order/stamps, generated asset/cache metadata, Data and Backups guide, and Help refresh. No durable fields or package/encryption changes.
+- Review 1: primary read all edits and traced encrypted/plaintext exports, password cancellation/validation, provider setup/busy/identity exits, retention, background callers, pre-restore snapshots, required-file refusal, and finally cleanup. Review 2: primary reread for plaintext/credential exclusion, ciphertext provider boundaries, optional callback failures, modal focus/scroll lock, concurrent operation IDs, Escape behavior, safe areas, theme tokens, and reduced motion. Review 3: primary read every final staged source/style/doc/shell/generated diff and checked that unrelated instruction copies and Luna files were excluded.
+- Sequential manual observation at 390 × 844 in the disposable localhost workspace: after password confirmation, the overlay was focused and showed “Backing up…”, an indeterminate progress indicator, and the actual packaging stage. A later observation showed it hidden and the workspace accessible again. No claim of browser-file durability or successful restore is made from this observation.
+- Permitted checks passed: backup-module syntax, leaf core integrity (27 assertions), architecture guardrails, manifest freshness, and cache freshness. The owning core budget generator recorded the 3,418-byte / 63-line seam. The staged-runtime hook remains enabled.
+- Deferred: suites/self-tests, encrypted round-trip/required-file failure coverage, provider integration, retention failures, concurrent exports, physical devices, and aggregate runtime/deploy validation. These must be checked before integration; no production/network account was used.
 
 ## Morning handoff and user verification
 

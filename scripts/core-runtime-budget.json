@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-01T04:32:55.954Z",
-  "reviewedReason": "Normalize legacy page tags, bind tag input to its page, and preserve tag filters across sidebar/search rerenders",
-  "maxBytes": 4916761,
-  "maxLines": 86428
+  "blessedAt": "2026-10-01T05:14:04.836Z",
+  "reviewedReason": "Add transient foreground backup lifecycle stages and finally cleanup without changing backup data or background Sync",
+  "maxBytes": 4920179,
+  "maxLines": 86491
 }

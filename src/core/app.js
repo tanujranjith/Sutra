@@ -53674,9 +53674,18 @@ function getActiveEditor() {
                         // for a different encrypted artifact (e.g. the pre-restore
                         // safety snapshot) without recording a manual-export
                         // health stamp or re-prompting the password manager.
-                        const result = typeof options.perform === 'function'
-                            ? await options.perform(passphrase)
-                            : await performEncryptedSutraWorkspaceExport({ ...exportOptions, passphrase });
+                        let result;
+                        if (typeof options.perform === 'function') {
+                            const progress = beginSutraForegroundBackup(exportOptions);
+                            try {
+                                await progress.ready;
+                                result = await options.perform(passphrase, { onBackupProgress: progress.stage });
+                            } finally {
+                                progress.finish();
+                            }
+                        } else {
+                            result = await performEncryptedSutraWorkspaceExport({ ...exportOptions, passphrase });
+                        }
                         if (typeof options.perform !== 'function') {
                             sutraStorePasswordCredential('sutra-backup', passphrase); // offer to save in the browser's password manager
                         }
@@ -56719,8 +56728,38 @@ function getActiveEditor() {
             return `${safePrefix}_${formatLocalExportTimestamp(date)}.sutra`;
         }
 
+        // Presentation follows explicit foreground work only; builders remain
+        // usable by automatic backups and Sync without opening a modal.
+        function beginSutraForegroundBackup(options = {}) {
+            const id = randomSutraId('backup-progress');
+            const enabled = !options.auto && !options.silent && !options.background;
+            const publish = (phase, stage) => {
+                if (!enabled) return;
+                try {
+                    document.dispatchEvent(new CustomEvent('sutra:backup-progress', { detail: { id, phase, stage } }));
+                } catch (error) {
+                    if (window.SutraReportError) window.SutraReportError(error, { where: 'backup:progress' }, 'warning');
+                }
+            };
+            publish('start', 'saving');
+            return {
+                ready: enabled ? new Promise(resolve => setTimeout(resolve, 0)) : Promise.resolve(),
+                stage: stage => publish('stage', stage),
+                finish: () => publish('end')
+            };
+        }
+
+        function notifySutraBackupStage(options, stage) {
+            if (typeof options.onBackupProgress !== 'function') return;
+            try { options.onBackupProgress(stage); }
+            catch (error) {
+                if (window.SutraReportError) window.SutraReportError(error, { where: 'backup:stage' }, 'warning');
+            }
+        }
+
         async function buildCanonicalSutraPackageBytes(options = {}) {
             // Commit the local snapshot before provider work.
+            notifySutraBackupStage(options, 'saving');
             savePage();
             await flushAppSaveNow('backup');
             // Course-file binaries live in a separate IndexedDB and are only read
@@ -56730,6 +56769,7 @@ function getActiveEditor() {
             // session and never re-opened would export with missingBlob=true and be
             // silently lost. Warming the cache here (await) guarantees every stored
             // attachment's bytes are present before the snapshot is taken.
+            notifySutraBackupStage(options, 'attachments');
             try {
                 await warmCourseAttachmentCache({ strict: options.requireCompleteAttachments === true });
             } catch (err) {
@@ -56737,6 +56777,7 @@ function getActiveEditor() {
                 recordPersistenceFailure(err, { reason: 'cache-warming', phase: 'cache-warming', kind: 'cache-warming' });
                 throw err;
             }
+            notifySutraBackupStage(options, 'packaging');
             const fullPayload = buildWorkspaceExportPayload({
                 mode: 'full',
                 includeSensitiveSettings: false,
@@ -56768,6 +56809,7 @@ function getActiveEditor() {
             const passphrase = validateSutraPassphrase(options.passphrase);
             assertSutraEncryptionAvailable();
             const internalPackage = await buildCanonicalSutraPackageBytes(options);
+            notifySutraBackupStage(options, 'encrypting');
             const encryptedBytes = await encryptSutraPackageBytes(internalPackage.bytes, passphrase);
             const filename = options.filenamePrefix
                 ? buildWorkspaceExportFilename(String(options.filenamePrefix))
@@ -56785,18 +56827,25 @@ function getActiveEditor() {
 
         async function performEncryptedSutraWorkspaceExport(options = {}) {
             showToast(options.emergency ? 'Preparing encrypted emergency Sutra backup...' : 'Preparing encrypted Sutra workspace backup...', { durationMs: 1800 });
+            const progress = beginSutraForegroundBackup(options);
             try {
-                const encrypted = await createEncryptedSutraBackupBlob(options);
-                await triggerBlobDownload(encrypted.blob, encrypted.filename);
+                await progress.ready;
+                const encrypted = await createEncryptedSutraBackupBlob({ ...options, onBackupProgress: progress.stage });
+                progress.stage('downloading');
+                const delivery = await triggerBlobDownload(encrypted.blob, encrypted.filename);
                 recordAtelierDataHealth({ lastAtelierExportAt: new Date().toISOString() });
                 clearResolvedExportFailure();
-                showToast(options.emergency ? 'Encrypted emergency Sutra backup exported.' : 'Encrypted Sutra workspace exported successfully.');
+                showToast(delivery && delivery.destination === 'folder'
+                    ? 'Encrypted Sutra backup saved to your backup folder.'
+                    : 'Encrypted Sutra backup download started. Check your browser downloads.');
                 return encrypted;
             } catch (error) {
                 console.error('Sutra export failed', error);
                 recordPersistenceFailure(error, { reason: options.emergency ? 'emergency-export' : 'sutra-export', phase: 'sutra-export' });
                 showToast(`Sutra export failed: ${error.message || 'Unknown error'}`);
                 throw error;
+            } finally {
+                progress.finish();
             }
         }
 
@@ -56809,25 +56858,32 @@ function getActiveEditor() {
         async function exportUnencryptedSutraPackage(options = {}) {
             const confirmed = options.confirmed === true || (typeof window !== 'undefined' && window.confirm('This .sutra backup will NOT be encrypted. Anyone with the file can read your workspace. Continue only if you trust its destination.'));
             if (!confirmed) return false;
+            const progress = beginSutraForegroundBackup(options);
             try {
+                await progress.ready;
                 // This intentionally emits the same verified internal package that
                 // encrypted backups wrap. It remains a legacy-compatible plaintext
                 // ZIP package, but never bypasses the complete-attachment preflight.
                 // Chats are flagged plaintext here so they are omitted unless the
                 // user explicitly opted into plaintext chat recovery — a readable
                 // file must not silently carry private conversations.
-                const internalPackage = await buildCanonicalSutraPackageBytes({ ...options, requireCompleteAttachments: true, plaintextChatPrivacy: true });
+                const internalPackage = await buildCanonicalSutraPackageBytes({ ...options, requireCompleteAttachments: true, plaintextChatPrivacy: true, onBackupProgress: progress.stage });
                 const filename = options.filenamePrefix ? buildWorkspaceExportFilename(String(options.filenamePrefix)) : buildWorkspaceExportFilename('sutra_UNENCRYPTED_workspace');
-                await triggerBlobDownload(new Blob([internalPackage.bytes], { type: 'application/zip' }), filename);
+                progress.stage('downloading');
+                const delivery = await triggerBlobDownload(new Blob([internalPackage.bytes], { type: 'application/zip' }), filename);
                 recordAtelierDataHealth({ lastAtelierExportAt: new Date().toISOString() });
                 clearResolvedExportFailure();
-                showToast('Unencrypted .sutra exported. Keep this readable file somewhere private.', { durationMs: 6000 });
+                showToast(delivery && delivery.destination === 'folder'
+                    ? 'Unencrypted .sutra saved to your backup folder. Keep this readable file private.'
+                    : 'Unencrypted .sutra download started. Check your browser downloads and keep this readable file private.', { durationMs: 6000 });
                 return { filename, manifest: internalPackage.manifest, encrypted: false };
             } catch (error) {
                 console.error('Unencrypted Sutra export failed', error);
                 recordPersistenceFailure(error, { reason: 'unencrypted-sutra-export', phase: 'sutra-export' });
                 showToast(`Unencrypted .sutra export failed: ${error.message || 'Unknown error'}`);
                 throw error;
+            } finally {
+                progress.finish();
             }
         }
 
@@ -58281,8 +58337,10 @@ function getActiveEditor() {
             if (!passphrase) return { cancelled: true };
             sutraCloudRuntime.busy = true;
             updateSutraCloudUi();
+            const progress = beginSutraForegroundBackup(options);
             try {
-                const encrypted = await createEncryptedSutraBackupBlob({ passphrase });
+                await progress.ready;
+                const encrypted = await createEncryptedSutraBackupBlob({ passphrase, onBackupProgress: progress.stage });
                 if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()
                     || provider !== getActiveSutraCloudProvider() || !provider.getSetupStatus().ready
                     || (options.auto && !sutraCloudAutoReady())) return { skipped: true, reason: 'connection-changed' };
@@ -58292,6 +58350,7 @@ function getActiveEditor() {
                     deviceId: loadSutraCloudMeta().deviceId,
                     filename: encrypted.filename
                 };
+                progress.stage(provider.id === 'manual' ? 'downloading' : 'uploading');
                 await provider.uploadBackup(encrypted.blob, meta);
                 if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()) {
                     return { skipped: true, reason: 'signed-out' };
@@ -58303,9 +58362,10 @@ function getActiveEditor() {
                 if (options.auto) m.lastAutoBackupHash = options.workspaceHash || '';
                 persistSutraCloudMeta();
                 sutraCloudRuntime.backupPassphrase = passphrase; // session-only cache enables unattended auto-backup
+                progress.stage('retention');
                 try { await provider.enforceRetention(SUTRA_CLOUD_KEEP_LAST); }
                 catch (error) { if (window.SutraReportError) window.SutraReportError(error, { where: 'sutraCloud:retention', provider: provider.id }, 'warning'); }
-                if (!options.silent) showToast(provider.id === 'manual' ? 'Encrypted backup downloaded.' : 'Encrypted backup saved to Sutra Cloud.');
+                if (!options.silent) showToast(provider.id === 'manual' ? 'Encrypted backup sent to your browser or backup folder. Check its destination.' : 'Encrypted backup saved to Sutra Cloud.');
                 return { uploaded: true };
             } catch (error) {
                 const m = loadSutraCloudMeta();
@@ -58317,6 +58377,7 @@ function getActiveEditor() {
                 if (!options.silent) showToast(`Sutra Cloud backup failed: ${m.lastError}`);
                 throw error;
             } finally {
+                progress.finish();
                 sutraCloudRuntime.busy = false;
                 updateSutraCloudUi();
             }
@@ -64517,11 +64578,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             try {
                 const outcome = await openSutraBackupPassphraseModal({
                     title: 'Encrypt safety snapshot before restoring',
-                    perform: async (passphrase) => {
+                    perform: async (passphrase, progressOptions) => {
                         const encrypted = await createEncryptedSutraBackupBlob({
                             passphrase,
-                            filenamePrefix: 'sutra_pre_import_snapshot'
+                            filenamePrefix: 'sutra_pre_import_snapshot',
+                            ...progressOptions
                         });
+                        notifySutraBackupStage(progressOptions, 'downloading');
                         const download = await triggerBlobDownload(encrypted.blob, encrypted.filename);
                         return { destination: (download && download.destination) || 'download', filename: encrypted.filename };
                     }

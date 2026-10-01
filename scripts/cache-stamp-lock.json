@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-page-tags1",
-    "hash": "ad940337701b3cc3"
+    "stamp": "20261001-backup-progress1",
+    "hash": "05a3e757c4c248f4"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -283,6 +283,10 @@
     "stamp": "20260915-cloud1",
     "hash": "0d31a21889c4db60"
   },
+  "src/features/workspace/backup-progress.js": {
+    "stamp": "20261001-backup-progress1",
+    "hash": "ab68a22a6c9086b1"
+  },
   "src/features/workspace/business-workspace.js": {
     "stamp": "20260807-opsqueue1",
     "hash": "eb4ce1fb3fbf3725"
@@ -320,8 +324,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261001-tags-focus-mobile1",
-    "hash": "f24d3986a8a64af2"
+    "stamp": "20261001-backup-help1",
+    "hash": "0f4065b3254446e8"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -510,6 +514,10 @@
   "styles/features/academic-planning.css": {
     "stamp": "20260707-batch2",
     "hash": "471e4b2f094dc3c4"
+  },
+  "styles/features/backup-progress.css": {
+    "stamp": "20261001-backup-progress1",
+    "hash": "2f957ae604803635"
   },
   "styles/features/cloud-sync.css": {
     "stamp": "20260807-syncsheet1",

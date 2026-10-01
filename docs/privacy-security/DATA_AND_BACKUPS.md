@@ -180,6 +180,20 @@ Both export paths build the workspace payload **with secrets stripped**: API
 keys and other secret-shaped fields are redacted, so credentials are never
 written to a backup. Provider/model **choices** (not secrets) are included.
 
+Foreground `.sutra` exports and manual encrypted provider backups show a large
+**Backing up…** overlay after confirmation/password entry. Its indeterminate
+indicator follows real stages: saving, required files, packaging, encryption,
+delivery/upload, and retention where applicable. It closes in the operation's
+cleanup path on success, failure, or an invalidated provider operation. Errors
+remain visible through the existing dialog/diagnostics. The overlay does not
+cancel an in-flight backup or bypass required-file checks. Automatic backups and
+Sync do not open it; creating an optional encrypted pre-restore safety snapshot
+does. Progress is transient presentation, never workspace data.
+
+A browser download is reported as **started**, because the app cannot confirm
+that the browser saved it. A successful configured-folder write can be reported
+as saved. Check your browser's downloads when that is your destination.
+
 ### Import
 
 Importing a backup rebuilds every runtime collection from the file, restores the
