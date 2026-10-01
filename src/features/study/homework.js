@@ -1916,13 +1916,13 @@
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
     const byClass = homeworkViewState.tab === 'class';
-    const groupPast = homeworkViewState.tab === 'all' && !hasActiveHomeworkTaskFilters();
-    const currentTasks = groupPast ? filteredTasks.filter(task => getTaskDayOffset(task) == null || getTaskDayOffset(task) >= 0) : filteredTasks;
-    const pastTasks = groupPast ? filteredTasks.filter(task => getTaskDayOffset(task) < 0) : [];
-    const rows = groupPast && pastTasks.length ? `
+    const groupCompleted = homeworkViewState.tab === 'all' && !hasActiveHomeworkTaskFilters();
+    const currentTasks = groupCompleted ? filteredTasks.filter(task => !task.done) : filteredTasks;
+    const completedTasks = groupCompleted ? filteredTasks.filter(task => task.done) : [];
+    const rows = groupCompleted && completedTasks.length ? `
       <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
-      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Past assignments <span>(${pastTasks.length})</span></button></th></tr></tbody>
-      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${renderHomeworkWorkspaceRows(pastTasks)}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
+      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed assignments <span>(${completedTasks.length})</span></button></th></tr></tbody>
+      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${renderHomeworkWorkspaceRows(completedTasks)}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
     const totalLabel = `${filteredTasks.length} of ${tasks.length} assignment${tasks.length === 1 ? '' : 's'}`;
     let content = '';
 

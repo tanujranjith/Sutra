@@ -59,6 +59,8 @@ test('student date words stay deterministic and Quick Capture recognizes schoolw
       },
       captures: {
         homework: compact(parse('chem lab due friday')),
+        tonightHomework: compact(parse('chem homework tonight')),
+        tonightTimedHomework: compact(parse('chem homework tonight 7pm')),
         test: compact(parse('APUSH test next Tuesday unit 6')),
         quiz: compact(parse('physics quiz next block')),
         review: compact(parse('review bio chapter 12')),
@@ -78,6 +80,8 @@ test('student date words stay deterministic and Quick Capture recognizes schoolw
   expect(result.dates.none).toBeNull();
 
   expect(result.captures.homework).toMatchObject({ type: 'homework' });
+  expect(result.captures.tonightHomework).toMatchObject({ type: 'homework', dueTime: '23:59' });
+  expect(result.captures.tonightTimedHomework).toMatchObject({ type: 'homework', dueTime: '19:00' });
   expect(result.captures.test).toMatchObject({ type: 'test' });
   expect(result.captures.quiz).toMatchObject({ type: 'test' });
   expect(result.captures.review).toMatchObject({ type: 'review', title: 'bio chapter 12' });
@@ -118,6 +122,27 @@ test('Quick Capture keeps parsed dates and times visible in enhanced controls', 
   else await expect(modal.locator('#quickCaptureDate')).toBeVisible();
   if (await timeLabel.count()) await expect(timeLabel).toHaveText('11:59 PM');
   else await expect(modal.locator('#quickCaptureTime')).toBeVisible();
+});
+
+test('Homework capture treats tonight as 11:59 PM unless a clock time is stated', async ({ page }) => {
+  await openApp(page);
+
+  await page.evaluate(() => window.openQuickCaptureModal('SAT formulate chatting plan for sat tonight', { type: 'homework' }));
+  const modal = page.locator('#quickCaptureModal');
+  await expect(modal).toBeVisible();
+  const today = await page.evaluate(() => window.SutraStudentDateParser.localDateKey(new Date()));
+  await expect(modal.locator('#quickCaptureType')).toHaveValue('homework');
+  await expect(modal.locator('#quickCaptureDate')).toHaveValue(today);
+  await expect(modal.locator('#quickCaptureTime')).toHaveValue('23:59');
+  await expect(modal.locator('#quickCapturePreview')).toContainText('time: 23:59');
+
+  await modal.locator('#quickCaptureInput').fill('SAT formulate chatting plan for sat tonight 7pm');
+  await expect(modal.locator('#quickCaptureTime')).toHaveValue('19:00');
+
+  await modal.locator('#quickCaptureCancelBtn').click();
+  await page.evaluate(() => window.openQuickCaptureModal('SAT formulate chatting plan for sat tonight'));
+  await page.locator('#quickCaptureType').selectOption('homework');
+  await expect(modal.locator('#quickCaptureTime')).toHaveValue('23:59');
 });
 
 test('empty Homework teaches one primary action: paste or type your homework', async ({ page }) => {

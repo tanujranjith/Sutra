@@ -131,12 +131,14 @@ then stacks the assignment list, Extracurriculars, and Upcoming Deadlines in one
 column. Semantic table rows become task cards on phones without duplicating the
 underlying Homework records. Search, tabs, filters, sorting, quick completion, and
 scheduling remain reachable at touch-target size. Add/edit flows open as modals that
-scroll internally. **Import from School Portal** (paste import) works on mobile via
-the same modal pattern.
+scroll internally. In homework Quick Capture, “tonight” means today at 11:59 PM
+unless a specific clock time is stated. **Import from School Portal** (paste import)
+works on mobile via the same modal pattern.
 Schedule, Complete, and More form one aligned action group. In unfiltered All
-Assignments, current work appears first and past assignments sit in a collapsed
-section. Its disclosure stays open for the current session; searching or filtering
-shows matching overdue work immediately.
+Assignments, open work appears first and completed assignments sit in a collapsed
+section, regardless of due date. Overdue unfinished work stays in the main list
+until it is marked complete. Its disclosure stays open for the current session;
+searching or filtering shows matching work immediately.
 
 ### AP Study
 

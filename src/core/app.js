@@ -44887,7 +44887,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
   <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, Homework, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
-  <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items.</li>
+  <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items. For homework, “tonight” means today at 11:59 PM unless you state a specific time.</li>
   <li>If more than one AP subject exists, Quick Capture requires you to choose the destination subject before it saves.</li>
 </ul>
                     `
@@ -75392,6 +75392,27 @@ ${cspMeta}
                     const durationMs = Date.now() - startedAt;
 
                     if (!resp.ok) {
+                        // Some newer OpenAI-compatible models reject the legacy
+                        // max_tokens field and explicitly name
+                        // max_completion_tokens as its replacement. Adapt only
+                        // to that exact provider response, only before any
+                        // visible output, and within the existing retry budget.
+                        // This keeps ordinary OpenAI-compatible providers and
+                        // the Anthropic/Gemini adapters on their own wire shapes.
+                        const outputTokenAliasRejected = providerType === 'openai_compatible'
+                            && resp.status === 400
+                            && Object.prototype.hasOwnProperty.call(body, 'max_tokens')
+                            && !Object.prototype.hasOwnProperty.call(body, 'max_completion_tokens')
+                            && /unsupported\s+parameter\s*:\s*['"`]?max_tokens['"`]?\s+is\s+not\s+supported\b/i.test(extracted)
+                            && /\buse\s+['"`]?max_completion_tokens['"`]?\s+instead\b/i.test(extracted);
+                        if (outputTokenAliasRejected && retryCount < maxRetries && !emittedText
+                            && !controller.signal.aborted && remainingMs() > minRetryBudgetMs) {
+                            body.max_completion_tokens = body.max_tokens;
+                            delete body.max_tokens;
+                            retryCount += 1;
+                            continue;
+                        }
+
                         const category = classifyIntelligenceHttpError(resp.status, extracted);
                         const retryable = Diag ? Diag.isRetryable({ status: resp.status, category }) : false;
                         if (retryCount < maxRetries && retryable && !emittedText
@@ -82570,9 +82591,10 @@ function resolveQuickCaptureCourse(text) {
     return best ? { id: best.id, name: best.name } : null;
 }
 
-function parseQuickCaptureText(text) {
+function parseQuickCaptureText(text, options) {
     const raw = String(text || '').trim();
     if (!raw) return null;
+    const captureType = String(options && options.type || '').trim().toLowerCase();
     const out = { title: raw, type: 'task', dueDate: '', dueTime: '', priority: 'medium', difficulty: 'medium', classHint: '', courseId: '', courseName: '', score: null, maxScore: null, estimateMinutes: 0 };
     let working = raw;
 
@@ -82605,6 +82627,8 @@ function parseQuickCaptureText(text) {
         ? sharedDateParser.parseDurationMinutes(working)
         : null;
     const dateParsed = parseQuickCaptureDate(working, new Date());
+    const tonightDateIntent = dateParsed && (dateParsed.kind === 'tonight'
+        || /\b(tonight|tn|eod|end of day)\b/i.test(String(dateParsed.match || '')));
     if (dateParsed && dateParsed.date) {
         out.dueDate = dateParsed.date;
         if (dateParsed.timeHint) out.dueTime = String(dateParsed.timeHint);
@@ -82615,6 +82639,7 @@ function parseQuickCaptureText(text) {
     }
 
     // Time parse e.g. "6pm", "18:00", "3:30pm".
+    let explicitTimeSpecified = false;
     const timeMatch = working.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
     if (timeMatch) {
         let h = parseInt(timeMatch[1], 10);
@@ -82624,10 +82649,12 @@ function parseQuickCaptureText(text) {
         if (suffix === 'am' && h === 12) h = 0;
         if (h >= 0 && h <= 23 && min >= 0 && min <= 59 && (suffix || timeMatch[0].includes(':'))) {
             out.dueTime = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+            explicitTimeSpecified = true;
             working = working.replace(timeMatch[0], ' ').replace(/\s+/g, ' ').trim();
         }
     } else if (sharedTimeParsed && sharedTimeParsed.time) {
         out.dueTime = String(sharedTimeParsed.time);
+        explicitTimeSpecified = !(sharedTimeParsed.kind === 'evening' && tonightDateIntent);
         // Phrases such as "after school" may already have been removed by the
         // date parser; replacing a missing match is harmless and keeps titles clean.
         if (sharedTimeParsed.match) {
@@ -82710,6 +82737,12 @@ function parseQuickCaptureText(text) {
         // Fallback crude class hint when nothing matched ("chem homework" -> "chem").
         const classMatch = working.match(/^([A-Za-z][A-Za-z0-9 &.]{0,30})/);
         if (classMatch) out.classHint = classMatch[1].trim();
+    }
+
+    if (tonightDateIntent && !explicitTimeSpecified && (out.type === 'homework' || captureType === 'homework')) {
+        // “Tonight” on an assignment means end of the local day, not the
+        // generic evening estimate used for calendar/study-block intents.
+        out.dueTime = '23:59';
     }
 
     out.title = working.replace(/\s+/g, ' ').trim().replace(/^[\s:,\-]+/, '').trim() || raw;
@@ -82972,12 +83005,12 @@ function openQuickCaptureModal(prefillText, options) {
 
     input.value = String(prefillText || '');
     const updatePreview = () => {
-        const parsed = parseQuickCaptureText(input.value);
+        const manualType = typeSelect.dataset && typeSelect.dataset.manualType;
+        const parsed = parseQuickCaptureText(input.value, { type: manualType || requestedType });
         if (!parsed) {
             previewEl.textContent = 'Start typing to capture…';
             return;
         }
-        const manualType = typeSelect.dataset && typeSelect.dataset.manualType;
         if (manualType) parsed.type = manualType;
         if (prioritySelect && prioritySelect.dataset.userTouched === '1') parsed.priority = prioritySelect.value || 'medium';
         if (difficultySelect && difficultySelect.dataset.userTouched === '1') parsed.difficulty = difficultySelect.value || 'medium';
@@ -83067,6 +83100,7 @@ function openQuickCaptureModal(prefillText, options) {
         syncQuickCaptureCourseField({ type: manualType, courseId: '', classHint: '' }, modal);
         const bf = modal.querySelector('#quickCaptureBlockTimeField');
         if (bf) bf.hidden = !['homework', 'task', 'test', 'college', 'apsession'].includes(manualType);
+        updatePreview();
     };
     apSubjectSelect.onchange = updatePreview;
     if (courseSelect) {
