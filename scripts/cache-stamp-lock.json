@@ -520,8 +520,8 @@
     "hash": "45186a4c913b046f"
   },
   "src/ui/task-completion-effects.js": {
-    "stamp": "20261001-task-completion1",
-    "hash": "38b3465632db5849"
+    "stamp": "20261001-task-dust8",
+    "hash": "bffb36dfd1bd6308"
   },
   "styles/base/contracts.css": {
     "stamp": "20260905-updatelayer1",
@@ -652,8 +652,8 @@
     "hash": "7ff9f8c5515f34db"
   },
   "styles/features/task-completion-effects.css": {
-    "stamp": "20261001-task-completion1",
-    "hash": "40702a0d5f9e7c1c"
+    "stamp": "20261001-task-dust8",
+    "hash": "66c43c17803b2382"
   },
   "styles/features/workspace-lock.css": {
     "stamp": "20260816-lock2",

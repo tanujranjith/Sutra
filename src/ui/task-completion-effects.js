@@ -4,139 +4,425 @@
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
   const MAX_ACTIVE_EFFECTS = 3;
-  const FALLBACK_LIFETIME_MS = 980;
-  const PIECES = [
-    { kind: 'shred', x: -15, y: -9, dx: -74, dy: 82, rotate: -168, width: 7, height: 19, delay: 0, duration: 660 },
-    { kind: 'shred', x: 12, y: -12, dx: 56, dy: 112, rotate: 142, width: 9, height: 17, delay: 18, duration: 730 },
-    { kind: 'shred', x: -28, y: 4, dx: -104, dy: 42, rotate: -224, width: 6, height: 15, delay: 34, duration: 700 },
-    { kind: 'shred', x: 24, y: 6, dx: 98, dy: 60, rotate: 192, width: 8, height: 21, delay: 48, duration: 760 },
-    { kind: 'shred', x: -4, y: -15, dx: -26, dy: 136, rotate: 115, width: 6, height: 18, delay: 65, duration: 790 },
-    { kind: 'shred', x: 5, y: 11, dx: 34, dy: 96, rotate: -132, width: 9, height: 16, delay: 82, duration: 710 },
-    { kind: 'particle', x: -21, y: -7, dx: -88, dy: 8, rotate: 0, width: 5, height: 5, delay: 12, duration: 600 },
-    { kind: 'particle', x: 19, y: -5, dx: 76, dy: 22, rotate: 0, width: 4, height: 4, delay: 38, duration: 640 },
-    { kind: 'particle', x: -7, y: 9, dx: -47, dy: 74, rotate: 0, width: 5, height: 5, delay: 70, duration: 680 },
-    { kind: 'particle', x: 9, y: -10, dx: 52, dy: 91, rotate: 0, width: 4, height: 4, delay: 96, duration: 720 }
-  ];
-  const COLORS = [
-    'var(--accent, #7c6dff)',
-    'var(--accent-strong, var(--accent, #7c6dff))',
-    'var(--accent-gold, var(--accent, #7c6dff))'
-  ];
+  const CAPTURE_LIFETIME_MS = 2100;
+  const SWEEP_MS = 1100;
+  const FALL_MS = 850;
+  const COLLAPSE_MS = 180;
+  const LIFETIME_MS = SWEEP_MS + FALL_MS + COLLAPSE_MS;
   const activeEffects = new Map();
+  const pendingSnapshots = new Map();
 
   function motionIsAllowed() {
     if (document.hidden || document.visibilityState === 'hidden') return false;
     if (document.body && document.body.classList.contains('motion-off')) return false;
-
     try {
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-    } catch (_) { /* the body motion class remains the app-level fallback */ }
-
-    try {
-      if (typeof appSettings !== 'undefined' && appSettings && appSettings.motionEnabled === false) return false;
-      if (typeof appSettings !== 'undefined'
-          && appSettings
-          && appSettings.preferences
-          && appSettings.preferences.appearance
-          && appSettings.preferences.appearance.motionIntensity === 'off') return false;
-    } catch (_) { /* tolerate hosts that do not expose the preference binding */ }
-
+      if (typeof appSettings !== 'undefined' && appSettings) {
+        if (appSettings.motionEnabled === false) return false;
+        if (appSettings.preferences && appSettings.preferences.appearance
+            && appSettings.preferences.appearance.motionIntensity === 'off') return false;
+      }
+    } catch (_) { /* body motion class is the fallback for older hosts */ }
     return true;
   }
 
-  function visibleAnchor(rawRect) {
-    if (!rawRect || typeof rawRect !== 'object') return null;
-    const left = rawRect.left;
-    const top = rawRect.top;
-    const width = rawRect.width;
-    const height = rawRect.height;
-    if (![left, top, width, height].every(Number.isFinite)) return null;
-    if (width < 8 || height < 8 || width > 10000 || height > 10000) return null;
-    if (Math.abs(left) > 100000 || Math.abs(top) > 100000) return null;
+  function taskKey(value) {
+    return String(value || '').replace(/^hw_v2_/, '').replace(/^(?:hw|task):/, '');
+  }
 
-    const viewportWidth = Math.max(0, document.documentElement && document.documentElement.clientWidth, window.innerWidth || 0);
-    const viewportHeight = Math.max(0, document.documentElement && document.documentElement.clientHeight, window.innerHeight || 0);
-    if (!viewportWidth || !viewportHeight) return null;
+  function visibleRect(raw) {
+    if (!raw || ![raw.left, raw.top, raw.width, raw.height].every(Number.isFinite)) return null;
+    if (raw.width < 8 || raw.height < 8 || raw.width > 10000 || raw.height > 10000) return null;
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+    const left = Math.max(0, raw.left);
+    const top = Math.max(0, raw.top);
+    const right = Math.min(width, raw.left + raw.width);
+    const bottom = Math.min(height, raw.top + raw.height);
+    if (right - left < 8 || bottom - top < 8) return null;
+    return { left, top, width: right - left, height: bottom - top };
+  }
 
-    const right = left + width;
-    const bottom = top + height;
-    if (!Number.isFinite(right) || !Number.isFinite(bottom)) return null;
-
-    const visibleLeft = Math.max(0, left);
-    const visibleTop = Math.max(0, top);
-    const visibleRight = Math.min(viewportWidth, right);
-    const visibleBottom = Math.min(viewportHeight, bottom);
-    if (visibleRight - visibleLeft < 8 || visibleBottom - visibleTop < 8) return null;
-
-    return {
-      x: (visibleLeft + visibleRight) / 2,
-      y: (visibleTop + visibleBottom) / 2
-    };
+  function forgetSnapshot(key) {
+    const snapshot = pendingSnapshots.get(key);
+    if (snapshot) window.clearTimeout(snapshot.timer);
+    pendingSnapshots.delete(key);
   }
 
   function removeEffect(effect) {
-    if (!effect) return;
-    const timer = activeEffects.get(effect);
-    if (timer !== undefined) window.clearTimeout(timer);
+    const state = activeEffects.get(effect);
+    if (!state) return;
+    window.cancelAnimationFrame(state.frame);
+    window.clearTimeout(state.timer);
+    if (state.gap) state.gap.remove();
+    effect.remove();
     activeEffects.delete(effect);
-    if (effect.parentNode) effect.parentNode.removeChild(effect);
   }
 
   function clearEffects() {
     Array.from(activeEffects.keys()).forEach(removeEffect);
+    Array.from(pendingSnapshots.keys()).forEach(forgetSnapshot);
   }
 
-  function makeEffect(anchor) {
+  function reportVisualError(error) {
+    if (typeof window.SutraReportError === 'function') {
+      window.SutraReportError(error, { where: 'task-completion-effects' }, 'warn');
+    }
+  }
+
+  function boxPath(context, x, y, width, height, radius) {
+    context.beginPath();
+    if (radius && typeof context.roundRect === 'function') {
+      context.roundRect(x, y, width, height, Math.min(radius, width / 2, height / 2));
+    } else context.rect(x, y, width, height);
+  }
+
+  function paintLocalIcon(context, node, box, rect) {
+    if (typeof window.Path2D !== 'function') return;
+    const view = node.viewBox && node.viewBox.baseVal;
+    if (!view || view.width <= 0 || view.height <= 0) return;
+    context.save();
+    context.translate(box.left - rect.left, box.top - rect.top);
+    context.scale(box.width / view.width, box.height / view.height);
+    context.translate(-view.x, -view.y);
+    let pathBudget = 4000;
+    Array.from(node.children).slice(0, 24).forEach(shape => {
+      const style = window.getComputedStyle(shape);
+      const number = name => parseFloat(shape.getAttribute(name)) || 0;
+      const path = new window.Path2D();
+      const tag = shape.localName;
+      if (tag === 'path') {
+        const data = shape.getAttribute('d') || '';
+        if (data.length > pathBudget) return;
+        pathBudget -= data.length;
+        path.addPath(new window.Path2D(data));
+      } else if (tag === 'circle') {
+        path.arc(number('cx'), number('cy'), Math.max(0, number('r')), 0, Math.PI * 2);
+      } else if (tag === 'ellipse') {
+        path.ellipse(number('cx'), number('cy'), Math.max(0, number('rx')), Math.max(0, number('ry')),
+          0, 0, Math.PI * 2);
+      } else if (tag === 'rect') {
+        const width = Math.max(0, number('width'));
+        const height = Math.max(0, number('height'));
+        if (typeof path.roundRect === 'function') path.roundRect(number('x'), number('y'), width, height,
+          Math.min(number('rx'), width / 2, height / 2));
+        else path.rect(number('x'), number('y'), width, height);
+      } else if (tag === 'line') {
+        path.moveTo(number('x1'), number('y1'));
+        path.lineTo(number('x2'), number('y2'));
+      } else return;
+      context.lineWidth = parseFloat(style.strokeWidth) || 1.75;
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      if (style.fill !== 'none') { context.fillStyle = style.fill; context.fill(path); }
+      if (style.stroke !== 'none') { context.strokeStyle = style.stroke; context.stroke(path); }
+    });
+    context.restore();
+  }
+
+  function paintBox(context, node, rect) {
+    if (node.closest('svg') && !node.matches('svg.atelier-icon')) return;
+    const box = node.getBoundingClientRect();
+    if (!box.width || !box.height || box.bottom <= rect.top || box.top >= rect.top + rect.height) return;
+    const style = window.getComputedStyle(node);
+    if (style.visibility === 'hidden' || style.opacity === '0') return;
+    if (node.matches('svg.atelier-icon')) { paintLocalIcon(context, node, box, rect); return; }
+    const x = box.left - rect.left;
+    const y = box.top - rect.top;
+    const radius = parseFloat(style.borderTopLeftRadius) || 0;
+    context.fillStyle = style.backgroundColor;
+    boxPath(context, x, y, box.width, box.height, radius);
+    context.fill();
+    const sides = ['Top', 'Right', 'Bottom', 'Left'];
+    const borderWidth = parseFloat(style.borderTopWidth) || 0;
+    const uniformBorder = borderWidth && radius && sides.every(side =>
+      style[`border${side}Width`] === style.borderTopWidth
+      && style[`border${side}Style`] === style.borderTopStyle
+      && style[`border${side}Color`] === style.borderTopColor);
+    if (uniformBorder && style.borderTopStyle !== 'none') {
+      context.lineWidth = borderWidth;
+      context.strokeStyle = style.borderTopColor;
+      boxPath(context, x + borderWidth / 2, y + borderWidth / 2,
+        box.width - borderWidth, box.height - borderWidth, Math.max(0, radius - borderWidth / 2));
+      context.stroke();
+    }
+    sides.forEach((side, index) => {
+      if (uniformBorder) return;
+      const size = parseFloat(style[`border${side}Width`]) || 0;
+      if (!size || style[`border${side}Style`] === 'none') return;
+      context.lineWidth = size;
+      context.strokeStyle = style[`border${side}Color`];
+      context.beginPath();
+      const lines = [[x, y, x + box.width, y], [x + box.width, y, x + box.width, y + box.height],
+        [x, y + box.height, x + box.width, y + box.height], [x, y, x, y + box.height]];
+      const line = lines[index];
+      context.moveTo(line[0], line[1]);
+      context.lineTo(line[2], line[3]);
+      context.stroke();
+    });
+    // Support legacy local font icons as well as canonical inline SVG icons.
+    if (node.matches('i')) {
+      const icon = window.getComputedStyle(node, '::before');
+      const content = icon.content;
+      if (content && /^['"]/.test(content) && content.length < 12) {
+        context.font = icon.font || style.font;
+        context.fillStyle = icon.color;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText(content.slice(1, -1), x + box.width / 2, y + box.height / 2);
+      }
+    }
+  }
+
+  function rasterizeRow(source, rect) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(rect.width);
+    canvas.height = Math.ceil(rect.height);
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return null;
+    // Composite ancestor colors so transparent cells do not reveal the task
+    // newly rendered below the decorative snapshot.
+    context.fillStyle = '#f4faf9';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const ancestors = [];
+    for (let node = source.parentElement; node; node = node.parentElement) ancestors.push(node);
+    ancestors.reverse().forEach(node => {
+      context.fillStyle = window.getComputedStyle(node).backgroundColor;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    });
+    const nodes = [source, ...source.querySelectorAll('*')].slice(0, 180);
+    nodes.forEach(node => {
+      if (!node.closest('.hw-task-menu, .task-overflow-menu')) paintBox(context, node, rect);
+    });
+    const walker = document.createTreeWalker(source, window.NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let textNode;
+    let measurements = 0;
+    context.textAlign = 'left';
+    context.textBaseline = 'alphabetic';
+    while ((textNode = walker.nextNode()) && measurements < 160) {
+      const parent = textNode.parentElement;
+      if (!parent || parent.closest('.hw-task-menu, .task-overflow-menu')) continue;
+      const style = window.getComputedStyle(parent);
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      context.font = style.font || `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      context.fillStyle = style.color;
+      if ('letterSpacing' in context) context.letterSpacing = style.letterSpacing === 'normal' ? '0px' : style.letterSpacing;
+      const text = (textNode.textContent || '').slice(0, 2400);
+      const parentBox = parent.getBoundingClientRect();
+      context.save();
+      context.beginPath();
+      context.rect(parentBox.left - rect.left, parentBox.top - rect.top, parentBox.width, parentBox.height);
+      context.clip();
+      // Measure words rather than every character: completion's click handler
+      // must not wait on thousands of synchronous layout reads.
+      const words = text.matchAll(/\S+/g);
+      for (const word of words) {
+        if (measurements++ >= 160) break;
+        range.setStart(textNode, word.index);
+        range.setEnd(textNode, word.index + word[0].length);
+        const boxes = Array.from(range.getClientRects());
+        if (!boxes.length) continue;
+        const box = boxes[0];
+        if (!box.width || !box.height || box.top < rect.top || box.bottom > rect.top + rect.height + 1) continue;
+        const label = style.textTransform === 'uppercase' ? word[0].toUpperCase()
+          : style.textTransform === 'lowercase' ? word[0].toLowerCase() : word[0];
+        const metrics = context.measureText(label);
+        const ascent = metrics.actualBoundingBoxAscent || parseFloat(style.fontSize) * 0.8;
+        const descent = metrics.actualBoundingBoxDescent || 0;
+        const baseline = box.top - rect.top + (box.height + ascent - descent) / 2;
+        if (boxes.length > 1) context.fillText(label, box.left - rect.left, baseline, box.width);
+        else context.fillText(label, box.left - rect.left, baseline);
+      }
+      context.restore();
+    }
+    return canvas;
+  }
+
+  function captureBeforeCompletion(event) {
+    const target = event.target instanceof window.Element ? event.target : null;
+    const control = target && target.closest('[data-task-toggle], [data-task-menu-toggle], [data-donow-done], .task-done-btn');
+    if (!control) return;
+    const inlineId = (control.getAttribute('onclick') || '').match(/\btoggleComplete\(['"]([^'"]+)['"]\)/);
+    const key = taskKey(control.getAttribute('data-task-toggle') || control.getAttribute('data-task-menu-toggle')
+      || control.getAttribute('data-donow-done') || (inlineId && inlineId[1]));
+    if (!key) return;
+    forgetSnapshot(key);
+    Array.from(activeEffects).forEach(([effect, state]) => { if (state.key === key) removeEffect(effect); });
+    if (!motionIsAllowed() || control.classList.contains('active')
+        || /incomplete|as open|undo/i.test(control.getAttribute('aria-label') || control.title || control.textContent)) return;
+    const source = control.closest('.hw-assignment-row, .hw-card, .hw-assignment, .task-card, .today-brief-nba') || control;
+    const rect = visibleRect(source.getBoundingClientRect());
+    if (!rect || rect.width > 1800 || rect.height > 360) return;
+    try {
+      const canvas = rasterizeRow(source, rect);
+      if (!canvas) return;
+      while (pendingSnapshots.size >= MAX_ACTIVE_EFFECTS) forgetSnapshot(pendingSnapshots.keys().next().value);
+      const siblings = source.parentElement ? Array.from(source.parentElement.children) : [];
+      const snapshot = {
+        canvas, rect, key, createdAt: Date.now(), view: document.body.dataset.view,
+        inkTone: (window.getComputedStyle(source).color.match(/[\d.]+/g) || []).slice(0, 3).map(Number),
+        table: source.matches('.hw-assignment-row'), block: window.getComputedStyle(source).display !== 'table-row',
+        columns: source.cells ? source.cells.length : 1,
+        nextIds: siblings.slice(siblings.indexOf(source) + 1).map(node => node.getAttribute('data-task-id')).filter(Boolean)
+      };
+      snapshot.timer = window.setTimeout(() => forgetSnapshot(key), CAPTURE_LIFETIME_MS);
+      pendingSnapshots.set(key, snapshot);
+    } catch (error) { reportVisualError(error); }
+  }
+
+  function makeDust(canvas, inkTone) {
+    const context = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const baseOffset = (Math.min(2, height - 1) * width + Math.min(2, width - 1)) * 4;
+    const base = pixels.slice(baseOffset, baseOffset + 3);
+    const tone = inkTone && inkTone.length === 3 && inkTone.every(Number.isFinite) ? inkTone : base;
+    const dust = [];
+    function grain(x, y, offset, surface) {
+      const size = surface ? 1.5 + Math.random() * 1.7 : 2 + Math.random() * 2.3;
+      // Mix pale surface grains with the row's own ink so dust stays visible
+      // on light themes without introducing a separate celebration palette.
+      const color = [0, 1, 2].map(channel => Math.round(surface
+        ? pixels[offset + channel] * 0.68 + tone[channel] * 0.32 : pixels[offset + channel]));
+      dust.push({ x, y, size, born: x / width * SWEEP_MS,
+        dx: (Math.random() - 0.45) * 58, fall: 48 + Math.random() * 112,
+        color: `rgb(${color.join(',')})`, alpha: surface ? 0.78 : 0.98 });
+    }
+    const surfaceCount = Math.min(650, Math.max(220, Math.round(width * height / 110)));
+    for (let index = 0; index < surfaceCount; index++) {
+      const x = (index + Math.random()) / surfaceCount * (width - 1);
+      const y = Math.random() * (height - 1);
+      grain(x, y, (Math.floor(y) * width + Math.floor(x)) * 4, true);
+    }
+    // Actual ink/badges keep their own color as they break into dust.
+    const ink = new Uint32Array(750);
+    let inkSeen = 0;
+    const stride = Math.max(2, Math.ceil(Math.sqrt(width * height / 9000)));
+    for (let y = 0; y < height; y += stride) {
+      for (let x = 0; x < width; x += stride) {
+        const offset = (y * width + x) * 4;
+        if (Math.abs(pixels[offset] - base[0]) + Math.abs(pixels[offset + 1] - base[1])
+            + Math.abs(pixels[offset + 2] - base[2]) <= 60) continue;
+        // A bounded reservoir samples the whole row without allocating an
+        // object for every matching pixel on large cards.
+        const slot = inkSeen < ink.length ? inkSeen : Math.floor(Math.random() * (inkSeen + 1));
+        if (slot < ink.length) ink[slot] = offset / 4;
+        inkSeen++;
+      }
+    }
+    const inkCount = Math.min(ink.length, inkSeen);
+    for (let index = 0; index < inkCount; index++) {
+      const pixel = ink[index];
+      grain(pixel % width, Math.floor(pixel / width), pixel * 4, false);
+    }
+    return dust;
+  }
+
+  function reserveRowGap(snapshot) {
+    if (!snapshot.table || snapshot.view !== 'homework') return null;
+    const table = Array.from(document.querySelectorAll('#view-homework .hw-assignment-table')).find(node => node.getClientRects().length);
+    if (!table) return null;
+    const rows = Array.from(table.querySelectorAll('.hw-assignment-row')).filter(node => node.getClientRects().length);
+    // Some views retain completed rows in place; an expanded Completed group
+    // instead moves the row elsewhere and still needs the original gap.
+    const retained = rows.find(node => taskKey(node.getAttribute('data-task-id')) === snapshot.key);
+    if (retained && Math.abs(retained.getBoundingClientRect().top - snapshot.rect.top) < 2) return null;
+    const next = snapshot.nextIds.map(id => rows.find(node => node.getAttribute('data-task-id') === id)).find(Boolean);
+    const body = next ? next.parentElement : table.querySelector('tbody:not([hidden]):not(.hw-past-heading)');
+    if (!body) return null;
+    const gap = document.createElement('tr');
+    gap.className = 'sutra-task-completion-gap';
+    gap.setAttribute('aria-hidden', 'true');
+    gap.style.display = snapshot.block ? 'block' : 'table-row';
+    const cell = document.createElement('td');
+    cell.colSpan = snapshot.columns;
+    cell.style.display = snapshot.block ? 'block' : 'table-cell';
+    cell.style.height = `${snapshot.rect.height}px`;
+    gap.appendChild(cell);
+    body.insertBefore(gap, next || null);
+    return gap;
+  }
+
+  function startEffect(snapshot) {
+    while (activeEffects.size >= MAX_ACTIVE_EFFECTS) removeEffect(activeEffects.keys().next().value);
     const effect = document.createElement('div');
     effect.className = 'sutra-task-completion-effect';
     effect.setAttribute('aria-hidden', 'true');
-    const origin = document.createElement('div');
-    origin.className = 'sutra-task-completion-effect__origin';
-    origin.style.left = `${anchor.x}px`;
-    origin.style.top = `${anchor.y}px`;
-    effect.appendChild(origin);
-
-    PIECES.forEach((design, index) => {
-      const piece = document.createElement('span');
-      piece.className = `sutra-task-completion-effect__piece sutra-task-completion-effect__piece--${design.kind}`;
-      piece.style.left = `${design.x}px`;
-      piece.style.top = `${design.y}px`;
-      piece.style.width = `${design.width}px`;
-      piece.style.height = `${design.height}px`;
-      piece.style.setProperty('--task-effect-dx', `${design.dx}px`);
-      piece.style.setProperty('--task-effect-dy', `${design.dy}px`);
-      piece.style.setProperty('--task-effect-rotate', `${design.rotate}deg`);
-      piece.style.setProperty('--task-effect-delay', `${design.delay}ms`);
-      piece.style.setProperty('--task-effect-duration', `${design.duration}ms`);
-      piece.style.setProperty('--task-effect-color', COLORS[index % COLORS.length]);
-      origin.appendChild(piece);
-    });
-
-    return effect;
+    effect.inert = true;
+    const canvas = document.createElement('canvas');
+    canvas.className = 'sutra-task-completion-effect__canvas';
+    canvas.width = snapshot.canvas.width + 80;
+    canvas.height = snapshot.canvas.height + 170;
+    canvas.style.left = `${snapshot.rect.left - 40}px`;
+    canvas.style.top = `${snapshot.rect.top}px`;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const dust = makeDust(snapshot.canvas, snapshot.inkTone);
+    effect.appendChild(canvas);
+    const gap = reserveRowGap(snapshot);
+    document.body.appendChild(effect);
+    const state = { key: snapshot.key, gap, frame: 0, timer: 0 };
+    activeEffects.set(effect, state);
+    state.timer = window.setTimeout(() => removeEffect(effect), LIFETIME_MS + 250);
+    const started = window.performance.now();
+    function frame(now) {
+      if (!activeEffects.has(effect)) return;
+      if (!motionIsAllowed() || (gap && !gap.isConnected)) return removeEffect(effect);
+      const elapsed = now - started;
+      if (elapsed >= LIFETIME_MS) return removeEffect(effect);
+      try {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.globalAlpha = 1;
+        const edge = Math.min(1, elapsed / SWEEP_MS) * snapshot.canvas.width;
+        // Staggered strips give the advancing edge a crumbling outline.
+        for (let y = 0; elapsed < SWEEP_MS && y < snapshot.canvas.height; y += 4) {
+          const x = Math.min(snapshot.canvas.width, Math.max(0, edge + Math.sin(y * 1.7) * 5));
+          const width = snapshot.canvas.width - x;
+          if (width > 0) context.drawImage(snapshot.canvas, x, y, width, Math.min(4, snapshot.canvas.height - y),
+            x + 40, y, width, Math.min(4, snapshot.canvas.height - y));
+        }
+        dust.forEach(piece => {
+          const age = (elapsed - piece.born) / FALL_MS;
+          if (age < 0 || age >= 1) return;
+          context.globalAlpha = piece.alpha * Math.pow(1 - age, 1.4);
+          context.fillStyle = piece.color;
+          const x = piece.x + 40 + piece.dx * age;
+          const y = piece.y + piece.fall * age * age;
+          context.fillRect(x, y, piece.size * (1 - age * 0.45), piece.size * (1 - age * 0.45));
+        });
+        context.globalAlpha = 1;
+        if (gap) {
+          const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
+          const eased = collapse * collapse * (3 - 2 * collapse);
+          gap.firstElementChild.style.height = `${snapshot.rect.height * (1 - eased)}px`;
+        }
+        state.frame = window.requestAnimationFrame(frame);
+      } catch (error) { removeEffect(effect); reportVisualError(error); }
+    }
+    // Paint immediately so save confirmation never exposes an empty canvas.
+    frame(started);
   }
 
   function onTaskCompleted(event) {
     const detail = event && event.detail;
-    if (!detail || typeof detail.taskId !== 'string' || !detail.taskId.trim()) return;
-    if (!document.body || !motionIsAllowed()) return;
-
-    const anchor = visibleAnchor(detail.rect);
-    if (!anchor) return;
-
-    while (activeEffects.size >= MAX_ACTIVE_EFFECTS) {
-      removeEffect(activeEffects.keys().next().value);
-    }
-
-    const effect = makeEffect(anchor);
-    document.body.appendChild(effect);
-    const timer = window.setTimeout(() => removeEffect(effect), FALLBACK_LIFETIME_MS);
-    activeEffects.set(effect, timer);
+    if (!detail || typeof detail.taskId !== 'string' || !visibleRect(detail.rect)) return;
+    const key = taskKey(detail.taskId);
+    const snapshot = pendingSnapshots.get(key);
+    // Consume once; duplicate save callbacks cannot replay an old row.
+    forgetSnapshot(key);
+    if (!snapshot || !motionIsAllowed() || snapshot.view !== document.body.dataset.view
+        || Date.now() - snapshot.createdAt > CAPTURE_LIFETIME_MS) return;
+    try { startEffect(snapshot); } catch (error) { clearEffects(); reportVisualError(error); }
   }
 
+  document.addEventListener('click', captureBeforeCompletion, true);
   document.addEventListener('sutra:task-completed', onTaskCompleted);
   window.addEventListener('noteflow:view-changed', clearEffects);
+  window.addEventListener('sutra:workspace-lock-changed', clearEffects);
+  window.addEventListener('sutra:note-page-locked', clearEffects);
   window.addEventListener('pagehide', clearEffects);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden || document.visibilityState === 'hidden') clearEffects();
-  });
+  window.addEventListener('resize', clearEffects);
+  window.addEventListener('scroll', clearEffects, true);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearEffects(); });
 })();
