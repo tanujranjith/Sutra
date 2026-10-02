@@ -67,6 +67,22 @@
     Array.from(pendingSnapshots.keys()).forEach(key => forgetSnapshot(key));
   }
 
+  function cancelForScrollKey(event) {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return;
+    const target = event.target instanceof window.Element ? event.target : null;
+    if (target && target.closest('input, textarea, select, [contenteditable], [role="textbox"]')) return;
+    if (event.key === ' ' && target && target.closest('button, a, [role="button"]')) return;
+    clearEffects();
+  }
+
+  function cancelForScrollbar(event) {
+    const target = event.target instanceof window.Element ? event.target : null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    if ((target.scrollHeight > target.clientHeight && event.clientX >= rect.right - 20)
+        || (target.scrollWidth > target.clientWidth && event.clientY >= rect.bottom - 20)) clearEffects();
+  }
+
   function reportVisualError(error) {
     if (typeof window.SutraReportError === 'function') {
       window.SutraReportError(error, { where: 'task-completion-effects' }, 'warn');
@@ -263,8 +279,12 @@
       if (!canvas) return;
       while (pendingSnapshots.size >= MAX_ACTIVE_EFFECTS) forgetSnapshot(pendingSnapshots.keys().next().value);
       const siblings = source.parentElement ? Array.from(source.parentElement.children) : [];
+      const scrollParents = [];
+      for (let node = source.parentElement; node; node = node.parentElement) {
+        scrollParents.push({ node, left: node.scrollLeft, top: node.scrollTop });
+      }
       const snapshot = {
-        canvas, rect, layoutHeight: sourceRect.height, key, createdAt: Date.now(), view: document.body.dataset.view,
+        canvas, rect, control, scrollParents, layoutHeight: sourceRect.height, key, createdAt: Date.now(), view: document.body.dataset.view,
         inkTone: (window.getComputedStyle(source).color.match(/[\d.]+/g) || []).slice(0, 3).map(Number),
         table: source.matches('.hw-assignment-row'), block: window.getComputedStyle(source).display !== 'table-row',
         columns: source.cells ? source.cells.length : 1,
@@ -288,8 +308,20 @@
       const store = window.SutraHomeworkStore;
       const task = store && typeof store.getSnapshot === 'function'
         ? store.getSnapshot().tasks.find(row => taskKey(row.id) === snapshot.key) : null;
-      // A cancelled click or recurring task may rerender without completing.
-      if (task && !task.done) return forgetSnapshot(snapshot.key);
+      // Home's canonical handler updates its day state and replaces the card
+      // before the mirrored homework store catches up. Use that local handoff;
+      // consulting the stale mirror here would discard a valid Home effect.
+      if (snapshot.view === 'today') {
+        if (snapshot.control.isConnected) return forgetSnapshot(snapshot.key);
+        // Inline Home cards complete today's occurrence. Next Up can instead
+        // use Homework's recurring advance, which intentionally remains open.
+        if (!snapshot.cardClick && task && !task.done && task.recurrence && task.recurrence !== 'none') {
+          return forgetSnapshot(snapshot.key);
+        }
+      } else if (task && !task.done) {
+        // To-do's recurring advance rerenders without completing the task.
+        return forgetSnapshot(snapshot.key);
+      }
       const state = activeEffects.get(snapshot.effect);
       if (state && (!state.gap || !state.gap.isConnected)) state.gap = reserveRowGap(snapshot);
       // Respond to the accepted local action without waiting for disk I/O.
@@ -421,14 +453,31 @@
     const dust = makeDust(snapshot.canvas, snapshot.inkTone);
     if (!state.gap || !state.gap.isConnected) state.gap = reserveRowGap(snapshot);
     const gap = state.gap;
-    state.timer = window.setTimeout(() => removeEffect(effect), LIFETIME_MS + 250);
-    const started = window.performance.now();
+    window.clearTimeout(snapshot.timer);
+    state.timer = window.setTimeout(() => removeEffect(effect), CAPTURE_LIFETIME_MS);
+    let started = null;
     function frame(now) {
       if (!activeEffects.has(effect)) return;
       if (!motionIsAllowed() || (gap && !gap.isConnected)) return removeEffect(effect);
+      if (started === null) {
+        started = now;
+        window.clearTimeout(state.timer);
+        state.timer = window.setTimeout(() => removeEffect(effect), LIFETIME_MS + 250);
+      }
       const elapsed = now - started;
       if (elapsed >= LIFETIME_MS) return removeEffect(effect);
       try {
+        // A list rerender may adjust an ancestor's scroll offset. Keep the
+        // snapshot in its content slot instead of cancelling before it paints.
+        let shiftX = 0;
+        let shiftY = 0;
+        snapshot.scrollParents.forEach(({ node, left, top }) => {
+          if (!node.isConnected) return;
+          shiftX += node.scrollLeft - left;
+          shiftY += node.scrollTop - top;
+        });
+        canvas.style.left = `${snapshot.rect.left - 40 - shiftX}px`;
+        canvas.style.top = `${snapshot.rect.top - shiftY}px`;
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.globalAlpha = 1;
         const edge = Math.min(1, elapsed / SWEEP_MS) * snapshot.canvas.width;
@@ -457,8 +506,8 @@
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
     }
-    // Paint immediately; a later save callback must not restart the effect.
-    frame(started);
+    // Start the clock on the first actual paint, after the click's rerenders.
+    state.frame = window.requestAnimationFrame(frame);
   }
 
   function onTaskCompleted(event) {
@@ -468,6 +517,9 @@
     const snapshot = pendingSnapshots.get(key);
     // Consume once; duplicate save callbacks cannot replay an old row.
     forgetSnapshot(key, true);
+    // An accepted local action already owns its animation and cleanup.
+    // Late persistence confirmation must neither restart nor cancel it.
+    if (snapshot && activeEffects.get(snapshot.effect)?.started) return;
     if (!snapshot || !motionIsAllowed() || snapshot.view !== document.body.dataset.view
         || Date.now() - snapshot.createdAt > CAPTURE_LIFETIME_MS) {
       if (snapshot) removeEffect(snapshot.effect);
@@ -483,6 +535,9 @@
   window.addEventListener('sutra:note-page-locked', clearEffects);
   window.addEventListener('pagehide', clearEffects);
   window.addEventListener('resize', clearEffects);
-  window.addEventListener('scroll', clearEffects, true);
+  window.addEventListener('wheel', clearEffects, { capture: true, passive: true });
+  window.addEventListener('touchmove', clearEffects, { capture: true, passive: true });
+  document.addEventListener('keydown', cancelForScrollKey, true);
+  document.addEventListener('pointerdown', cancelForScrollbar, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearEffects(); });
 })();
