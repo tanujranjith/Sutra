@@ -12,6 +12,8 @@
   pointer-events: none;
 }
 
+.sutra-task-completion-gap--card { flex-shrink: 0; }
+
 /* Decorative space lets the dust settle before remaining table rows move.
    It has no task ID or controls and never changes completion or saved data. */
 .sutra-task-completion-gap > td {

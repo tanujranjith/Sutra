@@ -43,10 +43,11 @@
     return { left, top, width: right - left, height: bottom - top };
   }
 
-  function forgetSnapshot(key) {
+  function forgetSnapshot(key, keepEffect = false) {
     const snapshot = pendingSnapshots.get(key);
     if (snapshot) window.clearTimeout(snapshot.timer);
     pendingSnapshots.delete(key);
+    if (snapshot && !keepEffect) removeEffect(snapshot.effect);
   }
 
   function removeEffect(effect) {
@@ -57,11 +58,13 @@
     if (state.gap) state.gap.remove();
     effect.remove();
     activeEffects.delete(effect);
+    const pending = pendingSnapshots.get(state.key);
+    if (pending && pending.effect === effect) forgetSnapshot(state.key, true);
   }
 
   function clearEffects() {
     Array.from(activeEffects.keys()).forEach(removeEffect);
-    Array.from(pendingSnapshots.keys()).forEach(forgetSnapshot);
+    Array.from(pendingSnapshots.keys()).forEach(key => forgetSnapshot(key));
   }
 
   function reportVisualError(error) {
@@ -252,7 +255,8 @@
     if (!motionIsAllowed() || control.classList.contains('active')
         || /incomplete|as open|undo/i.test(control.getAttribute('aria-label') || control.title || control.textContent)) return;
     const source = control.closest('.hw-assignment-row, .hw-card, .hw-assignment, .task-card, .today-brief-nba') || control;
-    const rect = visibleRect(source.getBoundingClientRect());
+    const sourceRect = source.getBoundingClientRect();
+    const rect = visibleRect(sourceRect);
     if (!rect || rect.width > 1800 || rect.height > 360) return;
     try {
       const canvas = rasterizeRow(source, rect);
@@ -260,15 +264,35 @@
       while (pendingSnapshots.size >= MAX_ACTIVE_EFFECTS) forgetSnapshot(pendingSnapshots.keys().next().value);
       const siblings = source.parentElement ? Array.from(source.parentElement.children) : [];
       const snapshot = {
-        canvas, rect, key, createdAt: Date.now(), view: document.body.dataset.view,
+        canvas, rect, layoutHeight: sourceRect.height, key, createdAt: Date.now(), view: document.body.dataset.view,
         inkTone: (window.getComputedStyle(source).color.match(/[\d.]+/g) || []).slice(0, 3).map(Number),
         table: source.matches('.hw-assignment-row'), block: window.getComputedStyle(source).display !== 'table-row',
         columns: source.cells ? source.cells.length : 1,
+        cardList: source.matches('.task-card') && source.parentElement.matches('.task-list') ? source.parentElement : null,
+        cardIndex: siblings.indexOf(source), cardClick: control.getAttribute('onclick'),
         nextIds: siblings.slice(siblings.indexOf(source) + 1).map(node => node.getAttribute('data-task-id')).filter(Boolean)
       };
       snapshot.timer = window.setTimeout(() => forgetSnapshot(key), CAPTURE_LIFETIME_MS);
       pendingSnapshots.set(key, snapshot);
-    } catch (error) { reportVisualError(error); }
+      prepareEffect(snapshot);
+      // The canonical handler is already attached to this button. Run after
+      // it in the same click dispatch, before the browser paints its rerender.
+      control.addEventListener('click', () => holdAfterCompletionClick(snapshot), { once: true });
+    } catch (error) { forgetSnapshot(key); reportVisualError(error); }
+  }
+
+  function holdAfterCompletionClick(snapshot) {
+    if (pendingSnapshots.get(snapshot.key) !== snapshot) return;
+    if (!motionIsAllowed() || snapshot.view !== document.body.dataset.view) return forgetSnapshot(snapshot.key);
+    try {
+      const store = window.SutraHomeworkStore;
+      const task = store && typeof store.getSnapshot === 'function'
+        ? store.getSnapshot().tasks.find(row => taskKey(row.id) === snapshot.key) : null;
+      // A cancelled click or recurring task may rerender without completing.
+      if (task && !task.done) return forgetSnapshot(snapshot.key);
+      const state = activeEffects.get(snapshot.effect);
+      if (state && (!state.gap || !state.gap.isConnected)) state.gap = reserveRowGap(snapshot);
+    } catch (error) { forgetSnapshot(snapshot.key); reportVisualError(error); }
   }
 
   function makeDust(canvas, inkTone) {
@@ -320,6 +344,23 @@
   }
 
   function reserveRowGap(snapshot) {
+    const list = snapshot.cardList;
+    if (list && list.isConnected && list.getClientRects().length) {
+      const retained = Array.from(list.querySelectorAll('.task-done-btn'))
+        .find(button => button.getAttribute('onclick') === snapshot.cardClick);
+      if (retained && Math.abs(retained.closest('.task-card').getBoundingClientRect().top - snapshot.rect.top) < 2) return null;
+      // Home's task drawer rerenders its children but retains the list. Hold
+      // the vacated slot so another task cannot move beneath the old card.
+      const gap = document.createElement('div');
+      gap.className = 'sutra-task-completion-gap sutra-task-completion-gap--card';
+      gap.setAttribute('aria-hidden', 'true');
+      gap.inert = true;
+      const space = document.createElement('div');
+      space.style.height = `${snapshot.layoutHeight}px`;
+      gap.appendChild(space);
+      list.insertBefore(gap, list.children[snapshot.cardIndex] || null);
+      return gap;
+    }
     if (!snapshot.table || snapshot.view !== 'homework') return null;
     const table = Array.from(document.querySelectorAll('#view-homework .hw-assignment-table')).find(node => node.getClientRects().length);
     if (!table) return null;
@@ -338,13 +379,13 @@
     const cell = document.createElement('td');
     cell.colSpan = snapshot.columns;
     cell.style.display = snapshot.block ? 'block' : 'table-cell';
-    cell.style.height = `${snapshot.rect.height}px`;
+    cell.style.height = `${snapshot.layoutHeight}px`;
     gap.appendChild(cell);
     body.insertBefore(gap, next || null);
     return gap;
   }
 
-  function startEffect(snapshot) {
+  function prepareEffect(snapshot) {
     while (activeEffects.size >= MAX_ACTIVE_EFFECTS) removeEffect(activeEffects.keys().next().value);
     const effect = document.createElement('div');
     effect.className = 'sutra-task-completion-effect';
@@ -358,12 +399,24 @@
     canvas.style.top = `${snapshot.rect.top}px`;
     const context = canvas.getContext('2d');
     if (!context) return;
-    const dust = makeDust(snapshot.canvas, snapshot.inkTone);
+    // Hold the intact row across the asynchronous save. This is decorative;
+    // the canonical completion still runs immediately and owns the save.
+    context.drawImage(snapshot.canvas, 40, 0);
     effect.appendChild(canvas);
-    const gap = reserveRowGap(snapshot);
-    document.body.appendChild(effect);
-    const state = { key: snapshot.key, gap, frame: 0, timer: 0 };
+    snapshot.effect = effect;
+    const state = { key: snapshot.key, gap: null, canvas, context, frame: 0, timer: 0 };
     activeEffects.set(effect, state);
+    document.body.appendChild(effect);
+  }
+
+  function startEffect(snapshot) {
+    const effect = snapshot.effect;
+    const state = activeEffects.get(effect);
+    if (!state) return;
+    const { canvas, context } = state;
+    const dust = makeDust(snapshot.canvas, snapshot.inkTone);
+    if (!state.gap || !state.gap.isConnected) state.gap = reserveRowGap(snapshot);
+    const gap = state.gap;
     state.timer = window.setTimeout(() => removeEffect(effect), LIFETIME_MS + 250);
     const started = window.performance.now();
     function frame(now) {
@@ -395,7 +448,7 @@
         if (gap) {
           const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
           const eased = collapse * collapse * (3 - 2 * collapse);
-          gap.firstElementChild.style.height = `${snapshot.rect.height * (1 - eased)}px`;
+          gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;
         }
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
@@ -410,9 +463,12 @@
     const key = taskKey(detail.taskId);
     const snapshot = pendingSnapshots.get(key);
     // Consume once; duplicate save callbacks cannot replay an old row.
-    forgetSnapshot(key);
+    forgetSnapshot(key, true);
     if (!snapshot || !motionIsAllowed() || snapshot.view !== document.body.dataset.view
-        || Date.now() - snapshot.createdAt > CAPTURE_LIFETIME_MS) return;
+        || Date.now() - snapshot.createdAt > CAPTURE_LIFETIME_MS) {
+      if (snapshot) removeEffect(snapshot.effect);
+      return;
+    }
     try { startEffect(snapshot); } catch (error) { clearEffects(); reportVisualError(error); }
   }
 
