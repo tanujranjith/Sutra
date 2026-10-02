@@ -5,9 +5,9 @@
 
   const MAX_ACTIVE_EFFECTS = 3;
   const CAPTURE_LIFETIME_MS = 2100;
-  const SWEEP_MS = 1100;
-  const FALL_MS = 850;
-  const COLLAPSE_MS = 180;
+  const SWEEP_MS = 500;
+  const FALL_MS = 380;
+  const COLLAPSE_MS = 100;
   const LIFETIME_MS = SWEEP_MS + FALL_MS + COLLAPSE_MS;
   const activeEffects = new Map();
   const pendingSnapshots = new Map();
@@ -292,6 +292,9 @@
       if (task && !task.done) return forgetSnapshot(snapshot.key);
       const state = activeEffects.get(snapshot.effect);
       if (state && (!state.gap || !state.gap.isConnected)) state.gap = reserveRowGap(snapshot);
+      // Respond to the accepted local action without waiting for disk I/O.
+      // Saving and its error reporting stay with the canonical task action.
+      startEffect(snapshot);
     } catch (error) { forgetSnapshot(snapshot.key); reportVisualError(error); }
   }
 
@@ -399,12 +402,12 @@
     canvas.style.top = `${snapshot.rect.top}px`;
     const context = canvas.getContext('2d');
     if (!context) return;
-    // Hold the intact row across the asynchronous save. This is decorative;
-    // the canonical completion still runs immediately and owns the save.
+    // Keep the row visible across the synchronous list rerender, then reuse
+    // this same canvas for the accepted action's dust animation.
     context.drawImage(snapshot.canvas, 40, 0);
     effect.appendChild(canvas);
     snapshot.effect = effect;
-    const state = { key: snapshot.key, gap: null, canvas, context, frame: 0, timer: 0 };
+    const state = { key: snapshot.key, gap: null, canvas, context, started: false, frame: 0, timer: 0 };
     activeEffects.set(effect, state);
     document.body.appendChild(effect);
   }
@@ -412,7 +415,8 @@
   function startEffect(snapshot) {
     const effect = snapshot.effect;
     const state = activeEffects.get(effect);
-    if (!state) return;
+    if (!state || state.started) return;
+    state.started = true;
     const { canvas, context } = state;
     const dust = makeDust(snapshot.canvas, snapshot.inkTone);
     if (!state.gap || !state.gap.isConnected) state.gap = reserveRowGap(snapshot);
@@ -453,7 +457,7 @@
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
     }
-    // Paint immediately so save confirmation never exposes an empty canvas.
+    // Paint immediately; a later save callback must not restart the effect.
     frame(started);
   }
 
