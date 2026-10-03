@@ -400,9 +400,11 @@
     normalizeState();
   }
 
-  function notifyHomeworkUpdated() {
+  function notifyHomeworkUpdated(localRefreshHandled = false) {
     try {
-      window.dispatchEvent(new CustomEvent('homework:updated'));
+      window.dispatchEvent(new CustomEvent('homework:updated', {
+        detail: { source: 'homework-ui', localRefreshHandled }
+      }));
     } catch (error) {
       // no-op
     }
@@ -419,11 +421,11 @@
       load();
       renderPins();
       if (isHomeworkViewActive()) render();
-      notifyHomeworkUpdated();
+      notifyHomeworkUpdated(true);
     });
   }
 
-  function save() {
+  function save({ localRefreshHandled = false } = {}) {
     normalizeState();
     calibrationCache.clear(); // task data changed — recompute ratios lazily
     const store = window.SutraHomeworkStore;
@@ -437,7 +439,7 @@
     }
     // Always notify so the UI re-renders the in-memory state, even when the
     // persistence write above failed.
-    notifyHomeworkUpdated();
+    notifyHomeworkUpdated(localRefreshHandled);
     return {
       ok: !!result,
       workspace: result
@@ -2026,7 +2028,7 @@
     const rows = groupCompleted && completedTasks.length ? `
       <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
       <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
-      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${renderHomeworkWorkspaceRows(completedTasks)}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
+      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${homeworkViewState.pastExpanded ? renderHomeworkWorkspaceRows(completedTasks) : ''}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
     const categoryTasks = tasks.filter(taskMatchesCategory);
     const totalLabel = `${filteredTasks.length} of ${categoryTasks.length} task${categoryTasks.length === 1 ? '' : 's'}`;
     let content = '';
@@ -3162,7 +3164,7 @@
       const next = advanceDueDate(task.dueDate, recurrence);
       if (next) task.dueDate = next;
       task.updatedAt = new Date().toISOString();
-      save();
+      save({ localRefreshHandled: true });
       render();
       return;
     }
@@ -3179,7 +3181,7 @@
       delete task.completedAt;
     }
     task.updatedAt = new Date().toISOString();
-    const persistence = save();
+    const persistence = save({ localRefreshHandled: true });
     render();
     restoreCompletionFocus(taskId, anchor);
     if (task.done) {
@@ -3219,7 +3221,7 @@
     if (nextDone) task.completedAt = new Date().toISOString();
     else delete task.completedAt;
     task.updatedAt = new Date().toISOString();
-    const persistence = save();
+    const persistence = save({ localRefreshHandled: true });
     render();
     restoreCompletionFocus(taskId, anchor);
     if (nextDone) showSavedCompletion(task, anchor, persistence);
@@ -4096,7 +4098,10 @@
       handleHomeworkViewChange(view);
     });
 
-    window.addEventListener('homework:updated', () => {
+    window.addEventListener('homework:updated', event => {
+      // Local completion renders immediately after save(). Other surfaces
+      // still receive this event; only this redundant board rebuild is skipped.
+      if (event.detail && event.detail.source === 'homework-ui' && event.detail.localRefreshHandled) return;
       load();
       renderPins();
       if (isHomeworkViewActive()) render();
