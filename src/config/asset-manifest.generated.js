@@ -311,7 +311,7 @@
     "./src/ui/select-enhancer.js?v=20260914-export-modal",
     "./src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1",
     "./src/ui/student-loop-actions.js?v=20260809-audit1",
-    "./src/ui/task-completion-effects.js?v=20261001-task-dust-home2",
+    "./src/ui/task-completion-effects.js?v=20261002-task-dust-reliable1",
     "./src/ui/time-enhancer.js",
     "./styles/base/contracts.css?v=20260905-updatelayer1",
     "./styles/base/microinteractions.css?v=20260807-cohesion1",

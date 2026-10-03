@@ -5,9 +5,9 @@
 
   const MAX_ACTIVE_EFFECTS = 3;
   const CAPTURE_LIFETIME_MS = 2100;
-  const SWEEP_MS = 500;
-  const FALL_MS = 380;
-  const COLLAPSE_MS = 100;
+  const SWEEP_MS = 1100;
+  const FALL_MS = 850;
+  const COLLAPSE_MS = 180;
   const LIFETIME_MS = SWEEP_MS + FALL_MS + COLLAPSE_MS;
   const activeEffects = new Map();
   const pendingSnapshots = new Map();
@@ -195,8 +195,10 @@
 
   function rasterizeRow(source, rect) {
     const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(rect.width);
-    canvas.height = Math.ceil(rect.height);
+    // Bound pixel work without silently skipping wide or tall Home cards.
+    const scale = Math.min(1, Math.sqrt(650000 / (rect.width * rect.height)));
+    canvas.width = Math.ceil(rect.width * scale);
+    canvas.height = Math.ceil(rect.height * scale);
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) return null;
     // Composite ancestor colors so transparent cells do not reveal the task
@@ -209,6 +211,7 @@
       context.fillStyle = window.getComputedStyle(node).backgroundColor;
       context.fillRect(0, 0, canvas.width, canvas.height);
     });
+    context.scale(canvas.width / rect.width, canvas.height / rect.height);
     const nodes = [source, ...source.querySelectorAll('*')].slice(0, 180);
     nodes.forEach(node => {
       if (!node.closest('.hw-task-menu, .task-overflow-menu')) paintBox(context, node, rect);
@@ -273,7 +276,7 @@
     const source = control.closest('.hw-assignment-row, .hw-card, .hw-assignment, .task-card, .today-brief-nba') || control;
     const sourceRect = source.getBoundingClientRect();
     const rect = visibleRect(sourceRect);
-    if (!rect || rect.width > 1800 || rect.height > 360) return;
+    if (!rect) return;
     try {
       const canvas = rasterizeRow(source, rect);
       if (!canvas) return;
@@ -290,6 +293,8 @@
         columns: source.cells ? source.cells.length : 1,
         cardList: source.matches('.task-card') && source.parentElement.matches('.task-list') ? source.parentElement : null,
         cardIndex: siblings.indexOf(source), cardClick: control.getAttribute('onclick'),
+        nextCardClicks: siblings.slice(siblings.indexOf(source) + 1)
+          .map(node => node.querySelector('.task-done-btn')?.getAttribute('onclick')).filter(Boolean),
         nextIds: siblings.slice(siblings.indexOf(source) + 1).map(node => node.getAttribute('data-task-id')).filter(Boolean)
       };
       snapshot.timer = window.setTimeout(() => forgetSnapshot(key), CAPTURE_LIFETIME_MS);
@@ -322,15 +327,13 @@
         // To-do's recurring advance rerenders without completing the task.
         return forgetSnapshot(snapshot.key);
       }
-      const state = activeEffects.get(snapshot.effect);
-      if (state && (!state.gap || !state.gap.isConnected)) state.gap = reserveRowGap(snapshot);
       // Respond to the accepted local action without waiting for disk I/O.
       // Saving and its error reporting stay with the canonical task action.
       startEffect(snapshot);
     } catch (error) { forgetSnapshot(snapshot.key); reportVisualError(error); }
   }
 
-  function makeDust(canvas, inkTone) {
+  function makeDust(canvas, inkTone, rect) {
     const context = canvas.getContext('2d');
     const { width, height } = canvas;
     const pixels = context.getImageData(0, 0, width, height).data;
@@ -344,7 +347,7 @@
       // on light themes without introducing a separate celebration palette.
       const color = [0, 1, 2].map(channel => Math.round(surface
         ? pixels[offset + channel] * 0.68 + tone[channel] * 0.32 : pixels[offset + channel]));
-      dust.push({ x, y, size, born: x / width * SWEEP_MS,
+      dust.push({ x: x / width * rect.width, y: y / height * rect.height, size, born: x / width * SWEEP_MS,
         dx: (Math.random() - 0.45) * 58, fall: 48 + Math.random() * 112,
         color: `rgb(${color.join(',')})`, alpha: surface ? 0.78 : 0.98 });
     }
@@ -393,7 +396,12 @@
       const space = document.createElement('div');
       space.style.height = `${snapshot.layoutHeight}px`;
       gap.appendChild(space);
-      list.insertBefore(gap, list.children[snapshot.cardIndex] || null);
+      const followingGaps = Array.from(activeEffects.values())
+        .filter(state => snapshot.nextCardClicks.includes(state.snapshot.cardClick))
+        .map(state => state.gap);
+      const next = Array.from(list.children).find(node => followingGaps.includes(node)
+        || snapshot.nextCardClicks.includes(node.querySelector('.task-done-btn')?.getAttribute('onclick')));
+      list.insertBefore(gap, next || list.children[snapshot.cardIndex] || null);
       return gap;
     }
     if (!snapshot.table || snapshot.view !== 'homework') return null;
@@ -420,6 +428,16 @@
     return gap;
   }
 
+  function restoreEffectGaps() {
+    // A second completion or a late list refresh replaces decorative spacers.
+    // Rebuild them without restarting or cancelling the independent canvases.
+    activeEffects.forEach(state => {
+      if (state.started && state.gap && !state.gap.isConnected) {
+        state.gap = reserveRowGap(state.snapshot);
+      }
+    });
+  }
+
   function prepareEffect(snapshot) {
     while (activeEffects.size >= MAX_ACTIVE_EFFECTS) removeEffect(activeEffects.keys().next().value);
     const effect = document.createElement('div');
@@ -428,18 +446,24 @@
     effect.inert = true;
     const canvas = document.createElement('canvas');
     canvas.className = 'sutra-task-completion-effect__canvas';
-    canvas.width = snapshot.canvas.width + 80;
-    canvas.height = snapshot.canvas.height + 170;
+    const width = snapshot.rect.width + 80;
+    const height = snapshot.rect.height + 170;
+    const scale = Math.min(1, Math.sqrt(900000 / (width * height)));
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     canvas.style.left = `${snapshot.rect.left - 40}px`;
     canvas.style.top = `${snapshot.rect.top}px`;
     const context = canvas.getContext('2d');
     if (!context) return;
+    context.scale(canvas.width / width, canvas.height / height);
     // Keep the row visible across the synchronous list rerender, then reuse
     // this same canvas for the accepted action's dust animation.
-    context.drawImage(snapshot.canvas, 40, 0);
+    context.drawImage(snapshot.canvas, 40, 0, snapshot.rect.width, snapshot.rect.height);
     effect.appendChild(canvas);
     snapshot.effect = effect;
-    const state = { key: snapshot.key, gap: null, canvas, context, started: false, frame: 0, timer: 0 };
+    const state = { key: snapshot.key, snapshot, gap: null, canvas, context, started: false, frame: 0, timer: 0 };
     activeEffects.set(effect, state);
     document.body.appendChild(effect);
   }
@@ -450,15 +474,15 @@
     if (!state || state.started) return;
     state.started = true;
     const { canvas, context } = state;
-    const dust = makeDust(snapshot.canvas, snapshot.inkTone);
+    const dust = makeDust(snapshot.canvas, snapshot.inkTone, snapshot.rect);
+    restoreEffectGaps();
     if (!state.gap || !state.gap.isConnected) state.gap = reserveRowGap(snapshot);
-    const gap = state.gap;
     window.clearTimeout(snapshot.timer);
     state.timer = window.setTimeout(() => removeEffect(effect), CAPTURE_LIFETIME_MS);
     let started = null;
     function frame(now) {
       if (!activeEffects.has(effect)) return;
-      if (!motionIsAllowed() || (gap && !gap.isConnected)) return removeEffect(effect);
+      if (!motionIsAllowed()) return removeEffect(effect);
       if (started === null) {
         started = now;
         window.clearTimeout(state.timer);
@@ -467,6 +491,7 @@
       const elapsed = now - started;
       if (elapsed >= LIFETIME_MS) return removeEffect(effect);
       try {
+        restoreEffectGaps();
         // A list rerender may adjust an ancestor's scroll offset. Keep the
         // snapshot in its content slot instead of cancelling before it paints.
         let shiftX = 0;
@@ -478,15 +503,18 @@
         });
         canvas.style.left = `${snapshot.rect.left - 40 - shiftX}px`;
         canvas.style.top = `${snapshot.rect.top - shiftY}px`;
-        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.clearRect(0, 0, snapshot.rect.width + 80, snapshot.rect.height + 170);
         context.globalAlpha = 1;
-        const edge = Math.min(1, elapsed / SWEEP_MS) * snapshot.canvas.width;
+        const edge = Math.min(1, elapsed / SWEEP_MS) * snapshot.rect.width;
+        const scaleX = snapshot.canvas.width / snapshot.rect.width;
+        const scaleY = snapshot.canvas.height / snapshot.rect.height;
         // Staggered strips give the advancing edge a crumbling outline.
-        for (let y = 0; elapsed < SWEEP_MS && y < snapshot.canvas.height; y += 4) {
-          const x = Math.min(snapshot.canvas.width, Math.max(0, edge + Math.sin(y * 1.7) * 5));
-          const width = snapshot.canvas.width - x;
-          if (width > 0) context.drawImage(snapshot.canvas, x, y, width, Math.min(4, snapshot.canvas.height - y),
-            x + 40, y, width, Math.min(4, snapshot.canvas.height - y));
+        for (let y = 0; elapsed < SWEEP_MS && y < snapshot.rect.height; y += 4) {
+          const x = Math.min(snapshot.rect.width, Math.max(0, edge + Math.sin(y * 1.7) * 5));
+          const width = snapshot.rect.width - x;
+          const height = Math.min(4, snapshot.rect.height - y);
+          if (width > 0) context.drawImage(snapshot.canvas, x * scaleX, y * scaleY, width * scaleX, height * scaleY,
+            x + 40, y, width, height);
         }
         dust.forEach(piece => {
           const age = (elapsed - piece.born) / FALL_MS;
@@ -498,10 +526,10 @@
           context.fillRect(x, y, piece.size * (1 - age * 0.45), piece.size * (1 - age * 0.45));
         });
         context.globalAlpha = 1;
-        if (gap) {
+        if (state.gap && state.gap.isConnected) {
           const collapse = Math.max(0, (elapsed - SWEEP_MS - FALL_MS) / COLLAPSE_MS);
           const eased = collapse * collapse * (3 - 2 * collapse);
-          gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;
+          state.gap.firstElementChild.style.height = `${snapshot.layoutHeight * (1 - eased)}px`;
         }
         state.frame = window.requestAnimationFrame(frame);
       } catch (error) { removeEffect(effect); reportVisualError(error); }
