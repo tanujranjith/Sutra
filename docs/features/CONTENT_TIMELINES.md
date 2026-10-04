@@ -48,6 +48,9 @@ explains that limitation instead of inserting through the classic editor.
 Folders, Help & Docs, Sheets, and PDF workspaces do not embed authored
 timelines. A PDF can link to a Note that contains one.
 
+For HTML Pages, the source editor must be visible: Code or desktop Split shows
+the actions and timeline picker; Preview hides them without changing content.
+
 Insertion captures the editor's current caret or text selection before the
 timeline editor opens, then inserts through the host's normal editor action.
 Selection tokens also prevent an edit from changing a timeline after its page

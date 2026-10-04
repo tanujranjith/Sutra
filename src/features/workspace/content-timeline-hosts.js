@@ -200,6 +200,7 @@
     if (pageSpace !== activeSpace) return null;
 
     var api = apiForHost(kind);
+    if (kind === 'html' && (!api || typeof api.isSourceVisible !== 'function' || !api.isSourceVisible())) return null;
     var ready = apiHasTimelineMethods(api);
     var reason = '';
     if (kind === 'note' && api && typeof api.isMounted === 'function' && !api.isMounted()) {

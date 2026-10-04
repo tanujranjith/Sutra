@@ -18,6 +18,7 @@
   var selectedTimelineIndex = -1;
   var timelineSelectionMode = 'auto';
   var timelinePickerTimer = 0;
+  var timelineSourceWasVisible = false;
   var MAX_SOURCE_BYTES = 4 * 1024 * 1024;
   var MAX_SOURCE_HISTORY_STATES = 40;
   var MAX_SOURCE_HISTORY_BYTES = 9 * 1024 * 1024;
@@ -651,11 +652,14 @@
     var wrapper = root && root.querySelector('[data-html-timeline-picker-wrap]');
     if (!editor || !picker || !wrapper) return [];
     var source = String(editor.value || '');
-    if (timelinePickerSource === source) return timelinePickerEntries;
+    if (timelinePickerSource === source) {
+      wrapper.hidden = !isSourceVisible() || timelinePickerEntries.length === 0;
+      return timelinePickerEntries;
+    }
     timelinePickerSource = source;
     timelinePickerEntries = timelineEntriesForSource(source);
     if (selectedTimelineIndex >= timelinePickerEntries.length) selectedTimelineIndex = -1;
-    wrapper.hidden = timelinePickerEntries.length === 0;
+    wrapper.hidden = !isSourceVisible() || timelinePickerEntries.length === 0;
     picker.replaceChildren();
     timelinePickerEntries.forEach(function (entry, index) {
       var option = document.createElement('option');
@@ -848,6 +852,24 @@
     return true;
   }
 
+  function isSourceVisible() {
+    var panel = root && root.querySelector('.html-page-code');
+    return !!(root && !root.hidden && panel && panel.getClientRects().length);
+  }
+
+  function refreshTimelineAuthoringControls() {
+    if (!root) return;
+    timelineSourceWasVisible = isSourceVisible();
+    var picker = root.querySelector('[data-html-timeline-picker-wrap]');
+    if (picker) picker.hidden = !timelineSourceWasVisible || timelinePickerEntries.length === 0;
+    var hosts = timelineHosts();
+    if (hosts && typeof hosts.refresh === 'function') hosts.refresh();
+  }
+
+  function onTimelineAuthoringResize() {
+    if (isSourceVisible() !== timelineSourceWasVisible) refreshTimelineAuthoringControls();
+  }
+
   function updateModeControls() {
     if (!root) return;
     var mode = root.dataset.layout || 'preview';
@@ -871,6 +893,7 @@
       editButton.textContent = sourceVisible ? 'Close source' : 'Edit source';
       editButton.setAttribute('aria-expanded', sourceVisible ? 'true' : 'false');
     }
+    refreshTimelineAuthoringControls();
   }
 
   function setLayoutMode(mode, focusEditor) {
@@ -1250,11 +1273,13 @@ global.addEventListener('sutra:note-page-loaded', refresh);
 global.addEventListener('sutra:note-page-locked', refresh);
 global.addEventListener('sutra:workspace-lock-changed', refresh);
 global.addEventListener('sutra:workspace-remote-commit', refresh);
+  global.addEventListener('resize', onTimelineAuthoringResize);
   global.SutraHTMLPages = {
     createPage: createPage,
     createFromNewPageDialog: createFromNewPageDialog,
     getCurrentPage: pageForCurrentRoute,
     getDocument: function () { return documentFor(pageForCurrentRoute()); },
+    isSourceVisible: isSourceVisible,
     normalizeDocument: normalizeDocument,
     renderPreview: function () { renderPreview(true); },
     captureContentTimelineInsertion: captureContentTimelineInsertion,

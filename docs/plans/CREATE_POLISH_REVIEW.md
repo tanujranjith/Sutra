@@ -138,3 +138,28 @@ Miniplayer launcher. The launch action timed out and the separate PiP window
 was not available in the browser tool inventory; its layout, populated task
 list, and pause/resume behavior were not visually verified. Close the old PiP,
 refresh the live preview, and reopen it for the user's hands-on check.
+
+## HTML Preview authoring controls — 2026-10-04
+
+Item 16: HTML Preview now hides Timeline actions and the authored-timeline
+picker. Code and desktop Split retain them. Visibility follows the actual
+source pane, so narrowing desktop Split into phone Preview also hides the
+controls and cancels any pending timeline draft. Existing rendered timelines
+and HTML source remain intact. Resize refreshes run only when source-pane
+visibility changes, avoiding repeated full-source scans during resizing.
+
+The primary agent reviewed the change in three passes: host visibility and
+load order, mode/owner cancellation and source preservation, final integration
+and manual browser behavior. Luna added a read-only review; its resize-cost
+finding was addressed. No durable fields, export paths, sandbox permissions,
+or core-runtime code changed. Feature docs and Help & Docs were updated.
+
+Manual CUA QA on isolated port 5290 verified Preview hiding both controls,
+Code/Split restoring them, an inserted timeline continuing to render in
+Preview, phone Code/Preview transitions, breakpoint resizing, reload behavior,
+and cancellation of an open timeline draft when resizing Split to phone
+Preview. Source matched its original value after undoing the temporary QA
+timeline and after cancellation. Proof: .tmp/qa/html-preview-clean-toolbar.png.
+Syntax, architecture guardrails, cache freshness, manifest regeneration, and
+whitespace checks passed. No automated suites, builds, installs, network
+provider requests, merge, push, or deployment were performed.
