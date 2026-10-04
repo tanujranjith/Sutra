@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "d48a329b07397e5e"
+    "stamp": "20261003-create-review7",
+    "hash": "7a999836833b148f"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -240,8 +240,8 @@
     "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261001-authoring4",
-    "hash": "9a2aaa7669d02fc7"
+    "stamp": "20261003-create-review6",
+    "hash": "1a14e196dab1cd90"
   },
   "src/features/notes/editor-v2.js": {
     "stamp": "20261003-create-review5",
@@ -332,8 +332,8 @@
     "hash": "d2d01e3d4679216e"
   },
   "src/features/workspace/create-page-templates.js": {
-    "stamp": "20261003-create-polish1",
-    "hash": "47799d21824e558f"
+    "stamp": "20261003-create-review7",
+    "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260921-html-widget-mode2",
@@ -408,8 +408,8 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "38673481bcbbac91"
+    "stamp": "20261003-create-review7",
+    "hash": "55be3af77fd8c4d8"
   },
   "src/features/workspace/slides.js": {
     "stamp": "20261003-create-review5",
@@ -632,16 +632,16 @@
     "hash": "ecd67c5236290029"
   },
   "styles/features/sheets.css": {
-    "stamp": "20261003-create-review5",
-    "hash": "256517e6bfe4b19d"
+    "stamp": "20261003-create-review7",
+    "hash": "ac54806d3a4b956d"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20261003-create-review5",
-    "hash": "a3ce1c6bcb434937"
+    "stamp": "20261003-create-review7",
+    "hash": "7c0e5b29465f2240"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",

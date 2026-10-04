@@ -196,9 +196,9 @@ body.slides-page-active #slidesEditor {
 .slides-inspector-grid button { margin-top: 0; font-size: .78rem; }
 .slides-toggle { display: flex !important; grid-template-columns: auto 1fr; align-items: center; }
 .slides-status { justify-content: space-between; gap: 12px; border-top: 1px solid var(--slides-border); border-bottom: 0; color: var(--slides-muted); font-size: .8rem; }
-.slides-present-overlay { position: fixed; z-index: 2147483646; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 25vw); gap: 18px; padding: 24px; background: color-mix(in srgb, #101828 94%, transparent); }
-.slides-present-stage { position: relative; align-self: center; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; container-type: inline-size; }
-.slides-present-stage[data-size="standard"] { aspect-ratio: 4 / 3; }
+.slides-present-overlay { position: fixed; z-index: 2147483646; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 25vw); gap: 18px; padding: 24px; overflow: auto; overscroll-behavior: contain; background: color-mix(in srgb, #101828 94%, transparent); }
+.slides-present-stage { position: relative; align-self: center; width: min(100%, calc((100vh - 48px) * 16 / 9)); width: min(100%, calc((100dvh - 48px) * 16 / 9)); aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; container-type: inline-size; }
+.slides-present-stage[data-size="standard"] { width: min(100%, calc((100vh - 48px) * 4 / 3)); width: min(100%, calc((100dvh - 48px) * 4 / 3)); aspect-ratio: 4 / 3; }
 .slides-present-notes { align-self: center; max-height: 70vh; overflow: auto; padding: 18px; border: 1px solid var(--slides-border); border-radius: 10px; background: var(--slides-surface); color: var(--text-primary, #1d2939); white-space: pre-wrap; }
 .slides-present-overlay > button { position: fixed; top: 16px; right: 16px; padding: 9px 12px; border: 1px solid #fff; border-radius: 8px; background: #101828; color: #fff; font: inherit; cursor: pointer; }
 
@@ -264,9 +264,15 @@ body.slides-page-active #slidesEditor {
     .slides-element-resize { box-sizing: border-box; width: 44px; height: 44px; right: -22px; bottom: -22px; border: 0; border-radius: 0; background: transparent; touch-action: none; }
     .slides-element-resize::after { position: absolute; right: 22px; bottom: 22px; width: 16px; height: 16px; border: 2px solid var(--slides-accent); border-radius: 50%; background: var(--slides-surface); content: ''; }
     .slides-element-resize:focus-visible { outline: 2px solid var(--slides-accent); outline-offset: -3px; }
-    .slides-present-overlay { grid-template-columns: 1fr; padding: 10px; }
+    .slides-present-overlay { grid-template-columns: minmax(0, 1fr); align-content: start; -webkit-overflow-scrolling: touch; padding: 10px; }
+    .slides-present-stage { width: min(100%, calc((100vh - 20px) * 16 / 9)); width: min(100%, calc((100dvh - 20px) * 16 / 9)); }
+    .slides-present-stage[data-size="standard"] { width: min(100%, calc((100vh - 20px) * 4 / 3)); width: min(100%, calc((100dvh - 20px) * 4 / 3)); }
     .slides-present-notes { max-height: 25vh; }
     .slides-present-overlay > button { min-height: 44px; }
     .slides-status { justify-content: space-between; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+}
+@media (pointer: coarse) {
+    .slides-view-controls button { min-width: 44px; min-height: 44px; }
+    .slides-present-overlay > button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .slides-editor *, .slides-present-overlay * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

@@ -166,11 +166,11 @@
       setup = prepareBook(title, 'Grades', [260, 140, 150, 140]);
       if (!setup) return null;
       writeHeaders(setup.api, setup.sheet, ['Assignment', 'Points earned', 'Points possible', 'Score']);
-      for (var gradeRow = 1; gradeRow <= 20; gradeRow += 1) setFormula(setup.api, setup.sheet, gradeRow, 3, '=IF(C' + (gradeRow + 1) + '=0,"",B' + (gradeRow + 1) + '/C' + (gradeRow + 1) + ')', 'template_percent');
+      for (var gradeRow = 1; gradeRow <= 20; gradeRow += 1) setFormula(setup.api, setup.sheet, gradeRow, 3, '=IFERROR(B' + (gradeRow + 1) + '/C' + (gradeRow + 1) + ',"")', 'template_percent');
       setValue(setup.api, setup.sheet, 21, 0, 'Total points', 'template_total');
       setFormula(setup.api, setup.sheet, 21, 1, '=SUM(B2:B21)', 'template_total');
       setFormula(setup.api, setup.sheet, 21, 2, '=SUM(C2:C21)', 'template_total');
-      setFormula(setup.api, setup.sheet, 21, 3, '=IF(C22=0,"",B22/C22)', 'template_total_percent');
+      setFormula(setup.api, setup.sheet, 21, 3, '=IFERROR(B22/C22,"")', 'template_total_percent');
       return setup.workbook;
     }
     setup = prepareBook(title, 'Study plan', [130, 180, 290, 120, 150]);

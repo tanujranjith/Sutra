@@ -499,6 +499,11 @@ without an external file. Dismissing either prompt or cancelling the password
 screen cancels the restore; an export failure retains the existing explicit
 continue-or-cancel decision. The local recovery journal stays enabled.
 
+If another tab or a local edit changes the workspace while a manual restore is
+being reviewed, Sutra cancels before replacement and keeps that newer work. A
+successful safety export includes the edits captured in its snapshot; changes
+made after that capture still cancel the restore.
+
 Two deliberate details:
 
 - The safety snapshot is always **encrypted**. Restoring never silently writes

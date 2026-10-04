@@ -239,7 +239,7 @@
                     var node = props.node;
                     var dom = document.createElement('span');
                     dom.className = 'sutra-rich-link-inline'; dom.contentEditable = 'false';
-                    function preview() {
+                    function preview(sourceAnchor) {
                         var value = json(node.attrs.linkJSON);
                         var pos = props.getPos();
                         var token = capture();
@@ -247,10 +247,13 @@
                         var callbacks = token ? {
                             onEdit: function () { openRichLink(token); },
                             onRemove: function () {
-                                if (nodeCurrent(token, 'sutraRichLink')) commit(editor().state.tr.delete(pos, pos + node.nodeSize));
+                                if (!nodeCurrent(token, 'sutraRichLink')) return;
+                                var ed = editor();
+                                var label = String(value.label || value.href || '');
+                                commit(label ? ed.state.tr.replaceWith(pos, pos + node.nodeSize, ed.state.schema.text(label)) : ed.state.tr.delete(pos, pos + node.nodeSize));
                             }
                         } : {};
-                        global.SutraRichLinks.preview(value, callbacks);
+                        global.SutraRichLinks.preview(value, callbacks, sourceAnchor);
                     }
                     function render() {
                         var storage = renderLink(node.attrs.linkJSON);
@@ -258,12 +261,12 @@
                         var anchor = dom.querySelector('a');
                         if (anchor) anchor.addEventListener('click', function (event) {
                             if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-                            event.preventDefault(); event.stopPropagation(); preview();
+                            event.preventDefault(); event.stopPropagation(); preview(anchor);
                         });
                         var button = document.createElement('button');
                         button.type = 'button'; button.className = 'sutra-authoring-node-action sutra-rich-link-preview-button';
                         button.textContent = 'Preview'; button.setAttribute('aria-label', 'Preview link');
-                        button.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); preview(); });
+                        button.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); preview(anchor || button); });
                         dom.appendChild(button);
                     }
                     render();
