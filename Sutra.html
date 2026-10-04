@@ -562,10 +562,6 @@
                                                             </button>
                                                         </div>
                                                         <div class="custom-shortcut-launchers" id="tabShortcutLaunchers" role="group" aria-label="Custom shortcuts"></div>
-                                                        <button type="button" class="quick-app-btn quick-app-btn-add" id="addShortcutFromTabsBtn" title="Add shortcut">
-                                                            <i class="fas fa-plus" aria-hidden="true"></i>
-                                                            <span>Shortcut</span>
-                                                        </button>
                                                     </div>
                                                     <button class="view-tab-theme" onclick="toggleThemePanel(); event.stopPropagation();" aria-label="Theme" title="Theme">
                                                         <i class="fas fa-palette" aria-hidden="true"></i>
@@ -7580,19 +7576,11 @@
                     <label for="shortcutPageInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Destination Page</label>
                     <select class="modal-input" id="shortcutPageInput"></select>
                 </div>
-                <div class="shortcut-modal-grid">
-                    <div>
-                        <label for="shortcutIconInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Icon or Emoji (optional)</label>
-                        <input type="text" class="modal-input" id="shortcutIconInput" maxlength="8" placeholder="??">
-                    </div>
-                    <div>
-                        <label for="shortcutPlacementInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Placement</label>
-                        <select class="modal-input" id="shortcutPlacementInput">
-                            <option value="tabs">Tab switcher</option>
-                            <option value="sidebar">Sidebar</option>
-                        </select>
-                    </div>
+                <div>
+                    <label for="shortcutIconInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Icon or Emoji (optional)</label>
+                    <input type="text" class="modal-input" id="shortcutIconInput" maxlength="8" placeholder="??">
                 </div>
+                <p>Shortcuts appear in the Create sidebar.</p>
                 <p class="shortcut-modal-error" id="shortcutModalError" style="display:none;"></p>
             </div>
             <div class="modal-footer">
@@ -7923,7 +7911,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261004-focus-compact1"></script>
+    <script src="src/core/app.js?v=20261004-sidebar-shortcuts2"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7937,7 +7925,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261004-html-preview-actions1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261004-sidebar-shortcuts1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>

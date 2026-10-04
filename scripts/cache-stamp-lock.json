@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261004-focus-compact1",
-    "hash": "ba9e20e13c82fa6c"
+    "stamp": "20261004-sidebar-shortcuts2",
+    "hash": "ebff9d217770653a"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261004-html-preview-actions1",
-    "hash": "04d1144884b47db2"
+    "stamp": "20261004-sidebar-shortcuts1",
+    "hash": "729466f0d18d28fe"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

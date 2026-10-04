@@ -33854,7 +33854,6 @@ function buildOnboardingPlanPreview() {
         function applyQuickAppLaunchersVisibility() {
             const launchers = document.getElementById('quickAppLaunchers');
             const integrationsDock = document.getElementById('integrationsDock');
-            const addShortcutBtn = document.getElementById('addShortcutFromTabsBtn');
             if (!launchers) return;
             const enabled = !!(appSettings && appSettings.quickAppLaunchersEnabled);
             const spotifyEnabled = getWorkspacePreference('integrations.spotifyEnabled', true) !== false;
@@ -33867,13 +33866,9 @@ function buildOnboardingPlanPreview() {
                 (spotifyBtn && spotifyBtn.style.display !== 'none')
                 || (chatgptBtn && chatgptBtn.style.display !== 'none')
             );
-            const tabShortcutCount = getCustomShortcuts().filter(item => normalizeShortcutPlacement(item.placement) === 'tabs').length;
             launchers.style.display = enabled && hasVisibleQuickApp ? 'inline-flex' : 'none';
-            if (addShortcutBtn) {
-                addShortcutBtn.style.display = 'inline-flex';
-            }
             if (integrationsDock) {
-                const showDock = hasVisibleQuickApp || tabShortcutCount > 0;
+                const showDock = hasVisibleQuickApp;
                 integrationsDock.style.display = showDock ? 'inline-flex' : 'none';
             }
             syncTopNavTabOverflow();
@@ -34689,7 +34684,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#quickAppLaunchers, #integrationsDock',
                   before: () => safeRunTutorial(() => setActiveView('today')),
                   title: 'Integrations dock',
-                  body: 'Quick launchers for Spotify and ChatGPT, plus a `+` button to add your own website shortcuts to the top bar. Useful for class portals, Notion, or research databases.' },
+                  body: 'Quick launchers for Spotify and ChatGPT. Add your own website or page shortcuts from the Create sidebar or Settings → Web shortcuts.' },
 
                 /* ---------- 54-62 Settings ---------- */
                 { selector: '#view-settings',
@@ -35666,7 +35661,6 @@ function buildOnboardingPlanPreview() {
 
             const shortcutAddButtons = [
                 document.getElementById('addShortcutBtn'),
-                document.getElementById('addShortcutFromTabsBtn'),
                 document.getElementById('addSidebarShortcutBtn')
             ];
             shortcutAddButtons.forEach((btn) => {
@@ -45000,9 +44994,9 @@ function buildOnboardingPlanPreview() {
                     title: 'Custom Shortcuts',
                     body: `
 <ul>
-  <li><strong>Custom Shortcuts</strong> let you add up to 30 personal launch buttons anywhere in the Sutra interface. Find them under <strong>Settings → Advanced → Web Shortcuts</strong>.</li>
+  <li><strong>Custom Shortcuts</strong> let you add up to 30 personal shortcuts in the Create sidebar. Add them from the sidebar or <strong>Settings → Web shortcuts</strong>.</li>
   <li><strong>Target type</strong> — link to an external URL (<code>http</code>/<code>https</code>) or directly to any page in your notes tree.</li>
-  <li><strong>Placement</strong> — choose <em>Tab switcher</em> (appears next to the built-in workspace tabs) or <em>Sidebar</em> (appears in the sidebar shortcuts section).</li>
+  <li><strong>Location</strong> — all website and page shortcuts appear in the Create sidebar.</li>
   <li><strong>Icon</strong> — any single emoji displayed on the button.</li>
   <li><strong>Name</strong> — up to 40 characters, shown as the button label and tooltip.</li>
   <li>Shortcuts are saved in workspace settings, so they travel with every backup format including <code>.atelier</code> and workspace JSON.</li>
@@ -46159,15 +46153,14 @@ function getActiveEditor() {
             };
 
             if (tabContainer) {
-                const tabShortcuts = shortcuts.filter(item => normalizeShortcutPlacement(item.placement) === 'tabs');
-                tabContainer.innerHTML = tabShortcuts.map(item => renderShortcutButton(item, 'custom-shortcut-btn')).join('');
-                tabContainer.querySelectorAll('.custom-shortcut-btn[data-shortcut-id]').forEach(btn => {
-                    btn.addEventListener('click', () => openCustomShortcutById(btn.dataset.shortcutId));
-                });
+                tabContainer.replaceChildren();
+                tabContainer.hidden = true;
             }
 
             if (sidebarContainer) {
-                const sidebarShortcuts = shortcuts.filter(item => normalizeShortcutPlacement(item.placement) === 'sidebar');
+                // Legacy placement values remain portable; all shortcuts now
+                // use the same visible Create-sidebar destination.
+                const sidebarShortcuts = shortcuts;
                 if (!sidebarShortcuts.length) {
                     sidebarContainer.innerHTML = '<div class="sidebar-shortcuts-empty">No sidebar shortcuts yet.</div>';
                 } else {
@@ -46179,7 +46172,7 @@ function getActiveEditor() {
             }
 
             if (sidebarShell) {
-                const hasSidebarItems = shortcuts.some(item => normalizeShortcutPlacement(item.placement) === 'sidebar');
+                const hasSidebarItems = shortcuts.length > 0;
                 sidebarShell.classList.toggle('has-items', hasSidebarItems);
             }
         }
@@ -46194,7 +46187,7 @@ function getActiveEditor() {
             }
             list.innerHTML = shortcuts.map(item => {
                 const icon = sanitizeShortcutIcon(item.icon);
-                const placementLabel = normalizeShortcutPlacement(item.placement) === 'sidebar' ? 'Sidebar' : 'Tab switcher';
+                const placementLabel = 'Create sidebar';
                 const targetLabel = getShortcutTargetLabel(item);
                 return `
                     <div class="shortcut-settings-item" data-shortcut-id="${escapeHtml(String(item.id || ''))}">
@@ -46256,9 +46249,8 @@ function getActiveEditor() {
             const urlInput = document.getElementById('shortcutUrlInput');
             const pageInput = document.getElementById('shortcutPageInput');
             const iconInput = document.getElementById('shortcutIconInput');
-            const placementInput = document.getElementById('shortcutPlacementInput');
             const deleteBtn = document.getElementById('shortcutDeleteBtn');
-            if (!modal || !titleEl || !idInput || !nameInput || !targetTypeUrlInput || !targetTypePageInput || !urlInput || !pageInput || !iconInput || !placementInput || !deleteBtn) return;
+            if (!modal || !titleEl || !idInput || !nameInput || !targetTypeUrlInput || !targetTypePageInput || !urlInput || !pageInput || !iconInput || !deleteBtn) return;
 
             const existing = getShortcutById(shortcutId);
             const isEdit = !!existing;
@@ -46277,7 +46269,6 @@ function getActiveEditor() {
             pageInput.innerHTML = renderShortcutPageOptions(selectedPageId);
             pageInput.value = selectedPageId;
             iconInput.value = isEdit ? existing.icon : '';
-            placementInput.value = isEdit ? normalizeShortcutPlacement(existing.placement) : 'tabs';
             deleteBtn.style.display = isEdit ? 'inline-flex' : 'none';
             setShortcutModalError('');
             updateShortcutTargetFields();
@@ -46294,8 +46285,7 @@ function getActiveEditor() {
             const urlInput = document.getElementById('shortcutUrlInput');
             const pageInput = document.getElementById('shortcutPageInput');
             const iconInput = document.getElementById('shortcutIconInput');
-            const placementInput = document.getElementById('shortcutPlacementInput');
-            if (!idInput || !nameInput || !targetTypeInput || !urlInput || !pageInput || !iconInput || !placementInput) return;
+            if (!idInput || !nameInput || !targetTypeInput || !urlInput || !pageInput || !iconInput) return;
 
             const shortcutId = String(idInput.value || '').trim();
             const name = normalizeShortcutName(nameInput.value, '');
@@ -46303,7 +46293,7 @@ function getActiveEditor() {
             const safeUrl = targetType === 'page' ? '' : normalizeExternalUrl(urlInput.value);
             const pageId = targetType === 'page' ? normalizeShortcutPageId(pageInput.value) : '';
             const icon = sanitizeShortcutIcon(iconInput.value);
-            const placement = normalizeShortcutPlacement(placementInput.value);
+            const placement = 'sidebar';
 
             if (!name) {
                 setShortcutModalError('Enter a shortcut name.');

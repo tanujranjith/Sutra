@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-04T17:35:25.757Z",
-  "reviewedReason": "Expose the existing canonical upcoming-task getter on the production Focus miniplayer bridge (one reviewed API entry)",
-  "maxBytes": 4964361,
-  "maxLines": 87073
+  "blessedAt": "2026-10-04T17:49:46.285Z",
+  "reviewedReason": "Remove obsolete tab shortcut entry and help text; preserve legacy normalization",
+  "maxBytes": 4963024,
+  "maxLines": 87063
 }
