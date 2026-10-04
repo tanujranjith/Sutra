@@ -372,14 +372,21 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   local `.sutra` import.
 - **Optional auto-backup** is off by default. When enabled it runs only while
   signed in, with the passphrase cached for the session, on the chosen trigger
-  (app hidden / once a day / on significant change). Turning it off stops it
+  (app hidden / daily at a chosen local time / on significant change). Turning it off stops it
   immediately.
   A cross-tab Web Lock and persisted successful-upload hash prevent duplicate
   scheduled snapshots. Without Web Locks, automatic backups pause visibly.
   Metadata remains at the compatibility key `sutra:supabaseCloud:v1`, now
-  versioned with `schemaVersion: 2`; migration preserves existing opt-in,
+  versioned with `schemaVersion: 3`; migration preserves existing opt-in,
   cadence and unknown fields. No Sync database, vault, backup format or
   credential migration is involved.
+  Daily time defaults to 20:00 and can be edited without enabling backups.
+  Enabling or changing the schedule starts at its next occurrence. Sutra checks
+  the local clock while open and on return from sleep/background; the latest
+  missed slot runs once the destination, connection, and session password are
+  ready. It cannot run while the browser is closed. Calendar dates follow local
+  daylight-saving changes. An unchanged-work check has its own receipt and does
+  not update the last successful backup timestamp.
 - **Password recovery:** because backups are end-to-end encrypted, a lost
   passphrase means the cloud copy is unrecoverable — so the passphrase modals are
   wired to let your **browser's password manager** save and autofill it.
@@ -485,7 +492,12 @@ Importing replaces your current workspace, so before applying a **manual** impor
 or restore Sutra first offers to save an **encrypted `.sutra` safety snapshot**
 of your existing data (you choose the password). If an import is not what you
 expected, this snapshot is your fallback — the import is not a one-way door that
-discards your prior state with no recourse.
+discards your prior state with no recourse. The first prompt offers **Yes, make
+safety export**, **No, continue without export**, and **Cancel restore**.
+Only Yes opens the password screen. No continues the already-confirmed restore
+without an external file. Dismissing either prompt or cancelling the password
+screen cancels the restore; an export failure retains the existing explicit
+continue-or-cancel decision. The local recovery journal stays enabled.
 
 Two deliberate details:
 

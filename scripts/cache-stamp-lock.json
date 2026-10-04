@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261001-qa-review1",
-    "hash": "6695b99003b46f78"
+    "stamp": "20261003-create-review5",
+    "hash": "d48a329b07397e5e"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -244,16 +244,16 @@
     "hash": "9a2aaa7669d02fc7"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261001-authoring4",
-    "hash": "2d14aaed9a4d8a9a"
+    "stamp": "20261003-create-review5",
+    "hash": "6e31b85290d92f12"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261001-inline-ai1",
-    "hash": "771b339215d4c6de"
+    "stamp": "20261003-create-review5",
+    "hash": "3443ec7ea7c18f67"
   },
   "src/features/notes/rich-links.js": {
-    "stamp": "20261001-rich-links6",
-    "hash": "ecf07f032b93b829"
+    "stamp": "20261003-create-review5",
+    "hash": "afa4425de87f1917"
   },
   "src/features/search/global-search-engine.js": {
     "stamp": "20261001-todo-completion1",
@@ -324,12 +324,16 @@
     "hash": "97d74c2d0846c183"
   },
   "src/features/workspace/content-timeline-hosts.js": {
-    "stamp": "20261001-content-timeline3",
-    "hash": "d2bcef3dff79af5d"
+    "stamp": "20261003-create-review5",
+    "hash": "389d860f3625da3f"
   },
   "src/features/workspace/contextual-shell.js": {
     "stamp": "20260913-page-tree-guides1",
     "hash": "d2d01e3d4679216e"
+  },
+  "src/features/workspace/create-page-templates.js": {
+    "stamp": "20261003-create-polish1",
+    "hash": "47799d21824e558f"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260921-html-widget-mode2",
@@ -360,8 +364,8 @@
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20261001-authoring6",
-    "hash": "f463eb73d4149397"
+    "stamp": "20261003-create-review5",
+    "hash": "0dcb3515934bd721"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -404,12 +408,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20261001-authoring6",
-    "hash": "14827808e9654fcb"
+    "stamp": "20261003-create-review5",
+    "hash": "38673481bcbbac91"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20261001-authoring6",
-    "hash": "f05729c9cb3eaebe"
+    "stamp": "20261003-create-review5",
+    "hash": "d6f54c624e03e14e"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -444,8 +448,8 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20261001-focus-player2",
-    "hash": "d06a23efd5a1b688"
+    "stamp": "20261003-create-review5",
+    "hash": "70ddc83a8e235cfb"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20261001-todo-completion1",
@@ -532,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261001-create-polish4",
-    "hash": "0db9cd9dfada2f13"
+    "stamp": "20261003-create-review5",
+    "hash": "166194544941a901"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -552,8 +556,8 @@
     "hash": "2f957ae604803635"
   },
   "styles/features/canvas-workbench-polish.css": {
-    "stamp": "20261001-canvas-polish2",
-    "hash": "7c11af4c3f5afb2f"
+    "stamp": "20261003-create-review5",
+    "hash": "5c1e685e9743f2c4"
   },
   "styles/features/cloud-sync.css": {
     "stamp": "20260807-syncsheet1",
@@ -564,8 +568,8 @@
     "hash": "47cef56579d25652"
   },
   "styles/features/content-timeline-hosts.css": {
-    "stamp": "20261001-content-timeline3",
-    "hash": "61fbe3ff4003d5c9"
+    "stamp": "20261003-create-review5",
+    "hash": "3f066d7802e3065d"
   },
   "styles/features/content-timeline.css": {
     "stamp": "20261001-content-timeline4",
@@ -592,12 +596,12 @@
     "hash": "24eb3719c1ba2831"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20261001-authoring4",
-    "hash": "4a2b39947d0c2377"
+    "stamp": "20261003-create-review5",
+    "hash": "2cebb741939d5ee9"
   },
   "styles/features/inline-ai-assist.css": {
-    "stamp": "20261001-inline-ai1",
-    "hash": "12d9dc7fa4f2427e"
+    "stamp": "20261003-create-review5",
+    "hash": "a5028684bcc4696d"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -624,28 +628,28 @@
     "hash": "1c807a578c7b1092"
   },
   "styles/features/rich-links.css": {
-    "stamp": "20261001-rich-links8",
-    "hash": "35f767869d6e91fc"
+    "stamp": "20261003-create-review5",
+    "hash": "ecd67c5236290029"
   },
   "styles/features/sheets.css": {
-    "stamp": "20261001-create-polish3",
-    "hash": "58cf6ffba82aa1f4"
+    "stamp": "20261003-create-review5",
+    "hash": "256517e6bfe4b19d"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20261001-authoring4",
-    "hash": "f4677f80441cb909"
+    "stamp": "20261003-create-review5",
+    "hash": "a3ce1c6bcb434937"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
     "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
-    "stamp": "20260915-cloud2",
-    "hash": "5cd5ccc11565d718"
+    "stamp": "20261003-create-review5",
+    "hash": "aeb0432096584cba"
   },
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
@@ -744,8 +748,8 @@
     "hash": "0c12386cb8c9bacd"
   },
   "styles/views/today-focus-timer.css": {
-    "stamp": "20261001-focus-player2",
-    "hash": "a6e18e650c33b6cd"
+    "stamp": "20261003-create-review5",
+    "hash": "00ebfd1a2bbf37ca"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260816-home-quick-task1",

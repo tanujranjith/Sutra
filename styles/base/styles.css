@@ -7882,6 +7882,7 @@
         .new-page-type-description { margin: 0 0 12px; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
         #newPageModal [hidden] { display: none !important; }
         .new-page-starter-field { margin-bottom: 14px; }
+        .new-page-starter-preview { margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
         .new-page-starter-field select { width: 100%; min-height: 44px; padding: 9px 12px; border: 1px solid var(--surface-border, var(--glass-border)); border-radius: 8px; color: var(--text-primary); background: var(--surface-bg); font: inherit; }
         @media (max-width: 700px) { .new-page-type-chooser { padding-inline: 12px; } }
 

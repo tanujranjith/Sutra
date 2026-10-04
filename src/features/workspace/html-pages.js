@@ -914,6 +914,36 @@
     buttons[nextIndex].focus();
   }
 
+  function closeOverflowMenu(returnFocus) {
+    var menu = root && root.querySelector('[data-html-overflow]');
+    var trigger = menu && menu.querySelector('summary');
+    if (!menu || !menu.open) return;
+    menu.open = false;
+    if (returnFocus && trigger) {
+      try { trigger.focus({ preventScroll: true }); } catch (_) { trigger.focus(); }
+    }
+  }
+
+  function handleOverflowMenuKeydown(event) {
+    if (event.key !== 'Escape' || !root) return;
+    var menu = root.querySelector('[data-html-overflow]');
+    if (!menu || !menu.open || !menu.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeOverflowMenu(true);
+  }
+
+  function handleOverflowOutsidePointerDown(event) {
+    var menu = root && root.querySelector('[data-html-overflow]');
+    if (menu && menu.open && !menu.contains(event.target)) closeOverflowMenu(false);
+  }
+
+  function handleOverflowFocusOut(menu) {
+    global.setTimeout(function () {
+      if (menu && menu.open && !menu.contains(document.activeElement)) closeOverflowMenu(false);
+    }, 0);
+  }
+
   function importFile(file) {
     if (!file) return;
     var owner = pageForCurrentRoute(); var revision = previewRevision;
@@ -1042,17 +1072,20 @@
       + '<button type="button" data-html-panel="preview" role="tab" aria-controls="htmlPagePreviewPanel" aria-selected="true" tabindex="0" class="active">Preview</button></div>'
       + '<div class="html-page-actions"><span class="html-page-layout-status" data-html-layout-status aria-live="polite">Preview only</span>'
       + '<label class="html-page-timeline-picker" data-html-timeline-picker-wrap hidden>Timeline to edit<select data-html-timeline-picker aria-label="Choose an authored timeline"></select></label>'
-      + '<button type="button" data-html-source-undo aria-label="Undo source change" disabled>Undo</button>'
-      + '<button type="button" data-html-source-redo aria-label="Redo source change" disabled>Redo</button>'
+      + '<button type="button" class="html-page-icon-action" data-html-source-undo aria-label="Undo source change" title="Undo" disabled><i class="fas fa-undo" aria-hidden="true"></i></button>'
+      + '<button type="button" class="html-page-icon-action" data-html-source-redo aria-label="Redo source change" title="Redo" disabled><i class="fas fa-redo" aria-hidden="true"></i></button>'
       + '<button type="button" data-html-edit-source aria-expanded="false" aria-controls="sutraHtmlPageSource">Edit source</button>'
+      + '<details class="html-page-overflow" data-html-overflow><summary class="html-page-overflow-trigger" aria-label="More HTML Page actions" title="More actions" aria-expanded="false"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>'
+      + '<div class="html-page-overflow-menu" role="group" aria-label="More HTML Page actions">'
       + '<button type="button" data-html-refresh aria-label="Refresh the local HTML preview">Refresh preview</button>'
-      + '<button type="button" data-html-export>Export .html</button></div></header>'
+      + '<button type="button" data-html-export>Export .html</button>'
+      + '<button type="button" data-html-import-trigger>Import HTML</button></div></details>'
+      + '<input class="html-page-import-input" type="file" accept=".html,.htm,text/html" data-html-import aria-label="Import a local HTML file" hidden></div></header>'
       + '<div class="html-page-warning" data-html-asset-warning role="note" hidden>Linked or remote assets are blocked in this local preview. Embed assets as data URLs to keep them available offline.</div>'
       + '<div class="html-page-workspace"><section id="htmlPageCodePanel" class="html-page-code" aria-label="HTML source">'
       + '<div class="html-page-source-toolbar"><label for="sutraHtmlPageSource">HTML, CSS, and JavaScript</label>'
       + '<output id="htmlPageSourceSize" data-html-source-size aria-label="Source size">0 B / 4 MB</output>'
-      + '<div class="html-page-starter"><select data-html-starter aria-label="Choose a starter snippet"><option value="">Starter snippets</option><option value="section">Content section</option><option value="checklist">Checklist</option><option value="callout">Note callout</option></select><button type="button" data-html-insert-starter>Insert</button></div>'
-      + '<label class="html-page-import"><input type="file" accept=".html,.htm,text/html" data-html-import aria-label="Import a local HTML file"><span>Import HTML</span></label></div>'
+      + '<div class="html-page-starter"><select data-html-starter aria-label="Choose a starter snippet"><option value="">Starter snippets</option><option value="section">Content section</option><option value="checklist">Checklist</option><option value="callout">Note callout</option></select><button type="button" data-html-insert-starter>Insert</button></div></div>'
       + '<textarea id="sutraHtmlPageSource" data-html-source spellcheck="false" autocomplete="off" aria-describedby="htmlPageSafetyNote htmlPageSourceSize"></textarea>'
       + '<p id="htmlPageSafetyNote">Scripts run only inside an isolated offline sandbox. Network requests, forms, popups, downloads, parent access, and top navigation are blocked.</p>'
       + '</section><section id="htmlPagePreviewPanel" class="html-page-preview" aria-label="Live preview"><div data-html-preview></div></section></div>'
@@ -1066,6 +1099,12 @@
     sourceEditor.addEventListener('keydown', handleSourceHistoryShortcut);
     root.querySelector('[data-html-source-undo]').addEventListener('click', function () { applySourceHistory('undo', false); });
     root.querySelector('[data-html-source-redo]').addEventListener('click', function () { applySourceHistory('redo', false); });
+    root.addEventListener('keydown', handleOverflowMenuKeydown);
+    global.document.addEventListener('pointerdown', handleOverflowOutsidePointerDown);
+    var overflowMenu = root.querySelector('[data-html-overflow]');
+    var overflowTrigger = overflowMenu.querySelector('summary');
+    overflowMenu.addEventListener('toggle', function () { overflowTrigger.setAttribute('aria-expanded', overflowMenu.open ? 'true' : 'false'); });
+    overflowMenu.addEventListener('focusout', function () { handleOverflowFocusOut(overflowMenu); });
     function onSourceSelectionChange() {
       selectedTimelineIndex = -1;
       timelineSelectionMode = 'source';
@@ -1080,8 +1119,12 @@
       timelineSelectionMode = 'picker';
     });
     root.querySelector('[data-html-edit-source]').addEventListener('click', function () { setSourceMode(root.dataset.sourceOpen !== 'true'); });
-    root.querySelector('[data-html-refresh]').addEventListener('click', function () { renderPreview(true); });
-    root.querySelector('[data-html-export]').addEventListener('click', exportSource);
+    root.querySelector('[data-html-refresh]').addEventListener('click', function () { closeOverflowMenu(true); renderPreview(true); });
+    root.querySelector('[data-html-export]').addEventListener('click', function () { closeOverflowMenu(true); exportSource(); });
+    root.querySelector('[data-html-import-trigger]').addEventListener('click', function () {
+      closeOverflowMenu(true);
+      root.querySelector('[data-html-import]').click();
+    });
     root.querySelector('[data-html-insert-starter]').addEventListener('click', insertStarterSnippet);
     root.querySelector('[data-html-import]').addEventListener('change', function (event) { importFile(event.target.files && event.target.files[0]); event.target.value = ''; });
     root.querySelectorAll('[data-html-layout]').forEach(function (button) {
@@ -1118,6 +1161,7 @@
       global.clearTimeout(previewLoadTimer);
       previewRevision += 1;
       if (root) {
+        closeOverflowMenu(false);
         var sourceEditor = root.querySelector('[data-html-source]');
         var previewHost = root.querySelector('[data-html-preview]');
         if (sourceEditor) sourceEditor.value = '';
@@ -1133,6 +1177,7 @@
     mount();
     var changedPage = activePageId !== page.id || activePageReference !== page || activeDocumentReference !== page.htmlDocument;
     if (changedPage) {
+      closeOverflowMenu(false);
       sourceRevision += 1;
       timelinePickerSource = null;
       selectedTimelineIndex = -1;

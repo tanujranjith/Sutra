@@ -1,36 +1,32 @@
-/* Inline AI draft review. The shared modal manager owns focus, Escape,
-   background isolation, scroll locking, and focus restoration. */
-.sutra-inline-ai-modal {
-    box-sizing: border-box;
-    overflow: hidden;
-    overscroll-behavior: contain;
-    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-    z-index: 11000;
-}
-
-.sutra-inline-ai-modal [hidden] {
+/* Note writing mode inside the existing right-docked Sutra Assistant panel. */
+#chatbotPanel.sutra-inline-ai-mode > .sutra-intel-badge,
+#chatbotPanel.sutra-inline-ai-mode > #flowContextChipRow,
+#chatbotPanel.sutra-inline-ai-mode > .chatbot-messages,
+#chatbotPanel.sutra-inline-ai-mode > #chatSuggestionRow,
+#chatbotPanel.sutra-inline-ai-mode > .chatbot-input {
     display: none !important;
 }
 
-.sutra-inline-ai-modal .sutra-inline-ai-dialog {
+#chatbotPanel.sutra-inline-ai-mode > .sutra-inline-ai-workbench {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
-    box-sizing: border-box;
-    width: min(760px, calc(100vw - 32px));
-    max-width: 760px;
-    max-height: min(850px, calc(100vh - max(16px, env(safe-area-inset-top, 0px)) - max(16px, env(safe-area-inset-bottom, 0px))));
-    max-height: min(850px, calc(100dvh - max(16px, env(safe-area-inset-top, 0px)) - max(16px, env(safe-area-inset-bottom, 0px))));
-    padding: 0;
+    min-height: 0;
     overflow: hidden;
     color: var(--text-primary);
 }
 
+.sutra-inline-ai-workbench [hidden] {
+    display: none !important;
+}
+
 .sutra-inline-ai-header {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 18px 22px 14px;
+    gap: 10px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--surface-border);
 }
 
@@ -38,17 +34,17 @@
     min-width: 0;
     margin: 0;
     color: var(--text-primary);
-    font-size: 1.2rem;
+    font-size: 1.04rem;
     line-height: 1.3;
 }
 
-.sutra-inline-ai-icon-button,
 .sutra-inline-ai-button {
     box-sizing: border-box;
     min-width: 44px;
     min-height: 44px;
     border: 1px solid var(--button-border, var(--surface-border));
-    border-radius: 12px;
+    border-radius: 10px;
+    padding: 9px 12px;
     background: var(--button-bg, var(--surface-bg));
     color: var(--button-text, var(--text-primary));
     font: inherit;
@@ -57,17 +53,8 @@
     touch-action: manipulation;
 }
 
-.sutra-inline-ai-icon-button {
-    flex: 0 0 44px;
-    padding: 0;
-    font-size: 1.55rem;
-    line-height: 1;
-}
-
-.sutra-inline-ai-button {
-    flex: 1 1 150px;
-    padding: 10px 14px;
-    white-space: normal;
+.sutra-inline-ai-button:hover:not(:disabled) {
+    background: var(--button-bg-hover, var(--surface-bg-hover));
 }
 
 .sutra-inline-ai-button.sutra-inline-ai-primary {
@@ -75,29 +62,32 @@
     background: var(--accent-soft, var(--surface-bg-active));
 }
 
-.sutra-inline-ai-button:hover:not(:disabled),
-.sutra-inline-ai-icon-button:hover {
-    background: var(--button-bg-hover, var(--surface-bg-hover));
-}
-
 .sutra-inline-ai-button:disabled {
     cursor: not-allowed;
     opacity: 0.58;
 }
 
-.sutra-inline-ai-modal :is(button, textarea, summary):focus-visible {
+.sutra-inline-ai-button:focus-visible,
+.sutra-inline-ai-workbench :is(textarea, summary):focus-visible {
     outline: 2px solid var(--accent-strong, var(--accent));
     outline-offset: 2px;
+}
+
+.sutra-inline-ai-back {
+    flex: 0 0 auto;
+    min-width: 96px;
+    padding-inline: 10px;
+    font-size: 0.86rem;
 }
 
 .sutra-inline-ai-body {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     min-height: 0;
     overflow: auto;
-    padding: 18px 22px;
+    padding: 14px;
     overscroll-behavior: contain;
 }
 
@@ -106,8 +96,8 @@
 .sutra-inline-ai-error {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.92rem;
-    line-height: 1.5;
+    font-size: 0.87rem;
+    line-height: 1.45;
 }
 
 .sutra-inline-ai-error {
@@ -119,7 +109,7 @@
     display: block;
     margin: 2px 0 0;
     color: var(--text-primary);
-    font-size: 0.94rem;
+    font-size: 0.9rem;
     font-weight: 650;
 }
 
@@ -128,10 +118,10 @@
     width: 100%;
     min-width: 0;
     border: 1px solid var(--field-border, var(--surface-border));
-    border-radius: 12px;
-    padding: 12px 14px;
+    border-radius: 10px;
+    padding: 10px 12px;
     background: var(--field-bg, var(--surface-bg));
-    color: var(--text-primary);
+    color: var(--field-text, var(--text-primary));
     font: inherit;
     line-height: 1.5;
     resize: vertical;
@@ -142,50 +132,53 @@
 }
 
 .sutra-inline-ai-instruction {
-    min-height: 76px;
+    min-height: 72px;
+    max-height: 140px;
 }
 
 .sutra-inline-ai-context {
     min-width: 0;
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
+    border-radius: 10px;
     background: var(--surface-bg);
 }
 
 .sutra-inline-ai-context summary {
     min-height: 44px;
-    padding: 11px 14px;
+    padding: 11px 12px;
     color: var(--text-primary);
+    font-size: 0.88rem;
     font-weight: 600;
     cursor: pointer;
 }
 
 .sutra-inline-ai-context-text {
     box-sizing: border-box;
-    max-height: 160px;
+    max-height: 140px;
     margin: 0;
     overflow: auto;
     border-top: 1px solid var(--surface-border);
-    padding: 12px 14px;
+    padding: 10px 12px;
     color: var(--text-secondary);
     font: inherit;
-    font-size: 0.88rem;
-    line-height: 1.5;
+    font-size: 0.82rem;
+    line-height: 1.45;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
 .sutra-inline-ai-preview-wrap {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
     min-height: 0;
 }
 
 .sutra-inline-ai-preview {
-    min-height: 180px;
-    max-height: 42vh;
-    max-height: 42dvh;
+    min-height: 120px;
+    max-height: 34vh;
+    max-height: 34dvh;
 }
 
 .sutra-inline-ai-footer {
@@ -195,54 +188,44 @@
     justify-content: flex-end;
     gap: 8px;
     border-top: 1px solid var(--surface-border);
-    padding: 14px 22px max(14px, env(safe-area-inset-bottom));
+    padding: 10px 14px;
 }
 
-@media (max-width: 700px) {
-    .sutra-inline-ai-modal {
-        align-items: flex-end;
-        padding: max(8px, env(safe-area-inset-top, 0px)) 8px max(8px, env(safe-area-inset-bottom, 0px));
-    }
+.sutra-inline-ai-footer .sutra-inline-ai-button {
+    flex: 1 1 130px;
+}
 
-    .sutra-inline-ai-modal .sutra-inline-ai-dialog {
-        width: 100%;
-        max-height: calc(100vh - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
-        max-height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
-        border-radius: 20px 20px 0 0;
-    }
-
+@media (max-width: 560px) {
     .sutra-inline-ai-header {
-        padding: 14px 16px 12px;
+        padding: 10px 12px;
     }
 
     .sutra-inline-ai-body {
-        gap: 10px;
-        padding: 14px 16px;
+        gap: 9px;
+        padding: 12px;
     }
 
     .sutra-inline-ai-footer {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        padding: 10px 16px max(12px, env(safe-area-inset-bottom));
+        padding: 9px 12px max(10px, env(safe-area-inset-bottom, 0px));
     }
 
-    .sutra-inline-ai-button {
-        min-width: 0;
+    .sutra-inline-ai-footer .sutra-inline-ai-button {
         min-height: 48px;
-        padding: 8px 10px;
+        padding: 8px 9px;
     }
 
     .sutra-inline-ai-preview {
-        min-height: 140px;
-        max-height: 34vh;
-        max-height: 34dvh;
+        min-height: 110px;
+        max-height: 30vh;
+        max-height: 30dvh;
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .sutra-inline-ai-modal,
-    .sutra-inline-ai-modal * {
+    .sutra-inline-ai-workbench,
+    .sutra-inline-ai-workbench * {
         scroll-behavior: auto !important;
         animation-duration: 0.01ms !important;
         transition-duration: 0.01ms !important;

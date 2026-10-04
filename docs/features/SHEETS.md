@@ -1,7 +1,9 @@
 # Sutra Sheets
 
 Sutra Sheets is a local-first spreadsheet surface inside a normal Create page.
-It is for grade trackers, lab tables, budgets, study logs, and compact class data—not a hosted collaboration product. From **New Page**, choose **Sheets**, set an optional title and parent location, and select **Blank workbook** or **Study tracker** before confirming with **Create spreadsheet**. The Study tracker starts with **Task**, **Due date**, and **Status** columns. Choosing Sheets alone does not create a page. The workbook is stored at `page.spreadsheet`; no account, network request, or second database is required.
+It is for grade trackers, lab tables, budgets, study logs, and compact class data—not a hosted collaboration product. From **New Page**, choose **Sheets**, set an optional title and parent location, then choose **Blank workbook**, **Study tracker**, **Assignment tracker**, **Grade calculator**, or **Study planner**. The dialog shows the selected starter's description before you confirm with **Create spreadsheet**. Choosing Sheets or a starter only prepares the dialog; it does not create a page. The workbook is stored at `page.spreadsheet`; no account, network request, or second database is required.
+
+The Study tracker starts with **Task**, **Due date**, and **Status** columns. Assignment tracker adds class, priority, notes, and dropdowns for status and priority. Grade calculator computes each entered score and a points-based total percentage from **Points earned** and **Points possible**. Study planner lists the days of the week, offers a status dropdown, and totals planned minutes. All starter cells and formulas remain editable.
 
 ## Durable model and privacy
 

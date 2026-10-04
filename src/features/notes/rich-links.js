@@ -1,5 +1,5 @@
 /*
- * Rich link dialog and safe preview helpers for Notes.
+ * Rich link dialogs and anchored link popovers for Notes.
  *
  * This module owns presentation only. Callers apply returned link edits through
  * the active editor's canonical commands; metadata and helper configuration
@@ -19,6 +19,10 @@
     var sessionHelperPort = null;
     var dialogSequence = 0;
     var activeDialog = null;
+    var activePopup = null;
+    var activatedAnchor = null;
+    var activationClearTimer = null;
+    var pendingInlineEdit = null;
 
     function safeHttpUrl(raw) {
         if (typeof raw !== 'string' || !raw || raw !== raw.trim() || /[\u0000-\u0020\u007f\u00a0\u1680\u2000-\u200f\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(raw)) return null;
@@ -317,12 +321,19 @@
         var opts = options || {};
         if (isWorkspaceLocked() || !safeCall(opts.isCurrent)) return Promise.resolve(null);
         if (activeDialog && typeof activeDialog.close === 'function') activeDialog.close(false);
+        if (activePopup && typeof activePopup.close === 'function') activePopup.close(false);
+
+        var inlineEdit = pendingInlineEdit;
+        pendingInlineEdit = null;
 
         var opener = document.activeElement;
         var initialView = document.body && document.body.dataset ? document.body.dataset.view || '' : '';
         var dialog = document.createElement('dialog');
         var id = ++dialogSequence;
         dialog.className = 'sutra-rich-link-dialog';
+        if (inlineEdit) dialog.dataset.inlineEdit = 'true';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', inlineEdit ? 'false' : 'true');
         dialog.setAttribute('aria-labelledby', 'sutraRichLinkTitle' + id);
         dialog.setAttribute('aria-describedby', 'sutraRichLinkDescription' + id);
 
@@ -334,6 +345,7 @@
         heading.id = 'sutraRichLinkTitle' + id;
         form.appendChild(heading);
         var description = textElement('p', 'sutra-rich-link-description', 'Choose the words people see and confirm where the link opens.');
+        description.hidden = !!inlineEdit;
         description.id = 'sutraRichLinkDescription' + id;
         form.appendChild(description);
 
@@ -375,6 +387,7 @@
 
         var openRow = document.createElement('div');
         openRow.className = 'sutra-rich-link-dialog-open-row';
+        openRow.hidden = !!inlineEdit;
         var openAnchor = safeAnchor(hrefField.value, 'Open link', 'sutra-rich-link-open');
         if (!openAnchor) {
             openAnchor = textElement('a', 'sutra-rich-link-open', 'Open link');
@@ -385,6 +398,7 @@
 
         var metadata = document.createElement('details');
         metadata.className = 'sutra-rich-link-metadata';
+        metadata.hidden = !!inlineEdit;
         var summary = textElement('summary', '', 'Get page title using the optional local helper');
         metadata.appendChild(summary);
         metadata.appendChild(textElement('p', 'sutra-rich-link-metadata-intro', 'Title lookup is off until you choose Fetch title. Enter the port shown when you start the helper (1024–65535). The port is remembered only in this tab. The helper may follow up to three public redirects from the address shown below; Sutra does not contact a page service on its own.'));
@@ -467,7 +481,7 @@
         var saveButton = document.createElement('button');
         saveButton.type = 'submit';
         saveButton.className = 'sutra-rich-link-save';
-        setText(saveButton, 'Save link');
+        setText(saveButton, inlineEdit ? 'Apply' : 'Save link');
         actions.appendChild(cancelButton);
         actions.appendChild(saveButton);
         form.appendChild(actions);
@@ -482,6 +496,23 @@
         var fallbackKeydown = null;
         var resultPromise;
         var resolveResult;
+
+        function updatePosition() {
+            if (!inlineEdit || !inlineEdit.anchor || !inlineEdit.anchor.isConnected) {
+                if (inlineEdit) close(null, false);
+                return;
+            }
+            positionPopover(dialog, inlineEdit.anchor);
+        }
+
+        function onOutsidePointer(event) {
+            if (!dialog.contains(event.target) && !inlineEdit.anchor.contains(event.target)) close(null, false);
+        }
+        function onFocusOut() {
+            window.setTimeout(function () {
+                if (!done && !dialog.contains(document.activeElement)) close(null, false);
+            }, 0);
+        }
 
         function contextIsCurrent() {
             if (isWorkspaceLocked() || !safeCall(opts.isCurrent)) return false;
@@ -507,6 +538,12 @@
             window.removeEventListener('pagehide', onPageHide);
             window.removeEventListener('popstate', onNavigate);
             window.removeEventListener('hashchange', onNavigate);
+            if (inlineEdit) {
+                document.removeEventListener('pointerdown', onOutsidePointer, true);
+                document.removeEventListener('scroll', updatePosition, true);
+                window.removeEventListener('resize', updatePosition);
+                dialog.removeEventListener('focusout', onFocusOut);
+            }
             if (fallbackKeydown) dialog.removeEventListener('keydown', fallbackKeydown);
             cancelButton.removeEventListener('click', onCancel);
             form.removeEventListener('submit', onSubmit);
@@ -524,11 +561,13 @@
                 dialog.removeAttribute('open');
             }
             dialog.remove();
-            if (window.SutraModalManager) window.SutraModalManager.sync();
-            document.body.classList.remove('sutra-rich-link-open');
+            if (!inlineEdit && window.SutraModalManager) window.SutraModalManager.sync();
+            if (!inlineEdit) document.body.classList.remove('sutra-rich-link-open');
             if (activeDialog && activeDialog.close === activeClose) activeDialog = null;
-            if (restoreFocus && contextIsCurrent() && opener && opener.isConnected && typeof opener.focus === 'function') {
-                try { opener.focus({ preventScroll: true }); } catch (error) { try { opener.focus(); } catch (ignored) {} }
+            var focusTarget = inlineEdit && inlineEdit.anchorContainer && inlineEdit.anchorContainer.isConnected
+                ? (inlineEdit.anchor.isConnected ? inlineEdit.anchor : inlineEdit.anchorContainer.querySelector('a')) : opener;
+            if (restoreFocus && contextIsCurrent() && focusTarget && focusTarget.isConnected && typeof focusTarget.focus === 'function') {
+                try { focusTarget.focus({ preventScroll: true }); } catch (error) { try { focusTarget.focus(); } catch (ignored) {} }
             }
             if (resolveResult) resolveResult(result);
         }
@@ -721,8 +760,14 @@
         fetchButton.addEventListener('click', onFetchTitle);
         useTitleButton.addEventListener('click', onUseTitle);
 
-        if (!usingNativeDialog) {
-            dialog.setAttribute('role', 'dialog');
+        if (inlineEdit) {
+            dialog.tabIndex = -1;
+            if (!usingNativeDialog) dialog.setAttribute('open', '');
+            fallbackKeydown = function (event) {
+                if (event.key === 'Escape') { event.preventDefault(); close(null, true); }
+            };
+            dialog.addEventListener('keydown', fallbackKeydown);
+        } else if (!usingNativeDialog) {
             dialog.setAttribute('aria-modal', 'true');
             dialog.dataset.fallbackModal = 'true';
             dialog.tabIndex = -1;
@@ -743,13 +788,14 @@
 
         resultPromise = new Promise(function (resolveResultFn) { resolveResult = resolveResultFn; });
         document.body.appendChild(dialog);
-        document.body.classList.add('sutra-rich-link-open');
+        if (!inlineEdit) document.body.classList.add('sutra-rich-link-open');
         activeDialog = { close: activeClose };
         updateValidity();
         try {
-            if (usingNativeDialog) dialog.showModal();
+            if (inlineEdit && usingNativeDialog) dialog.show();
+            else if (usingNativeDialog) dialog.showModal();
             else dialog.focus();
-            if (window.SutraModalManager) window.SutraModalManager.sync();
+            if (!inlineEdit && window.SutraModalManager) window.SutraModalManager.sync();
         } catch (error) {
             close(null, false);
             return resultPromise;
@@ -762,70 +808,225 @@
         window.addEventListener('pagehide', onPageHide);
         window.addEventListener('popstate', onNavigate);
         window.addEventListener('hashchange', onNavigate);
-        hrefField.focus();
+        if (inlineEdit) {
+            document.addEventListener('pointerdown', onOutsidePointer, true);
+            document.addEventListener('scroll', updatePosition, true);
+            window.addEventListener('resize', updatePosition);
+            dialog.addEventListener('focusout', onFocusOut);
+            updatePosition();
+        }
+        (inlineEdit ? labelField : hrefField).focus();
         return resultPromise;
     }
 
-    function preview(link, callbacks) {
-        if (!link || !safeHttpUrl(link.href)) return false;
-        var actions = callbacks || {};
-        var card = createLinkCard(link, {
-            onEdit: typeof actions.onEdit === 'function' ? function () { close(); actions.onEdit(); } : null,
-            onRemove: typeof actions.onRemove === 'function' ? function () { close(); actions.onRemove(); } : null
-        });
-        if (!card) return false;
-        var dialog = document.createElement('dialog');
-        dialog.className = 'sutra-rich-link-dialog sutra-rich-link-preview-dialog';
-        dialog.setAttribute('aria-label', 'Link preview');
-        var closeButton = textElement('button', 'sutra-rich-link-secondary', 'Close preview');
-        closeButton.type = 'button';
-        closeButton.setAttribute('data-modal-close', 'true');
-        var closed = false;
-        function close() {
-            if (closed) return;
-            closed = true;
-            window.removeEventListener('noteflow:view-changed', close);
-            window.removeEventListener('sutra:note-page-loaded', close);
-            window.removeEventListener('sutra:workspace-lock-changed', close);
-            window.removeEventListener('sutra:note-page-locked', close);
-            window.removeEventListener('sutra:workspace-remote-commit', close);
-            window.removeEventListener('pagehide', close);
-            if (dialog.open && typeof dialog.close === 'function') dialog.close();
-            dialog.remove();
-            if (window.SutraModalManager) window.SutraModalManager.sync();
+    function positionPopover(popover, anchor) {
+        var rect = anchor.getBoundingClientRect();
+        var margin = 8;
+        var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        var viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+        var width = popover.offsetWidth || 320;
+        var height = popover.offsetHeight || 80;
+        var left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
+        var top = rect.bottom + 8;
+        if (top + height > viewportHeight - margin && rect.top - height - 8 >= margin) top = rect.top - height - 8;
+        popover.style.left = Math.round(left) + 'px';
+        popover.style.top = Math.round(Math.max(margin, top)) + 'px';
+    }
+
+    function iconButton(iconName, label) {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'sutra-rich-link-popup-action';
+        button.setAttribute('aria-label', label);
+        button.title = label;
+        var icon = document.createElement('i');
+        icon.className = 'fas ' + iconName;
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
+        return button;
+    }
+
+    function copyText(text) {
+        var clipboard = window.navigator && window.navigator.clipboard;
+        if (clipboard && typeof clipboard.writeText === 'function') {
+            try { return Promise.resolve(clipboard.writeText(text)).catch(function () { return copyTextFallback(text); }); }
+            catch (error) { return copyTextFallbackPromise(text); }
         }
-        closeButton.addEventListener('click', close);
-        dialog.addEventListener('close', close);
-        dialog.addEventListener('cancel', close);
-        dialog.addEventListener('click', function (event) {
-            if (event.target === dialog || event.target.closest('.sutra-rich-link-card-actions button')) close();
-        });
-        dialog.appendChild(card);
-        dialog.appendChild(closeButton);
-        document.body.appendChild(dialog);
-        if (typeof dialog.showModal !== 'function') { dialog.remove(); return false; }
-        try { dialog.showModal(); } catch (_) { dialog.remove(); return false; }
-        if (window.SutraModalManager) window.SutraModalManager.sync();
-        window.addEventListener('noteflow:view-changed', close);
-        window.addEventListener('sutra:note-page-loaded', close);
-        window.addEventListener('sutra:workspace-lock-changed', close);
-        window.addEventListener('sutra:note-page-locked', close);
-        window.addEventListener('sutra:workspace-remote-commit', close);
-        window.addEventListener('pagehide', close);
+        return copyTextFallbackPromise(text);
+    }
+
+    function copyTextFallbackPromise(text) {
+        try { return Promise.resolve(copyTextFallback(text)); }
+        catch (error) { return Promise.reject(error); }
+    }
+
+    function copyTextFallback(text) {
+        if (typeof document.execCommand !== 'function') throw new Error('Clipboard access is unavailable.');
+        var field = document.createElement('textarea');
+        var focusTarget = document.activeElement;
+        field.value = text;
+        field.setAttribute('readonly', '');
+        field.setAttribute('aria-hidden', 'true');
+        field.style.position = 'fixed';
+        field.style.left = '-10000px';
+        field.style.top = '0';
+        document.body.appendChild(field);
+        field.select();
+        var copied = false;
+        try { copied = document.execCommand('copy'); }
+        finally {
+            field.remove();
+            if (focusTarget && focusTarget.isConnected && typeof focusTarget.focus === 'function') {
+                try { focusTarget.focus({ preventScroll: true }); } catch (error) { try { focusTarget.focus(); } catch (ignored) {} }
+            }
+        }
+        if (!copied) throw new Error('The browser declined the copy request.');
         return true;
     }
 
-    // Stored/read-mode markup has no editor NodeView. Preview locally on click;
-    // opening the destination remains an explicit action inside the preview.
+    function preview(link, callbacks, sourceAnchor) {
+        var url = link && safeHttpUrl(link.href);
+        if (!url) return false;
+        var actions = callbacks || {};
+        var anchor = sourceAnchor || (activatedAnchor && activatedAnchor.isConnected ? activatedAnchor : null);
+        activatedAnchor = null;
+        if (!anchor) return false;
+        if (activeDialog && typeof activeDialog.close === 'function') activeDialog.close(false);
+        if (activePopup && typeof activePopup.close === 'function') activePopup.close(false);
+
+        var popup = document.createElement('dialog');
+        popup.className = 'sutra-rich-link-popup';
+        popup.setAttribute('role', 'dialog');
+        popup.setAttribute('aria-modal', 'false');
+        popup.setAttribute('aria-label', 'Link actions');
+        var row = document.createElement('div');
+        row.className = 'sutra-rich-link-popup-row';
+        var openLink = document.createElement('a');
+        openLink.className = 'sutra-rich-link-popup-url';
+        openLink.href = url.href;
+        openLink.target = '_blank';
+        openLink.rel = 'noopener noreferrer';
+        openLink.referrerPolicy = 'no-referrer';
+        openLink.title = url.href;
+        openLink.setAttribute('aria-label', 'Open link: ' + url.href);
+        var linkIcon = document.createElement('i');
+        linkIcon.className = 'fas fa-link';
+        linkIcon.setAttribute('aria-hidden', 'true');
+        openLink.appendChild(linkIcon);
+        openLink.appendChild(textElement('span', 'sutra-rich-link-popup-url-text', url.href));
+        row.appendChild(openLink);
+
+        var copyButton = iconButton('fa-copy', 'Copy link');
+        var editButton = typeof actions.onEdit === 'function' ? iconButton('fa-pen', 'Edit link') : null;
+        var unlinkButton = typeof actions.onRemove === 'function' ? iconButton('fa-unlink', 'Remove link') : null;
+        row.appendChild(copyButton);
+        if (editButton) row.appendChild(editButton);
+        if (unlinkButton) row.appendChild(unlinkButton);
+        popup.appendChild(row);
+        var status = textElement('span', 'sutra-rich-link-popup-status', '');
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        popup.appendChild(status);
+
+        var closed = false;
+        var anchorContainer = anchor.closest('[data-sutra-rich-link]');
+        function close(restoreFocus) {
+            if (closed) return;
+            closed = true;
+            window.removeEventListener('noteflow:view-changed', closePopup);
+            window.removeEventListener('sutra:note-page-loaded', closePopup);
+            window.removeEventListener('sutra:workspace-lock-changed', closePopup);
+            window.removeEventListener('sutra:note-page-locked', closePopup);
+            window.removeEventListener('sutra:workspace-remote-commit', closePopup);
+            window.removeEventListener('pagehide', closePopup);
+            document.removeEventListener('pointerdown', onOutsidePointer, true);
+            document.removeEventListener('scroll', updatePosition, true);
+            window.removeEventListener('resize', updatePosition);
+            popup.removeEventListener('focusout', onFocusOut);
+            popup.removeEventListener('keydown', onKeydown);
+            if (popup.open && typeof popup.close === 'function') popup.close();
+            popup.remove();
+            if (activePopup && activePopup.close === close) activePopup = null;
+            var focusTarget = anchor.isConnected ? anchor : (anchorContainer && anchorContainer.querySelector('a'));
+            if (restoreFocus && focusTarget && focusTarget.isConnected && typeof focusTarget.focus === 'function') {
+                try { focusTarget.focus({ preventScroll: true }); } catch (error) { try { focusTarget.focus(); } catch (ignored) {} }
+            }
+        }
+
+        function closePopup() { close(false); }
+        function onOutsidePointer(event) {
+            if (!popup.contains(event.target) && !anchor.contains(event.target)) close(false);
+        }
+        function onFocusOut() {
+            window.setTimeout(function () {
+                if (!closed && !popup.contains(document.activeElement)) close(false);
+            }, 0);
+        }
+        function onKeydown(event) {
+            if (event.key === 'Escape') { event.preventDefault(); close(true); }
+        }
+        function updatePosition() {
+            if (!anchor.isConnected) { close(false); return; }
+            positionPopover(popup, anchor);
+        }
+        copyButton.addEventListener('click', function () {
+            copyText(url.href).then(function () { if (!closed) setText(status, 'Link copied.'); }).catch(function () {
+                if (!closed) setText(status, 'Could not copy the link.');
+            });
+        });
+        if (editButton) editButton.addEventListener('click', function () {
+            close(false);
+            pendingInlineEdit = { anchor: anchor, anchorContainer: anchorContainer };
+            try { actions.onEdit({ href: url.href, label: plainLabel(link.label, url.href) }); }
+            finally {
+                window.setTimeout(function () {
+                    if (pendingInlineEdit && pendingInlineEdit.anchor === anchor) pendingInlineEdit = null;
+                }, 0);
+            }
+        });
+        if (unlinkButton) unlinkButton.addEventListener('click', function () {
+            close(false);
+            actions.onRemove({ href: url.href, label: plainLabel(link.label, url.href) });
+        });
+        openLink.addEventListener('click', function () { close(false); });
+        popup.addEventListener('cancel', function (event) { event.preventDefault(); close(true); });
+        popup.addEventListener('focusout', onFocusOut);
+        popup.addEventListener('keydown', onKeydown);
+        document.body.appendChild(popup);
+        try {
+            if (typeof popup.show === 'function') popup.show();
+            else popup.setAttribute('open', '');
+        } catch (error) { popup.remove(); return false; }
+        activePopup = { close: close };
+        document.addEventListener('pointerdown', onOutsidePointer, true);
+        document.addEventListener('scroll', updatePosition, true);
+        window.addEventListener('resize', updatePosition);
+        window.addEventListener('noteflow:view-changed', closePopup);
+        window.addEventListener('sutra:note-page-loaded', closePopup);
+        window.addEventListener('sutra:workspace-lock-changed', closePopup);
+        window.addEventListener('sutra:note-page-locked', closePopup);
+        window.addEventListener('sutra:workspace-remote-commit', closePopup);
+        window.addEventListener('pagehide', closePopup);
+        updatePosition();
+        try { copyButton.focus({ preventScroll: true }); } catch (error) { copyButton.focus(); }
+        return true;
+    }
+
+    // Stored/read-mode markup has no editor NodeView. Keep ordinary modified
+    // clicks native; an unmodified activation opens the local action popover.
     document.addEventListener('click', function (event) {
-        if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
         var anchor = event.target.closest && event.target.closest('a');
         var wrapper = anchor && anchor.closest('[data-sutra-rich-link]');
-        if (!wrapper || wrapper.closest('.editor-v2-host')) return;
+        if (!wrapper) return;
+        if (activationClearTimer) window.clearTimeout(activationClearTimer);
+        activatedAnchor = anchor;
+        activationClearTimer = window.setTimeout(function () { activatedAnchor = null; activationClearTimer = null; }, 0);
+        if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        if (wrapper.closest('.editor-v2-host')) return;
         var link;
         try { link = JSON.parse(wrapper.getAttribute('data-sutra-rich-link')); } catch (_) { return; }
-        if (preview(link)) event.preventDefault();
-    });
+        if (preview(link, null, anchor)) event.preventDefault();
+    }, true);
 
     window.SutraRichLinks = {
         open: openLinkDialog,

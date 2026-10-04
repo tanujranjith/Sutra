@@ -237,6 +237,7 @@ async function acceptRestoreConflictChooser(page) {
 // the standard backup-passphrase dialog. Complete it so the import proceeds;
 // the resulting .sutra download is captured by Playwright's temp storage.
 async function completeSafetySnapshotDialog(page, pass = PASS) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', pass);
@@ -249,6 +250,7 @@ async function completeSafetySnapshotDialog(page, pass = PASS) {
 // Decline path: cancelling the snapshot passphrase must cancel the whole
 // import — the workspace stays exactly as it was.
 async function declineSafetySnapshotDialog(page) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.locator('#sutraBackupPasswordCancelBtn').click();
@@ -638,6 +640,7 @@ test('pre-restore safety snapshot is encrypted and never a plaintext JSON side e
   // produces and prove it is an encrypted .sutra envelope containing none of
   // the current workspace's plaintext.
   const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', PASS);

@@ -85,6 +85,16 @@ Selection, active tool, and minimap visibility stay in memory; visual styling
 does not add workspace fields or change object data. Locked linked notes remain
 subject to the existing page authorization checks.
 
+Text boxes, sticky notes, and shape text save each edit to the current object by
+ID. Resizing or resetting the viewport preserves that text. Backspace/Delete,
+arrows, selection, and Undo stay with a focused text field; board shortcuts only
+act outside text editing. A text-edit session creates one board Undo checkpoint.
+Linked-note cards show the opening lines, or an explicit empty/locked-note hint;
+their Open action retains the normal note navigation and authorization path.
+
+Both modern and classic slash menus keep the selected command visible during
+arrow-key navigation without scrolling the document behind the menu.
+
 An authored timeline is a separate Canvas object from scheduled-item cards.
 Read its scrollable body, drag its header to move it, or use **Edit timeline**
 to change the local draft before saving. It follows normal Canvas Undo/Redo.

@@ -5,6 +5,29 @@
     --canvas-control-size: 44px;
 }
 
+.canvas-object-text {
+    user-select: text;
+    cursor: text;
+    box-sizing: border-box;
+}
+
+.canvas-object-linked-note { overflow: hidden; }
+.canvas-object-linked-note > strong {
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.canvas-object-linked-note > p {
+    flex: 1 1 auto;
+    min-height: 0;
+    line-height: 1.45;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+.canvas-object-linked-note > .canvas-card-open,
+.canvas-object-linked-note > .canvas-linked-card-kicker { flex-shrink: 0; }
+
 .canvas-object-content-timeline {
     display: flex;
     flex-direction: column;

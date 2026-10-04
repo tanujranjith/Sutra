@@ -3,8 +3,10 @@
 Slides is a local Create surface for building short class presentations without
 leaving Sutra. A Slides deck belongs to one normal Note page and is created from
 the New Page dialog. Choose **Slides**, set an optional title and parent
-location, choose **Title slide** or **Blank slide**, then confirm with **Create
-slides**. Selecting a type only prepares the dialog; it does not create a page.
+location, then choose **Title slide**, **Blank slide**, **Class presentation**,
+**Research report**, or **Project pitch**. The dialog shows the selected starter's
+description before you confirm with **Create slides**. Selecting a type or starter
+only prepares the dialog; it does not create a page.
 The deck lives at `page.slides`, which deliberately keeps ordinary note content
 and unknown page fields intact.
 
@@ -20,8 +22,8 @@ Authored timelines are separate `content-timeline` elements; see
 portable text rendering.
 
 The current interaction state—selected slide, selected element, inspector
-visibility, and presenter position—is session-only. It is never persisted, so
-opening a deck does not cause Sync churn.
+visibility, canvas zoom, and presenter position—is session-only. It is never
+persisted, so opening a deck does not cause Sync churn.
 
 ## Workbench editing
 
@@ -40,14 +42,23 @@ and do not become durable fields. Presentation mode uses read-only elements,
 supports keyboard navigation, and lets a presenter toggle speaker notes with
 `N`.
 
-The workbench groups **Insert**, **History**, and **Slide** actions and keeps
-**Present** visible as the primary action. Its header and selection guidance
-identify the current presentation, slide, and selected object. An empty slide
-offers **Add text** and **Choose a layout**. Design and speaker-notes panels use
-disclosures; they start open on wide layouts and collapsed on narrow layouts.
-Use **Rename slide** to edit a title. Changing a layout that would replace
-existing slide objects asks for confirmation; the change remains undoable and
-retains the slide title, speaker notes, and background.
+The compact toolbar groups **Insert**, **History**, and **Slide** actions and
+keeps **New slide** and **Present** visible. Only one toolbar menu opens at a
+time. Choosing an action, clicking outside the toolbar, or pressing Escape
+closes it; Escape returns focus to its heading. Moving focus within a menu does
+not close it. Slide thumbnails preview their contents and follow the deck's
+16:9 or 4:3 ratio. The **Fit**, **−**, and **+** controls size the current slide
+within the workspace; zoom is session-only and resets to Fit when another page
+opens.
+
+The header and selection guidance identify the current presentation, slide,
+and selected object. An empty slide offers **Add text** and **Choose a layout**.
+The Slide design disclosure starts open on wide layouts and collapsed on narrow
+layouts. Selected object and Import and export disclosures start collapsed.
+Speaker notes start collapsed at every size and open when selected. Use
+**Rename slide** to edit a title. Changing a layout that would replace existing
+slide objects asks for confirmation; the change remains undoable and retains
+the slide title, speaker notes, and background.
 
 ## Local-first behavior
 
@@ -78,9 +89,9 @@ before very large decks should be encouraged.
 ## Exports and presenter
 
 The **Import and export** section offers browser printing for PDF output. This
-is a simple landscape print view: it emits slide text in order, omits inline
-images, and does not preserve object placement or faithfully render native
-charts and tables. Use it as a quick print path, not a faithful deck export.
+landscape print view retains slide object positions and fits text to each
+object's slide-relative box. It omits inline images; tables and charts print
+their available text rather than their native visual layout.
 The presenter uses the full viewport, speaker notes, arrow/space navigation,
 and Escape to exit.
 

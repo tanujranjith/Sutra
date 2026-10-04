@@ -1,12 +1,13 @@
 /*
- * Inline AI review dialog for Notes. The editor owns context capture, request
- * construction/provider disclosure, and the final editor transaction.
+ * Contextual writing workspace hosted inside the canonical Sutra Assistant
+ * panel. The Notes editor owns context capture, provider request construction,
+ * send disclosure, and the final editor transaction.
  *
  * API: window.SutraInlineAIAssist.open({ contextText, selectedText?, request, isCurrent })
  *   request({ instruction, contextText, selectedText, signal }) -> Promise<string>
- *   isCurrent() -> boolean; checked before generation, after response, and on approval.
- * Resolves to { action: 'replace'|'insert', text } only after an explicit review
- * choice, or null when dismissed/stale. No workspace data is saved here.
+ *   isCurrent() -> boolean; checked before generation, after response, and approval.
+ * Resolves to { action: 'replace'|'insert', text } only after explicit review,
+ * or null when dismissed/stale. This UI never writes workspace content.
  */
 (function (global, doc) {
     'use strict';
@@ -64,21 +65,6 @@
         session.previewWrap.hidden = true;
     }
 
-    function markStale(session, message) {
-        if (session.closed) return;
-        session.stale = true;
-        if (session.controller && !session.controller.signal.aborted) {
-            try { session.controller.abort(); } catch (error) { /* best-effort cancellation */ }
-        }
-        session.controller = null;
-        session.requestSequence += 1;
-        setPending(session, false);
-        session.generate.disabled = true;
-        disableApproval(session);
-        setError(session, message || 'This note is no longer current or is locked. Nothing was applied. Close this dialog and reopen AI help from the current note.');
-        setStatus(session, 'The draft cannot be applied to the current note.');
-    }
-
     function removeSessionListeners(session) {
         global.removeEventListener('noteflow:view-changed', session.onViewChanged, true);
         global.removeEventListener('sutra:note-page-loaded', session.onPageLoaded, true);
@@ -88,15 +74,31 @@
         global.removeEventListener('pagehide', session.onNavigate, true);
         global.removeEventListener('popstate', session.onNavigate, true);
         global.removeEventListener('hashchange', session.onNavigate, true);
-        session.root.removeEventListener('click', session.onBackdropClick);
-        session.closeButton.removeEventListener('click', session.onCloseClick);
-        session.cancelButton.removeEventListener('click', session.onCloseClick);
-        session.cancelRequest.removeEventListener('click', session.onCancelRequest);
-        session.generate.removeEventListener('click', session.onGenerate);
-        session.instruction.removeEventListener('input', session.onInstructionInput);
-        session.preview.removeEventListener('input', session.onPreviewInput);
-        session.replace.removeEventListener('click', session.onReplace);
-        session.insert.removeEventListener('click', session.onInsert);
+        if (session.panelObserver) session.panelObserver.disconnect();
+        if (session.panelCloseButton) session.panelCloseButton.removeEventListener('click', session.onPanelCloseClick, true);
+        if (session.backButton) session.backButton.removeEventListener('click', session.onBackClick);
+        if (session.cancelRequest) session.cancelRequest.removeEventListener('click', session.onCancelRequest);
+        if (session.generate) session.generate.removeEventListener('click', session.onGenerate);
+        if (session.replace) session.replace.removeEventListener('click', session.onReplace);
+        if (session.insert) session.insert.removeEventListener('click', session.onInsert);
+        if (session.root) {
+            session.root.removeEventListener('input', session.onInput);
+        }
+    }
+
+    function restorePanelMode(session) {
+        if (!session.panel) return;
+        session.panel.classList.remove('sutra-inline-ai-mode');
+        if (session.root && session.root.parentNode) session.root.parentNode.removeChild(session.root);
+        if (session.restoreFullscreen && assistantPanelIsVisible(session.panel)) {
+            session.panel.classList.add('fullscreen');
+        }
+        var focusTarget = session.returnFocus;
+        var canRestoreFocus = assistantPanelIsVisible(session.panel) && ownerIsCurrent(session);
+        if (canRestoreFocus && focusTarget && focusTarget.isConnected && typeof focusTarget.focus === 'function') {
+            try { if (global.getComputedStyle && global.getComputedStyle(focusTarget).display === 'none') return; } catch (error) { /* best-effort visibility check */ }
+            try { focusTarget.focus({ preventScroll: true }); } catch (error) { try { focusTarget.focus(); } catch (_) {} }
+        }
     }
 
     function closeSession(session, result) {
@@ -108,13 +110,7 @@
         }
         session.controller = null;
         removeSessionListeners(session);
-        session.root.classList.remove('active');
-        session.root.setAttribute('aria-hidden', 'true');
-        var manager = global.SutraModalManager;
-        if (manager && typeof manager.sync === 'function') {
-            try { manager.sync(); } catch (error) { /* closing must remain reliable */ }
-        }
-        if (session.root.parentNode) session.root.parentNode.removeChild(session.root);
+        restorePanelMode(session);
         if (currentSession === session) currentSession = null;
         session.resolve(result || null);
     }
@@ -127,14 +123,15 @@
         }
         session.controller = null;
         setPending(session, false);
-        setError(session, 'The request was cancelled. You can edit the prompt and try again.');
-        setStatus(session, 'Request cancelled.');
+        setError(session, 'The request was cancelled. You can edit the instruction and try again.');
+        setStatus(session, 'Request cancelled. No note changes were made.');
+        session.instruction.focus();
     }
 
     function applyChoice(session, action) {
         if (session.closed || session.stale || !session.hasDraft) return;
         if (!ownerIsCurrent(session)) {
-            markStale(session);
+            closeSession(session, null);
             return;
         }
         var text = session.preview.value;
@@ -169,7 +166,7 @@
         session.replace.hidden = true;
         session.insert.hidden = true;
         setError(session, '');
-        setStatus(session, 'Generating a draft…');
+        setStatus(session, 'Preparing a draft with the configured Assistant provider…');
         setPending(session, true);
 
         Promise.resolve().then(function () {
@@ -184,7 +181,7 @@
             session.controller = null;
             setPending(session, false);
             if (!ownerIsCurrent(session)) {
-                markStale(session);
+                closeSession(session, null);
                 return;
             }
             if (typeof value !== 'string') {
@@ -211,8 +208,8 @@
             session.controller = null;
             setPending(session, false);
             if (wasAborted) {
-                setError(session, 'The request was cancelled. You can edit the prompt and try again.');
-                setStatus(session, 'Request cancelled.');
+                setError(session, 'The request was cancelled. You can edit the instruction and try again.');
+                setStatus(session, 'Request cancelled. No note changes were made.');
                 return;
             }
             var message = error && error.message ? String(error.message) : 'The AI request failed. Check the connection or provider settings and try again.';
@@ -221,52 +218,45 @@
         });
     }
 
-    function makeDialog(options) {
+    function makeWorkbench(options) {
         var id = ++nextSessionId;
-        var root = element('div', 'modal sutra-inline-ai-modal active');
-        root.id = 'sutraInlineAiAssistModal_' + id;
-        root.setAttribute('aria-hidden', 'false');
-        root.setAttribute('data-sutra-inline-ai-assist', 'true');
-
-        var dialog = element('section', 'modal-content sutra-inline-ai-dialog');
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.setAttribute('aria-labelledby', 'sutraInlineAiAssistTitle_' + id);
-        dialog.setAttribute('tabindex', '-1');
+        var root = element('section', 'sutra-inline-ai-workbench');
+        root.id = 'sutraInlineAiAssist_' + id;
+        root.setAttribute('role', 'region');
+        root.setAttribute('aria-labelledby', 'sutraInlineAiAssistTitle_' + id);
+        root.setAttribute('aria-busy', 'false');
 
         var header = element('header', 'sutra-inline-ai-header');
-        var heading = element('h2', 'sutra-inline-ai-title', 'AI writing help');
+        var heading = element('h2', 'sutra-inline-ai-title', 'Note writing help');
         heading.id = 'sutraInlineAiAssistTitle_' + id;
-        var closeButton = element('button', 'sutra-inline-ai-icon-button', '×');
-        closeButton.type = 'button';
-        closeButton.setAttribute('aria-label', 'Close AI writing help without applying a draft');
-        closeButton.setAttribute('data-modal-close', 'true');
-        closeButton.title = 'Close';
+        var backButton = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary sutra-inline-ai-back', 'Back to chat');
+        backButton.type = 'button';
         header.appendChild(heading);
-        header.appendChild(closeButton);
+        header.appendChild(backButton);
 
         var body = element('div', 'sutra-inline-ai-body');
-        var disclosure = element('p', 'sutra-inline-ai-disclosure', 'Generate sends your instruction and the note text shown here to your configured AI provider. Review any provider send confirmation before continuing. Your note changes only after you approve a draft.');
+        var disclosure = element('p', 'sutra-inline-ai-disclosure',
+            'Generate sends the instruction and note text shown here through your configured Sutra Assistant provider. Review its send confirmation before continuing. Nothing is sent until you choose Generate, and your note changes only after you approve a draft.');
 
-        var instructionLabel = element('label', 'sutra-inline-ai-label', 'What should the AI do?');
+        var instructionLabel = element('label', 'sutra-inline-ai-label', 'What should Sutra do?');
         instructionLabel.htmlFor = 'sutraInlineAiInstruction_' + id;
         var instruction = element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-instruction');
         instruction.id = instructionLabel.htmlFor;
         instruction.rows = 3;
         instruction.maxLength = 2000;
         instruction.value = 'Improve clarity while preserving my meaning.';
-        instruction.setAttribute('data-autofocus', 'true');
+        instruction.setAttribute('spellcheck', 'true');
 
         var contextDetails = element('details', 'sutra-inline-ai-context');
         contextDetails.open = true;
-        var contextSummary = element('summary', '', 'Text context included');
+        var contextSummary = element('summary', '', 'Note passage included');
         var contextText = element('pre', 'sutra-inline-ai-context-text', options.contextText);
         contextDetails.appendChild(contextSummary);
         contextDetails.appendChild(contextText);
 
         var selectionDetails = element('details', 'sutra-inline-ai-context sutra-inline-ai-selection');
         selectionDetails.open = !!options.selectedText;
-        var selectionSummary = element('summary', '', options.selectedText ? 'Selected text included' : 'No separate selection included');
+        var selectionSummary = element('summary', '', options.selectedText ? 'Selected text included' : 'No separate selection');
         var selectionText = element('pre', 'sutra-inline-ai-context-text', options.selectedText || 'The request will receive no separate selected-text value.');
         selectionDetails.appendChild(selectionSummary);
         selectionDetails.appendChild(selectionText);
@@ -280,11 +270,11 @@
 
         var previewWrap = element('div', 'sutra-inline-ai-preview-wrap');
         previewWrap.hidden = true;
-        var previewLabel = element('label', 'sutra-inline-ai-label', 'AI draft — edit before accepting');
+        var previewLabel = element('label', 'sutra-inline-ai-label', 'Assistant draft — edit before accepting');
         previewLabel.htmlFor = 'sutraInlineAiPreview_' + id;
         var preview = element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-preview');
         preview.id = previewLabel.htmlFor;
-        preview.rows = 9;
+        preview.rows = 8;
         preview.maxLength = MAX_RESULT_LENGTH;
         preview.setAttribute('spellcheck', 'true');
         previewWrap.appendChild(previewLabel);
@@ -300,8 +290,6 @@
         body.appendChild(previewWrap);
 
         var footer = element('footer', 'sutra-inline-ai-footer');
-        var cancelButton = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary', 'Cancel');
-        cancelButton.type = 'button';
         var cancelRequest = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary', 'Cancel request');
         cancelRequest.type = 'button';
         cancelRequest.hidden = true;
@@ -315,20 +303,17 @@
         insert.type = 'button';
         insert.disabled = true;
         insert.hidden = true;
-        footer.appendChild(cancelButton);
         footer.appendChild(cancelRequest);
         footer.appendChild(generate);
         footer.appendChild(replace);
         footer.appendChild(insert);
 
-        dialog.appendChild(header);
-        dialog.appendChild(body);
-        dialog.appendChild(footer);
-        root.appendChild(dialog);
+        root.appendChild(header);
+        root.appendChild(body);
+        root.appendChild(footer);
         return {
             root: root,
-            closeButton: closeButton,
-            cancelButton: cancelButton,
+            backButton: backButton,
             cancelRequest: cancelRequest,
             generate: generate,
             replace: replace,
@@ -341,12 +326,39 @@
         };
     }
 
+    function assistantPanelIsVisible(panel) {
+        if (!panel || panel.style.display !== 'flex') return false;
+        try {
+            return !global.getComputedStyle || global.getComputedStyle(panel).display !== 'none';
+        } catch (error) { return true; }
+    }
+
+    function openAssistantPanel(panel) {
+        if (assistantPanelIsVisible(panel)) return true;
+        var bridge = global.flowAtelier;
+        var toggle = bridge && typeof bridge.toggleChat === 'function' ? bridge.toggleChat : global.toggleChat;
+        if (typeof toggle !== 'function') return false;
+        if (doc.body && doc.body.classList.contains('focus-mode')) return false;
+        var oldDisplay = panel.style.display;
+        var oldAriaHidden = panel.getAttribute('aria-hidden');
+        var launcher = doc.getElementById('chatbotBtn');
+        var oldLauncherDisplay = launcher ? launcher.style.display : '';
+        var hadLayoutOpen = !!(doc.body && doc.body.classList.contains('assistant-panel-open'));
+        try { toggle(); } catch (error) { /* restore the prior panel state below */ }
+        if (assistantPanelIsVisible(panel)) return true;
+        panel.style.display = oldDisplay;
+        if (oldAriaHidden == null) panel.removeAttribute('aria-hidden');
+        else panel.setAttribute('aria-hidden', oldAriaHidden);
+        if (launcher) launcher.style.display = oldLauncherDisplay;
+        if (doc.body) doc.body.classList.toggle('assistant-panel-open', hadLayoutOpen);
+        return false;
+    }
+
     function open(options) {
         options = options && typeof options === 'object' ? options : {};
         if (currentSession) closeSession(currentSession, null);
         if (typeof options.request !== 'function' || typeof options.isCurrent !== 'function') return Promise.resolve(null);
-        var manager = global.SutraModalManager;
-        if (!manager || typeof manager.sync !== 'function' || !doc.body) return Promise.resolve(null);
+        if (!doc.body) return Promise.resolve(null);
 
         var normalized = {
             contextText: safeText(options.contextText),
@@ -358,14 +370,25 @@
         try { current = normalized.isCurrent() === true; } catch (error) { current = false; }
         if (!current) return Promise.resolve(null);
 
-        var ui = makeDialog(normalized);
+        var panel = doc.getElementById('chatbotPanel');
+        if (!panel || !openAssistantPanel(panel)) {
+            try {
+                var notify = global.flowAtelier && global.flowAtelier.showToast || global.showToast;
+                if (typeof notify === 'function') notify('Sutra Assistant is unavailable right now. Enable it in Settings or leave Focus mode, then try again.');
+            } catch (error) { /* best-effort notice */ }
+            return Promise.resolve(null);
+        }
+
+        var ui = makeWorkbench(normalized);
         var session = {
             options: normalized,
             contextText: normalized.contextText,
             selectedText: normalized.selectedText,
+            panel: panel,
+            restoreFullscreen: panel.classList.contains('fullscreen'),
             root: ui.root,
-            closeButton: ui.closeButton,
-            cancelButton: ui.cancelButton,
+            backButton: ui.backButton,
+            panelCloseButton: doc.getElementById('chatCloseBtn'),
             cancelRequest: ui.cancelRequest,
             generate: ui.generate,
             replace: ui.replace,
@@ -381,7 +404,8 @@
             hasDraft: false,
             stale: false,
             closed: false,
-            resolve: null
+            resolve: null,
+            returnFocus: doc.activeElement
         };
         var promise = new Promise(function (resolve) { session.resolve = resolve; });
 
@@ -391,44 +415,68 @@
             if (!event || !event.detail || event.detail.locked !== false) closeSession(session, null);
         };
         session.onNavigate = function () { closeSession(session, null); };
-        session.onBackdropClick = function (event) {
-            if (event.target === session.root) closeSession(session, null);
+        session.onPanelCloseClick = function () {
+            global.setTimeout(function () {
+                if (!session.closed && !assistantPanelIsVisible(session.panel)) closeSession(session, null);
+            }, 0);
         };
-        session.onCloseClick = function (event) { event.preventDefault(); closeSession(session, null); };
-        session.onCancelRequest = function (event) { event.preventDefault(); cancelRequest(session); };
-        session.onGenerate = function (event) { event.preventDefault(); requestDraft(session); };
-        session.onInstructionInput = function () {
-            if (session.hasDraft) {
-                session.hasDraft = false;
-                session.preview.value = '';
-                session.previewWrap.hidden = true;
-                session.replace.disabled = true;
-                session.insert.disabled = true;
-                session.replace.hidden = true;
-                session.insert.hidden = true;
-                setStatus(session, 'Prompt changed. Generate a new draft before accepting it.');
+        session.onBackClick = function (event) {
+            if (event.target === session.backButton || session.backButton.contains(event.target)) {
+                event.preventDefault();
+                closeSession(session, null);
             }
-            setError(session, '');
-            session.generate.disabled = session.pending || session.stale || !session.instruction.value.trim();
         };
-        session.onPreviewInput = function () {
-            if (!session.stale) {
+        session.onCancelRequest = function (event) {
+            if (event.target === session.cancelRequest || session.cancelRequest.contains(event.target)) {
+                event.preventDefault();
+                cancelRequest(session);
+            }
+        };
+        session.onGenerate = function (event) {
+            if (event.target === session.generate || session.generate.contains(event.target)) {
+                event.preventDefault();
+                requestDraft(session);
+            }
+        };
+        session.onInput = function (event) {
+            if (event.target === session.instruction) {
+                if (session.hasDraft) {
+                    session.hasDraft = false;
+                    session.preview.value = '';
+                    session.previewWrap.hidden = true;
+                    session.replace.disabled = true;
+                    session.insert.disabled = true;
+                    session.replace.hidden = true;
+                    session.insert.hidden = true;
+                    setStatus(session, 'Instruction changed. Generate a new draft before accepting it.');
+                }
+                setError(session, '');
+                session.generate.disabled = session.pending || session.stale || !session.instruction.value.trim();
+            } else if (event.target === session.preview && !session.stale) {
                 session.replace.disabled = !session.hasDraft || !session.selectedText || !session.selectedText.trim() || !session.preview.value.trim();
                 session.insert.disabled = !session.hasDraft || !session.preview.value.trim();
             }
         };
-        session.onReplace = function (event) { event.preventDefault(); applyChoice(session, 'replace'); };
-        session.onInsert = function (event) { event.preventDefault(); applyChoice(session, 'insert'); };
+        session.onReplace = function (event) {
+            if (event.target === session.replace || session.replace.contains(event.target)) {
+                event.preventDefault();
+                applyChoice(session, 'replace');
+            }
+        };
+        session.onInsert = function (event) {
+            if (event.target === session.insert || session.insert.contains(event.target)) {
+                event.preventDefault();
+                applyChoice(session, 'insert');
+            }
+        };
 
-        session.closeButton.addEventListener('click', session.onCloseClick);
-        session.cancelButton.addEventListener('click', session.onCloseClick);
+        session.backButton.addEventListener('click', session.onBackClick);
         session.cancelRequest.addEventListener('click', session.onCancelRequest);
         session.generate.addEventListener('click', session.onGenerate);
-        session.instruction.addEventListener('input', session.onInstructionInput);
-        session.preview.addEventListener('input', session.onPreviewInput);
+        session.root.addEventListener('input', session.onInput);
         session.replace.addEventListener('click', session.onReplace);
         session.insert.addEventListener('click', session.onInsert);
-        session.root.addEventListener('click', session.onBackdropClick);
+        if (session.panelCloseButton) session.panelCloseButton.addEventListener('click', session.onPanelCloseClick, true);
         global.addEventListener('noteflow:view-changed', session.onViewChanged, true);
         global.addEventListener('sutra:note-page-loaded', session.onPageLoaded, true);
         global.addEventListener('sutra:workspace-lock-changed', session.onWorkspaceLock, true);
@@ -438,11 +486,22 @@
         global.addEventListener('popstate', session.onNavigate, true);
         global.addEventListener('hashchange', session.onNavigate, true);
 
-        currentSession = session;
-        doc.body.appendChild(session.root);
-        try { manager.sync(); } catch (error) {
-            closeSession(session, null);
+        if (typeof global.MutationObserver === 'function') {
+            session.panelObserver = new global.MutationObserver(function () {
+                if (!session.closed && !assistantPanelIsVisible(session.panel)) closeSession(session, null);
+            });
+            session.panelObserver.observe(panel, { attributes: true, attributeFilter: ['style', 'class'] });
         }
+
+        currentSession = session;
+        if (session.restoreFullscreen) panel.classList.remove('fullscreen');
+        panel.classList.add('sutra-inline-ai-mode');
+        var header = panel.querySelector('.chatbot-header');
+        if (header && header.parentNode === panel) panel.insertBefore(session.root, header.nextSibling);
+        else panel.insertBefore(session.root, panel.firstChild);
+        global.setTimeout(function () {
+            if (!session.closed && ownerIsCurrent(session)) session.instruction.focus();
+        }, 150);
         return promise;
     }
 

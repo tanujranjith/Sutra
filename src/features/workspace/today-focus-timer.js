@@ -14,6 +14,12 @@
     var sessionActive = false;
     var dismissed = false;
     var lastSnapshot = { durationSeconds: 25 * 60, remaining: 25 * 60, running: false };
+    var pipWindow = null;
+    var pipElements = null;
+    var pipRefreshTimer = 0;
+    var pipLastTaskRefreshAt = 0;
+    var pipOpening = false;
+    var pipRequestId = 0;
 
     function formatTime(totalSeconds) {
         var seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -53,6 +59,64 @@
             seconds: document.getElementById('todayFocusTimerSeconds'),
             apply: document.getElementById('todayFocusTimerApplyBtn')
         };
+    }
+
+    function makeTodayPipLauncher() {
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'today-focus-timer-secondary';
+        button.id = 'todayFocusTimerPipBtn';
+        button.setAttribute('aria-label', 'Open the always-on-top Focus miniplayer');
+        button.textContent = 'Miniplayer';
+        button.addEventListener('click', openFocusMiniPlayer);
+
+        var status = document.createElement('p');
+        status.className = 'today-focus-timer-pip-status';
+        status.id = 'todayFocusTimerPipStatus';
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        status.hidden = true;
+        return { button: button, status: status };
+    }
+
+    function syncPipAvailability() {
+        var button = document.getElementById('todayFocusTimerPipBtn');
+        var status = document.getElementById('todayFocusTimerPipStatus');
+        var playerButton = document.querySelector('#sutraFocusMiniPlayer [data-focus-player-action="pip"]');
+        var available = window.isSecureContext !== false && !!(window.documentPictureInPicture
+            && typeof window.documentPictureInPicture.requestWindow === 'function');
+        if (button) {
+            button.disabled = !available;
+            button.title = available
+                ? 'Open an always-on-top Focus window'
+                : 'An always-on-top Focus window is unavailable in this browser or page context';
+        }
+        if (playerButton) {
+            playerButton.disabled = !available;
+            playerButton.title = available
+                ? 'Open an always-on-top Focus window'
+                : 'An always-on-top Focus window is unavailable in this browser or page context';
+        }
+        var playerNotice = document.querySelector('#sutraFocusMiniPlayer [data-focus-pip-notice]');
+        if (playerNotice) {
+            playerNotice.textContent = available ? '' : 'Always-on-top miniplayer unavailable in this browser or page context.';
+            playerNotice.hidden = available;
+        }
+        if (status && !available) {
+            status.textContent = 'Always-on-top Focus miniplayer is unavailable in this browser or page context.';
+            status.hidden = false;
+        } else if (status && status.textContent === 'Always-on-top Focus miniplayer is unavailable in this browser or page context.') {
+            status.textContent = '';
+            status.hidden = true;
+        }
+        return available;
+    }
+
+    function setPipStatus(message) {
+        var status = document.getElementById('todayFocusTimerPipStatus');
+        if (!status) return;
+        status.textContent = String(message || '');
+        status.hidden = !message;
     }
 
     function makePlayerButton(action, label, symbol) {
@@ -99,15 +163,21 @@
         status.setAttribute('role', 'status');
         status.setAttribute('aria-live', 'polite');
         status.setAttribute('aria-atomic', 'true');
-        copy.append(heading, clock, status);
+        var pipNotice = document.createElement('span');
+        pipNotice.className = 'sutra-focus-mini-player__pip-notice';
+        pipNotice.setAttribute('data-focus-pip-notice', '');
+        pipNotice.hidden = true;
+        copy.append(heading, clock, status, pipNotice);
 
         var actions = document.createElement('div');
         actions.className = 'sutra-focus-mini-player__actions';
         actions.append(
             makePlayerButton('toggle', 'Pause focus timer', 'Ⅱ'),
             makePlayerButton('full-focus', 'Open full Focus', '↗'),
+            makePlayerButton('pip', 'Open always-on-top Focus miniplayer', '▣'),
             makePlayerButton('dismiss', 'Hide focus timer player', '×')
         );
+        syncPipAvailability();
         controls.append(copy, actions);
 
         var restore = document.createElement('button');
@@ -118,6 +188,7 @@
         restore.hidden = true;
         player.append(controls, restore);
         document.body.appendChild(player);
+        syncPipAvailability();
 
         player.addEventListener('click', function (event) {
             var button = event.target.closest('[data-focus-player-action]');
@@ -128,6 +199,8 @@
                 if (snapshot) render(snapshot);
             } else if (action === 'full-focus') {
                 openFullFocusSession();
+            } else if (action === 'pip') {
+                openFocusMiniPlayer();
             } else if (action === 'dismiss') {
                 dismissed = true;
                 render(lastSnapshot);
@@ -140,6 +213,236 @@
             }
         });
         return player;
+    }
+
+    function buildPipElement(tag, className, text) {
+        var element = pipWindow.document.createElement(tag);
+        if (className) element.className = className;
+        if (text !== undefined) element.textContent = text;
+        return element;
+    }
+
+    function makePipButton(label, action, text) {
+        var button = buildPipElement('button', 'sutra-focus-document-pip__button', text);
+        button.type = 'button';
+        button.setAttribute('data-focus-pip-action', action);
+        button.setAttribute('aria-label', label);
+        button.addEventListener('click', function () {
+            if (action === 'toggle') {
+                var snapshot = dispatchTimerCommand(lastSnapshot.running ? 'pause' : 'start');
+                if (snapshot) render(snapshot);
+            } else if (action === 'return') {
+                try { window.focus(); } catch (error) { /* browser may deny focus */ }
+                closeFocusMiniPlayer();
+            }
+        });
+        return button;
+    }
+
+    function createPipContent(targetWindow) {
+        if (isWorkspaceLocked()) {
+            try { targetWindow.close(); } catch (error) { /* browser may already be closing it */ }
+            return;
+        }
+        pipWindow = targetWindow;
+        var pipDocument = targetWindow.document;
+        pipDocument.title = 'Sutra Focus';
+        pipDocument.documentElement.lang = document.documentElement.lang || 'en';
+        pipDocument.body.className = 'sutra-focus-document-pip-body';
+
+        // Keep the PiP document isolated and use a same-origin stylesheet. No
+        // app shell, workspace markup, script, or remote resource is copied.
+        var stylesheet = pipDocument.createElement('link');
+        stylesheet.rel = 'stylesheet';
+        stylesheet.href = getFocusTimerStylesheetHref();
+        pipDocument.head.appendChild(stylesheet);
+
+        var panel = buildPipElement('main', 'sutra-focus-document-pip');
+        var heading = buildPipElement('div', 'sutra-focus-document-pip__eyebrow', 'SUTRA · FOCUS');
+        var clock = buildPipElement('div', 'sutra-focus-document-pip__time', formatTime(lastSnapshot.remaining));
+        clock.setAttribute('role', 'timer');
+        clock.setAttribute('aria-live', 'off');
+        var timerStatus = buildPipElement('p', 'sutra-focus-document-pip__timer-status', lastSnapshot.running ? 'Running' : (sessionActive ? 'Paused' : 'Ready'));
+        timerStatus.setAttribute('role', 'status');
+        timerStatus.setAttribute('aria-live', 'polite');
+        timerStatus.setAttribute('aria-atomic', 'true');
+
+        var controls = buildPipElement('div', 'sutra-focus-document-pip__controls');
+        var toggle = makePipButton(lastSnapshot.running ? 'Pause focus timer' : 'Start focus timer', 'toggle', lastSnapshot.running ? 'Ⅱ  Pause' : '▶  Start');
+        var returnButton = makePipButton('Return to Sutra and close miniplayer', 'return', 'Return to Sutra');
+        controls.append(toggle, returnButton);
+
+        var taskHeading = buildPipElement('h2', 'sutra-focus-document-pip__tasks-heading', 'Upcoming tasks');
+        var taskStatus = buildPipElement('p', 'sutra-focus-document-pip__tasks-status', 'Loading tasks…');
+        taskStatus.setAttribute('role', 'status');
+        taskStatus.setAttribute('aria-live', 'polite');
+        taskStatus.setAttribute('aria-atomic', 'true');
+        var taskList = buildPipElement('ol', 'sutra-focus-document-pip__tasks');
+        taskList.setAttribute('aria-label', 'Upcoming tasks');
+
+        panel.append(heading, clock, timerStatus, controls, taskHeading, taskStatus, taskList);
+        pipDocument.body.appendChild(panel);
+        pipElements = { clock: clock, timerStatus: timerStatus, toggle: toggle, taskStatus: taskStatus, taskList: taskList };
+        setPipStatus('');
+        renderPipTimer();
+        refreshPipTasks();
+
+        targetWindow.addEventListener('pagehide', function () {
+            if (pipWindow !== targetWindow) return;
+            pipWindow = null;
+            pipElements = null;
+            pipOpening = false;
+            pipLastTaskRefreshAt = 0;
+            if (pipRefreshTimer) window.clearTimeout(pipRefreshTimer);
+            pipRefreshTimer = 0;
+        }, { once: true });
+    }
+
+    function openFocusMiniPlayer() {
+        if (pipWindow && !pipWindow.closed) {
+            try { pipWindow.focus(); } catch (error) { /* focus is optional */ }
+            refreshPipTasks();
+            return;
+        }
+        if (pipOpening) return;
+        var api = window.documentPictureInPicture;
+        if (window.isSecureContext === false || !api || typeof api.requestWindow !== 'function') {
+            syncPipAvailability();
+            setPipStatus('Always-on-top Focus miniplayer is unavailable in this browser or page context.');
+            return;
+        }
+        try {
+            if (api.window && !api.window.closed) {
+                setPipStatus('Close the current picture-in-picture window before opening Focus.');
+                return;
+            }
+        } catch (error) { /* older implementations may omit the current-window property */ }
+        // requestWindow must run directly inside this click handler so the
+        // browser's transient user activation is still present.
+        var opening;
+        pipOpening = true;
+        var requestId = ++pipRequestId;
+        try {
+            opening = api.requestWindow({ width: 380, height: 520 });
+        } catch (error) {
+            pipOpening = false;
+            setPipStatus('The browser could not open the always-on-top Focus miniplayer.');
+            return;
+        }
+        Promise.resolve(opening)
+            .then(function (targetWindow) {
+                if (requestId !== pipRequestId || isWorkspaceLocked()) {
+                    try { targetWindow.close(); } catch (error) { /* browser may already be closing it */ }
+                    return;
+                }
+                pipOpening = false;
+                createPipContent(targetWindow);
+            })
+            .catch(function () {
+                if (requestId === pipRequestId) pipOpening = false;
+                setPipStatus('The browser could not open the always-on-top Focus miniplayer.');
+            });
+    }
+
+    function closeFocusMiniPlayer() {
+        pipRequestId += 1;
+        pipOpening = false;
+        if (pipRefreshTimer) window.clearTimeout(pipRefreshTimer);
+        pipRefreshTimer = 0;
+        pipLastTaskRefreshAt = 0;
+        var current = pipWindow;
+        if (!current || current.closed) {
+            pipWindow = null;
+            pipElements = null;
+            return;
+        }
+        try { current.close(); } catch (error) { /* browser may already be closing it */ }
+    }
+
+    function renderPipTimer() {
+        if (!pipElements || !pipWindow || pipWindow.closed) return;
+        var remaining = Math.max(0, Math.floor(Number(lastSnapshot.remaining) || 0));
+        var running = !!lastSnapshot.running;
+        pipElements.clock.textContent = formatTime(remaining);
+        pipElements.timerStatus.textContent = running ? 'Running' : (sessionActive ? 'Paused' : (remaining > 0 ? 'Ready' : 'Complete'));
+        pipElements.toggle.textContent = running ? 'Ⅱ  Pause' : '▶  ' + (sessionActive ? 'Resume' : 'Start');
+        pipElements.toggle.setAttribute('aria-label', running ? 'Pause focus timer' : (sessionActive ? 'Resume focus timer' : 'Start focus timer'));
+    }
+
+    function refreshPipTasks() {
+        if (!pipElements || !pipWindow || pipWindow.closed) return;
+        if (isWorkspaceLocked()) {
+            closeFocusMiniPlayer();
+            return;
+        }
+        var bridge = window.flowAtelier;
+        var rows = null;
+        pipLastTaskRefreshAt = Date.now();
+        // Keep task data fresh while the canonical timer is paused too. This
+        // uses the same single throttled timeout as change-triggered refreshes;
+        // an already-pending refresh is never postponed or duplicated.
+        schedulePipTaskRefresh(5000);
+        try {
+            if (bridge && typeof bridge.getFocusUpcomingTasks === 'function') {
+                rows = bridge.getFocusUpcomingTasks(5);
+            }
+        } catch (error) { rows = null; }
+        while (pipElements.taskList.firstChild) pipElements.taskList.removeChild(pipElements.taskList.firstChild);
+        if (!Array.isArray(rows)) {
+            pipElements.taskStatus.textContent = 'Upcoming tasks are unavailable right now.';
+            return;
+        }
+        rows = rows.slice(0, 5);
+        rows.forEach(function (row) {
+            if (!row || typeof row !== 'object') return;
+            var item = buildPipElement('li', 'sutra-focus-document-pip__task');
+            var title = String(row.title || 'Untitled task').trim().slice(0, 120);
+            var dueLabel = String(row.dueLabel || '').trim().slice(0, 48);
+            item.appendChild(buildPipElement('span', 'sutra-focus-document-pip__task-title', title || 'Untitled task'));
+            if (dueLabel) item.appendChild(buildPipElement('span', 'sutra-focus-document-pip__task-due', dueLabel));
+            pipElements.taskList.appendChild(item);
+        });
+        if (pipElements.taskList.childNodes.length) {
+            pipElements.taskStatus.textContent = 'Your next ' + pipElements.taskList.childNodes.length + ' task' + (pipElements.taskList.childNodes.length === 1 ? '' : 's') + ' by due date and priority.';
+        } else {
+            pipElements.taskStatus.textContent = 'No upcoming tasks.';
+        }
+    }
+
+    function schedulePipTaskRefresh(delay) {
+        if (!pipWindow || pipWindow.closed) return;
+        // Keep the first pending deadline. Repeated one-second timer updates
+        // must not keep moving the task refresh farther into the future.
+        if (pipRefreshTimer) return;
+        var requestedWait = Math.max(0, Number(delay) || 0);
+        var throttleWait = Math.max(0, 5000 - (Date.now() - pipLastTaskRefreshAt));
+        var wait = Math.max(requestedWait, throttleWait);
+        pipRefreshTimer = window.setTimeout(function () {
+            pipRefreshTimer = 0;
+            refreshPipTasks();
+        }, wait);
+    }
+
+    function getFocusTimerStylesheetHref() {
+        var expected = new URL('styles/views/today-focus-timer.css', window.location.href);
+        var links = document.querySelectorAll('link[rel="stylesheet"][href]');
+        for (var index = 0; index < links.length; index += 1) {
+            try {
+                var candidate = new URL(links[index].href, window.location.href);
+                if (candidate.origin === expected.origin && candidate.pathname === expected.pathname) return candidate.href;
+            } catch (error) { /* Ignore malformed or cross-origin links. */ }
+        }
+        return expected.href;
+    }
+
+    function closeForWorkspaceLock(event) {
+        if (!event || !event.detail || event.detail.locked !== false) closeFocusMiniPlayer();
+    }
+
+    function isWorkspaceLocked() {
+        return !!(document.documentElement
+            && document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true')
+            || !!(document.body && document.body.classList.contains('sutra-revocation-locked'));
     }
 
     function openFullFocusSession() {
@@ -261,6 +564,7 @@
         if (!running) finishAtMs = null;
 
         renderMiniPlayer(lastSnapshot);
+        renderPipTimer();
 
         if (!elements.card || !elements.display) return;
 
@@ -330,6 +634,16 @@
         if (elements.apply) elements.apply.addEventListener('click', setDurationFromInputs);
         if (elements.fullscreen) elements.fullscreen.addEventListener('click', openFullFocusSession);
 
+        if (elements.card) {
+            var timerActions = elements.card.querySelector('.today-focus-timer-actions');
+            if (timerActions && !document.getElementById('todayFocusTimerPipBtn')) {
+                var launcher = makeTodayPipLauncher();
+                timerActions.appendChild(launcher.button);
+                timerActions.parentNode.insertBefore(launcher.status, timerActions.nextSibling);
+            }
+            syncPipAvailability();
+        }
+
         if (elements.card) elements.card.querySelectorAll('[data-today-timer-preset]').forEach(function (button) {
             button.addEventListener('click', function () {
                 var minutes = Math.max(1, Math.floor(Number(button.getAttribute('data-today-timer-preset')) || 25));
@@ -341,6 +655,7 @@
 
         document.addEventListener('sutra:focus-timer-updated', function (event) {
             render(event && event.detail, true);
+            schedulePipTaskRefresh(250);
         });
 
         // Capture pause intent before the core listener changes running state;
@@ -365,6 +680,30 @@
 
         document.addEventListener('focusin', syncKeyboardVisibility);
         document.addEventListener('focusout', function () { window.setTimeout(syncKeyboardVisibility, 0); });
+
+        window.addEventListener('sutra:workspace-remote-commit', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('sutra:schedule-changed', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('homework:updated', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('noteflow:view-changed', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('sutra:workspace-lock-changed', closeForWorkspaceLock);
+        window.addEventListener('sutra:note-page-locked', closeFocusMiniPlayer);
+        window.addEventListener('pagehide', closeFocusMiniPlayer);
+        window.addEventListener('beforeunload', closeFocusMiniPlayer);
+        document.addEventListener('sutra:task-completed', function () { schedulePipTaskRefresh(250); });
+        document.addEventListener('sutra:homework-prefs', function () { schedulePipTaskRefresh(250); });
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) schedulePipTaskRefresh(250); });
+        window.addEventListener('storage', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('focus', function () { schedulePipTaskRefresh(250); });
+
+        if (window.MutationObserver && document.documentElement) {
+            var lockObserver = new MutationObserver(function () {
+                if (isWorkspaceLocked()) {
+                    closeFocusMiniPlayer();
+                }
+            });
+            lockObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-sutra-workspace-locked', 'class'] });
+            if (document.body) lockObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        }
         window.addEventListener('resize', syncKeyboardVisibility);
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', syncKeyboardVisibility);

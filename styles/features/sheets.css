@@ -4,39 +4,47 @@ body.sheets-page-active #notesPrimaryPane > :not(#sheetsEditor) { display: none 
 body.sheets-page-active #view-notes .toolbar-wrapper { display: none !important; }
 body.sheets-page-active #view-notes .editor-container, body.sheets-page-active #notesPrimaryPane, body.sheets-page-active #sheetsEditor { width: 100% !important; max-width: none !important; height: 100%; min-height: 0; padding: 0 !important; }
 body.sheets-page-active #view-notes .editor-container { display: flex; overflow: hidden; }
-.sheets-editor { --sheet-border: color-mix(in srgb, var(--surface-border, var(--border-color, #d7d3c7)) 86%, transparent); --sheet-surface: var(--surface-bg, var(--bg-secondary, #fbfaf5)); --sheet-ink: var(--text-primary, #173d2b); --sheet-accent: var(--accent, var(--accent-color, #635bdf)); display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; color: var(--sheet-ink); background: var(--sheet-surface); border: 1px solid var(--sheet-border); }
-.sheets-context { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 9px 12px; border-bottom: 1px solid var(--sheet-border); }
+.sheets-editor { --sheet-border: color-mix(in srgb, var(--surface-border, var(--border-color, #d7d3c7)) 86%, transparent); --sheet-surface: var(--surface-bg, var(--bg-secondary, #fbfaf5)); --sheet-ink: var(--text-primary, #173d2b); --sheet-accent: var(--accent, var(--accent-color, #635bdf)); display: flex; flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; color: var(--sheet-ink); background: var(--sheet-surface); border: 1px solid var(--sheet-border); }
+.sheets-context { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 5px 12px; border-bottom: 1px solid var(--sheet-border); }
 .sheets-context-title { display: grid; min-width: 0; gap: 2px; }
 .sheets-context-title > span { color: var(--text-secondary, #687079); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .sheets-context-title > strong { overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .sheets-workbook-status { color: var(--text-secondary, #687079); font-size: 12px; text-align: right; }
-.sheets-toolbar { display: grid; flex: 0 0 auto; gap: 8px; min-width: 0; padding: 8px 12px; border-bottom: 1px solid var(--sheet-border); }
-.sheets-toolbar-primary, .sheets-toolbar-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.sheets-toolbar button, .sheets-toolbar select, .sheets-tabs-bar button { min-height: 36px; flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--sheet-border); border-radius: 7px; color: inherit; background: var(--sheet-surface); font: inherit; cursor: pointer; }
+.sheets-toolbar { position: relative; z-index: 6; display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; padding: 5px 12px; border-bottom: 1px solid var(--sheet-border); }
+.sheets-toolbar-primary, .sheets-toolbar-groups { display: flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; gap: 4px; }
+.sheets-toolbar-groups { flex: 1 1 auto; justify-content: flex-end; }
+.sheets-toolbar button, .sheets-toolbar select, .sheets-tabs-bar button { box-sizing: border-box; min-height: 40px; flex: 0 0 auto; padding: 4px 8px; border: 1px solid var(--sheet-border); border-radius: 7px; color: inherit; background: var(--sheet-surface); font: inherit; cursor: pointer; }
 .sheets-toolbar button:hover, .sheets-tabs-bar button:hover { border-color: var(--sheet-accent); }
 .sheets-toolbar button:focus-visible, .sheets-toolbar select:focus-visible, .sheets-formula input:focus-visible, .sheets-formula-actions button:focus-visible, .sheets-tabs-bar button:focus-visible, .sheets-tool-group summary:focus-visible { outline: 2px solid var(--sheet-accent); outline-offset: 2px; }
 .sheets-toolbar button:disabled, .sheets-formula-actions button:disabled { opacity: .55; cursor: not-allowed; }
 .sheets-toolbar-primary [data-bold], .sheets-toolbar-primary [data-italic] { min-width: 40px; }
-.sheets-tool-group { min-width: 0; }
-.sheets-tool-group summary { display: flex; align-items: center; min-height: 36px; padding: 4px 10px; border: 1px solid var(--sheet-border); border-radius: 7px; color: var(--sheet-ink); background: var(--sheet-surface); font-size: 13px; font-weight: 700; cursor: pointer; list-style-position: inside; }
+.sheets-toolbar-primary [data-chart] { white-space: nowrap; }
+.sheets-tool-group { position: relative; min-width: 0; }
+.sheets-tool-group summary { display: flex; align-items: center; min-height: 40px; padding: 4px 10px; border: 1px solid var(--sheet-border); border-radius: 7px; color: var(--sheet-ink); background: var(--sheet-surface); font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+.sheets-tool-group summary::-webkit-details-marker { display: none; }
+.sheets-tool-group summary::after { margin-left: 7px; color: var(--text-secondary, #687079); content: '⌄'; font-size: 12px; }
 .sheets-tool-group[open] summary { border-color: var(--sheet-accent); color: var(--sheet-accent); }
-.sheets-tool-group-content { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 2px 2px; }
-.sheets-color-tool { min-height: 36px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--sheet-border); border-radius: 7px; font-size: 12px; }
+.sheets-tool-group-content { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; display: none; width: max-content; min-width: 220px; max-width: min(420px, calc(100vw - 24px)); flex-wrap: wrap; align-items: center; gap: 5px; padding: 8px; border: 1px solid var(--sheet-border); border-radius: 9px; background: var(--sheet-surface); box-shadow: 0 10px 28px rgb(16 24 40 / .16); }
+.sheets-tool-group[open] .sheets-tool-group-content { display: flex; }
+.sheets-tool-group:last-child .sheets-tool-group-content { right: 0; left: auto; }
+.sheets-tool-group-content button, .sheets-tool-group-content select { min-height: 40px; }
+.sheets-color-tool { min-height: 40px; display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--sheet-border); border-radius: 7px; font-size: 12px; }
 .sheets-color-tool input { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; }
-.sheets-formula { display: grid; flex: 0 0 auto; gap: 7px; padding: 9px 12px; border-bottom: 1px solid var(--sheet-border); }
-.sheets-formula-context { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; min-width: 0; color: var(--text-secondary, #687079); font-size: 12px; }
+.sheets-formula { display: grid; flex: 0 0 auto; gap: 3px; padding: 5px 12px 6px; border-bottom: 1px solid var(--sheet-border); }
+.sheets-formula-context { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; min-height: 16px; color: var(--text-secondary, #687079); font-size: 11px; }
 .sheets-formula-context [data-address] { min-width: 64px; color: var(--accent-strong, var(--sheet-ink)); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .sheets-formula-context [data-selection-summary] { font-variant-numeric: tabular-nums; }
 .sheets-formula-context [data-value-preview] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheets-formula-context [data-value-preview].is-error { color: var(--color-error, var(--text-danger, #b42318)); font-weight: 700; }
 .sheets-formula-context [data-value-preview].is-draft { color: var(--sheet-accent); font-weight: 700; }
-.sheets-formula-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.sheets-formula-entry > span { color: var(--accent-strong, var(--sheet-ink)); font-weight: 800; }
-.sheets-formula input { flex: 1; min-width: 0; min-height: 38px; border: 1px solid var(--sheet-border); border-radius: 7px; padding: 7px 9px; background: var(--sheet-surface); color: inherit; font: inherit; }
-.sheets-formula-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.sheets-formula-actions button { min-height: 38px; padding: 6px 12px; border: 1px solid var(--sheet-border); border-radius: 7px; color: inherit; background: var(--sheet-surface); font: inherit; cursor: pointer; }
+.sheets-formula-entry { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.sheets-formula-entry > [data-address] { box-sizing: border-box; display: grid; flex: 0 0 66px; min-height: 40px; place-items: center; border: 1px solid var(--sheet-border); border-radius: 7px; background: var(--sheet-surface); color: var(--accent-strong, var(--sheet-ink)); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sheets-formula-entry > span { flex: 0 0 auto; color: var(--text-secondary, #687079); font-size: 12px; font-style: italic; font-weight: 800; }
+.sheets-formula input { box-sizing: border-box; flex: 1; min-width: 0; min-height: 40px; border: 1px solid var(--sheet-border); border-radius: 7px; padding: 6px 9px; background: var(--sheet-surface); color: inherit; font: inherit; }
+.sheets-formula-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.sheets-formula-actions button { box-sizing: border-box; width: 40px; min-width: 40px; min-height: 40px; padding: 4px; border: 1px solid var(--sheet-border); border-radius: 7px; color: inherit; background: var(--sheet-surface); font-size: 17px; font-weight: 700; cursor: pointer; }
 .sheets-formula-actions [data-formula-apply] { border-color: var(--sheet-accent); background: var(--sheet-accent); color: var(--button-text, #fff); font-weight: 700; }
-.sheets-formula-help { margin: 0; color: var(--text-secondary, #687079); font-size: 11px; line-height: 1.4; }
+.sheets-formula-help { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .sheets-grid-wrap { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; outline: none; background: var(--sheet-surface); } .sheets-grid-canvas { position: relative; margin-left: 48px; margin-top: 0; }
 .sheets-corner { position: absolute; z-index: 5; top: 0; left: 0; width: 48px; height: 28px; border-right: 1px solid var(--sheet-border); border-bottom: 1px solid var(--sheet-border); background: var(--sheet-surface); }
 .sheets-column-headings { position: sticky; z-index: 4; top: 0; left: 48px; height: 28px; } .sheets-row-headings { position: sticky; z-index: 4; left: 0; top: 28px; width: 48px; }
@@ -44,6 +52,8 @@ body.sheets-page-active #view-notes .editor-container { display: flex; overflow:
 .sheets-row-head { width: 48px; }
 .sheets-cell { position: absolute; box-sizing: border-box; width: 120px; height: 28px; padding: 5px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-right: 1px solid var(--sheet-border); border-bottom: 1px solid var(--sheet-border); cursor: cell; background: var(--sheet-surface); font-size: 13px; }
 .sheets-cell.in-range { background: color-mix(in srgb, var(--sheet-accent) 8%, var(--sheet-surface)); } .sheets-cell.selected { z-index: 2; outline: 2px solid var(--sheet-accent); outline-offset: -2px; }
+.sheets-col-head.is-selected, .sheets-row-head.is-selected { background: color-mix(in srgb, var(--sheet-accent) 11%, var(--sheet-surface)); color: var(--sheet-accent); font-weight: 700; }
+.sheets-col-head.is-active-axis, .sheets-row-head.is-active-axis { background: color-mix(in srgb, var(--sheet-accent) 20%, var(--sheet-surface)); color: var(--sheet-accent); font-weight: 800; }
 .sheets-cell.is-hidden, .sheets-row-head.is-hidden { opacity: .22; }
 .sheets-cell select { width: 100%; height: 100%; margin: -5px -7px; padding: 0 5px; border: 0; color: inherit; background: transparent; font: inherit; }
 .sheets-chart-panel { display: flex; gap: 12px; max-height: 190px; padding: 10px 12px; overflow-x: auto; border-top: 1px solid var(--sheet-border); background: var(--sheet-surface); }
@@ -65,30 +75,26 @@ body.sheets-page-active #view-notes .editor-container { display: flex; overflow:
 .sheets-rename-status { flex: 1 1 100%; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
 .sheets-rename-panel :focus-visible { outline: 2px solid var(--accent-strong, var(--sheet-accent)); outline-offset: 2px; }
 @media (max-width: 700px) {
-    .sheets-editor { overflow: auto; }
-    .sheets-context { align-items: flex-start; padding: 8px 10px; }
+    .sheets-editor { overflow: hidden; }
+    .sheets-context { align-items: center; padding: 5px 10px; }
     .sheets-workbook-status { max-width: 54%; font-size: 11px; }
-    .sheets-toolbar { max-height: 36dvh; gap: 7px; padding: 7px 8px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-    .sheets-toolbar-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-    .sheets-toolbar-primary button, .sheets-toolbar-primary select { min-width: 0; min-height: 44px; padding-inline: 6px; font-size: 12px; }
-    .sheets-toolbar-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+    .sheets-toolbar { gap: 4px 6px; padding: 4px 8px; }
+    .sheets-toolbar-primary { display: flex; flex: 1 1 100%; gap: 4px; }
+    .sheets-toolbar-primary button, .sheets-toolbar-primary select { min-width: 0; min-height: 44px; padding-inline: 7px; font-size: 12px; }
+    .sheets-toolbar-groups { display: flex; flex: 1 1 100%; justify-content: space-between; gap: 4px; }
     .sheets-tool-group { min-width: 0; }
-    .sheets-tool-group[open] { grid-column: 1 / -1; }
-    .sheets-tool-group summary { justify-content: center; min-height: 44px; padding-inline: 3px; font-size: 11px; list-style: none; }
-    .sheets-tool-group summary::-webkit-details-marker { display: none; }
-    .sheets-tool-group-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 6px 0 2px; }
-    .sheets-tool-group-content > button, .sheets-tool-group-content > select, .sheets-color-tool { min-width: 0; min-height: 44px; width: 100%; padding: 6px; font-size: 12px; }
+    .sheets-tool-group summary { justify-content: center; min-height: 44px; padding-inline: 7px; font-size: 12px; }
+    .sheets-tool-group-content { width: min(310px, calc(100vw - 16px)); max-height: min(60vh, 420px); max-height: min(60dvh, 420px); overflow: auto; overscroll-behavior: contain; }
+    .sheets-tool-group-content > button, .sheets-tool-group-content > select, .sheets-color-tool { min-width: 0; min-height: 44px; padding: 6px; font-size: 12px; }
     .sheets-color-tool { justify-content: space-between; }
     .sheets-color-tool input { flex: 0 0 auto; }
-    .sheets-formula { gap: 7px; padding: 8px; }
-    .sheets-formula-context { display: flex; gap: 4px 10px; }
-    .sheets-formula-entry { gap: 6px; }
+    .sheets-formula { gap: 2px; padding: 4px 8px 5px; }
+    .sheets-formula-entry { gap: 5px; }
+    .sheets-formula-entry > [data-address] { flex-basis: 58px; min-height: 44px; }
     .sheets-formula input { min-height: 44px; padding: 8px; font-size: 16px; }
-    .sheets-formula-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
-    .sheets-formula-actions button { min-width: 0; min-height: 44px; padding: 6px; font-size: 12px; }
-    .sheets-formula-help { font-size: 11px; }
-    .sheets-grid-wrap { min-height: 120px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-    .sheets-tabs-bar { min-height: 56px; gap: 5px; padding: 7px 8px calc(7px + env(safe-area-inset-bottom, 0px)); }
+    .sheets-formula-actions button { width: 44px; min-width: 44px; min-height: 44px; }
+    .sheets-grid-wrap { min-height: 0; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    .sheets-tabs-bar { min-height: 50px; gap: 5px; padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px)); }
     .sheets-tabs-bar .sheets-sheet-tab { min-width: 64px; max-width: 100px; min-height: 44px; padding-inline: 7px; font-size: 12px; }
     .sheets-sheet-actions { gap: 4px; }
     .sheets-sheet-actions button { min-height: 44px !important; padding-inline: 8px; font-size: 12px; }

@@ -237,6 +237,7 @@ test('Assistant chat history persists locally and is included in encrypted backu
   // conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
   // Manual restores now complete an encrypted pre-restore safety snapshot first.
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const snapModal = page.locator('#sutraBackupPasswordModal');
   await snapModal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', PASS);

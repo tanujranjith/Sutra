@@ -10,6 +10,13 @@ configured Supabase account. Backup providers do not gain incremental Sync
 capabilities through this UI unification. Sync unlock and backup passwords
 remain independent; enabling one does not enable the other.
 
+Automatic backups are separately opt-in. **Once a day** includes a time picker
+using this device's local clock (20:00 by default). A new time starts at its next
+occurrence; missed daily slots catch up once when Sutra is open, online, and the
+backup password is unlocked for the session. Unchanged work is skipped. The
+schedule is device-local and never exported or synchronized. Restore first asks
+whether to make an encrypted safety export; only Yes opens its password screen.
+
 > Every provider receives **ciphertext only**. The choice of provider does **not**
 > change the encryption or the passphrase model. Advanced/self-hosted providers
 > are **more user-controlled, not automatically safer**.

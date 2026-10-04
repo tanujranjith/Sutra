@@ -9,11 +9,15 @@
   var ALLOWED_TAGS = Object.create(null);
   var activeRequestContext = null;
   var toolbar = null;
+  var menu = null;
+  var menuActions = null;
+  var menuButton = null;
   var insertButton = null;
   var editButton = null;
   var statusNode = null;
   var actionInProgress = false;
   var actionStatus = '';
+  var actionStatusState = '';
   var toolbarOwner = '';
   var refreshTimer = 0;
   var interactionPane = null;
@@ -239,9 +243,10 @@
 
   function setStatus(message, state) {
     actionStatus = safeText(message);
+    actionStatusState = state || '';
     if (statusNode) {
       statusNode.textContent = actionStatus;
-      if (state) statusNode.dataset.state = state;
+      if (actionStatusState) statusNode.dataset.state = actionStatusState;
       else delete statusNode.dataset.state;
     }
   }
@@ -263,9 +268,11 @@
     if (!context) {
       toolbar.hidden = true;
       toolbar.setAttribute('aria-hidden', 'true');
+      closeMenu(false);
       if (activeRequestContext) cancelPendingRequest();
       toolbarOwner = '';
       actionStatus = '';
+      actionStatusState = '';
       return;
     }
 
@@ -273,15 +280,19 @@
     if (toolbarOwner !== owner) {
       toolbarOwner = owner;
       actionStatus = '';
+      actionStatusState = '';
+      closeMenu(false);
     }
     toolbar.hidden = false;
     toolbar.setAttribute('aria-hidden', 'false');
-    insertButton.disabled = actionInProgress || !context.ready;
     var selected = currentSelection(context);
+    insertButton.disabled = actionInProgress || !context.ready;
     editButton.disabled = actionInProgress || !context.ready || !selected;
     if (statusNode) {
-      statusNode.textContent = context.reason || actionStatus || 'Timelines stay with this page and do not create schedule events.';
-      statusNode.dataset.state = context.reason ? 'unavailable' : (actionStatus ? 'result' : 'hint');
+      statusNode.textContent = context.reason || actionStatus || (selected
+        ? 'Add a timeline or edit the selected one.'
+        : 'Add a timeline. Select one in the page to edit it.');
+      statusNode.dataset.state = context.reason ? 'unavailable' : (actionStatus ? (actionStatusState || 'result') : 'hint');
     }
   }
 
@@ -294,8 +305,22 @@
   }
 
   function onPaneInteraction(event) {
-    if (toolbar && toolbar.contains(event.target)) return;
+    if (isToolbarSurface(event.target)) return;
     scheduleToolbarRefresh();
+  }
+
+  function isToolbarSurface(target) {
+    return !!(target && ((toolbar && toolbar.contains(target)) || (menu && menu.contains(target))));
+  }
+
+  function targetForContext(context) {
+    var doc = global.document;
+    if (!doc || !context) return null;
+    if (context.kind === 'note') return doc.getElementById('toolbar');
+    if (context.kind === 'canvas') return doc.getElementById('canvasToolbar');
+    if (context.kind === 'html') return doc.querySelector('#htmlPageEditor .html-page-toolbar');
+    if (context.kind === 'slides') return doc.querySelector('#slidesEditor [data-insert-tools]');
+    return null;
   }
 
   function mountToolbar() {
@@ -303,34 +328,75 @@
     var pane = doc && doc.getElementById('notesPrimaryPane');
     if (!pane) return null;
     var context = resolveContext();
-    var hostToolbar = context && context.kind === 'html' ? doc.querySelector('#htmlPageEditor .html-page-toolbar')
-      : context && context.kind === 'slides' ? doc.querySelector('#slidesEditor .slides-toolbar') : null;
-    var target = hostToolbar || pane;
+    var target = targetForContext(context);
     if (toolbar && toolbar.isConnected) {
-      if (toolbar.parentNode !== target) placeToolbar(target, pane);
+      if (target && toolbar.parentNode !== target) target.appendChild(toolbar);
+      toolbar.classList.toggle('sutra-content-timeline-toolbar--canvas', !!(context && context.kind === 'canvas'));
       return toolbar;
     }
 
-    toolbar = element('div', 'sutra-content-timeline-host-toolbar');
-    toolbar.id = 'sutraContentTimelineHostToolbar';
+    if (menu && menu.parentNode) menu.parentNode.removeChild(menu);
+    toolbar = element('div', 'sutra-content-timeline-toolbar');
+    toolbar.id = 'sutraContentTimelineToolbar';
     toolbar.hidden = true;
     toolbar.setAttribute('aria-hidden', 'true');
     toolbar.setAttribute('role', 'group');
-    toolbar.setAttribute('aria-label', 'Authored timeline content');
-    insertButton = element('button', 'sutra-content-timeline-host-toolbar__button sutra-content-timeline-host-toolbar__insert', 'Insert timeline');
+    toolbar.setAttribute('aria-label', 'Timeline actions');
+
+    menuButton = element('button', 'sutra-content-timeline-toolbar__trigger toolbar-btn');
+    menuButton.type = 'button';
+    menuButton.title = 'Timeline actions';
+    menuButton.setAttribute('aria-label', 'Timeline actions');
+    menuButton.setAttribute('aria-haspopup', 'menu');
+    menuButton.setAttribute('aria-expanded', 'false');
+    menuButton.setAttribute('aria-controls', 'sutraContentTimelineMenu');
+    var triggerIcon = element('i', 'fas fa-clock');
+    triggerIcon.setAttribute('aria-hidden', 'true');
+    menuButton.appendChild(triggerIcon);
+
+    menu = element('div', 'sutra-content-timeline-menu');
+    menu.id = 'sutraContentTimelineMenu';
+    menu.hidden = true;
+    menu.setAttribute('role', 'group');
+    menu.setAttribute('aria-label', 'Timeline actions');
+    menuActions = element('div', 'sutra-content-timeline-menu__items');
+    menuActions.setAttribute('role', 'menu');
+    menuActions.setAttribute('aria-label', 'Timeline actions');
+
+    insertButton = element('button', 'sutra-content-timeline-menu__action', 'Insert timeline');
     insertButton.type = 'button';
-    editButton = element('button', 'sutra-content-timeline-host-toolbar__button', 'Edit selected timeline');
+    insertButton.setAttribute('role', 'menuitem');
+    var insertIcon = element('i', 'fas fa-plus');
+    insertIcon.setAttribute('aria-hidden', 'true');
+    insertButton.insertBefore(insertIcon, insertButton.firstChild);
+
+    editButton = element('button', 'sutra-content-timeline-menu__action', 'Edit selected timeline');
     editButton.type = 'button';
-    statusNode = element('span', 'sutra-content-timeline-host-toolbar__status');
+    editButton.setAttribute('role', 'menuitem');
+    var editIcon = element('i', 'fas fa-edit');
+    editIcon.setAttribute('aria-hidden', 'true');
+    editButton.insertBefore(editIcon, editButton.firstChild);
+
+    statusNode = element('span', 'sutra-content-timeline-menu__status');
     statusNode.setAttribute('role', 'status');
     statusNode.setAttribute('aria-live', 'polite');
+    statusNode.setAttribute('aria-atomic', 'true');
+    menuActions.appendChild(insertButton);
+    menuActions.appendChild(editButton);
+    menu.appendChild(menuActions);
+    menu.appendChild(statusNode);
+    doc.body.appendChild(menu);
+
+    menuButton.addEventListener('click', toggleMenu);
     insertButton.addEventListener('click', insertTimeline);
     editButton.addEventListener('click', editSelectedTimeline);
-    toolbar.appendChild(insertButton);
-    toolbar.appendChild(editButton);
-    toolbar.appendChild(statusNode);
+    menuButton.addEventListener('keydown', onToolbarKeydown);
+    menuActions.addEventListener('keydown', onToolbarKeydown);
+    toolbar.appendChild(menuButton);
 
-    placeToolbar(target, pane);
+    var mountTarget = target || doc.getElementById('toolbar') || pane;
+    mountTarget.appendChild(toolbar);
+    toolbar.classList.toggle('sutra-content-timeline-toolbar--canvas', !!(context && context.kind === 'canvas'));
 
     if (interactionPane !== pane) {
       if (interactionPane) {
@@ -346,13 +412,91 @@
     return toolbar;
   }
 
-  function placeToolbar(target, pane) {
-    if (target !== pane) { target.appendChild(toolbar); return; }
-    var tags = global.document.getElementById('tagsContainer');
-    var title = global.document.getElementById('pageTitle');
-    if (tags && tags.parentNode === pane) pane.insertBefore(toolbar, tags.nextSibling);
-    else if (title && title.parentNode === pane) pane.insertBefore(toolbar, title.nextSibling);
-    else pane.insertBefore(toolbar, pane.firstChild);
+  function menuItems() {
+    return [insertButton, editButton].filter(function (button) { return button && !button.disabled; });
+  }
+
+  function positionMenu() {
+    if (!menu || menu.hidden || !menuButton || !menuButton.isConnected) return;
+    var rect = menuButton.getBoundingClientRect();
+    var width = menu.offsetWidth;
+    var height = menu.offsetHeight;
+    var viewportWidth = global.document.documentElement.clientWidth || global.innerWidth;
+    var viewportHeight = global.innerHeight || global.document.documentElement.clientHeight;
+    var left = rect.left;
+    if (left + width > viewportWidth - 8) left = rect.right - width;
+    left = Math.max(8, Math.min(left, viewportWidth - width - 8));
+    var top = rect.bottom + 6;
+    if (top + height > viewportHeight - 8 && rect.top >= height + 14) top = rect.top - height - 6;
+    top = Math.max(8, Math.min(top, viewportHeight - height - 8));
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+
+  function openMenu(focusLast) {
+    if (!menu || !menuButton) return;
+    updateToolbarState();
+    if (toolbar.hidden) return;
+    menu.hidden = false;
+    menuButton.setAttribute('aria-expanded', 'true');
+    positionMenu();
+    if (focusLast !== undefined) {
+      var items = menuItems();
+      var target = focusLast ? items[items.length - 1] : items[0];
+      if (target) target.focus();
+    }
+  }
+
+  function closeMenu(restoreFocus) {
+    if (!menu || !menuButton) return;
+    menu.hidden = true;
+    menuButton.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && menuButton.isConnected) menuButton.focus();
+  }
+
+  function toggleMenu() {
+    if (menu && !menu.hidden) closeMenu(false);
+    else openMenu();
+  }
+
+  function onToolbarKeydown(event) {
+    if (event.target === menuButton && event.key === 'Escape' && menu && !menu.hidden) {
+      event.preventDefault();
+      closeMenu(false);
+      return;
+    }
+    if (event.target === menuButton && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      openMenu(event.key === 'ArrowUp');
+      return;
+    }
+    if (!menuActions || menu.hidden || !menuActions.contains(event.target)) return;
+    var items = menuItems();
+    var index = items.indexOf(event.target);
+    if (!items.length || index < 0) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu(true);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      items[0].focus();
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      items[items.length - 1].focus();
+    }
+  }
+
+  function onDocumentPointerDown(event) {
+    if (!menu || menu.hidden || actionInProgress || isToolbarSurface(event.target)) return;
+    closeMenu(false);
+  }
+
+  function onDocumentFocusIn(event) {
+    if (!menu || menu.hidden || actionInProgress || isToolbarSurface(event.target)) return;
+    closeMenu(false);
   }
 
   function cancelPendingRequest() {
@@ -492,6 +636,10 @@
     if (!global.document) return;
     mountToolbar();
     updateToolbarState();
+    global.document.addEventListener('pointerdown', onDocumentPointerDown, true);
+    global.document.addEventListener('focusin', onDocumentFocusIn, true);
+    global.document.addEventListener('scroll', positionMenu, true);
+    global.addEventListener('resize', positionMenu);
     global.addEventListener('sutra:flow-bridge-ready', scheduleToolbarRefresh);
     global.addEventListener('sutra:workspace-boot-result', scheduleToolbarRefresh);
     global.addEventListener('noteflow:view-changed', onViewChanged);

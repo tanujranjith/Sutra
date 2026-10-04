@@ -38,12 +38,20 @@ for records they cannot interpret.
 
 ## Create surfaces
 
-The contextual **Insert timeline** and **Edit selected timeline** controls appear
-for a writable current Note, Canvas, Slides, or HTML Page. The controls require
-the canonical page write authorization. When the Modern Notes editor is
-unavailable, Sutra explains that limitation instead of inserting through the
-classic editor. Folders, Help & Docs, Sheets, and PDF workspaces do not embed
-authored timelines. A PDF can link to a Note that contains one.
+The **Timeline actions** button appears in the existing editor toolbar for a
+writable current Note, Canvas, Slides, or HTML Page. Its menu offers **Insert
+timeline** and **Edit selected timeline**; editing is available when a timeline
+is selected in that editor. The menu keeps action results and editor
+availability messages beside those choices. Timeline actions require canonical
+page write authorization. When the Modern Notes editor is unavailable, Sutra
+explains that limitation instead of inserting through the classic editor.
+Folders, Help & Docs, Sheets, and PDF workspaces do not embed authored
+timelines. A PDF can link to a Note that contains one.
+
+Insertion captures the editor's current caret or text selection before the
+timeline editor opens, then inserts through the host's normal editor action.
+Selection tokens also prevent an edit from changing a timeline after its page
+or selected content has changed.
 
 The model stays in each host's existing page record:
 

@@ -24922,6 +24922,24 @@ function populateProgressDashboard() {
             return best;
         }
 
+        function getFocusUpcomingTasks(limit = 3) {
+            const count = Math.min(8, Math.max(1, Math.trunc(Number(limit) || 3)));
+            const now = new Date();
+            const context = getNextStepRankingContext(now);
+            return collectWorkspaceDeadlines()
+                .filter(item => item && ['task', 'homework'].includes(item.source)
+                    && !item.completed && item.status !== 'done'
+                    && (!item.linkedNoteId || isPageContentAuthorized(item.linkedNoteId)))
+                .map(item => ({ item, rank: computeDeadlineRank(item, now, context) }))
+                .sort((a, b) => b.rank.score - a.rank.score || String(a.item.id).localeCompare(String(b.item.id)))
+                .slice(0, count)
+                .map(({ item, rank }) => ({
+                    id: String(item.id),
+                    title: String(item.title || 'Untitled task'),
+                    dueLabel: item.scheduleSummary || (rank.overdue ? 'Overdue' : (rank.daysUntil === 0 ? 'Due today' : (rank.daysUntil === 1 ? 'Due tomorrow' : item.due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))))
+                }));
+        }
+
         function openDeadlineSource(item) {
             if (!item || !item.source) return;
             if (item.source === 'review') {
@@ -35298,6 +35316,11 @@ function buildOnboardingPlanPreview() {
                 newPageTypeSelect.dataset.bound = 'true';
                 newPageTypeSelect.addEventListener('change', applyNewPageTypeUi);
             }
+            const contentStarterSelect = document.getElementById('newPageContentStarter');
+            if (contentStarterSelect && contentStarterSelect.dataset.bound !== 'true') {
+                contentStarterSelect.dataset.bound = 'true';
+                contentStarterSelect.addEventListener('change', updateContentStarterPreview);
+            }
 
             // Bind the integrated template picker search input.
             const templatePickerSearch = document.getElementById('templatePickerSearch');
@@ -45189,11 +45212,11 @@ function buildOnboardingPlanPreview() {
 </ul>
 <h3>Restore warning</h3>
 <ul>
-  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first and offers an encrypted pre-import safety snapshot. A wrong passphrase fails safely and leaves your workspace untouched.</li>
+  <li><strong>Restore replaces your current workspace — it does not merge.</strong> Sutra confirms first, then asks whether to make a safety export. Yes opens the encrypted .sutra password screen; No continues without an external file; Cancel keeps this device unchanged. A wrong passphrase fails safely and leaves your workspace untouched.</li>
 </ul>
 <h3>Auto-backup</h3>
 <ul>
-  <li><strong>Off by default.</strong> Manual backups are always available. Enabling it needs a connected provider and one manual backup this session (so the passphrase is unlocked). Choose: on app close, once a day, or on significant change. Turn it off to stop instantly.</li>
+  <li><strong>Off by default.</strong> Manual backups are always available. Enabling it needs a connected provider and one manual backup this session (so the passphrase is unlocked). Choose: when the app is hidden, daily at a local time you choose, or on significant change. Sutra must be open; a missed daily slot catches up when ready, and unchanged work is skipped. A new time starts at its next occurrence. Turn it off to stop.</li>
 </ul>
 <h3>Provider limitations (important)</h3>
 <ul>
@@ -47541,13 +47564,14 @@ function getActiveEditor() {
                 const options = {};
                 if (pageType === 'slides') options.layout = selectedStarter === 'blank' ? 'blank' : 'title';
                 if (pageType === 'html' && selectedStarter === 'blank') options.source = '';
-                if (pageType === 'sheets' && selectedStarter === 'study') {
-                    if (!window.SutraSheetsEngine) { showToast('The spreadsheet engine is unavailable.'); return; }
-                    const workbook = window.SutraSheetsEngine.createWorkbook(name);
-                    ['Task', 'Due date', 'Status'].forEach((value, column) => window.SutraSheetsEngine.setCell(workbook.sheets[0], 0, column, { value }));
-                    options.workbook = workbook;
-                }
                 try {
+                    if (pageType === 'slides' || pageType === 'sheets') {
+                        const templates = window.SutraCreatePageTemplates;
+                        if (!templates) { showToast('The starter templates are unavailable. Please reload and try again.'); return; }
+                        const model = pageType === 'slides' ? templates.createSlidesDeck(selectedStarter, name) : templates.createSheetsWorkbook(selectedStarter, name);
+                        if (!model) { showToast('This starter is unavailable. Your page has not been created.'); return; }
+                        options[pageType === 'slides' ? 'deck' : 'workbook'] = model;
+                    }
                     const created = feature.createPage(name, options);
                     if (!created) { showToast('The page could not be created.'); return; }
                     closeModal('newPageModal');
@@ -48020,6 +48044,33 @@ function getActiveEditor() {
             return d;
         }
 
+        function bindCanvasTextEditor(editable, pageId, objectId) {
+            let historyStarted = false;
+            const currentObject = () => {
+                const page = getPrimaryCanvasPage();
+                if (!page || page.id !== pageId || !canWritePageContent(page)) return null;
+                const object = page.canvas.objects.find(item => item.id === objectId);
+                return object && !object.locked ? { page, object } : null;
+            };
+            editable.readOnly = !currentObject();
+            editable.addEventListener('focus', () => { historyStarted = false; });
+            editable.addEventListener('input', () => {
+                let live = currentObject();
+                if (!live) return;
+                if (!historyStarted) {
+                    pushCanvasUndo(live.page);
+                    historyStarted = true;
+                    live = currentObject();
+                    if (!live) return;
+                }
+                // Normalization and saves replace model objects. Resolve by ID
+                // for every edit rather than writing to a detached render copy.
+                live.object.text = editable.value;
+                live.object.updatedAt = new Date().toISOString();
+                saveCanvasPage(live.page, { persist: true });
+            });
+        }
+
         function renderCanvasObject(object, page) {
             const div = document.createElement('div');
             div.className = `canvas-object canvas-object-${object.type}${(activeCanvasRuntime && activeCanvasRuntime.selectedObjectIds.includes(object.id)) ? ' selected' : ''}${object.locked ? ' locked' : ''}`;
@@ -48091,11 +48142,7 @@ function getActiveEditor() {
                 editable.className = 'canvas-object-text';
                 editable.value = object.text || '';
                 editable.setAttribute('aria-label', 'Shape text');
-                editable.addEventListener('input', () => {
-                    object.text = editable.value;
-                    object.updatedAt = new Date().toISOString();
-                    saveCanvasPage(page, { persist: true });
-                });
+                bindCanvasTextEditor(editable, page.id, object.id);
                 div.appendChild(editable);
             } else if (object.type === 'table') {
                 const table = document.createElement('table');
@@ -48110,15 +48157,11 @@ function getActiveEditor() {
             } else {
                 const editable = document.createElement(object.type === 'frame' ? 'div' : 'textarea');
                 editable.className = 'canvas-object-text';
-                editable.value = object.text || object.label || '';
-                editable.textContent = object.text || object.label || '';
+                editable.value = typeof object.text === 'string' ? object.text : (object.label || '');
+                editable.textContent = editable.value;
                 if (editable.tagName === 'TEXTAREA') {
                     editable.setAttribute('aria-label', 'Canvas object text');
-                    editable.addEventListener('input', () => {
-                        object.text = editable.value;
-                        object.updatedAt = new Date().toISOString();
-                        saveCanvasPage(page, { persist: true });
-                    });
+                    bindCanvasTextEditor(editable, page.id, object.id);
                 }
                 div.appendChild(editable);
             }
@@ -48131,8 +48174,11 @@ function getActiveEditor() {
 
             div.addEventListener('pointerdown', event => handleCanvasObjectPointerDown(event, object.id));
             div.addEventListener('keydown', event => {
+                if (event.target !== div || event.isComposing) return;
                 if (event.key === 'Delete' || event.key === 'Backspace') {
                     event.preventDefault();
+                    event.stopPropagation();
+                    if (!activeCanvasRuntime || !activeCanvasRuntime.selectedObjectIds.includes(object.id)) setCanvasSelection([object.id]);
                     canvasDeleteSelected();
                 }
             });
@@ -48145,7 +48191,13 @@ function getActiveEditor() {
             if (normalizePageType(page.type) === PAGE_TYPES.CANVAS) {
                 return `${normalizeCanvasModel(page.canvas).objects.length} canvas objects`;
             }
-            return (page.htmlDocument ? getHtmlDocumentSearchText(page) : String(page.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 160);
+            const text = page.htmlDocument ? getHtmlDocumentSearchText(page) : String(page.content || '')
+                .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+                .replace(/<br\s*\/?\s*>|<\/(?:p|div|li|h[1-6])>/gi, '\n')
+                .replace(/<[^>]+>/g, '')
+                .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+                .replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+            return text.slice(0, 360) || 'This note is empty. Open it to add content.';
         }
 
         function renderCanvasConnections(page) {
@@ -48414,7 +48466,7 @@ function getActiveEditor() {
                     return selected && !selected.locked ? { id, x: selected.x, y: selected.y, width: selected.width, height: selected.height } : null;
                 }).filter(Boolean)
             };
-            try { event.currentTarget.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
+            try { getCanvasEls().root.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
             renderCanvasPage(page);
         }
 
@@ -48925,8 +48977,8 @@ function getActiveEditor() {
             return addCanvasObject('linked-note', {
                 label: linkedPage.title || 'Linked note',
                 ref: { type: 'page', id: linkedPage.id },
-                width: 280,
-                height: 150
+                width: 320,
+                height: 200
             });
         }
 
@@ -49086,15 +49138,21 @@ function getActiveEditor() {
             root.addEventListener('pointermove', handleCanvasPointerMove);
             root.addEventListener('pointerup', handleCanvasPointerUp);
             root.addEventListener('pointercancel', handleCanvasPointerUp);
+            window.addEventListener('sutra:note-page-locked', () => {
+                const page = getPrimaryCanvasPage();
+                if (page && !root.hidden) renderCanvasPage(page);
+            });
 
             document.addEventListener('keydown', (event) => {
+                if (activeView !== 'notes' || root.hidden || root.closest('[inert]')) return;
+                const target = event.target;
+                if (event.isComposing || (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+                    || target.tagName === 'SELECT' || target.isContentEditable
+                    || (target.closest && target.closest('button, a, dialog, [role="dialog"], [role="menu"]'))))) return;
                 const page = getPrimaryCanvasPage();
                 const runtime = ensureCanvasRuntime(page);
                 if (!page || !runtime) return;
                 if (root.hidden) return;
-                const target = event.target;
-                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
-                    (target.isContentEditable && !target.closest('#canvasEditor')))) return;
                 const command = event.ctrlKey || event.metaKey;
                 const key = String(event.key || '').toLowerCase();
                 if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key === 'z' && !event.shiftKey) {
@@ -53040,14 +53098,28 @@ function getActiveEditor() {
             if (starterRow) starterRow.hidden = !isContentType;
             if (starterSelect && starterSelect.dataset.type !== pageType) {
                 starterSelect.replaceChildren();
-                const choices = pageType === 'slides' ? [['title', 'Title slide'], ['blank', 'Blank slide']] : (pageType === 'sheets' ? [['blank', 'Blank workbook'], ['study', 'Study tracker']] : [['default', 'Simple HTML page'], ['blank', 'Empty source']]);
+                const catalog = window.SutraCreatePageTemplates;
+                const choices = ['slides', 'sheets'].includes(pageType) && catalog
+                    ? catalog.list(pageType).map(item => [item.id, item.name])
+                    : (pageType === 'slides' ? [['title', 'Title slide'], ['blank', 'Blank slide']] : (pageType === 'sheets' ? [['blank', 'Blank workbook'], ['study', 'Study tracker']] : [['default', 'Simple HTML page'], ['blank', 'Empty source']]));
                 choices.forEach(([value, label]) => { const option = document.createElement('option'); option.value = value; option.textContent = label; starterSelect.appendChild(option); });
                 starterSelect.dataset.type = pageType;
                 if (typeof window.refreshCustomSelects === 'function') window.refreshCustomSelects(starterSelect);
             }
+            updateContentStarterPreview();
             syncPageTypeToggleState(pageType);
             renderTemplatePickerCards(getActiveCreationContext());
             syncNewPageSecondaryAction(usesTemplates && templateSelect ? templateSelect.value : 'blank');
+        }
+
+        function updateContentStarterPreview() {
+            const select = document.getElementById('newPageContentStarter');
+            const preview = document.getElementById('newPageContentStarterPreview');
+            if (!select || !preview) return;
+            const catalog = window.SutraCreatePageTemplates;
+            const item = catalog && catalog.get(select.dataset.type, select.value);
+            preview.hidden = !item;
+            preview.textContent = item ? `${item.description} ${item.preview}.` : '';
         }
 
         function syncPageTypeToggleState(type) {
@@ -57048,6 +57120,7 @@ function getActiveEditor() {
                 includeSensitiveSettings: false,
                 plaintextChatPrivacy: options.plaintextChatPrivacy === true
             });
+            const snapshotSaveRevision = localWorkspaceSaveRequestRevision;
             const missingBlobs = findMissingCourseExportBlobs(fullPayload);
             if (missingBlobs.length) {
                 const missingError = new Error(`Cannot export .sutra backup because ${missingBlobs.length} required attachment blob${missingBlobs.length === 1 ? '' : 's'} are missing.`);
@@ -57065,6 +57138,7 @@ function getActiveEditor() {
             return {
                 bytes: new Uint8Array(packageBuffer),
                 internalByteLength: internalPackage.blob.size || packageBuffer.byteLength || 0,
+                snapshotSaveRevision,
                 manifest: internalPackage.manifest,
                 package: internalPackage
             };
@@ -57085,6 +57159,7 @@ function getActiveEditor() {
                 blob: new Blob([encryptedBytes], { type: 'application/octet-stream' }),
                 filename,
                 internalByteLength: internalPackage.internalByteLength,
+                snapshotSaveRevision: internalPackage.snapshotSaveRevision,
                 encryptedByteLength: encryptedBytes.byteLength,
                 manifest: internalPackage.manifest
             };
@@ -57353,6 +57428,7 @@ function getActiveEditor() {
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupCheckAt = '';
             meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;  // re-opt-in per backend
             persistSutraCloudMeta();
@@ -57387,6 +57463,7 @@ function getActiveEditor() {
             meta.lastBackupAt = '';
             meta.lastError = '';
             meta.lastAutoBackupAt = '';
+            meta.lastAutoBackupCheckAt = '';
             meta.lastAutoBackupHash = '';
             if (meta.autoBackup) meta.autoBackup.enabled = false;   // re-opt-in per destination
             persistSutraCloudMeta();
@@ -57406,9 +57483,10 @@ function getActiveEditor() {
                 deviceId: (existing && existing.deviceId) || randomSutraId('device'),
                 lastBackupAt: '',
                 lastError: '',
-                autoBackup: { enabled: false, frequency: 'daily' },
+                autoBackup: { enabled: false, frequency: 'daily', dailyTime: '20:00', dailyScheduleStartedAt: '' },
                 lastAutoBackupAt: '',
-                schemaVersion: 2,
+                lastAutoBackupCheckAt: '',
+                schemaVersion: 3,
                 lastAutoBackupHash: ''
             };
         }
@@ -57421,11 +57499,14 @@ function getActiveEditor() {
             sutraCloudMeta.autoBackup = {
                 ...(auto && typeof auto === 'object' ? auto : {}),
                 enabled: !!auto && auto.enabled === true,
-                frequency: auto && ['daily', 'close', 'change'].includes(auto.frequency) ? auto.frequency : 'daily'
+                frequency: auto && ['daily', 'close', 'change'].includes(auto.frequency) ? auto.frequency : 'daily',
+                dailyTime: normalizeSutraCloudDailyTime(auto && auto.dailyTime),
+                dailyScheduleStartedAt: auto && Number.isFinite(Date.parse(auto.dailyScheduleStartedAt))
+                    ? auto.dailyScheduleStartedAt : (auto && auto.enabled ? (sutraCloudMeta.lastAutoBackupAt || new Date().toISOString()) : '')
             };
             // Version the frozen device-local record in place, retaining unknown fields.
-            if (!raw || !raw.schemaVersion || raw.schemaVersion < 2) {
-                sutraCloudMeta.schemaVersion = 2;
+            if (!raw || !raw.schemaVersion || raw.schemaVersion < 3) {
+                sutraCloudMeta.schemaVersion = 3;
                 persistSutraCloudMeta();
             }
             return sutraCloudMeta;
@@ -58608,7 +58689,8 @@ function getActiveEditor() {
                 const encrypted = await createEncryptedSutraBackupBlob({ passphrase, onBackupProgress: progress.stage });
                 if (epoch !== (sutraCloudRuntime.operationEpoch || 0) || identity !== provider.getSignedInIdentity()
                     || provider !== getActiveSutraCloudProvider() || !provider.getSetupStatus().ready
-                    || (options.auto && !sutraCloudAutoReady())) return { skipped: true, reason: 'connection-changed' };
+                    || (options.auto && (!sutraCloudAutoReady()
+                        || (options.autoScheduleKey && options.autoScheduleKey !== JSON.stringify(loadSutraCloudMeta().autoBackup))))) return { skipped: true, reason: 'connection-changed' };
                 const meta = {
                     label: options.label || (options.auto ? 'Auto backup' : 'Manual backup'),
                     size: encrypted.blob.size || encrypted.encryptedByteLength || 0,
@@ -58645,6 +58727,7 @@ function getActiveEditor() {
                 progress.finish();
                 sutraCloudRuntime.busy = false;
                 updateSutraCloudUi();
+                if (!options.auto && loadSutraCloudMeta().autoBackup.frequency === 'daily') scheduleSutraCloudDailyBackup();
             }
         }
 
@@ -58742,7 +58825,7 @@ function getActiveEditor() {
                 body.appendChild(warn);
             }
             const note = document.createElement('p');
-            note.textContent = 'Before replacement, Sutra asks you to create an encrypted safety snapshot. Browser downloads are not verifiable; the local recovery journal remains available.';
+            note.textContent = 'Before replacement, you can choose whether to make an encrypted safety export. Browser downloads are not verifiable; the local recovery journal remains available.';
             note.setAttribute('style', 'margin:10px 0 0;font-size:0.8rem;opacity:0.7;');
             body.appendChild(note);
 
@@ -58826,7 +58909,46 @@ function getActiveEditor() {
                 && !!sutraCloudRuntime.backupPassphrase;
         }
 
-        async function runSutraCloudAutoBackup() {
+        function normalizeSutraCloudDailyTime(value) {
+            return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : '20:00';
+        }
+
+        // Calendar dates, rather than elapsed 24-hour intervals, follow local
+        // time through daylight-saving changes. Only the latest missed slot is due.
+        function getSutraCloudDailySchedule(meta, now = Date.now()) {
+            const [hour, minute] = normalizeSutraCloudDailyTime(meta.autoBackup.dailyTime).split(':').map(Number);
+            const date = new Date(now);
+            const at = offset => new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset, hour, minute).getTime();
+            const today = at(0);
+            const dueAt = today <= now ? today : at(-1);
+            const nextAt = today > now ? today : at(1);
+            const coveredThrough = Math.max(
+                Date.parse(meta.lastAutoBackupAt) || 0,
+                Date.parse(meta.lastAutoBackupCheckAt) || 0,
+                Date.parse(meta.autoBackup.dailyScheduleStartedAt) || now
+            );
+            return { due: dueAt > coveredThrough, dueAt, nextAt };
+        }
+
+        function scheduleSutraCloudDailyBackup(retryDelay = 0) {
+            if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
+            const meta = loadSutraCloudMeta();
+            if (!sutraCloudAutoReady() || meta.autoBackup.frequency !== 'daily') return;
+            const now = Date.now();
+            const schedule = getSutraCloudDailySchedule(meta, now);
+            // Recheck the clock at least once a minute, including after sleep or
+            // timezone changes. Failed/offline/unchanged attempts never spin.
+            const delay = schedule.due ? retryDelay : Math.min(60000, schedule.nextAt - now);
+            sutraCloudAutoTimer = setTimeout(async () => {
+                sutraCloudAutoTimer = null;
+                try { await runSutraCloudAutoBackup('daily'); }
+                finally {
+                    if (loadSutraCloudMeta().autoBackup.frequency === 'daily') scheduleSutraCloudDailyBackup(60000);
+                }
+            }, delay);
+        }
+
+        async function runSutraCloudAutoBackup(expectedFrequency) {
             if (!sutraCloudAutoReady() || sutraCloudRuntime.busy || !navigator.onLine
                 || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
             // Without an atomic cross-tab lock, keep automatic backup paused.
@@ -58838,17 +58960,28 @@ function getActiveEditor() {
                     sutraCloudMeta = null;
                     const meta = loadSutraCloudMeta();
                     if (!sutraCloudAutoReady() || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+                    const frequency = meta.autoBackup.frequency;
+                    if (expectedFrequency && frequency !== expectedFrequency) return { skipped: true, reason: 'schedule-changed' };
+                    if (frequency === 'daily' && !getSutraCloudDailySchedule(meta).due) return { skipped: true, reason: 'not-due' };
+                    const scheduleKey = JSON.stringify(meta.autoBackup);
                     // Use the existing semantic projection so save timestamps and
                     // UI bookkeeping cannot manufacture another backup of unchanged work.
                     const projection = window.SutraSyncProjection.buildProjection(await getSyncWorkspaceSnapshot());
                     const hashes = await window.SutraSyncProjection.hashProjection(projection);
                     const hash = await window.SutraSyncProtocol.hashText(window.SutraSyncProtocol.stableStringify(hashes));
-                    if (!hash || meta.lastAutoBackupHash === hash) return { skipped: true, reason: 'unchanged' };
-                    if (meta.autoBackup.frequency === 'daily' && meta.lastAutoBackupAt
-                        && Date.now() - Date.parse(meta.lastAutoBackupAt) < 20 * 60 * 60 * 1000) return { skipped: true, reason: 'not-due' };
+                    if (!sutraCloudAutoReady() || JSON.stringify(loadSutraCloudMeta().autoBackup) !== scheduleKey) return { skipped: true, reason: 'schedule-changed' };
+                    if (!hash || meta.lastAutoBackupHash === hash) {
+                        if (hash && frequency === 'daily') {
+                            // A check is not a successful backup. Keep its receipt
+                            // separate so unchanged work is not rehashed every minute.
+                            meta.lastAutoBackupCheckAt = new Date().toISOString();
+                            persistSutraCloudMeta();
+                        }
+                        return { skipped: true, reason: 'unchanged' };
+                    }
                     return await sutraCloudBackupNow({
                         passphrase: sutraCloudRuntime.backupPassphrase,
-                        auto: true, silent: true, label: 'Auto backup', workspaceHash: hash
+                        auto: true, silent: true, label: 'Auto backup', workspaceHash: hash, autoScheduleKey: scheduleKey
                     });
                 });
             } catch (error) {
@@ -58863,7 +58996,7 @@ function getActiveEditor() {
             if (sutraCloudAutoTimer) clearTimeout(sutraCloudAutoTimer);
             sutraCloudAutoTimer = setTimeout(() => {
                 sutraCloudAutoTimer = null;
-                runSutraCloudAutoBackup();
+                runSutraCloudAutoBackup('change');
             }, delayMs);
         }
 
@@ -58874,15 +59007,15 @@ function getActiveEditor() {
             const freq = (meta.autoBackup && meta.autoBackup.frequency) || 'daily';
             if (reason === 'hidden') {
                 // "On app close" — best-effort when the tab is hidden/backgrounded.
-                if (freq === 'close') runSutraCloudAutoBackup();
+                if (freq === 'close') runSutraCloudAutoBackup('close');
                 return;
             }
             if (freq === 'close') return;            // only fires on hidden
             if (freq === 'daily') {
-                const last = meta.lastAutoBackupAt ? Date.parse(meta.lastAutoBackupAt) : 0;
-                if (last && (Date.now() - last) < 20 * 60 * 60 * 1000) return; // ~once per day
+                scheduleSutraCloudDailyBackup();
+                return;
             }
-            scheduleSutraCloudAutoBackup();          // 'change' or due 'daily' → debounced upload
+            scheduleSutraCloudAutoBackup();          // significant changes → debounced upload
         }
 
         function bindSutraCloudVisibilityAutoBackup() {
@@ -58892,8 +59025,11 @@ function getActiveEditor() {
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') {
                         try { maybeSutraCloudAutoBackup('hidden'); } catch (e) { /* noop */ }
+                    } else {
+                        try { maybeSutraCloudAutoBackup('visible'); } catch (e) { /* noop */ }
                     }
                 });
+                window.addEventListener('pageshow', () => maybeSutraCloudAutoBackup('pageshow'));
             } catch (e) { /* noop */ }
         }
 
@@ -58943,7 +59079,14 @@ function getActiveEditor() {
             const autoFreq = document.getElementById('sutraCloudAutoFrequency');
             if (autoFreq) {
                 autoFreq.value = (meta.autoBackup && meta.autoBackup.frequency) || 'daily';
-                autoFreq.disabled = !(meta.autoBackup && meta.autoBackup.enabled);
+                autoFreq.disabled = sutraCloudRuntime.busy;
+            }
+            const autoTimeRow = document.getElementById('sutraCloudAutoTimeRow');
+            if (autoTimeRow) autoTimeRow.hidden = meta.autoBackup.frequency !== 'daily';
+            const autoTime = document.getElementById('sutraCloudAutoTime');
+            if (autoTime) {
+                autoTime.value = meta.autoBackup.dailyTime;
+                autoTime.disabled = sutraCloudRuntime.busy;
             }
             if (!ready || !hasList) sutraCloudSetHidden('sutraCloudManage', true);
         }
@@ -58978,7 +59121,8 @@ function getActiveEditor() {
             row('Status', label, tone);
             if (identity) row(provider.requiresOAuth || provider.id === 'supabase' ? 'Account' : 'Endpoint', identity);
             row('Last backup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'never');
-            row('Auto-backup', (meta.autoBackup && meta.autoBackup.enabled) ? `on (${meta.autoBackup.frequency || 'daily'})` : 'off');
+            row('Auto-backup', meta.autoBackup.enabled
+                ? (meta.autoBackup.frequency === 'daily' ? `Daily at ${meta.autoBackup.dailyTime} (local time)` : `on (${meta.autoBackup.frequency})`) : 'off');
             if (!ready && status && status.reason) row('Next step', status.reason, 'warn');
             if (meta.lastError && ready) row('Last error', meta.lastError, 'warn');
         }
@@ -59461,13 +59605,18 @@ function getActiveEditor() {
         }
 
         function setSutraCloudAutoBackup(options = {}) {
-            const frequency = options.frequency || 'daily';
-            if (!['daily', 'close', 'change'].includes(frequency)) throw new Error('Unknown automatic backup frequency.');
-            if (options.enabled && !sutraCloudRuntime.backupPassphrase) throw new Error('Make an encrypted backup first to unlock automatic backups for this session.');
-            const provider = getActiveSutraCloudProvider();
-            if (options.enabled && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready)) throw new Error('Connect a supported backup destination first.');
             const meta = loadSutraCloudMeta();
-            meta.autoBackup = { ...meta.autoBackup, enabled: options.enabled === true, frequency };
+            const frequency = options.frequency || meta.autoBackup.frequency || 'daily';
+            if (!['daily', 'close', 'change'].includes(frequency)) throw new Error('Unknown automatic backup frequency.');
+            const dailyTime = options.dailyTime === undefined ? normalizeSutraCloudDailyTime(meta.autoBackup.dailyTime) : options.dailyTime;
+            if (normalizeSutraCloudDailyTime(dailyTime) !== dailyTime) throw new Error('Choose a valid backup time.');
+            const enabled = options.enabled === undefined ? meta.autoBackup.enabled : options.enabled === true;
+            if (enabled && !meta.autoBackup.enabled && !sutraCloudRuntime.backupPassphrase) throw new Error('Make an encrypted backup first to unlock automatic backups for this session.');
+            const provider = getActiveSutraCloudProvider();
+            if (enabled && !meta.autoBackup.enabled && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready)) throw new Error('Connect a supported backup destination first.');
+            const changed = !meta.autoBackup.enabled || frequency !== meta.autoBackup.frequency || dailyTime !== meta.autoBackup.dailyTime;
+            meta.autoBackup = { ...meta.autoBackup, enabled, frequency, dailyTime,
+                dailyScheduleStartedAt: changed ? new Date().toISOString() : meta.autoBackup.dailyScheduleStartedAt };
             if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
             persistSutraCloudMeta();
             updateSutraCloudUi();
@@ -59547,6 +59696,7 @@ function getActiveEditor() {
                     sutraCloudMeta = null;
                     if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
                     updateSutraCloudUi();
+                    maybeSutraCloudAutoBackup('settings-changed');
                 }
             });
             const on = (id, event, handler) => {
@@ -59596,6 +59746,10 @@ function getActiveEditor() {
             on('sutraCloudAutoFrequency', 'change', (event) => {
                 try { setSutraCloudAutoBackup({ enabled: loadSutraCloudMeta().autoBackup.enabled, frequency: event.target.value }); }
                 catch (error) { showToast(error.message || 'Could not change backup frequency.'); updateSutraCloudUi(); }
+            });
+            on('sutraCloudAutoTime', 'change', (event) => {
+                try { setSutraCloudAutoBackup({ dailyTime: event.target.value }); }
+                catch (error) { showToast(error.message || 'Could not change backup time.'); updateSutraCloudUi(); }
             });
             on('sutraCloudSwitchConfirmYes', 'click', async () => {
                 const id = sutraCloudUiState.pendingProviderSwitch;
@@ -62723,6 +62877,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 },
                 pageExists: (pageId) => pages.some(p => p && p.id === pageId),
                 getActiveSpaceId: () => activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default',
+                getFocusUpcomingTasks: (limit) => getFocusUpcomingTasks(limit),
                 getCurrentPage: () => pages.find(page => page && page.id === currentPageId) || null,
                 createSpace(name = 'QA Space') {
                     return createSpaceFromFields({ name, icon: '🧪', color: '#6fa7ff' });
@@ -64867,7 +65022,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         });
                         notifySutraBackupStage(progressOptions, 'downloading');
                         const download = await triggerBlobDownload(encrypted.blob, encrypted.filename);
-                        return { destination: (download && download.destination) || 'download', filename: encrypted.filename };
+                        return { destination: (download && download.destination) || 'download', filename: encrypted.filename, snapshotSaveRevision: encrypted.snapshotSaveRevision };
                     }
                 });
                 if (!outcome) return { ok: false, declined: true };
@@ -64877,7 +65032,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     // confirmed by the app, so it must not masquerade as one.
                     recordAtelierDataHealth({ lastPreImportSnapshotAt: new Date().toISOString() });
                 }
-                return { ok: true, verified: outcome.destination === 'folder', destination: outcome.destination, filename: outcome.filename };
+                return { ok: true, verified: outcome.destination === 'folder', destination: outcome.destination, filename: outcome.filename, snapshotSaveRevision: outcome.snapshotSaveRevision };
             } catch (err) {
                 console.warn('Pre-import safety snapshot failed', err);
                 if (window.SutraReportError && typeof window.SutraReportError === 'function') {
@@ -64885,6 +65040,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 }
                 return { ok: false };
             }
+        }
+
+        async function confirmPreImportSafetyExport() {
+            const body = document.createElement('p');
+            body.textContent = 'Would you like an encrypted .sutra export of your current workspace before restoring? It gives you a separate file to return to. The local recovery journal remains available either way.';
+            const { result } = openSutraModal({
+                titleText: 'Make a safety export before restoring?',
+                bodyNode: body,
+                buttons: [
+                    { label: 'Cancel restore', value: false },
+                    { label: 'No, continue without export', value: 'skip' },
+                    { label: 'Yes, make safety export', value: 'export', primary: true }
+                ]
+            });
+            return result;
         }
 
         // ---- Whole-workspace snapshots (in-app restore points + diff) ----------
@@ -65117,6 +65287,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function applyValidatedWorkspaceImport(workspacePayload, options = {}) {
             validateWorkspacePayloadForImport(workspacePayload);
+            const interactiveRestore = options.skipConflictCheck !== true;
+            let expectedSaveRevision = localWorkspaceSaveRequestRevision;
+            const remoteCommitAtStart = interactiveRestore ? workspaceCoordinator.getState().lastRemoteCommit : null;
+            const remoteHashAtStart = remoteCommitAtStart && remoteCommitAtStart.hash || '';
             // Every whole-workspace replacement funnels through here, so the
             // "this device vs the backup" conflict chooser lives here too —
             // file imports, Drive restores and Sutra Cloud restores all get the
@@ -65133,13 +65307,23 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     return false;
                 }
             }
-            // Interactive restores offer an encrypted file; cancellation stops
-            // replacement. Background restores rely on the recovery journal.
+            // Ask before opening the password form. Skipping the file is an
+            // explicit choice; dismissing either dialog cancels replacement.
             if (options.safetySnapshot !== false) {
-                showToast('Preparing encrypted safety snapshot...', { durationMs: 1400 });
-                const snapshot = await createPreImportSafetySnapshot({
-                    recordHealth: options.recordSafetySnapshotHealth !== false
+                const safetyChoice = await confirmPreImportSafetyExport();
+                if (safetyChoice !== 'export' && safetyChoice !== 'skip') {
+                    showToast('Import cancelled — this device was left untouched.');
+                    return false;
+                }
+                const snapshot = safetyChoice === 'skip' ? { ok: true } : await createPreImportSafetySnapshot({
+                    // Restore immediately replaces this health record. Avoid an
+                    // export-only settings write during the replacement gate.
+                    recordHealth: false
                 });
+                // Export flushes the active editor and captures those latest
+                // local edits. Only a successful export may advance the local
+                // baseline; Skip must still protect the pre-dialog workspace.
+                if (safetyChoice === 'export' && snapshot.ok && Number.isSafeInteger(snapshot.snapshotSaveRevision)) expectedSaveRevision = snapshot.snapshotSaveRevision;
                 if (!snapshot.ok) {
                     if (snapshot.declined) {
                         showToast('Import cancelled — the pre-restore safety snapshot was not created.');
@@ -65168,7 +65352,31 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (typeof options.canApplyNow === 'function' && options.canApplyNow() === false) {
                 return false;
             }
-            importWorkspacePayload(workspacePayload);
+            if (interactiveRestore) {
+                // Verify the actual disk head after the user-facing dialogs.
+                // Hold the canonical writer lock through the synchronous apply,
+                // including Homework's compatibility-store replacement. Do not
+                // await a save while holding this lock: commits acquire it too.
+                await persistenceCommitQueue;
+                const applied = await workspaceCoordinator.runExclusive(async () => {
+                    const current = await readAppData();
+                    const remoteCommit = workspaceCoordinator.getState().lastRemoteCommit;
+                    const changed = persistenceWritesBlocked || sutraRemoteCommitPending
+                        || (remoteCommit && remoteCommit.hash || '') !== remoteHashAtStart
+                        || hashCanonicalWorkspaceRecord(current) !== canonicalWorkspaceHash
+                        || localWorkspaceSaveRequestRevision !== expectedSaveRevision;
+                    if (changed) {
+                        showToast('Restore cancelled because the workspace changed while you were reviewing it. Your current work was kept. Reload the latest workspace and try restoring again.', { durationMs: 7000 });
+                        return false;
+                    }
+                    if (typeof options.canApplyNow === 'function' && options.canApplyNow() === false) return false;
+                    importWorkspacePayload(workspacePayload);
+                    return true;
+                });
+                if (!applied) return false;
+            } else {
+                importWorkspacePayload(workspacePayload);
+            }
             // Durability gate: block on the imported attachment blob writes so we
             // never report a successful restore while file bytes are only in the
             // in-memory session cache (an immediate reload would lose them).
@@ -71462,6 +71670,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         
         function renderSlashMenuItems(commands) {
             const container = document.getElementById('slashMenuItems');
+            const menu = document.getElementById('slashMenu');
+            const previousScrollTop = menu.scrollTop;
             
             if (commands.length === 0) {
                 container.innerHTML = '<div class="slash-menu-empty">No matching commands</div>';
@@ -71481,6 +71691,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     </div>
                 </div>
             `).join('');
+            menu.scrollTop = previousScrollTop;
+            const selected = container.querySelector('.slash-menu-item.selected');
+            if (selected) {
+                const rowRect = selected.getBoundingClientRect();
+                const menuRect = menu.getBoundingClientRect();
+                const scale = menuRect.height / menu.offsetHeight || 1;
+                const visibleTop = menuRect.top + (menu.clientTop + 6) * scale;
+                const visibleBottom = menuRect.bottom - (menu.clientTop + 6) * scale;
+                if (rowRect.top < visibleTop) menu.scrollTop -= (visibleTop - rowRect.top) / scale;
+                else if (rowRect.bottom > visibleBottom) menu.scrollTop += (rowRect.bottom - visibleBottom) / scale;
+            }
         }
         
         async function executeSlashCommand(command) {

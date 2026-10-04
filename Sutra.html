@@ -117,7 +117,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261001-create-polish4">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -6540,15 +6540,22 @@
                 <div class="sutra-cloud-manage" id="sutraCloudManage" hidden>
                     <div class="sutra-cloud-action-buttons">
                         <button class="storage-btn" type="button" id="sutraCloudRefreshBtn"><i class="fas fa-rotate" aria-hidden="true"></i> Refresh</button>
-                        <label class="sutra-cloud-auto">
+                        <div class="sutra-cloud-auto">
+                          <label class="sutra-cloud-auto-toggle">
                             <input type="checkbox" id="sutraCloudAutoToggle">
                             <span>Auto-backup (optional, off by default)</span>
-                            <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
+                          </label>
+                            <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency">
                                 <option value="close">When app is hidden (best effort)</option>
                                 <option value="daily">Once a day</option>
                                 <option value="change">On significant change</option>
                             </select>
-                        </label>
+                            <div id="sutraCloudAutoTimeRow" class="sutra-cloud-auto-time">
+                                <label for="sutraCloudAutoTime">Daily backup time</label>
+                                <input class="modal-input" id="sutraCloudAutoTime" type="time" value="20:00" step="60" required aria-describedby="sutraCloudAutoTimeHelp">
+                                <p class="sutra-cloud-fineprint" id="sutraCloudAutoTimeHelp">Uses this device’s local time. Keep Sutra open and make one backup to unlock your password each session. A missed backup runs when Sutra is ready again; unchanged work is skipped. Changing the time starts with the next occurrence.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="sutra-cloud-backups" id="sutraCloudBackupList" aria-live="polite"></div>
                 </div>
@@ -6858,7 +6865,8 @@
 
                         <div id="newPageContentStarterRow" class="new-page-starter-field" hidden>
                             <label class="new-page-field-label" for="newPageContentStarter">Start with</label>
-                            <select id="newPageContentStarter" aria-label="Content starter"></select>
+                            <select id="newPageContentStarter" aria-label="Content starter" aria-describedby="newPageContentStarterPreview"></select>
+                            <p id="newPageContentStarterPreview" class="new-page-starter-preview" aria-live="polite" hidden></p>
                         </div>
 
                         <div class="new-page-parent-field">
@@ -7898,10 +7906,10 @@
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
     <script src="src/domain/content-timeline.js?v=20261001-content-timeline3"></script>
-    <script src="src/features/notes/rich-links.js?v=20261001-rich-links6"></script>
-    <script src="src/features/notes/inline-ai-assist.js?v=20261001-inline-ai1"></script>
+    <script src="src/features/notes/rich-links.js?v=20261003-create-review5"></script>
+    <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/authoring-tools.js?v=20261001-authoring4"></script>
-    <script src="src/features/notes/editor-v2.js?v=20261001-authoring4"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261003-create-review5"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7915,7 +7923,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261001-qa-review1"></script>
+    <script src="src/core/app.js?v=20261003-create-review5"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7939,15 +7947,16 @@
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20261001-todo-completion1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
-    <script src="src/features/workspace/slides.js?v=20261001-authoring6"></script>
+    <script src="src/features/workspace/slides.js?v=20261003-create-review5"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
-    <script src="src/features/workspace/sheets.js?v=20261001-authoring6"></script>
-    <script src="src/features/workspace/html-pages.js?v=20261001-authoring6"></script>
-    <script src="src/features/workspace/content-timeline-hosts.js?v=20261001-content-timeline3"></script>
+    <script src="src/features/workspace/create-page-templates.js?v=20261003-create-polish1"></script>
+    <script src="src/features/workspace/sheets.js?v=20261003-create-review5"></script>
+    <script src="src/features/workspace/html-pages.js?v=20261003-create-review5"></script>
+    <script src="src/features/workspace/content-timeline-hosts.js?v=20261003-create-review5"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
-    <script src="src/features/workspace/today-focus-timer.js?v=20261001-focus-player2"></script>
+    <script src="src/features/workspace/today-focus-timer.js?v=20261003-create-review5"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
@@ -8357,18 +8366,18 @@
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
     <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-dust-hold3">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20261001-authoring4">
-    <link rel="stylesheet" href="styles/features/sheets.css?v=20261001-create-polish3">
-    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261001-authoring4">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20261001-authoring4">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
-    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260915-cloud2">
+    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/backup-progress.css?v=20261001-backup-progress1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
-    <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261001-focus-player2">
+    <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
@@ -8376,11 +8385,11 @@
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
     <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261001-desktop-density4">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
-    <link rel="stylesheet" href="styles/features/rich-links.css?v=20261001-rich-links8">
-    <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261001-inline-ai1">
+    <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/content-timeline.css?v=20261001-content-timeline4">
-    <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261001-content-timeline3">
-    <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261001-canvas-polish2">
+    <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/folder-workspace.css?v=20261001-folders7">
     <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261001-qa-touch5">
 

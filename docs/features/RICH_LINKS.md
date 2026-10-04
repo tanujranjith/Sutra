@@ -2,10 +2,13 @@
 
 Use **Insert link**, the selection toolbar, or `/link` in the Modern Notes
 editor. Enter display text and a complete HTTP or HTTPS address, then choose
-**Save link**. Clicking the saved link or its **Preview** button opens a local
-preview with the destination, **Open link**, **Edit link**, and **Remove link**.
-Modified clicks retain ordinary browser link behavior. Opening the website is
-an explicit action; rendering a saved link makes no network request.
+**Save link**. Clicking a saved link opens a small local popover just below it.
+The popover shows the address and compact **Copy link**, **Edit link**, and
+**Remove link** actions when the note can be edited. Choose the address in the
+popover to open the website in a new tab. **Edit link** opens a compact form
+anchored to the link; **Apply** saves through the note editor's normal edit
+path. Modified clicks retain ordinary browser link behavior. Rendering a saved
+link and opening its popover make no network request.
 
 The link is a native inline editor node. Edits, removal, Undo/Redo, autosave,
 and reload use the owning note's existing transaction and save path. Its JSON

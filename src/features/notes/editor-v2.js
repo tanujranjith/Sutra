@@ -1139,12 +1139,14 @@
 
     function renderSlashMenu() {
         var el = ensureSlashMenu();
+        var previousScrollTop = el.scrollTop;
         writeTrustedHtml(el, ''); // clear
         ctx.slashItems.forEach(function (item, idx) {
             var row = document.createElement('button');
             row.type = 'button';
             row.className = 'editor-v2-slash-item' + (idx === ctx.slashActiveIndex ? ' active' : '');
             row.setAttribute('role', 'option');
+            row.setAttribute('aria-selected', String(idx === ctx.slashActiveIndex));
             var icon = document.createElement('i');
             icon.className = 'fas ' + item.icon;
             var label = document.createElement('span');
@@ -1156,6 +1158,18 @@
             el.appendChild(row);
         });
         el.style.display = ctx.slashItems.length ? 'block' : 'none';
+        el.scrollTop = previousScrollTop;
+        var selected = el.querySelector('.editor-v2-slash-item.active');
+        if (selected) {
+            // Scroll only the popup; scrollIntoView can move the note/page too.
+            var rowRect = selected.getBoundingClientRect();
+            var menuRect = el.getBoundingClientRect();
+            var scale = menuRect.height / el.offsetHeight || 1;
+            var visibleTop = menuRect.top + (el.clientTop + 6) * scale;
+            var visibleBottom = menuRect.bottom - (el.clientTop + 6) * scale;
+            if (rowRect.top < visibleTop) el.scrollTop -= (visibleTop - rowRect.top) / scale;
+            else if (rowRect.bottom > visibleBottom) el.scrollTop += (rowRect.bottom - visibleBottom) / scale;
+        }
     }
 
     function positionSlashMenu() {
