@@ -10,7 +10,15 @@ anchored to the link; **Apply** saves through the note editor's normal edit
 path. Modified clicks retain ordinary browser link behavior. Rendering a saved
 link and opening its popover make no network request.
 
-The link is a native inline editor node. Edits, removal, Undo/Redo, autosave,
+Pasted URLs and pasted HTML links open the same popover on their first click;
+there is no preliminary Edit/Save step. They remain ordinary native link marks
+in `page.content`. Changing their address or removing the link preserves the
+existing text runs and formatting, and removal leaves the visible text in
+place. A replacement display label inherits the first run's formatting.
+Actions target the clicked link, including links with mixed bold/italic runs,
+and cannot write after the note, editor document, or write permission changes.
+
+An inserted rich link is a native inline editor node. Edits, removal, Undo/Redo, autosave,
 and reload use the owning note's existing transaction and save path. Its JSON
 attribute in `page.content` holds `href`, `label`, and optional `metadataTitle`
 and `thumbnail`; unrelated future fields survive edits. Known metadata follows

@@ -129,7 +129,7 @@
             if (!canWrite() || !global.SutraRichLinks) return false;
             var ed = editor();
             var token = nodeToken || (!range && selected('sutraRichLink'));
-            var value = token && token.node ? json(token.node.attrs.linkJSON) : null;
+            var value = token && token.node ? json(token.node.attrs.linkJSON) : token && token.linkValue;
             if (!token) {
                 // Legacy ordinary links remain editable through the same dialog.
                 if (!range && ed.isActive('link')) ed.commands.extendMarkRange('link');
@@ -154,7 +154,70 @@
                 return commit(ed.state.tr.setNodeMarkup(token.pos, undefined,
                     Object.assign({}, token.node.attrs, { linkJSON: JSON.stringify(next) })));
             }
+            if (token.linkMark) {
+                var tr = ed.state.tr;
+                var label = ed.state.doc.textBetween(token.from, token.to, ' ');
+                var nextMark = token.linkMark.type.create(Object.assign({}, token.linkMark.attrs, { href: next.href }));
+                if (next.label === label) {
+                    tr.removeMark(token.from, token.to, token.linkMark);
+                    tr.addMark(token.from, token.to, nextMark);
+                } else {
+                    // A new label inherits the first text run's other formatting;
+                    // changing only the address keeps every existing text run.
+                    var first = ed.state.doc.nodeAt(token.from);
+                    var marks = (first ? first.marks : []).filter(function (mark) { return mark.type !== token.linkMark.type; });
+                    tr.replaceWith(token.from, token.to, ed.state.schema.text(next.label || next.href, marks.concat(nextMark)));
+                }
+                return commit(tr.setMeta('preventAutolink', true));
+            }
             return insertNode('sutraRichLink', { linkJSON: JSON.stringify(next) }, token);
+        }
+        function previewNativeLink(view, event) {
+            if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return false;
+            var anchor = event.target.closest && event.target.closest('a');
+            var links = global.SutraRichLinks;
+            if (!anchor || !view.dom.contains(anchor) || anchor.closest('.sutra-rich-link-inline') || !links) return false;
+            var href = links.validateHref(anchor.getAttribute('href'));
+            if (!href) return false;
+            var token = capture();
+            var callbacks = {};
+            var value = { href: href, label: anchor.textContent || href };
+            if (token) {
+                try {
+                    // Resolve the clicked anchor, not the last editor selection.
+                    // Expand through adjacent text runs sharing the exact mark,
+                    // including links split by bold/italic formatting.
+                    var resolved = token.doc.resolve(view.posAtDOM(anchor, 0));
+                    var parent = resolved.parent;
+                    var child = parent.childAfter(resolved.parentOffset);
+                    var mark = child.node && child.node.marks.find(function (candidate) {
+                        return candidate.type.name === 'link' && links.validateHref(candidate.attrs.href) === href;
+                    });
+                    if (!mark) return false;
+                    var firstIndex = child.index;
+                    var lastIndex = child.index + 1;
+                    var from = resolved.start() + child.offset;
+                    var to = from + child.node.nodeSize;
+                    while (firstIndex > 0 && mark.isInSet(parent.child(firstIndex - 1).marks)) {
+                        from -= parent.child(--firstIndex).nodeSize;
+                    }
+                    while (lastIndex < parent.childCount && mark.isInSet(parent.child(lastIndex).marks)) {
+                        to += parent.child(lastIndex++).nodeSize;
+                    }
+                    token.from = from; token.to = to; token.linkMark = mark;
+                    token.linkValue = { href: mark.attrs.href, label: token.doc.textBetween(from, to, ' ') };
+                    value = token.linkValue;
+                    callbacks.onEdit = function () { openRichLink(token); };
+                    callbacks.onRemove = function () {
+                        if (!current(token)) return;
+                        // Suppress URL autolinking for this explicit unlink.
+                        commit(editor().state.tr.removeMark(from, to, mark).setMeta('preventAutolink', true));
+                    };
+                } catch (_) { return false; }
+            }
+            if (!links.preview(value, callbacks, anchor)) return false;
+            event.preventDefault();
+            return true;
         }
         async function openAI(range) {
             var token = captureSlash(range);
@@ -276,7 +339,13 @@
                     }, stopEvent: function (event) { return !!event.target.closest('a, button'); }, ignoreMutation: function () { return true; } };
                 }; }
             });
-            return [timeline, richLink];
+            var nativeLinks = eng.Extension.create({
+                name: 'sutraNativeLinkActions',
+                addProseMirrorPlugins: function () {
+                    return [new eng.Plugin({ props: { handleDOMEvents: { click: previewNativeLink } } })];
+                }
+            });
+            return [timeline, richLink, nativeLinks];
         }
         return { buildExtensions: buildExtensions, openRichLink: openRichLink, openAI: openAI,
             openTimeline: openTimeline, captureContentTimelineInsertion: capture,

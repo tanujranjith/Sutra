@@ -41,9 +41,33 @@ No automated test suites, installs, builds, or deployment checks were run, per t
 
 ## Remaining hands-on checks
 
-1. In a connected backup session, choose a daily time, reload, and confirm the next scheduled run; also try switching frequency and disabling it.
-2. Restore a disposable backup through Yes, No and Cancel; cancel the password form and confirm original work remains. Do not use the only copy of important data.
-3. Open Miniplayer in a browser with Document Picture-in-Picture support, switch to another app, pause/resume, and change tasks while paused.
-4. Optional: connect the intended AI provider and generate/apply a draft, plus a phone/touch and Office export round-trip pass.
+1. Daily backup time and optional restore safety export were verified by the user on 2026-10-04, along with the timeline toolbar.
+2. Open Miniplayer in a browser with Document Picture-in-Picture support, switch to another app, pause/resume, and change tasks while paused.
+3. Optional: connect the intended AI provider and generate/apply a draft, plus a phone/touch and Office export round-trip pass.
 
 Manual screenshots are local ignored artifacts under `.tmp/qa/`: `html-toolbar.png`, `canvas-preserved-text.png`, `link-popup.png`, `inline-ai-panel.png`, `slides-editor.png`, and `sheets-template.png`.
+
+## Pasted-link follow-up — 2026-10-04
+
+The user reopened item 4: newly pasted links required an unchanged Edit/Save
+before the popup appeared. Ordinary Tiptap link marks lacked the rich-link
+NodeView activation handler. A scoped authoring extension now routes native
+link clicks to the same local popup, captures the exact marked range, and uses
+guarded native transactions for editing and unlinking. No data fields or
+storage paths changed. A new label inherits the first run's formatting;
+address-only edits and unlink retain every existing run.
+
+Manual QA on port 5290 reproduced the missing popup before refresh, then
+verified a fresh plain-text URL paste with immediate popup, an existing pasted
+link after reload, copy, address/label edits, unlink preserving text, Undo/Redo,
+mixed bold/italic HTML links and neighboring-link isolation, and popup cleanup
+on page switching. The primary agent reviewed the implementation in three
+passes; Luna supplied an additional read-only review. Screenshot:
+`.tmp/qa/fresh-paste-popup.png`. Keyboard activation of a native editor anchor
+could not be exercised through the browser locator, so that check remains
+unverified. Automated suites and builds remain unrun under the resource
+constraint.
+
+JavaScript syntax, architecture guardrails, the unchanged core's 27 static
+integrity assertions, generated asset manifest, cache-stamp freshness, and
+whitespace checks passed for this follow-up.
