@@ -71488,6 +71488,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // ==================== SLASH COMMANDS ====================
         const slashCommands = [
+            { id: 'ai', icon: 'fa-wand-magic-sparkles', title: 'Sutra Assistant writing help', desc: 'Open the Assistant with a writing prompt', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || 'Help me improve the writing in this note while preserving my meaning.', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
+            { id: 'assistant', icon: 'fa-robot', title: 'Sutra Assistant general help', desc: 'Open the Assistant mini panel', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || '', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
             { id: 'h1', icon: 'fa-heading', title: 'Heading 1', desc: 'Large section heading', action: () => formatBlock('h1') },
             { id: 'h2', icon: 'fa-heading', title: 'Heading 2', desc: 'Medium section heading', action: () => formatBlock('h2') },
             { id: 'h3', icon: 'fa-heading', title: 'Heading 3', desc: 'Small section heading', action: () => formatBlock('h3') },

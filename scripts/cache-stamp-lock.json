@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261003-create-review7",
-    "hash": "7a999836833b148f"
+    "stamp": "20261004-assistant-slides1",
+    "hash": "e18ce55a2373c065"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -240,12 +240,12 @@
     "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261004-pasted-links1",
-    "hash": "87a60ef8b95cc514"
+    "stamp": "20261004-assistant-slides2",
+    "hash": "62501fff6f0dfa53"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "6e31b85290d92f12"
+    "stamp": "20261004-assistant-slides1",
+    "hash": "ec7db93953aedfd6"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261004-pasted-links1",
-    "hash": "023da9e3f611c5cb"
+    "stamp": "20261004-assistant-slides1",
+    "hash": "b342e0ca5ce8812b"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -412,8 +412,8 @@
     "hash": "55be3af77fd8c4d8"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "d6f54c624e03e14e"
+    "stamp": "20261004-assistant-slides5",
+    "hash": "6c7a8b96bb2f3169"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -640,8 +640,8 @@
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20261003-create-review7",
-    "hash": "7c0e5b29465f2240"
+    "stamp": "20261004-assistant-slides2",
+    "hash": "12fc82f06929f567"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",

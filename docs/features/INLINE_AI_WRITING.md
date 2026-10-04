@@ -1,7 +1,8 @@
 # Inline AI writing help
 
-In the Modern Notes editor, open **AI writing help** from the /ai slash
-command, the toolbar, or the selection toolbar. The writing workspace opens
+In the Modern Notes editor, open **Sutra Assistant writing help** from the
+slash menu (`/ai` remains a search alias), the toolbar, or the selection
+toolbar. The writing workspace opens
 inside the existing right-docked Sutra Assistant panel. It keeps the Assistant
 header and provider settings available while temporarily hiding the
 conversation and composer so the note request is easy to review. **Back to
@@ -30,5 +31,14 @@ ownership discard pending results. A failed request is visible and never
 applies a partial result. Sutra remains usable without a configured provider.
 The writing workspace stores no separate workspace state.
 
-The source change was checked with Node syntax validation. No provider request,
-automated test, or browser review was performed for this update.
+Choose **Sutra Assistant general help** in the slash menu to open the ordinary
+Sutra Assistant panel. This only opens the panel; it does not send a message or
+contact an AI provider, and it preserves any existing composer draft. The
+command removes its slash query through the current note editor transaction
+only while that editor still owns the captured note and text range. If the
+panel is unavailable, the slash query stays in the note.
+
+General help also returns an open writing workspace to the ordinary chat panel.
+In Classic Notes, the same commands open the canonical mini panel: writing help
+prepares a writing prompt when the composer is empty, and general help preserves
+the composer. Neither command sends a message.

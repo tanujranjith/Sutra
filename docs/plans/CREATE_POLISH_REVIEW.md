@@ -71,3 +71,42 @@ constraint.
 JavaScript syntax, architecture guardrails, the unchanged core's 27 static
 integrity assertions, generated asset manifest, cache-stamp freshness, and
 whitespace checks passed for this follow-up.
+
+## Assistant commands and Slides manipulation — 2026-10-04
+
+The user verified slash-menu scrolling (item 5), then reopened items 6 and 7.
+Modern Notes now lists **Sutra Assistant writing help** (including the /ai
+search alias) and **Sutra Assistant general help**. General help closes an open
+writing workspace, opens ordinary chat without sending, preserves the composer
+draft, and removes only the captured slash query through an owner-checked
+transaction. Classic Notes has corresponding panel-opening commands; its
+writing command prepopulates an empty composer with a writing prompt.
+
+Slides separates object selection from text editing: click/tap to select and
+drag, double-click or Enter/F2 to edit, Escape to select again. Eight handles,
+exact geometry fields, axis-constrained movement, center guides, and compact
+Edit/Duplicate/Delete/Arrange tools make direct manipulation discoverable.
+Text sessions and completed drags create undo checkpoints. Pending drag
+geometry stays outside the durable deck until a current-owner/revision-checked
+pointerup; interruptions discard the preview.
+
+The primary agent reviewed changes in three passes (implementation, ownership
+and history, final integration/browser behavior) and reviewed Luna's scoped
+Assistant output. A separate Luna review identified uncommitted drag mutations
+and blocked touch scrolling; both were corrected and reviewed again. Touch uses
+tap-to-select before dragging. No durable fields, stores, or export paths changed.
+
+Manual CUA checks on isolated port 5290 verified both slash names, /ai filtering,
+regular chat opening, writing-workspace opening, switching from writing to chat,
+preservation of an unsent composer draft, slash-query removal, text-box dragging,
+corner and side resizing, double-click/Enter editing, Escape, Backspace preserving
+the object, separate drag undo/redo, consecutive keyboard undo/redo, numeric
+placement, table-cell editing/movement, Arrange centering, reload persistence,
+and read-only presentation without resize handles. At 390px, the DOM showed no
+document-level horizontal overflow. Physical touch and an interruption during a
+held drag were not exercised; those paths were reviewed in source.
+
+Proof: .tmp/qa/slides-object-editing.png. Syntax, architecture guardrails,
+27 static core-integrity assertions, manifest generation, cache-stamp freshness,
+and whitespace checks passed. No automated suites, installs, builds, or provider
+requests were run. Changes remain on the local candidate branch; no merge/push.

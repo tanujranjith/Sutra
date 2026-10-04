@@ -958,7 +958,7 @@
             if (typeof window.insertLink === 'function') window.insertLink();
         }));
         el.appendChild(mkBtn('<i class="fas fa-highlighter"></i>', 'Highlight', function () { exec('highlight', '#ffe066'); }));
-        el.appendChild(mkBtn('<i class="fas fa-wand-magic-sparkles"></i>', 'AI writing help', function () {
+        el.appendChild(mkBtn('<i class="fas fa-wand-magic-sparkles"></i>', 'Sutra Assistant writing help', function () {
             hideBubble();
             if (state.authoring) state.authoring.openAI();
         }));
@@ -1091,7 +1091,8 @@
     /* ---- Slash-command insert menu ---- */
     function slashItemDefs() {
         return [
-            { label: 'AI writing help', icon: 'fa-magic', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAI(range); } },
+            { label: 'Sutra Assistant writing help', keywords: 'ai writing help', icon: 'fa-magic', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAI(range); } },
+            { label: 'Sutra Assistant general help', icon: 'fa-robot', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAssistantGeneral(range); } },
             { label: 'Link', icon: 'fa-link', deferred: true, run: function (range) { if (state.authoring) state.authoring.openRichLink(null, range); } },
             { label: 'Custom timeline', icon: 'fa-stream', deferred: true, run: function (range) { if (state.authoring) state.authoring.openTimeline(range); } },
             { label: 'Heading 1', icon: 'fa-heading', run: function () { if (window.formatBlock) window.formatBlock('h1'); } },
@@ -1236,7 +1237,9 @@
         if (!range) return closeSlash();
         ctx.slashFilter = range.filter;
         var items = slashItemDefs().filter(function (it) {
-            return !ctx.slashFilter || it.label.toLowerCase().indexOf(ctx.slashFilter) !== -1;
+            var label = String(it.label || '').toLowerCase();
+            var keywords = String(it.keywords || '').toLowerCase();
+            return !ctx.slashFilter || label.indexOf(ctx.slashFilter) !== -1 || keywords.indexOf(ctx.slashFilter) !== -1;
         });
         if (!items.length) return closeSlash();
         ctx.slashItems = items;

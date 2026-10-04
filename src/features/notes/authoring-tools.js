@@ -78,13 +78,13 @@
             return current(token) && token.node && token.node.type.name === name
                 && editor().state.doc.nodeAt(token.pos) === token.node;
         }
-        function commit(tr) {
+        function commit(tr, options) {
             if (!canWrite()) return false;
             // Apply the approved change through the owning editor history.
             tr.setMeta('uiEvent', 'sutra-authoring');
             editor().view.dispatch(tr.scrollIntoView());
             owner.scheduleSave();
-            editor().commands.focus();
+            if (!options || options.focus !== false) editor().commands.focus();
             return true;
         }
         function insertNode(name, attrs, token) {
@@ -264,6 +264,38 @@
             });
             return commit(ed.state.tr.replaceWith(from, to, nodes));
         }
+        function openAssistantGeneral(range) {
+            var token = captureSlash(range);
+            var assistant = global.flowAssistant;
+            if (!token || !assistant || typeof assistant.askFlow !== 'function') {
+                if (token) report('Sutra Assistant is unavailable. The slash command was left in your note.');
+                return false;
+            }
+            if (!current(token)) return false;
+            var doc = global.document;
+            var input = doc && doc.getElementById('chatInput');
+            var composerDraft = input ? input.value : '';
+            try {
+                var writing = global.SutraInlineAIAssist;
+                if (writing && typeof writing.cancel === 'function') writing.cancel();
+                assistant.askFlow(composerDraft, { send: false });
+            }
+            catch (_) {
+                report('Sutra Assistant could not open. The slash command was left in your note.');
+                return false;
+            }
+            var panel = doc && doc.getElementById('chatbotPanel');
+            if (!panel || panel.style.display !== 'flex') {
+                report('Turn on Sutra Assistant in Settings to open it. The slash command was left in your note.');
+                return false;
+            }
+            if (!current(token)) return false;
+            try {
+                return commit(editor().state.tr.delete(token.from, token.to), { focus: false });
+            } catch (_) {
+                return false;
+            }
+        }
         function buildExtensions(eng) {
             var timeline = eng.Node.create({
                 name: 'sutraContentTimeline', group: 'block', atom: true, selectable: true, draggable: true,
@@ -348,6 +380,7 @@
             return [timeline, richLink, nativeLinks];
         }
         return { buildExtensions: buildExtensions, openRichLink: openRichLink, openAI: openAI,
+            openAssistantGeneral: openAssistantGeneral,
             openTimeline: openTimeline, captureContentTimelineInsertion: capture,
             insertContentTimeline: insertContentTimeline, getContentTimelineSelection: getContentTimelineSelection,
             updateContentTimeline: updateContentTimeline };

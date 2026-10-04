@@ -34,7 +34,20 @@ nudge the selected object; Shift increases the movement. `Ctrl/Cmd+C`, `V`,
 `D`, `Z`, and `Y` copy, paste, duplicate, undo, and redo. Page Up/Down and the
 toolbar reorder the active slide. Objects snap to slide edges and centers while
 dragging, and the inspector can align a selected object to any slide edge or
-center line. Table cells edit directly on the slide.
+center line. Click an object to select it and drag its surface to move it.
+Double-click text (including a table cell), or press Enter/F2 on a selected object,
+to edit; Escape returns to object selection. Typing and Backspace affect text
+while editing, rather than deleting the object. Eight corner/edge handles resize
+selected objects. Hold Shift while dragging to move along one axis.
+
+Selected objects expose compact Edit text, Duplicate, Delete, and Arrange tools.
+The inspector offers exact left, top, width, and height percentages; changes
+apply on Enter or when leaving the field. Center snap guides appear during a
+drag. A completed drag and each text-edit session have separate undo checkpoints.
+Drag geometry is a temporary preview until release; cancellation, ownership
+changes, or an intervening page revision discard it. On touch, tap an object
+to select it before dragging; unselected objects and text-edit mode allow
+scrolling.
 
 These interactions mutate only the owning `page.slides` record through the
 canonical workspace bridge. Undo and clipboard data remain editor-session state

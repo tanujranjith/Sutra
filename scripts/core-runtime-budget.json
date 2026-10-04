@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-04T01:17:04.123Z",
-  "reviewedReason": "Document reviewed Create flows and retain auto-backup receipt on current metadata",
-  "maxBytes": 4963382,
-  "maxLines": 87070
+  "blessedAt": "2026-10-04T17:16:36.441Z",
+  "reviewedReason": "Add two classic slash menu entries that open the canonical Assistant without sending or clearing an existing draft",
+  "maxBytes": 4964281,
+  "maxLines": 87072
 }

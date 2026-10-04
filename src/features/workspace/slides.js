@@ -436,8 +436,8 @@
     var deck = ensureDeck(page); if (!deck.slides.some(function (slide) { return slide.id === activeSlideId; })) activeSlideId = deck.slides[0].id;
     selectedElementId = ''; render(); return true;
   }
-  function slidesUndo() { if (!restoreHistory(undoStack, redoStack)) showToast('Nothing to undo in this deck.'); }
-  function slidesRedo() { if (!restoreHistory(redoStack, undoStack)) showToast('Nothing to redo in this deck.'); }
+  function slidesUndo() { if (!restoreHistory(undoStack, redoStack)) showToast('Nothing to undo in this deck.'); else root.querySelector('.slides-stage').focus({ preventScroll: true }); }
+  function slidesRedo() { if (!restoreHistory(redoStack, undoStack)) showToast('Nothing to redo in this deck.'); else root.querySelector('.slides-stage').focus({ preventScroll: true }); }
   function selectedElement(deck) { var slide = activeSlide(deck); return slide && (slide.elements || []).find(function (element) { return element.id === selectedElementId; }) || null; }
   function updateSelectedElement(patch, options) { mutate(function (deck) { var element = selectedElement(deck); if (element) Object.assign(element, patch || {}); }, true, options); }
   function duplicateElement() { mutate(function (deck) { var slide = activeSlide(deck); var element = selectedElement(deck); if (!slide || !element) { showToast('Select a slide object first.'); return; } var copy = JSON.parse(JSON.stringify(element)); copy.id = id(); copy.x = Math.min(94 - Number(copy.width || 0), Number(copy.x || 0) + 3); copy.y = Math.min(94 - Number(copy.height || 0), Number(copy.y || 0) + 3); copy.zIndex = Math.max.apply(Math, slide.elements.map(function (item) { return Number(item.zIndex || 0); }).concat([0])) + 1; slide.elements.push(copy); selectedElementId = copy.id; }); }
@@ -483,23 +483,89 @@
     root.querySelector('[data-layout]').value = current.layout || 'blank';
     slideActionPanel('Replace this slide’s objects with the selected layout? You can undo this change.', false, '', 'Replace objects', apply);
   }
-  function nudgeElement(dx, dy) { var page = pageFrom(workspace()); var deck = page && deckFor(page); var element = deck && selectedElement(deck); if (!element) return; updateSelectedElement({ x: Math.max(0, Math.min(100, Number(element.x || 0) + dx)), y: Math.max(0, Math.min(100, Number(element.y || 0) + dy)) }); }
+  function nudgeElement(dx, dy) { var page = pageFrom(workspace()); var deck = page && deckFor(page); var element = deck && selectedElement(deck); if (!element || !pageCanWrite(page)) return; updateSelectedElement({ x: Math.max(0, Math.min(100 - element.width, Number(element.x || 0) + dx)), y: Math.max(0, Math.min(100 - element.height, Number(element.y || 0) + dy)) }); focusSelectedObject(); }
+  function focusSelectedObject() {
+    var stage = root && root.querySelector('.slides-stage');
+    var node = stage && Array.from(stage.querySelectorAll('[data-slide-element-id]')).find(function (item) { return item.dataset.slideElementId === selectedElementId; });
+    if (node) node.focus({ preventScroll: true });
+  }
+  function selectSlideObject(node, element, deck) {
+    selectedElementId = element.id;
+    root.querySelectorAll('.slides-stage > .slides-element.selected').forEach(function (item) { item.classList.remove('selected'); });
+    node.classList.add('selected');
+    root.querySelector('[data-object-disclosure]').open = true;
+    syncElementInspector(deck);
+    syncObjectTools(element);
+    root.querySelector('[data-selection-context]').textContent = 'Drag to move · handles resize · double-click or Enter to edit';
+  }
+  function startObjectTextEdit(node, target) {
+    var page = pageFrom(workspace());
+    if (!page || !pageCanWrite(page)) return;
+    var field = target && target.closest('.slides-element-text, td, th');
+    if (!field || field === node || !node.contains(field)) field = node.querySelector('.slides-element-text, td, th');
+    if (!field) return;
+    field.contentEditable = 'true'; node.classList.add('is-editing'); field.focus();
+    root.querySelector('[data-selection-context]').textContent = 'Editing text · Escape returns to object selection';
+  }
+  function wireObjectText(field, node, element, update) {
+    field.contentEditable = 'false';
+    field.setAttribute('aria-label', 'Edit ' + element.type + ' text');
+    var owner = pageFrom(workspace()); var slide = owner && activeSlide(deckFor(owner)); var history = false;
+    function current() { return node.isConnected && owner === pageFrom(workspace()) && pageCanWrite(owner) && activeSlide(deckFor(owner)) === slide && slide.elements.indexOf(element) >= 0; }
+    field.addEventListener('input', function () {
+      if (!current()) return;
+      if (!history) { pushHistory(owner); history = true; }
+      mutate(function () { update(field.textContent); }, false, { history: false });
+      node.setAttribute('aria-label', element.type + ' object: ' + String(element.text || element.alt || '').slice(0, 120));
+    });
+    field.addEventListener('blur', function () { field.contentEditable = 'false'; node.classList.remove('is-editing'); history = false; });
+    field.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') return;
+      event.preventDefault(); event.stopPropagation(); field.blur(); node.focus({ preventScroll: true });
+    });
+  }
   function beginElementDrag(event, element, mode) {
-    var stage = root && root.querySelector('.slides-stage'); if (!stage) return;
+    var page = pageFrom(workspace()); var deck = page && deckFor(page); var slide = deck && activeSlide(deck);
+    var stage = root && root.querySelector('.slides-stage'); if (!stage || !pageCanWrite(page) || !slide || slide.elements.indexOf(element) < 0) return;
     var rect = stage.getBoundingClientRect(); selectedElementId = element.id;
-    dragState = { id: element.id, mode: mode, startX: event.clientX, startY: event.clientY, original: { x: Number(element.x || 0), y: Number(element.y || 0), width: Number(element.width || 1), height: Number(element.height || 1) }, rect: rect, changed: false, history: false };
+    var geometry = { x: Number(element.x || 0), y: Number(element.y || 0), width: Number(element.width || 1), height: Number(element.height || 1) };
+    dragState = { id: element.id, page: page, updatedAt: page.updatedAt, deck: deck, slide: slide, element: element, pointerId: event.pointerId, mode: mode, startX: event.clientX, startY: event.clientY, original: geometry, pending: Object.assign({}, geometry), rect: rect, changed: false };
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) { /* no-op */ }
   }
   function snapSlidePosition(value, size) { var bounded = Math.max(0, Math.min(100 - size, value)); var targets = [0, (100 - size) / 2, 100 - size]; var nearest = targets.reduce(function (best, target) { return Math.abs(target - bounded) < Math.abs(best - bounded) ? target : best; }, targets[0]); return Math.abs(nearest - bounded) <= 1.25 ? nearest : Math.round(bounded * 4) / 4; }
   function moveElementDrag(event) {
-    if (!dragState) return; var page = pageFrom(workspace()); var deck = page && deckFor(page); var element = deck && selectedElement(deck); if (!element || element.id !== dragState.id) return;
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    var page = pageFrom(workspace()); var deck = page && deckFor(page); var element = dragState.element;
+    if (page !== dragState.page || deck !== dragState.deck || activeSlide(deck) !== dragState.slide || page.updatedAt !== dragState.updatedAt || !pageCanWrite(page) || dragState.slide.elements.indexOf(element) < 0) { dragState = null; var staleStage = root && root.querySelector('.slides-stage'); if (staleStage) staleStage.classList.remove('guide-x', 'guide-y'); render(); return; }
     var dx = (event.clientX - dragState.startX) / Math.max(1, dragState.rect.width) * 100; var dy = (event.clientY - dragState.startY) / Math.max(1, dragState.rect.height) * 100;
-    if (Math.abs(dx) + Math.abs(dy) < 0.1) return; if (!dragState.history) { pushHistory(page); dragState.history = true; } dragState.changed = true;
-    if (dragState.mode === 'resize') { element.width = Math.max(4, Math.min(100 - dragState.original.x, dragState.original.width + dx)); element.height = Math.max(4, Math.min(100 - dragState.original.y, dragState.original.height + dy)); }
-    else { element.x = snapSlidePosition(dragState.original.x + dx, dragState.original.width); element.y = snapSlidePosition(dragState.original.y + dy, dragState.original.height); }
-    var node = root.querySelector('[data-slide-element-id="' + element.id + '"]'); if (node) { node.style.left = element.x + '%'; node.style.top = element.y + '%'; node.style.width = element.width + '%'; node.style.height = element.height + '%'; }
+    if (!dragState.changed && Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) < 3) return;
+    dragState.changed = true;
+    element = dragState.pending;
+    var original = dragState.original; var mode = dragState.mode;
+    if (mode !== 'move') {
+      var left = original.x; var right = left + original.width; var top = original.y; var bottom = top + original.height;
+      if (mode.indexOf('w') >= 0) left = Math.max(0, Math.min(right - 4, left + dx));
+      if (mode.indexOf('e') >= 0) right = Math.min(100, Math.max(left + 4, right + dx));
+      if (mode.indexOf('n') >= 0) top = Math.max(0, Math.min(bottom - 4, top + dy));
+      if (mode.indexOf('s') >= 0) bottom = Math.min(100, Math.max(top + 4, bottom + dy));
+      element.x = left; element.y = top; element.width = right - left; element.height = bottom - top;
+    } else {
+      if (event.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
+      element.x = snapSlidePosition(original.x + dx, original.width); element.y = snapSlidePosition(original.y + dy, original.height);
+    }
+    var stage = root.querySelector('.slides-stage');
+    stage.classList.toggle('guide-x', mode === 'move' && Math.abs(element.x + element.width / 2 - 50) < .01);
+    stage.classList.toggle('guide-y', mode === 'move' && Math.abs(element.y + element.height / 2 - 50) < .01);
+    var node = root.querySelector('[data-slide-element-id="' + dragState.id + '"]'); if (node) { node.style.left = element.x + '%'; node.style.top = element.y + '%'; node.style.width = element.width + '%'; node.style.height = element.height + '%'; }
   }
-  function endElementDrag() { if (!dragState) return; var changed = dragState.changed; dragState = null; if (changed) { var page = pageFrom(workspace()); if (page) { page.updatedAt = new Date().toISOString(); scheduleSave(); } } render(); }
+  function endElementDrag(event) {
+    if (!dragState || event && event.pointerId !== dragState.pointerId) return;
+    var state = dragState; dragState = null;
+    var stage = root && root.querySelector('.slides-stage'); if (stage) stage.classList.remove('guide-x', 'guide-y');
+    if (event && event.type !== 'pointerup') { if (state.changed) render(); return; }
+    if (state.page !== pageFrom(workspace()) || state.deck !== deckFor(state.page) || activeSlide(state.deck) !== state.slide || state.page.updatedAt !== state.updatedAt || !pageCanWrite(state.page) || state.slide.elements.indexOf(state.element) < 0) { if (state.changed) render(); return; }
+    if (state.changed) { pushHistory(state.page); Object.assign(state.element, state.pending); state.page.updatedAt = new Date().toISOString(); scheduleSave(); render(); focusSelectedObject(); }
+  }
   function fitSlideTextFontSize(element, deck, ratioOverride) {
     var requested = Number(element && element.fontSize); if (!isFinite(requested) || requested <= 0) requested = 3;
     if (!element || (element.type !== 'text' && element.type !== 'shape')) return requested;
@@ -526,7 +592,7 @@
     node.style.cssText = 'left:' + element.x + '%;top:' + element.y + '%;width:' + element.width + '%;height:' + element.height + '%;font-size:' + objectFontSize + 'cqw;font-weight:' + (element.fontWeight === 'bold' || element.fontWeight === '700' ? '700' : '400') + ';color:' + (element.color || themes[deck.theme].ink) + ';background:' + (element.fill || 'transparent') + ';border:' + (element.borderWidth || 0) + 'px solid ' + (element.borderColor || '#d7d3c7') + ';z-index:' + (element.zIndex || 0) + ';';
     if (element.type === 'image') { var image = document.createElement('img'); image.src = element.dataUrl || ''; image.alt = element.alt || 'Slide image'; image.style.objectFit = element.imageFit || 'contain'; node.appendChild(image); }
     else if (element.type === 'chart') { var chart = document.createElement('div'); chart.className = 'slides-chart'; var values = element.chart && element.chart.values || [5, 8, 4]; var max = Math.max.apply(Math, values.concat([1])); values.forEach(function (value) { var bar = document.createElement('span'); bar.style.height = Math.max(6, value / max * 100) + '%'; chart.appendChild(bar); }); node.appendChild(chart); }
-    else if (element.type === 'table') { var table = document.createElement('table'); var tableRows = Array.isArray(element.rows) && element.rows.length ? element.rows : String(element.text || '').split(/\r?\n/).map(function (line) { return line.split('\t'); }); tableRows.forEach(function (values, rowIndex) { var tr = document.createElement('tr'); values.forEach(function (value, colIndex) { var cell = document.createElement(rowIndex === 0 ? 'th' : 'td'); cell.textContent = value; cell.contentEditable = readonly ? 'false' : 'true'; if (!readonly) cell.addEventListener('input', function () { mutate(function (currentDeck) { var found = activeSlide(currentDeck).elements.find(function (item) { return item.id === element.id; }); if (!found) return; if (!Array.isArray(found.rows)) found.rows = tableRows.map(function (row) { return row.slice(); }); if (!Array.isArray(found.rows[rowIndex])) found.rows[rowIndex] = []; found.rows[rowIndex][colIndex] = cell.textContent.slice(0, 2000); found.text = found.rows.map(function (row) { return row.join('\t'); }).join('\n'); }, false, { history: false }); }); tr.appendChild(cell); }); table.appendChild(tr); }); node.appendChild(table); }
+    else if (element.type === 'table') { var table = document.createElement('table'); var tableRows = Array.isArray(element.rows) && element.rows.length ? element.rows : String(element.text || '').split(/\r?\n/).map(function (line) { return line.split('\t'); }); tableRows.forEach(function (values, rowIndex) { var tr = document.createElement('tr'); values.forEach(function (value, colIndex) { var cell = document.createElement(rowIndex === 0 ? 'th' : 'td'); cell.textContent = value; if (!readonly) wireObjectText(cell, node, element, function (value) { if (!Array.isArray(element.rows)) element.rows = tableRows.map(function (row) { return row.slice(); }); if (!Array.isArray(element.rows[rowIndex])) element.rows[rowIndex] = []; element.rows[rowIndex][colIndex] = value.slice(0, 2000); element.text = element.rows.map(function (row) { return row.join('\t'); }).join('\n'); }); tr.appendChild(cell); }); table.appendChild(tr); }); node.appendChild(table); }
     else if (element.type === 'content-timeline') {
       var timelineHost = global.SutraContentTimelineHosts;
       var renderedTimeline = timelineHost && typeof timelineHost.renderDOM === 'function' ? timelineHost.renderDOM(element.contentTimeline) : null;
@@ -548,8 +614,29 @@
         });
       }
     }
-    else { var text = document.createElement('div'); text.className = 'slides-element-text'; text.style.textAlign = element.textAlign || 'left'; text.contentEditable = readonly ? 'false' : 'true'; text.textContent = element.text == null ? (element.type === 'shape' ? 'Shape' : 'Add text') : String(element.text); if (!readonly) { text.addEventListener('focus', function () { selectedElementId = element.id; if (root) root.querySelectorAll('.slides-element.selected').forEach(function (selectedNode) { selectedNode.classList.remove('selected'); }); node.classList.add('selected'); var objectDisclosure = root && root.querySelector('[data-object-disclosure]'); if (objectDisclosure) objectDisclosure.open = true; syncElementInspector(deck); var context = root && root.querySelector('[data-selection-context]'); if (context) context.textContent = 'Selected ' + element.type + ' object · use Design to adjust it.'; }); text.addEventListener('input', function () { mutate(function (currentDeck) { var found = activeSlide(currentDeck).elements.find(function (item) { return item.id === element.id; }); if (found) found.text = text.textContent.slice(0, 8000); }, false, { history: false }); }); } node.appendChild(text); }
-    if (!readonly) { var resize = document.createElement('button'); resize.type = 'button'; resize.className = 'slides-element-resize'; resize.setAttribute('aria-label', 'Resize selected object'); node.appendChild(resize); node.addEventListener('pointerdown', function (event) { if (event.target.isContentEditable) return; event.preventDefault(); beginElementDrag(event, element, event.target.closest('.slides-element-resize') ? 'resize' : 'move'); node.classList.add('selected'); var objectDisclosure = root && root.querySelector('[data-object-disclosure]'); if (objectDisclosure) objectDisclosure.open = true; syncElementInspector(deck); }); node.addEventListener('pointermove', moveElementDrag); node.addEventListener('pointerup', endElementDrag); node.addEventListener('pointercancel', endElementDrag); }
+    else { var text = document.createElement('div'); text.className = 'slides-element-text'; text.style.textAlign = element.textAlign || 'left'; text.textContent = element.text == null ? (element.type === 'shape' ? 'Shape' : 'Add text') : String(element.text); if (!readonly) wireObjectText(text, node, element, function (value) { element.text = value.slice(0, 8000); }); node.appendChild(text); }
+    if (!readonly) {
+      node.tabIndex = 0; node.setAttribute('role', 'group');
+      node.setAttribute('aria-label', element.type + ' object: ' + String(element.text || element.alt || '').slice(0, 120));
+      node.addEventListener('focus', function () { selectSlideObject(node, element, deck); });
+      [['nw', 'top left'], ['n', 'top'], ['ne', 'top right'], ['e', 'right'], ['se', 'bottom right'], ['s', 'bottom'], ['sw', 'bottom left'], ['w', 'left']].forEach(function (item) {
+        var handle = document.createElement('button'); handle.type = 'button'; handle.className = 'slides-element-resize'; handle.dataset.resize = item[0];
+        handle.setAttribute('aria-label', 'Resize object from ' + item[1]);
+        node.appendChild(handle);
+      });
+      node.addEventListener('dblclick', function (event) { if (event.target.closest('.slides-element-resize')) return; event.preventDefault(); startObjectTextEdit(node, event.target); });
+      node.addEventListener('keydown', function (event) {
+        if (event.target.isContentEditable || event.target.closest('button')) return;
+        if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); event.stopPropagation(); startObjectTextEdit(node); }
+      });
+      node.addEventListener('pointerdown', function (event) {
+        if (event.button !== 0 || event.target.isContentEditable) return;
+        event.preventDefault(); selectSlideObject(node, element, deck); node.focus({ preventScroll: true });
+        var handle = event.target.closest('.slides-element-resize'); beginElementDrag(event, element, handle ? handle.dataset.resize : 'move');
+      });
+      node.addEventListener('pointermove', moveElementDrag); node.addEventListener('pointerup', endElementDrag); node.addEventListener('pointercancel', endElementDrag);
+      node.addEventListener('lostpointercapture', endElementDrag);
+    }
     return node;
   }
   function syncElementInspector(deck) {
@@ -569,6 +656,7 @@
     panel.querySelector('[data-element-font]').value = Math.max(1, Math.min(10, Number(element.fontSize || 3)));
     panel.querySelector('[data-element-bold]').checked = element.fontWeight === 'bold';
     panel.querySelector('[data-element-align]').value = element.textAlign || 'left';
+    ['x', 'y', 'width', 'height'].forEach(function (field) { var control = panel.querySelector('[data-geometry="' + field + '"]'); if (control) control.value = Math.round(Number(element[field]) * 100) / 100; });
     panel.querySelector('[data-element-fit]').value = element.imageFit || 'contain';
     panel.querySelector('[data-element-color]').closest('label').hidden = isTimeline;
     panel.querySelector('[data-element-fill]').closest('label').hidden = isTimeline;
@@ -576,14 +664,20 @@
     panel.querySelector('[data-element-color]').value = /^#[0-9a-f]{6}$/i.test(element.color || '') ? element.color : '#173d2b';
   }
   function alignElement(position) { mutate(function (deck) { var element = selectedElement(deck); if (!element) { showToast('Select a slide object first.'); return; } if (position === 'left') element.x = 0; if (position === 'center') element.x = Math.max(0, (100 - element.width) / 2); if (position === 'right') element.x = Math.max(0, 100 - element.width); if (position === 'top') element.y = 0; if (position === 'middle') element.y = Math.max(0, (100 - element.height) / 2); if (position === 'bottom') element.y = Math.max(0, 100 - element.height); }); }
+  function syncObjectTools(element) {
+    var tools = root && root.querySelector('[data-object-tools]'); if (!tools) return;
+    tools.hidden = !element;
+    tools.querySelector('[data-edit-object-text]').disabled = !element || ['text', 'shape', 'table'].indexOf(element.type) < 0;
+  }
   function render() {
     if (!root || !activePageId) return; var data = workspace(); var page = pageFrom(data); var deck = page && deckFor(page); if (!deck) { setEditorVisible(false); return; }
     var restoreThumbnailFocus = document.activeElement && document.activeElement.classList.contains('slides-thumbnail');
     if (!activeSlideId || !deck.slides.some(function (slide) { return slide.id === activeSlideId; })) activeSlideId = deck.slides[0].id;
     var slide = activeSlide(deck); var theme = themes[deck.theme] || themes.sutra; var slideIndex = deck.slides.indexOf(slide); var selected = selectedElement(deck); setEditorVisible(true); root.dataset.size = deck.size; root.querySelector('[data-deck-title]').textContent = String(page.title || 'Untitled presentation'); root.querySelector('[data-slide-heading]').textContent = 'Slide ' + (slideIndex + 1) + ' of ' + deck.slides.length + ' · ' + (slide.title || 'Untitled slide'); root.querySelector('[data-count]').textContent = (slideIndex + 1) + ' of ' + deck.slides.length; root.querySelector('[data-status-count]').textContent = deck.slides.length + ' ' + (deck.slides.length === 1 ? 'slide' : 'slides');
     var context = selected
-      ? (selected.type === 'content-timeline' ? 'Selected timeline · use Edit selected timeline to change its events.' : 'Selected ' + selected.type + ' object · use Design to adjust it.')
-      : (slide.elements.length ? 'Select an object on the slide to edit it.' : 'No objects yet. Add content or choose a layout.'); root.querySelector('[data-selection-context]').textContent = context;
+      ? (selected.type === 'content-timeline' ? 'Drag to move · handles resize · Edit selected timeline changes events' : 'Drag to move · handles resize · double-click or Enter to edit')
+      : (slide.elements.length ? 'Click to select · drag to move · double-click to edit text' : 'No objects yet. Add content or choose a layout.'); root.querySelector('[data-selection-context]').textContent = context;
+    syncObjectTools(selected);
     root.querySelector('[data-slide-context]').textContent = slide.title || 'Untitled slide';
     root.querySelector('[data-theme]').value = deck.theme; root.querySelector('[data-layout]').value = slide.layout || 'blank'; root.querySelector('[data-size]').value = deck.size || 'widescreen'; root.querySelector('[data-slide-background]').value = /^#[0-9a-f]{6}$/i.test(slide.background || '') ? slide.background : theme.bg;
     var list = root.querySelector('.slides-thumbnail-list'); list.replaceChildren(); deck.slides.forEach(function (item, index) {
@@ -603,7 +697,7 @@
       list.appendChild(thumb);
     });
     root.querySelector('[data-move-slide-up]').disabled = slideIndex === 0; root.querySelector('[data-move-slide-down]').disabled = slideIndex === deck.slides.length - 1;
-    var stage = root.querySelector('.slides-stage'); stage.replaceChildren(); stage.style.background = slide.background || theme.bg; stage.style.color = theme.ink; stage.setAttribute('aria-label', 'Editable slide ' + (slideIndex + 1) + ' of ' + deck.slides.length); slide.elements.slice().sort(function (a, b) { return (a.zIndex || 0) - (b.zIndex || 0); }).forEach(function (element) { stage.appendChild(renderElement(element, deck)); });
+    var stage = root.querySelector('.slides-stage'); stage.replaceChildren(); stage.classList.remove('guide-x', 'guide-y'); stage.style.background = slide.background || theme.bg; stage.style.color = theme.ink; stage.setAttribute('aria-label', 'Editable slide ' + (slideIndex + 1) + ' of ' + deck.slides.length); slide.elements.slice().sort(function (a, b) { return (a.zIndex || 0) - (b.zIndex || 0); }).forEach(function (element) { stage.appendChild(renderElement(element, deck)); });
     if (!slide.elements.length) {
       var empty = document.createElement('div'); empty.className = 'slides-empty-state';
       var emptyTitle = document.createElement('strong'); emptyTitle.textContent = 'This slide is blank'; empty.appendChild(emptyTitle);
@@ -690,6 +784,7 @@
       '<details class="slides-toolbar-group"><summary><i class="fas fa-plus" aria-hidden="true"></i> Insert</summary><div class="slides-toolbar-actions" data-insert-tools></div></details>',
       '<details class="slides-toolbar-group"><summary><i class="fas fa-clock-rotate-left" aria-hidden="true"></i> History</summary><div class="slides-toolbar-actions" data-history-tools></div></details>',
       '<details class="slides-toolbar-group"><summary><i class="fas fa-sliders" aria-hidden="true"></i> Slide</summary><div class="slides-toolbar-actions" data-slide-tools></div></details>',
+      '<div class="slides-object-tools" data-object-tools hidden role="group" aria-label="Selected object actions"><button type="button" data-edit-object-text aria-label="Edit object text" title="Edit text (Enter)"><i class="fas fa-pen" aria-hidden="true"></i></button><button type="button" data-quick-duplicate aria-label="Duplicate selected object" title="Duplicate (Ctrl/Cmd+D)"><i class="fas fa-copy" aria-hidden="true"></i></button><button type="button" data-quick-delete aria-label="Delete selected object" title="Delete object"><i class="fas fa-trash" aria-hidden="true"></i></button><details class="slides-toolbar-group"><summary>Arrange</summary><div class="slides-toolbar-actions" data-arrange-tools></div></details></div>',
       '</div><div class="slides-toolbar-primary" data-primary-present role="group" aria-label="Deck actions"></div></div>',
       '<div class="slides-workspace"><aside class="slides-thumbnails" aria-label="Slide order"><div class="slides-filmstrip-heading"><strong>Slides</strong><span data-count></span></div><div class="slides-thumbnail-list" role="group" aria-label="Choose a slide"></div><button type="button" class="slides-add-thumbnail" aria-label="Add slide">+ Add slide</button></aside>',
       '<main class="slides-center"><div class="slides-center-head"><div class="slides-selection-context"><strong data-slide-context></strong><span data-selection-context aria-live="polite"></span></div><div class="slides-view-controls" role="group" aria-label="Slide zoom"><button type="button" data-zoom-fit aria-label="Fit slide to workspace">Fit</button><button type="button" data-zoom-out aria-label="Zoom out"><i class="fas fa-minus" aria-hidden="true"></i></button><output data-zoom-level aria-live="polite">Fit</output><button type="button" data-zoom-in aria-label="Zoom in"><i class="fas fa-plus" aria-hidden="true"></i></button></div></div><div class="slides-stage" tabindex="0" aria-label="Editable current slide"></div><details class="slides-notes-panel"><summary>Speaker notes</summary><textarea aria-label="Speaker notes"></textarea></details></main>',
@@ -705,6 +800,30 @@
     root.querySelector('[data-zoom-fit]').addEventListener('click', function () { setStageZoom(1); });
     root.querySelector('[data-zoom-out]').addEventListener('click', function () { setStageZoom(stageZoom - 0.1); });
     root.querySelector('[data-zoom-in]').addEventListener('click', function () { setStageZoom(stageZoom + 0.1); });
+    root.querySelector('[data-edit-object-text]').addEventListener('click', function () { focusSelectedObject(); var node = document.activeElement; if (node && node.classList.contains('slides-element')) startObjectTextEdit(node); });
+    root.querySelector('[data-quick-duplicate]').addEventListener('click', function () { duplicateElement(); focusSelectedObject(); });
+    root.querySelector('[data-quick-delete]').addEventListener('click', deleteElement);
+    var geometry = document.createElement('div'); geometry.className = 'slides-geometry-grid';
+    [['x', 'Left (%)'], ['y', 'Top (%)'], ['width', 'Width (%)'], ['height', 'Height (%)']].forEach(function (item) {
+      var label = document.createElement('label'); label.textContent = item[1];
+      var control = document.createElement('input'); control.type = 'number'; control.min = item[0] === 'x' || item[0] === 'y' ? '0' : '4'; control.max = '100'; control.step = '.25'; control.dataset.geometry = item[0]; label.appendChild(control); geometry.appendChild(label);
+      function applyGeometry() {
+        var page = pageFrom(workspace()); var element = page && selectedElement(deckFor(page)); var value = Number(control.value);
+        if (!element || !pageCanWrite(page) || !control.value.trim() || !isFinite(value)) { if (page) syncElementInspector(deckFor(page)); return; }
+        var field = item[0]; var maximum = field === 'x' ? 100 - element.width : field === 'y' ? 100 - element.height : field === 'width' ? 100 - element.x : 100 - element.y;
+        var patch = {}; patch[field] = Math.max(field === 'x' || field === 'y' ? 0 : 4, Math.min(maximum, value));
+        if (Math.abs(Number(element[field]) - patch[field]) < .005) return;
+        updateSelectedElement(patch);
+      }
+      control.addEventListener('change', applyGeometry);
+      control.addEventListener('blur', applyGeometry);
+      control.addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); applyGeometry(); control.blur(); } });
+    });
+    var inspector = root.querySelector('[data-element-inspector]'); inspector.insertBefore(geometry, inspector.querySelector('[data-element-font]').closest('label'));
+    var arrangeTools = root.querySelector('[data-arrange-tools]');
+    [['Align left', 'left'], ['Center horizontally', 'center'], ['Align right', 'right'], ['Align top', 'top'], ['Center vertically', 'middle'], ['Align bottom', 'bottom']].forEach(function (item) { arrangeTools.appendChild(button(item[0], '', function () { alignElement(item[1]); focusSelectedObject(); })); });
+    arrangeTools.appendChild(button('Bring forward', 'fa-arrow-up', function () { shiftElementLayer(1); focusSelectedObject(); }));
+    arrangeTools.appendChild(button('Send backward', 'fa-arrow-down', function () { shiftElementLayer(-1); focusSelectedObject(); }));
     root.querySelector('.slides-notes-panel').addEventListener('toggle', updateStageSize);
     global.addEventListener('resize', updateStageSize);
     var insertTools = root.querySelector('[data-insert-tools]'); var historyTools = root.querySelector('[data-history-tools]'); var slideTools = root.querySelector('[data-slide-tools]');
