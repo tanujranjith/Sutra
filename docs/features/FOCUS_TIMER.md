@@ -16,7 +16,11 @@ The Home timer and active compact player can open a user-requested browser
 miniplayer through the Document Picture-in-Picture API. It shows the canonical
 timer controls and up to five upcoming tasks from the existing local deadline
 ranking bridge. It uses its own small document and a same-origin stylesheet;
-it does not copy the Sutra app shell or fetch remote content. A throttled
+the initial window is 320 × 280 CSS pixels, with timer controls beside the clock
+and a keyboard-scrollable task list. Reopening requests the compact initial
+placement rather than a previously remembered large size; browsers may clamp
+the requested bounds. The production bridge exposes the canonical task getter.
+It does not copy the Sutra app shell or fetch remote content. A throttled
 five-second refresh keeps the task list current while the window is open,
 including when the timer is paused. The window closes when Sutra closes and is
 cleared when workspace locking begins. Browsers without Document

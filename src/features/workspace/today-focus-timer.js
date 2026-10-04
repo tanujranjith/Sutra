@@ -258,6 +258,8 @@
         pipDocument.head.appendChild(stylesheet);
 
         var panel = buildPipElement('main', 'sutra-focus-document-pip');
+        var timerHeader = buildPipElement('div', 'sutra-focus-document-pip__header');
+        var timerSummary = buildPipElement('div', 'sutra-focus-document-pip__summary');
         var heading = buildPipElement('div', 'sutra-focus-document-pip__eyebrow', 'SUTRA · FOCUS');
         var clock = buildPipElement('div', 'sutra-focus-document-pip__time', formatTime(lastSnapshot.remaining));
         clock.setAttribute('role', 'timer');
@@ -269,9 +271,10 @@
 
         var controls = buildPipElement('div', 'sutra-focus-document-pip__controls');
         var toggle = makePipButton(lastSnapshot.running ? 'Pause focus timer' : 'Start focus timer', 'toggle', lastSnapshot.running ? 'Ⅱ  Pause' : '▶  Start');
-        var returnButton = makePipButton('Return to Sutra and close miniplayer', 'return', 'Return to Sutra');
+        var returnButton = makePipButton('Return to Sutra and close miniplayer', 'return', '↗');
         controls.append(toggle, returnButton);
 
+        var taskSection = buildPipElement('section', 'sutra-focus-document-pip__task-section');
         var taskHeading = buildPipElement('h2', 'sutra-focus-document-pip__tasks-heading', 'Upcoming tasks');
         var taskStatus = buildPipElement('p', 'sutra-focus-document-pip__tasks-status', 'Loading tasks…');
         taskStatus.setAttribute('role', 'status');
@@ -279,8 +282,12 @@
         taskStatus.setAttribute('aria-atomic', 'true');
         var taskList = buildPipElement('ol', 'sutra-focus-document-pip__tasks');
         taskList.setAttribute('aria-label', 'Upcoming tasks');
+        taskList.tabIndex = 0;
 
-        panel.append(heading, clock, timerStatus, controls, taskHeading, taskStatus, taskList);
+        timerSummary.append(heading, clock, timerStatus);
+        timerHeader.append(timerSummary, controls);
+        taskSection.append(taskHeading, taskStatus, taskList);
+        panel.append(timerHeader, taskSection);
         pipDocument.body.appendChild(panel);
         pipElements = { clock: clock, timerStatus: timerStatus, toggle: toggle, taskStatus: taskStatus, taskList: taskList };
         setPipStatus('');
@@ -323,7 +330,8 @@
         pipOpening = true;
         var requestId = ++pipRequestId;
         try {
-            opening = api.requestWindow({ width: 380, height: 520 });
+            // Do not reopen at a previously remembered oversized window size.
+            opening = api.requestWindow({ width: 320, height: 280, preferInitialWindowPlacement: true });
         } catch (error) {
             pipOpening = false;
             setPipStatus('The browser could not open the always-on-top Focus miniplayer.');
@@ -387,6 +395,7 @@
                 rows = bridge.getFocusUpcomingTasks(5);
             }
         } catch (error) { rows = null; }
+        var previousScrollTop = pipElements.taskList.scrollTop;
         while (pipElements.taskList.firstChild) pipElements.taskList.removeChild(pipElements.taskList.firstChild);
         if (!Array.isArray(rows)) {
             pipElements.taskStatus.textContent = 'Upcoming tasks are unavailable right now.';
@@ -402,8 +411,9 @@
             if (dueLabel) item.appendChild(buildPipElement('span', 'sutra-focus-document-pip__task-due', dueLabel));
             pipElements.taskList.appendChild(item);
         });
+        pipElements.taskList.scrollTop = previousScrollTop;
         if (pipElements.taskList.childNodes.length) {
-            pipElements.taskStatus.textContent = 'Your next ' + pipElements.taskList.childNodes.length + ' task' + (pipElements.taskList.childNodes.length === 1 ? '' : 's') + ' by due date and priority.';
+            pipElements.taskStatus.textContent = 'Next ' + pipElements.taskList.childNodes.length + ' · due date and priority';
         } else {
             pipElements.taskStatus.textContent = 'No upcoming tasks.';
         }

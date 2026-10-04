@@ -110,3 +110,31 @@ Proof: .tmp/qa/slides-object-editing.png. Syntax, architecture guardrails,
 27 static core-integrity assertions, manifest generation, cache-stamp freshness,
 and whitespace checks passed. No automated suites, installs, builds, or provider
 requests were run. Changes remain on the local candidate branch; no merge/push.
+
+## Browser Focus miniplayer size — 2026-10-04
+
+Item 14 was reopened after the user showed an oversized browser window.
+The initial request is now 320 × 280 rather than 380 × 520, with
+preferInitialWindowPlacement so supported browsers do not restore the previous
+oversized bounds. Timer and 44-pixel controls share a compact header; up to five
+tasks stay in a keyboard-scrollable region whose scroll position survives the
+five-second refresh. A narrow-window rule stacks the controls.
+
+Luna diagnosed the unavailable-task message: the existing canonical getter was
+exposed only in test hooks, while PiP uses the production flowAtelier bridge.
+One production bridge entry now exposes that same getter. No durable fields,
+stores, timer state, network paths, or export behavior changed. A byte recovery
+copy preceded the core edit; the reviewed core budget grew by one API entry.
+
+The primary agent manually reviewed the diff in three passes: markup and
+layout, bridge/privacy/lifecycle behavior, and final integration. Luna provided
+an additional read-only review; its narrow-window concern was addressed.
+Syntax, architecture guardrails, cache freshness, whitespace, and all 27
+static core-runtime assertions passed. Asset manifests were regenerated.
+No automated tests, builds, installs, or provider requests ran.
+
+CUA loaded the isolated preview and observed the paused canonical timer and
+Miniplayer launcher. The launch action timed out and the separate PiP window
+was not available in the browser tool inventory; its layout, populated task
+list, and pause/resume behavior were not visually verified. Close the old PiP,
+refresh the live preview, and reopen it for the user's hands-on check.

@@ -79173,6 +79173,7 @@ ${cspMeta}
                 get testingHub() { return testingHub; },
                 get canvas() { return window.SutraCanvas || null; },
                 getActiveSpaceId: () => activeSpaceId || (appSettings && appSettings.activeSpaceId) || 'default',
+                getFocusUpcomingTasks: (limit) => getFocusUpcomingTasks(limit),
                 insertIntoEditor: (text) => _origInsertIntoEditor(text),
                 persistAppData: () => (_origPersistAppData ? _origPersistAppData() : undefined),
                 flushAppSaveNow: (reason) => flushAppSaveNow(reason || 'bridge-flush'),

@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261004-assistant-slides1",
-    "hash": "e18ce55a2373c065"
+    "stamp": "20261004-focus-compact1",
+    "hash": "ba9e20e13c82fa6c"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261004-assistant-slides1",
-    "hash": "b342e0ca5ce8812b"
+    "stamp": "20261004-focus-compact1",
+    "hash": "b9fd1e962c4a84d6"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -448,8 +448,8 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "70ddc83a8e235cfb"
+    "stamp": "20261004-focus-compact1",
+    "hash": "eed8d48a5b478f83"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20261001-todo-completion1",
@@ -748,8 +748,8 @@
     "hash": "0c12386cb8c9bacd"
   },
   "styles/views/today-focus-timer.css": {
-    "stamp": "20261003-create-review5",
-    "hash": "00ebfd1a2bbf37ca"
+    "stamp": "20261004-focus-compact1",
+    "hash": "2d67a55611b97b7d"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260816-home-quick-task1",
