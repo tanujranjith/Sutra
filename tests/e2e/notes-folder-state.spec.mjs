@@ -47,8 +47,8 @@ test('Page Setup keeps all six types visible through narrow widths and zoom', as
       await page.evaluate(value => { document.body.style.zoom = value; }, zoom);
       await expect.poll(() => page.evaluate(() => {
         const group = document.getElementById('newPageTypeToggle');
-        const column = group.closest('.new-page-setup-column');
-        const bounds = column.getBoundingClientRect();
+        const chooser = group.closest('.new-page-type-chooser');
+        const bounds = chooser.getBoundingClientRect();
         return Array.from(group.querySelectorAll('button')).every(button => {
           const rect = button.getBoundingClientRect();
           return rect.width > 0 && rect.height > 0 && rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
@@ -109,7 +109,7 @@ test('page creation and unrelated page mutations preserve independent folder sta
   }, { folderAId: folderA, folderBId: folderB });
 
   const folderRow = page.locator(`#pagesList .page-item[data-page-id="${ids.folderA}"]`);
-  await folderRow.click();
+  await folderRow.locator(':scope > i.fa-chevron-down').click();
   const folderIds = [ids.folderA, ids.folderB];
   const childIds = { [ids.folderA]: [ids.childA], [ids.folderB]: [ids.childB] };
   const expected = [
@@ -157,7 +157,7 @@ test('deleting the current last document does not expand a collapsed folder fall
     return hooks.createNoteInActiveSpace('QA Fallback Folder::Only child', '<p>Only child</p>').id;
   });
 
-  await page.locator(`#pagesList .page-item[data-page-id="${folderId}"]`).click();
+  await page.locator(`#pagesList .page-item[data-page-id="${folderId}"] > i.fa-chevron-down`).click();
   const before = await captureFolderState(page, [folderId], { [folderId]: [childId] });
   expect(before).toEqual([{ id: folderId, collapsed: true, chevron: 'right', childVisible: false }]);
 

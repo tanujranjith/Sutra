@@ -145,20 +145,24 @@ test('Homework capture treats tonight as 11:59 PM unless a clock time is stated'
   await expect(modal.locator('#quickCaptureTime')).toHaveValue('23:59');
 });
 
-test('empty Homework teaches one primary action: paste or type your homework', async ({ page }) => {
+test('empty Homework teaches one primary action to add homework', async ({ page }) => {
   await openApp(page);
-  const ui = await page.evaluate(() => {
-    try { localStorage.setItem('hwCourses:v2', '[]'); localStorage.setItem('hwTasks:v2', '[]'); } catch (e) {}
-    if (window.SutraHomework && typeof window.SutraHomework.render === 'function') {
-      try { window.SutraHomework.render(); } catch (e) {}
-    }
-    const view = document.getElementById('view-homework');
-    const html = view ? view.innerHTML : '';
-    const btn = view ? view.querySelector('[data-hw-empty-capture]') : null;
-    return { hasCaptureBtn: !!btn, label: btn ? btn.textContent.trim() : '', html };
+  await page.waitForFunction(() => !!window.SutraHomeworkStore && !!window.SutraHomework && typeof window.setActiveView === 'function');
+  await page.evaluate(() => {
+    const store = window.SutraHomeworkStore;
+    store.replace({ ...store.getSnapshot(), courses: [], tasks: [] }, { reason: 'empty-homework-capture-test-seed' });
+    window.setActiveView('homework');
+    window.SutraHomework.render();
   });
-  expect(ui.hasCaptureBtn).toBe(true);
-  expect(ui.label).toContain('Paste or type your homework');
+  await page.locator('[data-todo-category="homework"]').click();
+  const emptyState = page.locator('#view-homework .hw-empty-redesign');
+  const primary = emptyState.locator('.hw-btn-primary');
+  await expect(primary).toHaveCount(1);
+  await expect(primary).toHaveText('Add homework');
+  await expect(emptyState).toContainText('Paste homework or type one line with its class and due date.');
+  await primary.click();
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
+  await expect(page.locator('#quickCaptureType')).toHaveValue('homework');
 });
 
 test('homework captured without a class remains editable', async ({ page }) => {

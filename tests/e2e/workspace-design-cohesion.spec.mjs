@@ -73,6 +73,9 @@ test('default workspace palette keeps supporting text and primary actions readab
 test('Cancel for now dismisses empty Homework setup for the current session', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => window.setActiveView('homework'));
+  await page.locator('[data-todo-category="homework"]').click();
+  await page.evaluate(() => window.setActiveView('today'));
+  await page.evaluate(() => window.setActiveView('homework'));
 
   const setup = page.locator('#hwSetupOverlay');
   await expect(setup).toBeVisible();

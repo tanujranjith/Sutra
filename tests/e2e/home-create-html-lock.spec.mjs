@@ -140,11 +140,13 @@ test('HTML Pages fill Create, isolate preview scrolling, and restore the Notes t
   const shortMetrics = await page.evaluate(() => {
     const getRect = (selector) => document.querySelector(selector).getBoundingClientRect();
     const view = getRect('#view-notes');
+    const navigation = getRect('.top-nav');
     const html = getRect('#htmlPageEditor');
     const host = getRect('#htmlPageEditor [data-html-preview]');
     const iframe = getRect('#htmlPageEditor [data-html-preview] iframe');
     return {
       view,
+      navigation,
       html,
       host,
       iframe,
@@ -152,7 +154,8 @@ test('HTML Pages fill Create, isolate preview scrolling, and restore the Notes t
     };
   });
   expect(shortMetrics.toolbarDisplay).toBe('none');
-  expect(shortMetrics.html.top).toBeGreaterThanOrEqual(shortMetrics.view.top + 70);
+  expect(shortMetrics.html.top).toBeGreaterThanOrEqual(shortMetrics.navigation.bottom - 1);
+  expect(shortMetrics.html.top).toBeLessThanOrEqual(shortMetrics.navigation.bottom + 2);
   expect(shortMetrics.html.bottom).toBeGreaterThanOrEqual(shortMetrics.view.bottom - 2);
   expect(shortMetrics.html.height).toBeGreaterThan(800);
   expect(Math.abs(shortMetrics.iframe.width - shortMetrics.host.width)).toBeLessThanOrEqual(1);
