@@ -528,10 +528,13 @@ function verifyPng(buffer) {
   while (offset < buffer.length) {
     if (offset + 12 > buffer.length) invalidImage();
     const length = buffer.readUInt32BE(offset);
-    const type = buffer.toString('ascii', offset + 4, offset + 8);
+    // Preserve non-ASCII bytes so they cannot alias an allowed chunk name.
+    const type = buffer.toString('latin1', offset + 4, offset + 8);
     const dataStart = offset + 8;
     const crcOffset = dataStart + length;
-    if (!/^[A-Z][A-Za-z]{3}$/.test(type) || crcOffset + 4 > buffer.length || !allowed.has(type)) invalidImage();
+    // PNG ancillary chunks start with lowercase; the reserved third letter
+    // must still be uppercase. Only the explicit safe chunk set is accepted.
+    if (!/^[A-Za-z]{2}[A-Z][A-Za-z]$/.test(type) || crcOffset + 4 > buffer.length || !allowed.has(type)) invalidImage();
     if (crc32(buffer.subarray(offset + 4, crcOffset)) !== buffer.readUInt32BE(crcOffset)) invalidImage();
     if (!seenIhdr && type !== 'IHDR') invalidImage();
     if (type === 'IHDR') {
@@ -1008,5 +1011,9 @@ function main() {
   process.on('SIGINT', () => server.close(() => { process.exitCode = 0; }));
   process.on('SIGTERM', () => server.close(() => { process.exitCode = 0; }));
 }
+
+// Pure byte inspection is available to regression tests. Importing this module
+// never starts the loopback service or makes a metadata request.
+export { verifyImage };
 
 if (isDirectRun()) main();

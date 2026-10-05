@@ -345,6 +345,109 @@ function makeCanonicalWorkbook() {
   };
 }
 
+function makeSheetsEditWorld(value) {
+  const page = makePage({ spreadsheet: makeCanonicalWorkbook() });
+  page.spreadsheet.sheets[0].cells['row-0:column-0'].value = value;
+  page.spreadsheet.sheets[0].cells['row-0:column-1'] = { value: '', formula: '=IF(A1,1,0)' };
+  const world = makeWorld(page);
+  let saves = 0;
+  world.bridge.persistAppData = () => { saves += 1; };
+  world.load(sheetsEngineSource, 'src/features/workspace/sheets-engine.js');
+  world.load(sheetsSource, 'src/features/workspace/sheets.js');
+  world.pageLoaded();
+  const editor = world.document.getElementById('sheetsEditor');
+  const formula = editor.querySelector('[data-formula]');
+  // A browser input exposes its value as text even for typed workbook data.
+  formula.value = String(value);
+  return { world, page, editor, formula, saves: () => saves };
+}
+
+test('Sheets formula focus and blur preserve Boolean false and dependent results without a save', () => {
+  const state = makeSheetsEditWorld(false);
+  const before = JSON.stringify(state.page.spreadsheet);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.dispatchEvent({ type: 'blur', relatedTarget: null });
+  assert.equal(JSON.stringify(state.page.spreadsheet), before);
+  assert.equal(state.saves(), 0);
+  const book = state.page.spreadsheet;
+  assert.equal(state.world.window.SutraSheetsEngine.evaluate(book).getValue(book.sheets[0], 0, 1), 0);
+});
+
+test('Sheets unchanged Enter and explicit Apply preserve numeric cell types and history', () => {
+  const state = makeSheetsEditWorld(42);
+  const before = JSON.stringify(state.page.spreadsheet);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.editor.querySelector('[data-formula-apply]').click();
+  state.formula.value = '42';
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault() {} });
+  assert.equal(JSON.stringify(state.page.spreadsheet), before);
+  assert.equal(state.saves(), 0);
+  state.world.window.SutraSheets.undo();
+  assert.equal(state.saves(), 0, 'unchanged actions did not create an Undo checkpoint');
+});
+
+test('Sheets changed draft commits once on blur and keeps the sheet tab click target', () => {
+  const state = makeSheetsEditWorld(false);
+  const tabs = state.editor.querySelector('[data-sheet-tabs]');
+  const tab = tabs.children[0];
+  tab.closest = () => null; // It is a sheet tab, not an Apply/Cancel action.
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.value = 'Reviewed text';
+  state.formula.dispatchEvent({ type: 'input' });
+  state.formula.dispatchEvent({ type: 'blur', relatedTarget: tab });
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value, 'Reviewed text');
+  assert.equal(state.saves(), 1);
+  assert.equal(tabs.children[0], tab, 'blur must not replace a tab before its click');
+  state.formula.dispatchEvent({ type: 'blur', relatedTarget: null });
+  assert.equal(state.saves(), 1);
+  state.world.window.SutraSheets.undo();
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value, false);
+});
+
+test('Sheets Escape discards a changed draft without converting the original Boolean', () => {
+  const state = makeSheetsEditWorld(false);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.value = 'Changed';
+  state.formula.dispatchEvent({ type: 'input' });
+  state.formula.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {} });
+  state.formula.dispatchEvent({ type: 'blur', relatedTarget: null });
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value, false);
+  assert.equal(state.saves(), 0);
+});
+
+test('Sheets commits a draft to its original cell before pointer selection moves', () => {
+  const state = makeSheetsEditWorld(false);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.value = 'Edited A1';
+  state.formula.dispatchEvent({ type: 'input' });
+  const grid = state.editor.querySelector('.sheets-grid-canvas');
+  const b1 = grid.children.find((cell) => cell.getAttribute('aria-label') === 'B1');
+  b1.dispatchEvent({ type: 'pointerdown', shiftKey: false });
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value, 'Edited A1');
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-1'].formula, '=IF(A1,1,0)');
+  assert.equal(state.editor.querySelector('[data-address]').textContent, 'B1');
+  assert.equal(state.saves(), 1);
+});
+
+test('Sheets rejects drafts after the owning cell changes or a remote apply reloads it', () => {
+  const state = makeSheetsEditWorld(false);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.value = 'Old draft';
+  state.formula.dispatchEvent({ type: 'input' });
+  state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value = 'New canonical value';
+  state.editor.querySelector('[data-formula-apply]').click();
+  assert.equal(state.page.spreadsheet.sheets[0].cells['row-0:column-0'].value, 'New canonical value');
+  assert.equal(state.saves(), 0);
+  state.formula.dispatchEvent({ type: 'focus' });
+  state.formula.value = 'Another old draft';
+  state.formula.dispatchEvent({ type: 'input' });
+  state.world.window.dispatchEvent({ type: 'sutra:workspace-remote-commit' });
+  state.formula.dispatchEvent({ type: 'blur', relatedTarget: null });
+  assert.equal(state.formula.value, 'New canonical value');
+  assert.equal(state.saves(), 0);
+});
+
 const workspaceLockScenarios = [
   {
     name: 'HTML Page',

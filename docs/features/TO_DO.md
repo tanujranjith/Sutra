@@ -20,6 +20,13 @@ use tighter spacing; phone and touch controls keep their larger targets.
 
 Both categories use `SutraHomeworkStore` and `appData.homeworkWorkspace.tasks`. There is no new task database or migration of legacy planner tasks. Existing `hwTasks:v2` mirroring, course links, IDs, completion timestamps, unknown row fields, JSON compatibility schema, full-workspace exports, encrypted backups, and Sync collection projection remain in place. The recognized `kind` value is inventoried in the existing row. Unknown kinds are preserved and displayed as homework.
 
+An explicit Boolean `done` is authoritative for completion. Legacy `completed`
+and `status: "done"` values supply the initial completion state only when no
+Boolean `done` exists. Their metadata remains portable, but cannot undo a
+student's explicit reopening of a task.
+Homework JSON imports also retain their historical acceptance of truthy
+non-Boolean `done` or `completed` values when no Boolean `done` is present.
+
 Home receives the existing stable `hw_v2_<id>` projection: general tasks use its existing `general` category; schoolwork uses `school`. A projected row and its authoritative To-do record represent one item. Existing standalone planner tasks retain their prior behavior and are not silently migrated or duplicated.
 
 ## Completion feedback

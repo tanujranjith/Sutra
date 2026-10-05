@@ -81,8 +81,9 @@ These placements add no page-level field or second persistence store. Notes,
 Canvas, and Slides updates use their normal undo and save paths. HTML Page
 updates use the existing source-size check, preview refresh, and save path. Its
 Undo/Redo controls and source-editor Ctrl/Cmd+Z shortcuts retain bounded,
-session-only full-source snapshots for typed source input and timeline
-insertions/replacements, so later typing is included in the undo sequence.
+session-only full-source snapshots for typed source input, including ordinary
+HTML edits to existing timeline markup. There is no timeline insertion or edit
+picker in HTML Pages.
 Selection tokens reject updates if the page or selected timeline changed while
 the editor was open. The helper's HTML contains fixed tags and classes and
 escaped text. Host markup parsing uses an inert DOM parser and does not execute

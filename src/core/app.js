@@ -44970,7 +44970,7 @@ function buildOnboardingPlanPreview() {
   <li>Canvas content stays local-first in the page model: objects, positions, sizes, viewport, background, groups, connectors, links, and attachments all travel inside <code>.sutra</code> backups.</li>
   <li><strong>Slides and Sheets starters</strong> are available in New Page. Slides includes class presentations, research reports, and project pitches; Sheets includes assignment tracking, a points-based grade calculator, and a weekly study planner.</li>
   <li><strong>Slides</strong> has a thumbnail rail, compact Insert / History / Slide menus, Fit and zoom controls, object formatting, speaker notes, and presentation mode. Sheets keeps its formula bar and main formatting actions near the grid, with more tools in Format / Data / Structure / File.</li>
-  <li><strong>Custom timelines</strong> can be inserted from the toolbar in notes, Canvas, HTML pages, and Slides (under Insert). They belong to that page and do not create schedule events. Sheets does not offer timelines.</li>
+  <li><strong>Custom timelines</strong> can be inserted from the toolbar in Notes, Canvas, and Slides (under Insert). They belong to that page and do not create schedule events. Sheets does not offer timelines.</li>
   <li>Click a note link to copy, edit, or remove its link formatting while keeping the text. Arrow keys keep the selected slash command visible. <strong>AI writing help</strong> opens in the right Assistant panel and only changes the note after you approve a draft.</li>
   <li>Canvas text and sticky notes keep their edits when resized or zoomed. Linked note cards show a readable opening excerpt; locked note contents remain protected. HTML pages keep secondary actions in the three-dot menu.</li>
 </ul>

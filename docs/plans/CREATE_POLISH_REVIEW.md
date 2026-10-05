@@ -198,3 +198,42 @@ Syntax checks, all 27 runtime assertions, 189 cache-stamp entries, architecture
 guardrails, brand assets, and whitespace checks passed. Asset manifests were
 regenerated. Screenshots: `.tmp/qa/html-no-timeline-20261004.jpg` and
 `.tmp/qa/slides-lines-menu-20261004.jpg`.
+## Pre-merge findings repaired — 2026-10-04
+
+The five findings from the immutable 84cbbdf..0c4e904 review are repaired:
+- Explicit Boolean `done` now overrides legacy completion aliases in both
+  canonical and UI normalization. Unknown metadata and historical truthy JSON
+  import compatibility are retained.
+- Sheets captures the editing owner and original draft. Unchanged focus/blur,
+  Apply, and Enter preserve stored types and create no save/history entry;
+  stale drafts are discarded and blur preserves sheet-tab click targets.
+- The exhaustive Sync fixture now includes every inventoried Homework task
+  field and maps `homeworkWorkspace.tasks[]` to its sentinel.
+- PNG validation accepts approved ancillary chunk names while preserving CRC,
+  size, ordering, reserved-letter, high-bit and explicit allowlist checks.
+- Help & Docs no longer advertises HTML timeline insertion or separate authored
+  timeline history. Existing HTML timeline markup remains ordinary source.
+
+Sol 6.1 medium agents implemented the data, Sheets, fixture, and PNG changes.
+Root reviewed their outputs and corrected a proposed loss of historical truthy
+completion imports. Agents independently cross-reviewed Sheets and PNG/Help.
+Root updated Help text, cache stamps, and generated manifests. No durable fields,
+storage identifiers, migrations, export formats or network grants were added.
+
+Manual browser QA used synthetic data on isolated localhost port 5290. An XLSX
+with Boolean false in A1, IF(A1,1,0) in B1, and numeric 42 in C1 retained false,
+0, and 42 after unchanged focus/blur, Enter, and reload. Escape canceled a draft;
+a real blur edit changed only C1 to 43; pointer selection reached B1; Undo
+restored 42. JSON tasks with completed:true and status:done imported completed,
+reopened, stayed open after reload, and could complete again. The browser could
+not capture the task JSON download; export metadata preservation was reviewed
+in source, not observed through that download.
+
+Proof: `.tmp/qa/review-sheets-typed-values-20261004.png` and
+`.tmp/qa/review-legacy-reopened-20261004.png`. Core integrity (27 assertions),
+189 cache stamps, generated asset manifest freshness, architecture guardrails,
+brand assets and whitespace checks passed. Focused regression tests were added
+but not executed. Full automated suites, builds and installs remain excluded by
+the user's constraint; full backup/Sync round trips, deployment artifact checks,
+physical touch and native browser PiP remain incompletely verified. No merge,
+push or deployment was performed.

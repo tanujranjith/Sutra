@@ -312,7 +312,18 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       schemaVersion: 2, revision: 17, updatedAt: EVERYTHING_STAMP,
       lastMutation: { type: 'fixture', at: EVERYTHING_STAMP },
       courses: [{ id: 'homework-course-parity', name: 'Synthetic Biology', color: '#16a34a' }],
-      tasks: [{ id: 'homework-task-parity', courseId: 'homework-course-parity', title: 'Synthetic lab report', dueDate: '2026-07-21', completed: false, subtasks: [{ id: 'hw-sub-parity', title: 'Analyze data', completed: false }] }],
+      tasks: [{
+        id: 'homework-task-parity', courseId: 'homework-course-parity',
+        title: 'Synthetic lab report', text: 'Synthetic lab report',
+        done: true, completed: true, dueDate: '2026-07-21', dueTime: '16:30', due: '2026-07-21',
+        priority: 'high', difficulty: 'hard', recurrence: 'none',
+        notes: 'Homework row portability sentinel.', kind: 'test',
+        estimateMinutes: 45, actualMinutes: 50, completedAt: EVERYTHING_STAMP,
+        sourceUrl: 'https://school.example/synthetic-lab',
+        studio: { milestones: [{ id: 'studio-hw-parity', title: 'Prepare evidence', done: true }] },
+        createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
+        subtasks: [{ id: 'hw-sub-parity', title: 'Analyze data', completed: false }]
+      }],
       quarantine: [{ id: 'homework-quarantine-parity', reason: 'synthetic compatibility check', value: { title: 'Recovered homework sentinel' } }]
     },
     reviewWorkspace: {

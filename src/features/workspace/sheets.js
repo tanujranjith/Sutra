@@ -1,6 +1,6 @@
 (function (global) {
   'use strict';
-  var activePageId = ''; var activeSheetId = ''; var root = null; var selection = { row: 0, col: 0, anchorRow: 0, anchorCol: 0 }; var editing = false; var formulaActionPointer = ''; var undo = []; var redo = []; var clipboard = null; var gridViewportObserver = null; var gridViewportFrame = 0; var gridViewportWidth = -1; var gridViewportHeight = -1;
+  var activePageId = ''; var activeSheetId = ''; var root = null; var selection = { row: 0, col: 0, anchorRow: 0, anchorCol: 0 }; var editing = false; var editContext = null; var formulaActionPointer = ''; var undo = []; var redo = []; var clipboard = null; var gridViewportObserver = null; var gridViewportFrame = 0; var gridViewportWidth = -1; var gridViewportHeight = -1;
   function engine() { return global.SutraSheetsEngine; }
   function interop() { if (!global.SutraOfficeInterop) throw new Error('Local Office interoperability is unavailable.'); return global.SutraOfficeInterop; }
   function bridge() { var value = global.flowAtelier; if (!value || !Array.isArray(value.pages) || typeof value.persistAppData !== 'function') throw new Error('Sheets requires the canonical Sutra workspace bridge.'); return value; }
@@ -30,7 +30,7 @@
   function sheetLimit(sheet, axis) { return axis === 'row' ? Math.max(10000, sheet.rows.length + 20) : Math.max(100, sheet.columns.length + 8); }
   function ensure(sheet, row, col) { var api = engine(); while (sheet.rows.length <= row) sheet.rows.push({ id: api.id('row'), height: 28 }); while (sheet.columns.length <= col) sheet.columns.push({ id: api.id('col'), width: 120 }); }
   function snapshot(page) { return { pageId: page.id, book: engine().clone(page.spreadsheet) }; }
-  function save(change, options) { var page = activePage(); if (!page) return false; if (!options || options.history !== false) { undo.push(snapshot(page)); if (undo.length > 80) undo.shift(); redo = []; } change(page.spreadsheet, page); page.updatedAt = new Date().toISOString(); bridge().persistAppData(); render(); return true; }
+  function save(change, options) { var page = activePage(); if (!page) return false; if (!options || options.history !== false) { undo.push(snapshot(page)); if (undo.length > 80) undo.shift(); redo = []; } change(page.spreadsheet, page); page.updatedAt = new Date().toISOString(); bridge().persistAppData(); render(options); return true; }
   function undoChange() { var page = activePage(); var entry = undo.pop(); if (!page || !entry || entry.pageId !== page.id) return; redo.push(snapshot(page)); page.spreadsheet = entry.book; page.updatedAt = new Date().toISOString(); bridge().persistAppData(); render(); }
   function redoChange() { var page = activePage(); var entry = redo.pop(); if (!page || !entry || entry.pageId !== page.id) return; undo.push(snapshot(page)); page.spreadsheet = entry.book; page.updatedAt = new Date().toISOString(); bridge().persistAppData(); render(); }
   function address() { return engine().columnLabel(selection.col) + String(selection.row + 1); }
@@ -38,15 +38,37 @@
   function select(row, col, extend) { selection.row = Math.max(0, row); selection.col = Math.max(0, col); if (!extend) { selection.anchorRow = selection.row; selection.anchorCol = selection.col; } render(); }
   function inputValue() { var page = activePage(); var sheet = activeSheet(workbookFor(page)); var cell = sheet && engine().cellAt(sheet, selection.row, selection.col); return cell ? (cell.formula || (cell.value == null ? '' : cell.value)) : ''; }
   function formulaActionsEnabled(enabled) { if (!root) return; root.querySelector('[data-formula-apply]').disabled = !enabled; root.querySelector('[data-formula-cancel]').disabled = !enabled; }
-  function commit(value) {
+  function beginEdit() {
+    var page = activePage(); var book = workbookFor(page); var sheet = activeSheet(book); if (!sheet) return false;
+    var cell = engine().cellAt(sheet, selection.row, selection.col);
+    editContext = { page: page, book: book, sheet: sheet, row: selection.row, col: selection.col,
+      rowId: sheet.rows[selection.row] && sheet.rows[selection.row].id, colId: sheet.columns[selection.col] && sheet.columns[selection.col].id,
+      snapshot: JSON.stringify(cell || null), input: String(inputValue()) };
+    editing = true; formulaActionsEnabled(false); return true;
+  }
+  function editIsCurrent(context) {
+    var page = activePage(); var book = workbookFor(page); var sheet = activeSheet(book);
+    return !!(context && page === context.page && book === context.book && sheet === context.sheet
+      && selection.row === context.row && selection.col === context.col
+      && (sheet.rows[context.row] && sheet.rows[context.row].id) === context.rowId
+      && (sheet.columns[context.col] && sheet.columns[context.col].id) === context.colId
+      && JSON.stringify(engine().cellAt(sheet, context.row, context.col) || null) === context.snapshot);
+  }
+  function commit(value, options) {
     var page = activePage(); var sheet = activeSheet(workbookFor(page)); if (!sheet) return false;
     var source = String(value == null ? '' : value); var current = engine().cellAt(sheet, selection.row, selection.col) || {};
-    editing = false; formulaActionPointer = ''; formulaActionsEnabled(false);
-    var saved = save(function () { ensure(sheet, selection.row, selection.col); engine().setCell(sheet, selection.row, selection.col, Object.assign({}, current, { value: source.charAt(0) === '=' ? '' : source, formula: source.charAt(0) === '=' ? source : '' })); });
-    if (!saved) { editing = true; formulaActionsEnabled(true); return false; }
+    if (editing && !editIsCurrent(editContext)) { cancelEdit(false); return false; }
+    // Looking at a typed XLSX value is not an edit. Keep Boolean/number values,
+    // history and save revisions intact even on explicit unchanged Apply/Enter.
+    var unchanged = source === String(current.formula || (current.value == null ? '' : current.value));
+    editing = false; editContext = null; formulaActionPointer = ''; formulaActionsEnabled(false);
+    if (unchanged) { render({ preserveSheetTabs: true }); return true; }
+    var row = selection.row; var col = selection.col;
+    var saved = save(function () { ensure(sheet, row, col); engine().setCell(sheet, row, col, Object.assign({}, current, { value: source.charAt(0) === '=' ? '' : source, formula: source.charAt(0) === '=' ? source : '' })); }, options);
+    if (!saved) { beginEdit(); formulaActionsEnabled(true); return false; }
     return true;
   }
-  function cancelEdit(returnFocus) { editing = false; formulaActionPointer = ''; formulaActionsEnabled(false); render(); if (returnFocus && root) root.querySelector('.sheets-grid-wrap').focus(); }
+  function cancelEdit(returnFocus) { editing = false; editContext = null; formulaActionPointer = ''; formulaActionsEnabled(false); render(); if (returnFocus && root) root.querySelector('.sheets-grid-wrap').focus(); }
   function rangeBounds() { return { top: Math.min(selection.row, selection.anchorRow), bottom: Math.max(selection.row, selection.anchorRow), left: Math.min(selection.col, selection.anchorCol), right: Math.max(selection.col, selection.anchorCol) }; }
   function selectedCells(sheet, callback) { var bounds = rangeBounds(); for (var row = bounds.top; row <= bounds.bottom; row += 1) for (var col = bounds.left; col <= bounds.right; col += 1) { ensure(sheet, row, col); callback(row, col, engine().cellAt(sheet, row, col) || {}); } }
   function styleFor(book, cell) { return cell && cell.styleId && book.styles && book.styles[cell.styleId] ? book.styles[cell.styleId] : (cell && cell.styleId === 'bold' ? { fontWeight: '700' } : {}); }
@@ -66,7 +88,7 @@
   function hideAxis(axis) { var sheet = activeSheet(workbookFor(activePage())); if (!sheet) return; save(function () { if (axis === 'row' && sheet.rows[selection.row]) sheet.rows[selection.row].hidden = !sheet.rows[selection.row].hidden; if (axis === 'column' && sheet.columns[selection.col]) sheet.columns[selection.col].hidden = !sheet.columns[selection.col].hidden; }); }
   function resizeAxis(axis) { var sheet = activeSheet(workbookFor(activePage())); if (!sheet) return; var current = axis === 'row' ? sheet.rows[selection.row].height : sheet.columns[selection.col].width; var answer = global.prompt((axis === 'row' ? 'Row height' : 'Column width') + ' in pixels:', String(current)); if (answer == null) return; var size = Math.max(axis === 'row' ? 20 : 44, Math.min(axis === 'row' ? 200 : 600, Number(answer) || current)); save(function () { if (axis === 'row') sheet.rows[selection.row].height = size; else sheet.columns[selection.col].width = size; }); }
   function setNamedRange() { var page = activePage(); var book = workbookFor(page); var sheet = activeSheet(book); if (!sheet) return; var answer = global.prompt('Name this selected range:', 'StudyData'); if (answer == null) return; var name = String(answer).trim().replace(/[^A-Za-z0-9_.]/g, '_'); if (!/^[A-Za-z_]/.test(name)) { if (typeof global.showToast === 'function') global.showToast('Range names must start with a letter or underscore.'); return; } save(function () { book.namedRanges[name] = "'" + String(sheet.name).replace(/'/g, "''") + "'!" + selectedRange(); }); }
-  function startEdit(seed) { if (!activeSheet(workbookFor(activePage()))) return; editing = true; formulaActionsEnabled(true); var input = root.querySelector('[data-formula]'); input.value = seed == null ? inputValue() : seed; input.focus(); input.select(); }
+  function startEdit(seed) { if (!beginEdit()) return; var input = root.querySelector('[data-formula]'); input.value = seed == null ? inputValue() : seed; formulaActionsEnabled(String(input.value) !== editContext.input); input.focus(); input.select(); }
   function renameReferences(book, oldName, newName) {
     function rewrite(value) {
       if (typeof value !== 'string') return value;
@@ -145,10 +167,10 @@
     [[formulaApply, 'apply'], [formulaCancel, 'cancel']].forEach(function (item) { item[0].addEventListener('pointerdown', function () { formulaActionPointer = item[1]; }); item[0].addEventListener('pointerup', function () { formulaActionPointer = ''; }); item[0].addEventListener('pointercancel', function () { formulaActionPointer = ''; }); });
     formulaApply.onclick = function () { formulaActionPointer = ''; if (commit(formulaInput.value)) root.querySelector('.sheets-grid-wrap').focus(); };
     formulaCancel.onclick = function () { cancelEdit(true); };
-    formulaInput.addEventListener('focus', function () { if (!editing) { editing = true; formulaActionsEnabled(true); } });
-    formulaInput.addEventListener('input', function () { editing = true; formulaActionsEnabled(true); var preview = root.querySelector('[data-value-preview]'); preview.textContent = 'Draft not applied'; preview.classList.add('is-draft'); });
+    formulaInput.addEventListener('focus', function () { if (!editing) beginEdit(); });
+    formulaInput.addEventListener('input', function () { if (!editing && !beginEdit()) return; formulaActionsEnabled(formulaInput.value !== editContext.input); var preview = root.querySelector('[data-value-preview]'); preview.textContent = 'Draft not applied'; preview.classList.add('is-draft'); });
     formulaInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); if (commit(event.target.value)) select(selection.row + (event.shiftKey ? -1 : 1), selection.col); } else if (event.key === 'Escape') { event.preventDefault(); cancelEdit(true); } });
-    formulaInput.addEventListener('blur', function (event) { var next = event.relatedTarget; var formulaAction = next && next.closest && next.closest('[data-formula-apply],[data-formula-cancel]'); if (editing && !formulaAction && !formulaActionPointer) commit(event.target.value); });
+    formulaInput.addEventListener('blur', function (event) { var next = event.relatedTarget; var formulaAction = next && next.closest && next.closest('[data-formula-apply],[data-formula-cancel]'); if (editing && !formulaAction && !formulaActionPointer) commit(event.target.value, { preserveSheetTabs: true }); });
     root.querySelector('[data-copy]').onclick = copy; root.querySelector('[data-paste]').onclick = function () { if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(paste); else paste(clipboard || ''); }; root.querySelector('[data-add-sheet]').onclick = addSheet;
     root.querySelector('[data-import]').onclick = function () { root.querySelector('[data-import-file]').click(); }; root.querySelector('[data-import-file]').onchange = function (event) { importFile(event.target.files && event.target.files[0]); event.target.value = ''; }; root.querySelector('[data-export-csv]').onclick = exportCsv; root.querySelector('[data-export-xlsx]').onclick = exportXlsx;
     root.querySelector('.sheets-grid-wrap').addEventListener('scroll', renderGrid); root.querySelector('.sheets-grid-wrap').addEventListener('dblclick', function () { startEdit(); }); root.querySelector('.sheets-grid-wrap').addEventListener('keydown', keys); return root;
@@ -163,7 +185,7 @@
     for (r = firstRow; r < lastRow; r += 1) { var rowHead = document.createElement('div'); rowHead.className = 'sheets-row-head'; rowHead.textContent = String(r + 1); rowHead.style.top = rowOffsets[r] + 'px'; rowHead.style.height = (rowOffsets[r + 1] - rowOffsets[r]) + 'px'; if (r >= Math.min(selection.row, selection.anchorRow) && r <= Math.max(selection.row, selection.anchorRow)) rowHead.classList.add('is-selected'); if (r === selection.row) rowHead.classList.add('is-active-axis'); if (sheet.rows[r] && sheet.rows[r].hidden) rowHead.classList.add('is-hidden'); rows.appendChild(rowHead); for (c = firstCol; c < lastCol; c += 1) { (function (row, col) { var cell = document.createElement('div'); cell.className = 'sheets-cell' + (row === selection.row && col === selection.col ? ' selected' : '') + (row >= Math.min(selection.row, selection.anchorRow) && row <= Math.max(selection.row, selection.anchorRow) && col >= Math.min(selection.col, selection.anchorCol) && col <= Math.max(selection.col, selection.anchorCol) ? ' in-range' : ''); cell.setAttribute('role', 'gridcell'); cell.setAttribute('aria-label', engine().columnLabel(col) + String(row + 1)); cell.style.left = colOffsets[col] + 'px'; cell.style.top = rowOffsets[row] + 'px'; cell.style.width = (colOffsets[col + 1] - colOffsets[col]) + 'px'; cell.style.height = (rowOffsets[row + 1] - rowOffsets[row]) + 'px'; if ((sheet.rows[row] && sheet.rows[row].hidden) || (sheet.columns[col] && sheet.columns[col].hidden)) cell.classList.add('is-hidden'); var item = engine().cellAt(sheet, row, col); var value = item && item.formula ? evaluation.getValue(sheet, row, col) : item && item.value; var style = Object.assign({}, styleFor(book, item), conditionalStyle(sheet, row, col, value)); ['fontWeight', 'fontStyle', 'textAlign', 'color', 'backgroundColor', 'border'].forEach(function (property) { if (style[property]) cell.style[property] = style[property]; }); if (item && item.validation && item.validation.type === 'list' && Array.isArray(item.validation.values)) { var dropdown = document.createElement('select'); dropdown.setAttribute('aria-label', 'Choose value for ' + engine().columnLabel(col) + String(row + 1)); var current = String(item.value == null ? '' : item.value); [''].concat(item.validation.values).forEach(function (choice) { var option = document.createElement('option'); option.value = choice; option.textContent = choice || 'Choose…'; option.selected = choice === current; dropdown.appendChild(option); }); dropdown.onchange = function (event) { event.stopPropagation(); selection = { row: row, col: col, anchorRow: row, anchorCol: col }; commit(event.target.value); }; cell.appendChild(dropdown); } else cell.textContent = formatValue(value, style); cell.addEventListener('pointerdown', function (event) { if (editing && !commit(root.querySelector('[data-formula]').value)) return; select(row, col, event.shiftKey); wrap.focus(); }); canvas.appendChild(cell); }(r, c)); } }
   }
   function renderCharts(sheet) { var panel = root.querySelector('[data-chart-panel]'); var charts = Array.isArray(sheet.charts) ? sheet.charts : []; panel.hidden = !charts.length; panel.replaceChildren(); charts.forEach(function (chart) { var figure = document.createElement('figure'); var caption = document.createElement('figcaption'); caption.textContent = chart.title || 'Chart'; figure.appendChild(caption); var plot = document.createElement('div'); plot.className = 'sheets-chart-bars'; var max = Math.max.apply(Math, (chart.values || []).map(Number).concat([1])); (chart.values || []).forEach(function (value, index) { var bar = document.createElement('span'); bar.style.height = Math.max(3, Number(value) / max * 100) + '%'; bar.title = String((chart.labels || [])[index] || '') + ': ' + value; plot.appendChild(bar); }); figure.appendChild(plot); var remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove chart'; remove.onclick = function () { save(function () { sheet.charts = sheet.charts.filter(function (item) { return item.id !== chart.id; }); }); }; figure.appendChild(remove); panel.appendChild(figure); }); }
-  function render() {
+  function render(options) {
     if (!root || root.hidden) return;
     var page = activePage(); var book = workbookFor(page); var sheet = activeSheet(book); if (!sheet) return;
     activeSheetId = sheet.id; root.querySelector('[data-workbook-title]').textContent = String(page.title || book.title || 'Spreadsheet');
@@ -175,16 +197,17 @@
     var style = selectedStyle(); var selectedCell = engine().cellAt(sheet, selection.row, selection.col); var evaluation = engine().evaluate(book); var evaluated = selectedCell && selectedCell.formula ? evaluation.getValue(sheet, selection.row, selection.col) : selectedCell && selectedCell.value;
     var preview = root.querySelector('[data-value-preview]'); var hasError = !!(evaluated && evaluated.error); var previewValue = formatValue(evaluated, style);
     preview.textContent = hasError ? 'Result: ' + previewValue : 'Value: ' + (previewValue === '' ? 'empty' : previewValue); preview.classList.toggle('is-error', hasError); preview.classList.remove('is-draft');
-    if (!editing) root.querySelector('[data-formula]').value = inputValue(); formulaActionsEnabled(editing);
+    if (!editing) root.querySelector('[data-formula]').value = inputValue(); formulaActionsEnabled(editing && editContext && root.querySelector('[data-formula]').value !== editContext.input);
     root.querySelector('[data-number-format]').value = style.numberFormat || 'general'; root.querySelector('[data-align]').value = style.textAlign || 'left';
     if (/^#[0-9a-f]{6}$/i.test(style.color || '')) root.querySelector('[data-text-color]').value = style.color;
     if (/^#[0-9a-f]{6}$/i.test(style.backgroundColor || '')) root.querySelector('[data-fill-color]').value = style.backgroundColor;
-    var tabs = root.querySelector('[data-sheet-tabs]'); tabs.replaceChildren();
-    book.sheets.forEach(function (item) {
+    var tabs = root.querySelector('[data-sheet-tabs]');
+    // Blur can precede the click on a sheet tab. Keep that click's live target.
+    if (!options || !options.preserveSheetTabs) { tabs.replaceChildren(); book.sheets.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'sheets-sheet-tab' + (item.id === sheet.id ? ' active' : ''); button.textContent = item.name; button.setAttribute('data-sheet-id', String(item.id)); button.setAttribute('aria-label', 'Open ' + item.name); button.setAttribute('aria-pressed', item.id === sheet.id ? 'true' : 'false');
       button.onclick = function () { activeSheetId = item.id; selection = { row: 0, col: 0, anchorRow: 0, anchorCol: 0 }; render(); var nextTabs = tabs.querySelectorAll('[data-sheet-id]'); for (var index = 0; index < nextTabs.length; index += 1) if (nextTabs[index].getAttribute('data-sheet-id') === String(item.id)) { nextTabs[index].focus(); break; } };
       button.ondblclick = function () { renameSheet(item); }; tabs.appendChild(button);
-    });
+    }); }
     root.querySelector('[data-rename-sheet]').setAttribute('aria-label', 'Rename ' + sheet.name);
     renderGrid(evaluation); renderCharts(sheet);
   }
@@ -208,6 +231,7 @@
   async function exportXlsx() { var page = activePage(); var book = workbookFor(page); if (!page || !book) return false; try { await interop().downloadXlsx(book, page.title); if (typeof global.showToast === 'function') global.showToast('XLSX exported'); return true; } catch (error) { if (typeof global.showToast === 'function') global.showToast(error.message || 'XLSX export failed.'); return false; } }
   function refresh() {
     closeSheetRename(false);
+    editing = false; editContext = null; formulaActionPointer = '';
     var value; try { value = bridge(); } catch (err) { return; }
     var pageId = value.currentPageId || '';
     var page = value.pages.find(function (item) { return item && item.id === pageId; });

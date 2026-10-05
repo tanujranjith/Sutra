@@ -86,7 +86,8 @@
       courseId: courseId,
       title: title,
       text: title,
-      done: raw.done === true || raw.completed === true || raw.status === 'done',
+      // An explicit canonical value wins over retained legacy completion aliases.
+      done: typeof raw.done === 'boolean' ? raw.done : raw.completed === true || raw.status === 'done',
       dueDate: dueDate,
       dueTime: dueTime,
       due: dueDate,

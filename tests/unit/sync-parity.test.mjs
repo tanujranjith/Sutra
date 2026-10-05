@@ -136,6 +136,7 @@ test('everything fixture covers every portable top-level and named nested contra
     'settings.preferences.quotes': fixture.settings.preferences.quotes,
     'settings.preferences.quotes.customQuotes[]': fixture.settings.preferences.quotes.customQuotes[0],
     homeworkWorkspace: fixture.homeworkWorkspace,
+    'homeworkWorkspace.tasks[]': fixture.homeworkWorkspace.tasks[0],
     reviewWorkspace: fixture.reviewWorkspace
   };
   for (const [contract, fields] of Object.entries(inventory.nestedPersistentContracts)) {

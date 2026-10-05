@@ -32,8 +32,12 @@ The toolbar keeps common actions visible and groups **Format**, **Data**,
 area identifies the selected cell or range, selection size, and current value
 or formula result. Editing shows **Draft not applied** with **Apply** and
 **Cancel** actions; Enter applies and Escape cancels. Moving focus away from the
-formula field to another control can also commit the edit on blur. Rename the
-active sheet with **Rename** or double-click its tab; the Save/Cancel form
+formula field to another control can also commit the edit on blur.
+Only changed drafts are saved: focusing and leaving the formula field, or
+applying its unchanged value, preserves imported Boolean and numeric cell types
+without creating a save or Undo checkpoint. Drafts belong to the captured page,
+workbook, sheet, and cell; a page reload or remote apply discards a pending draft.
+Rename the active sheet with **Rename** or double-click its tab; the Save/Cancel form
 checks for duplicate or unsupported names and updates recognized cross-sheet
 A1 references and named ranges when the sheet is renamed.
 

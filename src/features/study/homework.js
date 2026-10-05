@@ -243,6 +243,11 @@
     return 'assignment';
   }
 
+  function normalizeHomeworkDone(task) {
+    // Keep legacy metadata portable without letting it undo an explicit reopen.
+    return typeof task.done === 'boolean' ? task.done : !!task.done || !!task.completed || task.status === 'done';
+  }
+
   function ensureCourseIdByName(courseName, type = 'class') {
     const normalizedName = String(courseName || '').trim();
     if (!normalizedName) return '';
@@ -274,7 +279,7 @@
       courseId: task.courseId ? String(task.courseId) : '',
       title,
       text: title,
-      done: !!task.done,
+      done: normalizeHomeworkDone(task),
       dueDate,
       dueTime,
       due: dueDate,
@@ -376,7 +381,7 @@
         id,
         courseId,
         title,
-        done: !!rawTask.done || !!rawTask.completed,
+        done: normalizeHomeworkDone(rawTask),
         dueDate,
         dueTime,
         priority: normalizePriority(rawTask.priority),

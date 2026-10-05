@@ -1,11 +1,69 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { extractFunction } from '../helpers/extract-function.mjs';
 
 const require = createRequire(import.meta.url);
 const canonical = require('../../src/domain/homework-store.js');
 const legacyReader = require('../../src/compat/legacy-homework.js');
 const NOW = '2026-07-09T12:00:00.000Z';
+
+test('explicit completion wins over legacy aliases in the UI and canonical store', () => {
+  const uiSource = readFileSync(new URL('../../src/features/study/homework.js', import.meta.url), 'utf8');
+  const normalizeUiDone = new Function(`${extractFunction(uiSource, 'normalizeHomeworkDone').body}; return normalizeHomeworkDone;`)();
+  const cases = [
+    [{ completed: true }, true],
+    [{ status: 'done' }, true],
+    [{ done: false, completed: true, status: 'done' }, false],
+    [{ done: true, completed: false, status: 'open' }, true],
+    [{ done: false }, false],
+    [{}, false]
+  ];
+  for (const [completion, expected] of cases) {
+    const row = { id: 'legacy', title: 'Read chapter', ...completion };
+    assert.equal(normalizeUiDone(row), expected);
+    const normalized = canonical.normalizeWorkspace({ tasks: [row] }, { now: NOW }).tasks[0];
+    assert.equal(normalized.done, expected);
+  }
+});
+
+test('reopening a migrated task survives subsequent normalization without losing metadata', () => {
+  for (const aliases of [{ completed: true }, { status: 'done' }, { completed: true, status: 'done' }]) {
+    const store = canonical.createStore({
+      tasks: [{ id: 'legacy', title: 'Read chapter', ...aliases, futureMetadata: { keep: true } }]
+    });
+    assert.equal(store.getSnapshot().tasks[0].done, true);
+    store.transact(workspace => { workspace.tasks[0].done = false; });
+    const reopened = canonical.normalizeWorkspace(store.getSnapshot(), { now: NOW }).tasks[0];
+    assert.equal(reopened.done, false);
+    assert.deepEqual(reopened.futureMetadata, { keep: true });
+    for (const [key, value] of Object.entries(aliases)) assert.equal(reopened[key], value);
+    store.transact(workspace => { workspace.tasks[0].done = true; });
+    assert.equal(store.getSnapshot().tasks[0].done, true);
+  }
+});
+
+test('Homework JSON import keeps historical truthy completion values before canonical saving', () => {
+  const uiSource = readFileSync(new URL('../../src/features/study/homework.js', import.meta.url), 'utf8');
+  const normalizeUiDone = new Function(`${extractFunction(uiSource, 'normalizeHomeworkDone').body}; return normalizeHomeworkDone;`)();
+  const cases = [
+    [{ done: 1 }, true],
+    [{ done: 'true' }, true],
+    [{ completed: 1 }, true],
+    [{ completed: 'true' }, true],
+    [{ done: 0, completed: '' }, false],
+    [{ done: false, completed: 1 }, false]
+  ];
+  for (const [completion, expected] of cases) {
+    const imported = { id: 'json-legacy', title: 'Imported task', ...completion };
+    // importJSON calls normalizeState before save, supplying a Boolean done.
+    const normalized = { ...imported, done: normalizeUiDone(imported) };
+    assert.equal(normalized.done, expected);
+    assert.equal(canonical.normalizeWorkspace({ tasks: [normalized] }, { now: NOW }).tasks[0].done, expected);
+    if (Object.prototype.hasOwnProperty.call(imported, 'completed')) assert.equal(normalized.completed, imported.completed);
+  }
+});
 
 function memoryStorage(values = {}) {
   return { getItem(key) { return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null; } };
