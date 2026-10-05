@@ -683,6 +683,9 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   await useSupabaseSignedIn(page);
   await page.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
   const second = await context.newPage();
+  // Creating a tab can hide the first page and queue its lifecycle save. Settle
+  // that writer before the second page hydrates its canonical baseline.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-before-second-backup-tab'));
   await configureSupabase(second);
   await installInspectableBlobRequests(second, [`${SUPA_URL}/`]);
   await installSupabaseMock(second, supa);
