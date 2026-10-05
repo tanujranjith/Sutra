@@ -153,7 +153,7 @@ test('one query returns results across pages, homework, tasks, timeline, and att
   const types = await resultLabels(page);
   expect(types).toContain('Page');
   expect(types).toContain('Note');
-  expect(types).toContain('Homework');
+  expect(types).toContain('To-do');
   expect(types).toContain('Task');
   expect(types).toContain('Timeline event');
   expect(types).toContain('Attachment');
@@ -218,7 +218,7 @@ test('filter chips narrow results to the selected entity type', async ({ page })
   });
   let labels = await resultLabels(page);
   expect(labels.length).toBeGreaterThan(0);
-  expect(labels.every(l => l === 'Homework')).toBeTruthy();
+  expect(labels.every(l => l === 'To-do')).toBeTruthy();
 
   await page.locator('[data-gs-filter="pages"]').click();
   await page.waitForFunction(() => {
@@ -325,7 +325,7 @@ test('metadata-only queries surface homework by due date and attachments by kind
   // The seeded homework is due 2026-05-22; its title/notes never contain it.
   await searchFor(page, '2026-05-22');
   const dueLabels = await resultLabels(page);
-  expect(dueLabels).toContain('Homework');
+  expect(dueLabels).toContain('To-do');
   const dueBody = await page.locator('#globalSearchResults').innerText();
   expect(dueBody).toContain('Biology notes review');
 
@@ -529,6 +529,11 @@ test('shortcut scopes: Ctrl+K search, Ctrl+Shift+P palette, AP add-subject, V2 i
   await expect(page.locator('#editorV2Host')).toBeVisible();
   await page.locator('#editorV2Host [contenteditable="true"]').first().click();
   await page.keyboard.press('Control+k');
-  await expect(page.locator('#customPromptModal')).toBeVisible();
+  const linkDialog = page.locator('.sutra-rich-link-dialog');
+  await expect(linkDialog).toBeVisible();
+  await expect(linkDialog).toHaveAttribute('aria-modal', 'true');
+  await expect(linkDialog.getByLabel('Display text')).toBeVisible();
+  await expect(linkDialog.getByLabel('Web address')).toBeVisible();
+  await expect(linkDialog.getByRole('button', { name: 'Save link', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.getElementById('globalSearchPanel').classList.contains('active'))).toBeFalsy();
 });

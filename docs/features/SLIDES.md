@@ -1,9 +1,14 @@
 # Slides mode
 
 Slides is a local Create surface for building short class presentations without
-leaving Sutra. A Slides deck belongs to one normal Note page and is selected
-from the New Page dialog. The deck lives at `page.slides`, which deliberately
-keeps ordinary note content and unknown page fields intact.
+leaving Sutra. A Slides deck belongs to one normal Note page and is created from
+the New Page dialog. Choose **Slides**, set an optional title and parent
+location, then choose **Title slide**, **Blank slide**, **Class presentation**,
+**Research report**, or **Project pitch**. The dialog shows the selected starter's
+description before you confirm with **Create slides**. Selecting a type or starter
+only prepares the dialog; it does not create a page.
+The deck lives at `page.slides`, which deliberately keeps ordinary note content
+and unknown page fields intact.
 
 ## Durable model
 
@@ -12,9 +17,13 @@ keeps ordinary note content and unknown page fields intact.
 ID. Elements use normalized percentage geometry and support text, basic shapes,
 tables, inline local images, and simple charts. Speaker notes are stored on the slide.
 
+Authored timelines are separate `content-timeline` elements; see
+[Authored content timelines](CONTENT_TIMELINES.md) for their editable model and
+portable text rendering.
+
 The current interaction state—selected slide, selected element, inspector
-visibility, and presenter position—is session-only. It is never persisted, so
-opening a deck does not cause Sync churn.
+visibility, canvas zoom, and presenter position—is session-only. It is never
+persisted, so opening a deck does not cause Sync churn.
 
 ## Workbench editing
 
@@ -25,13 +34,50 @@ nudge the selected object; Shift increases the movement. `Ctrl/Cmd+C`, `V`,
 `D`, `Z`, and `Y` copy, paste, duplicate, undo, and redo. Page Up/Down and the
 toolbar reorder the active slide. Objects snap to slide edges and centers while
 dragging, and the inspector can align a selected object to any slide edge or
-center line. Table cells edit directly on the slide.
+center line. Click an object to select it and drag its surface to move it.
+Double-click text (including a table cell), or press Enter/F2 on a selected object,
+to edit; Escape returns to object selection. Typing and Backspace affect text
+while editing, rather than deleting the object. Eight corner/edge handles resize
+selected objects. Hold Shift while dragging to move along one axis.
+Enter and Shift+Enter preserve deliberate line breaks in text, shape labels,
+and table cells through autosave, rerendering, reload, and export. These breaks
+are stored as plain-text newlines, rather than editable HTML.
+
+Selected objects expose compact Edit text, Duplicate, Delete, and Arrange tools.
+The inspector offers exact left, top, width, and height percentages; changes
+apply on Enter or when leaving the field. Center snap guides appear during a
+drag. A completed drag and each text-edit session have separate undo checkpoints.
+Drag geometry is a temporary preview until release; cancellation, ownership
+changes, or an intervening page revision discard it. On touch, tap an object
+to select it before dragging; unselected objects and text-edit mode allow
+scrolling.
 
 These interactions mutate only the owning `page.slides` record through the
 canonical workspace bridge. Undo and clipboard data remain editor-session state
 and do not become durable fields. Presentation mode uses read-only elements,
 supports keyboard navigation, and lets a presenter toggle speaker notes with
 `N`.
+
+The compact toolbar groups **Insert**, **History**, and **Slide** actions and
+keeps **New slide** and **Present** visible. Only one toolbar menu opens at a
+time. Choosing an action, clicking outside the toolbar, or pressing Escape
+closes it; Escape returns focus to its heading. Moving focus within a menu does
+not close it.
+Toolbar menus stay within the visible Slides workbench and viewport, including
+after resizing; long menus scroll within the available height.
+Slide thumbnails preview their contents and follow the deck's
+16:9 or 4:3 ratio. The **Fit**, **−**, and **+** controls size the current slide
+within the workspace; zoom is session-only and resets to Fit when another page
+opens.
+
+The header and selection guidance identify the current presentation, slide,
+and selected object. An empty slide offers **Add text** and **Choose a layout**.
+The Slide design disclosure starts open on wide layouts and collapsed on narrow
+layouts. Selected object and Import and export disclosures start collapsed.
+Speaker notes start collapsed at every size and open when selected. Use
+**Rename slide** to edit a title. Changing a layout that would replace existing
+slide objects asks for confirmation; the change remains undoable and retains
+the slide title, speaker notes, and background.
 
 ## Local-first behavior
 
@@ -41,6 +87,11 @@ edits must never invoke whole-workspace serialize/import or restore behavior.
 As a result, deck text, themes, layouts, notes, and inline image data
 participate in normal reload, encrypted `.sutra` export/import, duplication,
 and workspace Sync without a Slides-specific server or network request.
+
+Page and workspace lock events hide the editor, clear rendered content and
+session clipboard/history, and close an active presentation. Unlocking reloads
+the canonical deck. Presentation also closes when leaving Create or changing
+the owning page; exiting normally returns focus to its opener.
 
 When Slides is the active Note page, Sutra Assistant receives a bounded local
 deck context: slide titles, text/shape labels, chart labels and values, and
@@ -56,9 +107,12 @@ before very large decks should be encouraged.
 
 ## Exports and presenter
 
-The Design inspector opens browser printing for PDF output; it preserves slide
-order and sets a landscape page size. The presenter uses the full viewport,
-speaker notes, arrow/space navigation, and Escape to exit.
+The **Import and export** section offers browser printing for PDF output. This
+landscape print view retains slide object positions and fits text to each
+object's slide-relative box. It omits inline images; tables and charts print
+their available text rather than their native visual layout.
+The presenter uses the full viewport, speaker notes, arrow/space navigation,
+and Escape to exit.
 
 The PPTX command creates a standards-shaped, local PowerPoint package with a
 presentation part, slide master and layout, theme, slide relationships, DrawingML

@@ -24,6 +24,7 @@ test('medium Notes keeps its toolbar below the global navigation without double 
 test('Sutra loads the updated Glass integration layers', () => {
   assert.match(shell, /styles\/themes\/macos26-redesign\.css\?v=20260913-glass-surfaces1/);
   assert.match(shell, /styles\/themes\/glass\.css\?v=20260917-glass-cohesion1/);
-  assert.match(shell, /styles\/views\/contextual-shell\.css\?v=20260930-drawer-layer/);
+  // Content-to-stamp freshness is enforced by check:cache-stamps; newer shell fixes must remain loadable.
+  assert.match(shell, /href="styles\/views\/contextual-shell\.css\?v=[A-Za-z0-9._-]+"/);
   assert.match(shell, /styles\/themes\/theme-cohesion\.css\?v=20260917-glass-cohesion4/);
 });

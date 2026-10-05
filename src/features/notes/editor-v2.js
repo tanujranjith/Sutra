@@ -38,7 +38,10 @@
         mirrorTimer: null,
         selectionTimer: null,
         extensionsCache: null,
-        blockBridge: null
+        blockBridge: null,
+        authoring: null,
+        pendingImageOperations: [],
+        imageLifecycleListeners: null
     };
 
     var MIRROR_DEBOUNCE_MS = 150;
@@ -485,13 +488,19 @@
         state.placeholder = options.placeholder || 'Start writing\u2026';
 
         var eng = engine();
+        state.authoring = window.SutraNotesAuthoring ? window.SutraNotesAuthoring.create({
+            getEditor: function () { return state.editor; },
+            getPage: function () { return state.blockBridge && state.blockBridge.getPage ? state.blockBridge.getPage() : null; },
+            canWrite: function () { return !!(state.blockBridge && state.blockBridge.canWrite && state.blockBridge.canWrite()); },
+            scheduleSave: scheduleMirrorFlush
+        }) : null;
         try {
             state.editor = eng.create(host, {
                 placeholder: state.placeholder,
                 content: Object.prototype.hasOwnProperty.call(options, 'content')
                     ? normalizeLegacyHtml(options.content || '')
                     : '',
-                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng)),
+                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
                 editorProps: {
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
@@ -536,6 +545,7 @@
     }
 
     function destroy() {
+        cancelPendingImageOperations();
         detachContextualListeners();
         if (state.mirrorTimer) {
             clearTimeout(state.mirrorTimer);
@@ -552,6 +562,7 @@
         state.hostEl = null;
         state.mirrorEl = null;
         state.blockBridge = null;
+        state.authoring = null;
         state.callbacks = {};
         state.placeholder = '';
     }
@@ -615,7 +626,7 @@
     // <ul>). Recover the semantics BEFORE the attribute-strip pass throws the
     // styles away, so bold/italic/lists survive a paste from those apps.
     function isForeignPreserved(el) {
-        return !!(el.matches && el.matches('.html-embed-anchor, .drawing-anchor, [data-note-block-type][data-block-id]'));
+        return !!(el.matches && el.matches('.html-embed-anchor, .drawing-anchor, [data-note-block-type][data-block-id], [data-sutra-content-timeline], [data-sutra-rich-link]'));
     }
 
     function applyInlineStyleAsSemantics(el) {
@@ -701,7 +712,7 @@
         preprocessForeignPaste(root);
         Array.prototype.slice.call(root.querySelectorAll('*')).forEach(function (el) {
             var tag = String(el.tagName || '').toLowerCase();
-            var isSutraPreserved = !!(el.matches && el.matches('.html-embed-anchor, .drawing-anchor, [data-note-block-type][data-block-id]'));
+            var isSutraPreserved = isForeignPreserved(el);
             if (tag === 'font') {
                 var span = document.createElement('span');
                 while (el.firstChild) span.appendChild(el.firstChild);
@@ -715,7 +726,8 @@
                 var name = String(attr.name || '').toLowerCase();
                 if (name === 'href' || name === 'src' || name === 'alt' || name === 'title' ||
                     name === 'colspan' || name === 'rowspan' || name === 'data-type' || name === 'data-checked' ||
-                    (isSutraPreserved && (name === 'class' || name === 'data-block-id' || name === 'data-note-block-type' || name === 'contenteditable'))) {
+                    (isSutraPreserved && (name === 'class' || name === 'data-block-id' || name === 'data-note-block-type'
+                        || name === 'data-sutra-content-timeline' || name === 'data-sutra-rich-link' || name === 'contenteditable'))) {
                     return;
                 }
                 el.removeAttribute(attr.name);
@@ -906,7 +918,13 @@
         slashFilter: '',
         slashItems: [],
         slashActiveIndex: 0,
+        slashRange: null,
+        composing: false,
+        suppressSlashAfterComposition: false,
+        compositionEndTimer: null,
         keydownBound: null,
+        compositionStartBound: null,
+        compositionEndBound: null,
         mousemoveBound: null,
         scrollBound: null,
         drag: null
@@ -940,6 +958,10 @@
             if (typeof window.insertLink === 'function') window.insertLink();
         }));
         el.appendChild(mkBtn('<i class="fas fa-highlighter"></i>', 'Highlight', function () { exec('highlight', '#ffe066'); }));
+        el.appendChild(mkBtn('<i class="fas fa-wand-magic-sparkles"></i>', 'Sutra Assistant writing help', function () {
+            hideBubble();
+            if (state.authoring) state.authoring.openAI();
+        }));
         el.appendChild(mkBtn('<i class="fas fa-comment"></i>', 'Comment', function () {
             if (typeof window.addCommentFromSelection === 'function') window.addCommentFromSelection();
         }));
@@ -1069,6 +1091,10 @@
     /* ---- Slash-command insert menu ---- */
     function slashItemDefs() {
         return [
+            { label: 'Sutra Assistant writing help', keywords: 'ai writing help', icon: 'fa-magic', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAI(range); } },
+            { label: 'Sutra Assistant general help', icon: 'fa-robot', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAssistantGeneral(range); } },
+            { label: 'Link', icon: 'fa-link', deferred: true, run: function (range) { if (state.authoring) state.authoring.openRichLink(null, range); } },
+            { label: 'Custom timeline', icon: 'fa-stream', deferred: true, run: function (range) { if (state.authoring) state.authoring.openTimeline(range); } },
             { label: 'Heading 1', icon: 'fa-heading', run: function () { if (window.formatBlock) window.formatBlock('h1'); } },
             { label: 'Heading 2', icon: 'fa-heading', run: function () { if (window.formatBlock) window.formatBlock('h2'); } },
             { label: 'Heading 3', icon: 'fa-heading', run: function () { if (window.formatBlock) window.formatBlock('h3'); } },
@@ -1108,17 +1134,20 @@
         ctx.slashOpen = false;
         ctx.slashFilter = '';
         ctx.slashItems = [];
+        ctx.slashRange = null;
         if (ctx.slash) ctx.slash.style.display = 'none';
     }
 
     function renderSlashMenu() {
         var el = ensureSlashMenu();
+        var previousScrollTop = el.scrollTop;
         writeTrustedHtml(el, ''); // clear
         ctx.slashItems.forEach(function (item, idx) {
             var row = document.createElement('button');
             row.type = 'button';
             row.className = 'editor-v2-slash-item' + (idx === ctx.slashActiveIndex ? ' active' : '');
             row.setAttribute('role', 'option');
+            row.setAttribute('aria-selected', String(idx === ctx.slashActiveIndex));
             var icon = document.createElement('i');
             icon.className = 'fas ' + item.icon;
             var label = document.createElement('span');
@@ -1130,6 +1159,18 @@
             el.appendChild(row);
         });
         el.style.display = ctx.slashItems.length ? 'block' : 'none';
+        el.scrollTop = previousScrollTop;
+        var selected = el.querySelector('.editor-v2-slash-item.active');
+        if (selected) {
+            // Scroll only the popup; scrollIntoView can move the note/page too.
+            var rowRect = selected.getBoundingClientRect();
+            var menuRect = el.getBoundingClientRect();
+            var scale = menuRect.height / el.offsetHeight || 1;
+            var visibleTop = menuRect.top + (el.clientTop + 6) * scale;
+            var visibleBottom = menuRect.bottom - (el.clientTop + 6) * scale;
+            if (rowRect.top < visibleTop) el.scrollTop -= (visibleTop - rowRect.top) / scale;
+            else if (rowRect.bottom > visibleBottom) el.scrollTop += (rowRect.bottom - visibleBottom) / scale;
+        }
     }
 
     function positionSlashMenu() {
@@ -1150,23 +1191,59 @@
         el.style.left = left + 'px';
     }
 
-    function maybeSlash() {
-        if (!state.editor || !state.editor.isFocused) return closeSlash();
+    function slashRangeHasExcludedMark(from, to) {
+        if (!state.editor || !state.editor.state || !state.editor.state.doc) return true;
+        var excluded = false;
+        try {
+            state.editor.state.doc.nodesBetween(from, to, function (node) {
+                if (!node.isText || !Array.isArray(node.marks)) return;
+                if (node.marks.some(function (mark) {
+                    return mark && mark.type && (mark.type.name === 'code' || mark.type.name === 'link');
+                })) excluded = true;
+            });
+        } catch (e) { return true; }
+        return excluded;
+    }
+
+    function currentSlashQuery() {
+        if (!state.editor) return null;
         var sel = state.editor.state.selection;
-        if (!sel.empty) return closeSlash();
+        if (!sel.empty) return null;
         var $from = sel.$from;
         var parent = $from.parent;
-        if (!parent || parent.type.name !== 'paragraph') return closeSlash();
-        var text = parent.textContent;
-        var m = /^\/([a-zA-Z]*)$/.exec(text);
-        if (!m) return closeSlash();
-        if ($from.parentOffset !== parent.content.size) return closeSlash();
-        ctx.slashFilter = m[1].toLowerCase();
+        if (!parent || parent.type.name !== 'paragraph') return null;
+
+        var textBefore;
+        try { textBefore = parent.textBetween(0, $from.parentOffset, '', '\uFFFC'); }
+        catch (e) { return null; }
+        var match = /(?:^|\s)(\/([a-zA-Z]*))$/.exec(textBefore);
+        if (!match) return null;
+
+        var range = {
+            from: $from.pos - match[1].length,
+            to: $from.pos,
+            text: match[1],
+            filter: match[2].toLowerCase(),
+            editor: state.editor
+        };
+        if (range.from < $from.start() || slashRangeHasExcludedMark(range.from, range.to)) return null;
+        return range;
+    }
+
+    function maybeSlash() {
+        var view = state.editor && state.editor.view;
+        if (!state.editor || !state.editor.isFocused || ctx.composing || ctx.suppressSlashAfterComposition || (view && view.composing)) return closeSlash();
+        var range = currentSlashQuery();
+        if (!range) return closeSlash();
+        ctx.slashFilter = range.filter;
         var items = slashItemDefs().filter(function (it) {
-            return !ctx.slashFilter || it.label.toLowerCase().indexOf(ctx.slashFilter) !== -1;
+            var label = String(it.label || '').toLowerCase();
+            var keywords = String(it.keywords || '').toLowerCase();
+            return !ctx.slashFilter || label.indexOf(ctx.slashFilter) !== -1 || keywords.indexOf(ctx.slashFilter) !== -1;
         });
         if (!items.length) return closeSlash();
         ctx.slashItems = items;
+        ctx.slashRange = range;
         if (!ctx.slashOpen) ctx.slashActiveIndex = 0;
         else ctx.slashActiveIndex = Math.min(ctx.slashActiveIndex, items.length - 1);
         ctx.slashOpen = true;
@@ -1175,20 +1252,32 @@
     }
 
     function chooseSlashItem(index) {
-        if (!state.editor) return;
         var item = ctx.slashItems[index];
-        if (!item) return;
-        var $from = state.editor.state.selection.$from;
-        var start = $from.start();
-        var end = $from.pos;
+        var range = ctx.slashRange;
+        var editor = state.editor;
+        if (!item || !range || !editor || range.editor !== editor) return closeSlash();
+        var current = currentSlashQuery();
+        if (!current || current.editor !== range.editor || current.from !== range.from || current.to !== range.to || current.text !== range.text) return closeSlash();
         closeSlash();
-        // Delete the "/filter" trigger text, then run the insert on the now-empty block.
-        try { state.editor.chain().focus().deleteRange({ from: start, to: end }).run(); } catch (e) { /* non-critical */ }
+        if (item.deferred) {
+            // Leave the query intact until the user approves the dialog result.
+            item.run(range);
+            return;
+        }
+        // Remove only the slash query, leaving any paragraph text before it intact.
+        try {
+            if (editor.chain().focus().deleteRange({ from: range.from, to: range.to }).run() === false) return;
+        } catch (e) { return; }
         try { item.run(); } catch (e) { /* non-critical */ }
         scheduleMirrorFlush();
     }
 
     function onEditorKeydown(event) {
+        var view = state.editor && state.editor.view;
+        if (event.isComposing || event.keyCode === 229 || ctx.composing || (view && view.composing)) {
+            closeSlash();
+            return;
+        }
         if (!ctx.slashOpen) return;
         var handled = true;
         if (event.key === 'ArrowDown') {
@@ -1210,6 +1299,27 @@
             event.preventDefault();
             event.stopPropagation();
         }
+    }
+
+    function onSlashCompositionStart() {
+        ctx.composing = true;
+        ctx.suppressSlashAfterComposition = false;
+        if (ctx.compositionEndTimer) {
+            window.clearTimeout(ctx.compositionEndTimer);
+            ctx.compositionEndTimer = null;
+        }
+        closeSlash();
+    }
+
+    function onSlashCompositionEnd() {
+        ctx.composing = false;
+        ctx.suppressSlashAfterComposition = true;
+        if (ctx.compositionEndTimer) window.clearTimeout(ctx.compositionEndTimer);
+        ctx.compositionEndTimer = window.setTimeout(function () {
+            ctx.compositionEndTimer = null;
+            ctx.suppressSlashAfterComposition = false;
+        }, 0);
+        closeSlash();
     }
 
     /* ---- Block drag handle (pointer-based reorder of top-level blocks) ---- */
@@ -1336,7 +1446,209 @@
         scheduleMirrorFlush();
     }
 
-    // Drop image files straight into the document as base64 <img> nodes.
+    function imageInsertContext(view, mode, dropPosition) {
+        var editor = state.editor;
+        if (!editor || editor.view !== view || editor.isEditable !== true || !view || !view.state) return null;
+        var bridge = state.blockBridge;
+        if (bridge && typeof bridge.canWrite === 'function') {
+            try { if (bridge.canWrite() !== true) return null; } catch (e) { return null; }
+        }
+        var page = null;
+        var pageId = '';
+        if (bridge && typeof bridge.getPage === 'function') {
+            try { page = bridge.getPage(); } catch (e) { return null; }
+            if (!page) return null;
+            pageId = page.id == null ? '' : String(page.id);
+        }
+        var selection = view.state.selection;
+        if (!selection) return null;
+        return {
+            editor: editor,
+            view: view,
+            bridge: bridge,
+            page: page,
+            pageId: pageId,
+            doc: view.state.doc,
+            selection: selection,
+            mode: mode,
+            dropPosition: dropPosition
+        };
+    }
+
+    function imageInsertContextIsCurrent(context) {
+        if (!context || context.cancelled) return false;
+        var editor = state.editor;
+        var view = context.view;
+        if (editor !== context.editor || !editor || editor.view !== view || !editor.isEditable
+            || !view || view.destroyed || !view.state || view.state.doc !== context.doc
+            || state.blockBridge !== context.bridge) return false;
+        var selection = view.state.selection;
+        try {
+            if (!selection || !(selection === context.selection
+                || (typeof selection.eq === 'function' && selection.eq(context.selection)))) return false;
+        } catch (e) { return false; }
+        var bridge = context.bridge;
+        if (bridge && typeof bridge.canWrite === 'function') {
+            try { if (bridge.canWrite() !== true) return false; } catch (e) { return false; }
+        }
+        if (bridge && typeof bridge.getPage === 'function') {
+            var page;
+            try { page = bridge.getPage(); } catch (e) { return false; }
+            if (!page || page !== context.page || String(page.id == null ? '' : page.id) !== context.pageId) return false;
+        }
+        return true;
+    }
+
+    function removePendingImageOperation(operation) {
+        var operations = state.pendingImageOperations;
+        var index = operations.indexOf(operation);
+        if (index >= 0) operations.splice(index, 1);
+    }
+
+    function cancelImageOperation(operation) {
+        if (!operation || operation.cancelled) return;
+        operation.cancelled = true;
+        operation.readers.forEach(function (reader) {
+            reader.onload = reader.onerror = reader.onabort = null;
+            try { if (reader.readyState === 1) reader.abort(); } catch (e) { /* cancellation is best-effort */ }
+        });
+        operation.readers.length = 0;
+        removePendingImageOperation(operation);
+    }
+
+    function cancelPendingImageOperations(matches) {
+        state.pendingImageOperations.slice().forEach(function (operation) {
+            if (!matches || matches(operation)) cancelImageOperation(operation);
+        });
+    }
+
+    function cancelImageOperationsForPage(event) {
+        var detail = event && event.detail;
+        var pageId = detail && detail.pageId != null ? String(detail.pageId) : '';
+        cancelPendingImageOperations(function (operation) {
+            return !pageId || !operation.context.pageId || operation.context.pageId === pageId;
+        });
+    }
+
+    function attachImageLifecycleListeners() {
+        if (state.imageLifecycleListeners) return;
+        var listeners = {
+            onWorkspaceLock: function (event) {
+                if (!event || !event.detail || event.detail.locked !== false) cancelPendingImageOperations();
+            },
+            onPageLoaded: cancelImageOperationsForPage,
+            onPageLocked: cancelImageOperationsForPage,
+            onRemoteCommit: function () { cancelPendingImageOperations(); },
+            onViewChanged: function (event) {
+                var nextView = event && event.detail && event.detail.view;
+                if (nextView !== 'notes') cancelPendingImageOperations();
+            },
+            onPageHide: function () { cancelPendingImageOperations(); }
+        };
+        state.imageLifecycleListeners = listeners;
+        window.addEventListener('sutra:workspace-lock-changed', listeners.onWorkspaceLock);
+        window.addEventListener('sutra:note-page-loaded', listeners.onPageLoaded);
+        window.addEventListener('sutra:note-page-locked', listeners.onPageLocked);
+        window.addEventListener('sutra:workspace-remote-commit', listeners.onRemoteCommit);
+        window.addEventListener('noteflow:view-changed', listeners.onViewChanged);
+        window.addEventListener('pagehide', listeners.onPageHide);
+    }
+
+    function detachImageLifecycleListeners() {
+        var listeners = state.imageLifecycleListeners;
+        if (!listeners) return;
+        window.removeEventListener('sutra:workspace-lock-changed', listeners.onWorkspaceLock);
+        window.removeEventListener('sutra:note-page-loaded', listeners.onPageLoaded);
+        window.removeEventListener('sutra:note-page-locked', listeners.onPageLocked);
+        window.removeEventListener('sutra:workspace-remote-commit', listeners.onRemoteCommit);
+        window.removeEventListener('noteflow:view-changed', listeners.onViewChanged);
+        window.removeEventListener('pagehide', listeners.onPageHide);
+        state.imageLifecycleListeners = null;
+    }
+
+    function finishImageOperation(operation) {
+        if (!operation || operation.cancelled || operation.remaining > 0) return;
+        removePendingImageOperation(operation);
+        if (!imageInsertContextIsCurrent(operation.context)) return;
+        var view = operation.context.view;
+        var imageType = view.state.schema.nodes.image;
+        if (!imageType) return;
+        var images = operation.results.filter(function (image) { return !!image; });
+        if (!images.length) return;
+        try {
+            var tr = view.state.tr;
+            if (operation.context.mode === 'paste') tr.setSelection(operation.context.selection);
+            var position = operation.context.dropPosition;
+            images.forEach(function (image) {
+                var imageNode = imageType.create({ src: image.src, alt: image.alt });
+                if (operation.context.mode === 'paste') {
+                    tr.replaceSelectionWith(imageNode);
+                } else {
+                    tr.insert(position, imageNode);
+                    position += imageNode.nodeSize;
+                }
+            });
+            if (!tr.docChanged || !imageInsertContextIsCurrent(operation.context)) return;
+            view.dispatch(tr.scrollIntoView());
+            scheduleMirrorFlush();
+        } catch (error) {
+            if (operation.reportErrors) reportImagePasteFailure(error);
+        }
+    }
+
+    function readImagesIntoEditor(view, files, mode, dropPosition, reportErrors) {
+        var context = imageInsertContext(view, mode, dropPosition);
+        if (!context) return false;
+        var operation = {
+            context: context,
+            readers: [],
+            results: new Array(files.length),
+            remaining: files.length,
+            cancelled: false,
+            reportErrors: reportErrors === true
+        };
+        state.pendingImageOperations.push(operation);
+        files.forEach(function (file, index) {
+            var reader;
+            try { reader = new FileReader(); }
+            catch (error) {
+                operation.results[index] = null;
+                operation.remaining -= 1;
+                if (operation.reportErrors) reportImagePasteFailure(error);
+                finishImageOperation(operation);
+                return;
+            }
+            operation.readers.push(reader);
+            var completed = false;
+            function complete(result, error) {
+                if (operation.cancelled || completed) return;
+                completed = true;
+                var readerIndex = operation.readers.indexOf(reader);
+                if (readerIndex >= 0) operation.readers.splice(readerIndex, 1);
+                if (error && operation.reportErrors) reportImagePasteFailure(error);
+                operation.results[index] = result || null;
+                operation.remaining -= 1;
+                finishImageOperation(operation);
+            }
+            reader.onload = function () {
+                var src = String(reader.result || '');
+                if (!/^data:image\//i.test(src)) {
+                    complete(null, new Error('Clipboard image did not produce an image data URL.'));
+                    return;
+                }
+                complete({ src: src, alt: file && file.name ? String(file.name) : 'Pasted image' });
+            };
+            reader.onerror = function () { complete(null, new Error('Unable to read the pasted image.')); };
+            reader.onabort = function () { complete(null, new Error('Image reading was cancelled.')); };
+            try { reader.readAsDataURL(file); }
+            catch (error) { complete(null, error); }
+        });
+        return true;
+    }
+
+    // Drop image files straight into the document as base64 <img> nodes. The
+    // numeric drop position is valid only while the captured document/selection
+    // remains current; completion is discarded across edits or page boundaries.
     function handleImageDrop(view, event) {
         var dt = event.dataTransfer;
         if (!dt || !dt.files || !dt.files.length) return false;
@@ -1345,18 +1657,7 @@
         event.preventDefault();
         var posInfo = view.posAtCoords({ left: event.clientX, top: event.clientY });
         var pos = posInfo ? posInfo.pos : view.state.selection.from;
-        var imgType = view.state.schema.nodes.image;
-        if (!imgType) return false;
-        files.forEach(function (file) {
-            var reader = new FileReader();
-            reader.onload = function () {
-                var src = String(reader.result || '');
-                if (!src) return;
-                try { view.dispatch(view.state.tr.insert(pos, imgType.create({ src: src }))); } catch (e) { /* non-critical */ }
-                scheduleMirrorFlush();
-            };
-            reader.readAsDataURL(file);
-        });
+        readImagesIntoEditor(view, files, 'drop', pos, false);
         return true;
     }
 
@@ -1369,42 +1670,6 @@
                 userMessage: 'That image could not be pasted.'
             }, 'warning');
         } catch (reportError) { /* diagnostics must not interrupt editor input */ }
-    }
-
-    function insertPastedImage(view, file, onComplete) {
-        var reader = new FileReader();
-        reader.onload = function () {
-            var src = String(reader.result || '');
-            if (!/^data:image\//i.test(src)) {
-                reportImagePasteFailure(new Error('Clipboard image did not produce an image data URL.'));
-                if (typeof onComplete === 'function') onComplete();
-                return;
-            }
-            try {
-                if (!view || view.destroyed || !view.state) return;
-                var imageType = view.state.schema.nodes.image;
-                if (!imageType) throw new Error('The notes editor image node is unavailable.');
-                var image = imageType.create({
-                    src: src,
-                    alt: file && file.name ? String(file.name) : 'Pasted image'
-                });
-                view.dispatch(view.state.tr.replaceSelectionWith(image).scrollIntoView());
-            } catch (error) {
-                reportImagePasteFailure(error);
-            } finally {
-                if (typeof onComplete === 'function') onComplete();
-            }
-        };
-        reader.onerror = function () {
-            reportImagePasteFailure(new Error('Unable to read the pasted image.'));
-            if (typeof onComplete === 'function') onComplete();
-        };
-        try {
-            reader.readAsDataURL(file);
-        } catch (error) {
-            reportImagePasteFailure(error);
-            if (typeof onComplete === 'function') onComplete();
-        }
     }
 
     function handleImagePaste(view, event) {
@@ -1429,13 +1694,7 @@
         if (!files.length) return false;
 
         event.preventDefault();
-        var index = 0;
-        var insertNext = function () {
-            if (index >= files.length) return;
-            var file = files[index++];
-            insertPastedImage(view, file, insertNext);
-        };
-        insertNext();
+        readImagesIntoEditor(view, files, 'paste', null, true);
         return true;
     }
 
@@ -1462,9 +1721,14 @@
 
     function attachContextualListeners() {
         if (!state.editor) return;
+        attachImageLifecycleListeners();
         var dom = state.editor.view.dom;
         ctx.keydownBound = onEditorKeydown;
         dom.addEventListener('keydown', ctx.keydownBound, true);
+        ctx.compositionStartBound = onSlashCompositionStart;
+        dom.addEventListener('compositionstart', ctx.compositionStartBound);
+        ctx.compositionEndBound = onSlashCompositionEnd;
+        dom.addEventListener('compositionend', ctx.compositionEndBound);
         ctx.mousemoveBound = onEditorMouseMove;
         dom.addEventListener('mousemove', ctx.mousemoveBound);
         dom.addEventListener('mouseleave', function () { if (ctx.handle && !ctx.drag) ctx.handle.style.display = 'none'; });
@@ -1478,8 +1742,17 @@
     }
 
     function detachContextualListeners() {
+        detachImageLifecycleListeners();
         if (ctx.keydownBound && state.editor) {
             try { state.editor.view.dom.removeEventListener('keydown', ctx.keydownBound, true); } catch (e) { /* noop */ }
+        }
+        if (state.editor && state.editor.view) {
+            if (ctx.compositionStartBound) state.editor.view.dom.removeEventListener('compositionstart', ctx.compositionStartBound);
+            if (ctx.compositionEndBound) state.editor.view.dom.removeEventListener('compositionend', ctx.compositionEndBound);
+        }
+        if (ctx.compositionEndTimer) {
+            window.clearTimeout(ctx.compositionEndTimer);
+            ctx.compositionEndTimer = null;
         }
         if (ctx.mousemoveBound && state.editor) {
             try { state.editor.view.dom.removeEventListener('mousemove', ctx.mousemoveBound); } catch (e) { /* noop */ }
@@ -1497,7 +1770,9 @@
         ctx.drag = null;
         if (ctx.handle && ctx.handle.parentNode) ctx.handle.parentNode.removeChild(ctx.handle);
         ctx.handle = null;
-        ctx.keydownBound = ctx.mousemoveBound = ctx.scrollBound = null;
+        ctx.composing = false;
+        ctx.suppressSlashAfterComposition = false;
+        ctx.keydownBound = ctx.compositionStartBound = ctx.compositionEndBound = ctx.mousemoveBound = ctx.scrollBound = null;
     }
 
     function scheduleSelectionState() {
@@ -1615,6 +1890,12 @@
         flushToMirror: flushToMirror,
         flushPendingEdit: flushPendingEdit,
         insertHtml: insertHtml,
+        openRichLink: function () { return state.authoring ? state.authoring.openRichLink() : Promise.resolve(false); },
+        openAI: function () { return state.authoring ? state.authoring.openAI() : Promise.resolve(false); },
+        captureContentTimelineInsertion: function () { return state.authoring ? state.authoring.captureContentTimelineInsertion() : null; },
+        insertContentTimeline: function (model, token) { return !!(state.authoring && state.authoring.insertContentTimeline(model, token)); },
+        getContentTimelineSelection: function () { return state.authoring ? state.authoring.getContentTimelineSelection() : null; },
+        updateContentTimeline: function (token, model) { return !!(state.authoring && state.authoring.updateContentTimeline(token, model)); },
         getStructuredBlocks: getStructuredBlocks,
         exec: exec,
         focus: focus,

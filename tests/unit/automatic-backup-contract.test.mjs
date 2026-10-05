@@ -31,11 +31,11 @@ test('auto-backup fires only when every opt-in condition holds', () => {
   assert.ok(extractFunction(app, 'sutraCloudAutoReady').body.includes('backupPassphrase'), 'the session-only passphrase gate is part of the readiness check');
 });
 
-test('auto-backup respects frequency: close-only, daily window, and change scheduling', () => {
-  const maybe = loadAppFunction('maybeSutraCloudAutoBackup', ['sutraCloudAutoReady', 'loadSutraCloudMeta', 'runSutraCloudAutoBackup', 'scheduleSutraCloudAutoBackup']);
+test('auto-backup respects frequency: close-only, daily clock, and change scheduling', () => {
+  const maybe = loadAppFunction('maybeSutraCloudAutoBackup', ['sutraCloudAutoReady', 'loadSutraCloudMeta', 'runSutraCloudAutoBackup', 'scheduleSutraCloudAutoBackup', 'scheduleSutraCloudDailyBackup']);
   const run = (ready, meta, reason) => {
-    const calls = { run: 0, schedule: 0 };
-    maybe(() => ready, () => meta, () => { calls.run += 1; }, () => { calls.schedule += 1; })(reason);
+    const calls = { run: 0, schedule: 0, daily: 0 };
+    maybe(() => ready, () => meta, () => { calls.run += 1; }, () => { calls.schedule += 1; }, () => { calls.daily += 1; })(reason);
     return calls;
   };
 
@@ -47,11 +47,14 @@ test('auto-backup respects frequency: close-only, daily window, and change sched
   assert.equal(calls.schedule, 0);
 
   calls = run(true, { autoBackup: { frequency: 'daily' }, lastAutoBackupAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() }, 'change');
-  assert.equal(calls.schedule, 0, 'daily mode skips within the ~once-per-day window');
+  assert.equal(calls.daily, 1, 'daily mode arms the wall-clock scheduler even after a recent backup');
   calls = run(true, { autoBackup: { frequency: 'daily' }, lastAutoBackupAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString() }, 'change');
-  assert.equal(calls.schedule, 1, 'daily mode schedules after the window');
+  assert.equal(calls.daily, 1, 'daily mode checks its chosen clock time');
   calls = run(true, { autoBackup: { frequency: 'daily' } }, 'change');
-  assert.equal(calls.schedule, 1, 'daily mode schedules when never backed up');
+  assert.equal(calls.daily, 1, 'daily mode schedules when never backed up');
+  assert.equal(calls.schedule, 0, 'daily does not use the save debounce');
+  calls = run(true, { autoBackup: { frequency: 'change' } }, 'change');
+  assert.equal(calls.schedule, 1);
   calls = run(false, { autoBackup: { frequency: 'daily' } }, 'change');
   assert.equal(calls.schedule, 0, 'not ready never schedules');
   calls = run(true, { autoBackup: { frequency: 'daily' } }, 'hidden');
@@ -62,7 +65,7 @@ test('automatic backup takes an atomic cross-tab lock and rechecks the receipt',
   const runBackup = loadAppFunction('runSutraCloudAutoBackup', [
     'sutraCloudAutoReady', 'sutraCloudRuntime', 'sutraCloudBackupNow', 'navigator',
     'sutraRemoteCommitPending', 'persistenceWritesBlocked', 'loadSutraCloudMeta',
-    'window', 'persistSutraCloudMeta', 'updateSutraCloudUi', 'sutraCloudMeta', 'getSyncWorkspaceSnapshot'
+    'window', 'persistSutraCloudMeta', 'updateSutraCloudUi', 'sutraCloudMeta', 'getSyncWorkspaceSnapshot', 'getSutraCloudDailySchedule'
   ]);
   const attempts = [];
   const meta = { autoBackup: { enabled: true, frequency: 'daily' } };
@@ -81,7 +84,7 @@ test('automatic backup takes an atomic cross-tab lock and rechecks the receipt',
   }, navigator, false, false, () => meta, {
     SutraSyncProjection: { buildProjection: value => value, hashProjection: async () => ({ page: 'content' }) },
     SutraSyncProtocol: { stableStringify: JSON.stringify, hashText: async () => 'confirmed-root' }
-  }, () => {}, () => {}, null, async () => ({}));
+  }, () => {}, () => {}, null, async () => ({}), () => ({ due: true }));
   await Promise.all([run(), run()]);
   await run();
   assert.equal(attempts.length, 1, 'concurrent and repeated schedules upload once');

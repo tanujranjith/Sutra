@@ -120,6 +120,20 @@
 #view-today.today-redesign .today-focus-timer-actions button[hidden],
 #view-today.today-redesign .today-focus-timer-settings[hidden] { display: none !important; }
 
+#view-today.today-redesign .today-focus-timer-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+#view-today.today-redesign .today-focus-timer-pip-status {
+    grid-column: 1 / -1;
+    margin: -10px 0 0;
+    color: var(--text-secondary, #686868);
+    font-size: 0.72rem;
+}
+
+#view-today.today-redesign .today-focus-timer-pip-status[hidden] { display: none !important; }
+
 #view-today.today-redesign .today-focus-timer-settings {
     grid-column: 1 / -1;
     display: grid;
@@ -199,4 +213,281 @@
     #view-today.today-redesign .today-focus-timer-actions { gap: 7px; }
     #view-today.today-redesign .today-focus-timer-actions button { flex: 1 1 auto; }
     #view-today.today-redesign .today-focus-timer-custom input { width: 72px; }
+}
+
+/* A transient companion to the canonical timer. The timer itself remains
+   owned by the core Focus controller; this player only reflects its events. */
+:root { --sutra-focus-player-height: 0px; }
+
+.sutra-focus-mini-player {
+    position: fixed;
+    right: max(20px, var(--sutra-safe-right, env(safe-area-inset-right, 0px)));
+    bottom: max(20px, var(--sutra-safe-bottom, env(safe-area-inset-bottom, 0px)));
+    z-index: var(--z-fab, 2600);
+    width: min(360px, calc(100vw - 40px));
+    border: 1px solid var(--sutra-color-border, var(--surface-border, rgba(22, 30, 45, 0.16)));
+    border-radius: 16px;
+    color: var(--sutra-color-text, var(--text-primary, #242424));
+    background: var(--sutra-color-elevated, var(--bg-elevated, #fff));
+    box-shadow: var(--shadow-soft, 0 14px 32px rgba(22, 30, 45, 0.16));
+    font-family: var(--font-body, inherit);
+}
+
+.sutra-focus-mini-player[hidden],
+.sutra-focus-mini-player__controls[hidden] { display: none !important; }
+
+.sutra-focus-mini-player__controls {
+    display: flex;
+    min-height: 60px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 8px 7px 12px;
+}
+
+.sutra-focus-mini-player__copy {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 8px;
+    min-width: 0;
+}
+
+.sutra-focus-mini-player__heading {
+    color: var(--sutra-color-text-muted, var(--text-secondary, #686868));
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.sutra-focus-mini-player__time {
+    color: var(--sutra-color-text, var(--text-primary, #242424));
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.sutra-focus-mini-player__status {
+    grid-column: 1 / -1;
+    color: var(--sutra-color-text-muted, var(--text-secondary, #686868));
+    font-size: 0.68rem;
+    line-height: 1.25;
+}
+
+.sutra-focus-mini-player__pip-notice {
+    grid-column: 1 / -1;
+    color: var(--sutra-color-text-muted, var(--text-secondary, #686868));
+    font-size: 0.64rem;
+    line-height: 1.25;
+}
+
+.sutra-focus-mini-player__pip-notice[hidden] { display: none !important; }
+
+.sutra-focus-mini-player__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+}
+
+.sutra-focus-mini-player__button {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--sutra-color-border, var(--surface-border, rgba(22, 30, 45, 0.16)));
+    border-radius: 12px;
+    padding: 0 9px;
+    color: var(--sutra-color-text, var(--text-primary, #242424));
+    background: var(--sutra-color-surface, var(--bg-secondary, #f6f6f7));
+    cursor: pointer;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 750;
+    line-height: 1;
+    text-decoration: none;
+}
+
+.sutra-focus-mini-player__button:hover {
+    border-color: var(--sutra-color-accent, var(--accent-strong, #526ff4));
+    background: color-mix(in srgb, var(--sutra-color-accent, var(--accent, #526ff4)) 12%, var(--sutra-color-elevated, #fff));
+}
+
+.sutra-focus-mini-player__button:focus-visible {
+    outline: var(--sutra-focus-outline, 2px solid var(--sutra-color-accent, #526ff4));
+    outline-offset: 2px;
+    box-shadow: var(--sutra-focus-ring, 0 0 0 3px rgba(82, 111, 244, 0.34));
+}
+
+body:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .fs-active, .focus-mode, .sutra-focus-player-keyboard-open) .sutra-focus-mini-player,
+body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]), #sutraSaveFailureBanner:not([hidden])) .sutra-focus-mini-player {
+    display: none !important;
+}
+
+@media (max-width: 640px) {
+    body.sutra-focus-player-session { --sutra-focus-player-height: 76px; }
+
+    body:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .fs-active, .focus-mode, .sutra-focus-player-keyboard-open) {
+        --sutra-focus-player-height: 0px;
+    }
+    body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]), #sutraSaveFailureBanner:not([hidden])) { --sutra-focus-player-height: 0px; }
+
+    .sutra-focus-mini-player {
+        right: max(10px, var(--sutra-safe-right, env(safe-area-inset-right, 0px)));
+        bottom: calc(var(--sutra-mobile-nav-height, 4.75rem) + var(--sutra-safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px);
+        left: max(10px, var(--sutra-safe-left, env(safe-area-inset-left, 0px)));
+        width: auto;
+        border-radius: 14px;
+    }
+
+    .sutra-focus-mini-player__controls { gap: 6px; padding-inline: 8px; }
+    .sutra-focus-mini-player__actions { gap: 3px; }
+    .sutra-focus-mini-player__button { padding-inline: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-focus-mini-player,
+    .sutra-focus-mini-player * { transition: none !important; }
+}
+
+/* The Document PiP window is a separate, deliberately small document. Its
+   stylesheet is loaded by URL so the app CSP can continue to block inline CSS. */
+.sutra-focus-document-pip-body {
+    box-sizing: border-box;
+    height: 100vh;
+    margin: 0;
+    padding: 10px;
+    overflow: hidden;
+    color: var(--sutra-color-text, #242424);
+    background: var(--sutra-color-canvas, #fff);
+    color-scheme: light dark;
+    font: 14px/1.4 var(--font-body, system-ui, -apple-system, "Segoe UI", sans-serif);
+}
+
+.sutra-focus-document-pip {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 8px;
+    height: 100%;
+    margin: 0 auto;
+}
+
+.sutra-focus-document-pip__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.sutra-focus-document-pip__summary {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.sutra-focus-document-pip__task-section {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 5px;
+    min-height: 0;
+}
+
+.sutra-focus-document-pip__eyebrow {
+    color: var(--sutra-color-text-muted, #686868);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.sutra-focus-document-pip__time {
+    font-size: clamp(1.75rem, 10vw, 2.2rem);
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+    letter-spacing: 0.02em;
+    line-height: 1;
+}
+
+.sutra-focus-document-pip__timer-status,
+.sutra-focus-document-pip__tasks-status {
+    margin: 0;
+    color: var(--sutra-color-text-muted, #686868);
+    font-size: 0.78rem;
+}
+
+.sutra-focus-document-pip__controls {
+    display: flex;
+    gap: 6px;
+}
+
+.sutra-focus-document-pip__button {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--sutra-color-border, #d7d7db);
+    border-radius: 9px;
+    padding: 0 9px;
+    color: var(--sutra-color-text, #242424);
+    background: var(--sutra-color-surface, #f6f6f7);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+.sutra-focus-document-pip__button:hover { filter: brightness(0.96); }
+.sutra-focus-document-pip__button:focus-visible { outline: 2px solid var(--sutra-color-accent, #526ff4); outline-offset: 2px; }
+
+.sutra-focus-document-pip__tasks-heading {
+    margin: 0;
+    font-size: 0.92rem;
+}
+
+.sutra-focus-document-pip__tasks {
+    display: grid;
+    align-content: start;
+    gap: 5px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    list-style: none;
+}
+
+.sutra-focus-document-pip__tasks:focus-visible { outline: 2px solid var(--sutra-color-accent, #526ff4); outline-offset: -2px; }
+
+.sutra-focus-document-pip__task {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    border: 1px solid var(--sutra-color-border, #d7d7db);
+    border-radius: 7px;
+    padding: 6px 8px;
+    background: var(--sutra-color-elevated, #fff);
+}
+
+.sutra-focus-document-pip__task-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.sutra-focus-document-pip__task-due {
+    color: var(--sutra-color-text-muted, #686868);
+    font-size: 0.72rem;
+}
+
+@media (max-width: 280px) {
+    .sutra-focus-document-pip__header { grid-template-columns: minmax(0, 1fr); }
+    .sutra-focus-document-pip__controls { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-focus-document-pip *,
+    .sutra-focus-document-pip *::before,
+    .sutra-focus-document-pip *::after { scroll-behavior: auto !important; transition: none !important; }
 }

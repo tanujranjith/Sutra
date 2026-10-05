@@ -13,6 +13,7 @@ test('automatic backup controls require independent session credentials and expl
   const set = new Function('sutraCloudRuntime', 'loadSutraCloudMeta', 'getActiveSutraCloudProvider',
     'persistSutraCloudMeta', 'updateSutraCloudUi', 'maybeSutraCloudAutoBackup', `
       let sutraCloudAutoTimer = null;
+      ${source('normalizeSutraCloudDailyTime')}
       ${source('setSutraCloudAutoBackup')}
       return setSutraCloudAutoBackup;
     `)(runtime, () => meta, () => ({ supportsAutoBackup: true, getSetupStatus: () => ({ ready: true }) }),
@@ -21,12 +22,22 @@ test('automatic backup controls require independent session credentials and expl
   assert.equal(meta.autoBackup.enabled, false);
   assert.equal(scheduled, 0);
   runtime.backupPassphrase = 'separate-backup-password';
-  assert.deepEqual(set({ enabled: true }), { enabled: true, frequency: 'daily' });
+  const enabled = set({ enabled: true });
+  assert.equal(enabled.enabled, true);
+  assert.equal(enabled.frequency, 'daily');
+  assert.equal(enabled.dailyTime, '20:00');
+  assert.ok(Number.isFinite(Date.parse(enabled.dailyScheduleStartedAt)));
   assert.equal(scheduled, 1);
   assert.throws(() => set({ enabled: true, frequency: 'invalid' }), /Unknown/);
   runtime.backupPassphrase = '';
-  assert.deepEqual(set({ enabled: false, frequency: 'close' }), { enabled: false, frequency: 'close' });
+  assert.equal(set({ enabled: false, frequency: 'close' }).enabled, false);
+  assert.equal(meta.autoBackup.frequency, 'close');
   assert.equal(scheduled, 1, 'disabling requires no password and schedules no work');
+  set({ dailyTime: '06:45' });
+  assert.equal(meta.autoBackup.dailyTime, '06:45', 'time can be prepared while disabled');
+  assert.equal(meta.autoBackup.enabled, false, 'editing a time does not opt in');
+  assert.throws(() => set({ dailyTime: '24:00' }), /valid backup time/);
+  assert.throws(() => set({ dailyTime: '' }), /valid backup time/);
 });
 
 test('Cloud metadata upgrades in place without losing unknown fields or enabling backups', () => {
@@ -38,13 +49,15 @@ test('Cloud metadata upgrades in place without losing unknown fields or enabling
     const read = new Function('SutraSafeStorage', 'randomSutraId', `
       const SUTRA_CLOUD_META_KEY = 'sutra:supabaseCloud:v1';
       let sutraCloudMeta = null;
+      ${source('normalizeSutraCloudDailyTime')}
       ${source('getDefaultSutraCloudMeta')}
       ${source('persistSutraCloudMeta')}
       ${source('loadSutraCloudMeta')}
       return () => { sutraCloudMeta = null; return loadSutraCloudMeta(); };
     `)(storage, () => 'new-device');
     const migrated = read();
-    assert.equal(migrated.schemaVersion, 2);
+    assert.equal(migrated.schemaVersion, 3);
+    assert.equal(migrated.autoBackup.dailyTime, '20:00');
     assert.equal(migrated.autoBackup.enabled, old?.autoBackup?.enabled === true);
     assert.equal(migrated.autoBackup.frequency, old?.autoBackup?.frequency === 'close' ? 'close' : 'daily');
     if (old?.extra) assert.deepEqual(migrated.extra, old.extra);

@@ -68,6 +68,14 @@ test('everything fixture survives actual diff, merge, and projection bootstrap',
   assert.equal(deviceB.notificationsState.lastDigest, 456);
   assert.equal(deviceB.notificationsState.lastWeeklyReviewAt, 789);
   assert.equal(deviceB.notificationsState.lastWeeklyNudge, 101112);
+  const canvasTimeline = deviceB.pages.find(page => page.id === 'page-canvas-parity')
+    .canvas.objects.find(object => object.type === 'content-timeline').contentTimeline;
+  const slideTimeline = deviceB.pages.find(page => page.id === 'page-parent')
+    .slides.slides[0].elements.find(element => element.type === 'content-timeline').contentTimeline;
+  assert.deepEqual(canvasTimeline.futureModelMetadata, { source: 'canvas-fixture', preserve: true });
+  assert.deepEqual(canvasTimeline.events[0].futureEventMetadata, { evidenceId: 'canvas-event-extra', preserve: true });
+  assert.deepEqual(slideTimeline.futureModelMetadata, { source: 'slides-fixture', preserve: true });
+  assert.deepEqual(slideTimeline.events[0].futureEventMetadata, { evidenceId: 'slide-event-extra', preserve: true });
 });
 
 test('Assistant thread contract includes order, provenance, receipts, memory, and empty threads', () => {
@@ -97,8 +105,16 @@ test('everything fixture covers every portable top-level and named nested contra
     assert.ok(Object.prototype.hasOwnProperty.call(fixture, field), 'fixture missing portable field: ' + field);
   }
 
+  const canvasTimeline = fixture.pages.find(page => page.id === 'page-canvas-parity')
+    .canvas.objects.find(object => object.type === 'content-timeline').contentTimeline;
+  const slideTimeline = fixture.pages.find(page => page.id === 'page-parent')
+    .slides.slides[0].elements.find(element => element.type === 'content-timeline').contentTimeline;
   const samples = {
     'pages[]': Object.assign({}, ...fixture.pages),
+    'pages[].canvas.objects[].contentTimeline': canvasTimeline,
+    'pages[].canvas.objects[].contentTimeline.events[]': canvasTimeline.events[0],
+    'pages[].slides.slides[].elements[].contentTimeline': slideTimeline,
+    'pages[].slides.slides[].elements[].contentTimeline.events[]': slideTimeline.events[0],
     'tasks[]': Object.assign({}, ...fixture.tasks),
     'timeBlocks[]': fixture.timeBlocks[0],
     assistantChatHistory: fixture.assistantChatHistory,
@@ -120,6 +136,7 @@ test('everything fixture covers every portable top-level and named nested contra
     'settings.preferences.quotes': fixture.settings.preferences.quotes,
     'settings.preferences.quotes.customQuotes[]': fixture.settings.preferences.quotes.customQuotes[0],
     homeworkWorkspace: fixture.homeworkWorkspace,
+    'homeworkWorkspace.tasks[]': fixture.homeworkWorkspace.tasks[0],
     reviewWorkspace: fixture.reviewWorkspace
   };
   for (const [contract, fields] of Object.entries(inventory.nestedPersistentContracts)) {

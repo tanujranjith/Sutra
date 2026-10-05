@@ -64,7 +64,7 @@
     <script src="src/persistence/revocation-wipe.js?v=20260831-revoke5"></script>
     <script src="src/core/credential-vault.js?v=20260831-revoke4"></script>
     <script src="src/compat/legacy-homework.js?v=20260709-compat1"></script>
-    <script src="src/domain/homework-store.js?v=20260916-integration-homework-store1"></script>
+    <script src="src/domain/homework-store.js?v=20261004-merge-review-fixes1"></script>
     <script src="src/domain/student-engine.js?v=20260913-energy-removal-engine1"></script>
     <script src="src/domain/workspace-entity-registry.js?v=20260728-entity1"></script>
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
@@ -89,7 +89,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20260913-locked-assistant-manifest2"></script>
+    <script src="src/config/feature-manifest.js?v=20261001-todo-completion1"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -98,7 +98,7 @@
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
     <script src="src/core/student-date-parser.js?v=20260709-studentdate1"></script>
-    <script src="src/components/icons/icon-paths.js?v=20260810-folder-plus1" defer></script>
+    <script src="src/components/icons/icon-paths.js?v=20261004-ci-icon-aliases1" defer></script>
     <script src="src/components/icons/index.js?v=20260809-audit-icons1" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
          Captured very early; AtelierCustomization.isSafeMode() reads this flag.
@@ -117,9 +117,9 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20260928-issues51-59-64">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
-    <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20260904-compactevents2">
+    <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
          this link when the optional Assistant pack initializes. -->
     <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260818-cache-refresh1">
@@ -465,7 +465,7 @@
                                         <div class="tabs-shell">
                                             <div class="view-tabs" role="group" aria-label="Workspace navigation and utilities">
                                                     <button class="view-tab active" data-view="today">Home</button>
-                                                    <button id="tabHomework" class="view-tab" data-view="homework">Homework</button>
+                                                    <button id="tabHomework" class="view-tab" data-view="homework">To-do</button>
                                                     <button class="view-tab" data-view="notes">Create</button>
                                                     <button class="view-tab" data-view="timeline">Timeline</button>
                                                     <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
@@ -492,7 +492,7 @@
                                                             <div class="view-more-group" data-nav-group="daily" role="group" aria-labelledby="moreViewsDailyLabel">
                                                                 <span class="view-more-group-label" id="moreViewsDailyLabel">Daily loop</span>
                                                                 <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Home</span></button>
-                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>Homework</span></button>
+                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>To-do</span></button>
                                                                 <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Create</span></button>
                                                                 <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-calendar-days" aria-hidden="true"></i><span>Timeline</span></button>
                                                             </div>
@@ -562,10 +562,6 @@
                                                             </button>
                                                         </div>
                                                         <div class="custom-shortcut-launchers" id="tabShortcutLaunchers" role="group" aria-label="Custom shortcuts"></div>
-                                                        <button type="button" class="quick-app-btn quick-app-btn-add" id="addShortcutFromTabsBtn" title="Add shortcut">
-                                                            <i class="fas fa-plus" aria-hidden="true"></i>
-                                                            <span>Shortcut</span>
-                                                        </button>
                                                     </div>
                                                     <button class="view-tab-theme" onclick="toggleThemePanel(); event.stopPropagation();" aria-label="Theme" title="Theme">
                                                         <i class="fas fa-palette" aria-hidden="true"></i>
@@ -930,7 +926,7 @@
                                     <span class="student-hub-metric-note" id="studentHubActiveTasksNote">Across all planners</span>
                                 </article>
                                 <article class="student-hub-metric">
-                                    <span class="student-hub-metric-label">Homework</span>
+                                    <span class="student-hub-metric-label">To-do</span>
                                     <strong class="student-hub-metric-value" id="studentHubHomeworkOpen">0</strong>
                                     <span class="student-hub-metric-note">Synced to tasks</span>
                                 </article>
@@ -961,7 +957,7 @@
                                 </article>
                             </div>
                             <div class="today-student-hub-actions">
-                                <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> Homework</button>
+                                <button class="neumo-btn" type="button" data-hub-view="homework"><i class="fas fa-book"></i> To-do</button>
                                 <button class="neumo-btn" type="button" data-hub-view="apstudy"><i class="fas fa-graduation-cap"></i> Review &amp; Tests</button>
                                 <button class="neumo-btn" type="button" data-hub-view="timeline"><i class="fas fa-calendar-days"></i> Calendar</button>
                                 <button class="neumo-btn" type="button" data-hub-view="notes"><i class="fas fa-note-sticky"></i> Create</button>
@@ -1487,6 +1483,9 @@
                 <!-- Insert -->
                 <button class="toolbar-btn" data-notes-v2-state="link" aria-pressed="false" onclick="insertLink()" title="Insert link (Ctrl+K)" aria-label="Insert link">
                     <i class="fas fa-link"></i>
+                </button>
+                <button class="toolbar-btn" type="button" onclick="window.flowAtelier?.openNotesAI()" title="AI writing help" aria-label="AI writing help">
+                    <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
                 </button>
                 <button class="toolbar-btn" onclick="insertTable()" title="Insert table" aria-label="Insert table">
                     <i class="fas fa-table"></i>
@@ -3217,7 +3216,7 @@
                 <optgroup label="Planning &amp; learning">
                     <option value="tasks">Tasks</option>
                     <option value="calendar">Calendar</option>
-                    <option value="homework">Homework</option>
+                    <option value="homework">To-do</option>
                     <option value="study">Study</option>
                 </optgroup>
                 <optgroup label="Services &amp; safety">
@@ -3289,7 +3288,7 @@
                         <button type="button" class="cc-sidebar-item" data-settings-nav="homework">
                             <span class="cc-sidebar-item-icon" aria-hidden="true"><i class="fas fa-book-open"></i></span>
                             <span class="cc-sidebar-item-text">
-                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">Homework</span>
+                                <span class="atelier-settings-nav-btn-title cc-sidebar-item-name">To-do</span>
                                 <span class="cc-sidebar-item-copy">Layout &amp; adding</span>
                             </span>
                         </button>
@@ -3580,7 +3579,7 @@
                                     <option value="today">Home</option>
                                     <option value="timeline">Timeline</option>
                                     <option value="notes">Create</option>
-                                    <option value="homework">Homework</option>
+                                    <option value="homework">To-do</option>
                                     <option value="apstudy">AP Study</option>
                                     <option value="collegeapp">College</option>
                                     <option value="life">Life</option>
@@ -3649,7 +3648,7 @@
                         <label class="cc-row cc-row-toggle" data-setting-item>
                             <span class="cc-row-text">
                                 <span class="cc-row-name">Course Hub &amp; All Due workspace</span>
-                                <span class="cc-row-help">Adds two tabs: a per-class cockpit (assignments, files, notes, grades) and a global "everything due" command center. Off by default — your existing Homework setup is unchanged either way.</span>
+                                <span class="cc-row-help">Adds two tabs: a per-class cockpit (assignments, files, notes, grades) and a global "everything due" command center. Off by default — your existing To-do setup is unchanged either way.</span>
                             </span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="layout.courseHubEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
@@ -4097,15 +4096,15 @@
                 <section class="cc-section" data-settings-section="homework">
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
-                            <h2 class="cc-section-title">Homework</h2>
-                            <p class="cc-section-copy">How assignments are shown. Add work through the shared Homework composer.</p>
+                            <h2 class="cc-section-title">To-do</h2>
+                            <p class="cc-section-copy">How homework and general tasks are shown. Add work through Capture.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="homework">Reset</button>
                     </header>
                     <div class="cc-group">
                         <span class="cc-group-title">Display</span>
                         <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Homework density</span><span class="cc-row-help">Spacing of homework rows.</span></div>
+                            <div class="cc-row-text"><span class="cc-row-name">Task density</span><span class="cc-row-help">Spacing of task rows.</span></div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="study.homeworkDensity">
                                     <option value="compact">Compact</option>
@@ -4133,9 +4132,9 @@
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="study">Reset</button>
                     </header>
                     <div class="cc-group">
-                        <span class="cc-group-title">Homework</span>
+                        <span class="cc-group-title">To-do</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Homework in student hub</span><span class="cc-row-help">Surface homework in the student hub.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">To-do in student hub</span><span class="cc-row-help">Surface homework and general tasks in the student hub.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="study.showHomeworkInStudentHub"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                     </div>
@@ -4813,12 +4812,12 @@
                     </header>
                     <div class="cc-group cc-group-stacked">
                         <div class="cc-group-head"><span class="cc-group-title">Feature packs</span></div>
-                        <p class="cc-foot-help">Your Student Setup keeps Today, Capture, Homework, Notes, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
+                        <p class="cc-foot-help">Your Student Setup keeps Home, Capture, To-do, Create, Timeline, Review &amp; Tests, Focus, and Settings easy to reach. Packs add deeper tools. Hiding a pack never deletes its data; re-enable it anytime.</p>
                         <div class="cc-feature-grid" id="featureToggleListSettings">
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="today"><span>Home</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="timeline"><span>Timeline</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="notes"><span>Create</span></label>
-                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>Homework</span></label>
+                            <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="homework"><span>To-do</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="apstudy"><span>Academic Pack: Review &amp; Tests</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="collegeapp"><span>College Pack</span></label>
                             <label class="cc-feature-toggle"><input type="checkbox" class="feature-toggle-input" data-feature-view="life"><span>Life Pack</span></label>
@@ -5343,10 +5342,10 @@
                 <div id="hwMainArea" class="hw-workspace-shell">
                     <header class="hw-page-header">
                         <div class="hw-page-heading">
-                            <h2>Homework</h2>
-                            <p>Plan, track, and complete your assignments.</p>
+                            <h2>To-do</h2>
+                            <p>Homework and general tasks, together in one list.</p>
                         </div>
-                        <div class="hw-page-actions" aria-label="Homework actions">
+                        <div class="hw-page-actions" aria-label="To-do actions">
                             <label class="hw-search-field" for="hwSearchInput">
                                 <i class="fas fa-search" aria-hidden="true"></i>
                                 <input id="hwSearchInput" type="search" placeholder="Search" autocomplete="off" />
@@ -5356,7 +5355,7 @@
                             </button>
                             <label class="hw-sort-control" for="hwSortSelect">
                                 <span>Sort:</span>
-                                <select id="hwSortSelect" aria-label="Sort homework">
+                                <select id="hwSortSelect" aria-label="Sort tasks">
                                     <option value="due">Due date</option>
                                     <option value="priority">Priority</option>
                                     <option value="course">Class / activity</option>
@@ -5365,7 +5364,7 @@
                                 </select>
                             </label>
                             <button id="hwOpenAddAssignment" class="hw-toolbar-btn hw-toolbar-primary" type="button">
-                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add homework</span>
+                                <i class="fas fa-plus" aria-hidden="true"></i><span>Add task</span>
                             </button>
                             <label class="hw-toolbar-btn hw-file-action" for="hwImportFile">
                                 <i class="fas fa-file-import" aria-hidden="true"></i><span>Import</span>
@@ -5375,13 +5374,13 @@
                                 <i class="fas fa-file-export" aria-hidden="true"></i><span>Export</span>
                             </button>
                             <details id="hwOverflowMenu" class="hw-overflow-menu">
-                                <summary class="hw-toolbar-btn hw-icon-only" aria-label="More homework actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
+                                <summary class="hw-toolbar-btn hw-icon-only" aria-label="More To-do actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
                                 <div class="hw-overflow-popover" role="menu">
                                     <button id="hwPasteImportBtn" type="button" role="menuitem" onclick="openHomeworkPasteImport('')"><i class="fas fa-paste" aria-hidden="true"></i>Paste import</button>
                                     <button id="hwSemesterSetupBtn" type="button" role="menuitem"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>Semester setup</button>
                                     <button id="hwHeaderAddClass" type="button" role="menuitem"><i class="fas fa-graduation-cap" aria-hidden="true"></i>Add class</button>
                                     <button id="hwHeaderAddActivity" type="button" role="menuitem"><i class="fas fa-people-group" aria-hidden="true"></i>Add activity</button>
-                                    <button id="hwResetBtn" class="danger" type="button" role="menuitem"><i class="fas fa-rotate-right" aria-hidden="true"></i>Reset Homework</button>
+                                    <button id="hwResetBtn" class="danger" type="button" role="menuitem"><i class="fas fa-rotate-right" aria-hidden="true"></i>Reset To-do</button>
                                 </div>
                             </details>
                         </div>
@@ -5396,7 +5395,7 @@
                         <button id="hwClearFilters" class="hw-filter-clear" type="button">Clear filters</button>
                     </div>
 
-                    <section class="hw-summary-grid" aria-label="Homework summary" aria-live="polite">
+                    <section class="hw-summary-grid" aria-label="To-do summary" aria-live="polite">
                         <button class="hw-summary-card is-urgent" type="button" data-summary-filter="today">
                             <span class="hw-summary-top"><i class="fas fa-calendar-day" aria-hidden="true"></i><span>Due Today</span><i class="fas fa-chevron-right" aria-hidden="true"></i></span>
                             <span class="hw-summary-value"><strong id="hwStatToday">0</strong> <span>tasks</span></span>
@@ -5424,8 +5423,13 @@
                         </button>
                     </section>
 
-                    <nav class="hw-list-tabs" aria-label="Assignment views">
-                        <button type="button" class="is-active" data-homework-tab="all" aria-current="page">All Assignments</button>
+                    <div class="hw-category-controls" role="group" aria-label="Task category">
+                        <button type="button" data-todo-category="all" aria-pressed="true">All</button>
+                        <button type="button" data-todo-category="homework" aria-pressed="false">Homework</button>
+                        <button type="button" data-todo-category="general" aria-pressed="false">General</button>
+                    </div>
+                    <nav class="hw-list-tabs" aria-label="Task views">
+                        <button type="button" class="is-active" data-homework-tab="all" aria-current="page">All Tasks</button>
                         <button type="button" data-homework-tab="class">By Class</button>
                         <button type="button" data-homework-tab="today">Due Today <span id="hwTabTodayCount" class="hw-tab-count">0</span></button>
                         <button type="button" data-homework-tab="week">This Week <span id="hwTabWeekCount" class="hw-tab-count">0</span></button>
@@ -5434,7 +5438,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20260930-homework-completion-grouping"></script>
+                <script src="src/features/study/homework.js?v=20261005-empty-class-kind1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -5518,11 +5522,11 @@
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
                 <label class="feature-toggle-item feature-toggle-card" data-feature-card="homework">
-                    <input type="checkbox" class="feature-toggle-input" data-feature-view="homework" aria-label="Enable Homework tab for startup">
+                    <input type="checkbox" class="feature-toggle-input" data-feature-view="homework" aria-label="Enable To-do tab for startup">
                     <span class="feature-toggle-icon"><i class="fas fa-book-open" aria-hidden="true"></i></span>
                     <span class="feature-toggle-copy">
-                        <span class="feature-toggle-title">Homework</span>
-                        <span class="feature-toggle-description">Classes, assignments, and school planning board.</span>
+                        <span class="feature-toggle-title">To-do</span>
+                        <span class="feature-toggle-description">Homework, general tasks, and class planning.</span>
                     </span>
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
@@ -5564,7 +5568,7 @@
                 <label class="quick-capture-field">
                     <span>Type</span>
                     <select id="quickCaptureType" class="modal-input">
-                        <option value="task">Task</option>
+                        <option value="task">General task</option>
                         <option value="homework">Homework</option>
                         <option value="test">Test / quiz</option>
                         <option value="note">Note</option>
@@ -5636,7 +5640,7 @@
                 <button type="button" class="neumo-btn" id="quickCaptureCancelBtn" data-modal-close>Cancel</button>
                 <button type="button" class="neumo-btn active" id="quickCaptureSubmitBtn">Capture</button>
             </div>
-            <p class="quick-capture-note">Examples: homework, tests, essays, review, notes, and study blocks. Sutra only saves after you tap Capture.</p>
+            <p class="quick-capture-note">Examples: homework, general tasks, tests, review, notes, and study blocks. Sutra only saves after you confirm.</p>
         </div>
     </div>
 
@@ -5696,7 +5700,7 @@
                     <button type="button" class="global-search-chip is-active" data-gs-filter="all" aria-pressed="true">All</button>
                     <button type="button" class="global-search-chip" data-gs-filter="pages" aria-pressed="false">Pages</button>
                     <button type="button" class="global-search-chip" data-gs-filter="notes" aria-pressed="false">Notes</button>
-                    <button type="button" class="global-search-chip" data-gs-filter="homework" aria-pressed="false">Homework</button>
+                    <button type="button" class="global-search-chip" data-gs-filter="homework" aria-pressed="false">To-do</button>
                     <button type="button" class="global-search-chip" data-gs-filter="tasks" aria-pressed="false">Tasks</button>
                     <button type="button" class="global-search-chip" data-gs-filter="timeline" aria-pressed="false">Timeline</button>
                     <button type="button" class="global-search-chip" data-gs-filter="attachments" aria-pressed="false">Attachments</button>
@@ -6532,15 +6536,22 @@
                 <div class="sutra-cloud-manage" id="sutraCloudManage" hidden>
                     <div class="sutra-cloud-action-buttons">
                         <button class="storage-btn" type="button" id="sutraCloudRefreshBtn"><i class="fas fa-rotate" aria-hidden="true"></i> Refresh</button>
-                        <label class="sutra-cloud-auto">
+                        <div class="sutra-cloud-auto">
+                          <label class="sutra-cloud-auto-toggle">
                             <input type="checkbox" id="sutraCloudAutoToggle">
                             <span>Auto-backup (optional, off by default)</span>
-                            <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency" disabled>
+                          </label>
+                            <select class="modal-input" id="sutraCloudAutoFrequency" aria-label="Auto-backup frequency">
                                 <option value="close">When app is hidden (best effort)</option>
                                 <option value="daily">Once a day</option>
                                 <option value="change">On significant change</option>
                             </select>
-                        </label>
+                            <div id="sutraCloudAutoTimeRow" class="sutra-cloud-auto-time">
+                                <label for="sutraCloudAutoTime">Daily backup time</label>
+                                <input class="modal-input" id="sutraCloudAutoTime" type="time" value="20:00" step="60" required aria-describedby="sutraCloudAutoTimeHelp">
+                                <p class="sutra-cloud-fineprint" id="sutraCloudAutoTimeHelp">Uses this device’s local time. Keep Sutra open and make one backup to unlock your password each session. A missed backup runs when Sutra is ready again; unchanged work is skipped. Changing the time starts with the next occurrence.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="sutra-cloud-backups" id="sutraCloudBackupList" aria-live="polite"></div>
                 </div>
@@ -6793,6 +6804,32 @@
                 </div>
             </div>
 
+            <div class="new-page-type-chooser"><!-- Selecting a type prepares the explicit Create confirmation. -->
+                        <div class="new-page-type-toggle" id="newPageTypeToggle" role="group" aria-label="Page type">
+                            <button type="button" class="new-page-type-toggle-btn nptt-active" id="newPageTypeBtn_note" data-type="note" onclick="handleNewPageTypeToggle('note')" aria-pressed="true">
+                                <i class="fas fa-file-alt" aria-hidden="true"></i> Notes
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_canvas" data-type="canvas" onclick="handleNewPageTypeToggle('canvas')" aria-pressed="false">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                Canvas
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_slides" data-type="slides" onclick="handleNewPageTypeToggle('slides')" aria-pressed="false">
+                                <i class="fas fa-chalkboard" aria-hidden="true"></i>
+                                Slides
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_sheets" data-type="sheets" onclick="handleNewPageTypeToggle('sheets')" aria-pressed="false">
+                                <i class="fas fa-table" aria-hidden="true"></i>
+                                Sheets
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_html" data-type="html" onclick="handleNewPageTypeToggle('html')" aria-pressed="false">
+                                <i class="fas fa-code" aria-hidden="true"></i>
+                                HTML Page
+                            </button>
+                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
+                                <i class="fas fa-folder" aria-hidden="true"></i>
+                                Folder
+                            </button>
+                        </div><p id="newPageTypeDescription" class="new-page-type-description" aria-live="polite">Write and format notes, with tables, links, and study tools.</p></div>
             <div class="template-picker-category-tabs" id="templatePickerCategoryTabs" role="tablist" aria-label="Template categories">
                 <button type="button" class="template-category-pill active" data-template-category="all" role="tab" aria-selected="true">All</button>
                 <button type="button" class="template-category-pill" data-template-category="student" role="tab" aria-selected="false">Student Workflows</button>
@@ -6814,39 +6851,18 @@
                     <aside class="new-page-setup-column" aria-label="Template setup">
                         <div class="new-page-setup-heading">Page setup</div>
 
-                        <!-- Page / Canvas type toggle -->
-                        <div class="new-page-type-toggle" id="newPageTypeToggle" role="group" aria-label="Page type">
-                            <button type="button" class="new-page-type-toggle-btn nptt-active" id="newPageTypeBtn_note" data-type="note" onclick="handleNewPageTypeToggle('note')" aria-pressed="true">
-                                <i class="fas fa-file-alt" aria-hidden="true"></i> Page
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_canvas" data-type="canvas" onclick="handleNewPageTypeToggle('canvas')" aria-pressed="false">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                                Canvas
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_slides" data-type="slides" onclick="SutraSlides.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-chalkboard" aria-hidden="true"></i>
-                                Slides
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_sheets" data-type="sheets" onclick="SutraSheets.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-table" aria-hidden="true"></i>
-                                Sheets
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_html" data-type="html" onclick="SutraHTMLPages.createFromNewPageDialog()" aria-pressed="false">
-                                <i class="fas fa-code" aria-hidden="true"></i>
-                                HTML Page
-                            </button>
-                            <button type="button" class="new-page-type-toggle-btn" id="newPageTypeBtn_folder" data-type="folder" onclick="handleNewPageTypeToggle('folder')" aria-pressed="false">
-                                <i class="fas fa-folder" aria-hidden="true"></i>
-                                Folder
-                            </button>
-                        </div>
-
                         <div class="new-page-name-field">
                             <label class="new-page-field-label" id="newPageNameLabel" for="newPageName">Page title</label>
                             <div class="new-page-name-row">
                                 <input type="text" class="modal-input" id="newPageName" placeholder="Enter page title..." />
                                 <button type="button" class="btn btn-secondary template-suggest-btn" id="templateUseNameBtn" onclick="applyTemplateSuggestedName()">Use suggested title</button>
                             </div>
+                        </div>
+
+                        <div id="newPageContentStarterRow" class="new-page-starter-field" hidden>
+                            <label class="new-page-field-label" for="newPageContentStarter">Start with</label>
+                            <select id="newPageContentStarter" aria-label="Content starter" aria-describedby="newPageContentStarterPreview"></select>
+                            <p id="newPageContentStarterPreview" class="new-page-starter-preview" aria-live="polite" hidden></p>
                         </div>
 
                         <div class="new-page-parent-field">
@@ -6973,6 +6989,8 @@
                             <option value="canvas">Canvas</option>
                             <option value="folder">Folder</option>
                             <option value="slides">Slides</option>
+                            <option value="sheets">Sheets</option>
+                            <option value="html">HTML Page</option>
                         </select>
 
                     </aside>
@@ -7558,19 +7576,11 @@
                     <label for="shortcutPageInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Destination Page</label>
                     <select class="modal-input" id="shortcutPageInput"></select>
                 </div>
-                <div class="shortcut-modal-grid">
-                    <div>
-                        <label for="shortcutIconInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Icon or Emoji (optional)</label>
-                        <input type="text" class="modal-input" id="shortcutIconInput" maxlength="8" placeholder="??">
-                    </div>
-                    <div>
-                        <label for="shortcutPlacementInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Placement</label>
-                        <select class="modal-input" id="shortcutPlacementInput">
-                            <option value="tabs">Tab switcher</option>
-                            <option value="sidebar">Sidebar</option>
-                        </select>
-                    </div>
+                <div>
+                    <label for="shortcutIconInput" style="display:block; margin:12px 0 6px; font-size:13px; color:var(--text-secondary);">Icon or Emoji (optional)</label>
+                    <input type="text" class="modal-input" id="shortcutIconInput" maxlength="8" placeholder="??">
                 </div>
+                <p>Shortcuts appear in the Create sidebar.</p>
                 <p class="shortcut-modal-error" id="shortcutModalError" style="display:none;"></p>
             </div>
             <div class="modal-footer">
@@ -7849,7 +7859,7 @@
     <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
     <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20260913-content-limits-semester1"></script>
+    <script src="src/features/academic/semester-setup.js?v=20261001-todo-completion1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -7883,7 +7893,11 @@
          Loads before app.js so the flag can mount at boot; app.js only touches it
          behind typeof guards, so a missing/failed bundle leaves the classic editor. -->
     <script src="assets/vendor/editor/sutra-editor.min.js?v=3.27.3-b5"></script>
-    <script src="src/features/notes/editor-v2.js?v=20260929-issues51-59-64-boundary1"></script>
+    <script src="src/domain/content-timeline.js?v=20261001-content-timeline3"></script>
+    <script src="src/features/notes/rich-links.js?v=20261003-create-review5"></script>
+    <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
+    <script src="src/features/notes/authoring-tools.js?v=20261004-native-link-click3"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261004-assistant-slides1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7895,19 +7909,23 @@
     <!-- Workspace-wide search: pure ranking engine + modal controller. Both are
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
-    <script src="src/features/search/global-search-engine.js?v=20260825-gsengine4"></script>
+    <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20260930-homework-tonight-2359"></script>
+    <script src="src/core/app.js?v=20261004-merge-review-fixes1"></script>
+    <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
+    <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
+    <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
+    <script src="src/ui/task-completion-effects.js?v=20261002-task-dust-reliable1"></script>
     <!-- Convert explicit pre-htmlDocument page records before the canonical
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
     <script src="src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
-    <script src="src/features/workspace/pdf-workspace.js?v=20260926-pdf28"></script>
+    <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20260823-combined1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261004-merge-review-fixes1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7915,16 +7933,18 @@
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
-    <script src="src/features/workspace/workspace-entity-adapters.js?v=20260728-entity1"></script>
+    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261001-todo-completion1"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
-    <script src="src/features/workspace/slides.js?v=20260825-oxremed1"></script>
+    <script src="src/features/workspace/slides.js?v=20261004-slides-lines-menus1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
-    <script src="src/features/workspace/sheets.js?v=20260825-oxremed1"></script>
-    <script src="src/features/workspace/html-pages.js?v=20260825-oxremed1"></script>
+    <script src="src/features/workspace/create-page-templates.js?v=20261003-create-review7"></script>
+    <script src="src/features/workspace/sheets.js?v=20261004-merge-review-fixes1"></script>
+    <script src="src/features/workspace/html-pages.js?v=20261004-html-no-timeline1"></script>
+    <script src="src/features/workspace/content-timeline-hosts.js?v=20261004-html-no-timeline1"></script>
     <!-- Student-loop DOM bindings extracted from app.js: Capture + Focus actions. -->
     <script src="src/ui/student-loop-actions.js?v=20260809-audit1"></script>
     <!-- Today timer controls reuse the canonical Focus timer bridge. -->
-    <script src="src/features/workspace/today-focus-timer.js?v=20260930-home-timer-focus-mode2"></script>
+    <script src="src/features/workspace/today-focus-timer.js?v=20261004-focus-dismiss-theme1"></script>
     <!-- PWA: protocol-gated service-worker registration (http/https only; never
          file://) + in-app offline indicator. Safe to fail; never blocks boot. -->
     <script src="src/boot/sw-register.js?v=20260709-safeupdate1"></script>
@@ -7935,11 +7955,11 @@
     <script src="src/features/study/code-highlight.js?v=20260620-hl1"></script>
     <script src="src/data/daily-lock-in-quotes.js?v=20260605-quotes1"></script>
     <script src="src/features/workspace/daily-lock-in-quote.js?v=20260905-quote-focus1"></script>
-    <script src="src/features/workspace/notifications.js?v=20260828-revocation-lock1"></script>
+    <script src="src/features/workspace/notifications.js?v=20261001-todo-completion1"></script>
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20260905-more-actions1"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20261001-mobile-data-actions2"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20260921-html-widget-mode2"></script>
@@ -7949,7 +7969,7 @@
     <!-- Timeline drag-and-drop — enables dragging homework/tasks onto the
          Timeline and dragging blocks to reschedule them. -->
     <script src="src/features/workspace/timeline-drag.js?v=20260913-content-limits-timeline1"></script>
-    <script src="src/features/workspace/timeline-calendar.js?v=20260922-prefill1"></script>
+    <script src="src/features/workspace/timeline-calendar.js?v=20261001-mobile-agenda1"></script>
     <!-- Smart Reschedule — deterministic rescheduling with conflict detection
          and proposal review. -->
     <script src="src/features/workspace/smart-reschedule.js?v=20260712-resched1"></script>
@@ -8325,32 +8345,41 @@
     <link rel="stylesheet" href="styles/base/microinteractions.css?v=20260807-cohesion1">
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/features/global-search.css?v=20260917-search-focus1">
-    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20260916-integration-mobile1">
+    <link rel="stylesheet" href="styles/responsive/mobile.css?v=20261001-mobile-data-actions1">
     <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20260821-settings16">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20260930-homework-title-wrap1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
+    <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-dust-hold3">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
-    <link rel="stylesheet" href="styles/features/slides.css?v=20260904-editorlayout2">
-    <link rel="stylesheet" href="styles/features/sheets.css?v=20260904-editorlayout2">
-    <link rel="stylesheet" href="styles/features/html-pages.css?v=20260912-html-layout1">
-    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20260815-pdf7">
+    <link rel="stylesheet" href="styles/features/slides.css?v=20261004-slides-lines-menus1">
+    <link rel="stylesheet" href="styles/features/sheets.css?v=20261003-create-review7">
+    <link rel="stylesheet" href="styles/features/html-pages.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/pdf-workspace.css?v=20261001-authoring4">
     <link rel="stylesheet" href="styles/features/command-center.css?v=20260705-clb2">
     <link rel="stylesheet" href="styles/features/academic-command-center.css?v=20260614-acc1">
     <link rel="stylesheet" href="styles/features/issue-prompt.css?v=20260617-issue1">
-    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20260915-cloud2">
+    <link rel="stylesheet" href="styles/features/sutra-cloud.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/backup-progress.css?v=20261001-backup-progress1">
     <link rel="stylesheet" href="styles/features/cloud-sync.css?v=20260807-syncsheet1">
     <link rel="stylesheet" href="styles/views/today-redesign.css?v=20260816-home-quick-task1">
-    <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20260809-todaytimer1">
+    <link rel="stylesheet" href="styles/views/today-focus-timer.css?v=20261004-focus-dismiss-theme1">
     <link rel="stylesheet" href="styles/views/custom-tabs.css?v=20260913-custom-html-widget1">
     <link rel="stylesheet" href="styles/base/contracts.css?v=20260905-updatelayer1">
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20260930-drawer-layer">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261001-desktop-density4">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
+    <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/content-timeline.css?v=20261001-content-timeline4">
+    <link rel="stylesheet" href="styles/features/content-timeline-hosts.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/canvas-workbench-polish.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/features/folder-workspace.css?v=20261001-folders7">
+    <link rel="stylesheet" href="styles/responsive/student-workspaces-polish.css?v=20261001-qa-touch5">
 
     <!-- Mobile robustness: ensure the "More tabs" dropdown opens reliably on touch.
          The existing click handler should work, but iOS Safari occasionally drops

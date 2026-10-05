@@ -29,6 +29,7 @@ async function openHomework(page) {
       homeworkSetup.style.setProperty('display', 'none', 'important');
     }
   });
+  await page.locator('[data-todo-category="homework"]').click();
 }
 
 test('Homework uses Quick Capture as the single assignment composer', async ({ page }) => {
@@ -112,14 +113,15 @@ test('marking Homework done on Home immediately updates the Homework board', asy
 
   await page.evaluate(() => window.setActiveView('homework'));
   const row = page.locator('.hw-assignment-row', { hasText: 'Existing task' });
+  const completedToggle = page.locator('[data-hw-past-toggle]');
+  await expect(completedToggle).toContainText('Completed tasks (1)');
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(row).toHaveCount(0);
+  await completedToggle.click();
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(row).toBeVisible();
   await expect(row).toHaveClass(/is-completed/);
   await expect(row.locator('.hw-work-status')).toContainText('Completed');
-
-  const completedToggle = page.locator('[data-hw-past-toggle]');
-  await expect(completedToggle).toContainText('Completed assignments (1)');
-  await expect(row).toBeHidden();
-  await completedToggle.click();
-  await expect(row).toBeVisible();
   await row.locator('[data-task-toggle]').click();
   await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
     .find((task) => task.title === 'Existing task')?.done)).toBe(false);

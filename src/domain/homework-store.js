@@ -86,7 +86,8 @@
       courseId: courseId,
       title: title,
       text: title,
-      done: raw.done === true || raw.completed === true || raw.status === 'done',
+      // An explicit canonical value wins over retained legacy completion aliases.
+      done: typeof raw.done === 'boolean' ? raw.done : raw.completed === true || raw.status === 'done',
       dueDate: dueDate,
       dueTime: dueTime,
       due: dueDate,
@@ -194,6 +195,14 @@
     var adapter = null;
     var listeners = [];
     var durableTail = Promise.resolve();
+    var latestPersistence = Promise.resolve(false);
+    function trackPersistence(result) {
+      // A synchronous/absent adapter is not evidence of a durable browser save.
+      latestPersistence = result && typeof result.then === 'function'
+        ? Promise.resolve(result).then(function (receipt) { return receipt !== false; })
+        : Promise.resolve(false);
+      latestPersistence.catch(function () { /* surfaced by workspace persistence health */ });
+    }
     function emit(meta) { listeners.slice().forEach(function (listener) { try { listener(getSnapshot(), meta || {}); } catch (_) {} }); }
     function getSnapshot() { return clone(state, normalizeWorkspace({})); }
     function commit(next, meta) {
@@ -211,6 +220,7 @@
           // here — failures surface through persistence health, not as an
           // unhandled rejection. Durable callers go through commitDurably.
           var scheduledPersist = adapter.persist(state.lastMutation.reason);
+          trackPersistence(scheduledPersist);
           if (scheduledPersist && typeof scheduledPersist.catch === 'function') {
             scheduledPersist.catch(function () { /* surfaced by workspace persistence health */ });
           }
@@ -241,7 +251,9 @@
         try {
           if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
           if (adapter && typeof adapter.persist === 'function') {
-            await Promise.resolve(adapter.persist(state.lastMutation.reason));
+            var durablePersist = adapter.persist(state.lastMutation.reason);
+            trackPersistence(durablePersist);
+            await Promise.resolve(durablePersist);
           }
         } catch (error) {
           // Roll back only while this durable mutation is still the newest
@@ -266,6 +278,7 @@
     }
     return {
       configure: function (nextAdapter) {
+        trackPersistence(undefined);
         adapter = nextAdapter || null;
         var canonical = adapter && typeof adapter.getWorkspace === 'function' ? adapter.getWorkspace() : state;
         var legacy = adapter && typeof adapter.readLegacy === 'function' ? adapter.readLegacy() : null;
@@ -273,6 +286,7 @@
         if (adapter && typeof adapter.setWorkspace === 'function') adapter.setWorkspace(getSnapshot());
         if (adapter && typeof adapter.persist === 'function') {
           var migrationPersist = adapter.persist('homework-migration');
+          trackPersistence(migrationPersist);
           if (migrationPersist && typeof migrationPersist.catch === 'function') {
             migrationPersist.catch(function () { /* surfaced by workspace persistence health */ });
           }
@@ -315,7 +329,7 @@
           return draft;
         }, meta || {}, outcome);
       },
-      whenPersisted: function () { return durableTail; },
+      whenPersisted: function () { return durableTail.then(function () { return latestPersistence; }); },
       subscribe: function (listener) {
         if (typeof listener !== 'function') return function () {};
         listeners.push(listener);

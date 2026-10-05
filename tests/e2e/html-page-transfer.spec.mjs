@@ -21,6 +21,19 @@ async function openApp(page) {
     }
   });
   await waitForAppReady(page);
+  // This is a clean transfer case. Start both independent workspaces with
+  // reminder receipts current so a timed nudge cannot invalidate the safety
+  // snapshot while encryption is in progress. Keep the real restore guards.
+  await page.evaluate(async () => {
+    const notifications = window.SutraNotifications;
+    const receiptTime = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: receiptTime,
+      lastWeeklyNudge: receiptTime
+    });
+    await window.flowAtelier.flushAppSaveNow('e2e-html-transfer-ready');
+  });
 }
 
 async function encryptedBackup(page) {
@@ -36,14 +49,14 @@ async function acceptOptionalRestorePrompt(page) {
   if (await restoreButton.count()) await restoreButton.click();
 }
 
-async function completeOptionalSafetySnapshot(page) {
+async function completeSafetySnapshot(page) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
-  if (await modal.count() && await modal.isVisible()) {
-    await modal.locator('#sutraBackupPassphraseInput').fill(PASS);
-    await modal.locator('#sutraBackupPassphraseConfirmInput').fill(PASS);
-    await modal.locator('#sutraBackupPasswordSubmitBtn').click();
-    await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
-  }
+  await expect(modal).toBeVisible({ timeout: 30_000 });
+  await modal.locator('#sutraBackupPassphraseInput').fill(PASS);
+  await modal.locator('#sutraBackupPassphraseConfirmInput').fill(PASS);
+  await modal.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
 }
 
 test('encrypted workspace transfer preserves HTML Pages and repairs legacy page records', async ({ page, browser }) => {
@@ -70,12 +83,26 @@ test('encrypted workspace transfer preserves HTML Pages and repairs legacy page 
     await target.locator('#sutraImportPasswordSubmitBtn').click();
     await expect(target.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
     await acceptOptionalRestorePrompt(target);
-    await completeOptionalSafetySnapshot(target);
+    await completeSafetySnapshot(target);
 
-    await expect.poll(() => target.evaluate((title) => {
-      const restored = window.flowAtelier.pages.find((item) => item.title === title);
-      return restored?.htmlDocument?.source || '';
-    }, 'Transfer demo'), { timeout: 60_000 }).toContain(marker);
+    try {
+      await expect.poll(() => target.evaluate((title) => {
+        const restored = window.flowAtelier.pages.find((item) => item.title === title);
+        return restored?.htmlDocument?.source || '';
+      }, 'Transfer demo'), { timeout: 60_000 }).toContain(marker);
+    } catch (error) {
+      const transferState = await target.evaluate((title) => {
+        const restored = window.flowAtelier.pages.find((item) => item.title === title);
+        return {
+          pagePresent: !!restored,
+          type: restored?.type || '',
+          htmlSourceLength: restored?.htmlDocument?.source?.length || 0
+        };
+      }, 'Transfer demo');
+      error.message += `\nHTML transfer state: ${JSON.stringify(transferState)}`;
+      error.stack += `\nHTML transfer state: ${JSON.stringify(transferState)}`;
+      throw error;
+    }
     const restoredIdentity = await target.evaluate((title) => {
       const restored = window.flowAtelier.pages.find((item) => item.title === title);
       return { id: restored?.id || '', source: restored?.htmlDocument?.source || '' };

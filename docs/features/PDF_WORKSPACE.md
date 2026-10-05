@@ -16,6 +16,23 @@ An open PDF owns its toolbar, observers, PDF.js documents, and in-flight render 
 - Served Chromium and WebKit pages use the vendored PDF.js worker. Direct `file://` use and Firefox use the tested same-thread vendored runtime because the worker path is not reliable for the current form fixture there; browser preview remains the final fallback.
 - Embedded PDF JavaScript is never evaluated. External links are not opened automatically.
 
+## Workspace context and status
+
+The top bar groups the document name and visible-page count, search, zoom, and
+document actions. The annotation toolbar groups markup, document, and selected
+text actions. When those selection actions are available, the footer reports
+the selected word count and page. The page count follows the most visible page
+while scrolling.
+
+The reader begins with a local-copy loading message. Page-render failures show
+an inline alert and a workspace status message; they do not change the original
+PDF bytes. An empty page arrangement explains that the original remains intact
+and points to the Pages organizer or reopening the exact original. On wide
+screens, the inspector stays beside the reader. On narrower screens, **Inspector**
+opens a closable bottom panel for the outline, bookmarks, comments, and reading
+text; Escape closes it and returns focus to the Inspector button. Phone layouts
+hide thumbnails and keep the current page count visible while the reader scrolls.
+
 ## Data ownership
 
 `pdfDocuments` stores page plans, stable page IDs, rotations, bookmarks, and bounded durable checkpoints. `pdfAnnotations` stores independent stable records with normalized coordinates in the unrotated page coordinate system. Form values are annotation records with `type: "form"` and a `fieldKey`.
@@ -27,6 +44,17 @@ Courses, Homework, Assignment Studio, private documents, and the PWA Share
 Target all route bytes and links through the same attachment bridge. Homework
 and Assignment Studio provide contextual upload actions; an Assignment Studio
 file can also be linked to its Homework record without duplicating bytes.
+
+The PDF document actions include **Create timeline note**. It opens the shared
+timeline editor and creates a separate Notes page through the canonical
+workspace bridge; the PDF document and its original attachment bytes are not
+changed. When the PDF is open inside a source note, the new page keeps that
+source reference and PDF title. A standalone attachment creates a timeline note
+with the PDF title as its source label and no page link. The action rechecks the
+open PDF, source page, current view, and write access after the editor closes;
+cancellation leaves the PDF unchanged and stale source context refuses the
+creation. Locking the source page or workspace closes the reader and cancels a
+pending embedded open; original attachment bytes remain unchanged.
 
 ## Editing boundary
 

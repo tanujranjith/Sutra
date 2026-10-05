@@ -35,7 +35,17 @@
   var moreCloseTimer = null;
   var morePendingCloseOptions = null;
   var notificationBadgeObserver = null;
+  var saveStatusObserver = null;
+  var moreSaveStatus = null;
   var sidebarReturnFocus = null;
+
+  var workspaceActionTargets = {
+    save: ['saveLocalBtn', 'fa-save', 'Save locally'],
+    export: ['exportFileBtn', 'fa-upload', 'Export'],
+    import: ['importFileBtn', 'fa-download', 'Import'],
+    cloud: ['sutraCloudOpenBtn', 'fa-cloud', 'Data & Backup'],
+    feedback: ['feedbackFabBtn', 'fa-flag', 'Report a problem']
+  };
 
   function reducedMotion() {
     try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
@@ -194,6 +204,21 @@
   function renderMoreActions() {
     if (!moreActions) return;
     moreActions.replaceChildren();
+    moreSaveStatus = document.createElement('p');
+    moreSaveStatus.className = 'sutra-mobile-save-status';
+    moreSaveStatus.setAttribute('role', 'status');
+    moreSaveStatus.setAttribute('aria-live', 'polite');
+    moreActions.appendChild(moreSaveStatus);
+    syncMoreSaveStatus();
+    Object.keys(workspaceActionTargets).forEach(function (action) {
+      var target = workspaceActionTargets[action];
+      var source = document.getElementById(target[0]);
+      if (!source) return;
+      var button = utilityButton(action, target[1], target[2]);
+      button.disabled = source.disabled;
+      moreActions.appendChild(button);
+    });
+    moreActions.appendChild(utilityButton('focus', 'fa-clock', 'Focus timer'));
     if (activeView() === 'notes') {
       moreActions.appendChild(utilityButton('pages', 'fa-bars', 'Pages'));
     }
@@ -204,13 +229,37 @@
     syncNotificationBadges();
   }
 
+  function syncMoreSaveStatus() {
+    if (!moreSaveStatus) return;
+    var source = document.getElementById('taskbarSaveStatus');
+    var text = source ? source.textContent.replace(/\s+/g, ' ').trim() : 'Save status unavailable';
+    if (moreSaveStatus.textContent !== text) moreSaveStatus.textContent = text;
+    moreSaveStatus.classList.toggle('failed', !!(source && source.classList.contains('failed')));
+  }
+
+  function observeSaveStatus() {
+    var source = document.getElementById('taskbarSaveStatus');
+    if (saveStatusObserver || !source || typeof MutationObserver !== 'function') return;
+    saveStatusObserver = new MutationObserver(function () {
+      if (moreOverlay && !moreOverlay.hidden) syncMoreSaveStatus();
+    });
+    saveStatusObserver.observe(source, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+  }
+
   function runMoreAction(action) {
     closeMore({ restoreFocus: false, afterClose: function () {
       // History navigation can rerender the nav. Resolve the live trigger only
       // after the sheet is actually closed, not before a guessed delay.
       var moreTrigger = navEl && navEl.querySelector('[data-bn-view="__more"]');
       if (moreTrigger && typeof moreTrigger.focus === 'function') moreTrigger.focus();
-      if (action === 'pages') {
+      if (workspaceActionTargets[action]) {
+        var source = document.getElementById(workspaceActionTargets[action][0]);
+        if (source && !source.disabled) source.click();
+      } else if (action === 'focus') {
+        var focusButton = document.querySelector('#sutraFocusMiniPlayer [data-focus-player-action="full-focus"]')
+          || document.getElementById('fsLaunchBtn');
+        if (focusButton) focusButton.click();
+      } else if (action === 'pages') {
         var sidebarToggle = document.getElementById('sidebarToggle');
         if (sidebarToggle) {
           sidebarReturnFocus = moreTrigger;
@@ -283,8 +332,9 @@
     document.body.classList.add('mobile-more-open');
     window.requestAnimationFrame(function () {
       moreOverlay.classList.add('open');
-      var active = moreList && moreList.querySelector('[aria-current="page"]');
-      var first = active || (morePanel && morePanel.querySelector('button'));
+      // Start at the header so short viewports expose save status/actions before
+      // focusing a destination would scroll the sheet past them.
+      var first = morePanel && morePanel.querySelector('button');
       if (first) first.focus();
     });
     try {
@@ -412,7 +462,9 @@
     buildMoreSheet();
     render();
     observeNotificationBadge();
+    observeSaveStatus();
     window.addEventListener('noteflow:view-changed', render);
+    document.body.classList.add('sutra-mobile-utilities-ready');
   }
 
   function setupBreakpointCleanup() {

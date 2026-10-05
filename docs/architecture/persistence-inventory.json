@@ -140,6 +140,10 @@
   "nestedPersistentContracts": {
     "inheritanceRule": "Every durable descendant of a synchronized record, ordered collection, or atomic section inherits that parent decision. Normalizers must preserve documented fields and forward-compatible extra fields unless a migration intentionally changes them.",
     "pages[]": ["id", "title", "type", "content", "blocks", "icon", "collapsed", "theme", "createdAt", "updatedAt", "isTemporary", "temporaryCreatedAt", "temporaryExpiresAt", "isLocked", "lockHash", "lockSalt", "lockedAt", "lockAutoLock", "lockDuressVerifier", "spaceId", "canvas", "slides", "spreadsheet", "htmlDocument", "isSystemPage", "builtInId", "systemRole", "pageMode", "documentBackground", "formatting", "documentLayout", "comments", "suggestions", "footnotes", "citations", "tags", "versions"],
+    "pages[].canvas.objects[].contentTimeline": ["version", "title", "layout", "events"],
+    "pages[].canvas.objects[].contentTimeline.events[]": ["id", "label", "when", "description"],
+    "pages[].slides.slides[].elements[].contentTimeline": ["version", "title", "layout", "events"],
+    "pages[].slides.slides[].elements[].contentTimeline.events[]": ["id", "label", "when", "description"],
     "tasks[]": ["id", "title", "notes", "priority", "difficulty", "status", "completed", "isActive", "scheduleType", "weeklyDays", "estimate", "category", "subtasks", "dependencies", "dueDate", "dueTime", "reminder", "recurrence", "noteId", "courseId", "createdAt", "updatedAt"],
     "timeBlocks[]": ["id", "name", "start", "end", "date", "category", "color", "recurrence", "weeklyDays", "recurrenceUntil", "recurrenceExceptions", "preserveRecurrence", "importedRecurrence", "isAllDay", "notes", "referenceUrl", "source", "sourceUid", "calendarImportId", "calendarName", "calendarUid", "calendarRecurrenceId", "calendarTimeZone", "calendarRrule", "createdAt", "updatedAt"],
     "assistantChatHistory": ["version", "currentChatId", "conversations", "legacyMigrationComplete"],
@@ -160,7 +164,13 @@
     "settings.preferences.quotes": ["showInSidebar", "showInCustomTabs", "sourceMode", "enabledCategories", "customQuotes"],
     "settings.preferences.quotes.customQuotes[]": ["id", "text", "author", "category", "createdAt", "updatedAt"],
     "homeworkWorkspace": ["schemaVersion", "revision", "courses", "tasks", "quarantine", "updatedAt", "lastMutation"],
+    "homeworkWorkspace.tasks[]": ["id", "courseId", "title", "text", "done", "dueDate", "dueTime", "due", "priority", "difficulty", "recurrence", "notes", "kind", "estimateMinutes", "actualMinutes", "completedAt", "sourceUrl", "studio", "createdAt", "updatedAt"],
     "reviewWorkspace": ["decks", "items", "sessions", "settings"]
+  },
+  "embeddedPageContentContracts": {
+    "notesRichLink": { "parent": "pages[].content", "attribute": "data-sutra-rich-link", "fields": ["href", "label", "metadataTitle", "thumbnail"], "reason": "Native inline editor atom; optional thumbnail is approved bounded inline image data. Unknown fields survive edits; helper port and credentials remain session/device local." },
+    "notesContentTimeline": { "parent": "pages[].content", "attribute": "data-sutra-content-timeline", "fields": ["version", "title", "layout", "events"], "eventFields": ["id", "label", "when", "description"], "reason": "Native block atom stores the complete authored model; malformed and future versions stay read-only and preserved." },
+    "htmlContentTimeline": { "parent": "pages[].htmlDocument.source", "attribute": "data-sutra-content-timeline", "fields": ["version", "title", "layout", "events"], "eventFields": ["id", "label", "when", "description"], "reason": "Escaped JSON in an inert source section follows canonical HTML source persistence; bounded editor history is session-only." }
   },
   "assetContracts": {
     "courseAttachmentBytes": {
@@ -216,7 +226,7 @@
     "sutra_ai_send_ack_v1": { "category": "deviceLocal", "reason": "Per-browser network-disclosure acknowledgement." },
     "chat_models_cache_*": { "category": "ephemeral", "reason": "Regenerable provider-model cache." },
     "sutra:googleDriveSync:v1": { "category": "deviceLocal", "reason": "Google Drive backup operational metadata." },
-    "sutra:supabaseCloud:v1": { "category": "deviceLocal", "reason": "Version-2 Cloud backup operational metadata: opt-in, cadence, successful snapshot timestamps and cross-tab automatic-backup hash receipt. Frozen storage key; migration preserves unknown fields. Never exported or synchronized." },
+    "sutra:supabaseCloud:v1": { "category": "deviceLocal", "reason": "Version-3 Cloud backup operational metadata: opt-in, cadence, local HH:mm dailyTime, dailyScheduleStartedAt, successful snapshot timestamps, lastAutoBackupCheckAt for unchanged daily slots, and cross-tab automatic-backup hash receipt. Frozen storage key; migration preserves unknown fields. Never exported or synchronized." },
     "sutra:cloudProvider:*": { "category": "secret", "reason": "Provider configuration may contain credentials." },
     "sutra:supabaseSession:v1": { "category": "secret", "reason": "Supabase access/refresh session." },
     "sutra:syncAccountHint:v1": { "category": "deviceLocal", "reason": "Non-secret account routing hint used only to select this browser's account-scoped sync operational namespace; never exported or synchronized." },

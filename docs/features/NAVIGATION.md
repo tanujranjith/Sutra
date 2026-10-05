@@ -7,7 +7,7 @@ Sutra uses one canonical set of `.view-tab[data-view]` controls for workspace ro
 The desktop strip keeps the student daily loop directly visible when space permits:
 
 - Home
-- Homework
+- To-do
 - Create
 - Timeline
 - Review & Tests
@@ -29,10 +29,16 @@ Custom dashboard buttons remain direct while they fit. Overflow entries are gene
 The top navigation is the only permanent desktop navigation chrome. Secondary navigation is registered by section through `SutraContextualShell`:
 
 - Create owns the contextual page tree and preserves its established collapsed/drawer state.
-- Home, Homework, Timeline, Review & Tests, Courses, Settings, optional packs, and custom dashboards use the full workspace by default.
+- Home, To-do, Timeline, Review & Tests, Courses, Settings, optional packs, and custom dashboards use the full workspace by default.
 - A future section may add its own contextual sidebar only when the navigation is genuinely section-specific. It must register with the shell rather than reuse or arbitrarily hide the Create tree.
 
 This keeps the hierarchy consistent: global navigation, then section controls, then primary content. Route-specific actions stay in their section toolbars; global utilities stay in the top shell.
+
+Desktop layouts with a precise pointer use a compact header and smaller workspace
+gutters. Create keeps note and folder rows at the same comfortable height; the
+Compact and Expanded note-list preferences still control row density. Text size
+and editor zoom stay governed by their existing preferences. Phone and touch
+layouts retain their larger controls.
 
 ## Keyboard behavior
 

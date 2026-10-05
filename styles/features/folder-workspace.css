@@ -1,0 +1,243 @@
+/* Contextual folder navigation over the existing title::path page model. */
+body.folder-page-active[data-view="notes"] #view-notes .toolbar-wrapper,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > #pageTitle,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > #tagsContainer,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > #editor,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > .editor-v2-host,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > .notes-backlinks,
+body.folder-page-active[data-view="notes"] #notesPrimaryPane > .sutra-content-timeline-host-toolbar {
+    display: none !important;
+}
+.page-folder-open { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
+.page-folder-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sutra-folder-workspace {
+    box-sizing: border-box;
+    display: grid;
+    gap: 20px;
+    min-width: 0;
+    padding: clamp(16px, 2.5vw, 28px);
+    color: var(--text-primary, #17212f);
+}
+
+.sutra-folder-workspace [hidden] { display: none !important; }
+.sutra-folder-workspace:focus-visible { outline: 2px solid var(--accent, #5078f2); outline-offset: 4px; }
+
+.sutra-folder-workspace-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 18px 24px;
+    min-width: 0;
+}
+
+.sutra-folder-workspace-heading-copy { min-width: 0; }
+.sutra-folder-workspace-heading { margin: 0; font-size: clamp(1.55rem, 3vw, 2.1rem); line-height: 1.2; overflow-wrap: anywhere; }
+.sutra-folder-workspace-description { margin: 7px 0 0; color: var(--text-secondary, #596579); line-height: 1.5; }
+
+.sutra-folder-workspace-create {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.sutra-folder-workspace-create-button,
+.sutra-folder-workspace-crumb,
+.sutra-folder-workspace-child {
+    box-sizing: border-box;
+    min-width: 44px;
+    min-height: 44px;
+    color: var(--text-primary, #17212f);
+    background: var(--surface-primary, var(--bg-primary, #fff));
+    border: 1px solid var(--glass-border, var(--border-color, #d0d5dd));
+    border-radius: 10px;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* The shared phone rule button[aria-label] must not shrink these targets. */
+.sutra-folder-workspace :is(.sutra-folder-workspace-create-button, .sutra-folder-workspace-crumb) {
+    min-height: 44px;
+}
+
+.sutra-folder-workspace-create-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 12px;
+    font-weight: 650;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.sutra-folder-workspace-create-button.is-primary {
+    color: var(--accent-text, #fff);
+    background: var(--accent-strong, var(--accent, #365fcb));
+    border-color: var(--accent-strong, var(--accent, #365fcb));
+}
+
+.sutra-folder-workspace-create-icon { line-height: 1; }
+.sutra-folder-workspace-create-button:hover,
+.sutra-folder-workspace-crumb:hover,
+.sutra-folder-workspace-child:hover { border-color: var(--accent, #5078f2); }
+
+.sutra-folder-workspace-create-button:focus-visible,
+.sutra-folder-workspace-crumb:focus-visible,
+.sutra-folder-workspace-child:focus-visible {
+    outline: 3px solid var(--accent, #5078f2);
+    outline-offset: 2px;
+}
+
+.sutra-folder-workspace-create-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.sutra-folder-workspace-status,
+.sutra-folder-workspace-readonly,
+.sutra-folder-workspace-message {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-secondary, #596579);
+    line-height: 1.5;
+}
+
+.sutra-folder-workspace-status:empty { display: none; }
+.sutra-folder-workspace-status.is-error,
+.sutra-folder-workspace-message.is-error { color: var(--sutra-color-danger, #b42318); }
+
+.sutra-folder-workspace-readonly {
+    padding: 12px 14px;
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px solid var(--glass-border, var(--border-color, #d0d5dd));
+    border-left: 4px solid var(--sutra-color-warning, #b54708);
+    border-radius: 9px;
+}
+
+.sutra-folder-workspace-breadcrumbs { min-width: 0; }
+.sutra-folder-workspace-breadcrumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sutra-folder-workspace-breadcrumbs li { display: flex; min-width: 0; align-items: center; }
+.sutra-folder-workspace-crumb,
+.sutra-folder-workspace-crumb-text,
+.sutra-folder-workspace-current-crumb {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    padding: 8px 10px;
+    color: var(--text-secondary, #596579);
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.sutra-folder-workspace-crumb { background: transparent; font-weight: 600; }
+.sutra-folder-workspace-current-crumb { color: var(--text-primary, #17212f); font-weight: 700; }
+.sutra-folder-workspace-crumb-separator { margin-right: 3px; color: var(--text-secondary, #596579); }
+
+.sutra-folder-workspace-children { display: grid; gap: 12px; min-width: 0; }
+.sutra-folder-workspace-list-heading { margin: 0; font-size: 1.05rem; line-height: 1.3; }
+
+.sutra-folder-workspace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 235px), 1fr));
+    gap: 12px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sutra-folder-workspace-grid > li { min-width: 0; }
+
+.sutra-folder-workspace .sutra-folder-workspace-child {
+    display: flex;
+    width: 100%;
+    min-height: 76px;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    text-align: left;
+}
+
+.sutra-folder-workspace-child-icon {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    place-items: center;
+    background: var(--accent-soft, var(--surface-bg, #f1f4fb));
+    border-radius: 10px;
+    font-size: 1.15rem;
+}
+
+.sutra-folder-workspace-child-copy { display: grid; gap: 3px; min-width: 0; }
+.sutra-folder-workspace-child-title { color: var(--text-primary, #17212f); font-weight: 700; overflow-wrap: anywhere; }
+.sutra-folder-workspace-child-kind,
+.sutra-folder-workspace-child-updated { color: var(--text-secondary, #596579); font-size: 0.82rem; line-height: 1.35; }
+.sutra-folder-workspace-child-lock { flex: 0 0 auto; color: var(--text-secondary, #596579); font-size: 0.76rem; font-weight: 650; }
+
+.sutra-folder-workspace-empty {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: clamp(26px, 7vw, 56px) 18px;
+    text-align: center;
+    background: var(--surface-bg, var(--bg-secondary, #f7f8fa));
+    border: 1px dashed var(--glass-border, var(--border-color, #cbd2dc));
+    border-radius: 14px;
+}
+
+.sutra-folder-workspace-empty-icon { font-size: 2rem; }
+.sutra-folder-workspace-empty h3 { margin: 0; font-size: 1.1rem; }
+.sutra-folder-workspace-empty p { max-width: 42ch; margin: 0; color: var(--text-secondary, #596579); line-height: 1.5; }
+
+@media (max-width: 760px) {
+    .sutra-folder-workspace { gap: 16px; padding: 16px; }
+    .sutra-folder-workspace-header { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .sutra-folder-workspace-create { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; max-width: none; }
+    .sutra-folder-workspace .sutra-folder-workspace-create-button { width: 100%; min-height: 48px; white-space: normal; }
+    .sutra-folder-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+    .sutra-folder-workspace-child { min-height: 76px; }
+}
+
+@media (max-width: 360px) {
+    .sutra-folder-workspace { padding: 12px; }
+    .sutra-folder-workspace-create { grid-template-columns: minmax(0, 1fr); }
+    .sutra-folder-workspace-create-button { justify-content: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-folder-workspace,
+    .sutra-folder-workspace * {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .sutra-folder-workspace-create-button,
+    .sutra-folder-workspace-crumb,
+    .sutra-folder-workspace-child,
+    .sutra-folder-workspace-readonly,
+    .sutra-folder-workspace-empty,
+    .sutra-folder-workspace-child-icon {
+        color: CanvasText;
+        background: Canvas;
+        border-color: ButtonText;
+        forced-color-adjust: auto;
+    }
+}

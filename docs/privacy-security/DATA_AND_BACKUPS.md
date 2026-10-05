@@ -180,6 +180,20 @@ Both export paths build the workspace payload **with secrets stripped**: API
 keys and other secret-shaped fields are redacted, so credentials are never
 written to a backup. Provider/model **choices** (not secrets) are included.
 
+Foreground `.sutra` exports and manual encrypted provider backups show a large
+**Backing up…** overlay after confirmation/password entry. Its indeterminate
+indicator follows real stages: saving, required files, packaging, encryption,
+delivery/upload, and retention where applicable. It closes in the operation's
+cleanup path on success, failure, or an invalidated provider operation. Errors
+remain visible through the existing dialog/diagnostics. The overlay does not
+cancel an in-flight backup or bypass required-file checks. Automatic backups and
+Sync do not open it; creating an optional encrypted pre-restore safety snapshot
+does. Progress is transient presentation, never workspace data.
+
+A browser download is reported as **started**, because the app cannot confirm
+that the browser saved it. A successful configured-folder write can be reported
+as saved. Check your browser's downloads when that is your destination.
+
 ### Import
 
 Importing a backup rebuilds every runtime collection from the file, restores the
@@ -358,14 +372,21 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   local `.sutra` import.
 - **Optional auto-backup** is off by default. When enabled it runs only while
   signed in, with the passphrase cached for the session, on the chosen trigger
-  (app hidden / once a day / on significant change). Turning it off stops it
+  (app hidden / daily at a chosen local time / on significant change). Turning it off stops it
   immediately.
   A cross-tab Web Lock and persisted successful-upload hash prevent duplicate
   scheduled snapshots. Without Web Locks, automatic backups pause visibly.
   Metadata remains at the compatibility key `sutra:supabaseCloud:v1`, now
-  versioned with `schemaVersion: 2`; migration preserves existing opt-in,
+  versioned with `schemaVersion: 3`; migration preserves existing opt-in,
   cadence and unknown fields. No Sync database, vault, backup format or
   credential migration is involved.
+  Daily time defaults to 20:00 and can be edited without enabling backups.
+  Enabling or changing the schedule starts at its next occurrence. Sutra checks
+  the local clock while open and on return from sleep/background; the latest
+  missed slot runs once the destination, connection, and session password are
+  ready. It cannot run while the browser is closed. Calendar dates follow local
+  daylight-saving changes. An unchanged-work check has its own receipt and does
+  not update the last successful backup timestamp.
 - **Password recovery:** because backups are end-to-end encrypted, a lost
   passphrase means the cloud copy is unrecoverable — so the passphrase modals are
   wired to let your **browser's password manager** save and autofill it.
@@ -471,7 +492,17 @@ Importing replaces your current workspace, so before applying a **manual** impor
 or restore Sutra first offers to save an **encrypted `.sutra` safety snapshot**
 of your existing data (you choose the password). If an import is not what you
 expected, this snapshot is your fallback — the import is not a one-way door that
-discards your prior state with no recourse.
+discards your prior state with no recourse. The first prompt offers **Yes, make
+safety export**, **No, continue without export**, and **Cancel restore**.
+Only Yes opens the password screen. No continues the already-confirmed restore
+without an external file. Dismissing either prompt or cancelling the password
+screen cancels the restore; an export failure retains the existing explicit
+continue-or-cancel decision. The local recovery journal stays enabled.
+
+If another tab or a local edit changes the workspace while a manual restore is
+being reviewed, Sutra cancels before replacement and keeps that newer work. A
+successful safety export includes the edits captured in its snapshot; changes
+made after that capture still cancel the restore.
 
 Two deliberate details:
 

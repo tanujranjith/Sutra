@@ -25,7 +25,7 @@
     const DOMAINS = {
         navigation: 'Navigation',
         tasks: 'Planner tasks',
-        homework: 'Homework',
+        homework: 'To-do',
         notes: 'Notes & pages',
         canvas: 'Canvas',
         slides: 'Slides',

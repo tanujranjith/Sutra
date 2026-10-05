@@ -71,7 +71,7 @@
                 '- **Canvas & Slides** — local visual workspaces that save through the owning note page, with reviewed Assistant edits and encrypted backup/Sync parity.',
                 '- **Today & Planner** — daily view, planner tasks, notifications, and a Timeline calendar.',
                 '- **Capture & navigation** — one intake path for schoolwork, notes, reminders, study sessions, and time blocks, with calm desktop overflow and a phone All sections sheet.',
-                '- **Homework** — assignments by course, with due dates, difficulty, and countdowns.',
+                '- **To-do** — homework and general tasks in one canonical list, with All, Homework, and General categories. General tasks do not need a class; existing assignments retain their class, due date, difficulty, and countdowns.',
                 '- **Course Hub** — courses with linked notes, resources, assignments, and class dashboards.',
                 '- **All Due** — one command center for every upcoming deadline across the workspace.',
                 '- **Review & Cram Hub** — flashcard decks with spaced repetition, plus last-minute cram sessions.',
@@ -96,7 +96,7 @@
             summary: 'Today is the student command center; Capture accepts several kinds of work, while desktop More and mobile All sections preserve access to advanced surfaces.',
             body: [
                 '**Today** brings together what is due, what to do next, schedule context, review debt, trackers, and save/backup confidence. **Quick Capture** previews the destination before it creates canonical data.',
-                'The default student shell keeps Home, Homework, Create, Timeline, Review, Focus, and Data close at hand. Advanced packs stay available in Settings. Create owns the contextual page tree; other sections use the full workspace by default.',
+                'The default student shell keeps Home, To-do, Create, Timeline, Review, Focus, and Data close at hand. Advanced packs stay available in Settings. Create owns the contextual page tree; other sections use the full workspace by default.',
                 'On phones, the unified bottom bar and **All sections** sheet route through the same canonical tabs as desktop overflow.'
             ],
             keywords: ['today', 'capture', 'quick capture', 'navigation', 'all sections', 'more menu', 'mobile navigation', 'daily loop'],
@@ -223,14 +223,14 @@
         },
         {
             id: 'homework-vs-coursehub',
-            title: 'Homework vs Course Hub',
+            title: 'To-do vs Course Hub',
             category: 'planner',
             availability: 'available',
-            summary: 'Homework is the fast deadline list — assignments by course with due dates. Course Hub is the home for each course: linked notes, resources, assignments, and a class dashboard.',
+            summary: 'To-do is the fast list for homework and general tasks. Course Hub is the home for each course: linked notes, resources, assignments, and a class dashboard.',
             body: [
-                '**Homework** is the lightweight assignment tracker: a list of what is due, grouped by course, with due dates, difficulty, and countdowns. Use it to capture and clear day-to-day work quickly.',
+                '**To-do** keeps homework and general tasks together. Select Homework for class work or General for tasks without a class. Use Capture to add either kind; the category counts and filters describe the selected category.',
                 '**Course Hub** is the deeper, per-course workspace. Each course gathers its **linked notes**, **resource links**, **assignments**, and a **class dashboard** that pulls everything about that class into one place.',
-                'They are connected: creating a course in the Course Hub also bridges to Homework, and a course\'s assignments show up in Homework and All Due. Think of Homework as the *deadline feed* and Course Hub as the *course home*.'
+                'They are connected: creating a course in the Course Hub also bridges to To-do, and a course\'s assignments show up in its Homework category and All Due. To-do is the task feed; Course Hub is the course home.'
             ],
             keywords: ['homework', 'course hub', 'courses', 'difference', 'vs', 'class', 'course', 'assignments', 'homework vs course'],
             nav: { view: 'homework' },

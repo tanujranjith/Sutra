@@ -28,24 +28,24 @@
     "hash": "bdaba42ae73dc103"
   },
   "src/components/icons/icon-paths.js": {
-    "stamp": "20260810-folder-plus1",
-    "hash": "f6ca5aec6dd17bf8"
+    "stamp": "20261004-ci-icon-aliases1",
+    "hash": "81d1415f3b8b9ebf"
   },
   "src/components/icons/index.js": {
     "stamp": "20260809-audit-icons1",
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20260913-locked-assistant-manifest2",
-    "hash": "b545c07367f3df20"
+    "stamp": "20261001-todo-completion1",
+    "hash": "1638db0af4185538"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20260930-homework-tonight-2359",
-    "hash": "6f16c9021ac29b3a"
+    "stamp": "20261004-merge-review-fixes1",
+    "hash": "c41ba006f595be76"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -107,9 +107,13 @@
     "stamp": "20260913-locked-assistant-permissions1",
     "hash": "adcc8905d68c7e3f"
   },
+  "src/domain/content-timeline.js": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "35b4ffc3e530c876"
+  },
   "src/domain/homework-store.js": {
-    "stamp": "20260916-integration-homework-store1",
-    "hash": "0e02a60c40c66667"
+    "stamp": "20261004-merge-review-fixes1",
+    "hash": "5e3b2013e956c37b"
   },
   "src/domain/icalendar.js": {
     "stamp": "20260807-ics3",
@@ -172,8 +176,8 @@
     "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20260913-content-limits-semester1",
-    "hash": "244d6d49e2babdd5"
+    "stamp": "20261001-todo-completion1",
+    "hash": "615592a8f5316089"
   },
   "src/features/assistant/action-system.js": {
     "stamp": "20260807-agentplans2",
@@ -188,8 +192,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20260913-locked-assistant-flow2",
-    "hash": "82b6cabc8c9ddc28"
+    "stamp": "20261001-todo-completion1",
+    "hash": "f311b41d259c6bed"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -212,16 +216,16 @@
     "hash": "87def3fca46ffcab"
   },
   "src/features/assistant/sutra-capability-registry.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "1554da3db2165bd0"
+    "stamp": "20261001-todo-completion1",
+    "hash": "336d5b60e5ec4766"
   },
   "src/features/assistant/sutra-local-help.js": {
-    "stamp": "20260816-home-create1",
-    "hash": "985bc2dccc287616"
+    "stamp": "20261001-todo-completion1",
+    "hash": "aaa57ee9deb1874c"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20260913-locked-assistant-knowledge2",
-    "hash": "d6e93007ae1beb6c"
+    "stamp": "20261001-todo-completion1",
+    "hash": "8ba26c1a1f873f0d"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -235,13 +239,25 @@
     "stamp": "20260917-features-style-reuse1",
     "hash": "b6d35b5d814e4343"
   },
+  "src/features/notes/authoring-tools.js": {
+    "stamp": "20261004-native-link-click3",
+    "hash": "531137092617df8f"
+  },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20260929-issues51-59-64-boundary1",
-    "hash": "dd0815729603283b"
+    "stamp": "20261004-assistant-slides1",
+    "hash": "ec7db93953aedfd6"
+  },
+  "src/features/notes/inline-ai-assist.js": {
+    "stamp": "20261003-create-review5",
+    "hash": "3443ec7ea7c18f67"
+  },
+  "src/features/notes/rich-links.js": {
+    "stamp": "20261003-create-review5",
+    "hash": "afa4425de87f1917"
   },
   "src/features/search/global-search-engine.js": {
-    "stamp": "20260825-gsengine4",
-    "hash": "1f414bc61c0d7c03"
+    "stamp": "20261001-todo-completion1",
+    "hash": "f616cbaa16815ffe"
   },
   "src/features/search/global-search-modal.js": {
     "stamp": "20260917-search-focus2",
@@ -260,8 +276,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20260930-homework-completion-grouping",
-    "hash": "ba64a1b79b536c92"
+    "stamp": "20261005-empty-class-kind1",
+    "hash": "4ef1e1bc76cdf65a"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -283,6 +299,10 @@
     "stamp": "20260915-cloud1",
     "hash": "0d31a21889c4db60"
   },
+  "src/features/workspace/backup-progress.js": {
+    "stamp": "20261001-backup-progress1",
+    "hash": "ab68a22a6c9086b1"
+  },
   "src/features/workspace/business-workspace.js": {
     "stamp": "20260807-opsqueue1",
     "hash": "eb4ce1fb3fbf3725"
@@ -299,9 +319,21 @@
     "stamp": "20260807-canvas2",
     "hash": "447a04ed9cb49a41"
   },
+  "src/features/workspace/content-timeline-editor.js": {
+    "stamp": "20261001-content-timeline3",
+    "hash": "97d74c2d0846c183"
+  },
+  "src/features/workspace/content-timeline-hosts.js": {
+    "stamp": "20261004-html-no-timeline1",
+    "hash": "f06b4a1e281ad259"
+  },
   "src/features/workspace/contextual-shell.js": {
     "stamp": "20260913-page-tree-guides1",
     "hash": "d2d01e3d4679216e"
+  },
+  "src/features/workspace/create-page-templates.js": {
+    "stamp": "20261003-create-review7",
+    "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/custom-tabs.js": {
     "stamp": "20260921-html-widget-mode2",
@@ -315,33 +347,37 @@
     "stamp": "20260913-direct-pdf2",
     "hash": "66cf045204ce8513"
   },
+  "src/features/workspace/folder-workspace.js": {
+    "stamp": "20261001-folders4",
+    "hash": "4906b813586df373"
+  },
   "src/features/workspace/handwriting.js": {
     "stamp": "20260601-handwriting",
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20260823-combined1",
-    "hash": "0ad9808ef25fcae8"
+    "stamp": "20261004-merge-review-fixes1",
+    "hash": "0aa8f38c3338b0b3"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "f90a17f531a988fe"
+    "stamp": "20261004-html-no-timeline1",
+    "hash": "6a3cc9031dbff1ca"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20260905-more-actions1",
-    "hash": "2f35ac15ce9d28f4"
+    "stamp": "20261001-mobile-data-actions2",
+    "hash": "585551cfceced47a"
   },
   "src/features/workspace/notifications.js": {
-    "stamp": "20260828-revocation-lock1",
-    "hash": "1cfd1993f59f9298"
+    "stamp": "20261001-todo-completion1",
+    "hash": "eeadd011283c2ee3"
   },
   "src/features/workspace/office-interoperability.js": {
     "stamp": "20260822-office4",
@@ -356,8 +392,8 @@
     "hash": "b071d76dfdbb4537"
   },
   "src/features/workspace/pdf-workspace.js": {
-    "stamp": "20260926-pdf28",
-    "hash": "d8b49bb3109100d8"
+    "stamp": "20261001-authoring6",
+    "hash": "ba751352ef5fc163"
   },
   "src/features/workspace/primary-nav-visibility.js": {
     "stamp": "20260812-primarynav3",
@@ -372,12 +408,12 @@
     "hash": "d295bbc97c4a93ba"
   },
   "src/features/workspace/sheets.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "afa05f9c91491c83"
+    "stamp": "20261004-merge-review-fixes1",
+    "hash": "95b7ea2d6ec18f71"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20260825-oxremed1",
-    "hash": "ca917c577e4b2222"
+    "stamp": "20261004-slides-lines-menus1",
+    "hash": "4f8e4cefcad5cdb3"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -396,8 +432,8 @@
     "hash": "ac88591cfa5f81c7"
   },
   "src/features/workspace/timeline-calendar.js": {
-    "stamp": "20260922-prefill1",
-    "hash": "2313a30dc1d968d9"
+    "stamp": "20261001-mobile-agenda1",
+    "hash": "cb8e67aa7adf257d"
   },
   "src/features/workspace/timeline-drag.js": {
     "stamp": "20260913-content-limits-timeline1",
@@ -412,12 +448,12 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20260930-home-timer-focus-mode2",
-    "hash": "a0b17167f117c237"
+    "stamp": "20261004-focus-dismiss-theme1",
+    "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20260728-entity1",
-    "hash": "6ee0586443745a0e"
+    "stamp": "20261001-todo-completion1",
+    "hash": "0d20d0b85cb74f79"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",
@@ -487,6 +523,10 @@
     "stamp": "20260809-audit1",
     "hash": "45186a4c913b046f"
   },
+  "src/ui/task-completion-effects.js": {
+    "stamp": "20261002-task-dust-reliable1",
+    "hash": "fec715a38e757d7f"
+  },
   "styles/base/contracts.css": {
     "stamp": "20260905-updatelayer1",
     "hash": "adba6b437cec1b36"
@@ -496,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20260928-issues51-59-64",
-    "hash": "8c50b404fe34cc27"
+    "stamp": "20261003-create-review5",
+    "hash": "166194544941a901"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -511,6 +551,14 @@
     "stamp": "20260707-batch2",
     "hash": "471e4b2f094dc3c4"
   },
+  "styles/features/backup-progress.css": {
+    "stamp": "20261001-backup-progress1",
+    "hash": "2f957ae604803635"
+  },
+  "styles/features/canvas-workbench-polish.css": {
+    "stamp": "20261003-create-review5",
+    "hash": "5c1e685e9743f2c4"
+  },
   "styles/features/cloud-sync.css": {
     "stamp": "20260807-syncsheet1",
     "hash": "055047fe4a69b8c3"
@@ -518,6 +566,14 @@
   "styles/features/command-center.css": {
     "stamp": "20260705-clb2",
     "hash": "47cef56579d25652"
+  },
+  "styles/features/content-timeline-hosts.css": {
+    "stamp": "20261003-create-review5",
+    "hash": "3f066d7802e3065d"
+  },
+  "styles/features/content-timeline.css": {
+    "stamp": "20261001-content-timeline4",
+    "hash": "d50cc5dc21e5560b"
   },
   "styles/features/customization.css": {
     "stamp": "20260601-handwriting-mods",
@@ -527,17 +583,25 @@
     "stamp": "20260807-customquotes1",
     "hash": "3bcf3e999e605556"
   },
+  "styles/features/folder-workspace.css": {
+    "stamp": "20261001-folders7",
+    "hash": "2ab5dd35ede79d81"
+  },
   "styles/features/global-search.css": {
     "stamp": "20260917-search-focus1",
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20260930-homework-title-wrap1",
-    "hash": "f5e7b88d2788cce3"
+    "stamp": "20261001-todo-completion1",
+    "hash": "24eb3719c1ba2831"
   },
   "styles/features/html-pages.css": {
-    "stamp": "20260912-html-layout1",
-    "hash": "70f24d8f6338e0af"
+    "stamp": "20261003-create-review5",
+    "hash": "2cebb741939d5ee9"
+  },
+  "styles/features/inline-ai-assist.css": {
+    "stamp": "20261003-create-review5",
+    "hash": "a5028684bcc4696d"
   },
   "styles/features/ios-install-guide.css": {
     "stamp": "20260905-install-layering2",
@@ -560,32 +624,40 @@
     "hash": "9ab16713e512d32f"
   },
   "styles/features/pdf-workspace.css": {
-    "stamp": "20260815-pdf7",
-    "hash": "18271099686c5736"
+    "stamp": "20261001-authoring4",
+    "hash": "1c807a578c7b1092"
+  },
+  "styles/features/rich-links.css": {
+    "stamp": "20261003-create-review5",
+    "hash": "ecd67c5236290029"
   },
   "styles/features/sheets.css": {
-    "stamp": "20260904-editorlayout2",
-    "hash": "fd46dbbdfe960239"
+    "stamp": "20261003-create-review7",
+    "hash": "ac54806d3a4b956d"
   },
   "styles/features/sidebar-page-actions.css": {
     "stamp": "20260803-overflow1",
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20260904-editorlayout2",
-    "hash": "f18180e3a13e0503"
+    "stamp": "20261004-slides-lines-menus1",
+    "hash": "341466f4d7d085f2"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
     "hash": "da0eccfd47df2aa1"
   },
   "styles/features/sutra-cloud.css": {
-    "stamp": "20260915-cloud2",
-    "hash": "5cd5ccc11565d718"
+    "stamp": "20261003-create-review5",
+    "hash": "aeb0432096584cba"
   },
   "styles/features/sutra-intelligence.css": {
     "stamp": "20260610-intel1",
     "hash": "7ff9f8c5515f34db"
+  },
+  "styles/features/task-completion-effects.css": {
+    "stamp": "20261001-task-dust-hold3",
+    "hash": "797fa2b7dc9bdc73"
   },
   "styles/features/workspace-lock.css": {
     "stamp": "20260816-lock2",
@@ -620,8 +692,12 @@
     "hash": "72db4a7b44adaac1"
   },
   "styles/responsive/mobile.css": {
-    "stamp": "20260916-integration-mobile1",
-    "hash": "ec13fbe97cdd22ca"
+    "stamp": "20261001-mobile-data-actions1",
+    "hash": "d250ec565ffba14d"
+  },
+  "styles/responsive/student-workspaces-polish.css": {
+    "stamp": "20261001-qa-touch5",
+    "hash": "39f771422b0dc3ae"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",
@@ -652,8 +728,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20260930-drawer-layer",
-    "hash": "66235663a5f0f623"
+    "stamp": "20261001-desktop-density4",
+    "hash": "9415a02954593e33"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
@@ -668,12 +744,12 @@
     "hash": "220440ec48d87134"
   },
   "styles/views/timeline-calendar.css": {
-    "stamp": "20260904-compactevents2",
-    "hash": "d9f941bdc3f01ed2"
+    "stamp": "20261001-mobile-agenda1",
+    "hash": "0c12386cb8c9bacd"
   },
   "styles/views/today-focus-timer.css": {
-    "stamp": "20260809-todaytimer1",
-    "hash": "097303c40f531be5"
+    "stamp": "20261004-focus-dismiss-theme1",
+    "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260816-home-quick-task1",

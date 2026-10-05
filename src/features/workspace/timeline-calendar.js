@@ -5,6 +5,8 @@
     'use strict';
     var rootId = 'timelineLegacyCalendar';
     var rendering = false;
+    var resizeFrame = 0;
+    var focusDateAfterRender = '';
 
     function text(value) { return String(value == null ? '' : value); }
     function key(date) { return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); }
@@ -29,12 +31,16 @@
         if (recurrence === 'weekly') return Array.isArray(block.weeklyDays) ? block.weeklyDays.indexOf(date.getDay()) >= 0 : (!base || localDate(base).getDay() === date.getDay());
         return !base || base === target;
     }
-    function forDay(date) { return blocks().filter(function (block) { return occur(block, date) && minutes(block.start) !== null && minutes(block.end) !== null; }).sort(function (a, b) { return minutes(a.start) - minutes(b.start); }); }
+    function forDay(date) {
+        var daily = typeof global.getTimelineBlocksForDate === 'function' ? global.getTimelineBlocksForDate(date) : blocks().filter(function (block) { return occur(block, date); });
+        return daily.filter(function (block) { return minutes(block.start) !== null && minutes(block.end) !== null; }).sort(function (a, b) { return minutes(a.start) - minutes(b.start); });
+    }
     function el(tag, className, content) { var node = document.createElement(tag); if (className) node.className = className; if (content != null) node.textContent = content; return node; }
-    function source(block) { var value = text(block.source); if (value === 'calendar_ics' || value === 'calendar_google') return 'Imported calendar'; if (value === 'ap_study_session') return 'AP Study'; if (value === 'hw_due' || value === 'homework') return 'Homework'; return 'Sutra'; }
+    function source(block) { if (typeof global.getTimelineBlockSourceLabel === 'function') return global.getTimelineBlockSourceLabel(block); var value = text(block.source); if (value === 'calendar_ics' || value === 'calendar_google') return 'Imported calendar'; if (value === 'ap_study_session') return 'AP Study'; if (value === 'hw_due' || value === 'homework') return 'Homework'; return 'Sutra'; }
     function color(block) { var names = { study: '#6f8dff', homework: '#8b70f5', task: '#2eaf91', review: '#a970d6', exam: '#e07878', break: '#8995a8', personal: '#d58c55' }; return /^#[0-9a-f]{6}$/i.test(text(block.color)) ? block.color : (names[text(block.category || block.sourceType || block.source).toLowerCase()] || '#6386d8'); }
     function centeredDate() { var input = document.getElementById('timelineDateInput'); return localDate(input && input.value); }
     function currentMode() { var active = document.querySelector('[data-timeline-view-mode].active'); return active ? text(active.getAttribute('data-timeline-view-mode')) : 'week'; }
+    function usesMobileWeek() { return global.matchMedia ? global.matchMedia('(max-width: 768px)').matches : global.innerWidth <= 768; }
     function dateInput(value) { var input = document.getElementById('timelineDateInput'); if (!input) return; input.value = value; input.dispatchEvent(new Event('change', { bubbles: true })); }
     function openBlock(block, date, start) {
         if (block && typeof global.openBlockModal === 'function') { global.openBlockModal(block); return; }
@@ -112,6 +118,76 @@
             column.addEventListener('click', function (event) { if (event.target.closest('[data-block-id]')) return; var rect = column.getBoundingClientRect(); var slot = min + Math.round(Math.max(0, event.clientY - rect.top) / hourHeight * 4) * 15; openBlock(null, dateKey, slot); }); grid.appendChild(column);
         }); root.replaceChildren(viewRoot);
     }
+    function agendaEvent(block, date) {
+        var button = el('button', 'sutra-calendar-agenda-event'); button.type = 'button';
+        button.setAttribute('data-block-id', text(block.id)); button.style.setProperty('--sutra-calendar-event-color', color(block));
+        button.setAttribute('aria-label', text(block.name || 'Untitled') + ', ' + date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + ', ' + displayTime(block.start) + ' to ' + displayTime(block.end) + ', ' + source(block));
+        var timeLabel = el('span', 'sutra-calendar-agenda-time', displayTime(block.start) + ' – ' + displayTime(block.end));
+        var details = el('span', 'sutra-calendar-agenda-details');
+        details.appendChild(el('span', 'sutra-calendar-agenda-title', text(block.name || 'Untitled')));
+        details.appendChild(el('span', 'sutra-calendar-agenda-source', source(block)));
+        button.appendChild(timeLabel); button.appendChild(details);
+        button.addEventListener('click', function (event) { event.stopPropagation(); openBlock(block); });
+        return button;
+    }
+    function mobileWeek(root, view) {
+        var start = add(view, -view.getDay()); var selectedKey = key(view); var todayKey = key(new Date());
+        var weekRoot = el('section', 'sutra-calendar-mobile-week');
+        var startLabel = start.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        weekRoot.setAttribute('aria-label', 'Week starting ' + startLabel);
+        var header = el('div', 'sutra-calendar-mobile-week-header');
+        header.appendChild(el('h3', 'sutra-calendar-mobile-week-heading', 'Week starting ' + startLabel));
+        header.appendChild(el('p', 'sutra-calendar-mobile-week-hint', 'Choose a day to see its schedule.'));
+        weekRoot.appendChild(header);
+
+        var strip = el('div', 'sutra-calendar-week-strip'); strip.setAttribute('role', 'group'); strip.setAttribute('aria-label', 'Days in this week');
+        for (var i = 0; i < 7; i += 1) {
+            (function (date) {
+                var dateKey = key(date); var daily = forDay(date); var selected = dateKey === selectedKey;
+                var button = el('button', 'sutra-calendar-week-day' + (selected ? ' is-selected' : '') + (dateKey === todayKey ? ' is-today' : ''));
+                button.type = 'button'; button.setAttribute('data-sutra-calendar-date', dateKey); button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                button.setAttribute('aria-label', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' + daily.length + ' scheduled ' + (daily.length === 1 ? 'item' : 'items') + (selected ? ', selected' : ''));
+                if (dateKey === todayKey) button.setAttribute('aria-current', 'date');
+                button.appendChild(el('span', 'sutra-calendar-week-day-name', date.toLocaleDateString('en-US', { weekday: 'short' })));
+                button.appendChild(el('strong', 'sutra-calendar-week-day-number', String(date.getDate())));
+                var count = el('span', 'sutra-calendar-week-day-count', String(daily.length)); count.classList.toggle('is-empty', daily.length === 0); count.setAttribute('aria-hidden', 'true'); button.appendChild(count);
+                button.addEventListener('click', function () {
+                    focusDateAfterRender = dateKey;
+                    dateInput(dateKey);
+                    root.replaceChildren(); render();
+                    announce('Showing ' + date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + '.');
+                });
+                strip.appendChild(button);
+            }(add(start, i)));
+        }
+        weekRoot.appendChild(strip);
+
+        var agenda = el('section', 'sutra-calendar-agenda'); var dateLabel = view.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        var dailyBlocks = forDay(view); var agendaHeader = el('div', 'sutra-calendar-agenda-header');
+        agendaHeader.appendChild(el('h4', 'sutra-calendar-agenda-heading', dateLabel));
+        agendaHeader.appendChild(el('span', 'sutra-calendar-agenda-count', dailyBlocks.length + ' ' + (dailyBlocks.length === 1 ? 'block' : 'blocks')));
+        agenda.appendChild(agendaHeader);
+        if (!dailyBlocks.length) {
+            var empty = el('div', 'sutra-calendar-agenda-empty');
+            empty.appendChild(el('p', '', 'No blocks scheduled for this day.'));
+            var addButton = el('button', 'sutra-calendar-agenda-add', 'Add a block'); addButton.type = 'button';
+            addButton.setAttribute('aria-label', 'Add a block on ' + dateLabel);
+            addButton.addEventListener('click', function (event) { event.stopPropagation(); openBlock(null, selectedKey); });
+            empty.appendChild(addButton); agenda.appendChild(empty);
+        } else {
+            var list = el('ul', 'sutra-calendar-agenda-list');
+            dailyBlocks.forEach(function (block) { var item = el('li', 'sutra-calendar-agenda-item'); item.appendChild(agendaEvent(block, view)); list.appendChild(item); });
+            agenda.appendChild(list);
+        }
+        weekRoot.appendChild(agenda); root.replaceChildren(weekRoot);
+        if (focusDateAfterRender === selectedKey) { var selectedButton = root.querySelector('[data-sutra-calendar-date="' + selectedKey + '"]'); if (selectedButton) selectedButton.focus(); focusDateAfterRender = ''; }
+    }
+    function setMobileWeekClasses(root, active) {
+        var shell = root.closest('.sutra-calendar-shell'); var body = root.closest('.sutra-calendar-body'); var view = root.closest('.timeline-calendar-view');
+        if (shell) shell.classList.toggle('is-mobile-week', active);
+        if (body) body.classList.toggle('is-mobile-week', active);
+        if (view) view.classList.toggle('is-mobile-week', active);
+    }
     function updateCurrent() { var card = document.getElementById('currentBlockCard'); if (!card) return; card.style.display = 'block'; var now = new Date(); var upcoming = blocks().filter(function (block) { var date = localDate(block.date || key(now)); var start = minutes(block.start); return occur(block, now) && start !== null; }).sort(function (a, b) { return minutes(a.start) - minutes(b.start); }); var info = document.getElementById('currentBlockInfo'); if (!info) return; var current = upcoming.find(function (block) { return minutes(block.start) <= now.getHours() * 60 + now.getMinutes() && minutes(block.end) > now.getHours() * 60 + now.getMinutes(); }); var next = current || upcoming.find(function (block) { return minutes(block.start) > now.getHours() * 60 + now.getMinutes(); }); info.textContent = next ? text(next.name || 'Untitled') + ' · ' + text(next.start) + '–' + text(next.end) : 'No active block right now'; var heading = document.getElementById('currentBlockCardHeading'); if (heading) heading.textContent = current ? 'Current' : next ? 'Next' : 'Current / Next'; }
     function nextOpenSlot(date, minimumMinutes) {
         var duration = Math.max(15, Number(minimumMinutes) || 45); var occupied = forDay(date).map(function (block) { return { start: minutes(block.start), end: Math.max(minutes(block.end), minutes(block.start) + 15) }; }).filter(function (slot) { return slot.start !== null && slot.end !== null; }).sort(function (a, b) { return a.start - b.start; });
@@ -131,8 +207,19 @@
             if (keyName === '?') { event.preventDefault(); announce('Timeline shortcuts: left and right move the calendar; T is today; D, W, and M change the view; N creates a new block.'); }
         });
     }
-    function render() { var root = document.getElementById(rootId); if (!root || rendering || currentMode() === 'planner' || root.querySelector('.sutra-calendar-month,.sutra-calendar-time-view')) return; rendering = true; try { var mode = currentMode(); var view = centeredDate(); if (mode === 'month') month(root, view); else if (mode === 'week' || mode === 'day') timeGrid(root, mode, view); updateCurrent(); } finally { rendering = false; } }
+    function render() {
+        var root = document.getElementById(rootId); if (!root || rendering) return;
+        var mode = currentMode(); var mobileWeekMode = mode === 'week' && usesMobileWeek();
+        if (mode === 'planner') { setMobileWeekClasses(root, false); return; }
+        var existingSelector = mode === 'month' ? '.sutra-calendar-month' : (mobileWeekMode ? '.sutra-calendar-mobile-week' : '.sutra-calendar-time-' + mode);
+        setMobileWeekClasses(root, mobileWeekMode);
+        if (root.querySelector(existingSelector)) return;
+        rendering = true;
+        try { var view = centeredDate(); if (mode === 'month') month(root, view); else if (mode === 'week' && mobileWeekMode) mobileWeek(root, view); else if (mode === 'week' || mode === 'day') timeGrid(root, mode, view); updateCurrent(); }
+        finally { rendering = false; }
+    }
+    function responsiveRender() { if (resizeFrame) return; resizeFrame = global.requestAnimationFrame(function () { resizeFrame = 0; render(); }); }
     function navigation() { ['timelineStepPrev', 'timelineStepNext'].forEach(function (id) { var button = document.getElementById(id); if (!button) return; button.addEventListener('click', function (event) { event.preventDefault(); event.stopImmediatePropagation(); var mode = currentMode(); var date = centeredDate(); if (mode === 'month') date.setMonth(date.getMonth() + (id === 'timelineStepPrev' ? -1 : 1)); else date.setDate(date.getDate() + (mode === 'week' ? 7 : 1) * (id === 'timelineStepPrev' ? -1 : 1)); dateInput(key(date)); }, true); }); var today = document.getElementById('timelineTodayBtn'); if (today) today.addEventListener('click', function (event) { event.preventDefault(); event.stopImmediatePropagation(); dateInput(key(new Date())); }, true); }
-    function init() { var root = document.getElementById(rootId); if (!root) return; root.tabIndex = 0; root.setAttribute('aria-label', 'Timeline calendar. Press question mark for keyboard shortcuts.'); new MutationObserver(function () { requestAnimationFrame(render); }).observe(root, { childList: true, subtree: false }); navigation(); shortcutHandler(root); document.addEventListener('sutra:schedule-changed', function () { var original = global.renderTimeline; if (typeof original === 'function') original(); }); requestAnimationFrame(render); }
+    function init() { var root = document.getElementById(rootId); if (!root) return; root.tabIndex = 0; root.setAttribute('aria-label', 'Timeline calendar. Press question mark for keyboard shortcuts.'); new MutationObserver(function () { requestAnimationFrame(render); }).observe(root, { childList: true, subtree: false }); navigation(); shortcutHandler(root); global.addEventListener('resize', responsiveRender); document.addEventListener('sutra:schedule-changed', function () { var original = global.renderTimeline; if (typeof original === 'function') original(); }); requestAnimationFrame(render); }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 }(window));

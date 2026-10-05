@@ -221,6 +221,7 @@
         'ai-spark': '<path d="M12 4c.5 3.5 2 5 5.5 5.5-3.5.5-5 2-5.5 5.5-.5-3.5-2-5-5.5-5.5C10 9 11.5 7.5 12 4z"/><path d="M18 16.5c.3 2 1 2.7 3 3-2 .3-2.7 1-3 3-.3-2-1-2.7-3-3 2-.3 2.7-1 3-3z"/>',
 
         // ── Misc that surface in toolbars and dashboards ────────────────────
+        'smile': '<circle cx="12" cy="12" r="8.5"/><path d="M8 14a4.5 4.5 0 0 0 8 0"/><circle cx="9" cy="9" r="0.75" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="0.75" fill="currentColor" stroke="none"/>',
         'pin': '<path d="m9 4 6 6-2 2 1 5-3-3-4 4-1-1 4-4-3-3 5 1z"/>',
 
         // ── Atelier Pro additions (Sections 11, 17, 15, 31, 32) ───────────────
@@ -312,6 +313,7 @@
         'fa-pen-fancy': 'pen-fancy',
         'fa-pen-nib': 'pen-fancy',
         'fa-pen-to-square': 'pen-edit',
+        'fa-edit': 'pen-edit',
         'fa-highlighter': 'highlighter',
         'fa-eraser': 'eraser',
         'fa-magic': 'magic-wand',
@@ -518,6 +520,7 @@
         'fa-circle-exclamation': 'exclamation-circle',
         'fa-clipboard-check': 'clipboard-check',
         'fa-th-list': 'th-list',
+        'fa-stream': 'th-list',
         'fa-list': 'th-list',
         'fa-list-check': 'check-square',
         'fa-check-square': 'check-square',
@@ -639,6 +642,7 @@
         'fa-shield': 'shield',
         'fa-shuffle': 'exchange',
         'fa-sparkles': 'sparkles',
+        'fa-smile': 'smile',
         'fa-stop': 'pause',
         'fa-stopwatch-20': 'stopwatch',
         'fa-timeline': 'chart-line',

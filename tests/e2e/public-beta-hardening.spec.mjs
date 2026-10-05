@@ -149,6 +149,16 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
   test.setTimeout(120_000);
   await openApp(page);
   const setup = await page.evaluate(async () => {
+    // Keep the clean restore baseline quiet while the user reviews its safety
+    // export. Timer receipts are unrelated writes that correctly cancel a
+    // prepared restore; their own persistence behavior is tested separately.
+    const notifications = window.SutraNotifications;
+    const receiptTime = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: receiptTime,
+      lastWeeklyNudge: receiptTime
+    });
     const now = new Date().toISOString();
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     const restoredTitle = `Restore QA ${Date.now()}`;
@@ -199,6 +209,7 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
   });
   expect(setup.restored).toBe(true);
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const snapshotModal = page.locator('#sutraBackupPasswordModal');
   await snapshotModal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', BACKUP_PASSWORD);

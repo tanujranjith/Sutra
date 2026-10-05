@@ -118,7 +118,24 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       },
       slides: { version: 1, theme: 'sutra', size: 'widescreen', slides: [{
         id: 'slide-parity', layout: 'title', title: 'Parity Slides', speakerNotes: 'Slide note sentinel.',
-        elements: [{ id: 'slide-text-parity', type: 'text', x: 10, y: 10, width: 70, height: 12, text: 'Unique slide evidence.' }]
+        elements: [
+          { id: 'slide-text-parity', type: 'text', x: 10, y: 10, width: 70, height: 12, text: 'Unique slide evidence.' },
+          {
+            id: 'slide-timeline-parity', type: 'content-timeline', x: 8, y: 28, width: 84, height: 56,
+            text: 'Slide timeline parity', textAlign: 'left', imageFit: 'contain',
+            contentTimeline: {
+              version: 1,
+              title: 'Slide timeline parity',
+              layout: 'horizontal',
+              futureModelMetadata: { source: 'slides-fixture', preserve: true },
+              events: [{
+                id: 'slide-event-parity', label: 'Draft the outline', when: 'Week one',
+                description: 'Keep the full authored slide event.',
+                futureEventMetadata: { evidenceId: 'slide-event-extra', preserve: true }
+              }]
+            }
+          }
+        ]
       }] },
       spreadsheet: {
         version: 1, title: 'Parity workbook', namedRanges: { total: 'Sheet1!B1' },
@@ -164,6 +181,41 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       tags: [{ name: 'parity', color: '#0f766e' }],
       versions: [{ id: 'version-parity', label: 'Parity snapshot', savedAt: EVERYTHING_STAMP,
         state: { title: 'Parity Parent::Parity Child', content: '<p>Version sentinel.</p>', tags: [{ name: 'version', color: '#111827' }] } }]
+    }, {
+      id: 'page-canvas-parity', title: 'Parity Canvas', type: 'canvas',
+      content: '', blocks: [], icon: '🎨', collapsed: false, theme: 'default', spaceId: 'space-school',
+      createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
+      isTemporary: false, temporaryCreatedAt: null, temporaryExpiresAt: null,
+      isLocked: false, lockHash: null, lockSalt: null, lockedAt: null,
+      lockAutoLock: 'navigation',
+      canvas: {
+        version: 1, viewport: { x: 0, y: 0, zoom: 1 }, background: 'grid',
+        snapToGrid: true, gridVisible: true,
+        objects: [{
+          id: 'canvas-timeline-parity', type: 'content-timeline',
+          x: 120, y: 96, width: 540, height: 320, rotation: 0, zIndex: 1,
+          locked: false, groupId: '', text: 'Canvas timeline parity', label: '',
+          color: '', fill: '', stroke: '', strokeWidth: 2,
+          createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
+          points: [], ref: null,
+          contentTimeline: {
+            version: 1,
+            title: 'Canvas timeline parity',
+            layout: 'vertical',
+            futureModelMetadata: { source: 'canvas-fixture', preserve: true },
+            events: [{
+              id: 'canvas-event-parity', label: 'Choose a question', when: 'First week',
+              description: 'Keep the full authored Canvas event.',
+              futureEventMetadata: { evidenceId: 'canvas-event-extra', preserve: true }
+            }]
+          }
+        }],
+        connections: [], groups: [], selectedObjectIds: []
+      },
+      htmlDocument: null, slides: null, spreadsheet: null,
+      isSystemPage: false, builtInId: '', systemRole: '', pageMode: { enabled: false },
+      documentBackground: { enabled: false }, formatting: {}, documentLayout: {},
+      comments: [], suggestions: [], footnotes: [], citations: [], tags: [], versions: []
     }],
     spaces: [{ id: 'space-school', name: 'Synthetic School', icon: 'graduation-cap', color: '#4f46e5', createdAt: EVERYTHING_STAMP }],
     tasks: [{
@@ -260,7 +312,18 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       schemaVersion: 2, revision: 17, updatedAt: EVERYTHING_STAMP,
       lastMutation: { type: 'fixture', at: EVERYTHING_STAMP },
       courses: [{ id: 'homework-course-parity', name: 'Synthetic Biology', color: '#16a34a' }],
-      tasks: [{ id: 'homework-task-parity', courseId: 'homework-course-parity', title: 'Synthetic lab report', dueDate: '2026-07-21', completed: false, subtasks: [{ id: 'hw-sub-parity', title: 'Analyze data', completed: false }] }],
+      tasks: [{
+        id: 'homework-task-parity', courseId: 'homework-course-parity',
+        title: 'Synthetic lab report', text: 'Synthetic lab report',
+        done: true, completed: true, dueDate: '2026-07-21', dueTime: '16:30', due: '2026-07-21',
+        priority: 'high', difficulty: 'hard', recurrence: 'none',
+        notes: 'Homework row portability sentinel.', kind: 'test',
+        estimateMinutes: 45, actualMinutes: 50, completedAt: EVERYTHING_STAMP,
+        sourceUrl: 'https://school.example/synthetic-lab',
+        studio: { milestones: [{ id: 'studio-hw-parity', title: 'Prepare evidence', done: true }] },
+        createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP,
+        subtasks: [{ id: 'hw-sub-parity', title: 'Analyze data', completed: false }]
+      }],
       quarantine: [{ id: 'homework-quarantine-parity', reason: 'synthetic compatibility check', value: { title: 'Recovered homework sentinel' } }]
     },
     reviewWorkspace: {

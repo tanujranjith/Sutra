@@ -255,7 +255,7 @@ test('phone notes and folder rows remain clickable above the sidebar scrim', asy
   const note = page.locator('.page-item[data-page-id="mobile-click-note"]');
   await expect(folder).toBeVisible();
   await expect(note).toBeHidden();
-  await folder.click();
+  await folder.locator(':scope > i.fa-chevron-right').click();
   await expect(note).toBeVisible();
   await note.click();
   await expect.poll(() => page.evaluate(() => window.flowAtelier.currentPageId)).toBe('mobile-click-note');

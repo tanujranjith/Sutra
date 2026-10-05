@@ -155,6 +155,7 @@ async function fillCloudPassword(page, pass = PASS, confirm = true) {
 }
 
 async function completeSafetySnapshotDialog(page, pass = PASS) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', pass);
@@ -678,10 +679,25 @@ test('switching destination signs out the old provider and keeps the local works
 test('scheduled backups upload ciphertext once across two tabs and stop when disabled', async ({ page, context }) => {
   test.setTimeout(90000);
   const supa = await openApp(page);
+  // Daily/weekly reminder receipts can otherwise autosave from the first tab
+  // after the second hydrates. Model reminders already shown for this backup
+  // scenario; seedWorkspace carries these public receipts into its snapshot.
+  await page.evaluate(() => {
+    const notifications = window.SutraNotifications;
+    const now = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: now,
+      lastWeeklyNudge: now
+    });
+  });
   await seedWorkspace(page, 'automatic-backup');
   await useSupabaseSignedIn(page);
   await page.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
   const second = await context.newPage();
+  // Creating a tab can hide the first page and queue its lifecycle save. Settle
+  // that writer before the second page hydrates its canonical baseline.
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-before-second-backup-tab'));
   await configureSupabase(second);
   await installInspectableBlobRequests(second, [`${SUPA_URL}/`]);
   await installSupabaseMock(second, supa);
@@ -691,7 +707,21 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   // correctly trip the cross-tab stale-workspace guard before this test starts.
   await waitForAppHydrated(second);
   await second.evaluate(({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
-  await second.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
+  await second.evaluate(async passphrase => {
+    try {
+      await window.SutraCloud.backupNow({ passphrase });
+    } catch (error) {
+      // A rejected stale write must stay rejected. Include only the existing
+      // conflict metadata so CI identifies the competing writer without
+      // printing workspace content or provider credentials.
+      if (error.workspaceConflictDetails) {
+        const diagnostic = `\nBackup fixture conflict: ${JSON.stringify(error.workspaceConflictDetails)}`;
+        error.message += diagnostic;
+        error.stack += diagnostic;
+      }
+      throw error;
+    }
+  }, PASS);
   await second.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' }));
   const before = supa.uploads.length;
   const hide = tab => tab.evaluate(() => {

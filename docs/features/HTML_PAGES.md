@@ -21,13 +21,17 @@ legacy `content`, `html`, or `source` field. Those records are converted to the
 canonical `htmlDocument` shape during migration; ordinary `note` pages are not
 inferred from HTML-looking content.
 
-## Editing and import
+## Create, editing, and import
 
-- New Page → HTML Page creates a normal page with starter HTML.
-- Paste or type HTML, CSS, and JavaScript in the source editor.
-- Import local `.html` and `.htm` files up to 4 MB.
-- Desktop shows code and preview side by side; phones switch between Code and Preview tabs.
-- Source changes use the canonical confirmed-save seam and keep editor text available if persistence fails.
+- In **New Page**, choose **HTML Page**, set an optional title and parent location, and choose **Simple HTML page** or **Empty source**. Confirm with **Create HTML page**; selecting the type alone does not create a page.
+- Paste or type HTML, CSS, and JavaScript in the source editor. The layout controls show **Code**, **Split**, or **Preview**, with the current mode named in the workspace. Phones use Code and Preview tabs.
+- The compact toolbar keeps the view tabs, **Edit source**, and icon-only **Undo** and **Redo** actions visible. Open **More HTML Page actions** for **Refresh preview**, **Import HTML**, and **Export .html**. Escape closes the menu and returns focus to its button; clicking elsewhere closes it.
+- HTML Pages have no timeline actions or authored-timeline picker in any view. Existing timeline markup remains in the source, preview, and exports.
+- Insert a **Content section**, **Checklist**, or **Note callout** starter at the current selection, or before `</body>` when the editor has no selection.
+- Use **Undo** and **Redo** in the HTML Page toolbar, or Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z while the source editor is focused, to move through source edits. Each accepted source input, starter, or import is captured as a local full-source snapshot. Editing existing timeline markup as HTML follows that same source history; there is no timeline picker. History is session-only, bounded to 40 states or 9 MiB of snapshots, and resets when the page/document/space changes, the page closes or locks, or Sutra reloads. When the byte cap is reached, oldest undo states are discarded; the current source remains available.
+- Import local `.html` and `.htm` files up to 4 MB, or export the current source as an `.html` download up to 4 MB. That download contains the HTML source only, not the page record or workspace backup.
+- The source-size display and save status report the 4 MB limit and local save state. Source edits update the canonical page record and autosave through the workspace bridge; if saving fails, the code remains available in the editor with an error status.
+- **Refresh preview** explicitly retries rendering. Empty source, sandbox preparation failures, load failures, and slow preview loads have visible status feedback; the authored source remains available for editing or export.
 
 ## Preview security boundary
 

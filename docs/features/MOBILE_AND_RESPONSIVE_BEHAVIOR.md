@@ -57,6 +57,14 @@ workspace controls) becomes an overlay/menu rather than a fixed column; opening 
 does not shift the main content under it on small screens. All primary destinations,
 including those behind the "More" overflow, stay reachable.
 
+At phone widths up to 640px, **More** also contains the canonical local save
+status and Save locally, Export, Import, Data & Backup, Focus timer, and Report
+a problem. Once navigation initializes, the floating save strip and report
+button give way to these actions. Critical persistence warnings remain visible.
+The All sections sheet scrolls as one container with a sticky header. The
+canonical Focus player reserves room above navigation and is suppressed while
+the sheet or a modal is open; see [Focus Timer](FOCUS_TIMER.md).
+
 ### Home / Focused Home
 
 Home uses a dedicated **mobile essentials shell** (`#todayMobileShell`) rather than
@@ -71,9 +79,14 @@ small screens.
 
 ### Timeline
 
-The timeline reflows to a single column on phones; entries remain tappable and the
-day/section structure stays legible. Horizontal density is reduced rather than
-introducing a horizontal scroll of the whole view.
+At 768px and below, Week uses a seven-day date strip and a selected-day agenda.
+Choose a day to see its complete block titles, times, and sources; choose an
+agenda item to open the canonical block editor. An empty day offers Add a block
+for that selected date. The strip may scroll internally at the narrowest widths,
+while the page itself stays bounded. Date navigation, Today, Day/Week/Month,
+Add Block, and desktop's seven-column Week grid retain their existing paths.
+The renderer uses the canonical date/recurrence filter when available and adds
+no schedule data or alternate store.
 
 ### Create
 

@@ -30,6 +30,7 @@ async function completeOnboarding(page) {
 }
 
 async function completeSafetySnapshotDialog(page, passphrase = PASS) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', passphrase);
@@ -370,6 +371,9 @@ test('a clean background Drive pull uses the recovery journal without prompting 
   // may independently see the mock change below on a slow worker and put the
   // fixture into a conflict before its explicit pull owns the decision.
   await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ enabled: false }));
+  // Disabling metadata does not cancel a cycle that already captured its old
+  // state. Finish that cycle before replacing the local fixture and baseline.
+  await page.evaluate(() => window.SutraDriveSync.syncNow());
   await seedWorkspace(page, 'LOCAL-TO-REPLACE');
   await page.evaluate(() => window.SutraDriveSync._setMetadataForTests({ enabled: true, localDirty: false }));
   drive.files[0].version = '99';

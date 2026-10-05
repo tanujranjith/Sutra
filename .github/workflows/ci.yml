@@ -83,7 +83,16 @@ jobs:
         # The static app is intentionally boot-tested from a clean browser
         # context. Two workers keep the three shards parallel without
         # overloading the shared GitHub runner during cold startup.
-        run: npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: |
+          if [ "${{ matrix.shard }}" = "2" ]; then
+            # Verify the clean HTML restore baseline before the full shard.
+            npx playwright test tests/e2e/html-page-transfer.spec.mjs --workers=1 --project=chromium
+          fi
+          if [ "${{ matrix.shard }}" = "3" ]; then
+            # Surface cross-tab backup conflicts before the full shard output.
+            npx playwright test tests/e2e/sutra-cloud-providers.spec.mjs --grep 'scheduled backups upload ciphertext once across two tabs and stop when disabled' --workers=1 --project=chromium
+          fi
+          npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

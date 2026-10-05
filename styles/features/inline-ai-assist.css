@@ -1,0 +1,233 @@
+/* Note writing mode inside the existing right-docked Sutra Assistant panel. */
+#chatbotPanel.sutra-inline-ai-mode > .sutra-intel-badge,
+#chatbotPanel.sutra-inline-ai-mode > #flowContextChipRow,
+#chatbotPanel.sutra-inline-ai-mode > .chatbot-messages,
+#chatbotPanel.sutra-inline-ai-mode > #chatSuggestionRow,
+#chatbotPanel.sutra-inline-ai-mode > .chatbot-input {
+    display: none !important;
+}
+
+#chatbotPanel.sutra-inline-ai-mode > .sutra-inline-ai-workbench {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+}
+
+.sutra-inline-ai-workbench [hidden] {
+    display: none !important;
+}
+
+.sutra-inline-ai-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.sutra-inline-ai-title {
+    min-width: 0;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.04rem;
+    line-height: 1.3;
+}
+
+.sutra-inline-ai-button {
+    box-sizing: border-box;
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--button-border, var(--surface-border));
+    border-radius: 10px;
+    padding: 9px 12px;
+    background: var(--button-bg, var(--surface-bg));
+    color: var(--button-text, var(--text-primary));
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.sutra-inline-ai-button:hover:not(:disabled) {
+    background: var(--button-bg-hover, var(--surface-bg-hover));
+}
+
+.sutra-inline-ai-button.sutra-inline-ai-primary {
+    border-color: var(--accent-strong, var(--accent));
+    background: var(--accent-soft, var(--surface-bg-active));
+}
+
+.sutra-inline-ai-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.sutra-inline-ai-button:focus-visible,
+.sutra-inline-ai-workbench :is(textarea, summary):focus-visible {
+    outline: 2px solid var(--accent-strong, var(--accent));
+    outline-offset: 2px;
+}
+
+.sutra-inline-ai-back {
+    flex: 0 0 auto;
+    min-width: 96px;
+    padding-inline: 10px;
+    font-size: 0.86rem;
+}
+
+.sutra-inline-ai-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow: auto;
+    padding: 14px;
+    overscroll-behavior: contain;
+}
+
+.sutra-inline-ai-disclosure,
+.sutra-inline-ai-status,
+.sutra-inline-ai-error {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.87rem;
+    line-height: 1.45;
+}
+
+.sutra-inline-ai-error {
+    color: var(--danger, #a12525);
+    font-weight: 600;
+}
+
+.sutra-inline-ai-label {
+    display: block;
+    margin: 2px 0 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+.sutra-inline-ai-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--field-border, var(--surface-border));
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--field-bg, var(--surface-bg));
+    color: var(--field-text, var(--text-primary));
+    font: inherit;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.sutra-inline-ai-textarea:focus {
+    border-color: var(--field-border-focus, var(--accent-strong, var(--accent)));
+}
+
+.sutra-inline-ai-instruction {
+    min-height: 72px;
+    max-height: 140px;
+}
+
+.sutra-inline-ai-context {
+    min-width: 0;
+    border: 1px solid var(--surface-border);
+    border-radius: 10px;
+    background: var(--surface-bg);
+}
+
+.sutra-inline-ai-context summary {
+    min-height: 44px;
+    padding: 11px 12px;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sutra-inline-ai-context-text {
+    box-sizing: border-box;
+    max-height: 140px;
+    margin: 0;
+    overflow: auto;
+    border-top: 1px solid var(--surface-border);
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.sutra-inline-ai-preview-wrap {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 7px;
+    min-height: 0;
+}
+
+.sutra-inline-ai-preview {
+    min-height: 120px;
+    max-height: 34vh;
+    max-height: 34dvh;
+}
+
+.sutra-inline-ai-footer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid var(--surface-border);
+    padding: 10px 14px;
+}
+
+.sutra-inline-ai-footer .sutra-inline-ai-button {
+    flex: 1 1 130px;
+}
+
+@media (max-width: 560px) {
+    .sutra-inline-ai-header {
+        padding: 10px 12px;
+    }
+
+    .sutra-inline-ai-body {
+        gap: 9px;
+        padding: 12px;
+    }
+
+    .sutra-inline-ai-footer {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 9px 12px max(10px, env(safe-area-inset-bottom, 0px));
+    }
+
+    .sutra-inline-ai-footer .sutra-inline-ai-button {
+        min-height: 48px;
+        padding: 8px 9px;
+    }
+
+    .sutra-inline-ai-preview {
+        min-height: 110px;
+        max-height: 30vh;
+        max-height: 30dvh;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sutra-inline-ai-workbench,
+    .sutra-inline-ai-workbench * {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}

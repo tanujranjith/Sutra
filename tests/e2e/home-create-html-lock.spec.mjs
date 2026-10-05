@@ -42,6 +42,10 @@ test('Home/Create labels and Home quick task use the canonical task path', async
   const task = await page.evaluate(() => window.flowAtelier.tasks.find((item) => item.title === 'Read chapter seven'));
   expect(task).toMatchObject({ scheduleType: 'once', priority: 'medium', difficulty: 'medium', isActive: true });
   expect(task.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  const canonical = await page.evaluate(() => window.SutraHomeworkStore.getSnapshot().tasks.filter(item => item.title === 'Read chapter seven'));
+  expect(canonical).toHaveLength(1);
+  expect(canonical[0]).toMatchObject({ kind: 'task', courseId: '', done: false });
+  expect(task.homeworkSourceId).toBe(canonical[0].id);
 });
 
 test('HTML Pages import, execute locally, persist source, and clear locked content', async ({ page }) => {
@@ -136,11 +140,13 @@ test('HTML Pages fill Create, isolate preview scrolling, and restore the Notes t
   const shortMetrics = await page.evaluate(() => {
     const getRect = (selector) => document.querySelector(selector).getBoundingClientRect();
     const view = getRect('#view-notes');
+    const navigation = getRect('.top-nav');
     const html = getRect('#htmlPageEditor');
     const host = getRect('#htmlPageEditor [data-html-preview]');
     const iframe = getRect('#htmlPageEditor [data-html-preview] iframe');
     return {
       view,
+      navigation,
       html,
       host,
       iframe,
@@ -148,7 +154,8 @@ test('HTML Pages fill Create, isolate preview scrolling, and restore the Notes t
     };
   });
   expect(shortMetrics.toolbarDisplay).toBe('none');
-  expect(shortMetrics.html.top).toBeGreaterThanOrEqual(shortMetrics.view.top + 70);
+  expect(shortMetrics.html.top).toBeGreaterThanOrEqual(shortMetrics.navigation.bottom - 1);
+  expect(shortMetrics.html.top).toBeLessThanOrEqual(shortMetrics.navigation.bottom + 2);
   expect(shortMetrics.html.bottom).toBeGreaterThanOrEqual(shortMetrics.view.bottom - 2);
   expect(shortMetrics.html.height).toBeGreaterThan(800);
   expect(Math.abs(shortMetrics.iframe.width - shortMetrics.host.width)).toBeLessThanOrEqual(1);
@@ -420,8 +427,10 @@ test('Slides and Sheets expose the student productivity V2 controls', async ({ p
 
   await page.evaluate(() => window.SutraSlides.createPage('Class presentation'));
   await expect(page.locator('#slidesEditor')).toBeVisible();
+  await page.locator('#slidesEditor .slides-inspector-disclosure > summary').filter({ hasText: 'Import and export' }).click();
   await expect(page.locator('#slidesEditor [data-import-pptx]')).toBeVisible();
-  await page.getByRole('button', { name: 'Table' }).click();
+  await page.locator('#slidesEditor .slides-toolbar-group > summary').filter({ hasText: 'Insert' }).click();
+  await page.locator('#slidesEditor').getByRole('button', { name: 'Table', exact: true }).click();
   await expect(page.locator('#slidesEditor .slides-element-table')).toBeVisible();
   await page.locator('#slidesEditor [data-slide-background]').evaluate((input) => {
     input.value = '#dbeafe';
@@ -444,6 +453,7 @@ test('Slides and Sheets expose the student productivity V2 controls', async ({ p
   await page.locator('#sheetsEditor [aria-label="A1"]').click();
   await page.locator('#sheetsEditor [aria-label="B2"]').click({ modifiers: ['Shift'] });
   await page.locator('#sheetsEditor [data-bold]').click();
+  await page.locator('#sheetsEditor .sheets-tool-group > summary').filter({ hasText: 'Format' }).click();
   await page.locator('#sheetsEditor [data-align]').selectOption('center');
   await page.locator('#sheetsEditor [data-chart]').click();
   await expect(page.locator('#sheetsEditor [data-chart-panel]')).toBeVisible();
@@ -469,7 +479,7 @@ test('phone Slides and Sheets keep a usable editing surface', async ({ page }) =
     const workspace = root.querySelector('.slides-workspace');
     const stage = root.querySelector('.slides-stage');
     const thumbnails = root.querySelector('.slides-thumbnails');
-    const toolbarButton = root.querySelector('.slides-toolbar-btn');
+    const toolbarButton = root.querySelector('.slides-toolbar-primary .slides-toolbar-btn');
     return {
       workspaceDisplay: getComputedStyle(workspace).display,
       stageTop: stage.getBoundingClientRect().top,

@@ -150,6 +150,17 @@ test('Assistant chat history persists locally and is included in encrypted backu
   // inspection, restore decryption, and the pre-restore safety snapshot.
   test.setTimeout(240_000);
   await openApp(page);
+  // Start this clean restore case with reminders already shown. Their timed
+  // receipts are unrelated writes that can invalidate the safety snapshot.
+  await page.evaluate(() => {
+    const notifications = window.SutraNotifications;
+    const receiptTime = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: receiptTime,
+      lastWeeklyNudge: receiptTime
+    });
+  });
   // The Assistant Pack is opt-in for fresh student workspaces (assistant.enabled
   // defaults OFF); enable it like a user would so the chat panel can open.
   await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
@@ -237,6 +248,7 @@ test('Assistant chat history persists locally and is included in encrypted backu
   // conflict chooser (applyValidatedWorkspaceImport). Accept it to proceed.
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
   // Manual restores now complete an encrypted pre-restore safety snapshot first.
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const snapModal = page.locator('#sutraBackupPasswordModal');
   await snapModal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', PASS);

@@ -143,7 +143,7 @@ test('More clears its modal and history state when desktop navigation takes over
   await expect(page.locator('body')).not.toHaveClass(/mobile-more-open/);
 });
 
-test('save bar clears the unified bottom navigation on workspace views', async ({ page }) => {
+test('phone workspace save status and actions are reachable through More', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
   await page.locator('#sutraBottomNav [data-bn-view="homework"]').click();
@@ -153,26 +153,59 @@ test('save bar clears the unified bottom navigation on workspace views', async (
     await homeworkSetup.getByRole('button', { name: 'Cancel for now' }).click();
     await expect(homeworkSetup).toBeHidden();
   }
-  await expect(page.locator('#storageOptions')).toBeVisible();
+  await expect(page.locator('#storageOptions')).toBeHidden();
+  const more = page.locator('#sutraBottomNav [data-bn-view="__more"]');
+  await more.click();
+  const overlay = page.locator('#sutraMobileMoreOverlay');
+  await expect(overlay).toBeVisible();
+  await expect(overlay.getByRole('button', { name: 'Close all sections' })).toBeFocused();
+  const status = overlay.locator('.sutra-mobile-save-status');
+  await expect(status).toBeVisible();
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect.poll(() => page.evaluate(() => {
+    const normalizedText = (node) => node.textContent.replace(/\s+/g, ' ').trim();
+    const canonical = normalizedText(document.getElementById('taskbarSaveStatus'));
+    return canonical.length > 0
+      && normalizedText(document.querySelector('#sutraMobileMoreOverlay .sutra-mobile-save-status')) === canonical;
+  })).toBe(true);
 
-  const geometry = await page.evaluate(() => {
-    const storage = document.getElementById('storageOptions').getBoundingClientRect();
+  const save = overlay.getByRole('button', { name: 'Save locally', exact: true });
+  const backup = overlay.getByRole('button', { name: 'Data & Backup', exact: true });
+  await expect(save).toBeVisible();
+  await expect(save).toBeEnabled();
+  await expect(backup).toBeVisible();
+  await expect(backup).toBeEnabled();
+  await page.keyboard.press('Tab');
+  await expect(save).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(overlay.getByRole('button', { name: 'Export', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(overlay.getByRole('button', { name: 'Import', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(backup).toBeFocused();
+
+  await expect.poll(() => page.evaluate(() => {
+    const panel = document.querySelector('#sutraMobileMoreOverlay .sutra-mobile-more-sheet').getBoundingClientRect();
+    const status = document.querySelector('#sutraMobileMoreOverlay .sutra-mobile-save-status').getBoundingClientRect();
     const nav = document.getElementById('sutraBottomNav').getBoundingClientRect();
-    const visibleButtons = Array.from(document.querySelectorAll('#sutraBottomNav button'))
-      .filter((button) => getComputedStyle(button).display !== 'none')
-      .map((button) => button.getBoundingClientRect());
-    const navigationTop = Math.min(nav.top, ...visibleButtons.map((rect) => rect.top));
+    const actions = ['save', 'cloud'].map((action) => document.querySelector(
+      '#sutraMobileMoreOverlay [data-mobile-more-action="' + action + '"]'
+    ).getBoundingClientRect());
     return {
-      storageBottom: storage.bottom,
-      navigationTop,
-      gap: navigationTop - storage.bottom
+      sheetContained: panel.left >= 0 && panel.right <= innerWidth && panel.top >= 0 && panel.bottom <= innerHeight,
+      statusContained: status.left >= panel.left && status.right <= panel.right && status.top >= panel.top && status.bottom <= panel.bottom,
+      primaryTargetsUsable: actions.every((rect) => rect.width >= 44 && rect.height >= 44
+        && rect.left >= panel.left && rect.right <= panel.right && rect.top >= panel.top && rect.bottom <= panel.bottom),
+      navigationContained: nav.left >= 0 && nav.right <= innerWidth && nav.top >= 0 && nav.bottom <= innerHeight
     };
-  });
+  })).toEqual({ sheetContained: true, statusContained: true, primaryTargetsUsable: true, navigationContained: true });
 
-  expect(geometry.gap).toBeGreaterThanOrEqual(8);
   if (process.env.SUTRA_CAPTURE_QA === '1') {
     await page.screenshot({ path: '.tmp/mobile-unified-navigation-homework.png', fullPage: false });
   }
+  await page.keyboard.press('Enter');
+  await expect(overlay).toBeHidden();
+  await expect(page.locator('#sutraCloudModal')).toHaveClass(/active/);
 });
 
 test('phone sidebar opens from the unified More sheet and Escape restores focus', async ({ page }) => {

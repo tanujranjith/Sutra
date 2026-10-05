@@ -342,7 +342,16 @@ test('toolbar pressed states mirror the v2 cursor formatting', async ({ page }) 
   await expect(page.locator('#toolbarStylesSelect')).toHaveValue('h2');
   await expect(page.locator('[data-notes-v2-state="bold"]')).toHaveAttribute('aria-pressed', 'false');
 
-  await page.locator('#editorV2Host a').click();
+  // Activating a saved link opens Link actions; place the editor cursor in
+  // its text explicitly to test cursor formatting rather than popup focus.
+  await page.evaluate((selector) => {
+    const pm = document.querySelector(selector);
+    const anchor = pm.querySelector('a');
+    const text = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT).nextNode();
+    const position = pm.editor.view.posAtDOM(text, 1);
+    pm.editor.commands.focus();
+    pm.editor.commands.setTextSelection(position);
+  }, PM_SELECTOR);
   await expect(page.locator('[data-notes-v2-state="link"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-notes-v2-state="alignCenter"]')).toHaveAttribute('aria-pressed', 'true');
 

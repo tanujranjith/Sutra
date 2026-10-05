@@ -1,0 +1,35 @@
+.sutra-task-completion-effect {
+  position: fixed;
+  z-index: calc(var(--z-nav, 2400) + 4);
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none !important;
+}
+
+.sutra-task-completion-effect__canvas {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+
+.sutra-task-completion-gap--card { flex-shrink: 0; }
+
+/* Decorative space lets the dust settle before remaining table rows move.
+   It has no task ID or controls and never changes completion or saved data. */
+.sutra-task-completion-gap > td {
+  padding: 0 !important;
+  border: 0 !important;
+  min-height: 0 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  background: transparent !important;
+}
+
+.sutra-task-completion-gap > td::before,
+.sutra-task-completion-gap > td::after { content: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sutra-task-completion-effect { display: none !important; }
+}
+
+body.motion-off .sutra-task-completion-effect { display: none !important; }

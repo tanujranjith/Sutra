@@ -56,9 +56,9 @@
         { label: 'Study with tutoring modes', to: 'tutoring-provider' },
         { label: 'How do I make flashcards?', to: 'flashcards' },
         { label: 'Back up my workspace', to: 'backup' },
-        { label: 'Open Homework', nav: { view: 'homework' }, close: true },
+        { label: 'Open To-do', nav: { view: 'homework' }, close: true },
         { label: 'Explain privacy', to: 'privacy' },
-        { label: 'Course Hub vs Homework', to: 'homework-vs-coursehub' },
+        { label: 'Course Hub vs To-do', to: 'homework-vs-coursehub' },
         { label: 'Manage Assistant Memory', to: 'memory' },
         { label: 'Change my assistant model', to: 'change-model' },
         { label: 'Plan my week', to: 'plans' },
@@ -221,12 +221,12 @@
             category: 'guided',
             local: true,
             answer: [
-                '**Assignment Studio** (in Homework) breaks a big assignment into milestones you can schedule and check off — all managed locally.',
+                '**Assignment Studio** (in To-do) breaks a big assignment into milestones you can schedule and check off — all managed locally.',
                 'Auto-generating a milestone breakdown with sensible due dates uses AI; connect a provider for that.'
             ].join('\n\n'),
             nav: { view: 'homework' },
             extraChoices: [
-                { label: 'Open Homework', nav: { view: 'homework' }, close: true }
+                { label: 'Open To-do', nav: { view: 'homework' }, close: true }
             ],
             provider: 'Break my next big assignment into milestones with realistic due dates.',
             followups: ['build-study-plan', 'next-step'],
