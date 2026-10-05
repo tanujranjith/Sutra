@@ -88,6 +88,34 @@ test('an empty class can be removed from the class empty state', async ({ page }
   await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.some((course) => course.id === 'remove-empty-class'))).toBe(false);
 });
 
+test('activities alone do not show a ready-class empty state', async ({ page }) => {
+  await openHomework(page);
+  await page.evaluate(() => {
+    const store = window.SutraHomeworkStore;
+    store.replace({
+      ...store.getSnapshot(),
+      courses: [{ id: 'activity-only', name: 'Robotics', type: 'misc' }],
+      tasks: []
+    }, { reason: 'homework-activity-only-test-seed' });
+    window.SutraHomework.render();
+  });
+
+  await page.locator('[data-todo-category="homework"]').click();
+  const panel = page.locator('#view-homework .hw-assignments-panel');
+  await expect(panel).toContainText('No homework yet.');
+  await expect(panel.locator('.hw-empty-class-state')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Add homework', exact: true }).click();
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
+  await expect(page.locator('#quickCaptureType')).toHaveValue('homework');
+  await page.locator('#quickCaptureModal').getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await page.locator('[data-todo-category="all"]').click();
+  await page.locator('[data-homework-tab="class"]').click();
+  await expect(panel).toContainText('Nothing on your list yet.');
+  await expect(panel.locator('.hw-empty-class-state')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.map(course => course.id))).toEqual(['activity-only']);
+});
+
 test('the class dashboard modal exposes the same removal action for both types', async ({ page }) => {
   await openHomework(page);
 

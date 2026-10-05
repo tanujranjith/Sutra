@@ -2039,8 +2039,8 @@
     let content = '';
 
     if (!categoryTasks.length) {
-      const showEmptyClasses = homeworkViewState.category === 'homework' && courses.length
-        || homeworkViewState.category === 'all' && byClass && courses.some(course => course.type === 'class');
+      const showEmptyClasses = courses.some(course => course.type === 'class')
+        && (homeworkViewState.category === 'homework' || homeworkViewState.category === 'all' && byClass);
       content = showEmptyClasses
         ? renderEmptyClassState()
         : renderEmptyStateRedesign(homeworkViewState.category === 'homework' ? 'No homework yet.'

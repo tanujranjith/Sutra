@@ -10,7 +10,7 @@ To-do is the existing Homework workspace with a clear place for general tasks. I
 
 The selected category is temporary view state. Summary counts and date tabs describe that category; search, class, status, priority, completion, and due-date filters remain available. Switching categories resets the class filter so a previous class cannot hide unassigned general tasks.
 
-The Class view in All keeps existing classes visible when there are no tasks, including their add and removal actions. General retains its own empty task state.
+The Class view in All keeps existing classes visible when there are no tasks, including their add and removal actions. Activities alone do not show a ready-class empty state. General retains its own empty task state.
 
 On wide desktops, categories and date/class views share a row to leave more room
 for tasks. Smaller screens keep the groups separate. Desktop cards and task rows
