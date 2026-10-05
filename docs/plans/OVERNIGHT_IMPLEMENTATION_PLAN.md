@@ -28,7 +28,7 @@ Prepared September 30, 2026. Task numbers refer to the reorganized list agreed i
 
 For each task, record: current behavior; relevant code and documentation; canonical APIs/data owners; existing test expectations; the proposed approach; accessibility, privacy, persistence, and compatibility implications; remaining uncertainty; and completion criteria. Link external research sources and distinguish observed behavior from inference.
 
-Start with [the agent guide](../../AGENTS.md), [architecture](../architecture/SUTRA_ARCHITECTURE.md), and affected sections of [subsystem contracts](../architecture/AGENT_SUBSYSTEM_CONTRACTS.md). Read only the deeper documents relevant to each task.
+Start with [the agent guide](../../AGENTS.md), [architecture](../architecture/SUTRA_ARCHITECTURE.md), and the affected feature contracts linked in the table below. Read only the deeper documents relevant to each task.
 
 | Area | Research and trace before editing |
 |---|---|
