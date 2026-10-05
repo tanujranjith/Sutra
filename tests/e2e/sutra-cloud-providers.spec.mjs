@@ -679,6 +679,18 @@ test('switching destination signs out the old provider and keeps the local works
 test('scheduled backups upload ciphertext once across two tabs and stop when disabled', async ({ page, context }) => {
   test.setTimeout(90000);
   const supa = await openApp(page);
+  // Daily/weekly reminder receipts can otherwise autosave from the first tab
+  // after the second hydrates. Model reminders already shown for this backup
+  // scenario; seedWorkspace carries these public receipts into its snapshot.
+  await page.evaluate(() => {
+    const notifications = window.SutraNotifications;
+    const now = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: now,
+      lastWeeklyNudge: now
+    });
+  });
   await seedWorkspace(page, 'automatic-backup');
   await useSupabaseSignedIn(page);
   await page.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
