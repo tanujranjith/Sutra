@@ -653,13 +653,13 @@
     if (!editor || !picker || !wrapper) return [];
     var source = String(editor.value || '');
     if (timelinePickerSource === source) {
-      wrapper.hidden = !isSourceVisible() || timelinePickerEntries.length === 0;
+      wrapper.hidden = true;
       return timelinePickerEntries;
     }
     timelinePickerSource = source;
     timelinePickerEntries = timelineEntriesForSource(source);
     if (selectedTimelineIndex >= timelinePickerEntries.length) selectedTimelineIndex = -1;
-    wrapper.hidden = !isSourceVisible() || timelinePickerEntries.length === 0;
+    wrapper.hidden = true;
     picker.replaceChildren();
     timelinePickerEntries.forEach(function (entry, index) {
       var option = document.createElement('option');
@@ -861,7 +861,7 @@
     if (!root) return;
     timelineSourceWasVisible = isSourceVisible();
     var picker = root.querySelector('[data-html-timeline-picker-wrap]');
-    if (picker) picker.hidden = !timelineSourceWasVisible || timelinePickerEntries.length === 0;
+    if (picker) picker.hidden = true;
     var hosts = timelineHosts();
     if (hosts && typeof hosts.refresh === 'function') hosts.refresh();
   }

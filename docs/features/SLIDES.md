@@ -39,6 +39,9 @@ Double-click text (including a table cell), or press Enter/F2 on a selected obje
 to edit; Escape returns to object selection. Typing and Backspace affect text
 while editing, rather than deleting the object. Eight corner/edge handles resize
 selected objects. Hold Shift while dragging to move along one axis.
+Enter and Shift+Enter preserve deliberate line breaks in text, shape labels,
+and table cells through autosave, rerendering, reload, and export. These breaks
+are stored as plain-text newlines, rather than editable HTML.
 
 Selected objects expose compact Edit text, Duplicate, Delete, and Arrange tools.
 The inspector offers exact left, top, width, and height percentages; changes
@@ -59,7 +62,10 @@ The compact toolbar groups **Insert**, **History**, and **Slide** actions and
 keeps **New slide** and **Present** visible. Only one toolbar menu opens at a
 time. Choosing an action, clicking outside the toolbar, or pressing Escape
 closes it; Escape returns focus to its heading. Moving focus within a menu does
-not close it. Slide thumbnails preview their contents and follow the deck's
+not close it.
+Toolbar menus stay within the visible Slides workbench and viewport, including
+after resizing; long menus scroll within the available height.
+Slide thumbnails preview their contents and follow the deck's
 16:9 or 4:3 ratio. The **Fit**, **−**, and **+** controls size the current slide
 within the workspace; zoom is session-only and resets to Fit when another page
 opens.

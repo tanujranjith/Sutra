@@ -234,8 +234,7 @@
 }
 
 .sutra-focus-mini-player[hidden],
-.sutra-focus-mini-player__controls[hidden],
-.sutra-focus-mini-player__restore[hidden] { display: none !important; }
+.sutra-focus-mini-player__controls[hidden] { display: none !important; }
 
 .sutra-focus-mini-player__controls {
     display: flex;
@@ -292,8 +291,7 @@
     gap: 4px;
 }
 
-.sutra-focus-mini-player__button,
-.sutra-focus-mini-player__restore {
+.sutra-focus-mini-player__button {
     display: inline-flex;
     min-width: 44px;
     min-height: 44px;
@@ -312,29 +310,15 @@
     text-decoration: none;
 }
 
-.sutra-focus-mini-player__button:hover,
-.sutra-focus-mini-player__restore:hover {
+.sutra-focus-mini-player__button:hover {
     border-color: var(--sutra-color-accent, var(--accent-strong, #526ff4));
     background: color-mix(in srgb, var(--sutra-color-accent, var(--accent, #526ff4)) 12%, var(--sutra-color-elevated, #fff));
 }
 
-.sutra-focus-mini-player__button:focus-visible,
-.sutra-focus-mini-player__restore:focus-visible {
+.sutra-focus-mini-player__button:focus-visible {
     outline: var(--sutra-focus-outline, 2px solid var(--sutra-color-accent, #526ff4));
     outline-offset: 2px;
     box-shadow: var(--sutra-focus-ring, 0 0 0 3px rgba(82, 111, 244, 0.34));
-}
-
-.sutra-focus-mini-player__restore {
-    display: flex;
-    width: 100%;
-    min-height: 52px;
-    justify-content: flex-start;
-    border: 0;
-    padding: 4px 14px;
-    background: transparent;
-    font-size: 0.8rem;
-    font-variant-numeric: tabular-nums;
 }
 
 body:is(.modal-open, .sutra-modal-lock, .onboarding-open, .mobile-more-open, .fs-active, .focus-mode, .sutra-focus-player-keyboard-open) .sutra-focus-mini-player,
@@ -376,16 +360,16 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
     margin: 0;
     padding: 10px;
     overflow: hidden;
-    color: CanvasText;
-    background: Canvas;
+    color: var(--sutra-color-text, #242424);
+    background: var(--sutra-color-canvas, #fff);
     color-scheme: light dark;
-    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 14px/1.4 var(--font-body, system-ui, -apple-system, "Segoe UI", sans-serif);
 }
 
 .sutra-focus-document-pip {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 12px;
+    gap: 8px;
     height: 100%;
     margin: 0 auto;
 }
@@ -411,7 +395,7 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
 }
 
 .sutra-focus-document-pip__eyebrow {
-    color: GrayText;
+    color: var(--sutra-color-text-muted, #686868);
     font-size: 0.68rem;
     font-weight: 800;
     letter-spacing: 0.12em;
@@ -428,7 +412,7 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
 .sutra-focus-document-pip__timer-status,
 .sutra-focus-document-pip__tasks-status {
     margin: 0;
-    color: GrayText;
+    color: var(--sutra-color-text-muted, #686868);
     font-size: 0.78rem;
 }
 
@@ -440,18 +424,18 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
 .sutra-focus-document-pip__button {
     min-width: 44px;
     min-height: 44px;
-    border: 1px solid ButtonBorder;
+    border: 1px solid var(--sutra-color-border, #d7d7db);
     border-radius: 9px;
     padding: 0 9px;
-    color: ButtonText;
-    background: ButtonFace;
+    color: var(--sutra-color-text, #242424);
+    background: var(--sutra-color-surface, #f6f6f7);
     cursor: pointer;
     font: inherit;
     font-weight: 700;
 }
 
 .sutra-focus-document-pip__button:hover { filter: brightness(0.96); }
-.sutra-focus-document-pip__button:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+.sutra-focus-document-pip__button:focus-visible { outline: 2px solid var(--sutra-color-accent, #526ff4); outline-offset: 2px; }
 
 .sutra-focus-document-pip__tasks-heading {
     margin: 0;
@@ -470,15 +454,16 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
     list-style: none;
 }
 
-.sutra-focus-document-pip__tasks:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+.sutra-focus-document-pip__tasks:focus-visible { outline: 2px solid var(--sutra-color-accent, #526ff4); outline-offset: -2px; }
 
 .sutra-focus-document-pip__task {
     display: grid;
     gap: 2px;
     min-width: 0;
-    border: 1px solid color-mix(in srgb, CanvasText 16%, transparent);
+    border: 1px solid var(--sutra-color-border, #d7d7db);
     border-radius: 7px;
     padding: 6px 8px;
+    background: var(--sutra-color-elevated, #fff);
 }
 
 .sutra-focus-document-pip__task-title {
@@ -492,7 +477,7 @@ body:has(#focusSessionOverlay:not([hidden]), .sutra-update-banner:not([hidden]),
 }
 
 .sutra-focus-document-pip__task-due {
-    color: GrayText;
+    color: var(--sutra-color-text-muted, #686868);
     font-size: 0.72rem;
 }
 

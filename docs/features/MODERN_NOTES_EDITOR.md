@@ -73,6 +73,10 @@ the grid-snap state. Use the zoom percentage to reset the view or **Fit Canvas
 content to view** to bring the board into view. The minimap shows the current
 viewport when the board extends beyond the stage.
 
+Panning stops immediately when the pointer is released; Canvas does not add
+momentum after a drag. Wheel movement applies directly without an additional
+animation. Zoom reset and Fit change the viewport without changing objects.
+
 On an empty board, the centered hint points to the available ways to begin.
 Canvas controls keep keyboard focus visible and use touch-size targets; on a
 small screen, the toolbar and selection actions can scroll horizontally within

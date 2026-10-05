@@ -163,7 +163,8 @@
     var type = String(page && page.type || 'note').toLowerCase();
     if (type === 'canvas') return 'canvas';
     if (type === 'pdf' || type === 'folder' || page.pdfDocument || page.sheets || page.spreadsheet) return '';
-    if (page.htmlDocument && typeof page.htmlDocument === 'object') return 'html';
+    // HTML pages keep existing authored content, but offer no timeline actions.
+    if (page.htmlDocument && typeof page.htmlDocument === 'object') return '';
     if (page.slides && Array.isArray(page.slides.slides)) return 'slides';
     if (type === 'note') return 'note';
     return '';
@@ -172,7 +173,6 @@
   function apiForHost(kind) {
     if (kind === 'canvas') return global.SutraCanvas || null;
     if (kind === 'slides') return global.SutraSlides || null;
-    if (kind === 'html') return global.SutraHTMLPages || null;
     if (kind === 'note') return global.SutraNotesEditorV2 || null;
     return null;
   }
@@ -200,7 +200,6 @@
     if (pageSpace !== activeSpace) return null;
 
     var api = apiForHost(kind);
-    if (kind === 'html' && (!api || typeof api.isSourceVisible !== 'function' || !api.isSourceVisible())) return null;
     var ready = apiHasTimelineMethods(api);
     var reason = '';
     if (kind === 'note' && api && typeof api.isMounted === 'function' && !api.isMounted()) {
@@ -319,7 +318,6 @@
     if (!doc || !context) return null;
     if (context.kind === 'note') return doc.getElementById('toolbar');
     if (context.kind === 'canvas') return doc.getElementById('canvasToolbar');
-    if (context.kind === 'html') return doc.querySelector('#htmlPageEditor .html-page-toolbar');
     if (context.kind === 'slides') return doc.querySelector('#slidesEditor [data-insert-tools]');
     return null;
   }

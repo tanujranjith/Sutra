@@ -174,7 +174,8 @@
         }
         function previewNativeLink(view, event) {
             if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return false;
-            var anchor = event.target.closest && event.target.closest('a');
+            var target = event.target && (event.target.nodeType === 1 ? event.target : event.target.parentElement);
+            var anchor = target && target.closest && target.closest('a');
             var links = global.SutraRichLinks;
             if (!anchor || !view.dom.contains(anchor) || anchor.closest('.sutra-rich-link-inline') || !links) return false;
             var href = links.validateHref(anchor.getAttribute('href'));
@@ -187,33 +188,42 @@
                     // Resolve the clicked anchor, not the last editor selection.
                     // Expand through adjacent text runs sharing the exact mark,
                     // including links split by bold/italic formatting.
-                    var resolved = token.doc.resolve(view.posAtDOM(anchor, 0));
+                    // The wrapper boundary can map to the preceding mark with
+                    // ProseMirror's default backward bias. Resolve the linked
+                    // text leaf with forward bias instead, including fresh paste.
+                    var textLeaf = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT).nextNode();
+                    var resolved = token.doc.resolve(view.posAtDOM(textLeaf || anchor, 0, 1));
                     var parent = resolved.parent;
                     var child = parent.childAfter(resolved.parentOffset);
                     var mark = child.node && child.node.marks.find(function (candidate) {
                         return candidate.type.name === 'link' && links.validateHref(candidate.attrs.href) === href;
                     });
-                    if (!mark) return false;
-                    var firstIndex = child.index;
-                    var lastIndex = child.index + 1;
-                    var from = resolved.start() + child.offset;
-                    var to = from + child.node.nodeSize;
-                    while (firstIndex > 0 && mark.isInSet(parent.child(firstIndex - 1).marks)) {
-                        from -= parent.child(--firstIndex).nodeSize;
+                    if (mark) {
+                        var firstIndex = child.index;
+                        var lastIndex = child.index + 1;
+                        var from = resolved.start() + child.offset;
+                        var to = from + child.node.nodeSize;
+                        while (firstIndex > 0 && mark.isInSet(parent.child(firstIndex - 1).marks)) {
+                            from -= parent.child(--firstIndex).nodeSize;
+                        }
+                        while (lastIndex < parent.childCount && mark.isInSet(parent.child(lastIndex).marks)) {
+                            to += parent.child(lastIndex++).nodeSize;
+                        }
+                        token.from = from; token.to = to; token.linkMark = mark;
+                        token.linkValue = { href: mark.attrs.href, label: token.doc.textBetween(from, to, ' ') };
+                        value = token.linkValue;
+                        callbacks.onEdit = function () { openRichLink(token); };
+                        callbacks.onRemove = function () {
+                            if (!current(token)) return;
+                            // Suppress URL autolinking for this explicit unlink.
+                            commit(editor().state.tr.removeMark(from, to, mark).setMeta('preventAutolink', true));
+                        };
                     }
-                    while (lastIndex < parent.childCount && mark.isInSet(parent.child(lastIndex).marks)) {
-                        to += parent.child(lastIndex++).nodeSize;
-                    }
-                    token.from = from; token.to = to; token.linkMark = mark;
-                    token.linkValue = { href: mark.attrs.href, label: token.doc.textBetween(from, to, ' ') };
-                    value = token.linkValue;
-                    callbacks.onEdit = function () { openRichLink(token); };
-                    callbacks.onRemove = function () {
-                        if (!current(token)) return;
-                        // Suppress URL autolinking for this explicit unlink.
-                        commit(editor().state.tr.removeMark(from, to, mark).setMeta('preventAutolink', true));
-                    };
-                } catch (_) { return false; }
+                } catch (_) {
+                    // Viewing/copying a validated anchor needs no writable model
+                    // range. Omit editing actions when mapping is unavailable.
+                    callbacks = {};
+                }
             }
             if (!links.preview(value, callbacks, anchor)) return false;
             event.preventDefault();
@@ -374,7 +384,18 @@
             var nativeLinks = eng.Extension.create({
                 name: 'sutraNativeLinkActions',
                 addProseMirrorPlugins: function () {
-                    return [new eng.Plugin({ props: { handleDOMEvents: { click: previewNativeLink } } })];
+                    return [new eng.Plugin({
+                        view: function (view) {
+                            // Native marks activate before editor selection or
+                            // click plugins can consume the event or popup focus.
+                            // Rich-link NodeViews retain their direct handler.
+                            function onClick(event) {
+                                if (previewNativeLink(view, event)) event.stopPropagation();
+                            }
+                            view.dom.addEventListener('click', onClick, true);
+                            return { destroy: function () { view.dom.removeEventListener('click', onClick, true); } };
+                        }
+                    })];
                 }
             });
             return [timeline, richLink, nativeLinks];

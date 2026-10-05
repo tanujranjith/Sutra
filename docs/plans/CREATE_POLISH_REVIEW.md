@@ -163,3 +163,38 @@ timeline and after cancellation. Proof: .tmp/qa/html-preview-clean-toolbar.png.
 Syntax, architecture guardrails, cache freshness, manifest regeneration, and
 whitespace checks passed. No automated suites, builds, installs, network
 provider requests, merge, push, or deployment were performed.
+
+## Follow-up regression review — 2026-10-04
+
+The follow-up patch preserves native Enter/Shift+Enter line breaks in Slides,
+keeps toolbar menus inside the workbench, captures native pasted-link clicks,
+removes Canvas pan momentum, removes all HTML timeline authoring controls, and
+makes the timer player X dismiss the whole in-app player. The browser miniplayer
+requests compact bounds and follows Sutra theme tokens through its external CSS.
+No workspace schema, storage key, or content migration is added.
+
+Root reviewed the changed implementation in three passes: patch review, ownership
+and lifecycle review, then final integration review. Sol 6.1 medium agents handled
+Slides, native links, and Focus; root handled Canvas, HTML controls, cache stamps,
+asset generation, and live checks.
+
+Observed live in the isolated localhost QA workspace:
+- A freshly pasted plain URL opens its popup immediately; Edit and Remove target
+  that link. Unlinking a pasted mixed bold/italic link keeps its text formatting.
+- Slides preserves native Enter line breaks after reload and blank lines when
+  returning to the page. The Slide menu stays inside 1280px and 680px viewports;
+  the narrow document has no horizontal overflow and Escape dismisses the menu.
+- HTML Code, Split, and Preview offer no timeline actions or picker.
+- Canvas stays at the released pan position and returns with a reverse drag.
+- The timer X leaves neither a restore chip nor reserved player spacing.
+- Both the Sutra and Assistant PNGs load and render in the restarted preview.
+
+Native browser PiP appearance, final browser-controlled sizing, and its task rows
+remain unverified because that separate window is not exposed by the available
+browser inspection surface. Keep that queue item pending visual confirmation.
+Automated test suites, dependency installs, and builds were not run. Syntax,
+runtime integrity, cache stamps, and generated assets were checked separately.
+Syntax checks, all 27 runtime assertions, 189 cache-stamp entries, architecture
+guardrails, brand assets, and whitespace checks passed. Asset manifests were
+regenerated. Screenshots: `.tmp/qa/html-no-timeline-20261004.jpg` and
+`.tmp/qa/slides-lines-menu-20261004.jpg`.

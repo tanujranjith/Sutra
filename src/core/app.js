@@ -48488,17 +48488,6 @@ function getActiveEditor() {
             // Viewport pan (drag-to-move-around) takes precedence over object drag.
             if (runtime.panning) {
                 const p = runtime.panning;
-                const now = performance.now();
-                const dt = now - p.lastTime;
-                if (dt > 0 && dt < 100) {
-                    const rawVx = (event.clientX - p.lastX) / dt;
-                    const rawVy = (event.clientY - p.lastY) / dt;
-                    p.vx = 0.7 * rawVx + 0.3 * p.vx;
-                    p.vy = 0.7 * rawVy + 0.3 * p.vy;
-                }
-                p.lastX = event.clientX;
-                p.lastY = event.clientY;
-                p.lastTime = now;
                 page.canvas.viewport.x = p.originX + (event.clientX - p.startX);
                 page.canvas.viewport.y = p.originY + (event.clientY - p.startY);
                 applyCanvasTransform(page);
@@ -48561,41 +48550,16 @@ function getActiveEditor() {
                 return;
             }
             if (runtime.panning) {
-                const vx = runtime.panning.vx;
-                const vy = runtime.panning.vy;
                 runtime.panning = null;
                 const shell = document.getElementById('canvasStageShell');
                 if (shell) shell.classList.remove('is-panning');
-                if (Math.sqrt(vx * vx + vy * vy) > 0.05) {
-                    startCanvasPanInertia(page, runtime, vx * 16, vy * 16);
-                } else {
-                    saveCanvasPage(page, { persist: true });
-                }
+                saveCanvasPage(page, { persist: true });
                 return;
             }
             if (!runtime.drag) return;
             const changed = runtime.drag.changed === true;
             runtime.drag = null;
             if (changed) saveCanvasPage(page, { persist: true });
-        }
-
-        function startCanvasPanInertia(page, runtime, vx, vy) {
-            const decay = 0.91;
-            const minSpeed = 0.4;
-            function step() {
-                vx *= decay;
-                vy *= decay;
-                if (Math.abs(vx) < minSpeed && Math.abs(vy) < minSpeed) {
-                    runtime.inertiaRaf = null;
-                    saveCanvasPage(page, { persist: true });
-                    return;
-                }
-                page.canvas.viewport.x += vx;
-                page.canvas.viewport.y += vy;
-                applyCanvasTransform(page);
-                runtime.inertiaRaf = requestAnimationFrame(step);
-            }
-            runtime.inertiaRaf = requestAnimationFrame(step);
         }
 
         function canvasDeleteSelected() {
@@ -49236,18 +49200,11 @@ function getActiveEditor() {
                     if (!wantPan) return;
                     event.preventDefault();
                     runtime.drag = null;
-                    if (runtime.inertiaRaf) { cancelAnimationFrame(runtime.inertiaRaf); runtime.inertiaRaf = null; }
-                    const now = performance.now();
                     runtime.panning = {
                         startX: event.clientX,
                         startY: event.clientY,
                         originX: page.canvas.viewport.x,
-                        originY: page.canvas.viewport.y,
-                        lastX: event.clientX,
-                        lastY: event.clientY,
-                        lastTime: now,
-                        vx: 0,
-                        vy: 0
+                        originY: page.canvas.viewport.y
                     };
                     try { stageShell.setPointerCapture(event.pointerId); } catch (err) { /* non-critical */ }
                     stageShell.classList.add('is-panning');

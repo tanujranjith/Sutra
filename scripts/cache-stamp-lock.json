@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261004-sidebar-shortcuts2",
-    "hash": "ebff9d217770653a"
+    "stamp": "20261004-canvas-stop1",
+    "hash": "fae8f8eeca753a64"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -240,8 +240,8 @@
     "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261004-assistant-slides2",
-    "hash": "62501fff6f0dfa53"
+    "stamp": "20261004-native-link-click3",
+    "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
     "stamp": "20261004-assistant-slides1",
@@ -324,8 +324,8 @@
     "hash": "97d74c2d0846c183"
   },
   "src/features/workspace/content-timeline-hosts.js": {
-    "stamp": "20261004-html-preview-actions1",
-    "hash": "5c50dfff0f9cafdf"
+    "stamp": "20261004-html-no-timeline1",
+    "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
     "stamp": "20260913-page-tree-guides1",
@@ -356,16 +356,16 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261004-sidebar-shortcuts1",
-    "hash": "729466f0d18d28fe"
+    "stamp": "20261004-preview-regressions1",
+    "hash": "8dd55759e9a5d7aa"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
     "hash": "f9ff245580961672"
   },
   "src/features/workspace/html-pages.js": {
-    "stamp": "20261004-html-preview-actions2",
-    "hash": "b891d92d82b1580f"
+    "stamp": "20261004-html-no-timeline1",
+    "hash": "6a3cc9031dbff1ca"
   },
   "src/features/workspace/ios-install-guide.js": {
     "stamp": "20260821-iosinstall1",
@@ -412,8 +412,8 @@
     "hash": "55be3af77fd8c4d8"
   },
   "src/features/workspace/slides.js": {
-    "stamp": "20261004-assistant-slides5",
-    "hash": "6c7a8b96bb2f3169"
+    "stamp": "20261004-slides-lines-menus1",
+    "hash": "4f8e4cefcad5cdb3"
   },
   "src/features/workspace/smart-reschedule.js": {
     "stamp": "20260712-resched1",
@@ -448,8 +448,8 @@
     "hash": "09255d9fcf4ddf4e"
   },
   "src/features/workspace/today-focus-timer.js": {
-    "stamp": "20261004-focus-compact1",
-    "hash": "eed8d48a5b478f83"
+    "stamp": "20261004-focus-dismiss-theme1",
+    "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
     "stamp": "20261001-todo-completion1",
@@ -640,8 +640,8 @@
     "hash": "1282bcc43a7bc9b4"
   },
   "styles/features/slides.css": {
-    "stamp": "20261004-assistant-slides2",
-    "hash": "12fc82f06929f567"
+    "stamp": "20261004-slides-lines-menus1",
+    "hash": "341466f4d7d085f2"
   },
   "styles/features/sutra-assistant-help.css": {
     "stamp": "20260729-providerwiz1",
@@ -748,8 +748,8 @@
     "hash": "0c12386cb8c9bacd"
   },
   "styles/views/today-focus-timer.css": {
-    "stamp": "20261004-focus-compact1",
-    "hash": "2d67a55611b97b7d"
+    "stamp": "20261004-focus-dismiss-theme1",
+    "hash": "28526a2c1b789288"
   },
   "styles/views/today-redesign.css": {
     "stamp": "20260816-home-quick-task1",

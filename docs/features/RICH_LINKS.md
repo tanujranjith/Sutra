@@ -17,6 +17,9 @@ existing text runs and formatting, and removal leaves the visible text in
 place. A replacement display label inherits the first run's formatting.
 Actions target the clicked link, including links with mixed bold/italic runs,
 and cannot write after the note, editor document, or write permission changes.
+Native link activation is captured by its live editor before editor click
+handlers run. Opening or copying a valid link remains available if its editable
+text range cannot be resolved; Edit and Remove require the owning document range.
 
 An inserted rich link is a native inline editor node. Edits, removal, Undo/Redo, autosave,
 and reload use the owning note's existing transaction and save path. Its JSON

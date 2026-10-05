@@ -39,7 +39,7 @@ for records they cannot interpret.
 ## Create surfaces
 
 The **Timeline actions** button appears in the existing editor toolbar for a
-writable current Note, Canvas, Slides, or HTML Page. Its menu offers **Insert
+writable current Note, Canvas, or Slides page. Its menu offers **Insert
 timeline** and **Edit selected timeline**; editing is available when a timeline
 is selected in that editor. The menu keeps action results and editor
 availability messages beside those choices. Timeline actions require canonical
@@ -48,8 +48,8 @@ explains that limitation instead of inserting through the classic editor.
 Folders, Help & Docs, Sheets, and PDF workspaces do not embed authored
 timelines. A PDF can link to a Note that contains one.
 
-For HTML Pages, the source editor must be visible: Code or desktop Split shows
-the actions and timeline picker; Preview hides them without changing content.
+HTML Pages have no timeline actions or picker in Code, Split, or Preview.
+Existing timeline markup is preserved and still renders and exports normally.
 
 Insertion captures the editor's current caret or text selection before the
 timeline editor opens, then inserts through the host's normal editor action.
@@ -73,9 +73,8 @@ The model stays in each host's existing page record:
   deck part.
 - HTML Pages store an inert section with an escaped JSON model attribute and safe
   rendered content in `page.htmlDocument.source`. When one or more wrappers are
-  present, a native picker in the HTML Page toolbar lets you choose which one to
-  edit. Selecting its source range also selects that timeline when the range is
-  unambiguous. Source is parsed only with an inert DOM parser; the preview
+  present, their data stays in the source and can be changed as ordinary HTML.
+  Source is parsed only with an inert DOM parser; the preview
   continues through the existing isolated sandbox.
 
 These placements add no page-level field or second persistence store. Notes,

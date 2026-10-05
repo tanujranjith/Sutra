@@ -515,7 +515,10 @@
     field.addEventListener('input', function () {
       if (!current()) return;
       if (!history) { pushHistory(owner); history = true; }
-      mutate(function () { update(field.textContent); }, false, { history: false });
+      // Native Enter/Shift+Enter use block nodes or BRs, which textContent
+      // concatenates. Read rendered plain text without storing editable HTML.
+      var value = typeof field.innerText === 'string' ? field.innerText : field.textContent;
+      mutate(function () { update(String(value || '').replace(/\r\n?/g, '\n')); }, false, { history: false });
       node.setAttribute('aria-label', element.type + ' object: ' + String(element.text || element.alt || '').slice(0, 120));
     });
     field.addEventListener('blur', function () { field.contentEditable = 'false'; node.classList.remove('is-editing'); history = false; });
@@ -746,12 +749,36 @@
   }
   function wireToolbarMenuLifecycle() {
     var toolbar = root.querySelector('.slides-toolbar'); var groups = Array.prototype.slice.call(toolbar.querySelectorAll('.slides-toolbar-main .slides-toolbar-group'));
+    function positionMenus() {
+      if (root.hidden) return;
+      var bounds = root.getBoundingClientRect();
+      var left = Math.max(8, bounds.left + 8);
+      var right = Math.min(document.documentElement.clientWidth - 8, bounds.right - 8);
+      if (right <= left) return;
+      groups.forEach(function (group) {
+        if (!group.open) return;
+        var menu = group.querySelector('.slides-toolbar-actions');
+        var anchor = group.getBoundingClientRect();
+        menu.style.setProperty('--slides-menu-width', (right - left) + 'px');
+        var width = menu.getBoundingClientRect().width;
+        var menuLeft = Math.max(left, Math.min(anchor.left, right - width));
+        menu.style.setProperty('--slides-menu-left', (menuLeft - anchor.left) + 'px');
+        var bottom = Math.min(document.documentElement.clientHeight - 8, bounds.bottom - 8);
+        menu.style.setProperty('--slides-menu-height', Math.max(0, bottom - anchor.bottom - 6) + 'px');
+      });
+    }
     groups.forEach(function (group) {
       group.addEventListener('toggle', function () {
         if (!group.open) return;
         groups.forEach(function (other) { if (other !== group && other.open) other.open = false; });
+        positionMenus();
       });
     });
+    global.addEventListener('resize', positionMenus);
+    if (typeof global.ResizeObserver === 'function') {
+      var menuObserver = new global.ResizeObserver(positionMenus);
+      menuObserver.observe(root); menuObserver.observe(toolbar);
+    }
     toolbar.addEventListener('click', function (event) {
       var summary = event.target && event.target.closest && event.target.closest('summary');
       if (summary) {

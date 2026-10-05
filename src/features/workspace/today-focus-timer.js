@@ -20,6 +20,7 @@
     var pipLastTaskRefreshAt = 0;
     var pipOpening = false;
     var pipRequestId = 0;
+    var pipTaskErrorReported = false;
 
     function formatTime(totalSeconds) {
         var seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -68,7 +69,11 @@
         button.id = 'todayFocusTimerPipBtn';
         button.setAttribute('aria-label', 'Open the always-on-top Focus miniplayer');
         button.textContent = 'Miniplayer';
-        button.addEventListener('click', openFocusMiniPlayer);
+        button.addEventListener('click', function () {
+            dismissed = false;
+            render(lastSnapshot);
+            openFocusMiniPlayer();
+        });
 
         var status = document.createElement('p');
         status.className = 'today-focus-timer-pip-status';
@@ -180,13 +185,7 @@
         syncPipAvailability();
         controls.append(copy, actions);
 
-        var restore = document.createElement('button');
-        restore.type = 'button';
-        restore.className = 'sutra-focus-mini-player__restore';
-        restore.setAttribute('data-focus-player-action', 'restore');
-        restore.setAttribute('aria-label', 'Show focus timer player');
-        restore.hidden = true;
-        player.append(controls, restore);
+        player.appendChild(controls);
         document.body.appendChild(player);
         syncPipAvailability();
 
@@ -204,12 +203,9 @@
             } else if (action === 'dismiss') {
                 dismissed = true;
                 render(lastSnapshot);
-                restore.focus();
-            } else if (action === 'restore') {
-                dismissed = false;
-                render(lastSnapshot);
-                var toggle = player.querySelector('[data-focus-player-action="toggle"]');
-                if (toggle) toggle.focus();
+                var launcher = document.getElementById('todayFocusTimerPipBtn');
+                if (launcher && launcher.getClientRects().length) launcher.focus();
+                else if (document.activeElement === button) button.blur();
             }
         });
         return player;
@@ -255,7 +251,17 @@
         var stylesheet = pipDocument.createElement('link');
         stylesheet.rel = 'stylesheet';
         stylesheet.href = getFocusTimerStylesheetHref();
+        stylesheet.addEventListener('error', function () {
+            if (pipWindow === targetWindow) setPipStatus('The miniplayer stylesheet could not load. Close it and reopen Miniplayer.');
+        }, { once: true });
         pipDocument.head.appendChild(stylesheet);
+        syncPipTheme();
+        // Some implementations retain user-resized bounds despite the initial
+        // placement hint. Request the compact content area once per opening.
+        try {
+            targetWindow.resizeTo(320 + Math.max(0, targetWindow.outerWidth - targetWindow.innerWidth),
+                280 + Math.max(0, targetWindow.outerHeight - targetWindow.innerHeight));
+        } catch (error) { /* Window sizing remains browser-controlled. */ }
 
         var panel = buildPipElement('main', 'sutra-focus-document-pip');
         var timerHeader = buildPipElement('div', 'sutra-focus-document-pip__header');
@@ -377,6 +383,30 @@
         pipElements.toggle.setAttribute('aria-label', running ? 'Pause focus timer' : (sessionActive ? 'Resume focus timer' : 'Start focus timer'));
     }
 
+    function syncPipTheme() {
+        if (!pipWindow || pipWindow.closed || !document.body) return;
+        var theme = window.getComputedStyle(document.body);
+        var destination = pipWindow.document.body.style;
+        // CSSOM property writes preserve the CSP restriction on inline style
+        // text. Resolve semantic colors in the source document so theme aliases
+        // never depend on copying the entire app stylesheet or shell.
+        var tokens = {
+            '--sutra-color-canvas': '--bg-primary',
+            '--sutra-color-surface': '--bg-secondary',
+            '--sutra-color-elevated': '--bg-elevated',
+            '--sutra-color-text': '--text-primary',
+            '--sutra-color-text-muted': '--text-secondary',
+            '--sutra-color-border': '--surface-border',
+            '--sutra-color-accent': '--accent-strong'
+        };
+        Object.keys(tokens).forEach(function (name) {
+            var value = theme.getPropertyValue(name).trim() || theme.getPropertyValue(tokens[name]).trim();
+            if (value) destination.setProperty(name, value);
+        });
+        destination.setProperty('--font-body', theme.fontFamily);
+        destination.setProperty('color-scheme', theme.colorScheme);
+    }
+
     function refreshPipTasks() {
         if (!pipElements || !pipWindow || pipWindow.closed) return;
         if (isWorkspaceLocked()) {
@@ -394,13 +424,21 @@
             if (bridge && typeof bridge.getFocusUpcomingTasks === 'function') {
                 rows = bridge.getFocusUpcomingTasks(5);
             }
-        } catch (error) { rows = null; }
+        } catch (error) {
+            rows = null;
+            if (!pipTaskErrorReported && typeof window.SutraReportError === 'function') {
+                window.SutraReportError(error, { where: 'focus-miniplayer:upcoming-tasks', feature: 'focus-timer' }, 'warning');
+                pipTaskErrorReported = true;
+            }
+        }
         var previousScrollTop = pipElements.taskList.scrollTop;
         while (pipElements.taskList.firstChild) pipElements.taskList.removeChild(pipElements.taskList.firstChild);
         if (!Array.isArray(rows)) {
-            pipElements.taskStatus.textContent = 'Upcoming tasks are unavailable right now.';
+            pipElements.taskStatus.textContent = bridge && typeof bridge.getFocusUpcomingTasks === 'function'
+                ? 'Upcoming tasks are unavailable right now.' : 'Waiting for workspace tasks…';
             return;
         }
+        pipTaskErrorReported = false;
         rows = rows.slice(0, 5);
         rows.forEach(function (row) {
             if (!row || typeof row !== 'object') return;
@@ -498,12 +536,10 @@
             // first tick; reset/set-duration commands clear it below.
             if (!previouslyRunning) {
                 sessionActive = false;
-                dismissed = false;
             }
         } else if (remaining > 0) sessionActive = true;
         if (completed) {
             sessionActive = false;
-            dismissed = false;
         }
     }
 
@@ -512,7 +548,7 @@
         var remaining = Math.max(0, Math.floor(Number(snapshot && snapshot.remaining) || 0));
         var running = !!(snapshot && snapshot.running);
         var duration = Math.max(1, Math.floor(Number(snapshot && snapshot.durationSeconds) || 25 * 60));
-        var visible = remaining > 0 && (running || sessionActive || remaining < duration);
+        var visible = !dismissed && remaining > 0 && (running || sessionActive || remaining < duration);
         player.hidden = !visible;
         document.body.classList.toggle('sutra-focus-player-session', visible);
         if (!visible) return;
@@ -520,8 +556,6 @@
         var clock = player.querySelector('[data-focus-player-time]');
         var status = player.querySelector('[data-focus-player-status]');
         var toggle = player.querySelector('[data-focus-player-action="toggle"]');
-        var controls = player.querySelector('.sutra-focus-mini-player__controls');
-        var restore = player.querySelector('[data-focus-player-action="restore"]');
         if (clock) clock.textContent = formatTime(remaining);
         var statusLabel = running ? 'Running' : 'Paused';
         if (status && status.textContent !== statusLabel) status.textContent = statusLabel;
@@ -531,12 +565,6 @@
             toggle.title = label;
             var icon = toggle.firstElementChild;
             if (icon) icon.textContent = running ? 'Ⅱ' : '▶';
-        }
-        if (controls) controls.hidden = dismissed;
-        if (restore) {
-            restore.hidden = !dismissed;
-            restore.textContent = 'Focus · ' + formatTime(remaining) + (running ? ' · Running' : ' · Paused');
-            restore.setAttribute('aria-label', 'Show focus timer player');
         }
         syncKeyboardVisibility();
     }
@@ -680,7 +708,6 @@
                 if (action === 'start') sessionActive = true;
                 else if (action === 'reset' || action === 'set-duration') {
                     sessionActive = false;
-                    dismissed = false;
                 } else if (action === 'pause' && wasRunning && lastSnapshot.remaining > 0) {
                     sessionActive = true;
                 }
@@ -704,15 +731,17 @@
         document.addEventListener('visibilitychange', function () { if (!document.hidden) schedulePipTaskRefresh(250); });
         window.addEventListener('storage', function () { schedulePipTaskRefresh(250); });
         window.addEventListener('focus', function () { schedulePipTaskRefresh(250); });
+        window.addEventListener('sutra:flow-bridge-ready', function () { schedulePipTaskRefresh(0); });
 
         if (window.MutationObserver && document.documentElement) {
             var lockObserver = new MutationObserver(function () {
                 if (isWorkspaceLocked()) {
                     closeFocusMiniPlayer();
                 }
+                syncPipTheme();
             });
             lockObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-sutra-workspace-locked', 'class'] });
-            if (document.body) lockObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            if (document.body) lockObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-theme-key'] });
         }
         window.addEventListener('resize', syncKeyboardVisibility);
         if (window.visualViewport) {
