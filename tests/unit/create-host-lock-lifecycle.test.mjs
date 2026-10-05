@@ -80,10 +80,25 @@ class FakeElement {
     return true;
   }
   querySelector(selector) {
-    if (!this._queryNodes.has(selector)) this._queryNodes.set(selector, new FakeElement(this.ownerDocument, 'div'));
+    if (!this._queryNodes.has(selector)) {
+      const node = new FakeElement(this.ownerDocument, 'div');
+      node.parentNode = this;
+      this._queryNodes.set(selector, node);
+    }
     return this._queryNodes.get(selector);
   }
   querySelectorAll() { return []; }
+  getClientRects() {
+    // Hidden or detached ancestors suppress layout boxes, unlike visibility:hidden.
+    for (let node = this; node; node = node.parentNode) {
+      if (!node.isConnected || node.hidden || node.attributes.has('hidden') || node.style.display === 'none') return [];
+    }
+    return [{
+      x: 0, y: 0, top: 0, left: 0,
+      width: this.clientWidth, height: this.clientHeight,
+      right: this.clientWidth, bottom: this.clientHeight
+    }];
+  }
   closest() { return this; }
   appendChild(child) {
     if (child.parentNode) child.parentNode.children = child.parentNode.children.filter((item) => item !== child);
