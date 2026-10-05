@@ -149,6 +149,16 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
   test.setTimeout(120_000);
   await openApp(page);
   const setup = await page.evaluate(async () => {
+    // Keep the clean restore baseline quiet while the user reviews its safety
+    // export. Timer receipts are unrelated writes that correctly cancel a
+    // prepared restore; their own persistence behavior is tested separately.
+    const notifications = window.SutraNotifications;
+    const receiptTime = Date.now();
+    notifications.importState({
+      ...notifications.exportState(),
+      lastDigest: receiptTime,
+      lastWeeklyNudge: receiptTime
+    });
     const now = new Date().toISOString();
     const base = window.serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
     const restoredTitle = `Restore QA ${Date.now()}`;
