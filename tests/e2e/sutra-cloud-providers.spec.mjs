@@ -695,7 +695,21 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   // correctly trip the cross-tab stale-workspace guard before this test starts.
   await waitForAppHydrated(second);
   await second.evaluate(({ email }) => window.SutraCloudSync.verifyCode(email, '123456'), { email: EMAIL });
-  await second.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
+  await second.evaluate(async passphrase => {
+    try {
+      await window.SutraCloud.backupNow({ passphrase });
+    } catch (error) {
+      // A rejected stale write must stay rejected. Include only the existing
+      // conflict metadata so CI identifies the competing writer without
+      // printing workspace content or provider credentials.
+      if (error.workspaceConflictDetails) {
+        const diagnostic = `\nBackup fixture conflict: ${JSON.stringify(error.workspaceConflictDetails)}`;
+        error.message += diagnostic;
+        error.stack += diagnostic;
+      }
+      throw error;
+    }
+  }, PASS);
   await second.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'close' }));
   const before = supa.uploads.length;
   const hide = tab => tab.evaluate(() => {
