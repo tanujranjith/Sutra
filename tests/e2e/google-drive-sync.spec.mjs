@@ -30,6 +30,7 @@ async function completeOnboarding(page) {
 }
 
 async function completeSafetySnapshotDialog(page, passphrase = PASS) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
   await modal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', passphrase);

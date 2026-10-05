@@ -36,14 +36,14 @@ async function acceptOptionalRestorePrompt(page) {
   if (await restoreButton.count()) await restoreButton.click();
 }
 
-async function completeOptionalSafetySnapshot(page) {
+async function completeSafetySnapshot(page) {
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const modal = page.locator('#sutraBackupPasswordModal');
-  if (await modal.count() && await modal.isVisible()) {
-    await modal.locator('#sutraBackupPassphraseInput').fill(PASS);
-    await modal.locator('#sutraBackupPassphraseConfirmInput').fill(PASS);
-    await modal.locator('#sutraBackupPasswordSubmitBtn').click();
-    await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
-  }
+  await expect(modal).toBeVisible({ timeout: 30_000 });
+  await modal.locator('#sutraBackupPassphraseInput').fill(PASS);
+  await modal.locator('#sutraBackupPassphraseConfirmInput').fill(PASS);
+  await modal.locator('#sutraBackupPasswordSubmitBtn').click();
+  await expect(modal).not.toHaveClass(/active/, { timeout: 60_000 });
 }
 
 test('encrypted workspace transfer preserves HTML Pages and repairs legacy page records', async ({ page, browser }) => {
@@ -70,7 +70,7 @@ test('encrypted workspace transfer preserves HTML Pages and repairs legacy page 
     await target.locator('#sutraImportPasswordSubmitBtn').click();
     await expect(target.locator('#sutraImportPasswordModal')).not.toHaveClass(/active/, { timeout: 30_000 });
     await acceptOptionalRestorePrompt(target);
-    await completeOptionalSafetySnapshot(target);
+    await completeSafetySnapshot(target);
 
     await expect.poll(() => target.evaluate((title) => {
       const restored = window.flowAtelier.pages.find((item) => item.title === title);

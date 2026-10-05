@@ -199,6 +199,7 @@ test('wipe-and-restore JSON plus legacy .atelier import preserve workspace data'
   });
   expect(setup.restored).toBe(true);
   await page.locator('.sutra-modal-overlay button', { hasText: 'Restore backup' }).click({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Yes, make safety export', exact: true }).click();
   const snapshotModal = page.locator('#sutraBackupPasswordModal');
   await snapshotModal.waitFor({ state: 'visible', timeout: 30_000 });
   await page.fill('#sutraBackupPassphraseInput', BACKUP_PASSWORD);

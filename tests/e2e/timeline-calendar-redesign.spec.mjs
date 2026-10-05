@@ -31,7 +31,10 @@ async function openTimeline(page) {
     );
     window.flowAtelier.renderTimeline();
   });
-  await page.waitForSelector('#timelineLegacyCalendar .sutra-calendar-time-view', { state: 'attached' });
+  const weekRenderer = await page.evaluate(() => window.matchMedia('(max-width: 768px)').matches
+    ? '.sutra-calendar-mobile-week'
+    : '.sutra-calendar-time-week');
+  await page.waitForSelector('#timelineLegacyCalendar ' + weekRenderer, { state: 'attached' });
 }
 
 test('calendar renderer provides Month, Week, and Day grids without replacing Timeline data', async ({ page }) => {

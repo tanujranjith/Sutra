@@ -2039,7 +2039,9 @@
     let content = '';
 
     if (!categoryTasks.length) {
-      content = homeworkViewState.category === 'homework' && courses.length
+      const showEmptyClasses = homeworkViewState.category === 'homework' && courses.length
+        || homeworkViewState.category === 'all' && byClass && courses.some(course => course.type === 'class');
+      content = showEmptyClasses
         ? renderEmptyClassState()
         : renderEmptyStateRedesign(homeworkViewState.category === 'homework' ? 'No homework yet.'
           : homeworkViewState.category === 'general' ? 'No general tasks yet.' : 'Nothing on your list yet.');

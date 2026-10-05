@@ -57,6 +57,7 @@ async function openSeededHomework(page) {
       homeworkSetup.style.setProperty('display', 'none', 'important');
     }
   });
+  await page.locator('[data-todo-category="homework"]').click();
 }
 
 test('All Assignments keeps open overdue work visible and groups completed assignments', async ({ page }) => {
@@ -66,8 +67,9 @@ test('All Assignments keeps open overdue work visible and groups completed assig
   const past = table.locator('#hwPastAssignmentRows');
   const toggle = table.locator('[data-hw-past-toggle]');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(toggle).toContainText('Completed assignments (2)');
+  await expect(toggle).toContainText('Completed tasks (2)');
   await expect(past).toBeHidden();
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(3);
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
   await toggle.focus();
@@ -99,14 +101,20 @@ test('All Assignments keeps open overdue work visible and groups completed assig
   expect(Math.min(...mobileSizes)).toBeGreaterThanOrEqual(44);
 
   await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
   const openOverdue = table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' });
   await openOverdue.locator('[data-task-toggle]').click();
-  await expect(toggle).toContainText('Completed assignments (3)');
+  await expect(toggle).toContainText('Completed tasks (3)');
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
   await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(3);
   await expect(past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(0);
   await past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('[data-task-toggle]').click();
-  await expect(toggle).toContainText('Completed assignments (2)');
+  await expect(toggle).toContainText('Completed tasks (2)');
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(2);
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
   await toggle.click();
   await page.locator('#hwSearchInput').fill('overdue quiz');
@@ -125,15 +133,15 @@ test('Homework completion takes precedence over overdue styling and By Class exp
   const table = page.locator('.hw-assignment-table.is-by-class');
   await expect(table).toBeVisible();
   await expect(table.locator('thead th')).toHaveText([
-    'Assignment', 'Class / activity', 'Due', 'Difficulty', 'Priority', 'Status', 'Actions'
+    'Task', 'Class / activity', 'Due', 'Difficulty', 'Priority', 'Status', 'Actions'
   ]);
   await expect(table.locator('.hw-assignment-group-row')).toHaveCount(3);
   // Action menus are intentionally hidden until opened; assert the visible
   // group label rather than including hidden menu item textContent.
   expect((await table.locator('.hw-assignment-group-heading > span').allTextContents()).map((text) => text.trim())).toEqual([
-    'BiologyClass · 2 assignments',
-    'UnassignedUnassigned · 1 assignment',
-    'World HistoryClass · 2 assignments'
+    'BiologyClass · 2 tasks',
+    'UnassignedUnassigned · 1 task',
+    'World HistoryClass · 2 tasks'
   ]);
 
   const completed = table.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' });
@@ -158,7 +166,7 @@ test('Homework completion takes precedence over overdue styling and By Class exp
   await page.locator('[data-homework-tab="all"]').click();
   const allTable = page.locator('.hw-assignment-table:not(.is-by-class)');
   await expect(allTable.locator('thead th')).toHaveText([
-    'Assignment', 'Class / activity', 'Due', 'Priority', 'Status', 'Actions'
+    'Task', 'Class / activity', 'Due', 'Priority', 'Status', 'Actions'
   ]);
   await expect(allTable.locator('.hw-difficulty-badge')).toHaveCount(0);
 

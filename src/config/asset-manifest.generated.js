@@ -250,7 +250,7 @@
     "./src/features/study/ap-study.js?v=20260913-content-limits-ap1",
     "./src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1",
     "./src/features/study/code-highlight.js?v=20260620-hl1",
-    "./src/features/study/homework.js?v=20261004-merge-review-fixes1",
+    "./src/features/study/homework.js?v=20261004-ci-empty-classes1",
     "./src/features/study/math-render.js?v=20260620-math1",
     "./src/features/study/review.js?v=20260913-content-limits-review1",
     "./src/features/workspace/activation-metrics.js?v=20260702-activation1",

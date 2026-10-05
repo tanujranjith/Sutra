@@ -24,8 +24,16 @@ for (const width of [1280, 390]) {
       if (overlay) { overlay.hidden = true; overlay.classList.remove('active'); }
     });
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.locator('#storageOptions').hover();
-    await page.locator('#sutraCloudOpenBtn').click();
+    const cloudReturnFocus = page.locator(width <= 640
+      ? '#sutraBottomNav [data-bn-view="__more"]'
+      : '#sutraCloudOpenBtn');
+    if (width <= 640) {
+      await cloudReturnFocus.click();
+      await page.locator('#sutraMobileMoreOverlay').getByRole('button', { name: 'Data & Backup', exact: true }).click();
+    } else {
+      await page.locator('#storageOptions').hover();
+      await cloudReturnFocus.click();
+    }
     await expect(page.getByRole('dialog', { name: 'Sutra Cloud', exact: true })).toBeVisible();
     await expect(page.locator('#sutraCloudSummary')).toContainText('Saved locally');
     await expect(page.locator('#sutraCloudSummary')).toContainText('Backed up');
@@ -43,10 +51,10 @@ for (const width of [1280, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.keyboard.press('Escape');
     await expect(page.locator('#sutraCloudModal')).not.toHaveClass(/active/);
-    await expect(page.locator('#sutraCloudOpenBtn')).toBeFocused();
+    await expect(cloudReturnFocus).toBeFocused();
     const meta = await page.evaluate(() => JSON.parse(localStorage.getItem('sutra:supabaseCloud:v1')));
-    expect(meta).toMatchObject({ schemaVersion: 2, deviceId: 'legacy-device', futureField: 'preserved',
-      autoBackup: { enabled: false, frequency: 'close' } });
+    expect(meta).toMatchObject({ schemaVersion: 3, deviceId: 'legacy-device', futureField: 'preserved',
+      autoBackup: { enabled: false, frequency: 'close', dailyTime: '20:00' } });
     const databases = await page.evaluate(() => indexedDB.databases());
     expect(databases.map(db => db.name)).not.toContain('sutra_sync_db');
     expect(requests).toEqual([]);
