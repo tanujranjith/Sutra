@@ -136,6 +136,10 @@ test('only linked-PDF wrappers reopen from their attachment identity', async ({ 
     const [legacyFile] = await window.SutraAttachments.addFiles([makeFile('legacy-linked.pdf')], {
       entityType: 'note', entityId: legacyCard.id
     });
+    const staleCard = hooks.createNoteInActiveSpace('Stale PDF marker with another attachment', '<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="removed-pdf"><p>Original PDF is unavailable.</p></aside>');
+    await window.SutraAttachments.addFiles([makeFile('different-attachment.pdf')], {
+      entityType: 'note', entityId: staleCard.id
+    });
     const legacyConverted = hooks.createNoteInActiveSpace('Legacy converted PDF note', '<p>Temporary legacy content.</p>');
     const [legacyConvertedFile] = await window.SutraAttachments.addFiles([makeFile('legacy-converted.pdf')], {
       entityType: 'note', entityId: legacyConverted.id
@@ -157,6 +161,7 @@ test('only linked-PDF wrappers reopen from their attachment identity', async ({ 
       ordinaryFileId: ordinaryFile.id,
       legacyCardId: legacyCard.id,
       legacyFileId: legacyFile.id,
+      staleCardId: staleCard.id,
       legacyConvertedId: legacyConverted.id,
       ambiguousId: ambiguous.id,
       ambiguousFileCount: ambiguousFiles.length,
@@ -173,6 +178,10 @@ test('only linked-PDF wrappers reopen from their attachment identity', async ({ 
   await page.evaluate(id => window.loadPage(id), linked.legacyCardId);
   await expect(page.locator('.pdfw-root')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.SutraPdfWorkspace.getContext()?.fileId || '')).toBe(linked.legacyFileId);
+
+  await page.evaluate(id => window.loadPage(id), linked.staleCardId);
+  await expect(page.locator('.pdfw-root')).toHaveCount(0);
+  expect(await page.evaluate(() => window.SutraPdfWorkspace.getContext())).toBeNull();
 
   await page.evaluate(id => window.loadPage(id), linked.legacyConvertedId);
   await expect(page.locator('.pdfw-root')).toHaveCount(0);

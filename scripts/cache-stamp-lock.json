@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261009-issues5",
-    "hash": "b7a7b753ffad99f1"
+    "stamp": "20261009-issues6",
+    "hash": "255fdf6dec35cca3"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

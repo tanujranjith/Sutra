@@ -50126,7 +50126,7 @@ function getActiveEditor() {
             // converted Note intentionally stays readable rather than opening
             // its source PDF again when selected.
             if (markerId && linkedPdfs.includes(markerId)) return markerId;
-            if (linkedPdfs.length === 1) return linkedPdfs[0];
+            if (!markerId && linkedPdfs.length === 1) return linkedPdfs[0];
             return '';
         }
 
