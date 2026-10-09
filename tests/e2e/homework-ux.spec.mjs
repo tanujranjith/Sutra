@@ -295,8 +295,19 @@ test('By Class partitions history, preserves filters, and scopes repeated class 
   await expect(table.locator('#hwCompletedAssignmentRows')).toBeHidden();
   await expect(table.locator('.hw-assignment-row')).toHaveCount(4);
 
-  await overdueToggle.click();
-  await completedToggle.click();
+  await overdueToggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(overdueToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-overdue-toggle'))).resolves.toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(overdueToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-overdue-toggle'))).resolves.toBe(true);
+  await overdueToggle.focus();
+  await page.keyboard.press('Enter');
+  await completedToggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-completed-toggle'))).resolves.toBe(true);
   const overdueRows = table.locator('#hwOverdueAssignmentRows .hw-assignment-row');
   const completedRows = table.locator('#hwCompletedAssignmentRows .hw-assignment-row');
   await expect(overdueRows).toHaveCount(1);

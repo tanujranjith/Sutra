@@ -3584,12 +3584,20 @@
 
     board.querySelectorAll('[data-hw-past-toggle], [data-hw-completed-toggle], [data-hw-overdue-toggle]').forEach(toggle => {
       toggle.addEventListener('click', () => {
+        const preserveFocus = document.activeElement === toggle;
+        const selector = toggle.hasAttribute('data-hw-overdue-toggle')
+          ? '[data-hw-overdue-toggle]'
+          : toggle.hasAttribute('data-hw-past-toggle')
+            ? '[data-hw-past-toggle]'
+            : '[data-hw-completed-toggle]';
         if (toggle.hasAttribute('data-hw-overdue-toggle')) {
           homeworkViewState.overdueExpanded = !homeworkViewState.overdueExpanded;
         } else {
           homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
         }
         render();
+        const replacement = preserveFocus ? board.querySelector(selector) : null;
+        if (replacement && replacement.getClientRects().length) replacement.focus({ preventScroll: true });
       });
     });
 
