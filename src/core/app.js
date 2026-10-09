@@ -1684,10 +1684,11 @@ function openMobilePageActionsSheet(pageItem, toggleButton, pageId, pageTitle) {
 }
 
 function closeSidebarPageActionsMenus() {
-    document.querySelectorAll('.page-item.mobile-actions-open').forEach((row) => {
+    const pagesList = document.getElementById('pagesList');
+    if (pagesList) pagesList.querySelectorAll('.page-item.mobile-actions-open').forEach((row) => {
         row.classList.remove('mobile-actions-open');
     });
-    document.querySelectorAll('.page-item-actions-toggle[aria-expanded="true"]').forEach((button) => {
+    if (pagesList) pagesList.querySelectorAll('.page-item-actions-toggle[aria-expanded="true"]').forEach((button) => {
         button.setAttribute('aria-expanded', 'false');
     });
     if (mobilePageActionsSheetRoot) {
@@ -40685,7 +40686,8 @@ function buildOnboardingPlanPreview() {
             try { if (typeof renderDocOutline === 'function') renderDocOutline(); } catch (e) { /* non-critical */ }
             try { if (typeof renderSplitNoteSelect === 'function') renderSplitNoteSelect(); } catch (e) { /* non-critical */ }
             // Soft-update the sidebar title without a full redraw.
-            const sidebarTitle = document.querySelector(`.page-item[data-page-id="${page.id}"] .page-title-text`);
+            const pagesList = document.getElementById('pagesList');
+            const sidebarTitle = pagesList && pagesList.querySelector(`.page-item[data-page-id="${page.id}"] .page-title-text`);
             if (sidebarTitle) sidebarTitle.textContent = (page.title || '').split('::').pop();
 
             // 8/9) Persist through the canonical local-save path. Pending timers
@@ -50003,8 +50005,28 @@ function getActiveEditor() {
         installSutraCanvasApi();
 
         function linkedPdfIdForNotePage(page) {
-            const match = String(page && page.content || '').match(/data-sutra-pdf-card=["']([^"']+)["']/);
-            return match ? String(match[1]) : '';
+            if (!page || !window.SutraAttachments || typeof window.SutraAttachments.listForEntity !== 'function') return '';
+            const content = String(page.content || '');
+            const cardTag = Array.from(content.matchAll(/<aside\b[^>]*>/gi))
+                .map(match => match[0])
+                .find(tag => /\bclass=["'][^"']*\bsutra-linked-pdf-card\b[^"']*["']/i.test(tag));
+            if (!cardTag || /\bdata-sutra-pdf-auto-open=["'](?:false|0|no)["']/i.test(cardTag)) return '';
+            const match = cardTag.match(/\bdata-sutra-pdf-card=["']([^"']+)["']/i);
+            const markerId = match ? String(match[1]) : '';
+            let linkedPdfs = [];
+            try {
+                linkedPdfs = window.SutraAttachments.listForEntity('note', String(page.id || ''))
+                    .filter(file => file && file.kind === 'pdf' && file.id)
+                    .map(file => String(file.id));
+            } catch (error) { /* keep PDF recovery failure-tolerant */ }
+
+            // Only Notes that still contain Sutra's linked-PDF card are PDF
+            // wrappers. Ordinary Notes may have attached PDFs too, and a
+            // converted Note intentionally stays readable rather than opening
+            // its source PDF again when selected.
+            if (markerId && linkedPdfs.includes(markerId)) return markerId;
+            if (linkedPdfs.length === 1) return linkedPdfs[0];
+            return '';
         }
 
         function reopenLinkedPdfForNotePage(page) {
@@ -50071,7 +50093,7 @@ function getActiveEditor() {
                 renderBreadcrumbs(page);
                 updatePageTemporaryMeta(page);
 
-                document.querySelectorAll('.page-item').forEach(item => {
+                document.getElementById('pagesList')?.querySelectorAll('.page-item').forEach(item => {
                     item.classList.toggle('active', item.dataset.pageId === pageId);
                 });
 
@@ -50345,7 +50367,8 @@ function getActiveEditor() {
                 saveSecondaryPageNow();
                 savePagesToLocal();
                 // A soft-render to update title in sidebar without full redraw
-                const pageTitleSpan = document.querySelector(`.page-item[data-page-id="${currentPageId}"] .page-title-text`);
+                const pagesList = document.getElementById('pagesList');
+                const pageTitleSpan = pagesList && pagesList.querySelector(`.page-item[data-page-id="${currentPageId}"] .page-title-text`);
                 if (pageTitleSpan) pageTitleSpan.textContent = titleInput;
                 
                 renderSplitNoteSelect();
@@ -53223,7 +53246,7 @@ function getActiveEditor() {
                     dragPageId = null;
                     dropTargetPageId = null;
                     dropPosition = null;
-                    document.querySelectorAll('.page-item').forEach(item => {
+                    pagesList.querySelectorAll('.page-item').forEach(item => {
                         item.classList.remove('drop-inside', 'drop-after', 'drop-before');
                     });
                 });
@@ -64669,11 +64692,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)');
         }
 
-        function buildLinkedPdfCardHtml(fileMeta, pageId) {
+        function buildLinkedPdfCardHtml(fileMeta, pageId, options = {}) {
             const fileId = escapeHtml(String(fileMeta && fileMeta.id || ''));
             const linkedPageId = escapeHtml(String(pageId || ''));
             const name = escapeHtml(String(fileMeta && (fileMeta.originalName || fileMeta.name) || 'PDF'));
-            return `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${fileId}">
+            const autoOpen = options.autoOpen !== false;
+            return `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${fileId}" data-sutra-pdf-auto-open="${autoOpen ? 'true' : 'false'}">
                 <p><strong>Linked PDF:</strong> ${name}</p>
                 <p>This note keeps the exact original attached. Open it in the PDF workspace or explicitly convert its searchable text into the note.</p>
                 <p><button type="button" data-sutra-pdf-action="open" data-file-id="${fileId}" data-page-id="${linkedPageId}">Open PDF</button>
@@ -64693,8 +64717,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             linkWorkspaceAttachment(added.id, 'note', page.id);
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
-            renderPagesList();
-            loadPage(page.id);
+            // createImportedPage() has already selected and rendered this Note.
+            // A same-page load would snapshot the editor mirror again while
+            // Modern Editor V2 is still hydrating the linked-PDF component.
             await flushAppSaveNow('pdf-note-attachment');
             if (context.openWorkspace === true && window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') {
                 try {
@@ -64715,12 +64740,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const page = pages.find(item => String(item && item.id) === String(pageId));
             if (!bytes || !fileMeta || !page) throw new Error('The linked PDF is unavailable.');
             const extracted = await window.SutraPdfAdapter.extractText(bytes);
-            const card = buildLinkedPdfCardHtml(fileMeta, page.id);
+            const card = buildLinkedPdfCardHtml(fileMeta, page.id, { autoOpen: false });
             page.content = sanitizeEditorHtml(card + '<hr>' + normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)'));
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             await flushAppSaveNow('pdf-convert-to-note');
-            if (String(currentPageId) === String(page.id)) loadPage(page.id);
+            if (String(currentPageId) === String(page.id)) {
+                // Rehydrate the current editor directly. Calling loadPage on
+                // the same id first snapshots its stale mirror over the newly
+                // converted content, and can also reopen the source PDF.
+                loadPageContentIntoEditor(getPrimaryEditor(), page);
+            }
             showToast('PDF text converted into the note. The original remains attached.');
             return page;
         }
@@ -66243,7 +66273,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             currentEmojiPageId = null;
             if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') window.SutraModalManager.sync();
             if (restoreIconFocus && pageId) {
-                const icon = document.querySelector(`.page-item[data-page-id="${CSS.escape(String(pageId))}"] .page-icon`);
+                const pagesList = document.getElementById('pagesList');
+                const icon = pagesList && pagesList.querySelector(`.page-item[data-page-id="${CSS.escape(String(pageId))}"] .page-icon`);
                 if (icon && !icon.closest('[inert]') && icon.getClientRects().length) icon.focus({ preventScroll: true });
             }
         }
@@ -70907,7 +70938,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function filterPages() {
             const query = getSearchQuery();
             searchQuery = query;
-            const pageItems = document.querySelectorAll('.page-item');
+            const pagesList = document.getElementById('pagesList');
+            if (!pagesList) return;
+            const pageItems = pagesList.querySelectorAll('.page-item');
             const renderedPageIds = new Set(Array.from(pageItems).map(item => item.dataset.pageId));
             const totalPages = Array.isArray(pages) ? pages.length : 0;
             

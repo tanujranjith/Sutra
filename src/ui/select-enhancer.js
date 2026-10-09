@@ -83,7 +83,20 @@
         component.trigger.setAttribute('aria-expanded', 'false');
         component.menu.classList.remove('is-open');
         component.menu.classList.remove('nf-select-menu--open-up');
+        component.menu.setAttribute('aria-hidden', 'true');
+        if ('inert' in component.menu) component.menu.inert = true;
         syncModalManager();
+    }
+
+    function isSelectSurfaceAvailable(component) {
+        if (!component || !component.trigger || !component.trigger.isConnected) return false;
+        for (let node = component.trigger; node && node !== document.documentElement; node = node.parentElement) {
+            if (node.hidden || node.hasAttribute('inert') || node.getAttribute('aria-hidden') === 'true') return false;
+            const style = window.getComputedStyle(node);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+        }
+        const rect = component.trigger.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
     }
 
     function getSelectedOption(select) {
@@ -172,12 +185,14 @@
     }
 
     function openSelect(component, focusSelected) {
-        if (component.select.disabled) return;
+        if (component.select.disabled || !isSelectSurfaceAvailable(component)) return;
         if (openComponent && openComponent !== component) closeOpenSelect();
         syncComponent(component, true);
         component.wrapper.classList.add('open');
         component.trigger.setAttribute('aria-expanded', 'true');
         component.menu.classList.add('is-open');
+        component.menu.removeAttribute('aria-hidden');
+        if ('inert' in component.menu) component.menu.inert = false;
         if (component.usePortal) positionPortalMenu(component);
         openComponent = component;
         syncModalManager();
@@ -295,6 +310,8 @@
         const menu = document.createElement('div');
         menu.className = 'nf-select-menu';
         menu.setAttribute('role', 'listbox');
+        menu.setAttribute('aria-hidden', 'true');
+        if ('inert' in menu) menu.inert = true;
         if (select.id) menu.id = select.id + '-menu';
         const usePortal = shouldUsePortal(select);
         if (usePortal) menu.classList.add('nf-select-menu--portal');
@@ -446,8 +463,11 @@
         if (domObserver || !document.body) return;
         domObserver = new MutationObserver(function (mutations) {
             try {
-                mutations.forEach((mutation) => {
-                    mutation.addedNodes.forEach((node) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && openComponent && !isSelectSurfaceAvailable(openComponent)) {
+                    closeOpenSelect();
+                }
+                mutation.addedNodes.forEach((node) => {
                         if (!(node instanceof Element)) return;
                         // Skip nodes created by this enhancer to avoid re-entrance
                         if (node.classList.contains('nf-select') || node.classList.contains('nf-select-menu')) return;
@@ -465,7 +485,12 @@
                 domObserver.takeRecords();
             }
         });
-        domObserver.observe(document.body, { childList: true, subtree: true });
+        domObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['aria-hidden', 'class', 'hidden', 'inert', 'style']
+        });
     }
 
     function patchSelectSetters() {

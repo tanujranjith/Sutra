@@ -205,6 +205,7 @@
     var PRESERVED_BLOCK_SELECTORS = [
         // Structured embeds and drawings have dedicated live nodes below.
         // Widget/media wrappers and other non-editable components.
+        'aside.sutra-linked-pdf-card[data-sutra-pdf-card]',
         'div.media-wrapper',
         'div.atelier-page-break',
         'div[contenteditable="false"]',

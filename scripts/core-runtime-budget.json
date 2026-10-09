@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-09T05:32:03.004Z",
-  "reviewedReason": "Issue 69 durable anchored comments, modal isolation ordering and Help guidance",
-  "maxBytes": 4963709,
-  "maxLines": 87027
+  "blessedAt": "2026-10-09T05:39:10.268Z",
+  "reviewedReason": "Combine reviewed issue 69 anchors with issue 72 linked PDF recovery and conversion",
+  "maxBytes": 4966092,
+  "maxLines": 87060
 }

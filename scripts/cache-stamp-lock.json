@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261009-comments2",
-    "hash": "960d9c6346f0bbeb"
+    "stamp": "20261009-issues1",
+    "hash": "35cadab130c5d36b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -244,8 +244,8 @@
     "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261009-comments1",
-    "hash": "aebdd6f8cb0a7495"
+    "stamp": "20261009-issues1",
+    "hash": "2936d78f014e4871"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -276,8 +276,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20261005-empty-class-kind1",
-    "hash": "4ef1e1bc76cdf65a"
+    "stamp": "20261009-issues1",
+    "hash": "a71c6d12aa8ea7f3"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -512,8 +512,8 @@
     "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
-    "stamp": "20260914-export-modal",
-    "hash": "f65f38a62c69d73b"
+    "stamp": "20261009-issues1",
+    "hash": "e132830705150099"
   },
   "src/ui/sidebar-page-actions-menu.js": {
     "stamp": "20260803-overflow1",
@@ -592,8 +592,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "24eb3719c1ba2831"
+    "stamp": "20261009-issues1",
+    "hash": "533d62d0dedcc340"
   },
   "styles/features/html-pages.css": {
     "stamp": "20261003-create-review5",
