@@ -117,7 +117,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261009-issues2">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -1356,7 +1356,7 @@
                 <button class="toolbar-scroll-btn left" id="toolbarScrollLeft" onclick="scrollToolbar(-200)" title="Scroll left" hidden>
                     <i class="fas fa-chevron-left"></i>
                 </button>
-                <div class="toolbar" id="toolbar">
+                <div class="toolbar" id="toolbar" role="toolbar" aria-orientation="horizontal" aria-label="Formatting toolbar for the main note">
                 <!-- Undo / Redo -->
                 <button class="toolbar-btn" onclick="formatText('undo')" title="Undo (Ctrl+Z)" aria-label="Undo">
                     <i class="fas fa-rotate-left"></i>
@@ -1649,7 +1649,8 @@
               </div>
             </div>
                 <div class="editor-container" id="notesEditorContainer">
-                    <div class="notes-pane notes-pane-primary" id="notesPrimaryPane">
+                    <div class="notes-pane notes-pane-primary" id="notesPrimaryPane" role="region" aria-label="Main note, active">
+                    <span class="notes-pane-label">Main note</span>
                     <div class="breadcrumbs" id="breadcrumbs"></div>
                     <input type="text" class="page-title-input" id="pageTitle" placeholder="Untitled" />
                     <div class="page-temporary-meta" id="pageTemporaryMeta" hidden></div>
@@ -1775,22 +1776,25 @@
                     <!-- Locked page overlay — shown instead of editor when page is PIN-protected -->
                     <div id="lockedPageScreen" class="locked-page-screen" hidden aria-live="polite"></div>
                 </div>
-                <div class="notes-pane notes-pane-secondary" id="notesSecondaryPane" aria-hidden="true">
+                <div class="notes-pane notes-pane-secondary" id="notesSecondaryPane" role="region" aria-label="Comparison note" aria-hidden="true">
                     <div class="split-pane-header">
                         <div class="split-pane-title-wrap">
-                            <span class="split-pane-label">Split Note</span>
-                            <select class="modal-input split-note-select" id="splitNoteSelect" aria-label="Select secondary note"></select>
+                            <span class="split-pane-label">Comparison note</span>
+                            <h2 class="split-pane-note-title" id="splitNoteMeta">Choose a note</h2>
                         </div>
                         <div class="split-pane-actions">
-                            <button class="neumo-btn split-pane-action" id="swapSplitNoteBtn" type="button" title="Open this note in the main editor">
+                            <button class="neumo-btn split-pane-action" id="swapSplitNoteBtn" type="button" title="Open this note in the main pane" aria-label="Open comparison note in the main pane">
                                 <i class="fas fa-exchange-alt"></i> Open
                             </button>
-                            <button class="neumo-btn split-pane-action" id="closeSplitNotesBtn" type="button" title="Close split view">
+                            <button class="neumo-btn split-pane-action" id="closeSplitNotesBtn" type="button" title="Close split view" aria-label="Close Split View">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
-                    <div class="split-pane-meta" id="splitNoteMeta">Select a note to open side-by-side.</div>
+                    <div class="split-pane-switcher">
+                        <label for="splitNoteSelect">Switch note</label>
+                        <select class="modal-input split-note-select" id="splitNoteSelect" aria-label="Switch comparison note"></select>
+                    </div>
                     <div class="editor split-editor" id="editorSecondary" contenteditable="true" placeholder="Select a secondary note..."></div>
                 </div>
             </div>
@@ -7817,7 +7821,7 @@
             display: grid !important;
         }
     </style>
-    <link rel="stylesheet" href="styles/legacy/responsive-hardening.css?v=20260616-cssextract1">
+    <link rel="stylesheet" href="styles/legacy/responsive-hardening.css?v=20261009-issues2">
     <script id="active-view-fallback-script">
         (function () {
             function applyActiveView(view) {
@@ -7911,7 +7915,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261009-issues1"></script>
+    <script src="src/core/app.js?v=20261009-issues2"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -8371,7 +8375,7 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261001-desktop-density4">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261009-issues2">
     <link rel="stylesheet" href="styles/features/notes-comments.css?v=20261009-comments1">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
     <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">

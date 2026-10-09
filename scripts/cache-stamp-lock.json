@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261009-issues1",
-    "hash": "35cadab130c5d36b"
+    "stamp": "20261009-issues2",
+    "hash": "6565cb90ef8684f9"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -536,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261003-create-review5",
-    "hash": "166194544941a901"
+    "stamp": "20261009-issues2",
+    "hash": "68c72d694aad3592"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -684,8 +684,8 @@
     "hash": "ba0708986de8b924"
   },
   "styles/legacy/responsive-hardening.css": {
-    "stamp": "20260616-cssextract1",
-    "hash": "ed47240026eee70a"
+    "stamp": "20261009-issues2",
+    "hash": "1456145152dfd9c5"
   },
   "styles/legacy/ui-refresh.css": {
     "stamp": "20260616-cssextract1",
@@ -732,8 +732,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261001-desktop-density4",
-    "hash": "9415a02954593e33"
+    "stamp": "20261009-issues2",
+    "hash": "72b1c6fda65ef691"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

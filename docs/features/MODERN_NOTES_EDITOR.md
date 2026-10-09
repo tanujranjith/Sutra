@@ -20,9 +20,17 @@ the page. A locked page must not mount a live node until it is unlocked.
 
 ## Split View
 
-Each Notes pane owns an editor instance and its own selection, history, and
-page context. Toolbar actions apply to the active pane. Leaving a pane disposes
-its node views and flushes its page before the next page is loaded.
+Split View presents two equal note panes in one workspace. Each header identifies
+its note, and the active pane stays outlined with an **Active** marker while the
+shared formatting toolbar names that note as its target. The two editor bodies
+scroll independently. When the Notes column is narrower than 940px, the panes
+stack vertically so both editors keep usable width.
+
+Each pane still owns its editor instance, selection, history, and page context.
+Switching the comparison note or closing Split View flushes pending edits before
+the next page is loaded. Modern Editor V2 restores the comparison note's scroll
+position when switching between notes. A locked note stays read-only in the
+comparison pane until it is opened and unlocked in the main pane.
 
 The text-colour and highlight toolbar controls offer preset swatches in the
 native colour picker and still allow a custom colour. These choices format the

@@ -2095,6 +2095,10 @@ function updateToolbarTimeWidget() {
                 const notesView = document.getElementById('view-notes');
                 syncNotesSplitPaneStickyMetrics();
                 if (!editorContainer || !notesView) return;
+                if (document.body && document.body.classList.contains('notes-split-active')) {
+                    editorContainer.style.setProperty('padding-top', '16px', 'important');
+                    return;
+                }
 
                 const toolbarWrapper = document.querySelector('.toolbar-wrapper');
                 const compactViewport = isCompactViewport();
@@ -19708,6 +19712,16 @@ function populateProgressDashboard() {
                 return true;
             };
             if (notesEditorContainer) {
+                if (notesEditorContainer.dataset.activePaneFocusBound !== 'true') {
+                    notesEditorContainer.dataset.activePaneFocusBound = 'true';
+                    notesEditorContainer.addEventListener('focusin', event => {
+                        const target = event.target && event.target.closest
+                            ? event.target.closest('#notesPrimaryPane, #notesSecondaryPane')
+                            : null;
+                        if (!target || !notesEditorContainer.contains(target)) return;
+                        setActiveEditorPane(target.id === 'notesSecondaryPane' ? 'secondary' : 'primary');
+                    });
+                }
                 notesEditorContainer.addEventListener('click', activatePageLink);
                 // Capture before ProseMirror handles Enter/Space as an edit.
                 notesEditorContainer.addEventListener('keydown', (event) => {
@@ -44914,7 +44928,7 @@ function buildOnboardingPlanPreview() {
   <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
   <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Home + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
-  <li>On phones, Split View degrades gracefully into stacked panes — the desktop Notes split is the only layout where both panes are visible side by side today.</li>
+  <li>Split View stays side by side while the Notes column is at least 940px wide; narrower columns stack both panes, each with its own scroll area. The highlighted <strong>Active</strong> pane receives toolbar formatting.</li>
   <li>Notes linked to a class expose a class chip near the breadcrumb trail so you can reopen the Class Dashboard quickly.</li>
   <li>The Class Dashboard drawer can also create or link notes for a class without duplicating dashboards.</li>
 </ul>
@@ -45524,6 +45538,13 @@ ${renderedSections}
                 host.className = 'editor editor-v2-host';
                 mirror.insertAdjacentElement('afterend', host);
             }
+            if (host.dataset.splitScrollTrackingBound !== 'true') {
+                host.dataset.splitScrollTrackingBound = 'true';
+                host.addEventListener('scroll', () => {
+                    if (!secondaryPageId || host.hidden || host.style.display === 'none') return;
+                    splitScrollPositions[secondaryPageId] = host.scrollTop || 0;
+                }, { passive: true });
+            }
             notesSecondaryEditorV2 = window.SutraNotesEditorV2.createInstance();
             if (!notesSecondaryEditorV2.mount({
                 host,
@@ -45748,6 +45769,22 @@ function getActiveEditor() {
         function setActiveEditorPane(pane) {
             const changed = activeEditorPane !== (pane === 'secondary' ? 'secondary' : 'primary');
             activeEditorPane = pane === 'secondary' ? 'secondary' : 'primary';
+            const secondaryIsActive = activeEditorPane === 'secondary'
+                && !!(document.body && document.body.classList.contains('notes-split-active'));
+            const primaryPane = document.getElementById('notesPrimaryPane');
+            const secondaryPane = document.getElementById('notesSecondaryPane');
+            primaryPane?.classList.toggle('is-active-pane', !secondaryIsActive);
+            secondaryPane?.classList.toggle('is-active-pane', secondaryIsActive);
+            primaryPane?.setAttribute('aria-label', secondaryIsActive ? 'Main note' : 'Main note, active');
+            secondaryPane?.setAttribute('aria-label', secondaryIsActive ? 'Comparison note, active' : 'Comparison note');
+
+            const activePageId = secondaryIsActive ? secondaryPageId : currentPageId;
+            const activePage = pages.find(page => page && page.id === activePageId);
+            const activeTitle = String(activePage?.title || 'Untitled').split('::').pop();
+            const toolbar = document.getElementById('toolbar');
+            if (toolbar) {
+                toolbar.setAttribute('aria-label', `Formatting toolbar for the ${secondaryIsActive ? 'comparison' : 'main'} note: ${activeTitle}`);
+            }
             updateWordCount();
             if (changed) renderComments();
         }
@@ -46450,13 +46487,9 @@ function getActiveEditor() {
         function updateSplitPaneMeta(page) {
             const meta = document.getElementById('splitNoteMeta');
             if (!meta) return;
-            if (!page) {
-                meta.textContent = 'Select a note to open side-by-side.';
-                return;
-            }
-            const updated = page.updatedAt ? new Date(page.updatedAt) : null;
-            const stamp = updated && !isNaN(updated) ? updated.toLocaleString() : 'unknown';
-            meta.textContent = `Editing "${page.title.split('::').pop()}". Last updated: ${stamp}.`;
+            meta.textContent = page ? String(page.title || 'Untitled').split('::').pop() : 'Choose a note';
+            if (page?.id) meta.dataset.pageId = String(page.id);
+            else delete meta.dataset.pageId;
         }
 
         function renderSplitNoteSelect() {
@@ -46496,17 +46529,23 @@ function getActiveEditor() {
             }
 
             if (secondaryPageId && secondaryPageId !== page.id) {
-                splitScrollPositions[secondaryPageId] = editor.scrollTop || 0;
+                const visibleV2Host = document.getElementById('editorV2SecondaryHost');
+                const scrollSurface = visibleV2Host && !visibleV2Host.hidden && visibleV2Host.style.display !== 'none'
+                    ? visibleV2Host
+                    : editor;
+                splitScrollPositions[secondaryPageId] = scrollSurface.scrollTop || 0;
             }
             secondaryPageId = page.id;
             const _secondaryLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
             if (_secondaryLocked) {
                 editor.contentEditable = 'false';
-                editor.innerHTML = `<div class="split-locked-placeholder"><i class="fas fa-lock"></i><p>This page is PIN-protected.</p><p>Open it in the main pane to unlock it first.</p></div>`;
-                if (notesSecondaryEditorV2?.isMounted()) editor.style.display = '';
-                if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.setContent('');
                 const v2Host = document.getElementById('editorV2SecondaryHost');
                 if (v2Host) { v2Host.hidden = true; v2Host.inert = true; }
+                if (notesSecondaryEditorV2?.isMounted()) {
+                    editor.style.display = '';
+                    notesSecondaryEditorV2.setContent('');
+                }
+                editor.innerHTML = `<div class="split-locked-placeholder"><i class="fas fa-lock"></i><p>This page is PIN-protected.</p><p>Open it in the main pane to unlock it first.</p></div>`;
             } else {
                 editor.contentEditable = 'true';
                 if (notesSecondaryEditorV2?.isMounted()) editor.style.display = 'none';
@@ -46514,10 +46553,13 @@ function getActiveEditor() {
                 if (v2Host) { v2Host.hidden = false; v2Host.inert = false; }
                 loadPageContentIntoEditor(editor, page);
             }
-            if (typeof splitScrollPositions[page.id] === 'number') {
-                editor.scrollTop = splitScrollPositions[page.id];
-            } else {
-                editor.scrollTop = 0;
+            const restoredScrollTop = typeof splitScrollPositions[page.id] === 'number'
+                ? splitScrollPositions[page.id]
+                : 0;
+            editor.scrollTop = restoredScrollTop;
+            const secondaryV2Host = document.getElementById('editorV2SecondaryHost');
+            if (secondaryV2Host && !secondaryV2Host.hidden && secondaryV2Host.style.display !== 'none') {
+                secondaryV2Host.scrollTop = restoredScrollTop;
             }
             if (select && select.value !== page.id) select.value = page.id;
             updateSplitPaneMeta(page);
@@ -46564,6 +46606,7 @@ function getActiveEditor() {
                 return;
             }
             syncNotesSecondaryEditorV2();
+            setActiveEditorPane('primary');
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
             const fallbackId = getFallbackSecondaryPageId();
