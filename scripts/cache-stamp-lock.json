@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261004-merge-review-fixes1",
-    "hash": "c41ba006f595be76"
+    "stamp": "20261009-comments1",
+    "hash": "99451365045176ea"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -244,8 +244,8 @@
     "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261004-assistant-slides1",
-    "hash": "ec7db93953aedfd6"
+    "stamp": "20261009-comments1",
+    "hash": "aebdd6f8cb0a7495"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -610,6 +610,10 @@
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",
     "hash": "3e852556c6ccee3b"
+  },
+  "styles/features/notes-comments.css": {
+    "stamp": "20261009-comments1",
+    "hash": "9ad3823c169e54a2"
   },
   "styles/features/notes-editor-v2.css": {
     "stamp": "20260928-issues51-59-64",

@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-05T00:43:08.757Z",
-  "reviewedReason": "Remove Canvas pan momentum and unused velocity tracking; preserve immediate viewport persistence",
-  "maxBytes": 4961146,
-  "maxLines": 87020
+  "blessedAt": "2026-10-09T05:20:20.943Z",
+  "reviewedReason": "Active-pane comment context and canonical anchor mapping for issue 69; preserve history with pending editor flush",
+  "maxBytes": 4963118,
+  "maxLines": 87023
 }

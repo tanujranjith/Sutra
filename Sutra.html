@@ -7897,7 +7897,7 @@
     <script src="src/features/notes/rich-links.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/authoring-tools.js?v=20261004-native-link-click3"></script>
-    <script src="src/features/notes/editor-v2.js?v=20261004-assistant-slides1"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261009-comments1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7911,7 +7911,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261004-merge-review-fixes1"></script>
+    <script src="src/core/app.js?v=20261009-comments1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -8372,6 +8372,7 @@
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
     <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261001-desktop-density4">
+    <link rel="stylesheet" href="styles/features/notes-comments.css?v=20261009-comments1">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
     <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261003-create-review5">
@@ -8872,7 +8873,7 @@
     <!-- ===== ATELIER PRO PANELS ===== -->
 
     <!-- Comments Panel (Section 11) -->
-    <div class="comments-panel" id="commentsPanel">
+    <div class="comments-panel" id="commentsPanel" role="region" aria-label="Note comments" aria-hidden="true">
         <div class="comments-panel-header">
             <div class="comments-panel-title">
                 <i class="fas fa-comments"></i>
@@ -8883,6 +8884,7 @@
                 <i class="fas fa-times"></i>
             </button>
         </div>
+        <div id="commentsPageTitle"></div>
         <div class="comments-filter" id="commentsFilterBar" role="tablist" aria-label="Filter comments">
             <button class="comments-filter-btn active" data-filter="open" role="tab" onclick="setCommentsFilter('open')">Open <span class="comments-filter-count" id="commentsOpenCount">0</span></button>
             <button class="comments-filter-btn" data-filter="resolved" role="tab" onclick="setCommentsFilter('resolved')">Resolved <span class="comments-filter-count" id="commentsResolvedCount">0</span></button>

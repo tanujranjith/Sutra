@@ -140,6 +140,8 @@
   "nestedPersistentContracts": {
     "inheritanceRule": "Every durable descendant of a synchronized record, ordered collection, or atomic section inherits that parent decision. Normalizers must preserve documented fields and forward-compatible extra fields unless a migration intentionally changes them.",
     "pages[]": ["id", "title", "type", "content", "blocks", "icon", "collapsed", "theme", "createdAt", "updatedAt", "isTemporary", "temporaryCreatedAt", "temporaryExpiresAt", "isLocked", "lockHash", "lockSalt", "lockedAt", "lockAutoLock", "lockDuressVerifier", "spaceId", "canvas", "slides", "spreadsheet", "htmlDocument", "isSystemPage", "builtInId", "systemRole", "pageMode", "documentBackground", "formatting", "documentLayout", "comments", "suggestions", "footnotes", "citations", "tags", "versions"],
+    "pages[].comments[]": ["id", "text", "selectedText", "author", "createdAt", "updatedAt", "resolved", "replies", "anchor"],
+    "pages[].comments[].anchor": ["version", "from", "to", "quote", "prefix", "suffix", "status"],
     "pages[].canvas.objects[].contentTimeline": ["version", "title", "layout", "events"],
     "pages[].canvas.objects[].contentTimeline.events[]": ["id", "label", "when", "description"],
     "pages[].slides.slides[].elements[].contentTimeline": ["version", "title", "layout", "events"],

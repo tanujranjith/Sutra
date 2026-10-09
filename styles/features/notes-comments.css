@@ -1,0 +1,63 @@
+/* Comments share the Notes document width on desktop and use a drawer below it. */
+.editor-v2-host .comment-mark {
+  background: color-mix(in srgb, var(--accent-color, #d4a30b) 18%, transparent);
+  border-bottom: 2px solid var(--accent-color, #d4a30b);
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+}
+.editor-v2-host .comment-mark.is-active {
+  background: color-mix(in srgb, var(--accent-color, #d4a30b) 35%, transparent);
+  outline: 1px solid var(--accent-color, #d4a30b);
+}
+.comment-item.is-active {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
+}
+.comment-detached, #commentsPageTitle {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+#commentsPageTitle { padding: 8px 16px; border-bottom: 1px solid var(--surface-border); }
+#commentsPanel { background: var(--surface-bg); color: var(--text-primary); min-height: 0; }
+#commentsPanel .comment-anchor { overflow-wrap: anywhere; white-space: normal; }
+#commentsPanel .comment-action-btn, #commentsPanel .comments-panel-close,
+#commentsPanel .comments-filter-btn { min-height: 44px; }
+body:not([data-view="notes"]) #commentsPanel,
+body.pdf-page-active #commentsPanel, body.canvas-page-active #commentsPanel,
+body.html-page-active #commentsPanel, body.slides-page-active #commentsPanel { display: none; }
+@media (min-width: 1280px) {
+  body[data-view="notes"].notes-comments-open:not(.pdf-page-active):not(.canvas-page-active):not(.html-page-active):not(.slides-page-active) #view-notes {
+    padding-right: 340px !important;
+    box-sizing: border-box;
+  }
+  body[data-view="notes"].notes-comments-open:not(.notes-split-active) #view-notes .toolbar-wrapper { right: 340px !important; width: auto !important; }
+  body[data-view="notes"] #commentsPanel {
+    top: calc(var(--sutra-global-nav-height, 64px) + 84px);
+    bottom: 64px;
+    right: 16px;
+    width: 308px;
+    max-width: 308px;
+    border-radius: 10px;
+    box-shadow: none;
+    z-index: 100;
+  }
+}
+@media (min-width: 641px) and (max-width: 1279px) {
+  #commentsPanel { top: 120px; bottom: 64px; right: 12px; width: min(340px, calc(100vw - 24px)); }
+}
+@media (max-width: 640px) {
+  #commentsPanel {
+    top: auto; right: 0; left: 0; bottom: var(--mobile-shell-bottom-offset, 64px);
+    width: 100%; max-width: 100%; max-height: 55dvh;
+    border-radius: 14px 14px 0 0;
+    box-sizing: border-box;
+  }
+}
+@media (prefers-reduced-motion: reduce) { #commentsPanel { animation: none; } }
+@media (forced-colors: active) {
+  .editor-v2-host .comment-mark { border-color: Highlight; }
+  .editor-v2-host .comment-mark.is-active { outline-color: Highlight; }
+}
+

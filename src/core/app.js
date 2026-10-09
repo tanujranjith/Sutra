@@ -932,7 +932,7 @@ function normalizePagesCollection(rawPages) {
             formatting: normalizePageFormatting(page.formatting),
             // Document layout (Section 9) — headers, footers, page numbers
             documentLayout: normalizeDocumentLayout(page.documentLayout),
-            // Comments (Section 11) — local-only comments
+            // Comments (Section 11) — canonical durable threads and external anchors
             comments: Array.isArray(page.comments) ? page.comments.filter(c => c && c.id && c.text) : [],
             // Suggestions (Section 12) — suggesting mode edits
             suggestions: Array.isArray(page.suggestions) ? page.suggestions.filter(s => s && s.id) : [],
@@ -39819,19 +39819,38 @@ function buildOnboardingPlanPreview() {
         // Outside-click closing is handled per-open in toggleSpacesDropdown via _spacesDropdownOutsideHandler
 
         // ===== COMMENTS (Section 11) =====
-        // Local-only threaded comments anchored (best-effort) to selected text.
+        // Canonical page-owned threads, with modern-editor range annotations.
         let commentsFilter = 'open'; // 'open' | 'resolved'
 
         function toggleCommentsPanel() {
             const panel = document.getElementById('commentsPanel');
             if (!panel) return;
             panel.classList.toggle('active');
+            document.body.classList.toggle('notes-comments-open', panel.classList.contains('active'));
+            panel.setAttribute('aria-hidden', panel.classList.contains('active') ? 'false' : 'true');
             if (panel.classList.contains('active')) renderComments();
         }
 
         function getActivePage() {
             if (!currentPageId) return null;
             return pages.find(p => p.id === currentPageId);
+        }
+
+        function getCommentContext() {
+            const editor = getActiveEditor(), page = getPageForEditor(editor);
+            return { editor, page: page && activeView === 'notes' && isPageContentAuthorized(page) ? page : null, modern: activeNotesEditorV2() };
+        }
+        function getCommentPage() { return getCommentContext().page; }
+        function focusCommentThread(id) {
+            const context = getCommentContext();
+            if (!context.page) return;
+            const panel = document.getElementById('commentsPanel');
+            if (panel && !panel.classList.contains('active')) toggleCommentsPanel();
+            if (context.modern?.comments) context.modern.comments.setActive(id);
+            document.querySelectorAll('#commentsList .comment-item').forEach(card => {
+                card.classList.toggle('is-active', card.dataset.commentId === id);
+                if (card.dataset.commentId === id) card.scrollIntoView({ block: 'nearest' });
+            });
         }
 
         // Human-friendly "3 min ago"–style timestamps; absolute string on hover.
@@ -39859,11 +39878,11 @@ function buildOnboardingPlanPreview() {
 
         function commentReplyHtml(commentId, reply) {
             const when = reply.createdAt ? escapeHtml(new Date(reply.createdAt).toLocaleString()) : '';
-            return `<div class="comment-reply" data-reply-id="${reply.id}">
+            return `<div class="comment-reply" data-reply-id="${escapeHtml(reply.id)}">
                 <div class="comment-reply-head">
                     <span class="comment-reply-author">${escapeHtml(reply.author || 'You')}</span>
                     <span class="comment-reply-time" title="${when}">${escapeHtml(commentRelativeTime(reply.createdAt))}</span>
-                    <button class="comment-reply-del" title="Delete reply" aria-label="Delete reply" onclick="deleteCommentReply('${commentId}','${reply.id}')"><i class="fas fa-times"></i></button>
+                    <button class="comment-reply-del" title="Delete reply" aria-label="Delete reply" onclick="deleteCommentReply(${escapeHtml(JSON.stringify(String(commentId)))},${escapeHtml(JSON.stringify(String(reply.id)))})"><i class="fas fa-times"></i></button>
                 </div>
                 <div class="comment-reply-text">${escapeHtml(reply.text)}</div>
             </div>`;
@@ -39874,8 +39893,9 @@ function buildOnboardingPlanPreview() {
             const created = c.createdAt ? escapeHtml(new Date(c.createdAt).toLocaleString()) : '';
             const rel = escapeHtml(commentRelativeTime(c.createdAt));
             const edited = (c.updatedAt && c.updatedAt !== c.createdAt) ? ' · edited' : '';
+            const detached = c.anchor && c.anchor.status === 'orphaned';
             const anchor = c.selectedText
-                ? `<button type="button" class="comment-anchor" onclick="jumpToCommentAnchor('${c.id}')" title="Jump to the referenced text">
+                ? `<button type="button" class="comment-anchor" onclick="jumpToCommentAnchor(${escapeHtml(JSON.stringify(String(c.id)))})" title="Jump to the referenced text">
                         <i class="fas fa-quote-left" aria-hidden="true"></i><span>${escapeHtml(c.selectedText)}</span>
                    </button>`
                 : '';
@@ -39884,24 +39904,25 @@ function buildOnboardingPlanPreview() {
                 ? `<div class="comment-replies">${replies.map(r => commentReplyHtml(c.id, r)).join('')}</div>`
                 : '';
             const composer = c.resolved ? '' : `<div class="comment-reply-compose">
-                    <input type="text" class="comment-reply-input" id="commentReplyInput-${c.id}" placeholder="Reply…" aria-label="Reply to comment" onkeydown="commentReplyKey(event, '${c.id}')" />
-                    <button class="comment-action-btn" onclick="addCommentReply('${c.id}')">Reply</button>
+                    <input type="text" class="comment-reply-input" id="commentReplyInput-${escapeHtml(c.id)}" placeholder="Reply…" aria-label="Reply to comment" onkeydown="commentReplyKey(event, ${escapeHtml(JSON.stringify(String(c.id)))})" />
+                    <button class="comment-action-btn" onclick="addCommentReply(${escapeHtml(JSON.stringify(String(c.id)))})">Reply</button>
                 </div>`;
-            return `<div class="comment-item ${resolved}" data-comment-id="${c.id}">
+            return `<div class="comment-item ${resolved}" data-comment-id="${escapeHtml(c.id)}">
                 <div class="comment-header">
                     <span class="comment-author">${escapeHtml(c.author || 'You')}</span>
                     <span class="comment-time" title="${created}">${rel}${edited}</span>
                 </div>
                 ${anchor}
+                ${detached ? '<div class="comment-detached">Referenced text changed or was removed</div>' : ''}
                 <div class="comment-text">${escapeHtml(c.text)}</div>
                 ${repliesHtml}
                 ${composer}
                 <div class="comment-actions">
                     ${c.resolved
-                        ? `<button class="comment-action-btn" onclick="reopenComment('${c.id}')"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reopen</button>`
-                        : `<button class="comment-action-btn primary" onclick="resolveComment('${c.id}')"><i class="fas fa-check" aria-hidden="true"></i> Resolve</button>`}
-                    <button class="comment-action-btn" onclick="editCommentPrompt('${c.id}')">Edit</button>
-                    <button class="comment-action-btn danger" onclick="deleteComment('${c.id}')">Delete</button>
+                        ? `<button class="comment-action-btn" onclick="reopenComment(${escapeHtml(JSON.stringify(String(c.id)))})"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reopen</button>`
+                        : `<button class="comment-action-btn primary" onclick="resolveComment(${escapeHtml(JSON.stringify(String(c.id)))})"><i class="fas fa-check" aria-hidden="true"></i> Resolve</button>`}
+                    <button class="comment-action-btn" onclick="editCommentPrompt(${escapeHtml(JSON.stringify(String(c.id)))})">Edit</button>
+                    <button class="comment-action-btn danger" onclick="deleteComment(${escapeHtml(JSON.stringify(String(c.id)))})">Delete</button>
                 </div>
             </div>`;
         }
@@ -39910,7 +39931,10 @@ function buildOnboardingPlanPreview() {
             const list = document.getElementById('commentsList');
             const countEl = document.getElementById('commentsCount');
             if (!list) return;
-            const page = getActivePage();
+            const context = getCommentContext(), page = context.page;
+            if (context.modern?.comments) context.modern.comments.refresh();
+            const title = document.getElementById('commentsPageTitle');
+            if (title) title.textContent = page ? String(page.title || 'Untitled').split('::').pop() : 'Open a note';
             const comments = (page && Array.isArray(page.comments)) ? page.comments : [];
 
             const openCount = comments.filter(c => !c.resolved).length;
@@ -39936,38 +39960,32 @@ function buildOnboardingPlanPreview() {
                 list.innerHTML = `<div class="comments-empty"><i class="fas fa-comment-slash" aria-hidden="true"></i><div>${escapeHtml(msg)}</div>${hint}</div>`;
                 return;
             }
-            // Newest first within the active filter.
-            const ordered = visible.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+            const position = c => c.anchor?.version === 1 && c.anchor.status === 'attached' ? c.anchor.from : Infinity;
+            const ordered = visible.slice().sort((a, b) => (position(a) - position(b)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
             list.innerHTML = ordered.map(commentCardHtml).join('');
+            const active = context.modern?.comments?.getActive();
+            list.querySelectorAll('.comment-item').forEach(card => card.classList.toggle('is-active', card.dataset.commentId === active));
         }
 
         async function addCommentFromSelection() {
-            const page = getActivePage();
-            if (!page) { await atelierAlert('Please open a note first.'); return; }
-            const sel = window.getSelection();
-            const selectedText = sel && sel.toString() ? sel.toString().replace(/\s+/g, ' ').trim().slice(0, 240) : '';
-            const text = await atelierPrompt(
-                selectedText ? `Comment on: "${selectedText}"` : 'Add a comment',
-                '',
-                { title: 'New Comment', multiline: true, placeholder: 'Your comment...' }
-            );
-            if (!text || !text.trim()) return;
-            const now = new Date().toISOString();
-            page.comments = page.comments || [];
-            page.comments.push({
-                id: generateId(),
-                text: text.trim(),
-                selectedText: selectedText,
-                author: 'You',
-                createdAt: now,
-                updatedAt: now,
-                resolved: false,
-                replies: []
-            });
-            // A brand-new comment is always open — surface it.
+            const context = getCommentContext(), page = context.page;
+            if (!page || !canWritePageContent(page)) { await atelierAlert('Open an editable note first.'); return; }
+            const anchor = context.modern?.comments?.getSelectionAnchor();
+            const selection = window.getSelection();
+            const inEditor = selection && selection.rangeCount && context.editor?.contains(selection.anchorNode) && context.editor.contains(selection.focusNode);
+            const selectedText = anchor ? anchor.quote : (!context.modern && inEditor ? selection.toString().trim() : '');
+            if (!selectedText) { await atelierAlert('Select text in the note before adding a comment.'); return; }
+            const text = await atelierPrompt('Comment on: "' + selectedText.slice(0, 240) + '"', '', { title: 'New Comment', multiline: true, placeholder: 'Your comment...' });
+            if (!text || !text.trim() || !canWritePageContent(page)) return;
+            flushPendingNoteSaves();
+            autoCreateVersionSnapshot(page);
+            const now = new Date().toISOString(), id = generateId();
+            page.comments = Array.isArray(page.comments) ? page.comments : [];
+            page.comments.push({ id, text: text.trim(), selectedText, ...(anchor ? { anchor } : {}), author: 'You', createdAt: now, updatedAt: now, resolved: false, replies: [] });
             commentsFilter = 'open';
             persistAppData();
             renderComments();
+            if (getCommentPage() === page) focusCommentThread(id);
         }
 
         function addCommentReply(id) {
@@ -39975,8 +39993,8 @@ function buildOnboardingPlanPreview() {
             if (!input) return;
             const text = input.value.trim();
             if (!text) { input.focus(); return; }
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (!c) return;
             c.replies = Array.isArray(c.replies) ? c.replies : [];
@@ -39996,8 +40014,8 @@ function buildOnboardingPlanPreview() {
         }
 
         async function deleteCommentReply(commentId, replyId) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === commentId);
             if (!c || !Array.isArray(c.replies)) return;
             c.replies = c.replies.filter(r => r.id !== replyId);
@@ -40005,54 +40023,18 @@ function buildOnboardingPlanPreview() {
             renderComments();
         }
 
-        // Best-effort: locate the commented text in the live editor and flash it.
-        // Uses the CSS Custom Highlight API so the document DOM is never mutated
-        // (critical — the editor engines own their DOM and any wrap/unwrap would
-        // dirty the doc or fight ProseMirror).
         function jumpToCommentAnchor(id) {
-            const page = getActivePage();
-            const c = page && Array.isArray(page.comments) ? page.comments.find(x => x.id === id) : null;
-            const needle = c && c.selectedText ? c.selectedText.trim() : '';
-            if (!needle) return;
-            const container = (typeof getActiveEditor === 'function' && getActiveEditor())
-                || (typeof getPrimaryEditor === 'function' && getPrimaryEditor())
-                || document.getElementById('editor');
-            if (!container) return;
-            // Match on normalized whitespace so anchors survive reflowed text.
-            const norm = needle.replace(/\s+/g, ' ');
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
-            let node, foundNode = null, foundOffset = -1;
-            while ((node = walker.nextNode())) {
-                const val = node.nodeValue || '';
-                let idx = val.indexOf(needle);
-                if (idx < 0 && norm !== needle) idx = val.replace(/\s+/g, ' ').indexOf(norm);
-                if (idx >= 0) { foundNode = node; foundOffset = Math.max(0, idx); break; }
-            }
-            if (!foundNode) {
-                if (typeof showToast === 'function') showToast('Referenced text not found — it may have been edited.', { type: 'info' });
-                return;
-            }
-            try {
-                const range = document.createRange();
-                range.setStart(foundNode, Math.min(foundOffset, foundNode.nodeValue.length));
-                range.setEnd(foundNode, Math.min(foundNode.nodeValue.length, foundOffset + needle.length));
-                const anchorEl = foundNode.parentElement;
-                if (anchorEl && anchorEl.scrollIntoView) anchorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (window.CSS && CSS.highlights && typeof Highlight === 'function') {
-                    const hl = new Highlight(range);
-                    CSS.highlights.set('comment-jump', hl);
-                    setTimeout(() => { try { CSS.highlights.delete('comment-jump'); } catch (e) { /* noop */ } }, 1800);
-                } else if (anchorEl) {
-                    // Fallback for engines without the Highlight API: transient class.
-                    anchorEl.classList.add('comment-anchor-flash');
-                    setTimeout(() => anchorEl.classList.remove('comment-anchor-flash'), 1800);
-                }
-            } catch (e) { /* range building can fail on exotic selections — non-fatal */ }
+            const context = getCommentContext(), thread = context.page?.comments?.find(comment => comment.id === id);
+            if (!thread) return;
+            focusCommentThread(id);
+            const found = context.modern?.comments ? context.modern.comments.scrollTo(id)
+                : window.SutraNotesEditorV2?.comments?.scrollToClassic(context.editor, thread.selectedText);
+            if (!found) showToast('Referenced text changed, was removed, or is ambiguous.', { type: 'info' });
         }
 
         function resolveComment(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (c) { c.resolved = true; c.updatedAt = new Date().toISOString(); }
             persistAppData();
@@ -40060,8 +40042,8 @@ function buildOnboardingPlanPreview() {
         }
 
         function reopenComment(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (c) { c.resolved = false; c.updatedAt = new Date().toISOString(); }
             persistAppData();
@@ -40069,22 +40051,23 @@ function buildOnboardingPlanPreview() {
         }
 
         async function deleteComment(id) {
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page)) return;
             const ok = await atelierConfirm('Delete this comment and its replies?', { destructive: true, confirmText: 'Delete' });
-            if (!ok) return;
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            if (!ok || !canWritePageContent(page)) return;
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             page.comments = page.comments.filter(x => x.id !== id);
             persistAppData();
             renderComments();
         }
 
         async function editCommentPrompt(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (!c) return;
             const newText = await atelierPrompt('Edit comment:', c.text, { title: 'Edit Comment', multiline: true });
-            if (newText === null) return;
+            if (newText === null || !newText.trim() || !canWritePageContent(page)) return;
             c.text = newText.trim();
             c.updatedAt = new Date().toISOString();
             persistAppData();
@@ -45757,8 +45740,10 @@ function getActiveEditor() {
 }
 
         function setActiveEditorPane(pane) {
+            const changed = activeEditorPane !== (pane === 'secondary' ? 'secondary' : 'primary');
             activeEditorPane = pane === 'secondary' ? 'secondary' : 'primary';
             updateWordCount();
+            if (changed) renderComments();
         }
 
         function getCustomShortcuts() {
@@ -67184,6 +67169,23 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             return {
                 getPage: pageForMirror,
+                activateComment(id) {
+                    setActiveEditorPane(mirror.id === 'editorSecondary' ? 'secondary' : 'primary');
+                    focusCommentThread(id);
+                },
+                onCommentsMapped(threads) {
+                    const page = pageForMirror();
+                    if (!canWritePageContent(page)) return;
+                    const changes = threads.filter(thread => {
+                        const comment = page.comments?.find(entry => String(entry.id) === thread.id);
+                        return comment && JSON.stringify(comment.anchor) !== JSON.stringify(thread.anchor);
+                    });
+                    if (!changes.length) return;
+                    autoCreateVersionSnapshot(page);
+                    changes.forEach(thread => { page.comments.find(entry => String(entry.id) === thread.id).anchor = thread.anchor; });
+                    queueSaveForEditor(mirror);
+                    if (document.getElementById('commentsPanel')?.classList.contains('active')) requestAnimationFrame(renderComments);
+                },
                 canWrite: () => canWritePageContent(pageForMirror()),
                 getBlock(type, id) {
                     const page = pageForMirror();
@@ -68241,6 +68243,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const v2Host = editor.id === 'editor' ? getNotesEditorV2Host() : document.getElementById('editorV2SecondaryHost');
                 if (v2Host) v2Host.dataset.pageId = String(page.id || '');
                 syncModernStructuredBlocks(editor, page, modern);
+                renderComments();
                 enhanceEditorPageLinks(v2Host);
                 applyDocumentBackgroundForEditor(editor, page);
                 return;

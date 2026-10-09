@@ -108,3 +108,13 @@ to change the local draft before saving. It follows normal Canvas Undo/Redo.
 Stored anchors and block records remain readable in the classic editor. Keep
 the classic toggle available for older content and recovery. No new persistent
 workspace fields are required for the live nodes.
+
+## Anchored comments
+
+Select text and choose **Comment** in the selection toolbar or **Add comment on selection**. Modern Editor threads attach to the exact selected range, including formatted text and multiple paragraphs. Clicking highlighted text opens its thread; clicking a thread's quote returns to the passage. Open threads follow document order. Replies, editing, resolve, reopen, and deletion stay available.
+
+Each split pane owns its comments. The Comments header identifies the active note. Wide screens reserve a review gutter alongside the document; narrower layouts use the existing drawer. Resolving hides the annotation and reopening restores it. If a passage is completely deleted, its thread remains accessible with a detached-text notice; editor Undo can restore the attachment.
+
+Version-1 anchor metadata (`from`, `to`, `quote`, `prefix`, `suffix`, and `status`) lives inside `page.comments[].anchor`, alongside the existing durable thread. ProseMirror maps positions during edits; the normal page save, version-history, encrypted backup, and Sync paths preserve them. Decorations are never stored in note HTML or copied/exported as document markup. Unknown anchor schemas and comment fields are preserved.
+
+Existing quote-only threads gain anchors only when their passage can be identified uniquely. Ambiguous or missing passages stay detached, without deleting discussion or choosing the first textual match. The classic editor retains quote-based comments and uniquely matched navigation; Modern Editor provides transaction-mapped annotations. The editor keeps a bounded in-memory anchor journal for recent undo/redo; durable restoration validates quote and surrounding context.
