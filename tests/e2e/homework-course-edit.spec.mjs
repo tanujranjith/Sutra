@@ -81,6 +81,53 @@ async function saveCourseSettings(page) {
   await page.locator('#courseHubMount').getByRole('button', { name: 'Save changes' }).click();
 }
 
+for (const scenario of [
+  { name: 'desktop dark', width: 1651, height: 966, theme: 'dark' },
+  { name: 'desktop light', width: 1440, height: 900, theme: 'light' },
+  { name: 'phone', width: 390, height: 844, theme: 'dark' }
+]) {
+  test(`Course Hub course list keeps 28 cards readable while editing an activity on ${scenario.name}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: scenario.width, height: scenario.height });
+    await openHomework(page);
+    await page.evaluate(theme => {
+      window.setApplyMode?.('all');
+      window.applyPresetTheme(theme);
+      for (let index = 0; index < 28; index++) {
+        window.courseHub.createCourse({
+          id: `course-list-${index}`, name: `Course list ${String(index).padStart(2, '0')}`,
+          type: index === 27 ? 'activity' : 'class', teacherName: 'Course teacher', room: 'Room 101'
+        });
+      }
+      window.setActiveView('homework');
+    }, scenario.theme);
+    await page.locator('[data-course-menu-trigger="course-list-27"]').click();
+    await page.getByRole('menuitem', { name: 'Edit activity', exact: true }).click();
+    await expect(page.locator('#courseHubMount [data-cs="name"]')).toHaveValue('Course list 27');
+    const cards = page.locator('#courseHubMount .cw-course-card');
+    await expect(cards).toHaveCount(28);
+    const measurements = await cards.evaluateAll(elements => elements.map(card => {
+      const bounds = card.getBoundingClientRect();
+      const name = card.querySelector('.cw-course-name').getBoundingClientRect();
+      return { height: bounds.height, nameTop: name.top - bounds.top, nameBottom: bounds.bottom - name.bottom };
+    }));
+    for (const card of measurements) {
+      expect(card.height).toBeGreaterThan(100);
+      expect(card.nameTop).toBeGreaterThanOrEqual(0);
+      expect(card.nameBottom).toBeGreaterThanOrEqual(0);
+    }
+    const lastCard = cards.filter({ hasText: 'Course list 27' });
+    await lastCard.scrollIntoViewIfNeeded();
+    await expect(lastCard.locator('.cw-course-name')).toBeVisible();
+    expect(await lastCard.evaluate(card => {
+      const name = card.querySelector('.cw-course-name');
+      const rect = name.getBoundingClientRect();
+      return card.contains(document.elementFromPoint(rect.left + 2, rect.top + rect.height / 2));
+    })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: testInfo.outputPath(`course-list-${scenario.theme}-${scenario.width}.png`) });
+  });
+}
+
 async function assertEditDrawerAction(page, courseId, label) {
   await page.evaluate(id => window.openClassDashboardDrawer(id), courseId);
   const drawer = page.locator('#classDashboardDrawer');

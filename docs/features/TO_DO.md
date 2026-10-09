@@ -62,5 +62,7 @@ projections intact. For completion changes, cover delayed saves, visible save
 failures, recurring due dates, reduced motion, rapid actions/navigation, and
 keyboard focus. For course editing, cover canonical Course Hub name/details,
 Homework lane synchronization, linked assignments and relationships, reload,
-and phone-sized dashboard actions. Run the focused Homework E2E tests and the
+and phone-sized dashboard actions. Verify that a populated Course Hub list
+keeps its cards readable and every course reachable through scrolling on both
+desktop and phone layouts. Run the focused Homework E2E tests and the
 relevant unit, portability, backup, or Sync checks for any affected contract.
