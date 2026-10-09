@@ -276,8 +276,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20261009-issues5",
-    "hash": "553fbde790c9e8cf"
+    "stamp": "20261009-ec-layout1",
+    "hash": "001dc94252790365"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261009-issues6",
-    "hash": "ecc69226a7877dff"
+    "stamp": "20261009-ec-layout1",
+    "hash": "69907934f93ea077"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -592,8 +592,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20261009-issues5",
-    "hash": "a980a03ddc948b0f"
+    "stamp": "20261009-ec-layout1",
+    "hash": "5d1c7df073aadead"
   },
   "styles/features/html-pages.css": {
     "stamp": "20261003-create-review5",

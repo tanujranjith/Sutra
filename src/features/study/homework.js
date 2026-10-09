@@ -1827,23 +1827,26 @@
     });
   }
 
+  function renderCourseActionsMenu(course, name) {
+    const courseId = escHtml(course.id);
+    const kindLabel = course.type === 'misc' ? 'activity' : 'class';
+    const actionLabel = course.type === 'misc' ? 'Activity' : 'Class';
+    return `<div class="hw-course-menu-wrap">
+      <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="${actionLabel} actions for ${escHtml(name)}" title="${actionLabel} actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
+      <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
+        <button type="button" data-course-edit="${courseId}" role="menuitem"><i class="fas fa-pen" aria-hidden="true"></i><span>Edit ${kindLabel}</span></button>
+        ${course.type === 'class' ? `<button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>` : `<button type="button" class="hw-course-remove-action" data-course-delete="${courseId}" role="menuitem"><i class="fas fa-trash" aria-hidden="true"></i><span>Remove activity</span></button>`}
+      </div>
+    </div>`;
+  }
+
   function renderCourseGroupActions(course, kind, name) {
     if (!course) return '';
     const courseId = escHtml(course.id);
     const kindLabel = course.type === 'misc' ? 'activity' : 'class';
     const iconButton = renderCourseIconButton(course, getCourseColor(course.id), 'hw-row-action');
-    const editMenuItem = `<button type="button" data-course-edit="${courseId}" role="menuitem"><i class="fas fa-pen" aria-hidden="true"></i><span>Edit class</span></button>`;
-    const editButton = `<button type="button" class="hw-row-action" data-course-edit="${courseId}" title="Edit ${kindLabel}" aria-label="Edit ${kindLabel} ${escHtml(name)}"><i class="fas fa-pen" aria-hidden="true"></i></button>`;
     const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${kindLabel}" aria-label="Remove ${kindLabel} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
-    if (course.type !== 'class') return `<div class="hw-assignment-group-actions">${iconButton}${editButton}${removeButton}</div>`;
-    const menu = `<div class="hw-course-menu-wrap">
-      <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="Class actions for ${escHtml(name)}" title="Class actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
-      <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
-        ${editMenuItem}
-        <button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>
-      </div>
-    </div>`;
-    return `<div class="hw-assignment-group-actions">${iconButton}${menu}${removeButton}</div>`;
+    return `<div class="hw-assignment-group-actions">${iconButton}${renderCourseActionsMenu(course, name)}${course.type === 'class' ? removeButton : ''}</div>`;
   }
 
   function openHomeworkCourseSettings(courseId) {
@@ -2148,8 +2151,7 @@
           <div class="hw-activity-actions">
             ${nearest ? `<button type="button" data-task-schedule="${escHtml(nearest.id)}" aria-label="Schedule ${escHtml(nearest.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>` : ''}
             <button type="button" data-open-add-assignment="${escHtml(course.id)}" aria-label="Add a task to ${escHtml(course.name)}" title="Add activity task"><i class="fas fa-plus" aria-hidden="true"></i></button>
-            <button type="button" data-course-edit="${escHtml(course.id)}" aria-label="Edit activity ${escHtml(course.name)}" title="Edit activity"><i class="fas fa-pen" aria-hidden="true"></i></button>
-            <button type="button" class="hw-course-remove-action" data-course-delete="${escHtml(course.id)}" aria-label="Remove activity ${escHtml(course.name)}" title="Remove activity"><i class="fas fa-trash" aria-hidden="true"></i></button>
+            ${renderCourseActionsMenu(course, course.name)}
           </div>
         </article>`;
     }).join('');

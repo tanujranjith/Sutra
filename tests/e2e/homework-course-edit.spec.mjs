@@ -232,9 +232,12 @@ test('activity can be edited from Homework and its dashboard without losing its 
   await openHomework(page);
   const ids = await seedLinkedCourses(page);
 
-  const activityEdit = page.locator(`.hw-activity-row [data-course-edit="${ids.roboticsId}"]`);
-  await expect(activityEdit).toHaveAttribute('aria-label', 'Edit activity Robotics');
-  await activityEdit.focus();
+  const activityActions = page.getByRole('button', { name: 'Activity actions for Robotics', exact: true });
+  await activityActions.focus();
+  await activityActions.press('Enter');
+  const activityEdit = page.locator(`.hw-activity-row [data-course-menu="${ids.roboticsId}"]`).getByRole('menuitem', { name: 'Edit activity', exact: true });
+  await expect(activityEdit).toBeVisible();
+  await expect(activityEdit).toBeFocused();
   await activityEdit.press('Enter');
   let settings = page.locator('#courseHubMount [data-cs="name"]');
   await expect(settings).toBeVisible();
@@ -289,3 +292,41 @@ test('activity can be edited from Homework and its dashboard without losing its 
     name: 'Robotics Crew', homeworkName: 'Robotics Crew', type: 'activity', homeworkType: 'misc', taskIds: [ids.activityTaskId]
   });
 });
+
+for (const width of [1440, 1100, 375]) {
+  test(`activity rows and actions menu fit without overlapping at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 950 });
+    await openHomework(page);
+    if (width === 1100) await page.evaluate(() => window.applyPresetTheme('dark'));
+    const ids = await seedLinkedCourses(page);
+    await page.evaluate(id => {
+      window.courseHub.updateCourse(id, { name: 'Robotics team with a long activity name' });
+      const completed = window.courseHub.createAssignmentForCourse(id, { title: 'A long completed robotics assignment', dueDate: '2026-01-01' });
+      window.SutraHomework.setDone(completed.id, true);
+      window.SutraHomework.render();
+    }, ids.roboticsId);
+    const row = page.locator('.hw-activity-row').filter({ has: page.locator(`[data-course-dashboard="${ids.roboticsId}"]`) });
+    await expect(row).toBeVisible();
+    const geometry = await row.evaluate(el => {
+      const rect = selector => { const b = el.querySelector(selector).getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
+      return { main: rect('.hw-activity-main'), actions: rect('.hw-activity-actions'), deadline: rect('.hw-activity-deadline'), overflow: document.documentElement.scrollWidth - innerWidth };
+    });
+    expect(geometry.main.width).toBeGreaterThan(75);
+    expect(geometry.main.right).toBeLessThanOrEqual(geometry.actions.left);
+    expect(geometry.deadline.top).toBeGreaterThanOrEqual(geometry.main.bottom);
+    expect(geometry.overflow).toBeLessThanOrEqual(1);
+    const trigger = row.getByRole('button', { name: 'Activity actions for Robotics team with a long activity name', exact: true });
+    await trigger.click();
+    const menu = row.getByRole('menu');
+    await expect(menu.getByRole('menuitem', { name: 'Edit activity', exact: true })).toBeFocused();
+    await expect(menu.getByRole('menuitem', { name: 'Remove activity', exact: true })).toBeVisible();
+    const bounds = await menu.boundingBox();
+    expect(bounds.width).toBeGreaterThan(170);
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `.tmp/review-ec-menu-${width}.png` });
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+}

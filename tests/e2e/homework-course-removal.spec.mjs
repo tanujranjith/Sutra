@@ -56,6 +56,7 @@ test('Homework exposes removal for classes and extracurriculars with recoverable
   await acceptRemoval(page, '[data-course-delete="remove-class"]');
   await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.some((course) => course.id === 'remove-class'))).toBe(false);
 
+  await page.locator('.hw-activity-row [data-course-menu-trigger="remove-activity"]').click();
   await expect(page.locator('.hw-activity-row [data-course-delete="remove-activity"]')).toBeVisible();
   await acceptRemoval(page, '.hw-activity-row [data-course-delete="remove-activity"]');
   await expect.poll(() => page.evaluate(() => {

@@ -13,7 +13,10 @@ The selected category is temporary view state. Summary counts and date tabs desc
 The Class view in All keeps existing classes visible when there are no tasks, including their add and removal actions. Activities alone do not show a ready-class empty state. General retains its own empty task state.
 
 Class groups and extracurricular rows expose **Edit class** and **Edit
-activity** actions. These open the existing Course Hub Settings editor for the
+activity** actions in their dots menus. The extracurricular menu also contains
+**Remove activity**; add-task and schedule shortcuts remain on the row. Activity
+deadlines sit below the activity details so the narrow sidebar stays readable.
+The Edit actions open the existing Course Hub Settings editor for the
 same stable course ID. Homework keeps only its compact course lane; rich details
 stay in Course Hub. Renaming updates the linked Homework label while retaining
 assignment IDs and relationships. Activities remain Course Hub `activity`
