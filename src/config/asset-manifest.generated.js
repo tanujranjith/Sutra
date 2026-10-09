@@ -269,7 +269,7 @@
     "./src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2",
     "./src/features/workspace/folder-workspace.js?v=20261001-folders4",
     "./src/features/workspace/handwriting.js?v=20260601-handwriting",
-    "./src/features/workspace/help-docs-refresh.js?v=20261004-merge-review-fixes1",
+    "./src/features/workspace/help-docs-refresh.js?v=20261009-issues6",
     "./src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2",
     "./src/features/workspace/html-pages.js?v=20261004-html-no-timeline1",
     "./src/features/workspace/ios-install-guide.js?v=20260821-iosinstall1",
