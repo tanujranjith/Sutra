@@ -39823,6 +39823,9 @@ function buildOnboardingPlanPreview() {
         let commentsFilter = 'open'; // 'open' | 'resolved'
 
         function toggleCommentsPanel() {
+            // Release a just-closed prompt's background isolation before changing
+            // the panel state, so its saved aria-hidden value cannot overwrite it.
+            SutraModalManager.sync();
             const panel = document.getElementById('commentsPanel');
             if (!panel) return;
             panel.classList.toggle('active');
@@ -44905,6 +44908,7 @@ function buildOnboardingPlanPreview() {
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
   <li>In Modern Editor Split View, each pane has its own note, caret, and undo history. Toolbar actions apply to the active pane.</li>
+  <li>Select text and choose <strong>Add comment on selection</strong> to start an anchored thread. Click its highlighted passage or quoted text to review, reply, resolve, or reopen it. Comments follow the active Split View note and stay in backups and version history. If a passage is removed or cannot be identified safely, the thread stays available with a changed-text notice.</li>
   <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
   <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Home + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
