@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-09T05:43:55.876Z",
-  "reviewedReason": "Integrate reviewed Split View geometry, active pane and locked host protections with comment and PDF fixes",
-  "maxBytes": 4969127,
-  "maxLines": 87103
+  "blessedAt": "2026-10-09T05:48:39.012Z",
+  "reviewedReason": "Clear stale classic and locked comment discussions on primary and secondary context changes",
+  "maxBytes": 4969314,
+  "maxLines": 87108
 }

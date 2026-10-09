@@ -39950,7 +39950,7 @@ function buildOnboardingPlanPreview() {
             const countEl = document.getElementById('commentsCount');
             if (!list) return;
             const context = getCommentContext(), page = context.page;
-            if (context.modern?.comments) context.modern.comments.refresh();
+            if (page && context.modern?.comments) context.modern.comments.refresh();
             const title = document.getElementById('commentsPageTitle');
             if (title) title.textContent = page ? String(page.title || 'Untitled').split('::').pop() : 'Open a note';
             const comments = (page && Array.isArray(page.comments)) ? page.comments : [];
@@ -46525,6 +46525,7 @@ function getActiveEditor() {
                     persistAppData();
                 }
                 updateSplitPaneMeta(null);
+                renderComments();
                 return;
             }
 
@@ -46563,6 +46564,8 @@ function getActiveEditor() {
             }
             if (select && select.value !== page.id) select.value = page.id;
             updateSplitPaneMeta(page);
+            setActiveEditorPane(activeEditorPane);
+            renderComments();
             try { updateSplitPaneContext('right', { selectedNoteId: page.id, scrollPosition: editor.scrollTop || 0 }); } catch (err) { /* non-critical */ }
             if (shouldPersist && appSettings) {
                 appSettings.notesSplitSecondaryPageId = page.id;
@@ -50205,6 +50208,7 @@ function getActiveEditor() {
                         setSplitViewEnabled(false);
                     }
                 }
+                renderComments();
                 reopenLinkedPdfForNotePage(page);
 
                 // Canonical note-page lifecycle signal. Slides, Sheets, and HTML
@@ -51394,6 +51398,7 @@ function getActiveEditor() {
 
         function renderLockedPageScreen(page) {
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(page && page.id || '') } }));
+            renderComments();
             const primaryPane = document.getElementById('notesPrimaryPane');
             if (window.SutraFolderWorkspace) window.SutraFolderWorkspace.close();
             const screen = document.getElementById('lockedPageScreen');

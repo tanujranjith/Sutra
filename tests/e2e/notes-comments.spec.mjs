@@ -305,3 +305,40 @@ test('adjacent and overlapping anchors retain document order and thread actions 
   expect(reopened.every(c=>c.anchor.status==='attached')).toBe(true);
   expect(reopened.map(c=>c.anchor.from)).toEqual([6,4]);
 });
+
+for (const modern of [true, false]) {
+  test((modern ? 'modern' : 'classic') + ' comment dock follows page switches and clears unauthorized discussions', async ({ page }) => {
+    await openNote(page, 'Visible discussion');
+    const ids = await page.evaluate(modern => {
+      const source = window.flowAtelier.pages.find(p=>p.id===window.flowAtelier.currentPageId);
+      source.comments = [{id:'public-discussion',text:'Visible discussion sentinel',selectedText:'Public text',createdAt:new Date().toISOString(),resolved:false,replies:[]}];
+      source.content = '<p>Public text</p>';
+      const protectedNote = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('Protected discussion','<p>Private text</p>');
+      protectedNote.comments = [{id:'private-discussion',text:'Private discussion sentinel',selectedText:'Private text',resolved:false,replies:[]}];
+      const comparison = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace('Comparison discussion','<p>Comparison text</p>');
+      comparison.comments = [{id:'comparison-discussion',text:'Comparison discussion sentinel',selectedText:'Comparison text',resolved:false,replies:[]}];
+      if (!modern) {window.setWorkspacePreference('editor.editorV2Enabled',false,{});window.applyWorkspacePreferences({});}
+      window.loadPage(source.id);
+      window.toggleCommentsPanel();
+      return {source:source.id,protected:protectedNote.id,comparison:comparison.id};
+    }, modern);
+    await expect(page.locator('#commentsList')).toContainText('Visible discussion sentinel');
+    await page.evaluate(async id=>{await window.__sutraPublicBetaTestHooks.lockPageWithPin(id,'4826');window.loadPage(id);}, ids.protected);
+    await expect(page.locator('#lockedPageScreen')).toBeVisible();
+    await expect(page.locator('#commentsPageTitle')).toHaveText('Open a note');
+    await expect(page.locator('#commentsList .comment-item')).toHaveCount(0);
+    await expect(page.locator('#commentsPanel')).not.toContainText('Private discussion sentinel');
+    await page.evaluate(id=>window.loadPage(id),ids.source);
+    await expect(page.locator('#commentsList')).toContainText('Visible discussion sentinel');
+    await page.evaluate(()=>document.getElementById('splitNotesToggleBtn').click());
+    await page.locator('#splitNoteSelect').selectOption(ids.comparison);
+    const target = modern ? '#editorV2SecondaryHost .ProseMirror' : '#editorSecondary';
+    await page.locator(target).click();
+    await expect(page.locator('#commentsPageTitle')).toHaveText('Comparison discussion');
+    await expect(page.locator('#commentsList')).toContainText('Comparison discussion sentinel');
+    await page.locator('#splitNoteSelect').selectOption(ids.protected);
+    await expect(page.locator('#commentsPageTitle')).toHaveText('Open a note');
+    await expect(page.locator('#commentsList .comment-item')).toHaveCount(0);
+    await expect(page.locator('#commentsPanel')).not.toContainText('Private discussion sentinel');
+  });
+}
