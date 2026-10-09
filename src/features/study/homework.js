@@ -49,7 +49,8 @@
     completion: 'all',
     due: 'all',
     sort: 'due',
-    pastExpanded: false
+    pastExpanded: false,
+    overdueExpanded: false
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -2027,13 +2028,47 @@
   function renderHomeworkAssignmentsPanel() {
     const filteredTasks = getHomeworkFilteredTasks();
     const byClass = homeworkViewState.tab === 'class';
-    const groupCompleted = homeworkViewState.tab === 'all' && !hasActiveHomeworkTaskFilters();
-    const currentTasks = groupCompleted ? filteredTasks.filter(task => !task.done) : filteredTasks;
-    const completedTasks = groupCompleted ? filteredTasks.filter(task => task.done) : [];
-    const rows = groupCompleted && completedTasks.length ? `
-      <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
-      <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
-      <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${homeworkViewState.pastExpanded ? renderHomeworkWorkspaceRows(completedTasks) : ''}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
+    const hasFocusedFilters = hasActiveHomeworkTaskFilters();
+    const groupCompleted = homeworkViewState.tab === 'all' && !hasFocusedFilters;
+    const groupClassHistory = byClass && !hasFocusedFilters;
+    let rows = '';
+
+    if (groupClassHistory) {
+      const activeTasks = [];
+      const overdueTasks = [];
+      const completedTasks = [];
+      filteredTasks.forEach(task => {
+        if (task.done) {
+          completedTasks.push(task);
+          return;
+        }
+        const offset = getTaskDayOffset(task);
+        if (offset != null && offset < 0) overdueTasks.push(task);
+        else activeTasks.push(task);
+      });
+      const activeRows = activeTasks.length
+        ? renderHomeworkWorkspaceRows(activeTasks)
+        : '<tr class="hw-history-empty"><td colspan="7">No current tasks. Past-due and completed tasks are below.</td></tr>';
+      const overdueRows = overdueTasks.length ? `
+        <tbody class="hw-past-heading"><tr><th colspan="7" scope="rowgroup"><button type="button" data-hw-overdue-toggle aria-expanded="${homeworkViewState.overdueExpanded}" aria-controls="hwOverdueAssignmentRows"><i class="fas ${homeworkViewState.overdueExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Past-due tasks <span>(${overdueTasks.length})</span></button></th></tr></tbody>
+        <tbody id="hwOverdueAssignmentRows" ${homeworkViewState.overdueExpanded ? '' : 'hidden'}>${homeworkViewState.overdueExpanded ? renderHomeworkWorkspaceRows(overdueTasks) : ''}</tbody>` : '';
+      const completedRows = completedTasks.length ? `
+        <tbody class="hw-past-heading"><tr><th colspan="7" scope="rowgroup"><button type="button" data-hw-completed-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwCompletedAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
+        <tbody id="hwCompletedAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${homeworkViewState.pastExpanded ? renderHomeworkWorkspaceRows(completedTasks) : ''}</tbody>` : '';
+      rows = `<tbody>${activeRows}</tbody>${overdueRows}${completedRows}`;
+    } else if (groupCompleted) {
+      const currentTasks = filteredTasks.filter(task => !task.done);
+      const completedTasks = filteredTasks.filter(task => task.done);
+      rows = completedTasks.length ? `
+        <tbody>${renderHomeworkWorkspaceRows(currentTasks)}</tbody>
+        <tbody class="hw-past-heading"><tr><th colspan="6" scope="rowgroup"><button type="button" data-hw-past-toggle data-hw-completed-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwPastAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
+        <tbody id="hwPastAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${homeworkViewState.pastExpanded ? renderHomeworkWorkspaceRows(completedTasks) : ''}</tbody>` : `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
+    } else {
+      // Focused filters and search results render every match directly so a
+      // collapsed history disclosure can never hide the item the student found.
+      rows = `<tbody>${renderHomeworkWorkspaceRows(filteredTasks)}</tbody>`;
+    }
+
     const categoryTasks = tasks.filter(taskMatchesCategory);
     const totalLabel = `${filteredTasks.length} of ${categoryTasks.length} task${categoryTasks.length === 1 ? '' : 's'}`;
     let content = '';
@@ -2045,13 +2080,13 @@
         ? renderEmptyClassState()
         : renderEmptyStateRedesign(homeworkViewState.category === 'homework' ? 'No homework yet.'
           : homeworkViewState.category === 'general' ? 'No general tasks yet.' : 'Nothing on your list yet.');
-    } else if (!filteredTasks.length && homeworkViewState.tab === 'class' && !hasActiveHomeworkTaskFilters()) {
+    } else if (!filteredTasks.length && homeworkViewState.tab === 'class' && !hasFocusedFilters) {
       content = renderEmptyClassState();
     } else if (!filteredTasks.length) {
       content = `<div class="hw-filter-empty"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><h4>No tasks match</h4><p>Try a different search or clear the current filters.</p><button type="button" class="hw-toolbar-btn" data-clear-task-filters>Clear filters</button></div>`;
     } else {
       content = `
-        <div class="hw-assignment-table-wrap">
+        <div class="hw-assignment-table-wrap${byClass ? ' is-by-class' : ''}">
           <table class="hw-assignment-table${byClass ? ' is-by-class' : ''}">
             <caption class="sr-only">To-do tasks</caption>
             <thead><tr><th scope="col">Task</th><th scope="col">Class / activity</th><th scope="col">Due</th>${byClass ? '<th scope="col">Difficulty</th>' : ''}<th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
@@ -2541,8 +2576,9 @@
     const board = $('#hwDataTable');
     if (!board || !courseId) return;
 
-    const menu = board.querySelector(`.hw-course-menu[data-course-menu="${CSS.escape(courseId)}"]`);
-    if (!menu) return;
+    const menuWrap = triggerBtn && triggerBtn.closest('.hw-course-menu-wrap');
+    const menu = menuWrap && menuWrap.querySelector('.hw-course-menu[data-course-menu]');
+    if (!menu || String(menu.getAttribute('data-course-menu')) !== String(courseId)) return;
 
     const isOpening = menu.hidden;
     closeTaskContextMenus();
@@ -3144,7 +3180,16 @@
     if (!anchor || !anchor.focused || document.body.dataset.view !== 'homework') return;
     const control = Array.from(document.querySelectorAll('[data-task-toggle]')).find(button =>
       button.getAttribute('data-task-toggle') === String(taskId) && button.getClientRects().length);
-    const fallback = control || document.querySelector('[data-hw-past-toggle]') || $('#hwOpenAddAssignment');
+    const task = tasks.find(row => String(row.id) === String(taskId));
+    const targetToggle = task && task.done
+      ? '[data-hw-completed-toggle], [data-hw-past-toggle]'
+      : task && getTaskDayOffset(task) != null && getTaskDayOffset(task) < 0
+        ? '[data-hw-overdue-toggle]'
+        : '[data-hw-past-toggle], [data-hw-completed-toggle]';
+    const fallback = control
+      || document.querySelector(targetToggle)
+      || document.querySelector('[data-hw-overdue-toggle], [data-hw-completed-toggle], [data-hw-past-toggle]')
+      || $('#hwOpenAddAssignment');
     if (fallback && fallback.getClientRects().length) fallback.focus({ preventScroll: true });
   }
 
@@ -3508,7 +3553,7 @@
       button.addEventListener('click', event => {
         event.stopPropagation();
         const courseId = button.getAttribute('data-course-merge');
-        const trigger = board.querySelector(`[data-course-menu-trigger="${CSS.escape(String(courseId || ''))}"]`);
+        const trigger = button.closest('.hw-course-menu-wrap')?.querySelector('[data-course-menu-trigger]') || null;
         openCourseMergeModal(courseId, trigger);
       });
     });
@@ -3537,10 +3582,15 @@
       });
     });
 
-    const pastToggle = board.querySelector('[data-hw-past-toggle]');
-    if (pastToggle) pastToggle.addEventListener('click', () => {
-      homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
-      render();
+    board.querySelectorAll('[data-hw-past-toggle], [data-hw-completed-toggle], [data-hw-overdue-toggle]').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        if (toggle.hasAttribute('data-hw-overdue-toggle')) {
+          homeworkViewState.overdueExpanded = !homeworkViewState.overdueExpanded;
+        } else {
+          homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
+        }
+        render();
+      });
     });
 
     board.querySelectorAll('[data-task-toggle], [data-task-menu-toggle]').forEach(button => {

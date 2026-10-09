@@ -832,13 +832,16 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-table th:nth-child(4) { width: 10%; }
 .hw-assignment-table th:nth-child(5) { width: 14%; }
 .hw-assignment-table th:nth-child(6) { width: 16%; }
-.hw-assignment-table.is-by-class th:nth-child(1) { width: 27%; }
-.hw-assignment-table.is-by-class th:nth-child(2) { width: 15%; }
-.hw-assignment-table.is-by-class th:nth-child(3) { width: 14%; }
-.hw-assignment-table.is-by-class th:nth-child(4) { width: 12%; }
-.hw-assignment-table.is-by-class th:nth-child(5) { width: 10%; }
-.hw-assignment-table.is-by-class th:nth-child(6) { width: 12%; }
-.hw-assignment-table.is-by-class th:nth-child(7) { width: 10%; }
+.hw-assignment-table.is-by-class { min-width: 960px; }
+.hw-assignment-table-wrap.is-by-class { min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: visible; overscroll-behavior-inline: contain; }
+.hw-assignment-table.is-by-class thead th:nth-child(1) { width: 25%; }
+.hw-assignment-table.is-by-class thead th:nth-child(2) { width: 14%; }
+.hw-assignment-table.is-by-class thead th:nth-child(3) { width: 13%; }
+.hw-assignment-table.is-by-class thead th:nth-child(4) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(5) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(6) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(7) { width: 18%; }
+.hw-assignment-table.is-by-class .hw-history-empty td { padding: 16px; color: var(--text-secondary); text-align: center; }
 .hw-assignment-row { border-bottom: 1px solid var(--surface-border); transition: background-color 0.14s ease; }
 .hw-assignment-row:last-child { border-bottom: 0; }
 .hw-assignment-row:hover { background: var(--hw-row-hover); }
@@ -1387,6 +1390,8 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
   .hw-workspace-sidebar { grid-template-columns: 1fr; }
 
   .hw-assignment-table-wrap { overflow: visible; }
+  .hw-assignment-table.is-by-class { min-width: 0; }
+  .hw-assignment-table-wrap.is-by-class { overflow: visible; }
   .hw-assignment-table,
   .hw-assignment-table tbody { display: block; }
   .hw-past-heading tr,

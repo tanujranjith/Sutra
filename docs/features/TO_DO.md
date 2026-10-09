@@ -18,6 +18,12 @@ use tighter spacing; phone and touch controls keep their larger targets.
 
 **Add task** opens the canonical Capture composer with General task selected. **Add homework** opens the same composer with Homework selected; a class may be chosen there. Capture previews the destination before adding the record. The Home quick task form and its top Add task button also create general tasks in this same store. The quick form keeps the submitted text until the local write is confirmed. Class-specific add actions continue to create homework. Extracurricular classes, imports, Assignment Studio, attachment tools, scheduling, and class dashboards remain available.
 
+## By Class history
+
+By Class keeps unfinished assignments due today or later in the main class groups. Undated unfinished assignments remain there too. Unfinished assignments with due dates before today appear in a collapsed **Past-due tasks** section; completed assignments appear in a separate collapsed **Completed tasks** section regardless of due date. Each section keeps its own class grouping and counts only the tasks shown there.
+
+Searching or applying a task filter shows every matching assignment directly in the filtered class groups so a collapsed section cannot hide a result. Completing, reopening, or changing a due date moves the assignment to the section that matches its current state. All Tasks keeps its existing collapsed Completed tasks section.
+
 ## Persistence and connected views
 
 Both categories use `SutraHomeworkStore` and `appData.homeworkWorkspace.tasks`. There is no new task database or migration of legacy planner tasks. Existing `hwTasks:v2` mirroring, course links, IDs, completion timestamps, unknown row fields, JSON compatibility schema, full-workspace exports, encrypted backups, and Sync collection projection remain in place. The recognized `kind` value is inventoried in the existing row. Unknown kinds are preserved and displayed as homework.
