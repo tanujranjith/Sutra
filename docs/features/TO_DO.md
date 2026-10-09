@@ -31,9 +31,9 @@ use tighter spacing; phone and touch controls keep their larger targets.
 
 ## By Class history
 
-By Class keeps unfinished assignments due today or later in the main class groups. Undated unfinished assignments remain there too. Unfinished assignments with due dates before today appear in a collapsed **Past-due tasks** section; completed assignments appear in a separate collapsed **Completed tasks** section regardless of due date. Each section keeps its own class grouping and counts only the tasks shown there.
+By Class keeps every unfinished assignment in its main class group, including past-due and undated work. Only completed assignments move into the collapsed **Completed tasks** section, regardless of due date. That section retains class grouping and counts only completed tasks.
 
-Searching or applying a task filter shows every matching assignment directly in the filtered class groups so a collapsed section cannot hide a result. Completing, reopening, or changing a due date moves the assignment to the section that matches its current state. All Tasks keeps its existing collapsed Completed tasks section.
+Searching or applying a task filter shows every matching assignment directly in the filtered class groups so a collapsed section cannot hide a result. Completing moves an assignment into Completed tasks; reopening returns it to its main class group even when it is overdue. Changing a due date does not move unfinished work out of its class group. All Tasks keeps its existing collapsed Completed tasks section.
 
 ## Persistence and connected views
 

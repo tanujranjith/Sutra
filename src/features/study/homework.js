@@ -49,8 +49,7 @@
     completion: 'all',
     due: 'all',
     sort: 'due',
-    pastExpanded: false,
-    overdueExpanded: false
+    pastExpanded: false
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -2057,27 +2056,21 @@
 
     if (groupClassHistory) {
       const activeTasks = [];
-      const overdueTasks = [];
       const completedTasks = [];
       filteredTasks.forEach(task => {
         if (task.done) {
           completedTasks.push(task);
           return;
         }
-        const offset = getTaskDayOffset(task);
-        if (offset != null && offset < 0) overdueTasks.push(task);
-        else activeTasks.push(task);
+        activeTasks.push(task);
       });
       const activeRows = activeTasks.length
         ? renderHomeworkWorkspaceRows(activeTasks)
-        : '<tr class="hw-history-empty"><td colspan="7">No current tasks. Past-due and completed tasks are below.</td></tr>';
-      const overdueRows = overdueTasks.length ? `
-        <tbody class="hw-past-heading"><tr><th colspan="7" scope="rowgroup"><button type="button" data-hw-overdue-toggle aria-expanded="${homeworkViewState.overdueExpanded}" aria-controls="hwOverdueAssignmentRows"><i class="fas ${homeworkViewState.overdueExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Past-due tasks <span>(${overdueTasks.length})</span></button></th></tr></tbody>
-        <tbody id="hwOverdueAssignmentRows" ${homeworkViewState.overdueExpanded ? '' : 'hidden'}>${homeworkViewState.overdueExpanded ? renderHomeworkWorkspaceRows(overdueTasks) : ''}</tbody>` : '';
+        : '<tr class="hw-history-empty"><td colspan="7">No unfinished tasks. Completed tasks are below.</td></tr>';
       const completedRows = completedTasks.length ? `
         <tbody class="hw-past-heading"><tr><th colspan="7" scope="rowgroup"><button type="button" data-hw-completed-toggle aria-expanded="${homeworkViewState.pastExpanded}" aria-controls="hwCompletedAssignmentRows"><i class="fas ${homeworkViewState.pastExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}" aria-hidden="true"></i> Completed tasks <span>(${completedTasks.length})</span></button></th></tr></tbody>
         <tbody id="hwCompletedAssignmentRows" ${homeworkViewState.pastExpanded ? '' : 'hidden'}>${homeworkViewState.pastExpanded ? renderHomeworkWorkspaceRows(completedTasks) : ''}</tbody>` : '';
-      rows = `<tbody>${activeRows}</tbody>${overdueRows}${completedRows}`;
+      rows = `<tbody>${activeRows}</tbody>${completedRows}`;
     } else if (groupCompleted) {
       const currentTasks = filteredTasks.filter(task => !task.done);
       const completedTasks = filteredTasks.filter(task => task.done);
@@ -3202,15 +3195,8 @@
     if (!anchor || !anchor.focused || document.body.dataset.view !== 'homework') return;
     const control = Array.from(document.querySelectorAll('[data-task-toggle]')).find(button =>
       button.getAttribute('data-task-toggle') === String(taskId) && button.getClientRects().length);
-    const task = tasks.find(row => String(row.id) === String(taskId));
-    const targetToggle = task && task.done
-      ? '[data-hw-completed-toggle], [data-hw-past-toggle]'
-      : task && getTaskDayOffset(task) != null && getTaskDayOffset(task) < 0
-        ? '[data-hw-overdue-toggle]'
-        : '[data-hw-past-toggle], [data-hw-completed-toggle]';
     const fallback = control
-      || document.querySelector(targetToggle)
-      || document.querySelector('[data-hw-overdue-toggle], [data-hw-completed-toggle], [data-hw-past-toggle]')
+      || document.querySelector('[data-hw-completed-toggle], [data-hw-past-toggle]')
       || $('#hwOpenAddAssignment');
     if (fallback && fallback.getClientRects().length) fallback.focus({ preventScroll: true });
   }
@@ -3612,19 +3598,13 @@
       });
     });
 
-    board.querySelectorAll('[data-hw-past-toggle], [data-hw-completed-toggle], [data-hw-overdue-toggle]').forEach(toggle => {
+    board.querySelectorAll('[data-hw-past-toggle], [data-hw-completed-toggle]').forEach(toggle => {
       toggle.addEventListener('click', () => {
         const preserveFocus = document.activeElement === toggle;
-        const selector = toggle.hasAttribute('data-hw-overdue-toggle')
-          ? '[data-hw-overdue-toggle]'
-          : toggle.hasAttribute('data-hw-past-toggle')
-            ? '[data-hw-past-toggle]'
-            : '[data-hw-completed-toggle]';
-        if (toggle.hasAttribute('data-hw-overdue-toggle')) {
-          homeworkViewState.overdueExpanded = !homeworkViewState.overdueExpanded;
-        } else {
-          homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
-        }
+        const selector = toggle.hasAttribute('data-hw-past-toggle')
+          ? '[data-hw-past-toggle]'
+          : '[data-hw-completed-toggle]';
+        homeworkViewState.pastExpanded = !homeworkViewState.pastExpanded;
         render();
         const replacement = preserveFocus ? board.querySelector(selector) : null;
         if (replacement && replacement.getClientRects().length) replacement.focus({ preventScroll: true });

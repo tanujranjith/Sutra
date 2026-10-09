@@ -276,8 +276,8 @@
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20261009-ec-layout1",
-    "hash": "001dc94252790365"
+    "stamp": "20261009-class-open1",
+    "hash": "155b25b88ad06c6d"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261009-ec-layout1",
-    "hash": "69907934f93ea077"
+    "stamp": "20261009-class-open1",
+    "hash": "c2b6d6830345f1f7"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
