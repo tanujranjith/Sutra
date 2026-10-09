@@ -12,6 +12,14 @@ The selected category is temporary view state. Summary counts and date tabs desc
 
 The Class view in All keeps existing classes visible when there are no tasks, including their add and removal actions. Activities alone do not show a ready-class empty state. General retains its own empty task state.
 
+Class groups and extracurricular rows expose **Edit class** and **Edit
+activity** actions. These open the existing Course Hub Settings editor for the
+same stable course ID. Homework keeps only its compact course lane; rich details
+stay in Course Hub. Renaming updates the linked Homework label while retaining
+assignment IDs and relationships. Activities remain Course Hub `activity`
+records linked to Homework `misc` lanes. Assignment editing remains a separate
+task-level workflow.
+
 On wide desktops, categories and date/class views share a row to leave more room
 for tasks. Smaller screens keep the groups separate. Desktop cards and task rows
 use tighter spacing; phone and touch controls keep their larger targets.
@@ -43,6 +51,13 @@ A visible task row or Home task card disintegrates from left to right as soon as
 
 The visual snapshot is captured before a mouse or keyboard completion click replaces the row. It contains only local colors, text, and Sutra's local icons, stays in memory only while awaiting the local action or animating, and never loads external images or clones interactive controls. Unused snapshots expire after 2.1 seconds. At most three effects run, with up to 1,400 grains each, lasting about 2.13 seconds from the first animation frame: a 1,100 ms sweep, 850 ms fall, and 180 ms collapse. Surface grains blend with the row's ink color so the dust remains visible across themes. Capture uses bounded word measurements, raster pixel budgets, and dust sampling to keep completion responsive; wide or tall visible cards use a scaled snapshot instead of skipping the animation. The decorative canvas and row spacer ignore pointer input and stay out of the accessibility tree. A list refresh or another completion rebuilds removed spacers without cancelling or restarting active effects. Home spacers follow surviving task controls and active spacers to preserve their order. Automatic scroll adjustments during a rerender move the snapshot with its content slot. User wheel, touch, scroll keys, or scrollbar input clears effects, as do navigation, resize, locking, page hide, or hidden visibility. Effects respect system reduced motion and Sutra's motion setting. Completion remains immediate and uses the existing action; animation does not delete task data or own a second completion state. The existing optional time-log card remains skippable.
 
-## Validation handoff
+## Validation
 
-Automated tests, self-tests, and integration/portability suites are deferred under the overnight run's no-local-tests instruction. Before integration, verify category creation/filter counts, reload, legacy import/export and unknown fields, encrypted backup/restore and Sync, completion/reopening from Home and To-do, immediate feedback with delayed saves and visible save failures, recurring due-date behavior, reduced motion, rapid actions/navigation, and phone/desktop keyboard focus.
+Changes to these workflows should keep category/filter counts, course and task
+IDs, reload behavior, legacy import/export, unknown fields, and Home/To-do
+projections intact. For completion changes, cover delayed saves, visible save
+failures, recurring due dates, reduced motion, rapid actions/navigation, and
+keyboard focus. For course editing, cover canonical Course Hub name/details,
+Homework lane synchronization, linked assignments and relationships, reload,
+and phone-sized dashboard actions. Run the focused Homework E2E tests and the
+relevant unit, portability, backup, or Sync checks for any affected contract.

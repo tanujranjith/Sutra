@@ -1830,17 +1830,36 @@
   function renderCourseGroupActions(course, kind, name) {
     if (!course) return '';
     const courseId = escHtml(course.id);
-    const kindLabel = String(kind || 'class').toLowerCase();
+    const kindLabel = course.type === 'misc' ? 'activity' : 'class';
     const iconButton = renderCourseIconButton(course, getCourseColor(course.id), 'hw-row-action');
-    const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${escHtml(kindLabel)}" aria-label="Remove ${escHtml(kindLabel)} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
-    if (course.type !== 'class') return `<div class="hw-assignment-group-actions">${iconButton}${removeButton}</div>`;
+    const editMenuItem = `<button type="button" data-course-edit="${courseId}" role="menuitem"><i class="fas fa-pen" aria-hidden="true"></i><span>Edit class</span></button>`;
+    const editButton = `<button type="button" class="hw-row-action" data-course-edit="${courseId}" title="Edit ${kindLabel}" aria-label="Edit ${kindLabel} ${escHtml(name)}"><i class="fas fa-pen" aria-hidden="true"></i></button>`;
+    const removeButton = `<button type="button" class="hw-row-action hw-course-remove-action" data-course-delete="${courseId}" title="Remove ${kindLabel}" aria-label="Remove ${kindLabel} ${escHtml(name)}"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
+    if (course.type !== 'class') return `<div class="hw-assignment-group-actions">${iconButton}${editButton}${removeButton}</div>`;
     const menu = `<div class="hw-course-menu-wrap">
       <button type="button" class="hw-row-action hw-course-menu-btn" data-course-menu-trigger="${courseId}" aria-haspopup="menu" aria-expanded="false" aria-label="Class actions for ${escHtml(name)}" title="Class actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></button>
       <div class="hw-course-menu" data-course-menu="${courseId}" role="menu" hidden>
+        ${editMenuItem}
         <button type="button" data-course-merge="${courseId}" role="menuitem"><i class="fas fa-object-group" aria-hidden="true"></i><span>Merge with another class</span></button>
       </div>
     </div>`;
     return `<div class="hw-assignment-group-actions">${iconButton}${menu}${removeButton}</div>`;
+  }
+
+  function openHomeworkCourseSettings(courseId) {
+    const id = String(courseId || '');
+    if (!id || !window.courseHub || typeof window.courseHub.getCourseById !== 'function'
+      || !window.courseHub.getCourseById(id) || typeof window.setActiveView !== 'function'
+      || typeof window.cwSelectCourse !== 'function' || typeof window.cwSetCourseTab !== 'function') {
+      showHomeworkToast('Course settings are unavailable.');
+      return false;
+    }
+    window.setActiveView('courses', { allowDisabled: true });
+    window.cwSelectCourse(id);
+    window.cwSetCourseTab('settings');
+    const nameInput = document.querySelector('#courseHubMount [data-cs="name"]');
+    if (nameInput) nameInput.focus({ preventScroll: true });
+    return true;
   }
 
   function taskMatchesCategory(task) {
@@ -2129,6 +2148,7 @@
           <div class="hw-activity-actions">
             ${nearest ? `<button type="button" data-task-schedule="${escHtml(nearest.id)}" aria-label="Schedule ${escHtml(nearest.title)}" title="Schedule"><i class="fas fa-calendar-plus" aria-hidden="true"></i></button>` : ''}
             <button type="button" data-open-add-assignment="${escHtml(course.id)}" aria-label="Add a task to ${escHtml(course.name)}" title="Add activity task"><i class="fas fa-plus" aria-hidden="true"></i></button>
+            <button type="button" data-course-edit="${escHtml(course.id)}" aria-label="Edit activity ${escHtml(course.name)}" title="Edit activity"><i class="fas fa-pen" aria-hidden="true"></i></button>
             <button type="button" class="hw-course-remove-action" data-course-delete="${escHtml(course.id)}" aria-label="Remove activity ${escHtml(course.name)}" title="Remove activity"><i class="fas fa-trash" aria-hidden="true"></i></button>
           </div>
         </article>`;
@@ -2653,7 +2673,7 @@
       // Course Hub is a richer mirror. Rename the retained record and archive
       // the absorbed record so files, notes, and metadata remain recoverable.
       if (hubTarget && typeof courseHub.updateCourse === 'function') {
-        const updatedTarget = courseHub.updateCourse(target.id, { name: mergedName });
+        const updatedTarget = courseHub.updateCourse(target.id, { name: mergedName }, { ignoreDuplicateIds: [source.id] });
         if (!updatedTarget || String(updatedTarget.name) !== mergedName) throw new Error('Course Hub could not rename the retained class.');
         hubTargetRenamed = true;
       }
@@ -3546,6 +3566,14 @@
       button.addEventListener('click', event => {
         event.stopPropagation();
         toggleCourseMenu(button.getAttribute('data-course-menu-trigger'), button);
+      });
+    });
+
+    board.querySelectorAll('[data-course-edit]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        closeHomeworkContextMenus();
+        openHomeworkCourseSettings(button.getAttribute('data-course-edit'));
       });
     });
 

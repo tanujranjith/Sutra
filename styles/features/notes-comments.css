@@ -23,7 +23,9 @@
 #commentsPanel { background: var(--surface-bg); color: var(--text-primary); min-height: 0; }
 #commentsPanel .comment-anchor { overflow-wrap: anywhere; white-space: normal; }
 #commentsPanel .comment-action-btn, #commentsPanel .comments-panel-close,
-#commentsPanel .comments-filter-btn { min-height: 44px; }
+#commentsPanel .comments-filter-btn, #commentsPanel .comment-anchor,
+#commentsPanel .comment-reply-del, #commentsPanel .comment-reply-input { min-height: 44px; min-width: 44px; }
+#commentsPanel .comments-panel-close, #commentsPanel .comment-reply-del { width: 44px; flex: 0 0 44px; }
 body:not([data-view="notes"]) #commentsPanel,
 body.pdf-page-active #commentsPanel, body.canvas-page-active #commentsPanel,
 body.html-page-active #commentsPanel, body.slides-page-active #commentsPanel { display: none; }

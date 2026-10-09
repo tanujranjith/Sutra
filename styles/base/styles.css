@@ -24268,6 +24268,7 @@ body.command-palette-open {
 .class-dash-actions .neumo-btn {
     flex: 1;
     justify-content: center;
+    min-height: 44px;
 }
 .class-dash-primary {
     background: color-mix(in srgb, var(--accent) 26%, var(--surface-bg)) !important;

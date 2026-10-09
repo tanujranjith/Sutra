@@ -28668,6 +28668,7 @@ function buildOnboardingPlanPreview() {
                 ? source.tags.map(t => String(t || '').trim()).filter(Boolean).slice(0, 24)
                 : [];
             return {
+                ...source,
                 id: String(source.id || cwId('course')),
                 name,
                 shortName: String(source.shortName || '').trim(),
@@ -29034,20 +29035,53 @@ function buildOnboardingPlanPreview() {
             return course;
         }
 
-        function updateCourse(courseId, patch = {}) {
+        function courseUpdateValidationError(courseId, patch = {}, options = {}) {
             const course = getCourseById(courseId);
-            if (!course) return null;
-            Object.keys(patch).forEach(key => {
+            if (!course) return 'This class or activity could not be found.';
+            const hasName = Object.prototype.hasOwnProperty.call(patch, 'name');
+            const hasType = Object.prototype.hasOwnProperty.call(patch, 'type');
+            const name = hasName ? String(patch.name == null ? '' : patch.name).trim() : String(course.name || '').trim();
+            if (hasName && !name) return 'Enter a name for this class or activity.';
+            const type = normalizeCourseType(hasType ? patch.type : course.type);
+            const nameChanged = name !== String(course.name || '').trim();
+            const typeChanged = type !== normalizeCourseType(course.type);
+            if (nameChanged || typeChanged) {
+                const homeworkType = cwTypeToHwType(type);
+                const ignoredDuplicateIds = new Set((Array.isArray(options.ignoreDuplicateIds) ? options.ignoreDuplicateIds : []).map(String));
+                const duplicate = (courseWorkspace.courses || []).some(other => (
+                    String(other && other.id) !== String(course.id)
+                    && !ignoredDuplicateIds.has(String(other && other.id))
+                    && cwTypeToHwType(other && other.type) === homeworkType
+                    && String(other && other.name || '').trim().toLowerCase() === name.toLowerCase()
+                ));
+                if (duplicate) return 'Another ' + (homeworkType === 'misc' ? 'activity' : 'class') + ' already uses that name. Choose a different name.';
+            }
+            return '';
+        }
+
+        function updateCourse(courseId, patch = {}, options = {}) {
+            const course = getCourseById(courseId);
+            if (!course || courseUpdateValidationError(courseId, patch, options)) return null;
+            const normalizedPatch = { ...patch };
+            if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'name')) {
+                normalizedPatch.name = String(normalizedPatch.name == null ? '' : normalizedPatch.name).trim();
+            }
+            if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'type')) {
+                normalizedPatch.type = normalizeCourseType(normalizedPatch.type);
+            }
+            Object.keys(normalizedPatch).forEach(key => {
                 if (key === 'id' || key === 'createdAt') return;
-                course[key] = patch[key];
+                course[key] = normalizedPatch[key];
             });
             course.type = normalizeCourseType(course.type);
             course.updatedAt = new Date().toISOString();
-            // Keep homework lane name in sync on rename.
+            // Keep Homework's compact lane linked by the same stable ID.
             const hwCourses = cwReadHwArray('hwCourses:v2');
             const hc = hwCourses.find(c => String(c && c.id) === String(course.id));
-            if (hc && hc.name !== course.name) {
+            const homeworkType = cwTypeToHwType(course.type);
+            if (hc && (hc.name !== course.name || hc.type !== homeworkType)) {
                 hc.name = course.name;
+                hc.type = homeworkType;
                 cwWriteHwArray('hwCourses:v2', hwCourses);
                 cwNotifyHomework();
             }
@@ -30822,7 +30856,17 @@ function buildOnboardingPlanPreview() {
             });
             const days = get('meetingDays'); const startTime = get('startTime'); const endTime = get('endTime');
             if (days !== undefined) patch.schedule = cwParseScheduleFromInput(days, startTime, endTime, patch.room);
-            updateCourse(courseId, patch);
+            const validationError = courseUpdateValidationError(courseId, patch);
+            if (validationError) {
+                const nameInput = root.querySelector('[data-cs="name"]');
+                if (nameInput && !String(nameInput.value || '').trim()) nameInput.focus();
+                showToast(validationError);
+                return;
+            }
+            if (!updateCourse(courseId, patch)) {
+                showToast('Course settings could not be saved.');
+                return;
+            }
             renderCourseHubView();
             showToast('Course updated.');
         }
@@ -31377,6 +31421,7 @@ function buildOnboardingPlanPreview() {
                         <label class="cw-field"><span class="cw-field-label">Teacher</span><input data-cs="teacherName" type="text" value="${cwEsc(course.teacherName)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Teacher email</span><input data-cs="teacherEmail" type="email" value="${cwEsc(course.teacherEmail)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Room</span><input data-cs="room" type="text" value="${cwEsc(course.room)}"></label>
+                        <label class="cw-field"><span class="cw-field-label">Location</span><input data-cs="location" type="text" value="${cwEsc(course.location)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Office hours</span><input data-cs="officeHours" type="text" value="${cwEsc(course.officeHours)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Term</span><input data-cs="termName" type="text" value="${cwEsc(course.termName)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Color</span><input data-cs="color" type="text" value="${cwEsc(course.color)}" placeholder="#7c9cf2"></label>
@@ -45013,7 +45058,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
-  <li>All Tasks shows current work first. Open <strong>Completed tasks</strong> to see finished work; search and filters show matches immediately.</li>
+  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
   <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>

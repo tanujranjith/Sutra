@@ -1018,6 +1018,8 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-group-heading strong { font-weight: 700; }
 .hw-assignment-group-heading .hw-row-action { flex: 0 0 auto; }
 .hw-assignment-group-actions { display: inline-flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.hw-assignment-group-actions [data-course-edit] { box-sizing: border-box; flex: 0 0 44px; width: 44px; height: 44px; margin: 0; }
+.hw-activity-actions button[data-course-edit] { box-sizing: border-box; flex: 0 0 44px; width: 44px; height: 44px; margin: 0; }
 .hw-course-menu-wrap { position: relative; display: inline-flex; }
 .hw-course-menu {
   position: absolute;

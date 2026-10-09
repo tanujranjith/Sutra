@@ -39,6 +39,19 @@ Remove action. Linked assignments are removed atomically with the lane and
 placed in shared Trash so the workspace does not keep a stale Homework mirror
 or silently recreate the removed class/activity.
 
+Homework class groups and activity rows also expose **Edit class** or **Edit
+activity**. The dashboard uses the same action. Each opens the canonical Course
+Hub Settings editor, including when Course Hub is hidden from the primary
+navigation, so Homework does not need a second metadata model. Names are
+trimmed and checked for empty or duplicate values before saving. A successful
+rename updates the Course Hub record and its compact Homework lane by the same
+stable ID; assignments and other relationships remain attached. Activities
+continue to use Course Hub type `activity` and Homework lane type `misc`.
+
+Settings edits the existing Course Hub fields, including room, location,
+schedule, description, syllabus summary, and grade data. Homework course records
+remain compact and do not become a second copy of this metadata.
+
 ## Persistence
 
 The course object and its relationships live in `courseWorkspace`, a top-level

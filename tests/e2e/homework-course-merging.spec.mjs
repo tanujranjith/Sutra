@@ -31,6 +31,9 @@ test('class actions can merge two classes and preserve every assignment', async 
     const store = window.SutraHomeworkStore;
     const current = store.getSnapshot();
     const ids = new Set(['merge-physics', 'merge-lab', 'merge-history', 'merge-physics-task', 'merge-lab-task']);
+    window.courseHub.createCourse({ id: 'merge-physics', name: 'Physics', type: 'class' });
+    window.courseHub.createCourse({ id: 'merge-lab', name: 'Physics Lab', type: 'class' });
+    window.courseHub.createCourse({ id: 'merge-history', name: 'History', type: 'class' });
     store.replace({
       ...current,
       courses: current.courses.filter(course => !ids.has(String(course.id))).concat([
@@ -39,8 +42,8 @@ test('class actions can merge two classes and preserve every assignment', async 
         { id: 'merge-history', name: 'History', type: 'class' }
       ]),
       tasks: current.tasks.filter(task => !ids.has(String(task.id))).concat([
-        { id: 'merge-physics-task', courseId: 'merge-physics', title: 'Kinematics worksheet', dueDate: '2026-09-20' },
-        { id: 'merge-lab-task', courseId: 'merge-lab', title: 'Lab report', dueDate: '2026-09-21' }
+        { id: 'merge-physics-task', courseId: 'merge-physics', title: 'Kinematics worksheet', dueDate: '2099-09-20' },
+        { id: 'merge-lab-task', courseId: 'merge-lab', title: 'Lab report', dueDate: '2099-09-21' }
       ])
     }, { reason: 'homework-class-merge-test-seed' });
     window.SutraHomework.render();
@@ -57,7 +60,10 @@ test('class actions can merge two classes and preserve every assignment', async 
   await expect(mergeModal).toBeVisible();
   await expect(mergeModal.locator('[data-course-merge-target] option')).toHaveCount(2);
   await mergeModal.locator('[data-course-merge-target]').selectOption('merge-lab');
-  await mergeModal.locator('[data-course-merge-name]').fill('Physics & Lab');
+  // A merge may legitimately keep the absorbed class's name. Course Hub's
+  // duplicate check must allow that one source record while retaining the
+  // canonical target ID and archiving the absorbed record.
+  await mergeModal.locator('[data-course-merge-name]').fill('Physics');
   await mergeModal.locator('[data-course-merge-submit]').click();
 
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
@@ -67,16 +73,24 @@ test('class actions can merge two classes and preserve every assignment', async 
     const snapshot = window.SutraHomeworkStore.getSnapshot();
     return {
       courses: snapshot.courses.filter(course => /^merge-/.test(String(course.id))).map(course => ({ id: course.id, name: course.name })),
-      tasks: snapshot.tasks.filter(task => /^merge-/.test(String(task.id))).map(task => ({ id: task.id, courseId: task.courseId }))
+      tasks: snapshot.tasks.filter(task => /^merge-/.test(String(task.id))).map(task => ({ id: task.id, courseId: task.courseId })),
+      courseHub: ['merge-physics', 'merge-lab'].map(id => {
+        const course = window.courseHub.getCourseById(id);
+        return { id: course.id, name: course.name, archived: course.archived };
+      })
     };
   })).toEqual({
     courses: [
-      { id: 'merge-lab', name: 'Physics & Lab' },
+      { id: 'merge-lab', name: 'Physics' },
       { id: 'merge-history', name: 'History' }
     ],
     tasks: [
       { id: 'merge-physics-task', courseId: 'merge-lab' },
       { id: 'merge-lab-task', courseId: 'merge-lab' }
+    ],
+    courseHub: [
+      { id: 'merge-physics', name: 'Physics', archived: true },
+      { id: 'merge-lab', name: 'Physics', archived: false }
     ]
   });
   await expect(mergeModal).toBeHidden();

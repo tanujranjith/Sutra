@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261009-issues4",
-    "hash": "4fb2db1ff91fd124"
+    "stamp": "20261009-issues5",
+    "hash": "b7a7b753ffad99f1"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -268,16 +268,16 @@
     "hash": "e06b7a0b7d124014"
   },
   "src/features/study/class-dashboard-actions.js": {
-    "stamp": "20260916-class-ec-delete1",
-    "hash": "8579da8954653d25"
+    "stamp": "20261009-issues5",
+    "hash": "419ee5919b61c705"
   },
   "src/features/study/code-highlight.js": {
     "stamp": "20260620-hl1",
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20261009-issues4",
-    "hash": "761212afd0fb8d85"
+    "stamp": "20261009-issues5",
+    "hash": "553fbde790c9e8cf"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -536,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261009-issues2",
-    "hash": "68c72d694aad3592"
+    "stamp": "20261009-issues5",
+    "hash": "14af7c4d376c45f7"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -592,8 +592,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20261009-issues1",
-    "hash": "533d62d0dedcc340"
+    "stamp": "20261009-issues5",
+    "hash": "a980a03ddc948b0f"
   },
   "styles/features/html-pages.css": {
     "stamp": "20261003-create-review5",
@@ -612,8 +612,8 @@
     "hash": "3e852556c6ccee3b"
   },
   "styles/features/notes-comments.css": {
-    "stamp": "20261009-comments1",
-    "hash": "9ad3823c169e54a2"
+    "stamp": "20261009-issues5",
+    "hash": "069cdfa89e887842"
   },
   "styles/features/notes-editor-v2.css": {
     "stamp": "20260928-issues51-59-64",
