@@ -23,8 +23,11 @@ the page. A locked page must not mount a live node until it is unlocked.
 Split View presents two equal note panes in one workspace. Each header identifies
 its note, and the active pane stays outlined with an **Active** marker while the
 shared formatting toolbar names that note as its target. The two editor bodies
-scroll independently. When the Notes column is narrower than 940px, the panes
-stack vertically so both editors keep usable width.
+scroll independently. Split View fills the available Notes workspace width and
+height, with aligned editor starts in both editor modes. Long titles truncate;
+the main note's tags scroll within their header row. When the Notes column is
+narrower than 940px, the panes stack vertically so both editors keep usable width,
+and the pane container scrolls when needed to reach the comparison note.
 
 Each pane still owns its editor instance, selection, history, and page context.
 Switching the comparison note or closing Split View flushes pending edits before

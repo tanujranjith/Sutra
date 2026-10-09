@@ -364,7 +364,7 @@
     "./styles/themes/sutra-pro.css?v=20260921-timepicker1",
     "./styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4",
     "./styles/views/assistant-view.css?v=20260818-cache-refresh1",
-    "./styles/views/contextual-shell.css?v=20261009-issues2",
+    "./styles/views/contextual-shell.css?v=20261009-split-layout2",
     "./styles/views/custom-tabs.css?v=20260913-custom-html-widget1",
     "./styles/views/focus-session.css?v=20260807-atmospheres1",
     "./styles/views/settings-redesign.css?v=20260821-settings16",
