@@ -50056,7 +50056,17 @@ function getActiveEditor() {
             const cardTag = Array.from(content.matchAll(/<aside\b[^>]*>/gi))
                 .map(match => match[0])
                 .find(tag => /\bclass=["'][^"']*\bsutra-linked-pdf-card\b[^"']*["']/i.test(tag));
-            if (!cardTag || /\bdata-sutra-pdf-auto-open=["'](?:false|0|no)["']/i.test(cardTag)) return '';
+            if (!cardTag) return '';
+            const cardTagIndex = content.indexOf(cardTag);
+            const cardClosingTag = /<\/aside\s*>/i.exec(content.slice(cardTagIndex + cardTag.length));
+            const afterCard = cardClosingTag
+                ? content.slice(cardTagIndex + cardTag.length + cardClosingTag.index + cardClosingTag[0].length)
+                : '';
+            const legacyConvertedTail = afterCard.match(/^\s*<hr\b[^>]*>([\s\S]*)/i);
+            const legacyConvertedText = legacyConvertedTail
+                ? legacyConvertedTail[1].replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim()
+                : '';
+            if (/\bdata-sutra-pdf-auto-open=["'](?:false|0|no)["']/i.test(cardTag) || legacyConvertedText) return '';
             const match = cardTag.match(/\bdata-sutra-pdf-card=["']([^"']+)["']/i);
             const markerId = match ? String(match[1]) : '';
             let linkedPdfs = [];
@@ -50077,13 +50087,14 @@ function getActiveEditor() {
 
         function reopenLinkedPdfForNotePage(page) {
             if (!page || document.body.getAttribute('data-view') !== 'notes') return;
+            if (!isPageContentAuthorized(page)) return;
             if (!window.SutraPdfWorkspace || typeof window.SutraPdfWorkspace.open !== 'function') return;
             const fileId = linkedPdfIdForNotePage(page);
             if (!fileId) return;
             const active = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
             if (active && String(active.fileId) === fileId && String(active.pageId || '')) return;
             window.setTimeout(() => {
-                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes') return;
+                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes' || !isPageContentAuthorized(page)) return;
                 const current = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
                 if (current && String(current.fileId) === fileId) return;
                 window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: page.id }).catch(error => {
@@ -51547,6 +51558,7 @@ function getActiveEditor() {
                     updatePageTemporaryMeta(page);
                     updateWordCount();
                     renderPagesList();
+                    reopenLinkedPdfForNotePage(page);
                     try { input.value = ''; } catch (err) {}
                     if (openDuressSetup) {
                         requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
@@ -51593,6 +51605,7 @@ function getActiveEditor() {
                     updatePageTemporaryMeta(page);
                     updateWordCount();
                     renderPagesList();
+                    reopenLinkedPdfForNotePage(page);
                     try { input.value = ''; } catch (err) {}
                     showToast('PIN protection removed.');
                 } else {
@@ -68359,6 +68372,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             noteUndoManager.push(editor);
             // Render this page's document background (if any) behind the note surface.
             applyDocumentBackgroundForEditor(editor, page);
+            renderComments();
         }
 
         /* ====================================================================

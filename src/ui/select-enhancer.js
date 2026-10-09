@@ -463,11 +463,14 @@
         if (domObserver || !document.body) return;
         domObserver = new MutationObserver(function (mutations) {
             try {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'attributes' && openComponent && !isSelectSurfaceAvailable(openComponent)) {
+                // Portaled menus outlive their owner's subtree. Check once for
+                // every DOM batch so hidden or detached owners cannot leave a
+                // live body-level list behind.
+                if (openComponent && !isSelectSurfaceAvailable(openComponent)) {
                     closeOpenSelect();
                 }
-                mutation.addedNodes.forEach((node) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
                         if (!(node instanceof Element)) return;
                         // Skip nodes created by this enhancer to avoid re-entrance
                         if (node.classList.contains('nf-select') || node.classList.contains('nf-select-menu')) return;

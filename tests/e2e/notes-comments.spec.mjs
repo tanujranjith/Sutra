@@ -328,6 +328,10 @@ for (const modern of [true, false]) {
     await expect(page.locator('#commentsPageTitle')).toHaveText('Open a note');
     await expect(page.locator('#commentsList .comment-item')).toHaveCount(0);
     await expect(page.locator('#commentsPanel')).not.toContainText('Private discussion sentinel');
+    await page.locator('#lockScreenPinInput').fill('4826');
+    await page.locator('#lockScreenForm button[type="submit"]').click();
+    await expect(page.locator('#commentsPageTitle')).toHaveText('Protected discussion');
+    await expect(page.locator('#commentsList')).toContainText('Private discussion sentinel');
     await page.evaluate(id=>window.loadPage(id),ids.source);
     await expect(page.locator('#commentsList')).toContainText('Visible discussion sentinel');
     await page.evaluate(()=>document.getElementById('splitNotesToggleBtn').click());

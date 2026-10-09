@@ -49,6 +49,8 @@ test('selecting export formats keeps the Export Options modal open', async ({ pa
   for (const [value, label] of formats) {
     await trigger.click();
     await expect(menu).toHaveClass(/is-open/);
+    await expect(menu).not.toHaveAttribute('aria-hidden', 'true');
+    expect(await menu.evaluate(element => element.inert)).toBe(false);
     await menu.locator('.nf-select-option').filter({ hasText: label }).click();
     await expect(modal).toHaveClass(/active/);
     await expect(page.locator('#exportModalFormatSelect')).toHaveValue(value);
@@ -59,5 +61,7 @@ test('selecting export formats keeps the Export Options modal open', async ({ pa
   await expect(menu).toHaveClass(/is-open/);
   await page.keyboard.press('Escape');
   await expect(menu).not.toHaveClass(/is-open/);
+  await expect(menu).toHaveAttribute('aria-hidden', 'true');
+  expect(await menu.evaluate(element => element.inert)).toBe(true);
   await expect(modal).toHaveClass(/active/);
 });

@@ -42,6 +42,15 @@ async function loadFixturePdfLib(page) {
   }));
 }
 
+async function expectPdfReady(page, fileId) {
+  await expect(page.locator('.pdfw-root')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(expectedFileId => {
+    const context = window.SutraPdfWorkspace.getContext();
+    const canvas = document.querySelector('.pdfw-root .pdfw-page-wrap canvas');
+    return !!context && context.fileId === expectedFileId && !!canvas && canvas.width > 0 && canvas.height > 0;
+  }, fileId)).toBe(true);
+}
+
 test('PDF import preserves its linked card through Editor V2 and reopens after navigation and reload', async ({ page }) => {
   await openApp(page);
   await loadFixturePdfLib(page);
@@ -74,8 +83,7 @@ test('PDF import preserves its linked card through Editor V2 and reopens after n
 
   expect(imported.noteContentHasCard).toBe(true);
   expect(imported.editorHasCard).toBe(true);
-  await expect(page.locator('.pdfw-root')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => window.SutraPdfWorkspace.getContext()?.fileId || '')).toBe(imported.fileId);
+  await expectPdfReady(page, imported.fileId);
 
   const otherNoteId = await page.evaluate(() => window.__sutraPublicBetaTestHooks
     .createNoteInActiveSpace('PDF reopen destination', '<p>Destination note.</p>').id);
@@ -84,8 +92,7 @@ test('PDF import preserves its linked card through Editor V2 and reopens after n
 
   for (let cycle = 0; cycle < 2; cycle += 1) {
     await page.evaluate(id => window.loadPage(id), imported.noteId);
-    await expect(page.locator('.pdfw-root')).toHaveCount(1);
-    await expect.poll(() => page.evaluate(() => window.SutraPdfWorkspace.getContext()?.fileId || '')).toBe(imported.fileId);
+    await expectPdfReady(page, imported.fileId);
     await page.evaluate(id => window.loadPage(id), otherNoteId);
     await expect(page.locator('.pdfw-root')).toHaveCount(0);
   }
@@ -100,8 +107,7 @@ test('PDF import preserves its linked card through Editor V2 and reopens after n
   await page.locator('.view-tabs > .view-tab[data-view="notes"]').click();
   await expect(page.locator('#view-notes')).toBeVisible();
   await page.locator(`#pagesList .page-item[data-page-id="${imported.noteId}"] .page-title-text`).click();
-  await expect(page.locator('.pdfw-root')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => window.SutraPdfWorkspace.getContext()?.fileId || '')).toBe(imported.fileId);
+  await expectPdfReady(page, imported.fileId);
 
   const afterReload = await page.evaluate(async fileId => {
     const bytes = await window.SutraAttachments.readBytes(fileId);
@@ -130,18 +136,32 @@ test('only linked-PDF wrappers reopen from their attachment identity', async ({ 
     const [legacyFile] = await window.SutraAttachments.addFiles([makeFile('legacy-linked.pdf')], {
       entityType: 'note', entityId: legacyCard.id
     });
+    const legacyConverted = hooks.createNoteInActiveSpace('Legacy converted PDF note', '<p>Temporary legacy content.</p>');
+    const [legacyConvertedFile] = await window.SutraAttachments.addFiles([makeFile('legacy-converted.pdf')], {
+      entityType: 'note', entityId: legacyConverted.id
+    });
+    legacyConverted.content = `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${legacyConvertedFile.id}"><p>Linked PDF.</p></aside><hr><p>Old converted text remains visible.</p>`;
     const ambiguous = hooks.createNoteInActiveSpace('Two PDFs in a markerless wrapper', '<aside class="sutra-linked-pdf-card"><p>Ambiguous linked PDFs.</p></aside>');
     const ambiguousFiles = await window.SutraAttachments.addFiles([
       makeFile('ambiguous-a.pdf'), makeFile('ambiguous-b.pdf')
     ], { entityType: 'note', entityId: ambiguous.id });
+    const locked = hooks.createNoteInActiveSpace('PIN-protected linked PDF', '<p>Private linked PDF.</p>');
+    const [lockedFile] = await window.SutraAttachments.addFiles([makeFile('locked-linked.pdf')], {
+      entityType: 'note', entityId: locked.id
+    });
+    locked.content = `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${lockedFile.id}"><p>PIN-protected PDF.</p></aside>`;
+    await hooks.lockPageWithPin(locked.id, '2468');
     await window.flowAtelier.flushAppSaveNow('pdf-linked-note-recovery-fixture');
     return {
       ordinaryId: ordinary.id,
       ordinaryFileId: ordinaryFile.id,
       legacyCardId: legacyCard.id,
       legacyFileId: legacyFile.id,
+      legacyConvertedId: legacyConverted.id,
       ambiguousId: ambiguous.id,
-      ambiguousFileCount: ambiguousFiles.length
+      ambiguousFileCount: ambiguousFiles.length,
+      lockedId: locked.id,
+      lockedFileId: lockedFile.id
     };
   });
 
@@ -154,9 +174,22 @@ test('only linked-PDF wrappers reopen from their attachment identity', async ({ 
   await expect(page.locator('.pdfw-root')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => window.SutraPdfWorkspace.getContext()?.fileId || '')).toBe(linked.legacyFileId);
 
+  await page.evaluate(id => window.loadPage(id), linked.legacyConvertedId);
+  await expect(page.locator('.pdfw-root')).toHaveCount(0);
+  await expect(page.locator('#editorV2Host')).toContainText('Old converted text remains visible.');
+
   await page.evaluate(id => window.loadPage(id), linked.ambiguousId);
   await expect(page.locator('.pdfw-root')).toHaveCount(0);
   expect(await page.evaluate(() => window.SutraPdfWorkspace.getContext())).toBeNull();
+
+  await page.evaluate(id => window.loadPage(id), linked.lockedId);
+  await expect(page.locator('#lockedPageScreen')).toBeVisible();
+  await expect(page.locator('.pdfw-root')).toHaveCount(0);
+  expect(await page.evaluate(() => window.SutraPdfWorkspace.getContext())).toBeNull();
+  await page.locator('#lockScreenPinInput').fill('2468');
+  await page.locator('#lockScreenForm').evaluate(form => form.requestSubmit());
+  await expect(page.locator('#lockedPageScreen')).toBeHidden();
+  await expectPdfReady(page, linked.lockedFileId);
 });
 
 test('Convert to Note keeps extracted text readable and explicit Open PDF still works', async ({ page }) => {

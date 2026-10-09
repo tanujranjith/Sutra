@@ -53,9 +53,12 @@ single unambiguous PDF through the canonical relationship; ordinary Notes with
 PDF attachments and ambiguous multi-PDF wrappers remain Notes until a student
 opens a PDF explicitly. **Convert to Note** keeps the source card and exact
 attachment available, marks the card as non-auto-opening, and leaves extracted
-text editable after navigation and reload. Import uses the page load performed
-by `createImportedPage()` once so an editor hydration snapshot cannot replace
-the new card immediately.
+text editable after navigation and reload. Legacy converted notes that predate
+that marker are recognized by their linked-PDF card followed by the historical
+horizontal rule and extracted text. A PIN-protected Note never opens its linked
+PDF until the Note is authorized; unlocking it restores the linked PDF reader.
+Import uses the page load performed by `createImportedPage()` once so an editor
+hydration snapshot cannot replace the new card immediately.
 
 The PDF document actions include **Create timeline note**. It opens the shared
 timeline editor and creates a separate Notes page through the canonical

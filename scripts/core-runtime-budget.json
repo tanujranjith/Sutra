@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-09T05:48:39.012Z",
-  "reviewedReason": "Clear stale classic and locked comment discussions on primary and secondary context changes",
-  "maxBytes": 4969314,
-  "maxLines": 87108
+  "blessedAt": "2026-10-09T06:00:56.241Z",
+  "reviewedReason": "Reviewed linked PDF PIN authorization, legacy conversion recovery and classic comment unlock context",
+  "maxBytes": 4970226,
+  "maxLines": 87122
 }
