@@ -25,6 +25,7 @@ test('scrolling the Homework class picker does not expose inactive Notes lists',
   await expect(page.getByText('Inactive picker note one', { exact: true }).filter({ visible: true })).toHaveCount(0);
   await expect(page.getByText('Inactive picker note two', { exact: true }).filter({ visible: true })).toHaveCount(0);
   const splitMenu = page.locator('#splitNoteSelect-menu');
+  await expect(splitMenu).toBeHidden();
   await expect(splitMenu).toHaveAttribute('aria-hidden', 'true');
   expect(await splitMenu.evaluate(element => element.inert && getComputedStyle(element).opacity === '0')).toBe(true);
   await page.locator('#quickCaptureCancelBtn').click();

@@ -869,6 +869,7 @@
             box-shadow: 0 18px 38px rgba(22, 30, 45, 0.18);
             z-index: 2200;
             opacity: 0;
+            visibility: hidden;
             transform: translateY(-8px) scale(0.98);
             transform-origin: top center;
             pointer-events: none;
@@ -879,12 +880,14 @@
 
         .nf-select.open .nf-select-menu {
             opacity: 1;
+            visibility: visible;
             transform: translateY(0) scale(1);
             pointer-events: auto;
         }
 
         .nf-select-menu.is-open {
             opacity: 1;
+            visibility: visible;
             transform: translateY(0) scale(1);
             pointer-events: auto;
         }
