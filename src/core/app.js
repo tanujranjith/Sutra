@@ -83304,10 +83304,7 @@ function parseQuickCaptureDate(text, now) {
 // using the course name, its significant words, and common student shorthand
 // (math, chem, bio, ...). Returns { id, name } for the most specific match, or null.
 function resolveQuickCaptureCourse(text) {
-    let courses = [];
-    try {
-        if (typeof localStorage !== 'undefined') courses = readLocalArraySafe('hwCourses:v2');
-    } catch (err) { courses = []; }
+    const courses = getQuickCaptureCourses();
     if (!Array.isArray(courses) || courses.length === 0) return null;
 
     const padded = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';

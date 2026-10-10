@@ -1,6 +1,37 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './helpers/app-ready.mjs';
 
+test('scrolling the Homework class picker does not expose inactive Notes lists', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    hooks.createNoteInActiveSpace('Inactive picker note one', '<p>First note.</p>');
+    hooks.createNoteInActiveSpace('Inactive picker note two', '<p>Second note.</p>');
+    const store = window.SutraHomeworkStore;
+    store.replace({ ...store.getSnapshot(), courses: Array.from({ length: 32 }, (_, index) => ({
+      id: `picker-course-${index}`, name: `Picker Class ${index + 1}`, type: 'class'
+    })), tasks: [] }, { reason: 'homework-picker-containment-fixture' });
+    document.getElementById('splitNotesToggleBtn').click();
+    window.setActiveView('homework');
+    window.openQuickCaptureModal('Finish worksheet', { type: 'homework' });
+  });
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
+  await page.locator('#quickCaptureCourse').locator('xpath=..').locator('.nf-select-trigger').click();
+  const menu = page.locator('#quickCaptureCourse-menu');
+  await expect(menu).toHaveClass(/is-open/);
+  await menu.locator('.nf-select-option').last().scrollIntoViewIfNeeded();
+  expect(await menu.evaluate(element => element.scrollTop > 0)).toBe(true);
+  await expect(page.locator('.page-item:visible')).toHaveCount(0);
+  await expect(page.getByText('Inactive picker note one', { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText('Inactive picker note two', { exact: true }).filter({ visible: true })).toHaveCount(0);
+  const splitMenu = page.locator('#splitNoteSelect-menu');
+  await expect(splitMenu).toHaveAttribute('aria-hidden', 'true');
+  expect(await splitMenu.evaluate(element => element.inert && getComputedStyle(element).opacity === '0')).toBe(true);
+  await page.locator('#quickCaptureCancelBtn').click();
+  await expect(menu).not.toHaveClass(/is-open/);
+  await expect(page.locator('.page-item:visible')).toHaveCount(0);
+});
+
 async function openApp(page) {
   await page.goto('/Sutra.html');
   await page.waitForSelector('#storageOptions', { state: 'attached' });

@@ -27,7 +27,7 @@ On wide desktops, categories and date/class views share a row to leave more room
 for tasks. Smaller screens keep the groups separate. Desktop cards and task rows
 use tighter spacing; phone and touch controls keep their larger targets.
 
-**Add task** opens the canonical Capture composer with General task selected. **Add homework** opens the same composer with Homework selected; a class may be chosen there. Capture previews the destination before adding the record. The Home quick task form and its top Add task button also create general tasks in this same store. The quick form keeps the submitted text until the local write is confirmed. Class-specific add actions continue to create homework. Extracurricular classes, imports, Assignment Studio, attachment tools, scheduling, and class dashboards remain available.
+**Add task** opens the canonical Capture composer with General task selected. **Add homework** opens the same composer with Homework selected; a class may be chosen there. When captured text names an existing Homework class or activity, Capture can preselect it and preview that destination. Students can change the class or activity before saving. The Home quick task form and its top Add task button also create general tasks in this same store. The quick form keeps the submitted text until the local write is confirmed. Class-specific add actions continue to create homework. Extracurricular classes, imports, Assignment Studio, attachment tools, scheduling, and class dashboards remain available.
 
 ## By Class history
 

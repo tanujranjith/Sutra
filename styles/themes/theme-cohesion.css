@@ -265,14 +265,6 @@ body[data-theme="heritage"][data-theme-key="heritage"] :is(.view-tab.active, .to
     box-shadow: 0 8px 18px rgba(126, 76, 41, .2) !important;
 }
 
-/* Picker previews: the single Heritage card is visibly different from the
-   older warm aliases that remain only for compatibility. */
-.preset-card[data-theme="heritage"] .preset-preview {
-    background:
-        radial-gradient(circle at 76% 24%, rgba(169, 111, 63, .36), transparent 32%),
-        linear-gradient(145deg, #fffaf1, #e9dcc9 62%, #a96f3f) !important;
-}
-
 .preset-card:is([data-theme="luxury"], [data-theme="sepia"]) {
     display: none !important;
 }
