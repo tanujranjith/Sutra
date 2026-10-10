@@ -59047,6 +59047,7 @@ function getActiveEditor() {
                             // separate so unchanged work is not rehashed every minute.
                             currentMeta.lastAutoBackupCheckAt = new Date().toISOString();
                             persistSutraCloudMeta();
+                            updateSutraCloudUi();
                         }
                         return { skipped: true, reason: 'unchanged' };
                     }
@@ -59194,6 +59195,11 @@ function getActiveEditor() {
             row('Last backup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'never');
             row('Auto-backup', meta.autoBackup.enabled
                 ? (meta.autoBackup.frequency === 'daily' ? `Daily at ${meta.autoBackup.dailyTime} (local time)` : `on (${meta.autoBackup.frequency})`) : 'off');
+            if (meta.autoBackup.enabled) {
+                row('Automatic backup status', getSutraCloudStatus().backups.state);
+                if (meta.lastAutoBackupAt) row('Last automatic backup', formatSutraDriveSyncDate(meta.lastAutoBackupAt));
+                if (meta.lastAutoBackupCheckAt) row('Last unchanged-work check', formatSutraDriveSyncDate(meta.lastAutoBackupCheckAt));
+            }
             if (!ready && status && status.reason) row('Next step', status.reason, 'warn');
             if (meta.lastError && ready) row('Last error', meta.lastError, 'warn');
         }
@@ -59614,6 +59620,9 @@ function getActiveEditor() {
             const backupState = !navigator.onLine ? 'Offline'
                 : sutraCloudRuntime.busy ? 'Working'
                 : meta.lastError ? 'Needs attention'
+                : automatic && persistenceWritesBlocked ? 'Automatic backups paused: local saving needs attention'
+                : automatic && sutraRemoteCommitPending ? 'Automatic backups waiting for workspace changes to finish'
+                : automatic && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready) ? 'Automatic backups paused: connect the backup destination'
                 : automatic && !navigator.locks ? 'Automatic backups paused: browser lock support required'
                 : automatic && !sutraCloudRuntime.backupPassphrase ? 'Unlock backups by making a backup this session'
                 : automatic ? 'Automatic backups on' : 'Automatic backups off';
@@ -59623,6 +59632,7 @@ function getActiveEditor() {
                 sync: { ...sync, automatic: !!sync.enabled, label: sutraSyncStateLabel(sync.state) },
                 backups: { state: backupState, provider: provider ? provider.id : null,
                     lastBackupAt: meta.lastBackupAt || null, lastAutoBackupAt: meta.lastAutoBackupAt || null,
+                    lastAutoBackupCheckAt: meta.lastAutoBackupCheckAt || null,
                     lastManualBackupAt: appSettings && appSettings.dataHealth && appSettings.dataHealth.lastAtelierExportAt || null,
                     autoBackup: { ...meta.autoBackup }, error: meta.lastError || null },
                 online: navigator.onLine
@@ -59712,6 +59722,7 @@ function getActiveEditor() {
             if (!modal.classList.contains('active')) sutraCloudUiState.lastFocus = document.activeElement;
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
+            bindSutraCloudVisibilityAutoBackup();
             bindSutraSyncUi();
             selectSutraCloudSection(section);
             sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state

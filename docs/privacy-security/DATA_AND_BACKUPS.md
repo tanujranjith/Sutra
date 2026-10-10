@@ -387,6 +387,9 @@ It is intentionally a **manual backup/restore** model (with an opt-in auto layer
   ready. It cannot run while the browser is closed. Calendar dates follow local
   daylight-saving changes. An unchanged-work check has its own receipt and does
   not update the last successful backup timestamp.
+  The backup panel shows the automatic-backup status, last automatic upload,
+  and last unchanged-work check separately. Opening the Cloud panel also binds
+  wake-up checks so a missed daily slot is reconsidered when the tab returns.
 - **Password recovery:** because backups are end-to-end encrypted, a lost
   passphrase means the cloud copy is unrecoverable — so the passphrase modals are
   wired to let your **browser's password manager** save and autofill it.

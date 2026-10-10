@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261009-issues7",
-    "hash": "9329c457fbd21358"
+    "stamp": "20261009-issues8",
+    "hash": "58fe42270de222f0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261009-class-open1",
-    "hash": "c2b6d6830345f1f7"
+    "stamp": "20261009-daily-backup1",
+    "hash": "5ad155a6e63863c0"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
