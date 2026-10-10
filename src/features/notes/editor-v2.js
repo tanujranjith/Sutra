@@ -40,6 +40,7 @@
         extensionsCache: null,
         blockBridge: null,
         authoring: null,
+        commentKey: null,
         pendingImageOperations: [],
         imageLifecycleListeners: null
     };
@@ -204,6 +205,7 @@
     var PRESERVED_BLOCK_SELECTORS = [
         // Structured embeds and drawings have dedicated live nodes below.
         // Widget/media wrappers and other non-editable components.
+        'aside.sutra-linked-pdf-card[data-sutra-pdf-card]',
         'div.media-wrapper',
         'div.atelier-page-break',
         'div[contenteditable="false"]',
@@ -471,6 +473,183 @@
         return true;
     }
 
+
+    // External comment anchors are mapped by ProseMirror; decorations are never serialized.
+    function commentPage() {
+        return state.blockBridge && state.blockBridge.getPage ? state.blockBridge.getPage() : null;
+    }
+    function commentAnchor(doc, from, to, previous) {
+        return Object.assign({}, previous || {}, {
+            version: 1, from: from, to: to, status: 'attached',
+            quote: doc.textBetween(from, to, '\n', '\ufffc'),
+            prefix: doc.textBetween(Math.max(0, from - 48), from, '\n', '\ufffc'),
+            suffix: doc.textBetween(to, Math.min(doc.content.size, to + 48), '\n', '\ufffc')
+        });
+    }
+    function normalizedCommentText(text) { return String(text || '').replace(/\s+/g, ' ').trim(); }
+    function commentTextIndex(doc) {
+        var text = '', positions = [];
+        doc.descendants(function (node, pos) {
+            if (node.isTextblock && text) { text += ' '; positions.push(pos); }
+            if (node.isText) {
+                for (var i = 0; i < node.text.length; i++) { text += node.text[i]; positions.push(pos + i); }
+            } else if (node.isLeaf && node.isInline) { text += '\ufffc'; positions.push(pos); }
+        });
+        var normalized = '', starts = [], ends = [];
+        for (var j = 0; j < text.length; j++) {
+            var character = /\s/.test(text[j]) ? ' ' : text[j];
+            if (character === ' ' && (!normalized || normalized.endsWith(' '))) {
+                if (normalized) ends[ends.length - 1] = positions[j] + 1;
+                continue;
+            }
+            normalized += character; starts.push(positions[j]); ends.push(positions[j] + 1);
+        }
+        return { text: normalized.trimEnd(), starts: starts, ends: ends };
+    }
+    function restoreCommentAnchor(doc, thread, index) {
+        var old = thread.anchor;
+        if (old && old.version !== 1) return old; // Preserve future schemas.
+        if (old && old.status === 'orphaned') return old;
+        if (old && Number.isInteger(old.from) && Number.isInteger(old.to)
+            && old.from >= 0 && old.to > old.from && old.to <= doc.content.size
+            && doc.textBetween(old.from, old.to, '\n', '\ufffc') === old.quote) {
+            var candidate = commentAnchor(doc, old.from, old.to, old);
+            if (candidate.prefix === old.prefix && candidate.suffix === old.suffix) return candidate;
+        }
+        var quote = normalizedCommentText(old ? old.quote : thread.selectedText), matches = [];
+        if (quote) {
+            var offset = index.text.indexOf(quote);
+            while (offset >= 0) {
+                var from = index.starts[offset], to = index.ends[offset + quote.length - 1];
+                if (Number.isInteger(from) && Number.isInteger(to)) {
+                    var recovered = commentAnchor(doc, from, to, old);
+                    if (!old || ((!old.prefix || normalizedCommentText(recovered.prefix).endsWith(normalizedCommentText(old.prefix)))
+                        && (!old.suffix || normalizedCommentText(recovered.suffix).startsWith(normalizedCommentText(old.suffix))))) matches.push(recovered);
+                }
+                offset = index.text.indexOf(quote, offset + 1);
+            }
+        }
+        return matches.length === 1 ? matches[0] : Object.assign({}, old || {}, {
+            version: 1, quote: old ? old.quote : String(thread.selectedText || ''), status: 'orphaned'
+        });
+    }
+    function buildCommentExtension(eng) {
+        var key = state.commentKey = new eng.PluginKey('sutraComments'), snapshots = [];
+        function threadsFor(doc) {
+            var page = commentPage(), index;
+            return (page && Array.isArray(page.comments) ? page.comments : []).map(function (thread) {
+                if (!index) index = commentTextIndex(doc);
+                return { id: String(thread.id), resolved: !!thread.resolved, anchor: restoreCommentAnchor(doc, thread, index) };
+            });
+        }
+        function remember(doc, threads) {
+            if (snapshots.length && snapshots[snapshots.length - 1].doc.eq(doc)) snapshots[snapshots.length - 1] = { doc: doc, threads: threads };
+            else snapshots.push({ doc: doc, threads: threads });
+            if (snapshots.length > 100) snapshots.shift();
+        }
+        function decorations(doc, threads, active) {
+            return eng.DecorationSet.create(doc, threads.filter(function (thread) {
+                return !thread.resolved && thread.anchor && thread.anchor.version === 1 && thread.anchor.status === 'attached';
+            }).map(function (thread) {
+                return eng.Decoration.inline(thread.anchor.from, thread.anchor.to, {
+                    class: 'comment-mark' + (thread.id === active ? ' is-active' : ''), 'data-comment-anchor-id': thread.id
+                }, { inclusiveStart: false, inclusiveEnd: false });
+            }));
+        }
+        return eng.Extension.create({
+            name: 'sutraComments',
+            addProseMirrorPlugins: function () {
+                return [new eng.Plugin({
+                    key: key,
+                    state: {
+                        init: function (_, editorState) {
+                            var threads = threadsFor(editorState.doc);
+                            remember(editorState.doc, threads);
+                            return { threads: threads, active: null, decorations: decorations(editorState.doc, threads, null) };
+                        },
+                        apply: function (tr, old) {
+                            var meta = tr.getMeta(key), threads = old.threads, active = old.active;
+                            if (meta && meta.refresh) { threads = threadsFor(tr.doc); remember(tr.doc, threads); }
+                            if (meta && Object.prototype.hasOwnProperty.call(meta, 'active')) active = meta.active;
+                            if (tr.docChanged && !state.applyingExternal) {
+                                var history = Object.keys(tr.meta).some(function (name) { return /^history\$/.test(name); });
+                                var snapshot = history ? snapshots.slice().reverse().find(function (entry) { return entry.doc.eq(tr.doc); }) : null;
+                                threads = threads.map(function (thread) {
+                                    var previous = snapshot && snapshot.threads.find(function (entry) { return entry.id === thread.id; });
+                                    if (previous) return Object.assign({}, thread, { anchor: previous.anchor });
+                                    var anchor = thread.anchor;
+                                    if (!anchor || anchor.version !== 1 || anchor.status !== 'attached') return thread;
+                                    var from = tr.mapping.map(anchor.from, 1), to = tr.mapping.map(anchor.to, -1);
+                                    var mapped = from < to ? commentAnchor(tr.doc, from, to, anchor) : Object.assign({}, anchor, { status: 'orphaned' });
+                                    return Object.assign({}, thread, { anchor: mapped });
+                                });
+                                remember(tr.doc, threads);
+                            }
+                            return { threads: threads, active: active, decorations: decorations(tr.doc, threads, active) };
+                        }
+                    },
+                    props: {
+                        decorations: function (editorState) { return key.getState(editorState).decorations; },
+                        handleClick: function (view, _, event) {
+                            var target = event.target.closest && event.target.closest('[data-comment-anchor-id]');
+                            if (target && view.dom.contains(target) && state.blockBridge && state.blockBridge.activateComment) state.blockBridge.activateComment(target.dataset.commentAnchorId);
+                            return false;
+                        }
+                    },
+                    view: function () {
+                        return { update: function (view) {
+                            if (!state.applyingExternal && state.blockBridge && state.blockBridge.onCommentsMapped) state.blockBridge.onCommentsMapped(key.getState(view.state).threads);
+                        } };
+                    }
+                })];
+            }
+        });
+    }
+    var commentsBridge = {
+        getActive: function () { return state.editor && state.commentKey ? state.commentKey.getState(state.editor.state).active : null; },
+        scrollToClassic: function (container, quote) {
+            if (!container || !quote) return false;
+            var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT), text = '', nodes = [], node;
+            while ((node = walker.nextNode())) {
+                for (var i = 0; i < node.nodeValue.length; i++) { text += node.nodeValue[i]; nodes.push({ node: node, offset: i }); }
+            }
+            var index = text.indexOf(quote);
+            if (index < 0 || text.indexOf(quote, index + 1) >= 0) return false;
+            var range = document.createRange(), end = nodes[index + quote.length - 1];
+            range.setStart(nodes[index].node, nodes[index].offset); range.setEnd(end.node, end.offset + 1);
+            var selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+            nodes[index].node.parentElement.scrollIntoView({ block: 'center' });
+            return true;
+        },
+        getSelectionAnchor: function () {
+            if (!state.editor) return null;
+            var selection = state.editor.state.selection;
+            if (selection.empty || !normalizedCommentText(state.editor.state.doc.textBetween(selection.from, selection.to, '\n', '\ufffc'))) return null;
+            return commentAnchor(state.editor.state.doc, selection.from, selection.to);
+        },
+        refresh: function () {
+            if (state.editor && state.commentKey) state.editor.view.dispatch(state.editor.state.tr.setMeta(state.commentKey, { refresh: true }).setMeta('addToHistory', false));
+        },
+        setActive: function (id) {
+            if (state.editor && state.commentKey) state.editor.view.dispatch(state.editor.state.tr.setMeta(state.commentKey, { active: id }).setMeta('addToHistory', false));
+        },
+        scrollTo: function (id) {
+            if (!state.editor || !state.commentKey) return false;
+            var thread = state.commentKey.getState(state.editor.state).threads.find(function (entry) { return entry.id === id; });
+            if (!thread || !thread.anchor || thread.anchor.version !== 1 || thread.anchor.status !== 'attached') return false;
+            commentsBridge.setActive(id);
+            state.editor.chain().focus().setTextSelection({ from: thread.anchor.from, to: thread.anchor.to }).scrollIntoView().run();
+            return true;
+        },
+        getAnchorRect: function (id) {
+            if (!state.editor || !state.commentKey) return null;
+            var thread = state.commentKey.getState(state.editor.state).threads.find(function (entry) { return entry.id === id; });
+            return thread && thread.anchor && thread.anchor.version === 1 && thread.anchor.status === 'attached'
+                ? engine().posToDOMRect(state.editor.view, thread.anchor.from, thread.anchor.to) : null;
+        }
+    };
+
+
     function mount(options) {
         options = options || {};
         if (!isAvailable()) return false;
@@ -500,7 +679,7 @@
                 content: Object.prototype.hasOwnProperty.call(options, 'content')
                     ? normalizeLegacyHtml(options.content || '')
                     : '',
-                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
+                extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), buildCommentExtension(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
                 editorProps: {
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
@@ -541,6 +720,7 @@
         polishPreservedCards();
         scheduleSelectionState();
         attachContextualListeners();
+        commentsBridge.refresh();
         return true;
     }
 
@@ -1902,6 +2082,7 @@
         isFocused: isFocused,
         getToolbarState: getToolbarState,
         search: searchBridge,
+        comments: commentsBridge,
         // Exposed for tests.
         _normalizeLegacyHtml: normalizeLegacyHtml
     };

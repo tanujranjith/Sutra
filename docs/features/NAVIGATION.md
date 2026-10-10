@@ -32,6 +32,15 @@ The top navigation is the only permanent desktop navigation chrome. Secondary na
 - Home, To-do, Timeline, Review & Tests, Courses, Settings, optional packs, and custom dashboards use the full workspace by default.
 - A future section may add its own contextual sidebar only when the navigation is genuinely section-specific. It must register with the shell rather than reuse or arbitrarily hide the Create tree.
 
+Create's page and folder rows belong to the scrollable `#pagesList`; its footer
+actions remain outside that list. Sidebar filtering, active-row updates,
+focus-restoration, and drag cleanup are scoped to this owner. The separate
+page-link picker owns its own list and does not participate in sidebar row
+updates. The Split View Note selector is rendered by the shared select
+enhancer in a body portal so it is not clipped by the editor pane. Its menu is
+hidden and inert while closed; if its owner pane or Notes view becomes hidden,
+the enhancer closes the portal before the owner can leave it behind.
+
 This keeps the hierarchy consistent: global navigation, then section controls, then primary content. Route-specific actions stay in their section toolbars; global utilities stay in the top shell.
 
 Desktop layouts with a precise pointer use a compact header and smaller workspace

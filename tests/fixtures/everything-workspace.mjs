@@ -154,7 +154,13 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       isSystemPage: false,
       builtInId: '', systemRole: '', pageMode: { enabled: false },
       documentBackground: { enabled: false }, formatting: {},
-      documentLayout: {}, comments: [], suggestions: [], footnotes: [],
+      documentLayout: {}, comments: [{
+        id: 'comment-anchor-parity', text: 'Review the parent passage.', selectedText: 'Parent sentinel.',
+        author: 'You', createdAt: EVERYTHING_STAMP, updatedAt: EVERYTHING_STAMP, resolved: false,
+        replies: [{ id: 'reply-anchor-parity', text: 'Synthetic reply', author: 'You', createdAt: EVERYTHING_STAMP }],
+        anchor: { version: 1, from: 1, to: 17, quote: 'Parent sentinel.', prefix: '', suffix: '', status: 'attached',
+          futureAnchorMetadata: { preserve: true } }, futureThreadMetadata: { preserve: true }
+      }], suggestions: [], footnotes: [],
       citations: [], tags: [{ name: 'parent', color: '#4f46e5' }], versions: []
     }, {
       id: 'page-child', title: 'Parity Parent::Parity Child', type: 'note',

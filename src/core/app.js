@@ -932,7 +932,7 @@ function normalizePagesCollection(rawPages) {
             formatting: normalizePageFormatting(page.formatting),
             // Document layout (Section 9) — headers, footers, page numbers
             documentLayout: normalizeDocumentLayout(page.documentLayout),
-            // Comments (Section 11) — local-only comments
+            // Comments (Section 11) — canonical durable threads and external anchors
             comments: Array.isArray(page.comments) ? page.comments.filter(c => c && c.id && c.text) : [],
             // Suggestions (Section 12) — suggesting mode edits
             suggestions: Array.isArray(page.suggestions) ? page.suggestions.filter(s => s && s.id) : [],
@@ -1684,10 +1684,11 @@ function openMobilePageActionsSheet(pageItem, toggleButton, pageId, pageTitle) {
 }
 
 function closeSidebarPageActionsMenus() {
-    document.querySelectorAll('.page-item.mobile-actions-open').forEach((row) => {
+    const pagesList = document.getElementById('pagesList');
+    if (pagesList) pagesList.querySelectorAll('.page-item.mobile-actions-open').forEach((row) => {
         row.classList.remove('mobile-actions-open');
     });
-    document.querySelectorAll('.page-item-actions-toggle[aria-expanded="true"]').forEach((button) => {
+    if (pagesList) pagesList.querySelectorAll('.page-item-actions-toggle[aria-expanded="true"]').forEach((button) => {
         button.setAttribute('aria-expanded', 'false');
     });
     if (mobilePageActionsSheetRoot) {
@@ -2094,6 +2095,10 @@ function updateToolbarTimeWidget() {
                 const notesView = document.getElementById('view-notes');
                 syncNotesSplitPaneStickyMetrics();
                 if (!editorContainer || !notesView) return;
+                if (document.body && document.body.classList.contains('notes-split-active')) {
+                    editorContainer.style.setProperty('padding-top', '16px', 'important');
+                    return;
+                }
 
                 const toolbarWrapper = document.querySelector('.toolbar-wrapper');
                 const compactViewport = isCompactViewport();
@@ -19707,6 +19712,16 @@ function populateProgressDashboard() {
                 return true;
             };
             if (notesEditorContainer) {
+                if (notesEditorContainer.dataset.activePaneFocusBound !== 'true') {
+                    notesEditorContainer.dataset.activePaneFocusBound = 'true';
+                    notesEditorContainer.addEventListener('focusin', event => {
+                        const target = event.target && event.target.closest
+                            ? event.target.closest('#notesPrimaryPane, #notesSecondaryPane')
+                            : null;
+                        if (!target || !notesEditorContainer.contains(target)) return;
+                        setActiveEditorPane(target.id === 'notesSecondaryPane' ? 'secondary' : 'primary');
+                    });
+                }
                 notesEditorContainer.addEventListener('click', activatePageLink);
                 // Capture before ProseMirror handles Enter/Space as an edit.
                 notesEditorContainer.addEventListener('keydown', (event) => {
@@ -28653,6 +28668,7 @@ function buildOnboardingPlanPreview() {
                 ? source.tags.map(t => String(t || '').trim()).filter(Boolean).slice(0, 24)
                 : [];
             return {
+                ...source,
                 id: String(source.id || cwId('course')),
                 name,
                 shortName: String(source.shortName || '').trim(),
@@ -29019,20 +29035,53 @@ function buildOnboardingPlanPreview() {
             return course;
         }
 
-        function updateCourse(courseId, patch = {}) {
+        function courseUpdateValidationError(courseId, patch = {}, options = {}) {
             const course = getCourseById(courseId);
-            if (!course) return null;
-            Object.keys(patch).forEach(key => {
+            if (!course) return 'This class or activity could not be found.';
+            const hasName = Object.prototype.hasOwnProperty.call(patch, 'name');
+            const hasType = Object.prototype.hasOwnProperty.call(patch, 'type');
+            const name = hasName ? String(patch.name == null ? '' : patch.name).trim() : String(course.name || '').trim();
+            if (hasName && !name) return 'Enter a name for this class or activity.';
+            const type = normalizeCourseType(hasType ? patch.type : course.type);
+            const nameChanged = name !== String(course.name || '').trim();
+            const typeChanged = type !== normalizeCourseType(course.type);
+            if (nameChanged || typeChanged) {
+                const homeworkType = cwTypeToHwType(type);
+                const ignoredDuplicateIds = new Set((Array.isArray(options.ignoreDuplicateIds) ? options.ignoreDuplicateIds : []).map(String));
+                const duplicate = (courseWorkspace.courses || []).some(other => (
+                    String(other && other.id) !== String(course.id)
+                    && !ignoredDuplicateIds.has(String(other && other.id))
+                    && cwTypeToHwType(other && other.type) === homeworkType
+                    && String(other && other.name || '').trim().toLowerCase() === name.toLowerCase()
+                ));
+                if (duplicate) return 'Another ' + (homeworkType === 'misc' ? 'activity' : 'class') + ' already uses that name. Choose a different name.';
+            }
+            return '';
+        }
+
+        function updateCourse(courseId, patch = {}, options = {}) {
+            const course = getCourseById(courseId);
+            if (!course || courseUpdateValidationError(courseId, patch, options)) return null;
+            const normalizedPatch = { ...patch };
+            if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'name')) {
+                normalizedPatch.name = String(normalizedPatch.name == null ? '' : normalizedPatch.name).trim();
+            }
+            if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'type')) {
+                normalizedPatch.type = normalizeCourseType(normalizedPatch.type);
+            }
+            Object.keys(normalizedPatch).forEach(key => {
                 if (key === 'id' || key === 'createdAt') return;
-                course[key] = patch[key];
+                course[key] = normalizedPatch[key];
             });
             course.type = normalizeCourseType(course.type);
             course.updatedAt = new Date().toISOString();
-            // Keep homework lane name in sync on rename.
+            // Keep Homework's compact lane linked by the same stable ID.
             const hwCourses = cwReadHwArray('hwCourses:v2');
             const hc = hwCourses.find(c => String(c && c.id) === String(course.id));
-            if (hc && hc.name !== course.name) {
+            const homeworkType = cwTypeToHwType(course.type);
+            if (hc && (hc.name !== course.name || hc.type !== homeworkType)) {
                 hc.name = course.name;
+                hc.type = homeworkType;
                 cwWriteHwArray('hwCourses:v2', hwCourses);
                 cwNotifyHomework();
             }
@@ -30807,7 +30856,17 @@ function buildOnboardingPlanPreview() {
             });
             const days = get('meetingDays'); const startTime = get('startTime'); const endTime = get('endTime');
             if (days !== undefined) patch.schedule = cwParseScheduleFromInput(days, startTime, endTime, patch.room);
-            updateCourse(courseId, patch);
+            const validationError = courseUpdateValidationError(courseId, patch);
+            if (validationError) {
+                const nameInput = root.querySelector('[data-cs="name"]');
+                if (nameInput && !String(nameInput.value || '').trim()) nameInput.focus();
+                showToast(validationError);
+                return;
+            }
+            if (!updateCourse(courseId, patch)) {
+                showToast('Course settings could not be saved.');
+                return;
+            }
             renderCourseHubView();
             showToast('Course updated.');
         }
@@ -31362,6 +31421,7 @@ function buildOnboardingPlanPreview() {
                         <label class="cw-field"><span class="cw-field-label">Teacher</span><input data-cs="teacherName" type="text" value="${cwEsc(course.teacherName)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Teacher email</span><input data-cs="teacherEmail" type="email" value="${cwEsc(course.teacherEmail)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Room</span><input data-cs="room" type="text" value="${cwEsc(course.room)}"></label>
+                        <label class="cw-field"><span class="cw-field-label">Location</span><input data-cs="location" type="text" value="${cwEsc(course.location)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Office hours</span><input data-cs="officeHours" type="text" value="${cwEsc(course.officeHours)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Term</span><input data-cs="termName" type="text" value="${cwEsc(course.termName)}"></label>
                         <label class="cw-field"><span class="cw-field-label">Color</span><input data-cs="color" type="text" value="${cwEsc(course.color)}" placeholder="#7c9cf2"></label>
@@ -39819,19 +39879,41 @@ function buildOnboardingPlanPreview() {
         // Outside-click closing is handled per-open in toggleSpacesDropdown via _spacesDropdownOutsideHandler
 
         // ===== COMMENTS (Section 11) =====
-        // Local-only threaded comments anchored (best-effort) to selected text.
+        // Canonical page-owned threads, with modern-editor range annotations.
         let commentsFilter = 'open'; // 'open' | 'resolved'
 
         function toggleCommentsPanel() {
+            // Release a just-closed prompt's background isolation before changing
+            // the panel state, so its saved aria-hidden value cannot overwrite it.
+            SutraModalManager.sync();
             const panel = document.getElementById('commentsPanel');
             if (!panel) return;
             panel.classList.toggle('active');
+            document.body.classList.toggle('notes-comments-open', panel.classList.contains('active'));
+            panel.setAttribute('aria-hidden', panel.classList.contains('active') ? 'false' : 'true');
             if (panel.classList.contains('active')) renderComments();
         }
 
         function getActivePage() {
             if (!currentPageId) return null;
             return pages.find(p => p.id === currentPageId);
+        }
+
+        function getCommentContext() {
+            const editor = getActiveEditor(), page = getPageForEditor(editor);
+            return { editor, page: page && activeView === 'notes' && isPageContentAuthorized(page) ? page : null, modern: activeNotesEditorV2() };
+        }
+        function getCommentPage() { return getCommentContext().page; }
+        function focusCommentThread(id) {
+            const context = getCommentContext();
+            if (!context.page) return;
+            const panel = document.getElementById('commentsPanel');
+            if (panel && !panel.classList.contains('active')) toggleCommentsPanel();
+            if (context.modern?.comments) context.modern.comments.setActive(id);
+            document.querySelectorAll('#commentsList .comment-item').forEach(card => {
+                card.classList.toggle('is-active', card.dataset.commentId === id);
+                if (card.dataset.commentId === id) card.scrollIntoView({ block: 'nearest' });
+            });
         }
 
         // Human-friendly "3 min ago"–style timestamps; absolute string on hover.
@@ -39859,11 +39941,11 @@ function buildOnboardingPlanPreview() {
 
         function commentReplyHtml(commentId, reply) {
             const when = reply.createdAt ? escapeHtml(new Date(reply.createdAt).toLocaleString()) : '';
-            return `<div class="comment-reply" data-reply-id="${reply.id}">
+            return `<div class="comment-reply" data-reply-id="${escapeHtml(reply.id)}">
                 <div class="comment-reply-head">
                     <span class="comment-reply-author">${escapeHtml(reply.author || 'You')}</span>
                     <span class="comment-reply-time" title="${when}">${escapeHtml(commentRelativeTime(reply.createdAt))}</span>
-                    <button class="comment-reply-del" title="Delete reply" aria-label="Delete reply" onclick="deleteCommentReply('${commentId}','${reply.id}')"><i class="fas fa-times"></i></button>
+                    <button class="comment-reply-del" title="Delete reply" aria-label="Delete reply" onclick="deleteCommentReply(${escapeHtml(JSON.stringify(String(commentId)))},${escapeHtml(JSON.stringify(String(reply.id)))})"><i class="fas fa-times"></i></button>
                 </div>
                 <div class="comment-reply-text">${escapeHtml(reply.text)}</div>
             </div>`;
@@ -39874,8 +39956,9 @@ function buildOnboardingPlanPreview() {
             const created = c.createdAt ? escapeHtml(new Date(c.createdAt).toLocaleString()) : '';
             const rel = escapeHtml(commentRelativeTime(c.createdAt));
             const edited = (c.updatedAt && c.updatedAt !== c.createdAt) ? ' · edited' : '';
+            const detached = c.anchor && c.anchor.status === 'orphaned';
             const anchor = c.selectedText
-                ? `<button type="button" class="comment-anchor" onclick="jumpToCommentAnchor('${c.id}')" title="Jump to the referenced text">
+                ? `<button type="button" class="comment-anchor" onclick="jumpToCommentAnchor(${escapeHtml(JSON.stringify(String(c.id)))})" title="Jump to the referenced text">
                         <i class="fas fa-quote-left" aria-hidden="true"></i><span>${escapeHtml(c.selectedText)}</span>
                    </button>`
                 : '';
@@ -39884,24 +39967,25 @@ function buildOnboardingPlanPreview() {
                 ? `<div class="comment-replies">${replies.map(r => commentReplyHtml(c.id, r)).join('')}</div>`
                 : '';
             const composer = c.resolved ? '' : `<div class="comment-reply-compose">
-                    <input type="text" class="comment-reply-input" id="commentReplyInput-${c.id}" placeholder="Reply…" aria-label="Reply to comment" onkeydown="commentReplyKey(event, '${c.id}')" />
-                    <button class="comment-action-btn" onclick="addCommentReply('${c.id}')">Reply</button>
+                    <input type="text" class="comment-reply-input" id="commentReplyInput-${escapeHtml(c.id)}" placeholder="Reply…" aria-label="Reply to comment" onkeydown="commentReplyKey(event, ${escapeHtml(JSON.stringify(String(c.id)))})" />
+                    <button class="comment-action-btn" onclick="addCommentReply(${escapeHtml(JSON.stringify(String(c.id)))})">Reply</button>
                 </div>`;
-            return `<div class="comment-item ${resolved}" data-comment-id="${c.id}">
+            return `<div class="comment-item ${resolved}" data-comment-id="${escapeHtml(c.id)}">
                 <div class="comment-header">
                     <span class="comment-author">${escapeHtml(c.author || 'You')}</span>
                     <span class="comment-time" title="${created}">${rel}${edited}</span>
                 </div>
                 ${anchor}
+                ${detached ? '<div class="comment-detached">Referenced text changed or was removed</div>' : ''}
                 <div class="comment-text">${escapeHtml(c.text)}</div>
                 ${repliesHtml}
                 ${composer}
                 <div class="comment-actions">
                     ${c.resolved
-                        ? `<button class="comment-action-btn" onclick="reopenComment('${c.id}')"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reopen</button>`
-                        : `<button class="comment-action-btn primary" onclick="resolveComment('${c.id}')"><i class="fas fa-check" aria-hidden="true"></i> Resolve</button>`}
-                    <button class="comment-action-btn" onclick="editCommentPrompt('${c.id}')">Edit</button>
-                    <button class="comment-action-btn danger" onclick="deleteComment('${c.id}')">Delete</button>
+                        ? `<button class="comment-action-btn" onclick="reopenComment(${escapeHtml(JSON.stringify(String(c.id)))})"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reopen</button>`
+                        : `<button class="comment-action-btn primary" onclick="resolveComment(${escapeHtml(JSON.stringify(String(c.id)))})"><i class="fas fa-check" aria-hidden="true"></i> Resolve</button>`}
+                    <button class="comment-action-btn" onclick="editCommentPrompt(${escapeHtml(JSON.stringify(String(c.id)))})">Edit</button>
+                    <button class="comment-action-btn danger" onclick="deleteComment(${escapeHtml(JSON.stringify(String(c.id)))})">Delete</button>
                 </div>
             </div>`;
         }
@@ -39910,7 +39994,10 @@ function buildOnboardingPlanPreview() {
             const list = document.getElementById('commentsList');
             const countEl = document.getElementById('commentsCount');
             if (!list) return;
-            const page = getActivePage();
+            const context = getCommentContext(), page = context.page;
+            if (page && context.modern?.comments) context.modern.comments.refresh();
+            const title = document.getElementById('commentsPageTitle');
+            if (title) title.textContent = page ? String(page.title || 'Untitled').split('::').pop() : 'Open a note';
             const comments = (page && Array.isArray(page.comments)) ? page.comments : [];
 
             const openCount = comments.filter(c => !c.resolved).length;
@@ -39936,38 +40023,32 @@ function buildOnboardingPlanPreview() {
                 list.innerHTML = `<div class="comments-empty"><i class="fas fa-comment-slash" aria-hidden="true"></i><div>${escapeHtml(msg)}</div>${hint}</div>`;
                 return;
             }
-            // Newest first within the active filter.
-            const ordered = visible.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+            const position = c => c.anchor?.version === 1 && c.anchor.status === 'attached' ? c.anchor.from : Infinity;
+            const ordered = visible.slice().sort((a, b) => (position(a) - position(b)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
             list.innerHTML = ordered.map(commentCardHtml).join('');
+            const active = context.modern?.comments?.getActive();
+            list.querySelectorAll('.comment-item').forEach(card => card.classList.toggle('is-active', card.dataset.commentId === active));
         }
 
         async function addCommentFromSelection() {
-            const page = getActivePage();
-            if (!page) { await atelierAlert('Please open a note first.'); return; }
-            const sel = window.getSelection();
-            const selectedText = sel && sel.toString() ? sel.toString().replace(/\s+/g, ' ').trim().slice(0, 240) : '';
-            const text = await atelierPrompt(
-                selectedText ? `Comment on: "${selectedText}"` : 'Add a comment',
-                '',
-                { title: 'New Comment', multiline: true, placeholder: 'Your comment...' }
-            );
-            if (!text || !text.trim()) return;
-            const now = new Date().toISOString();
-            page.comments = page.comments || [];
-            page.comments.push({
-                id: generateId(),
-                text: text.trim(),
-                selectedText: selectedText,
-                author: 'You',
-                createdAt: now,
-                updatedAt: now,
-                resolved: false,
-                replies: []
-            });
-            // A brand-new comment is always open — surface it.
+            const context = getCommentContext(), page = context.page;
+            if (!page || !canWritePageContent(page)) { await atelierAlert('Open an editable note first.'); return; }
+            const anchor = context.modern?.comments?.getSelectionAnchor();
+            const selection = window.getSelection();
+            const inEditor = selection && selection.rangeCount && context.editor?.contains(selection.anchorNode) && context.editor.contains(selection.focusNode);
+            const selectedText = anchor ? anchor.quote : (!context.modern && inEditor ? selection.toString().trim() : '');
+            if (!selectedText) { await atelierAlert('Select text in the note before adding a comment.'); return; }
+            const text = await atelierPrompt('Comment on: "' + selectedText.slice(0, 240) + '"', '', { title: 'New Comment', multiline: true, placeholder: 'Your comment...' });
+            if (!text || !text.trim() || !canWritePageContent(page)) return;
+            flushPendingNoteSaves();
+            autoCreateVersionSnapshot(page);
+            const now = new Date().toISOString(), id = generateId();
+            page.comments = Array.isArray(page.comments) ? page.comments : [];
+            page.comments.push({ id, text: text.trim(), selectedText, ...(anchor ? { anchor } : {}), author: 'You', createdAt: now, updatedAt: now, resolved: false, replies: [] });
             commentsFilter = 'open';
             persistAppData();
             renderComments();
+            if (getCommentPage() === page) focusCommentThread(id);
         }
 
         function addCommentReply(id) {
@@ -39975,8 +40056,8 @@ function buildOnboardingPlanPreview() {
             if (!input) return;
             const text = input.value.trim();
             if (!text) { input.focus(); return; }
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (!c) return;
             c.replies = Array.isArray(c.replies) ? c.replies : [];
@@ -39996,8 +40077,8 @@ function buildOnboardingPlanPreview() {
         }
 
         async function deleteCommentReply(commentId, replyId) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === commentId);
             if (!c || !Array.isArray(c.replies)) return;
             c.replies = c.replies.filter(r => r.id !== replyId);
@@ -40005,54 +40086,18 @@ function buildOnboardingPlanPreview() {
             renderComments();
         }
 
-        // Best-effort: locate the commented text in the live editor and flash it.
-        // Uses the CSS Custom Highlight API so the document DOM is never mutated
-        // (critical — the editor engines own their DOM and any wrap/unwrap would
-        // dirty the doc or fight ProseMirror).
         function jumpToCommentAnchor(id) {
-            const page = getActivePage();
-            const c = page && Array.isArray(page.comments) ? page.comments.find(x => x.id === id) : null;
-            const needle = c && c.selectedText ? c.selectedText.trim() : '';
-            if (!needle) return;
-            const container = (typeof getActiveEditor === 'function' && getActiveEditor())
-                || (typeof getPrimaryEditor === 'function' && getPrimaryEditor())
-                || document.getElementById('editor');
-            if (!container) return;
-            // Match on normalized whitespace so anchors survive reflowed text.
-            const norm = needle.replace(/\s+/g, ' ');
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
-            let node, foundNode = null, foundOffset = -1;
-            while ((node = walker.nextNode())) {
-                const val = node.nodeValue || '';
-                let idx = val.indexOf(needle);
-                if (idx < 0 && norm !== needle) idx = val.replace(/\s+/g, ' ').indexOf(norm);
-                if (idx >= 0) { foundNode = node; foundOffset = Math.max(0, idx); break; }
-            }
-            if (!foundNode) {
-                if (typeof showToast === 'function') showToast('Referenced text not found — it may have been edited.', { type: 'info' });
-                return;
-            }
-            try {
-                const range = document.createRange();
-                range.setStart(foundNode, Math.min(foundOffset, foundNode.nodeValue.length));
-                range.setEnd(foundNode, Math.min(foundNode.nodeValue.length, foundOffset + needle.length));
-                const anchorEl = foundNode.parentElement;
-                if (anchorEl && anchorEl.scrollIntoView) anchorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (window.CSS && CSS.highlights && typeof Highlight === 'function') {
-                    const hl = new Highlight(range);
-                    CSS.highlights.set('comment-jump', hl);
-                    setTimeout(() => { try { CSS.highlights.delete('comment-jump'); } catch (e) { /* noop */ } }, 1800);
-                } else if (anchorEl) {
-                    // Fallback for engines without the Highlight API: transient class.
-                    anchorEl.classList.add('comment-anchor-flash');
-                    setTimeout(() => anchorEl.classList.remove('comment-anchor-flash'), 1800);
-                }
-            } catch (e) { /* range building can fail on exotic selections — non-fatal */ }
+            const context = getCommentContext(), thread = context.page?.comments?.find(comment => comment.id === id);
+            if (!thread) return;
+            focusCommentThread(id);
+            const found = context.modern?.comments ? context.modern.comments.scrollTo(id)
+                : window.SutraNotesEditorV2?.comments?.scrollToClassic(context.editor, thread.selectedText);
+            if (!found) showToast('Referenced text changed, was removed, or is ambiguous.', { type: 'info' });
         }
 
         function resolveComment(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (c) { c.resolved = true; c.updatedAt = new Date().toISOString(); }
             persistAppData();
@@ -40060,8 +40105,8 @@ function buildOnboardingPlanPreview() {
         }
 
         function reopenComment(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (c) { c.resolved = false; c.updatedAt = new Date().toISOString(); }
             persistAppData();
@@ -40069,22 +40114,23 @@ function buildOnboardingPlanPreview() {
         }
 
         async function deleteComment(id) {
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page)) return;
             const ok = await atelierConfirm('Delete this comment and its replies?', { destructive: true, confirmText: 'Delete' });
-            if (!ok) return;
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            if (!ok || !canWritePageContent(page)) return;
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             page.comments = page.comments.filter(x => x.id !== id);
             persistAppData();
             renderComments();
         }
 
         async function editCommentPrompt(id) {
-            const page = getActivePage();
-            if (!page || !Array.isArray(page.comments)) return;
+            const page = getCommentPage();
+            if (!page || !canWritePageContent(page) || !Array.isArray(page.comments)) return;
             const c = page.comments.find(x => x.id === id);
             if (!c) return;
             const newText = await atelierPrompt('Edit comment:', c.text, { title: 'Edit Comment', multiline: true });
-            if (newText === null) return;
+            if (newText === null || !newText.trim() || !canWritePageContent(page)) return;
             c.text = newText.trim();
             c.updatedAt = new Date().toISOString();
             persistAppData();
@@ -40699,7 +40745,8 @@ function buildOnboardingPlanPreview() {
             try { if (typeof renderDocOutline === 'function') renderDocOutline(); } catch (e) { /* non-critical */ }
             try { if (typeof renderSplitNoteSelect === 'function') renderSplitNoteSelect(); } catch (e) { /* non-critical */ }
             // Soft-update the sidebar title without a full redraw.
-            const sidebarTitle = document.querySelector(`.page-item[data-page-id="${page.id}"] .page-title-text`);
+            const pagesList = document.getElementById('pagesList');
+            const sidebarTitle = pagesList && pagesList.querySelector(`.page-item[data-page-id="${page.id}"] .page-title-text`);
             if (sidebarTitle) sidebarTitle.textContent = (page.title || '').split('::').pop();
 
             // 8/9) Persist through the canonical local-save path. Pending timers
@@ -44922,10 +44969,11 @@ function buildOnboardingPlanPreview() {
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
   <li>In Modern Editor Split View, each pane has its own note, caret, and undo history. Toolbar actions apply to the active pane.</li>
+  <li>Select text and choose <strong>Add comment on selection</strong> to start an anchored thread. Click its highlighted passage or quoted text to review, reply, resolve, or reopen it. Comments follow the active Split View note and stay in backups and version history. If a passage is removed or cannot be identified safely, the thread stays available with a changed-text notice.</li>
   <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
   <li>Useful pairings the data model supports: <em>Notes + Review</em>, <em>Notes + AP</em>, <em>Home + Calendar</em>, <em>AP + Review</em>, <em>Workbook + Notes</em>, <em>Focus + Notes</em>.</li>
-  <li>On phones, Split View degrades gracefully into stacked panes — the desktop Notes split is the only layout where both panes are visible side by side today.</li>
+  <li>Split View stays side by side while the Notes column is at least 940px wide; narrower columns stack both panes, each with its own scroll area. The highlighted <strong>Active</strong> pane receives toolbar formatting.</li>
   <li>Notes linked to a class expose a class chip near the breadcrumb trail so you can reopen the Class Dashboard quickly.</li>
   <li>The Class Dashboard drawer can also create or link notes for a class without duplicating dashboards.</li>
 </ul>
@@ -45010,7 +45058,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
-  <li>All Tasks shows current work first. Open <strong>Completed tasks</strong> to see finished work; search and filters show matches immediately.</li>
+  <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
   <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
   <li>Assignment menus include details, done/open state, <strong>Schedule this</strong>, and <strong>Open class dashboard</strong>.</li>
@@ -45535,6 +45583,13 @@ ${renderedSections}
                 host.className = 'editor editor-v2-host';
                 mirror.insertAdjacentElement('afterend', host);
             }
+            if (host.dataset.splitScrollTrackingBound !== 'true') {
+                host.dataset.splitScrollTrackingBound = 'true';
+                host.addEventListener('scroll', () => {
+                    if (!secondaryPageId || host.hidden || host.style.display === 'none') return;
+                    splitScrollPositions[secondaryPageId] = host.scrollTop || 0;
+                }, { passive: true });
+            }
             notesSecondaryEditorV2 = window.SutraNotesEditorV2.createInstance();
             if (!notesSecondaryEditorV2.mount({
                 host,
@@ -45757,8 +45812,26 @@ function getActiveEditor() {
 }
 
         function setActiveEditorPane(pane) {
+            const changed = activeEditorPane !== (pane === 'secondary' ? 'secondary' : 'primary');
             activeEditorPane = pane === 'secondary' ? 'secondary' : 'primary';
+            const secondaryIsActive = activeEditorPane === 'secondary'
+                && !!(document.body && document.body.classList.contains('notes-split-active'));
+            const primaryPane = document.getElementById('notesPrimaryPane');
+            const secondaryPane = document.getElementById('notesSecondaryPane');
+            primaryPane?.classList.toggle('is-active-pane', !secondaryIsActive);
+            secondaryPane?.classList.toggle('is-active-pane', secondaryIsActive);
+            primaryPane?.setAttribute('aria-label', secondaryIsActive ? 'Main note' : 'Main note, active');
+            secondaryPane?.setAttribute('aria-label', secondaryIsActive ? 'Comparison note, active' : 'Comparison note');
+
+            const activePageId = secondaryIsActive ? secondaryPageId : currentPageId;
+            const activePage = pages.find(page => page && page.id === activePageId);
+            const activeTitle = String(activePage?.title || 'Untitled').split('::').pop();
+            const toolbar = document.getElementById('toolbar');
+            if (toolbar) {
+                toolbar.setAttribute('aria-label', `Formatting toolbar for the ${secondaryIsActive ? 'comparison' : 'main'} note: ${activeTitle}`);
+            }
             updateWordCount();
+            if (changed) renderComments();
         }
 
         function getCustomShortcuts() {
@@ -46459,13 +46532,9 @@ function getActiveEditor() {
         function updateSplitPaneMeta(page) {
             const meta = document.getElementById('splitNoteMeta');
             if (!meta) return;
-            if (!page) {
-                meta.textContent = 'Select a note to open side-by-side.';
-                return;
-            }
-            const updated = page.updatedAt ? new Date(page.updatedAt) : null;
-            const stamp = updated && !isNaN(updated) ? updated.toLocaleString() : 'unknown';
-            meta.textContent = `Editing "${page.title.split('::').pop()}". Last updated: ${stamp}.`;
+            meta.textContent = page ? String(page.title || 'Untitled').split('::').pop() : 'Choose a note';
+            if (page?.id) meta.dataset.pageId = String(page.id);
+            else delete meta.dataset.pageId;
         }
 
         function renderSplitNoteSelect() {
@@ -46501,21 +46570,28 @@ function getActiveEditor() {
                     persistAppData();
                 }
                 updateSplitPaneMeta(null);
+                renderComments();
                 return;
             }
 
             if (secondaryPageId && secondaryPageId !== page.id) {
-                splitScrollPositions[secondaryPageId] = editor.scrollTop || 0;
+                const visibleV2Host = document.getElementById('editorV2SecondaryHost');
+                const scrollSurface = visibleV2Host && !visibleV2Host.hidden && visibleV2Host.style.display !== 'none'
+                    ? visibleV2Host
+                    : editor;
+                splitScrollPositions[secondaryPageId] = scrollSurface.scrollTop || 0;
             }
             secondaryPageId = page.id;
             const _secondaryLocked = page.isLocked && page.lockHash && !unlockedPageIds.has(page.id);
             if (_secondaryLocked) {
                 editor.contentEditable = 'false';
-                editor.innerHTML = `<div class="split-locked-placeholder"><i class="fas fa-lock"></i><p>This page is PIN-protected.</p><p>Open it in the main pane to unlock it first.</p></div>`;
-                if (notesSecondaryEditorV2?.isMounted()) editor.style.display = '';
-                if (notesSecondaryEditorV2?.isMounted()) notesSecondaryEditorV2.setContent('');
                 const v2Host = document.getElementById('editorV2SecondaryHost');
                 if (v2Host) { v2Host.hidden = true; v2Host.inert = true; }
+                if (notesSecondaryEditorV2?.isMounted()) {
+                    editor.style.display = '';
+                    notesSecondaryEditorV2.setContent('');
+                }
+                editor.innerHTML = `<div class="split-locked-placeholder"><i class="fas fa-lock"></i><p>This page is PIN-protected.</p><p>Open it in the main pane to unlock it first.</p></div>`;
             } else {
                 editor.contentEditable = 'true';
                 if (notesSecondaryEditorV2?.isMounted()) editor.style.display = 'none';
@@ -46523,13 +46599,18 @@ function getActiveEditor() {
                 if (v2Host) { v2Host.hidden = false; v2Host.inert = false; }
                 loadPageContentIntoEditor(editor, page);
             }
-            if (typeof splitScrollPositions[page.id] === 'number') {
-                editor.scrollTop = splitScrollPositions[page.id];
-            } else {
-                editor.scrollTop = 0;
+            const restoredScrollTop = typeof splitScrollPositions[page.id] === 'number'
+                ? splitScrollPositions[page.id]
+                : 0;
+            editor.scrollTop = restoredScrollTop;
+            const secondaryV2Host = document.getElementById('editorV2SecondaryHost');
+            if (secondaryV2Host && !secondaryV2Host.hidden && secondaryV2Host.style.display !== 'none') {
+                secondaryV2Host.scrollTop = restoredScrollTop;
             }
             if (select && select.value !== page.id) select.value = page.id;
             updateSplitPaneMeta(page);
+            setActiveEditorPane(activeEditorPane);
+            renderComments();
             try { updateSplitPaneContext('right', { selectedNoteId: page.id, scrollPosition: editor.scrollTop || 0 }); } catch (err) { /* non-critical */ }
             if (shouldPersist && appSettings) {
                 appSettings.notesSplitSecondaryPageId = page.id;
@@ -46573,6 +46654,7 @@ function getActiveEditor() {
                 return;
             }
             syncNotesSecondaryEditorV2();
+            setActiveEditorPane('primary');
             syncNotesSplitPaneStickyMetrics();
             renderSplitNoteSelect();
             const fallbackId = getFallbackSecondaryPageId();
@@ -50014,19 +50096,50 @@ function getActiveEditor() {
         installSutraCanvasApi();
 
         function linkedPdfIdForNotePage(page) {
-            const match = String(page && page.content || '').match(/data-sutra-pdf-card=["']([^"']+)["']/);
-            return match ? String(match[1]) : '';
+            if (!page || !window.SutraAttachments || typeof window.SutraAttachments.listForEntity !== 'function') return '';
+            const content = String(page.content || '');
+            const cardTag = Array.from(content.matchAll(/<aside\b[^>]*>/gi))
+                .map(match => match[0])
+                .find(tag => /\bclass=["'][^"']*\bsutra-linked-pdf-card\b[^"']*["']/i.test(tag));
+            if (!cardTag) return '';
+            const cardTagIndex = content.indexOf(cardTag);
+            const cardClosingTag = /<\/aside\s*>/i.exec(content.slice(cardTagIndex + cardTag.length));
+            const afterCard = cardClosingTag
+                ? content.slice(cardTagIndex + cardTag.length + cardClosingTag.index + cardClosingTag[0].length)
+                : '';
+            const legacyConvertedTail = afterCard.match(/^\s*<hr\b[^>]*>([\s\S]*)/i);
+            const legacyConvertedText = legacyConvertedTail
+                ? legacyConvertedTail[1].replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').replace(/\s+/g, ' ').trim()
+                : '';
+            if (/\bdata-sutra-pdf-auto-open=["'](?:false|0|no)["']/i.test(cardTag) || legacyConvertedText) return '';
+            const match = cardTag.match(/\bdata-sutra-pdf-card=["']([^"']+)["']/i);
+            const markerId = match ? String(match[1]) : '';
+            let linkedPdfs = [];
+            try {
+                linkedPdfs = window.SutraAttachments.listForEntity('note', String(page.id || ''))
+                    .filter(file => file && file.kind === 'pdf' && file.id)
+                    .map(file => String(file.id));
+            } catch (error) { /* keep PDF recovery failure-tolerant */ }
+
+            // Only Notes that still contain Sutra's linked-PDF card are PDF
+            // wrappers. Ordinary Notes may have attached PDFs too, and a
+            // converted Note intentionally stays readable rather than opening
+            // its source PDF again when selected.
+            if (markerId && linkedPdfs.includes(markerId)) return markerId;
+            if (!markerId && linkedPdfs.length === 1) return linkedPdfs[0];
+            return '';
         }
 
         function reopenLinkedPdfForNotePage(page) {
             if (!page || document.body.getAttribute('data-view') !== 'notes') return;
+            if (!isPageContentAuthorized(page)) return;
             if (!window.SutraPdfWorkspace || typeof window.SutraPdfWorkspace.open !== 'function') return;
             const fileId = linkedPdfIdForNotePage(page);
             if (!fileId) return;
             const active = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
             if (active && String(active.fileId) === fileId && String(active.pageId || '')) return;
             window.setTimeout(() => {
-                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes') return;
+                if (currentPageId !== page.id || document.body.getAttribute('data-view') !== 'notes' || !isPageContentAuthorized(page)) return;
                 const current = typeof window.SutraPdfWorkspace.getContext === 'function' ? window.SutraPdfWorkspace.getContext() : null;
                 if (current && String(current.fileId) === fileId) return;
                 window.SutraPdfWorkspace.open(fileId, { entityType: 'note', entityId: page.id }).catch(error => {
@@ -50082,7 +50195,7 @@ function getActiveEditor() {
                 renderBreadcrumbs(page);
                 updatePageTemporaryMeta(page);
 
-                document.querySelectorAll('.page-item').forEach(item => {
+                document.getElementById('pagesList')?.querySelectorAll('.page-item').forEach(item => {
                     item.classList.toggle('active', item.dataset.pageId === pageId);
                 });
 
@@ -50151,6 +50264,7 @@ function getActiveEditor() {
                         setSplitViewEnabled(false);
                     }
                 }
+                renderComments();
                 reopenLinkedPdfForNotePage(page);
 
                 // Canonical note-page lifecycle signal. Slides, Sheets, and HTML
@@ -50356,7 +50470,8 @@ function getActiveEditor() {
                 saveSecondaryPageNow();
                 savePagesToLocal();
                 // A soft-render to update title in sidebar without full redraw
-                const pageTitleSpan = document.querySelector(`.page-item[data-page-id="${currentPageId}"] .page-title-text`);
+                const pagesList = document.getElementById('pagesList');
+                const pageTitleSpan = pagesList && pagesList.querySelector(`.page-item[data-page-id="${currentPageId}"] .page-title-text`);
                 if (pageTitleSpan) pageTitleSpan.textContent = titleInput;
                 
                 renderSplitNoteSelect();
@@ -51339,6 +51454,7 @@ function getActiveEditor() {
 
         function renderLockedPageScreen(page) {
             window.dispatchEvent(new CustomEvent('sutra:note-page-locked', { detail: { pageId: String(page && page.id || '') } }));
+            renderComments();
             const primaryPane = document.getElementById('notesPrimaryPane');
             if (window.SutraFolderWorkspace) window.SutraFolderWorkspace.close();
             const screen = document.getElementById('lockedPageScreen');
@@ -51487,6 +51603,7 @@ function getActiveEditor() {
                     updatePageTemporaryMeta(page);
                     updateWordCount();
                     renderPagesList();
+                    reopenLinkedPdfForNotePage(page);
                     try { input.value = ''; } catch (err) {}
                     if (openDuressSetup) {
                         requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
@@ -51533,6 +51650,7 @@ function getActiveEditor() {
                     updatePageTemporaryMeta(page);
                     updateWordCount();
                     renderPagesList();
+                    reopenLinkedPdfForNotePage(page);
                     try { input.value = ''; } catch (err) {}
                     showToast('PIN protection removed.');
                 } else {
@@ -53234,7 +53352,7 @@ function getActiveEditor() {
                     dragPageId = null;
                     dropTargetPageId = null;
                     dropPosition = null;
-                    document.querySelectorAll('.page-item').forEach(item => {
+                    pagesList.querySelectorAll('.page-item').forEach(item => {
                         item.classList.remove('drop-inside', 'drop-after', 'drop-before');
                     });
                 });
@@ -58929,6 +59047,7 @@ function getActiveEditor() {
                             // separate so unchanged work is not rehashed every minute.
                             currentMeta.lastAutoBackupCheckAt = new Date().toISOString();
                             persistSutraCloudMeta();
+                            updateSutraCloudUi();
                         }
                         return { skipped: true, reason: 'unchanged' };
                     }
@@ -59076,6 +59195,11 @@ function getActiveEditor() {
             row('Last backup', meta.lastBackupAt ? formatSutraDriveSyncDate(meta.lastBackupAt) : 'never');
             row('Auto-backup', meta.autoBackup.enabled
                 ? (meta.autoBackup.frequency === 'daily' ? `Daily at ${meta.autoBackup.dailyTime} (local time)` : `on (${meta.autoBackup.frequency})`) : 'off');
+            if (meta.autoBackup.enabled) {
+                row('Automatic backup status', getSutraCloudStatus().backups.state);
+                if (meta.lastAutoBackupAt) row('Last automatic backup', formatSutraDriveSyncDate(meta.lastAutoBackupAt));
+                if (meta.lastAutoBackupCheckAt) row('Last unchanged-work check', formatSutraDriveSyncDate(meta.lastAutoBackupCheckAt));
+            }
             if (!ready && status && status.reason) row('Next step', status.reason, 'warn');
             if (meta.lastError && ready) row('Last error', meta.lastError, 'warn');
         }
@@ -59496,6 +59620,9 @@ function getActiveEditor() {
             const backupState = !navigator.onLine ? 'Offline'
                 : sutraCloudRuntime.busy ? 'Working'
                 : meta.lastError ? 'Needs attention'
+                : automatic && persistenceWritesBlocked ? 'Automatic backups paused: local saving needs attention'
+                : automatic && sutraRemoteCommitPending ? 'Automatic backups waiting for workspace changes to finish'
+                : automatic && (!provider || !provider.supportsAutoBackup || !provider.getSetupStatus().ready) ? 'Automatic backups paused: connect the backup destination'
                 : automatic && !navigator.locks ? 'Automatic backups paused: browser lock support required'
                 : automatic && !sutraCloudRuntime.backupPassphrase ? 'Unlock backups by making a backup this session'
                 : automatic ? 'Automatic backups on' : 'Automatic backups off';
@@ -59505,6 +59632,7 @@ function getActiveEditor() {
                 sync: { ...sync, automatic: !!sync.enabled, label: sutraSyncStateLabel(sync.state) },
                 backups: { state: backupState, provider: provider ? provider.id : null,
                     lastBackupAt: meta.lastBackupAt || null, lastAutoBackupAt: meta.lastAutoBackupAt || null,
+                    lastAutoBackupCheckAt: meta.lastAutoBackupCheckAt || null,
                     lastManualBackupAt: appSettings && appSettings.dataHealth && appSettings.dataHealth.lastAtelierExportAt || null,
                     autoBackup: { ...meta.autoBackup }, error: meta.lastError || null },
                 online: navigator.onLine
@@ -59594,6 +59722,7 @@ function getActiveEditor() {
             if (!modal.classList.contains('active')) sutraCloudUiState.lastFocus = document.activeElement;
             if (!isSutraCloudSignedIn()) restoreSutraCloudSession(); // local only — keeps the save-bar entry self-sufficient
             bindSutraCloudUi();
+            bindSutraCloudVisibilityAutoBackup();
             bindSutraSyncUi();
             selectSutraCloudSection(section);
             sutraCloudUiState.forceSetupRebuild = true;   // refresh the setup form to current state
@@ -64680,11 +64809,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)');
         }
 
-        function buildLinkedPdfCardHtml(fileMeta, pageId) {
+        function buildLinkedPdfCardHtml(fileMeta, pageId, options = {}) {
             const fileId = escapeHtml(String(fileMeta && fileMeta.id || ''));
             const linkedPageId = escapeHtml(String(pageId || ''));
             const name = escapeHtml(String(fileMeta && (fileMeta.originalName || fileMeta.name) || 'PDF'));
-            return `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${fileId}">
+            const autoOpen = options.autoOpen !== false;
+            return `<aside class="sutra-linked-pdf-card" data-sutra-pdf-card="${fileId}" data-sutra-pdf-auto-open="${autoOpen ? 'true' : 'false'}">
                 <p><strong>Linked PDF:</strong> ${name}</p>
                 <p>This note keeps the exact original attached. Open it in the PDF workspace or explicitly convert its searchable text into the note.</p>
                 <p><button type="button" data-sutra-pdf-action="open" data-file-id="${fileId}" data-page-id="${linkedPageId}">Open PDF</button>
@@ -64704,8 +64834,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             linkWorkspaceAttachment(added.id, 'note', page.id);
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
-            renderPagesList();
-            loadPage(page.id);
+            // createImportedPage() has already selected and rendered this Note.
+            // A same-page load would snapshot the editor mirror again while
+            // Modern Editor V2 is still hydrating the linked-PDF component.
             await flushAppSaveNow('pdf-note-attachment');
             if (context.openWorkspace === true && window.SutraPdfWorkspace && typeof window.SutraPdfWorkspace.open === 'function') {
                 try {
@@ -64726,12 +64857,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const page = pages.find(item => String(item && item.id) === String(pageId));
             if (!bytes || !fileMeta || !page) throw new Error('The linked PDF is unavailable.');
             const extracted = await window.SutraPdfAdapter.extractText(bytes);
-            const card = buildLinkedPdfCardHtml(fileMeta, page.id);
+            const card = buildLinkedPdfCardHtml(fileMeta, page.id, { autoOpen: false });
             page.content = sanitizeEditorHtml(card + '<hr>' + normalizeTextToHtml(extracted || '(No searchable text found. This may be a scanned PDF.)'));
             page.updatedAt = new Date().toISOString();
             savePagesToLocal();
             await flushAppSaveNow('pdf-convert-to-note');
-            if (String(currentPageId) === String(page.id)) loadPage(page.id);
+            if (String(currentPageId) === String(page.id)) {
+                // Rehydrate the current editor directly. Calling loadPage on
+                // the same id first snapshots its stale mirror over the newly
+                // converted content, and can also reopen the source PDF.
+                loadPageContentIntoEditor(getPrimaryEditor(), page);
+            }
             showToast('PDF text converted into the note. The original remains attached.');
             return page;
         }
@@ -66254,7 +66390,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             currentEmojiPageId = null;
             if (window.SutraModalManager && typeof window.SutraModalManager.sync === 'function') window.SutraModalManager.sync();
             if (restoreIconFocus && pageId) {
-                const icon = document.querySelector(`.page-item[data-page-id="${CSS.escape(String(pageId))}"] .page-icon`);
+                const pagesList = document.getElementById('pagesList');
+                const icon = pagesList && pagesList.querySelector(`.page-item[data-page-id="${CSS.escape(String(pageId))}"] .page-icon`);
                 if (icon && !icon.closest('[inert]') && icon.getClientRects().length) icon.focus({ preventScroll: true });
             }
         }
@@ -67184,6 +67321,23 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             return {
                 getPage: pageForMirror,
+                activateComment(id) {
+                    setActiveEditorPane(mirror.id === 'editorSecondary' ? 'secondary' : 'primary');
+                    focusCommentThread(id);
+                },
+                onCommentsMapped(threads) {
+                    const page = pageForMirror();
+                    if (!canWritePageContent(page)) return;
+                    const changes = threads.filter(thread => {
+                        const comment = page.comments?.find(entry => String(entry.id) === thread.id);
+                        return comment && JSON.stringify(comment.anchor) !== JSON.stringify(thread.anchor);
+                    });
+                    if (!changes.length) return;
+                    autoCreateVersionSnapshot(page);
+                    changes.forEach(thread => { page.comments.find(entry => String(entry.id) === thread.id).anchor = thread.anchor; });
+                    queueSaveForEditor(mirror);
+                    if (document.getElementById('commentsPanel')?.classList.contains('active')) requestAnimationFrame(renderComments);
+                },
                 canWrite: () => canWritePageContent(pageForMirror()),
                 getBlock(type, id) {
                     const page = pageForMirror();
@@ -68241,6 +68395,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const v2Host = editor.id === 'editor' ? getNotesEditorV2Host() : document.getElementById('editorV2SecondaryHost');
                 if (v2Host) v2Host.dataset.pageId = String(page.id || '');
                 syncModernStructuredBlocks(editor, page, modern);
+                renderComments();
                 enhanceEditorPageLinks(v2Host);
                 applyDocumentBackgroundForEditor(editor, page);
                 return;
@@ -68273,6 +68428,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             noteUndoManager.push(editor);
             // Render this page's document background (if any) behind the note surface.
             applyDocumentBackgroundForEditor(editor, page);
+            renderComments();
         }
 
         /* ====================================================================
@@ -70900,7 +71056,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function filterPages() {
             const query = getSearchQuery();
             searchQuery = query;
-            const pageItems = document.querySelectorAll('.page-item');
+            const pagesList = document.getElementById('pagesList');
+            if (!pagesList) return;
+            const pageItems = pagesList.querySelectorAll('.page-item');
             const renderedPageIds = new Set(Array.from(pageItems).map(item => item.dataset.pageId));
             const totalPages = Array.isArray(pages) ? pages.length : 0;
             
@@ -83157,10 +83315,7 @@ function parseQuickCaptureDate(text, now) {
 // using the course name, its significant words, and common student shorthand
 // (math, chem, bio, ...). Returns { id, name } for the most specific match, or null.
 function resolveQuickCaptureCourse(text) {
-    let courses = [];
-    try {
-        if (typeof localStorage !== 'undefined') courses = readLocalArraySafe('hwCourses:v2');
-    } catch (err) { courses = []; }
+    const courses = getQuickCaptureCourses();
     if (!Array.isArray(courses) || courses.length === 0) return null;
 
     const padded = ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';

@@ -743,6 +743,39 @@ test('scheduled backups upload ciphertext once across two tabs and stop when dis
   await second.close();
 });
 
+test('daily backup at 07:15 local time uploads once and records unchanged checks separately', async ({ page }) => {
+  test.setTimeout(90000);
+  const supa = await openApp(page);
+  await seedWorkspace(page, 'daily-local-time');
+  await page.evaluate(() => {
+    const notifications = window.SutraNotifications;
+    const shownThrough = new Date(2026, 9, 20).getTime();
+    notifications.importState({ ...notifications.exportState(), lastDigest: shownThrough, lastWeeklyNudge: shownThrough });
+  });
+  await useSupabaseSignedIn(page);
+  await page.evaluate(passphrase => window.SutraCloud.backupNow({ passphrase }), PASS);
+  await page.clock.install({ time: new Date(2026, 9, 10, 7, 14, 59) });
+  await page.evaluate(() => {
+    window.SutraCloud.open('backups');
+    window.SutraCloud.setAutoBackup({ enabled: true, frequency: 'daily', dailyTime: '07:15' });
+  });
+  const before = supa.uploads.length;
+  await page.clock.fastForward(1500);
+  await page.clock.resume();
+  await expect.poll(() => supa.uploads.length).toBe(before + 1);
+  await expect.poll(() => page.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt)).toBeTruthy();
+  const uploadedAt = await page.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt);
+  expect(supa.uploads.at(-1).bytes.subarray(0, 8).toString()).toBe('SUTRAENC');
+  expect(supa.uploads.at(-1).bytes.toString()).not.toContain('Body daily-local-time');
+  await page.clock.setFixedTime(new Date(2026, 9, 11, 7, 16));
+  await page.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+  await expect.poll(() => page.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupCheckAt)).toBeTruthy();
+  expect(supa.uploads.length).toBe(before + 1);
+  expect(await page.evaluate(() => window.SutraCloud.getStatus().backups.lastAutoBackupAt)).toBe(uploadedAt);
+  await expect(page.locator('#sutraCloudStatusCard')).toContainText('Last unchanged-work check');
+  await page.evaluate(() => window.SutraCloud.setAutoBackup({ enabled: false }));
+});
+
 test('auto-backup is off by default and manual is always ready', async ({ page }) => {
   await openApp(page);
   expect(await page.evaluate(() => window.SutraCloudSync.getMeta().autoBackup.enabled)).toBe(false);

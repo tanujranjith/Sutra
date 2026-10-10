@@ -18,6 +18,22 @@
     return match ? String(match.id) : '';
   }
 
+  function openCourseSettings(courseId) {
+    const id = String(courseId || '').trim();
+    if (!id || typeof window.setActiveView !== 'function'
+      || typeof window.cwSelectCourse !== 'function' || typeof window.cwSetCourseTab !== 'function') {
+      if (typeof window.showToast === 'function') window.showToast('Course settings are unavailable.');
+      return false;
+    }
+    if (typeof window.closeClassDashboardDrawer === 'function') window.closeClassDashboardDrawer();
+    window.setActiveView('courses', { allowDisabled: true });
+    window.cwSelectCourse(id);
+    window.cwSetCourseTab('settings');
+    const nameInput = document.querySelector('#courseHubMount [data-cs="name"]');
+    if (nameInput) nameInput.focus({ preventScroll: true });
+    return true;
+  }
+
   function enhanceDrawer() {
     const drawer = getDrawer();
     if (!drawer || !drawer.classList.contains('active')) return;
@@ -30,6 +46,16 @@
     if (!course) return;
 
     const kindLabel = course.type === 'misc' ? 'activity' : 'class';
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'neumo-btn class-dash-edit';
+    editButton.setAttribute('data-class-dashboard-edit', courseId);
+    editButton.textContent = `Edit ${kindLabel}`;
+    editButton.addEventListener('click', () => openCourseSettings(courseId));
+    const startFocusButton = footer.querySelector('.class-dash-primary');
+    if (startFocusButton) footer.insertBefore(editButton, startFocusButton.nextSibling);
+    else footer.appendChild(editButton);
+
     const button = document.createElement('button');
     button.type = 'button';
     button.id = 'classDashDeleteBtn';

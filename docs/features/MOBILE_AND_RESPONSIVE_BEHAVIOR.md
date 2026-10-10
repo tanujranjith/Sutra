@@ -108,10 +108,11 @@ rendered. Page Mode stays a faithful preview of the printed/exported layout.
 
 ### Split view
 
-Side-by-side split editing is a **wide-screen feature**. On small screens the
-secondary pane (`.notes-pane-secondary`) stacks below or is set aside rather than
-squeezing two editors into a phone width, so each note stays readable. The
-`body.notes-split-active` flag still applies for any custom styling.
+Split View stays side by side while the Notes column has room for both editors.
+When that usable column is narrower than 940px, the panes stack vertically and
+keep their own scroll areas instead of squeezing two editors into a narrow row.
+The active note remains outlined and labeled **Active** when the shared toolbar
+has focus. The `body.notes-split-active` flag still applies for custom styling.
 
 ### Document backgrounds
 
@@ -291,8 +292,8 @@ Run through the following at each width — **1440, 1280, 1024, 900, 768, 640, 4
       table, image, or drawing overflows the page.
 - [ ] **Page Mode** pages fit the width (no horizontal scroll); breaks/headers/footers
       render.
-- [ ] **Split view** is desktop/tablet only; the secondary pane stacks/sets aside on
-      phones with both notes readable.
+- [ ] **Split view** stays side by side while the Notes column is at least 940px;
+      narrower columns stack both independent editor panes vertically.
 - [ ] **Document backgrounds** render in editor, Page Mode, and split; the modal
       controls stack under 520px; sliders work by touch and keyboard; locked pages
       hide their background behind the PIN.

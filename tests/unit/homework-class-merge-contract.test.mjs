@@ -8,8 +8,11 @@ const homework = readFileSync(new URL('../../src/features/study/homework.js', im
 test('Homework exposes class actions and a recoverable merge path', () => {
   const actions = extractFunction(homework, 'renderCourseGroupActions');
   assert.ok(actions, 'class group actions are rendered by a dedicated helper');
-  assert.match(actions.body, /data-course-menu-trigger/);
-  assert.match(actions.body, /data-course-merge/);
+  assert.match(actions.body, /renderCourseActionsMenu\(course, name\)/);
+  const menu = extractFunction(homework, 'renderCourseActionsMenu');
+  assert.ok(menu, 'classes and activities share the course actions menu');
+  assert.match(menu.body, /data-course-menu-trigger/);
+  assert.match(menu.body, /data-course-merge/);
   assert.match(actions.body, /data-course-delete/);
 
   const merge = extractFunction(homework, 'mergeClasses');

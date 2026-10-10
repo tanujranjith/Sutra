@@ -85,6 +85,8 @@ jobs:
         # overloading the shared GitHub runner during cold startup.
         run: |
           if [ "${{ matrix.shard }}" = "2" ]; then
+            # Check Homework picker containment before the longer regression shard.
+            npx playwright test tests/e2e/notes-sidebar-containment.spec.mjs --grep 'scrolling the Homework class picker' --workers=1 --project=chromium
             # Verify the clean HTML restore baseline before the full shard.
             npx playwright test tests/e2e/html-page-transfer.spec.mjs --workers=1 --project=chromium
           fi

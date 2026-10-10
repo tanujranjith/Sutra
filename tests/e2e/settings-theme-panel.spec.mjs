@@ -30,6 +30,27 @@ function alphaOf(rgb) {
   return p.length >= 4 ? p[3] : 1;
 }
 
+test('Peach preview shows three separated rounded color swatches', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => document.getElementById('themePanel').classList.add('active'));
+  const preview = page.locator('.preset-card[data-theme="heritage"] .preset-preview');
+  await expect(preview).toBeVisible();
+  const geometry = await preview.evaluate(element => {
+    const style = getComputedStyle(element);
+    const swatches = Array.from(element.children).map(child => {
+      const rect = child.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, width: rect.width, radius: parseFloat(getComputedStyle(child).borderRadius) };
+    });
+    return { background: style.backgroundColor, image: style.backgroundImage, swatches };
+  });
+  expect(geometry.swatches).toHaveLength(3);
+  expect(alphaOf(geometry.background)).toBe(0);
+  expect(geometry.image).toBe('none');
+  geometry.swatches.forEach(swatch => { expect(swatch.width).toBeGreaterThan(0); expect(swatch.radius).toBeGreaterThan(0); });
+  expect(geometry.swatches[1].left - geometry.swatches[0].right).toBeGreaterThanOrEqual(1);
+  expect(geometry.swatches[2].left - geometry.swatches[1].right).toBeGreaterThanOrEqual(1);
+});
+
 test('Settings "Open Theme Panel" opens the panel and it stays open (no immediate close)', async ({ page }) => {
   await openApp(page);
   // Click the real Settings trigger (it carries event.stopPropagation()).

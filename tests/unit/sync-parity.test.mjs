@@ -111,6 +111,8 @@ test('everything fixture covers every portable top-level and named nested contra
     .slides.slides[0].elements.find(element => element.type === 'content-timeline').contentTimeline;
   const samples = {
     'pages[]': Object.assign({}, ...fixture.pages),
+    'pages[].comments[]': fixture.pages[0].comments[0],
+    'pages[].comments[].anchor': fixture.pages[0].comments[0].anchor,
     'pages[].canvas.objects[].contentTimeline': canvasTimeline,
     'pages[].canvas.objects[].contentTimeline.events[]': canvasTimeline.events[0],
     'pages[].slides.slides[].elements[].contentTimeline': slideTimeline,
@@ -288,4 +290,38 @@ test('field-level diff reports exact content paths', () => {
     differences.map(row => row.path),
     ['$.assistant.conversations[0].messages[0].content']
   );
+});
+
+test('comment anchor edits and version snapshots travel with the canonical page record', async () => {
+  const initialWorkspace = createEverythingWorkspace({});
+  const initial = await projected(initialWorkspace);
+  const changedWorkspace = structuredClone(initialWorkspace);
+  const page = changedWorkspace.pages.find(p => p.id === 'page-parent');
+  page.versions.push({id:'comment-checkpoint',label:'Before prefix',savedAt:'2026-10-09T06:00:00.000Z',
+    state:{content:page.content,comments:structuredClone(page.comments)}});
+  page.content = '<p>Prefix Parent sentinel.</p>';
+  page.comments[0].anchor.from += 7;
+  page.comments[0].anchor.to += 7;
+  page.comments[0].anchor.prefix = 'Prefix ';
+  page.comments[0].replies.push({id:'reply-added',text:'Review complete',author:'You',createdAt:'2026-10-09T06:01:00.000Z'});
+  const changed = await projected(changedWorkspace);
+  const outbox = diffApi.computeOutbox({baseHashes:initial.hashes,currentRecords:changed.records,currentHashes:changed.hashes,
+    previousOutbox:[],identity:identity('comment-device')});
+  const pageOps = outbox.ops.filter(op => op.recordKey === 'c/pages/page-parent');
+  assert.equal(pageOps.length,1);
+  assert.equal(pageOps[0].kind,'upsert');
+  assert.deepEqual(pageOps[0].payload.comments,page.comments);
+  const remote = mergeApi.applyOpsToRecords(initial.records,outbox.ops).records;
+  const restored = projectionApi.applyProjectionToWorkspace(initialWorkspace,{records:remote}).pages.find(p=>p.id===page.id);
+  assert.deepEqual(restored.comments,page.comments);
+  assert.deepEqual(restored.versions,page.versions);
+  assert.deepEqual(restored.comments[0].anchor.futureAnchorMetadata,{preserve:true});
+  assert.deepEqual(restored.comments[0].futureThreadMetadata,{preserve:true});
+  assert.equal(restored.versions.at(-1).state.comments[0].anchor.from,1);
+  assert.equal(restored.content.includes('comment-mark'),false);
+  page.content = '<p></p>';
+  page.comments[0].anchor.status = 'orphaned';
+  page.comments[0].resolved = true;
+  const detached = await protocolTransfer(changedWorkspace,{},'comment-detached-device');
+  assert.deepEqual(detached.pages.find(p=>p.id===page.id).comments,page.comments);
 });

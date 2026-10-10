@@ -108,24 +108,8 @@
             }
         }
 
-        @media (max-width: 1180px) {
-            body.notes-split-active #view-notes .editor-container {
-                grid-template-columns: 1fr !important;
-            }
 
-            body.notes-split-active .notes-pane-secondary {
-                order: 2;
-            }
 
-            .split-pane-header {
-                flex-wrap: wrap;
-            }
-
-            .split-pane-actions {
-                width: 100%;
-                justify-content: flex-end;
-            }
-        }
 
         @media (max-width: 1024px), (hover: none), (pointer: coarse) {
             #storageOptions,

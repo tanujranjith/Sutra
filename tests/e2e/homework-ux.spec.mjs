@@ -30,10 +30,22 @@ async function openSeededHomework(page) {
       title: 'Completed undated reading',
       difficulty: 'easy'
     });
+    const completedFuture = window.SutraHomework.createTask({
+      courseId: biology.id,
+      title: 'Completed future lab',
+      dueDate: '2099-01-04',
+      difficulty: 'medium'
+    });
     window.SutraHomework.createTask({
       courseId: biology.id,
       title: 'Open overdue quiz',
       dueDate: '2020-01-03',
+      difficulty: 'medium'
+    });
+    window.SutraHomework.createTask({
+      courseId: biology.id,
+      title: 'Upcoming biology lab',
+      dueDate: '2099-01-01',
       difficulty: 'medium'
     });
     window.SutraHomework.createTask({
@@ -43,12 +55,18 @@ async function openSeededHomework(page) {
       difficulty: 'easy'
     });
     window.SutraHomework.createTask({
+      courseId: history.id,
+      title: 'Undated history reading',
+      difficulty: 'easy'
+    });
+    window.SutraHomework.createTask({
       title: 'Unassigned reading',
       dueDate: '2099-01-03',
       difficulty: 'easy'
     });
     window.SutraHomework.setDone(completed.id, true);
     window.SutraHomework.setDone(completedUndated.id, true);
+    window.SutraHomework.setDone(completedFuture.id, true);
     window.SutraHomework.render();
     const homeworkSetup = document.getElementById('hwSetupOverlay');
     if (homeworkSetup) {
@@ -60,6 +78,14 @@ async function openSeededHomework(page) {
   await page.locator('[data-todo-category="homework"]').click();
 }
 
+async function chooseHomeworkFilter(page, id, label) {
+  const filterToggle = page.locator('#hwFilterToggle');
+  if (await filterToggle.getAttribute('aria-expanded') !== 'true') await filterToggle.click();
+  const select = page.locator('#' + id);
+  await select.locator('xpath=..').locator('.nf-select-trigger').click();
+  await page.locator('#' + id + '-menu').getByRole('option', { name: label, exact: true }).click();
+}
+
 test('All Assignments keeps open overdue work visible and groups completed assignments', async ({ page }) => {
   await openSeededHomework(page);
   await page.locator('[data-homework-tab="all"]').click();
@@ -67,17 +93,19 @@ test('All Assignments keeps open overdue work visible and groups completed assig
   const past = table.locator('#hwPastAssignmentRows');
   const toggle = table.locator('[data-hw-past-toggle]');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(toggle).toContainText('Completed tasks (2)');
+  await expect(toggle).toContainText('Completed tasks (3)');
   await expect(past).toBeHidden();
   await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
-  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(3);
+  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row')).toHaveCount(5);
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
+
   await toggle.focus();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(past.locator('.hw-assignment-row')).toHaveCount(2);
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(3);
   await expect(past.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' })).toBeVisible();
   await expect(past.locator('.hw-assignment-row', { hasText: 'Completed undated reading' })).toBeVisible();
+  await expect(past.locator('.hw-assignment-row', { hasText: 'Completed future lab' })).toBeVisible();
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Completed undated reading' })).toHaveCount(0);
   await expect(past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(0);
 
@@ -104,18 +132,21 @@ test('All Assignments keeps open overdue work visible and groups completed assig
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
   const openOverdue = table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' });
-  await openOverdue.locator('[data-task-toggle]').click();
-  await expect(toggle).toContainText('Completed tasks (3)');
-  await expect(past.locator('.hw-assignment-row')).toHaveCount(0);
+  await openOverdue.locator('[data-task-toggle]').focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toContainText('Completed tasks (4)');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-past-toggle'))).resolves.toBe(true);
+
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(past.locator('.hw-assignment-row')).toHaveCount(3);
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(4);
   await expect(past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
-  await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(0);
-  await past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('[data-task-toggle]').click();
-  await expect(toggle).toContainText('Completed tasks (2)');
-  await expect(past.locator('.hw-assignment-row')).toHaveCount(2);
+  await past.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' }).locator('[data-task-toggle]').focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toContainText('Completed tasks (3)');
   await expect(table.locator('tbody:not(#hwPastAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
+  await expect(past.locator('.hw-assignment-row')).toHaveCount(3);
+
   await toggle.click();
   await page.locator('#hwSearchInput').fill('overdue quiz');
   await expect(table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
@@ -136,32 +167,48 @@ test('Homework completion takes precedence over overdue styling and By Class exp
     'Task', 'Class / activity', 'Due', 'Difficulty', 'Priority', 'Status', 'Actions'
   ]);
   await expect(table.locator('.hw-assignment-group-row')).toHaveCount(3);
-  // Action menus are intentionally hidden until opened; assert the visible
-  // group label rather than including hidden menu item textContent.
   expect((await table.locator('.hw-assignment-group-heading > span').allTextContents()).map((text) => text.trim())).toEqual([
     'BiologyClass · 2 tasks',
     'UnassignedUnassigned · 1 task',
     'World HistoryClass · 2 tasks'
   ]);
+  await expect(table.locator('[data-hw-overdue-toggle], #hwOverdueAssignmentRows')).toHaveCount(0);
+  await expect(table.locator('[data-hw-completed-toggle]')).toContainText('Completed tasks (3)');
+  await expect(table.locator('.hw-assignment-row')).toHaveCount(5);
+  await expect(table.locator('tbody:not(#hwCompletedAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
 
-  const completed = table.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' });
+  await table.locator('[data-hw-completed-toggle]').click();
+  const completed = table.locator('#hwCompletedAssignmentRows .hw-assignment-row', { hasText: 'Completed past-due essay' });
   await expect(completed).toHaveClass(/is-completed/);
   await expect(completed.locator('.hw-due-cell')).not.toHaveClass(/is-overdue/);
   await expect(completed.locator('.hw-due-cell')).not.toContainText('Overdue');
   await expect(completed.locator('.hw-work-status')).toHaveText(/Completed/);
   await expect(completed.locator('.hw-difficulty-badge')).toHaveText('Hard');
+  await expect(table.locator('#hwCompletedAssignmentRows .hw-assignment-row', { hasText: 'Completed future lab' })).toBeVisible();
+  await expect(table.locator('#hwCompletedAssignmentRows .hw-assignment-row', { hasText: 'Completed undated reading' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
     .find((task) => task.title === 'Completed past-due essay')?.dueDate)).toBe('2020-01-02');
   await expect(page.locator('[data-deadline-filter="overdue"] strong')).toHaveText('1 task');
 
-  await completed.locator('[data-task-toggle]').click();
-  const reopened = table.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' });
+  await completed.locator('[data-task-toggle]').focus();
+  await page.keyboard.press('Enter');
+  await expect(table.locator('[data-hw-completed-toggle]')).toContainText('Completed tasks (2)');
+  const reopened = table.locator('tbody:not(#hwCompletedAssignmentRows) .hw-assignment-row', { hasText: 'Completed past-due essay' });
+  await expect(reopened).toBeVisible();
+  await expect(reopened.locator('[data-task-toggle]')).toBeFocused();
   await expect(reopened).not.toHaveClass(/is-completed/);
   await expect(reopened.locator('.hw-due-cell')).toHaveClass(/is-overdue/);
   await expect(reopened.locator('.hw-work-status')).toHaveText(/Not Started/);
   await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
     .find((task) => task.title === 'Completed past-due essay')?.dueDate)).toBe('2020-01-02');
   await expect(page.locator('[data-deadline-filter="overdue"] strong')).toHaveText('2 tasks');
+
+  await table.locator('[data-hw-completed-toggle]').click();
+  await reopened.locator('[data-task-toggle]').focus();
+  await page.keyboard.press('Enter');
+  await expect(table.locator('[data-hw-completed-toggle]')).toContainText('Completed tasks (3)');
+  await expect(table.locator('[data-hw-completed-toggle]')).toBeFocused();
+  await expect(table.locator('tbody:not(#hwCompletedAssignmentRows) .hw-assignment-row', { hasText: 'Completed past-due essay' })).toHaveCount(0);
 
   await page.locator('[data-homework-tab="all"]').click();
   const allTable = page.locator('.hw-assignment-table:not(.is-by-class)');
@@ -171,9 +218,10 @@ test('Homework completion takes precedence over overdue styling and By Class exp
   await expect(allTable.locator('.hw-difficulty-badge')).toHaveCount(0);
 
   await page.locator('[data-homework-tab="class"]').click();
-  await page.locator('#hwSearchInput').fill('history');
+  await page.locator('#hwSearchInput').fill('long history assignment');
+  await expect(table.locator('[data-hw-overdue-toggle], [data-hw-completed-toggle]')).toHaveCount(0);
   await expect(table.locator('.hw-assignment-group-row')).toHaveCount(1);
-  await expect(table.locator('.hw-assignment-row')).toHaveCount(2);
+  await expect(table.locator('.hw-assignment-row')).toHaveCount(1);
   await expect(table.locator('.hw-assignment-title-btn', { hasText: 'long history assignment' })).toBeVisible();
 });
 
@@ -238,20 +286,126 @@ test('Homework effort prompt follows the active theme surface and button tokens'
   }
 });
 
-test('Homework By Class keeps grouped structure and assignment details on mobile', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test('By Class keeps overdue work in classes, separates only completed work, and preserves filters and menus', async ({ page }) => {
   await openSeededHomework(page);
-
+  await page.evaluate(() => {
+    const chemistry = window.SutraHomework.addCourse('Chemistry');
+    const task = window.SutraHomework.createTask({ courseId: chemistry.id, title: 'Completed only chemistry lab', dueDate: '2020-01-05' });
+    window.SutraHomework.setDone(task.id, true);
+    window.SutraHomework.render();
+  });
   await page.locator('[data-homework-tab="class"]').click();
   const table = page.locator('.hw-assignment-table.is-by-class');
-  await expect(table.locator('.hw-assignment-group-row')).toHaveCount(3);
-  await expect(table.locator('.hw-assignment-group-row th').first()).toHaveAttribute('colspan', '7');
+  const completedToggle = table.locator('[data-hw-completed-toggle]');
+  await expect(table.locator('[data-hw-overdue-toggle], #hwOverdueAssignmentRows')).toHaveCount(0);
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(table.locator('#hwCompletedAssignmentRows')).toBeHidden();
   await expect(table.locator('.hw-assignment-row')).toHaveCount(5);
-  await expect(table.locator('.hw-difficulty-cell')).toHaveCount(5);
-  await expect(table.locator('.hw-assignment-title-btn', { hasText: 'long history assignment' })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => ({
-    documentWidth: document.documentElement.scrollWidth,
-    viewportWidth: window.innerWidth,
-    rowDisplay: getComputedStyle(document.querySelector('.hw-assignment-row')).display
-  }))).toEqual({ documentWidth: 390, viewportWidth: 390, rowDisplay: 'grid' });
+  const overdueRows = table.locator('tbody:not(#hwCompletedAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' });
+  await expect(overdueRows).toBeVisible();
+  await completedToggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-completed-toggle'))).resolves.toBe(true);
+  const completedRows = table.locator('#hwCompletedAssignmentRows .hw-assignment-row');
+  await expect(overdueRows).toHaveCount(1);
+  await expect(overdueRows).toContainText('Open overdue quiz');
+  await expect(completedRows).toHaveCount(4);
+  await expect(table.locator('#hwCompletedAssignmentRows .hw-assignment-group-row', { hasText: 'Chemistry' })).toBeVisible();
+  const chemistryId = await page.evaluate(() => window.SutraHomework.getCourses().find(course => course.name === 'Chemistry')?.id);
+  const chemistryMenuTrigger = table.locator(`#hwCompletedAssignmentRows [data-course-menu-trigger="${chemistryId}"]`);
+  await chemistryMenuTrigger.click();
+  await expect(chemistryMenuTrigger.locator('xpath=..').locator('.hw-course-menu')).toBeVisible();
+  await expect(chemistryMenuTrigger).toHaveAttribute('aria-expanded', 'true');
+  await chemistryMenuTrigger.click();
+  await expect(table.locator('#hwCompletedAssignmentRows')).toContainText('Completed future lab');
+  await expect(table.locator('#hwCompletedAssignmentRows')).toContainText('Completed undated reading');
+  await expect(table.locator('#hwCompletedAssignmentRows')).toContainText('Completed past-due essay');
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toHaveCount(1);
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Completed past-due essay' })).toHaveCount(1);
+
+  const biologyId = await page.evaluate(() => window.SutraHomework.getCourses().find(course => course.name === 'Biology')?.id);
+  const biologyTriggers = table.locator(`[data-course-menu-trigger="${biologyId}"]`);
+  await expect(biologyTriggers).toHaveCount(2);
+  await biologyTriggers.nth(1).click();
+  await expect(biologyTriggers.nth(0)).toHaveAttribute('aria-expanded', 'false');
+  await expect(biologyTriggers.nth(1)).toHaveAttribute('aria-expanded', 'true');
+  await expect(biologyTriggers.nth(1).locator('xpath=..').locator('.hw-course-menu')).toBeVisible();
+
+  await chooseHomeworkFilter(page, 'hwDueFilter', 'Overdue');
+  await expect(table.locator('[data-hw-overdue-toggle], [data-hw-completed-toggle]')).toHaveCount(0);
+  await expect(table.locator('.hw-assignment-row')).toHaveCount(1);
+  await expect(table.locator('.hw-assignment-row')).toContainText('Open overdue quiz');
+
+  await chooseHomeworkFilter(page, 'hwDueFilter', 'Any due date');
+  await chooseHomeworkFilter(page, 'hwCompletionFilter', 'Completed only');
+  await expect(table.locator('[data-hw-overdue-toggle], [data-hw-completed-toggle]')).toHaveCount(0);
+  await expect(table.locator('.hw-assignment-row')).toHaveCount(4);
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Completed future lab' })).toBeVisible();
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Completed only chemistry lab' })).toBeVisible();
+
+  await chooseHomeworkFilter(page, 'hwCompletionFilter', 'Open and completed');
+  await page.locator('#hwSearchInput').fill('Completed future lab');
+  await expect(table.locator('[data-hw-overdue-toggle], [data-hw-completed-toggle]')).toHaveCount(0);
+  await expect(table.locator('.hw-assignment-row')).toHaveCount(1);
+  await expect(table.locator('.hw-assignment-row')).toContainText('Completed future lab');
+
+  await page.locator('#hwSearchInput').fill('');
+  const overdueTask = table.locator('tbody:not(#hwCompletedAssignmentRows) .hw-assignment-row', { hasText: 'Open overdue quiz' });
+  await overdueTask.locator('[data-task-menu-trigger]').click();
+  await overdueTask.getByRole('menuitem', { name: 'Edit assignment' }).click();
+  const editModal = page.locator('#hwGlobalAddModal');
+  await expect(editModal).toBeVisible();
+  await editModal.locator('[data-field="dueDate"]').fill('2099-01-05');
+  await editModal.locator('button[type="submit"]').click();
+  await expect(table.locator('[data-hw-overdue-toggle]')).toHaveCount(0);
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Open overdue quiz' })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.SutraHomework.getTasks()
+    .find(task => task.title === 'Open overdue quiz')?.dueDate)).toBe('2099-01-05');
+
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'true');
+  await completedToggle.click();
+  const activeTask = table.locator('.hw-assignment-row', { hasText: 'Upcoming biology lab' });
+  await activeTask.locator('[data-task-toggle]').focus();
+  await page.keyboard.press('Enter');
+  await expect(table.locator('[data-hw-completed-toggle]')).toContainText('Completed tasks (5)');
+  await expect(table.locator('[data-hw-completed-toggle]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.evaluate(() => document.activeElement?.hasAttribute('data-hw-completed-toggle'))).resolves.toBe(true);
+  await table.locator('[data-hw-completed-toggle]').click();
+  const completedActiveTask = table.locator('#hwCompletedAssignmentRows .hw-assignment-row', { hasText: 'Upcoming biology lab' });
+  await expect(completedActiveTask).toBeVisible();
+  await completedActiveTask.locator('[data-task-toggle]').click();
+  await expect(table.locator('.hw-assignment-row', { hasText: 'Upcoming biology lab' })).toBeVisible();
+  await expect(table.locator('[data-hw-completed-toggle]')).toContainText('Completed tasks (4)');
+
+  for (const width of [1586, 1280, 1024, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const geometry = await page.evaluate(() => {
+      const panel = document.querySelector('.hw-assignments-panel');
+      const wrapper = document.querySelector('.hw-assignment-table-wrap');
+      const table = wrapper?.querySelector('.hw-assignment-table');
+      if (!panel || !wrapper || !table) return null;
+      wrapper.scrollLeft = wrapper.scrollWidth;
+      const panelRect = panel.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      const buttons = Array.from(table.querySelectorAll('.hw-row-actions .hw-row-action')).filter(button => button.getClientRects().length);
+      return {
+        viewportWidth: window.innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        wrapperWithinPanel: wrapperRect.left >= panelRect.left - 1 && wrapperRect.right <= panelRect.right + 1,
+        buttonsWithinPanel: buttons.every(button => {
+          const rect = button.getBoundingClientRect();
+          return rect.left >= panelRect.left - 1 && rect.right <= panelRect.right + 1;
+        }),
+        actionsWidth: table.querySelector('thead th:last-child')?.getBoundingClientRect().width || 0,
+        actionButtons: buttons.length
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+    expect(geometry.wrapperWithinPanel).toBe(true);
+    expect(geometry.buttonsWithinPanel).toBe(true);
+    if (width > 1180) expect(geometry.actionsWidth).toBeGreaterThanOrEqual(156);
+    expect(geometry.actionButtons).toBeGreaterThan(0);
+  }
 });

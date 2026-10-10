@@ -832,13 +832,16 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-table th:nth-child(4) { width: 10%; }
 .hw-assignment-table th:nth-child(5) { width: 14%; }
 .hw-assignment-table th:nth-child(6) { width: 16%; }
-.hw-assignment-table.is-by-class th:nth-child(1) { width: 27%; }
-.hw-assignment-table.is-by-class th:nth-child(2) { width: 15%; }
-.hw-assignment-table.is-by-class th:nth-child(3) { width: 14%; }
-.hw-assignment-table.is-by-class th:nth-child(4) { width: 12%; }
-.hw-assignment-table.is-by-class th:nth-child(5) { width: 10%; }
-.hw-assignment-table.is-by-class th:nth-child(6) { width: 12%; }
-.hw-assignment-table.is-by-class th:nth-child(7) { width: 10%; }
+.hw-assignment-table.is-by-class { min-width: 960px; }
+.hw-assignment-table-wrap.is-by-class { min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: visible; overscroll-behavior-inline: contain; }
+.hw-assignment-table.is-by-class thead th:nth-child(1) { width: 25%; }
+.hw-assignment-table.is-by-class thead th:nth-child(2) { width: 14%; }
+.hw-assignment-table.is-by-class thead th:nth-child(3) { width: 13%; }
+.hw-assignment-table.is-by-class thead th:nth-child(4) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(5) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(6) { width: 10%; }
+.hw-assignment-table.is-by-class thead th:nth-child(7) { width: 18%; }
+.hw-assignment-table.is-by-class .hw-history-empty td { padding: 16px; color: var(--text-secondary); text-align: center; }
 .hw-assignment-row { border-bottom: 1px solid var(--surface-border); transition: background-color 0.14s ease; }
 .hw-assignment-row:last-child { border-bottom: 0; }
 .hw-assignment-row:hover { background: var(--hw-row-hover); }
@@ -949,7 +952,7 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-assignment-row .hw-quick-actions-cell { padding-inline: 8px; white-space: nowrap; }
 .hw-row-actions { display: inline-flex; align-items: center; justify-content: flex-start; gap: 4px; }
 .hw-row-action,
-.hw-activity-actions button {
+.hw-activity-actions > button {
   width: 30px;
   height: 30px;
   display: inline-flex;
@@ -1120,7 +1123,7 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-activity-list { display: grid; }
 .hw-activity-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) minmax(88px, 0.8fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
   min-width: 0;
@@ -1272,18 +1275,19 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
 .hw-course-icon-custom input:focus-visible,
 .hw-course-icon-custom-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hw-activity-main { min-width: 0; }
-.hw-activity-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
+.hw-activity-name { display: block; width: 100%; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
 .hw-activity-category,
-.hw-activity-empty-copy { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 0.62rem; white-space: nowrap; }
+.hw-activity-empty-copy { display: block; overflow: hidden; margin-top: 2px; color: var(--text-secondary); font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
 .hw-activity-progress { display: grid; grid-template-columns: minmax(35px, 1fr) auto; align-items: center; gap: 7px; margin-top: 7px; }
 .hw-activity-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: var(--surface-border); }
 .hw-activity-progress > span i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .hw-activity-progress small { color: var(--text-secondary); font-size: 0.57rem; }
-.hw-activity-deadline { min-width: 0; text-align: right; }
-.hw-activity-deadline button { display: block; margin-left: auto; color: var(--accent); font-size: 0.67rem; }
+.hw-activity-deadline { grid-column: 2 / -1; min-width: 0; text-align: left; }
+.hw-activity-deadline button { display: block; color: var(--accent); font-size: 0.67rem; }
 .hw-activity-deadline span { display: block; margin-top: 2px; overflow: hidden; color: var(--text-secondary); font-size: 0.6rem; text-overflow: ellipsis; white-space: nowrap; }
-.hw-activity-actions { display: flex; }
-.hw-activity-actions button { width: 28px; height: 28px; margin: 0 1px; }
+.hw-activity-actions { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 2px; }
+.hw-activity-actions > button,
+.hw-activity-actions .hw-course-menu-btn { box-sizing: border-box; flex: 0 0 28px; width: 28px; height: 28px; margin: 0; }
 .hw-side-add {
   width: calc(100% - 20px);
   min-height: 36px;
@@ -1387,6 +1391,8 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
   .hw-workspace-sidebar { grid-template-columns: 1fr; }
 
   .hw-assignment-table-wrap { overflow: visible; }
+  .hw-assignment-table.is-by-class { min-width: 0; }
+  .hw-assignment-table-wrap.is-by-class { overflow: visible; }
   .hw-assignment-table,
   .hw-assignment-table tbody { display: block; }
   .hw-past-heading tr,
@@ -1435,10 +1441,15 @@ body[data-theme-key="default"]:not([data-theme="dark"]) .hw-btn-primary {
   .hw-course-badge,
   .hw-priority-badge,
   .hw-work-status { justify-self: start; }
-  .hw-activity-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
-  .hw-activity-deadline { grid-column: 2 / -1; text-align: left; }
-  .hw-activity-deadline button { margin-left: 0; }
-  .hw-activity-actions { grid-column: 3; grid-row: 1; }
+  .hw-activity-actions > button,
+  .hw-activity-actions .hw-course-menu-btn { flex-basis: 44px; width: 44px; height: 44px; }
+  .hw-extracurricular-panel .hw-course-menu button { min-height: 44px; }
+}
+
+@media (pointer: coarse) {
+  .hw-activity-actions > button,
+  .hw-activity-actions .hw-course-menu-btn { flex-basis: 44px; width: 44px; height: 44px; }
+  .hw-extracurricular-panel .hw-course-menu button { min-height: 44px; }
 }
 
 @media (max-width: 480px) {

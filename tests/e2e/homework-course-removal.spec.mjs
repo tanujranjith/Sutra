@@ -56,6 +56,7 @@ test('Homework exposes removal for classes and extracurriculars with recoverable
   await acceptRemoval(page, '[data-course-delete="remove-class"]');
   await expect.poll(() => page.evaluate(() => window.SutraHomeworkStore.getSnapshot().courses.some((course) => course.id === 'remove-class'))).toBe(false);
 
+  await page.locator('.hw-activity-row [data-course-menu-trigger="remove-activity"]').click();
   await expect(page.locator('.hw-activity-row [data-course-delete="remove-activity"]')).toBeVisible();
   await acceptRemoval(page, '.hw-activity-row [data-course-delete="remove-activity"]');
   await expect.poll(() => page.evaluate(() => {
@@ -122,13 +123,15 @@ test('the class dashboard modal exposes the same removal action for both types',
   await page.evaluate(() => window.openClassDashboardDrawer('remove-class'));
   await expect(page.locator('#classDashboardDrawer')).toHaveClass(/active/);
   await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove class');
-  await expect(page.locator('.class-dash-actions .neumo-btn')).toHaveCount(3);
+  await expect(page.locator('[data-class-dashboard-edit=remove-class]')).toHaveText('Edit class');
+  await expect(page.locator('.class-dash-actions .neumo-btn')).toHaveCount(4);
   await page.locator('#classDashDeleteBtn').click();
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
   await page.locator('#customConfirmAcceptBtn').click();
   await expect(page.locator('#classDashboardDrawer')).not.toHaveClass(/active/);
 
   await page.evaluate(() => window.openClassDashboardDrawer('remove-activity'));
+  await expect(page.locator('[data-class-dashboard-edit=remove-activity]')).toHaveText('Edit activity');
   await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove activity');
   await page.locator('#classDashDeleteBtn').click();
   await expect(page.locator('#customConfirmModal')).toHaveClass(/active/);
@@ -145,15 +148,23 @@ test('the dashboard removal action remains usable in the phone bottom sheet', as
 
   const footer = page.locator('.class-dash-actions');
   await expect(footer).toBeVisible();
-  await expect(footer.locator('.neumo-btn')).toHaveCount(3);
+  await expect(footer.locator('.neumo-btn')).toHaveCount(4);
+  await expect(page.locator('[data-class-dashboard-edit=remove-class]')).toHaveText('Edit class');
   await expect(page.locator('#classDashDeleteBtn')).toHaveText('Remove class');
   await expect.poll(() => page.evaluate(() => {
     const element = document.querySelector('.class-dash-actions');
     const buttons = Array.from(element ? element.querySelectorAll('.neumo-btn') : []);
     const footerBox = element && element.getBoundingClientRect();
+    const boxes = buttons.map(button => button.getBoundingClientRect());
+    const noButtonOverlap = boxes.every((a, index) => boxes.slice(index + 1).every(b =>
+      a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top
+    ));
     return {
       footerFitsViewport: !!footerBox && footerBox.right <= window.innerWidth,
-      buttonsFitViewport: buttons.every((button) => button.getBoundingClientRect().right <= window.innerWidth)
+      buttonsFitViewport: buttons.every(button => button.getBoundingClientRect().right <= window.innerWidth),
+      touchTargetsFit: buttons.every(button => button.getBoundingClientRect().height >= 44),
+      noButtonOverlap,
+      oneColumn: getComputedStyle(element).gridTemplateColumns.split(' ').length === 1
     };
-  })).toEqual({ footerFitsViewport: true, buttonsFitViewport: true });
+  })).toEqual({ footerFitsViewport: true, buttonsFitViewport: true, touchTargetsFit: true, noButtonOverlap: true, oneColumn: true });
 });

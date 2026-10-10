@@ -53,6 +53,19 @@ async function openApp(page) {
   await completeOnboarding(page);
 }
 
+async function openAppForSplitLayout(page) {
+  await page.goto('/Sutra.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await page.waitForFunction(() =>
+    !!window.SutraNotesEditorV2 &&
+    !!window.flowAtelier &&
+    typeof window.flowAtelier.flushAppSaveNow === 'function' &&
+    typeof window.setWorkspacePreference === 'function' &&
+    typeof window.applyWorkspacePreferences === 'function');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-app-ready'));
+  await completeOnboarding(page);
+}
+
 async function enableEditorV2(page) {
   await page.evaluate(() => {
     window.setWorkspacePreference('editor.editorV2Enabled', true, {});
@@ -94,6 +107,109 @@ async function createBlankNote(page, name) {
       current.isSystemPage !== true &&
       pm && !pm.textContent.includes('Sutra Help & Docs');
   }, name);
+}
+
+async function readSplitLayoutGeometry(page, primaryEditorSelector, secondaryEditorSelector) {
+  return page.evaluate(({ primaryEditorSelector, secondaryEditorSelector }) => {
+    const rect = element => {
+      const value = element.getBoundingClientRect();
+      return { top: value.top, bottom: value.bottom, left: value.left, right: value.right, width: value.width, height: value.height };
+    };
+    const style = element => {
+      const value = getComputedStyle(element);
+      return {
+        height: value.height,
+        minHeight: value.minHeight,
+        maxHeight: value.maxHeight,
+        overflowY: value.overflowY,
+        display: value.display,
+        fontFamily: value.fontFamily,
+        fontSize: value.fontSize,
+        fontWeight: value.fontWeight,
+        lineHeight: value.lineHeight,
+        textOverflow: value.textOverflow
+      };
+    };
+    const container = document.getElementById('notesEditorContainer');
+    const primary = document.getElementById('notesPrimaryPane');
+    const secondary = document.getElementById('notesSecondaryPane');
+    const primaryEditor = document.querySelector(primaryEditorSelector);
+    const secondaryEditor = document.querySelector(secondaryEditorSelector);
+    const primaryTitle = document.getElementById('pageTitle');
+    const secondaryTitle = document.getElementById('splitNoteMeta');
+    const tags = document.getElementById('tagsContainer');
+    const switcher = document.querySelector('#notesSecondaryPane .split-pane-switcher');
+    const toolbar = document.querySelector('.toolbar-wrapper');
+    return {
+      viewport: { width: innerWidth, height: innerHeight },
+      view: rect(document.getElementById('view-notes')),
+      viewDisplay: getComputedStyle(document.getElementById('view-notes')).display,
+      mainContent: rect(document.querySelector('.main-content')),
+      container: rect(container),
+      containerMaxWidth: getComputedStyle(container).maxWidth,
+      columns: getComputedStyle(container).gridTemplateColumns.trim().split(/\s+/).length,
+      toolbar: rect(toolbar),
+      primary: rect(primary),
+      secondary: rect(secondary),
+      primaryTitle: rect(primaryTitle),
+      primaryTitleStyle: style(primaryTitle),
+      primaryTags: rect(tags),
+      primaryTagsScrollHeight: tags.scrollHeight,
+      primaryTagsClientHeight: tags.clientHeight,
+      primaryTagsOverflowY: getComputedStyle(tags).overflowY,
+      secondaryHeader: rect(document.querySelector('#notesSecondaryPane .split-pane-header')),
+      secondaryTitle: rect(secondaryTitle),
+      secondaryTitleStyle: style(secondaryTitle),
+      secondarySwitcher: rect(switcher),
+      closeAction: rect(document.getElementById('closeSplitNotesBtn')),
+      primaryEditor: rect(primaryEditor),
+      secondaryEditor: rect(secondaryEditor),
+      primaryEditorStyle: style(primaryEditor),
+      secondaryEditorStyle: style(secondaryEditor),
+      primaryEditorScrollHeight: primaryEditor.scrollHeight,
+      primaryEditorClientHeight: primaryEditor.clientHeight,
+      secondaryEditorScrollHeight: secondaryEditor.scrollHeight,
+      secondaryEditorClientHeight: secondaryEditor.clientHeight
+    };
+  }, { primaryEditorSelector, secondaryEditorSelector });
+}
+
+async function setDesktopSidebarCollapsed(page, collapsed) {
+  const sidebar = page.locator('#sidebar');
+  const isCollapsed = (await sidebar.getAttribute('class') || '').split(/\s+/).includes('collapsed');
+  if (isCollapsed !== collapsed) await page.locator('#sidebarToggle').click();
+  if (collapsed) {
+    await expect(sidebar).toHaveClass(/collapsed/);
+    await expect.poll(() => sidebar.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(120);
+  } else {
+    await expect(sidebar).not.toHaveClass(/collapsed/);
+    await expect.poll(() => sidebar.evaluate(element => element.getBoundingClientRect().width)).toBeGreaterThan(200);
+  }
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+function expectWideSplitGeometry(geometry) {
+  expect(geometry.columns).toBe(2);
+  expect(geometry.viewDisplay).toBe('flex');
+  expect(Math.abs(geometry.primary.width - geometry.secondary.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.primary.top - geometry.secondary.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.primary.bottom - geometry.secondary.bottom)).toBeLessThanOrEqual(1);
+  expect(geometry.container.width).toBeGreaterThanOrEqual(geometry.view.width - 72);
+  expect(geometry.view.bottom - geometry.container.bottom).toBeLessThanOrEqual(24);
+  expect(geometry.container.top).toBeGreaterThanOrEqual(geometry.toolbar.bottom - 1);
+  expect(Math.abs(geometry.primaryTitle.top - geometry.secondaryTitle.top)).toBeLessThanOrEqual(6);
+  expect(geometry.primaryTitleStyle.fontSize).toBe(geometry.secondaryTitleStyle.fontSize);
+  expect(geometry.primaryTitleStyle.fontFamily).toBe(geometry.secondaryTitleStyle.fontFamily);
+  expect(geometry.primaryTitleStyle.textOverflow).toBe('ellipsis');
+  expect(geometry.secondaryTitleStyle.textOverflow).toBe('ellipsis');
+  expect(Math.abs(geometry.primaryTags.top - geometry.secondarySwitcher.top)).toBeLessThanOrEqual(1);
+  expect(geometry.primaryTags.height).toBeLessThanOrEqual(48);
+  expect(geometry.primaryTagsOverflowY).toMatch(/auto|scroll/);
+  expect(Math.abs(geometry.primaryEditor.top - geometry.secondaryEditor.top)).toBeLessThanOrEqual(1);
+  expect(geometry.primaryEditor.bottom).toBeGreaterThan(geometry.primaryEditor.top);
+  expect(geometry.secondaryEditor.bottom).toBeGreaterThan(geometry.secondaryEditor.top);
+  expect(geometry.primaryEditorStyle.overflowY).toBe('auto');
+  expect(geometry.secondaryEditorStyle.overflowY).toBe('auto');
 }
 
 const PM_SELECTOR = '#editorV2Host .ProseMirror';
@@ -612,14 +728,58 @@ test('locking a live embed clears its preview until the page is unlocked', async
   await expect(page.locator('#lockedPageScreen')).toBeVisible();
   const lockedSurface = await page.evaluate(() => ({
     text: document.getElementById('editorV2Host')?.textContent || '',
+    display: getComputedStyle(document.getElementById('editorV2Host')).display,
     iframeCount: document.querySelectorAll('#editorV2Host iframe').length,
     mirror: document.getElementById('editor')?.textContent || ''
   }));
   expect(lockedSurface.text + lockedSurface.mirror).not.toContain('Private embed sentinel');
+  expect(lockedSurface.display).toBe('none');
   expect(lockedSurface.iframeCount).toBe(0);
   await page.locator('#lockScreenPinInput').fill('4826');
   await page.locator('#lockScreenForm button[type="submit"]').click();
   await expect(page.locator('#editorV2Host .html-embed-block-surface')).toContainText('Private embed sentinel');
+});
+
+test('a locked comparison note never exposes the secondary Modern Editor host', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'split protected comparison');
+  const protectedId = await page.evaluate(() => window.flowAtelier.currentPageId);
+  await page.evaluate(() => {
+    window.SutraNotesEditorV2.setContent('<p>Protected secondary body sentinel</p>');
+    window.flowAtelier.flushAppSaveNow('e2e-split-protected-content');
+  });
+  await page.evaluate(async id => window.__sutraPublicBetaTestHooks.lockPageWithPin(id, '4826'), protectedId);
+  await createBlankNote(page, 'split protected main');
+
+  await page.evaluate(() => document.getElementById('splitNotesToggleBtn').click());
+  await expect(page.locator('#editorV2SecondaryHost')).toBeAttached();
+  await page.evaluate(id => {
+    const select = document.getElementById('splitNoteSelect');
+    select.value = id;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, protectedId);
+  await page.waitForFunction(() => {
+    const host = document.getElementById('editorV2SecondaryHost');
+    return host && host.hidden && host.inert && getComputedStyle(host).display === 'none';
+  });
+
+  const protectedPane = await page.evaluate(() => ({
+    hostHidden: document.getElementById('editorV2SecondaryHost').hidden,
+    hostInert: document.getElementById('editorV2SecondaryHost').inert,
+    hostDisplay: getComputedStyle(document.getElementById('editorV2SecondaryHost')).display,
+    hostText: document.getElementById('editorV2SecondaryHost').textContent,
+    placeholder: document.getElementById('editorSecondary').textContent,
+    primaryDisplay: getComputedStyle(document.getElementById('editorV2Host')).display
+  }));
+  expect(protectedPane.hostHidden).toBe(true);
+  expect(protectedPane.hostInert).toBe(true);
+  expect(protectedPane.hostDisplay).toBe('none');
+  expect(protectedPane.hostText).not.toContain('Protected secondary body sentinel');
+  expect(protectedPane.placeholder).toContain('PIN-protected');
+  expect(protectedPane.placeholder).not.toContain('Protected secondary body sentinel');
+  expect(protectedPane.primaryDisplay).not.toBe('none');
 });
 
 test('Split View mounts independent Modern Editor instances', async ({ page }) => {
@@ -702,6 +862,249 @@ test('secondary pane saves its pending edit before switching pages or closing Sp
   expect(restored[1]).toContain('Saved before close');
 });
 
+test('Split View keeps equal panes aligned, independently scrollable, and clear about the active note', async ({ page }, testInfo) => {
+  test.setTimeout(90000);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await openAppForSplitLayout(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+  await setDesktopSidebarCollapsed(page, false);
+  const comparisonTitle = 'Comparison note title deliberately long enough to test clean truncation in the split pane';
+  const mainTitle = 'Main note title deliberately long enough to test clean truncation in the split pane';
+  await createBlankNote(page, 'Split layout spare note');
+  await createBlankNote(page, comparisonTitle);
+  await createBlankNote(page, mainTitle);
+
+  const comparisonId = await page.evaluate(title => window.flowAtelier.pages.find(item => item.title.endsWith(title))?.id, comparisonTitle);
+  expect(comparisonId).toBeTruthy();
+
+  await page.locator('.notes-toolbar-overflow-toggle').click();
+  await page.locator('#pagesToggleBtn').click();
+  await expect(page.locator('body')).toHaveClass(/notes-pages-mode/);
+
+  for (let index = 0; index < 8; index++) {
+    await page.locator('#tagsContainer .add-tag-btn').click();
+    await page.locator('#tagInput').fill(`Split layout tag ${index} with enough text to exercise the header row`);
+    await page.locator('#tagInput').press('Enter');
+  }
+  await expect(page.locator('#tagsContainer .tag-label')).toHaveCount(8);
+
+  await page.locator('.notes-toolbar-overflow-toggle').click();
+  await page.locator('#splitNotesToggleBtn').click();
+  await expect(page.locator('#editorV2SecondaryHost .ProseMirror')).toBeVisible();
+  await expect.poll(() => page.locator('#splitNoteSelect option').evaluateAll((options, id) => options.some(option => option.value === id), comparisonId)).toBe(true);
+  await page.locator('#splitNoteSelect').selectOption(comparisonId);
+  await expect(page.locator('#splitNoteMeta')).toContainText(comparisonTitle);
+
+  const longPageBody = Array.from({ length: 48 }, (_, index) =>
+    `<p>Split layout long page body line ${index} keeps both editor viewports independently scrollable.</p>${index > 0 && index % 12 === 0 ? '<div class="atelier-page-break" data-atelier-block="page-break" role="separator" aria-label="Page break"></div>' : ''}`
+  ).join('');
+  await page.evaluate(body => {
+    document.querySelector('#editorV2Host .ProseMirror').editor.commands.setContent(body, { emitUpdate: true });
+    document.querySelector('#editorV2SecondaryHost .ProseMirror').editor.commands.setContent(body, { emitUpdate: true });
+  }, longPageBody);
+  await expect(page.locator('#editorV2Host .atelier-page-break')).toHaveCount(3);
+  await expect(page.locator('#editorV2SecondaryHost .atelier-page-break')).toHaveCount(3);
+
+  const wideGeometry = await readSplitLayoutGeometry(page, '#editorV2Host', '#editorV2SecondaryHost');
+  expectWideSplitGeometry(wideGeometry);
+  expect(wideGeometry.closeAction.top).toBeGreaterThanOrEqual(wideGeometry.toolbar.bottom);
+  expect(wideGeometry.primaryEditorScrollHeight).toBeGreaterThan(wideGeometry.primaryEditorClientHeight + 100);
+  expect(wideGeometry.secondaryEditorScrollHeight).toBeGreaterThan(wideGeometry.secondaryEditorClientHeight + 100);
+  expect(wideGeometry.primaryTagsScrollHeight).toBeGreaterThan(wideGeometry.primaryTagsClientHeight);
+  await page.screenshot({ path: testInfo.outputPath('split-modern-wide.png') });
+
+  await page.evaluate(async () => {
+    window.setApplyMode?.('all');
+    await window.applyPresetTheme('dark');
+  });
+  await page.waitForFunction(() => document.body.dataset.themeKey === 'dark');
+  const darkThemeGeometry = await page.evaluate(() => ({
+    columns: getComputedStyle(document.getElementById('notesEditorContainer')).gridTemplateColumns.trim().split(/\s+/).length,
+    activeOutline: getComputedStyle(document.getElementById('notesPrimaryPane')).outlineStyle,
+    closeSize: (() => {
+      const rect = document.getElementById('closeSplitNotesBtn').getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    })()
+  }));
+  expect(darkThemeGeometry.columns).toBe(2);
+  expect(darkThemeGeometry.activeOutline).toBe('solid');
+  expect(darkThemeGeometry.closeSize.width).toBeGreaterThanOrEqual(44);
+  expect(darkThemeGeometry.closeSize.height).toBeGreaterThanOrEqual(44);
+
+  const primary = page.locator('#notesPrimaryPane');
+  const secondary = page.locator('#notesSecondaryPane');
+  const primaryEditor = page.locator('#editorV2Host .ProseMirror');
+  const secondaryEditor = page.locator('#editorV2SecondaryHost .ProseMirror');
+  await primaryEditor.click();
+  await expect(primary).toHaveClass(/is-active-pane/);
+  await expect(secondary).not.toHaveClass(/is-active-pane/);
+  const primaryTitle = await page.locator('#pageTitle').inputValue();
+  await expect(page.locator('#toolbar')).toHaveAttribute('aria-label', new RegExp('main note: ' + primaryTitle));
+
+  await secondaryEditor.click();
+  await expect(secondary).toHaveClass(/is-active-pane/);
+  await expect(primary).not.toHaveClass(/is-active-pane/);
+  const secondaryTitle = await page.locator('#splitNoteMeta').textContent();
+  await expect(page.locator('#toolbar')).toHaveAttribute('aria-label', new RegExp('comparison note: ' + secondaryTitle));
+
+  const scrollResult = await page.evaluate(async () => {
+    const primary = document.getElementById('editorV2Host');
+    const secondary = document.getElementById('editorV2SecondaryHost');
+    const notesView = document.getElementById('view-notes');
+    const outerScrollBefore = notesView.scrollTop;
+    primary.scrollTop = 280;
+    secondary.scrollTop = 460;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return {
+      primaryScrollTop: primary.scrollTop,
+      secondaryScrollTop: secondary.scrollTop,
+      primaryScrollHeight: primary.scrollHeight,
+      primaryClientHeight: primary.clientHeight,
+      secondaryScrollHeight: secondary.scrollHeight,
+      secondaryClientHeight: secondary.clientHeight,
+      outerScrollBefore,
+      outerScrollAfter: notesView.scrollTop
+    };
+  });
+  expect(scrollResult.primaryScrollHeight).toBeGreaterThan(scrollResult.primaryClientHeight + 100);
+  expect(scrollResult.secondaryScrollHeight).toBeGreaterThan(scrollResult.secondaryClientHeight + 100);
+  expect(scrollResult.primaryScrollTop).toBeGreaterThan(100);
+  expect(scrollResult.secondaryScrollTop).toBeGreaterThan(250);
+  expect(scrollResult.outerScrollAfter).toBe(scrollResult.outerScrollBefore);
+
+  await page.waitForTimeout(80);
+  const originalSecondaryId = await page.locator('#splitNoteSelect').inputValue();
+  const switchToId = await page.locator('#splitNoteSelect option').evaluateAll(options => options.map(option => option.value).find(value => value && value !== document.getElementById('splitNoteSelect').value));
+  expect(switchToId).toBeTruthy();
+  await page.evaluate(id => {
+    const select = document.getElementById('splitNoteSelect');
+    select.value = id;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, switchToId);
+  await expect.poll(() => page.locator('#splitNoteMeta').textContent()).not.toBe(secondaryTitle);
+  await page.evaluate(id => {
+    const select = document.getElementById('splitNoteSelect');
+    select.value = id;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  }, originalSecondaryId);
+  await expect.poll(() => page.locator('#editorV2SecondaryHost').evaluate(element => element.scrollTop)).toBeGreaterThan(250);
+
+  await setDesktopSidebarCollapsed(page, true);
+  const collapsedModernGeometry = await readSplitLayoutGeometry(page, '#editorV2Host', '#editorV2SecondaryHost');
+  expectWideSplitGeometry(collapsedModernGeometry);
+  expect(collapsedModernGeometry.container.width).toBeGreaterThan(wideGeometry.container.width);
+  await setDesktopSidebarCollapsed(page, false);
+
+  await page.setViewportSize({ width: 900, height: 780 });
+  const narrowGeometry = await page.evaluate(() => {
+    const container = document.getElementById('notesEditorContainer');
+    const primary = document.getElementById('notesPrimaryPane').getBoundingClientRect();
+    const secondary = document.getElementById('notesSecondaryPane').getBoundingClientRect();
+    return {
+      columns: getComputedStyle(container).gridTemplateColumns.trim().split(/\s+/).length,
+      primaryBottom: primary.bottom,
+      secondaryTop: secondary.top
+    };
+  });
+  expect(narrowGeometry.columns).toBe(1);
+  expect(narrowGeometry.secondaryTop).toBeGreaterThan(narrowGeometry.primaryBottom);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileGeometry = await page.evaluate(async () => {
+    const container = document.getElementById('notesEditorContainer');
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const view = document.getElementById('view-notes').getBoundingClientRect();
+    const toolbar = document.querySelector('.toolbar-wrapper').getBoundingClientRect();
+    const secondary = document.getElementById('notesSecondaryPane').getBoundingClientRect();
+    const close = document.getElementById('closeSplitNotesBtn').getBoundingClientRect();
+    return {
+      columns: getComputedStyle(container).gridTemplateColumns.trim().split(/\s+/).length,
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+      secondaryTop: secondary.top,
+      secondaryBottom: secondary.bottom,
+      viewBottom: view.bottom,
+      toolbarBottom: toolbar.bottom,
+      closeTop: close.top,
+      closeHit: document.elementFromPoint(close.left + close.width / 2, close.top + close.height / 2)?.closest('button')?.id,
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+  expect(mobileGeometry.columns).toBe(1);
+  expect(mobileGeometry.secondaryBottom).toBeLessThanOrEqual(mobileGeometry.viewBottom + 1);
+  expect(mobileGeometry.closeTop).toBeGreaterThanOrEqual(mobileGeometry.toolbarBottom);
+  expect(mobileGeometry.closeHit).toBe('closeSplitNotesBtn');
+  expect(mobileGeometry.documentOverflow).toBeLessThanOrEqual(2);
+  await page.setViewportSize({ width: 390, height: 640 });
+  const shortMobileGeometry = await page.evaluate(async () => {
+    const container = document.getElementById('notesEditorContainer');
+    container.scrollTop = container.scrollHeight;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const view = document.getElementById('view-notes').getBoundingClientRect();
+    const secondary = document.getElementById('notesSecondaryPane').getBoundingClientRect();
+    const close = document.getElementById('closeSplitNotesBtn').getBoundingClientRect();
+    const toolbar = document.querySelector('.toolbar-wrapper').getBoundingClientRect();
+    return {
+      scrollTop: container.scrollTop,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+      secondaryBottom: secondary.bottom,
+      viewBottom: view.bottom,
+      closeTop: close.top,
+      toolbarBottom: toolbar.bottom,
+      closeHit: document.elementFromPoint(close.left + close.width / 2, close.top + close.height / 2)?.closest('button')?.id
+    };
+  });
+  expect(shortMobileGeometry.scrollHeight).toBeGreaterThan(shortMobileGeometry.clientHeight);
+  expect(shortMobileGeometry.scrollTop).toBeGreaterThan(0);
+  expect(shortMobileGeometry.secondaryBottom).toBeLessThanOrEqual(shortMobileGeometry.viewBottom + 1);
+  expect(shortMobileGeometry.closeTop).toBeGreaterThanOrEqual(shortMobileGeometry.toolbarBottom);
+  expect(shortMobileGeometry.closeHit).toBe('closeSplitNotesBtn');
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.getElementById('notesEditorContainer')).gridTemplateColumns.trim().split(/\s+/).length)).toBe(2);
+
+  const titleTopAfterSplit = await page.locator('#pageTitle').evaluate(element => element.getBoundingClientRect().top);
+  expect(Math.abs(titleTopAfterSplit - wideGeometry.primaryTitle.top)).toBeLessThanOrEqual(1);
+  await page.locator('#closeSplitNotesBtn').click();
+  await expect(page.locator('#notesSecondaryPane')).toBeHidden();
+  await expect(page.locator('body')).not.toHaveClass(/notes-split-active/);
+
+  await page.evaluate(async () => {
+    window.SutraNotesEditorV2.flushToMirror();
+    await window.flowAtelier.flushAppSaveNow('e2e-split-classic-layout');
+  });
+  await page.locator('.notes-toolbar-overflow-toggle').click();
+  await page.locator('#pagesToggleBtn').click();
+  await expect(page.locator('body')).not.toHaveClass(/notes-pages-mode/);
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+  });
+  await page.waitForFunction(() => !window.SutraNotesEditorV2.isMounted() && document.getElementById('editor').style.display !== 'none');
+
+  await page.locator('.notes-toolbar-overflow-toggle').click();
+  await page.locator('#splitNotesToggleBtn').click();
+  await expect(page.locator('#editorSecondary')).toBeVisible();
+  await expect.poll(() => page.locator('#splitNoteSelect option').evaluateAll((options, id) => options.some(option => option.value === id), comparisonId)).toBe(true);
+  await page.locator('#splitNoteSelect').selectOption(comparisonId);
+  await expect(page.locator('#splitNoteMeta')).toContainText(comparisonTitle);
+  await expect(page.locator('#editor')).toContainText('Split layout long page body line 47');
+  await expect(page.locator('#editorSecondary')).toContainText('Split layout long page body line 47');
+
+  const wideClassicGeometry = await readSplitLayoutGeometry(page, '#editor', '#editorSecondary');
+  expectWideSplitGeometry(wideClassicGeometry);
+  expect(wideClassicGeometry.primaryEditorScrollHeight).toBeGreaterThan(wideClassicGeometry.primaryEditorClientHeight + 100);
+  expect(wideClassicGeometry.secondaryEditorScrollHeight).toBeGreaterThan(wideClassicGeometry.secondaryEditorClientHeight + 100);
+  await page.screenshot({ path: testInfo.outputPath('split-classic-wide.png') });
+  await setDesktopSidebarCollapsed(page, true);
+  const collapsedClassicGeometry = await readSplitLayoutGeometry(page, '#editor', '#editorSecondary');
+  expectWideSplitGeometry(collapsedClassicGeometry);
+  expect(collapsedClassicGeometry.container.width).toBeGreaterThan(wideClassicGeometry.container.width);
+  await setDesktopSidebarCollapsed(page, false);
+  await page.locator('#closeSplitNotesBtn').click();
+  await expect(page.locator('body')).not.toHaveClass(/notes-split-active/);
+});
 test('empty Enter exits ordered lists without leaving a phantom list item', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);

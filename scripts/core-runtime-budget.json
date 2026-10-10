@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-05T00:43:08.757Z",
-  "reviewedReason": "Remove Canvas pan momentum and unused velocity tracking; preserve immediate viewport persistence",
-  "maxBytes": 4961146,
-  "maxLines": 87020
+  "blessedAt": "2026-10-10T00:19:25.636Z",
+  "reviewedReason": "Bind daily backup wake handling at every Cloud entry and expose truthful automatic-backup readiness and receipts",
+  "maxBytes": 4974255,
+  "maxLines": 87175
 }

@@ -83,3 +83,23 @@ test('Cloud status keeps local save, locked Sync and backup failures independent
   assert.equal(status.backups.error, 'Upload failed');
   assert.equal(status.backups.lastBackupAt, null);
 });
+
+test('automatic backup status exposes blocked readiness and unchanged checks without claiming an upload', () => {
+  const runtime = { backupPassphrase: 'session-only-password' };
+  const meta = { autoBackup: { enabled: true, frequency: 'daily' }, lastAutoBackupCheckAt: '2026-10-11T11:16:00.000Z' };
+  const read = (ready, writesBlocked = false, remotePending = false) => new Function(
+    'getSutraSyncStatus', 'loadSutraCloudMeta', 'getActiveSutraCloudProvider', 'sutraPersistenceState',
+    'sutraCloudRuntime', 'navigator', 'persistenceWritesBlocked', 'sutraRemoteCommitPending', 'appSettings', 'sutraSyncStateLabel',
+    source('getSutraCloudStatus') + '; return getSutraCloudStatus;'
+  )(() => ({ state: 'off' }), () => meta,
+    () => ({ id: 'supabase', supportsAutoBackup: true, getSetupStatus: () => ({ ready }) }),
+    {}, runtime, { onLine: true, locks: {} }, writesBlocked, remotePending, {}, state => state)().backups;
+  assert.match(read(false).state, /connect the backup destination/);
+  assert.match(read(true, true).state, /local saving needs attention/);
+  assert.match(read(true, false, true).state, /workspace changes to finish/);
+  const ready = read(true);
+  assert.equal(ready.state, 'Automatic backups on');
+  assert.equal(ready.lastAutoBackupCheckAt, meta.lastAutoBackupCheckAt);
+  assert.equal(ready.lastAutoBackupAt, null);
+  assert.equal(ready.lastBackupAt, null);
+});

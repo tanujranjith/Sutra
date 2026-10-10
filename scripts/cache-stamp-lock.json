@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261004-merge-review-fixes1",
-    "hash": "c41ba006f595be76"
+    "stamp": "20261009-issues8",
+    "hash": "58fe42270de222f0"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -244,8 +244,8 @@
     "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261004-assistant-slides1",
-    "hash": "ec7db93953aedfd6"
+    "stamp": "20261009-issues1",
+    "hash": "2936d78f014e4871"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -268,16 +268,16 @@
     "hash": "e06b7a0b7d124014"
   },
   "src/features/study/class-dashboard-actions.js": {
-    "stamp": "20260916-class-ec-delete1",
-    "hash": "8579da8954653d25"
+    "stamp": "20261009-issues5",
+    "hash": "419ee5919b61c705"
   },
   "src/features/study/code-highlight.js": {
     "stamp": "20260620-hl1",
     "hash": "72a0e167b23d5a87"
   },
   "src/features/study/homework.js": {
-    "stamp": "20261005-empty-class-kind1",
-    "hash": "4ef1e1bc76cdf65a"
+    "stamp": "20261009-class-open1",
+    "hash": "155b25b88ad06c6d"
   },
   "src/features/study/math-render.js": {
     "stamp": "20260620-math1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261004-merge-review-fixes1",
-    "hash": "0aa8f38c3338b0b3"
+    "stamp": "20261009-daily-backup1",
+    "hash": "5ad155a6e63863c0"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -512,8 +512,8 @@
     "hash": "8875208847b08ed5"
   },
   "src/ui/select-enhancer.js": {
-    "stamp": "20260914-export-modal",
-    "hash": "f65f38a62c69d73b"
+    "stamp": "20261009-issues4",
+    "hash": "96841bf47e206ae4"
   },
   "src/ui/sidebar-page-actions-menu.js": {
     "stamp": "20260803-overflow1",
@@ -536,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261003-create-review5",
-    "hash": "166194544941a901"
+    "stamp": "20261009-select-hidden1",
+    "hash": "42b0e3c06134ba9c"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -592,8 +592,8 @@
     "hash": "640a1fac15387cd2"
   },
   "styles/features/homework-redesign.css": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "24eb3719c1ba2831"
+    "stamp": "20261009-ec-layout1",
+    "hash": "5d1c7df073aadead"
   },
   "styles/features/html-pages.css": {
     "stamp": "20261003-create-review5",
@@ -610,6 +610,10 @@
   "styles/features/issue-prompt.css": {
     "stamp": "20260617-issue1",
     "hash": "3e852556c6ccee3b"
+  },
+  "styles/features/notes-comments.css": {
+    "stamp": "20261009-issues5",
+    "hash": "069cdfa89e887842"
   },
   "styles/features/notes-editor-v2.css": {
     "stamp": "20260928-issues51-59-64",
@@ -680,8 +684,8 @@
     "hash": "ba0708986de8b924"
   },
   "styles/legacy/responsive-hardening.css": {
-    "stamp": "20260616-cssextract1",
-    "hash": "ed47240026eee70a"
+    "stamp": "20261009-issues2",
+    "hash": "1456145152dfd9c5"
   },
   "styles/legacy/ui-refresh.css": {
     "stamp": "20260616-cssextract1",
@@ -716,20 +720,20 @@
     "hash": "76a5ad75e57c83b5"
   },
   "styles/themes/sutra-pro.css": {
-    "stamp": "20260921-timepicker1",
-    "hash": "626f3305e7e662d6"
+    "stamp": "20261009-course-list1",
+    "hash": "a9ad45ea12b04df0"
   },
   "styles/themes/theme-cohesion.css": {
-    "stamp": "20260917-glass-cohesion4",
-    "hash": "2f862a9fc10083c5"
+    "stamp": "20261009-peach-preview1",
+    "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
     "stamp": "20260818-cache-refresh1",
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261001-desktop-density4",
-    "hash": "9415a02954593e33"
+    "stamp": "20261009-split-layout2",
+    "hash": "75acc51fd06c4277"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",

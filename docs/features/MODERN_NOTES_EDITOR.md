@@ -20,9 +20,20 @@ the page. A locked page must not mount a live node until it is unlocked.
 
 ## Split View
 
-Each Notes pane owns an editor instance and its own selection, history, and
-page context. Toolbar actions apply to the active pane. Leaving a pane disposes
-its node views and flushes its page before the next page is loaded.
+Split View presents two equal note panes in one workspace. Each header identifies
+its note, and the active pane stays outlined with an **Active** marker while the
+shared formatting toolbar names that note as its target. The two editor bodies
+scroll independently. Split View fills the available Notes workspace width and
+height, with aligned editor starts in both editor modes. Long titles truncate;
+the main note's tags scroll within their header row. When the Notes column is
+narrower than 940px, the panes stack vertically so both editors keep usable width,
+and the pane container scrolls when needed to reach the comparison note.
+
+Each pane still owns its editor instance, selection, history, and page context.
+Switching the comparison note or closing Split View flushes pending edits before
+the next page is loaded. Modern Editor V2 restores the comparison note's scroll
+position when switching between notes. A locked note stays read-only in the
+comparison pane until it is opened and unlocked in the main pane.
 
 The text-colour and highlight toolbar controls offer preset swatches in the
 native colour picker and still allow a custom colour. These choices format the
@@ -108,3 +119,13 @@ to change the local draft before saving. It follows normal Canvas Undo/Redo.
 Stored anchors and block records remain readable in the classic editor. Keep
 the classic toggle available for older content and recovery. No new persistent
 workspace fields are required for the live nodes.
+
+## Anchored comments
+
+Select text and choose **Comment** in the selection toolbar or **Add comment on selection**. Modern Editor threads attach to the exact selected range, including formatted text and multiple paragraphs. Clicking highlighted text opens its thread; clicking a thread's quote returns to the passage. Open threads follow document order. Replies, editing, resolve, reopen, and deletion stay available.
+
+Each split pane owns its comments. The Comments header identifies the active note in both editor modes. Switching to a locked note clears its discussion from the dock until it is authorized. Wide screens reserve a review gutter alongside the document; narrower layouts use the existing drawer. Resolving hides the annotation and reopening restores it. If a passage is completely deleted, its thread remains accessible with a detached-text notice; editor Undo can restore the attachment.
+
+Version-1 anchor metadata (`from`, `to`, `quote`, `prefix`, `suffix`, and `status`) lives inside `page.comments[].anchor`, alongside the existing durable thread. ProseMirror maps positions during edits; the normal page save, version-history, encrypted backup, and Sync paths preserve them. Decorations are never stored in note HTML or copied/exported as document markup. Unknown anchor schemas and comment fields are preserved.
+
+Existing quote-only threads gain anchors only when their passage can be identified uniquely. Ambiguous or missing passages stay detached, without deleting discussion or choosing the first textual match. The classic editor retains quote-based comments and uniquely matched navigation; Modern Editor provides transaction-mapped annotations. The editor keeps a bounded in-memory anchor journal for recent undo/redo; durable restoration validates quote and surrounding context.

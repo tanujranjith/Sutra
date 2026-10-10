@@ -117,20 +117,20 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261003-create-review5">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261009-select-hidden1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
          this link when the optional Assistant pack initializes. -->
     <link rel="stylesheet" href="styles/views/assistant-view.css?v=20260818-cache-refresh1">
-    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20260921-timepicker1">
+    <link rel="stylesheet" href="styles/themes/sutra-pro.css?v=20261009-course-list1">
     <style id="view-visibility-fallback">
         .view { display: none; }
         .view.active { display: block; }
     </style>
     <!-- Startup intro: shown once per session, dismissed on click/Escape/Enter -->
     <script src="src/boot/startup-intro.js?v=20260821-skipfallback1" defer></script>
-    <script src="src/ui/select-enhancer.js?v=20260914-export-modal" defer></script>
+    <script src="src/ui/select-enhancer.js?v=20261009-issues4" defer></script>
     <script src="src/ui/date-enhancer.js" defer></script>
     <script src="src/ui/time-enhancer.js" defer></script>
     <script src="src/data/emoji-keywords.generated.js" defer></script>
@@ -1356,7 +1356,7 @@
                 <button class="toolbar-scroll-btn left" id="toolbarScrollLeft" onclick="scrollToolbar(-200)" title="Scroll left" hidden>
                     <i class="fas fa-chevron-left"></i>
                 </button>
-                <div class="toolbar" id="toolbar">
+                <div class="toolbar" id="toolbar" role="toolbar" aria-orientation="horizontal" aria-label="Formatting toolbar for the main note">
                 <!-- Undo / Redo -->
                 <button class="toolbar-btn" onclick="formatText('undo')" title="Undo (Ctrl+Z)" aria-label="Undo">
                     <i class="fas fa-rotate-left"></i>
@@ -1649,7 +1649,8 @@
               </div>
             </div>
                 <div class="editor-container" id="notesEditorContainer">
-                    <div class="notes-pane notes-pane-primary" id="notesPrimaryPane">
+                    <div class="notes-pane notes-pane-primary" id="notesPrimaryPane" role="region" aria-label="Main note, active">
+                    <span class="notes-pane-label">Main note</span>
                     <div class="breadcrumbs" id="breadcrumbs"></div>
                     <input type="text" class="page-title-input" id="pageTitle" placeholder="Untitled" />
                     <div class="page-temporary-meta" id="pageTemporaryMeta" hidden></div>
@@ -1775,22 +1776,25 @@
                     <!-- Locked page overlay — shown instead of editor when page is PIN-protected -->
                     <div id="lockedPageScreen" class="locked-page-screen" hidden aria-live="polite"></div>
                 </div>
-                <div class="notes-pane notes-pane-secondary" id="notesSecondaryPane" aria-hidden="true">
+                <div class="notes-pane notes-pane-secondary" id="notesSecondaryPane" role="region" aria-label="Comparison note" aria-hidden="true">
                     <div class="split-pane-header">
                         <div class="split-pane-title-wrap">
-                            <span class="split-pane-label">Split Note</span>
-                            <select class="modal-input split-note-select" id="splitNoteSelect" aria-label="Select secondary note"></select>
+                            <span class="split-pane-label">Comparison note</span>
+                            <h2 class="split-pane-note-title" id="splitNoteMeta">Choose a note</h2>
                         </div>
                         <div class="split-pane-actions">
-                            <button class="neumo-btn split-pane-action" id="swapSplitNoteBtn" type="button" title="Open this note in the main editor">
+                            <button class="neumo-btn split-pane-action" id="swapSplitNoteBtn" type="button" title="Open this note in the main pane" aria-label="Open comparison note in the main pane">
                                 <i class="fas fa-exchange-alt"></i> Open
                             </button>
-                            <button class="neumo-btn split-pane-action" id="closeSplitNotesBtn" type="button" title="Close split view">
+                            <button class="neumo-btn split-pane-action" id="closeSplitNotesBtn" type="button" title="Close split view" aria-label="Close Split View">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
-                    <div class="split-pane-meta" id="splitNoteMeta">Select a note to open side-by-side.</div>
+                    <div class="split-pane-switcher">
+                        <label for="splitNoteSelect">Switch note</label>
+                        <select class="modal-input split-note-select" id="splitNoteSelect" aria-label="Switch comparison note"></select>
+                    </div>
                     <div class="editor split-editor" id="editorSecondary" contenteditable="true" placeholder="Select a secondary note..."></div>
                 </div>
             </div>
@@ -5438,7 +5442,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20261005-empty-class-kind1"></script>
+                <script src="src/features/study/homework.js?v=20261009-class-open1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7817,7 +7821,7 @@
             display: grid !important;
         }
     </style>
-    <link rel="stylesheet" href="styles/legacy/responsive-hardening.css?v=20260616-cssextract1">
+    <link rel="stylesheet" href="styles/legacy/responsive-hardening.css?v=20261009-issues2">
     <script id="active-view-fallback-script">
         (function () {
             function applyActiveView(view) {
@@ -7897,7 +7901,7 @@
     <script src="src/features/notes/rich-links.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/authoring-tools.js?v=20261004-native-link-click3"></script>
-    <script src="src/features/notes/editor-v2.js?v=20261004-assistant-slides1"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261009-issues1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7911,7 +7915,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261004-merge-review-fixes1"></script>
+    <script src="src/core/app.js?v=20261009-issues8"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7920,12 +7924,12 @@
          migration/normalization seam handles startup and workspace imports. -->
     <script src="src/features/workspace/html-page-transfer-compat.js?v=20260913-html-transfer2"></script>
     <script src="src/features/workspace/direct-pdf-export.js?v=20260913-direct-pdf2"></script>
-    <script src="src/features/study/class-dashboard-actions.js?v=20260916-class-ec-delete1"></script>
+    <script src="src/features/study/class-dashboard-actions.js?v=20261009-issues5"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261004-merge-review-fixes1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261009-daily-backup1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -8351,7 +8355,7 @@
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
-    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261001-todo-completion1">
+    <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261009-ec-layout1">
     <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-dust-hold3">
     <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
     <link rel="stylesheet" href="styles/features/slides.css?v=20261004-slides-lines-menus1">
@@ -8371,8 +8375,9 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261001-desktop-density4">
-    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20260917-glass-cohesion4">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261009-split-layout2">
+    <link rel="stylesheet" href="styles/features/notes-comments.css?v=20261009-issues5">
+    <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20261009-peach-preview1">
     <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/inline-ai-assist.css?v=20261003-create-review5">
     <link rel="stylesheet" href="styles/features/content-timeline.css?v=20261001-content-timeline4">
@@ -8872,7 +8877,7 @@
     <!-- ===== ATELIER PRO PANELS ===== -->
 
     <!-- Comments Panel (Section 11) -->
-    <div class="comments-panel" id="commentsPanel">
+    <div class="comments-panel" id="commentsPanel" role="region" aria-label="Note comments" aria-hidden="true">
         <div class="comments-panel-header">
             <div class="comments-panel-title">
                 <i class="fas fa-comments"></i>
@@ -8883,6 +8888,7 @@
                 <i class="fas fa-times"></i>
             </button>
         </div>
+        <div id="commentsPageTitle"></div>
         <div class="comments-filter" id="commentsFilterBar" role="tablist" aria-label="Filter comments">
             <button class="comments-filter-btn active" data-filter="open" role="tab" onclick="setCommentsFilter('open')">Open <span class="comments-filter-count" id="commentsOpenCount">0</span></button>
             <button class="comments-filter-btn" data-filter="resolved" role="tab" onclick="setCommentsFilter('resolved')">Resolved <span class="comments-filter-count" id="commentsResolvedCount">0</span></button>

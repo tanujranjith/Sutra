@@ -5940,6 +5940,7 @@ body.theme-retro .th2-resource-card {
 /* Course card */
 .cw-course-card {
     position: relative; display: flex; width: 100%; text-align: left; cursor: pointer;
+    flex-shrink: 0;
     background: var(--bg-elevated, var(--glass-01)); border: 1px solid var(--surface-border);
     border-radius: 16px; box-shadow: var(--shadow-soft); padding: 0; overflow: hidden; font-family: inherit;
     transition: border-color .15s, box-shadow .15s, transform .1s;

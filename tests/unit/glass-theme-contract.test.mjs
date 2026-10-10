@@ -26,5 +26,5 @@ test('Sutra loads the updated Glass integration layers', () => {
   assert.match(shell, /styles\/themes\/glass\.css\?v=20260917-glass-cohesion1/);
   // Content-to-stamp freshness is enforced by check:cache-stamps; newer shell fixes must remain loadable.
   assert.match(shell, /href="styles\/views\/contextual-shell\.css\?v=[A-Za-z0-9._-]+"/);
-  assert.match(shell, /styles\/themes\/theme-cohesion\.css\?v=20260917-glass-cohesion4/);
+  assert.match(shell, /styles\/themes\/theme-cohesion\.css\?v=20261009-peach-preview1/);
 });
