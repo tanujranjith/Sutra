@@ -28,7 +28,12 @@ test('scrolling the Homework class picker does not expose inactive Notes lists',
   await expect(splitMenu).toBeHidden();
   await expect(splitMenu).toHaveAttribute('aria-hidden', 'true');
   expect(await splitMenu.evaluate(element => element.inert && getComputedStyle(element).opacity === '0')).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(menu).not.toHaveClass(/is-open/);
+  await expect(page.locator('#quickCaptureModal')).toBeVisible();
   await page.locator('#quickCaptureCancelBtn').click();
+  await expect(page.locator('#quickCaptureModal')).toBeHidden();
   await expect(menu).not.toHaveClass(/is-open/);
   await expect(page.locator('.page-item:visible')).toHaveCount(0);
 });
