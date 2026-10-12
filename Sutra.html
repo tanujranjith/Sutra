@@ -56,7 +56,7 @@
            - error-reporter.js: window.reportError + global error/rejection capture + diagnostics
            - dom-safety.js:     central sanitize/escape/sandbox helpers (no raw user HTML)
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
-    <script src="src/core/error-reporter.js?v=20260812-error1"></script>
+    <script src="src/core/error-reporter.js?v=20261011-student-workflow1"></script>
     <script src="src/core/dom-safety.js?v=20260913-custom-html-safety1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
     <script src="src/core/migrations.js?v=20260913-energy-removal-migrations1"></script>
@@ -89,7 +89,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20261001-todo-completion1"></script>
+    <script src="src/config/feature-manifest.js?v=20261011-student-workflow1"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -117,7 +117,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261009-select-hidden1">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261011-student-workflow1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -5443,7 +5443,7 @@
 
                     <div id="hwDataTable" class="hw-workspace-mount" aria-live="polite"></div>
                 </div>
-                <script src="src/features/study/homework.js?v=20261009-class-open1"></script>
+                <script src="src/features/study/homework.js?v=20261011-student-workflow1"></script>
             </section>
 
             <!-- Courses / Course Hub -->
@@ -7862,7 +7862,7 @@
          Loaded BEFORE app.js so the core registers their workspaces in
          appData, backups, and import normalization. -->
     <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
-    <script src="src/features/academic/grade-planner.js?v=20260707-batch3"></script>
+    <script src="src/features/academic/grade-planner.js?v=20261011-student-workflow1"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
     <script src="src/features/academic/semester-setup.js?v=20261001-todo-completion1"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
@@ -7902,7 +7902,7 @@
     <script src="src/features/notes/rich-links.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/authoring-tools.js?v=20261004-native-link-click3"></script>
-    <script src="src/features/notes/editor-v2.js?v=20261009-issues1"></script>
+    <script src="src/features/notes/editor-v2.js?v=20261011-student-workflow1"></script>
     <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
@@ -7916,7 +7916,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261009-issues8"></script>
+    <script src="src/core/app.js?v=20261011-student-workflow1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7967,7 +7967,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20261001-mobile-data-actions2"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20260921-html-widget-mode2"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20261011-student-workflow1"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>
@@ -8358,7 +8358,7 @@
     <link rel="stylesheet" href="styles/features/academic-planning.css?v=20260707-batch2">
     <link rel="stylesheet" href="styles/features/homework-redesign.css?v=20261009-ec-layout1">
     <link rel="stylesheet" href="styles/features/task-completion-effects.css?v=20261001-task-dust-hold3">
-    <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20260928-issues51-59-64">
+    <link rel="stylesheet" href="styles/features/notes-editor-v2.css?v=20261011-student-workflow1">
     <link rel="stylesheet" href="styles/features/slides.css?v=20261004-slides-lines-menus1">
     <link rel="stylesheet" href="styles/features/sheets.css?v=20261003-create-review7">
     <link rel="stylesheet" href="styles/features/html-pages.css?v=20261003-create-review5">
@@ -8376,7 +8376,7 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261009-split-layout2">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261011-student-workflow1">
     <link rel="stylesheet" href="styles/features/notes-comments.css?v=20261009-issues5">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20261009-peach-preview1">
     <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">
