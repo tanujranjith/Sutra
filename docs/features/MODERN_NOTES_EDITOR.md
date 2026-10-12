@@ -39,6 +39,20 @@ The text-colour and highlight toolbar controls offer preset swatches in the
 native colour picker and still allow a custom colour. These choices format the
 current selection and do not add editor-only state to the page.
 
+## Pages mode
+
+Enable **Pages** from the note toolbar's More menu, or in editor settings. The
+primary Modern Editor inserts automatic visual gaps before overflowing text
+lines and small blocks. Stored manual page breaks still start a new sheet.
+Page size and margins use the same settings in both controls; editing, paste,
+zoom, width changes, and font loads recalculate the layout.
+
+Automatic gaps are view decorations, excluded from saved HTML, history,
+copy/export, backups, and Sync. The comparison pane keeps its own continuous
+editor. Oversized atomic images, embeds, drawings, and tables remain intact
+and can span sheet intervals; they are never clipped to manufacture a gap.
+The Classic Editor retains authored manual page breaks.
+
 ## Page tags
 
 Use **Add tag** below the page title in either editor. Enter or leaving the field
