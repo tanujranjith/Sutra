@@ -153,37 +153,44 @@
     // pass. Returns a number or null; never executes arbitrary code.
 
     function evalExpression(expr) {
-        var tokens = String(expr).match(/(\d+\.?\d*|\.\d+|[+\-*/()])/g);
+        var input = String(expr).replace(/\s+/g, '');
+        var tokens = input.match(/(\d+\.?\d*|\.\d+|[+\-*/()])/g);
         if (!tokens) return null;
-        var prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+        if (tokens.join('') !== input) return null;
+        var prec = { '+': 1, '-': 1, '*': 2, '/': 2, 'u-': 3, 'u+': 3 };
         var output = [];
         var ops = [];
         var prevType = 'start';
         for (var i = 0; i < tokens.length; i += 1) {
             var t = tokens[i];
             if (/^(\d|\.)/.test(t)) {
+                if (prevType === 'num') return null;
                 var n = Number(t);
                 if (!isFinite(n)) return null;
                 output.push(n);
                 prevType = 'num';
             } else if (t === '(') {
+                if (prevType === 'num') return null;
                 ops.push(t);
                 prevType = 'op';
             } else if (t === ')') {
+                if (prevType !== 'num') return null;
                 while (ops.length && ops[ops.length - 1] !== '(') output.push(ops.pop());
                 if (!ops.length) return null;
                 ops.pop();
                 prevType = 'num';
             } else {
-                // Unary minus: treat leading/after-operator '-' as 0 - x
-                if (t === '-' && (prevType === 'start' || prevType === 'op')) output.push(0);
-                while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[t]) {
+                var unary = prevType !== 'num';
+                if (unary && t !== '-' && t !== '+') return null;
+                if (unary) t = 'u' + t;
+                while (ops.length && ops[ops.length - 1] !== '(' && (prec[ops[ops.length - 1]] > prec[t] || (!unary && prec[ops[ops.length - 1]] === prec[t]))) {
                     output.push(ops.pop());
                 }
                 ops.push(t);
                 prevType = 'op';
             }
         }
+        if (prevType !== 'num') return null;
         while (ops.length) {
             var op = ops.pop();
             if (op === '(') return null;
@@ -194,6 +201,11 @@
             var tok = output[j];
             if (typeof tok === 'number') { stack.push(tok); continue; }
             var b = stack.pop();
+            if (tok === 'u-' || tok === 'u+') {
+                if (b === undefined) return null;
+                stack.push(tok === 'u-' ? -b : b);
+                continue;
+            }
             var a = stack.pop();
             if (a === undefined || b === undefined) return null;
             if (tok === '+') stack.push(a + b);

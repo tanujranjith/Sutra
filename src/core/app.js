@@ -40934,6 +40934,16 @@ function buildOnboardingPlanPreview() {
         // consistent across reloads and never produces reload-induced duplicates.
 
         // ===== SMART PASTE + CLIPBOARD IMAGES (Section 20) =====
+        let plainTextPasteTarget = null;
+        let plainTextPasteAt = 0;
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === 'v') {
+                plainTextPasteTarget = event.target;
+                plainTextPasteAt = Date.now();
+            } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
+                plainTextPasteTarget = null;
+            }
+        }, true);
         document.addEventListener('paste', function(e) {
             const editor = document.getElementById('editor');
             const editorSecondary = document.getElementById('editorSecondary');
@@ -40943,6 +40953,16 @@ function buildOnboardingPlanPreview() {
 
             const clipboardData = e.clipboardData || window.clipboardData;
             if (!clipboardData) return;
+
+            const plain = e.shiftKey || (Date.now() - plainTextPasteAt < 2000 && plainTextPasteTarget === e.target);
+            plainTextPasteTarget = null;
+            if (plain) {
+                e.preventDefault();
+                const text = clipboardData.getData('text/plain');
+                if (text) document.execCommand('insertText', false, text);
+                if (typeof savePage === 'function') savePage();
+                return;
+            }
 
             // Check for image data first
             const items = clipboardData.items;
@@ -66043,7 +66063,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // Flatten all emojis for search
         function getAllEmojis() {
-            let all = [];
+            let all = Object.keys(window.emojiSearchKeywordMap || {});
             Object.values(emojiCategories).forEach(arr => {
                 all = all.concat(arr);
             });
@@ -66309,6 +66329,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         ? allEmojis.filter(emoji => {
                             const tokens = keywordMap[emoji];
                             if (!Array.isArray(tokens) || tokens.length === 0) return false;
+                            const words = qRaw.split(/[\s_-]+/).filter(Boolean);
+                            const combined = tokens.join(' ').toLowerCase();
+                            if (words.length > 1) return words.every(word => combined.includes(word));
                             return tokens.some(token => {
                                 const rawToken = String(token || '').toLowerCase();
                                 if (!rawToken) return false;
@@ -66329,11 +66352,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         ...matchedByGlyph,
                         ...matchedByKeyword
                     ]);
-                    const filteredInCategory = emojis.filter(emoji => candidateSet.has(emoji));
+                    const queryWords = qRaw.split(/[\s_-]+/).filter(Boolean);
+                    const matchesQuery = emoji => candidateSet.has(emoji) && (queryWords.length < 2 || queryWords.every(word =>
+                        ((keywordMap && keywordMap[emoji]) || []).join(' ').toLowerCase().includes(word)));
+                    const filteredInCategory = emojis.filter(matchesQuery);
                     if (filteredInCategory.length > 0 || currentEmojiCategory === 'All') {
                         emojis = filteredInCategory;
                     } else {
-                        emojis = allEmojis.filter(emoji => candidateSet.has(emoji));
+                        emojis = allEmojis.filter(matchesQuery);
                     }
                 }
             }
@@ -66351,7 +66377,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     option.type = 'button';
                     option.className = 'emoji-option';
                     option.textContent = emoji;
-                    option.setAttribute('aria-label', `Use ${emoji} as page icon`);
+                    const names = (window.emojiSearchKeywordMap || {})[emoji];
+                    option.setAttribute('aria-label', `Use ${names && names.length ? names.slice(0, 3).join(', ') + ' ' : ''}${emoji} as page icon`);
                     option.addEventListener('click', () => setPageIcon(emoji));
                     fragment.appendChild(option);
                 });

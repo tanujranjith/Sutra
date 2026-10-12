@@ -61,6 +61,12 @@ This also works for **Help & Docs**. Its content, identity, name, and deletion
 protection stay built in; refreshing Help preserves its chosen icon. Remove
 restores Help's books icon.
 
+All icons includes every emoji in the bundled offline keyword dictionary as
+well as curated categories. Search accepts glyphs, names, aliases, and multiple
+keywords (for example, "red heart"). Buttons include keyword labels for screen
+readers. Ctrl/⌘+Shift+V pastes plain text in both editors, retaining line breaks
+while bypassing rich HTML, smart links, and clipboard images.
+
 Icons use the existing `page.icon` field and travel in workspace backups. Help
 pages are generated resources excluded from Sync, so their icon is a local
 choice; a remote apply preserves that device's Help icon per space. Locked page

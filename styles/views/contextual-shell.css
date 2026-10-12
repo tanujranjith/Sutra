@@ -3,6 +3,8 @@
    the full canvas. This late layer intentionally refines existing components
    without introducing a second router or data model. */
 
+#commandPaletteLauncher { min-width: 44px; min-height: 44px; flex: 0 0 auto; }
+
 :root {
   --sutra-global-nav-height: 72px;
   --sutra-nav-side-reserve: clamp(210px, 16vw, 286px);

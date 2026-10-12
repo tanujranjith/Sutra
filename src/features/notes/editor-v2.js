@@ -1453,6 +1453,7 @@
     }
 
     function onEditorKeydown(event) {
+        state.plainPaste = (event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === 'v' ? Date.now() : 0;
         var view = state.editor && state.editor.view;
         if (event.isComposing || event.keyCode === 229 || ctx.composing || (view && view.composing)) {
             closeSlash();
@@ -1855,6 +1856,15 @@
     function handleImagePaste(view, event) {
         var data = event && event.clipboardData;
         if (!data) return false;
+        var plain = event.shiftKey || (state.plainPaste && Date.now() - state.plainPaste < 2000);
+        state.plainPaste = 0;
+        if (plain) {
+            event.preventDefault();
+            // Re-enter ProseMirror's clipboard parser in plain-text mode. Its
+            // second handlePaste pass must proceed without interception.
+            view.pasteText(data.getData('text/plain'));
+            return true;
+        }
 
         var files = [];
         var items = data.items;
