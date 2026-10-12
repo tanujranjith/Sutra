@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-12T01:04:22.542Z",
-  "reviewedReason": "Share readable attachment failures and support Gemini 3 thinkingLevel payloads",
-  "maxBytes": 4975225,
-  "maxLines": 87190
+  "blessedAt": "2026-10-12T01:07:37.942Z",
+  "reviewedReason": "Repair academic sheet bindings, Homework metadata editing, local exam dates and unrated rankings",
+  "maxBytes": 4977006,
+  "maxLines": 87208
 }

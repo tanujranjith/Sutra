@@ -103,6 +103,13 @@ Because the engines are deterministic and tested in isolation, the academic
   when its name uniquely matches an existing category. Categories with scores
   survive an unmatched or ambiguous replacement and remain available for review
   in Course Hub → Grades. Explicit IDs support category renames.
+- Application Sheets binds its tabs, Add Row, and editing controls within the
+  current College workspace. Task details can edit Homework notes and Reference
+  URL; these write through to the existing canonical Homework row (`notes` and
+  `sourceUrl`) and its compatibility mirrors rather than a separate task copy.
+- SAT/ACT cards format date-only values in local calendar time. Blank essay word
+  targets remain unspecified. College and major rankings exclude entries with
+  no positive score on a weighted criterion, including legacy all-zero defaults.
 
 ---
 

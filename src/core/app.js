@@ -11859,7 +11859,7 @@ function populateProgressDashboard() {
         }
 
         function renderCollegeTracker() {
-            const root = document.getElementById('view-college');
+            const root = document.getElementById('collegeappPage-sheets');
             if (!root) return;
             collegeTracker = normalizeCollegeTracker(collegeTracker);
             applyCollegeTabState();
@@ -11868,7 +11868,7 @@ function populateProgressDashboard() {
         }
 
         function initCollegeTrackerUI() {
-            const root = document.getElementById('view-college');
+            const root = document.getElementById('collegeappPage-sheets');
             if (!root) return;
             if (root.dataset.bound === 'true') {
                 renderCollegeTracker();
@@ -14126,6 +14126,7 @@ function populateProgressDashboard() {
             const colleges = getCollegeAppRows('decisionColleges');
             const totalWeight = criteria.reduce((sum, criterion) => sum + Math.max(0, normalizeFiniteNumber(criterion.weight, 0)), 0);
             return colleges
+                .filter(college => criteria.some(criterion => Number(criterion.weight) > 0 && Number(college.scores && college.scores[criterion.id]) > 0))
                 .map(college => {
                     const weighted = criteria.reduce((sum, criterion) => {
                         const score = Math.max(0, Math.min(10, normalizeFiniteNumber(college.scores && college.scores[criterion.id], 0)));
@@ -14233,7 +14234,7 @@ function populateProgressDashboard() {
 
             if (rankingList) {
                 if (!rankings.length) {
-                    rankingList.innerHTML = '<div class="dm-empty"><i class="fas fa-trophy"></i>Add criteria and colleges to compute rankings.</div>';
+                    rankingList.innerHTML = '<div class="dm-empty"><i class="fas fa-trophy"></i>Rate colleges on weighted criteria to see rankings. Unrated and all-zero entries are excluded.</div>';
                 } else {
                     rankingList.innerHTML = rankings.map((entry, index) => {
                         const pct = maxNorm > 0 ? ((entry.normalizedScore / 10) * 100).toFixed(1) : 0;
@@ -14273,6 +14274,7 @@ function populateProgressDashboard() {
             const majors = getCollegeAppRows('majorDecisionMajors');
             const totalWeight = criteria.reduce((sum, c) => sum + Math.max(0, normalizeFiniteNumber(c.weight, 0)), 0);
             return majors
+                .filter(major => criteria.some(criterion => Number(criterion.weight) > 0 && Number(major.scores && major.scores[criterion.id]) > 0))
                 .map(major => {
                     const weighted = criteria.reduce((sum, c) => {
                         const score = Math.max(0, Math.min(10, normalizeFiniteNumber(major.scores && major.scores[c.id], 0)));
@@ -14368,7 +14370,7 @@ function populateProgressDashboard() {
 
             if (rankingList) {
                 if (!rankings.length) {
-                    rankingList.innerHTML = '<div class="mdm-empty"><i class="fas fa-trophy"></i>Add criteria and majors to compute rankings.</div>';
+                    rankingList.innerHTML = '<div class="mdm-empty"><i class="fas fa-trophy"></i>Rate majors on weighted criteria to see rankings. Unrated and all-zero entries are excluded.</div>';
                 } else {
                     rankingList.innerHTML = rankings.map((entry, index) => {
                         const pct = maxNorm > 0 ? ((entry.normalizedScore / 10) * 100).toFixed(1) : 0;
@@ -21391,10 +21393,11 @@ function populateProgressDashboard() {
             if (key === 'hwCourses:v2' || key === 'hwTasks:v2') {
                 try {
                     const store = window.SutraHomeworkStore;
-                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return;
+                    if (!store || typeof store.getSnapshot !== 'function' || typeof store.replace !== 'function') return false;
                     const snapshot = store.getSnapshot();
                     const update = key === 'hwCourses:v2' ? { courses: value } : { tasks: value };
                     store.replace({ ...snapshot, ...update }, { reason: 'compat-write-adapter' });
+                    return true;
                 } catch (error) {
                     // User-authored data failed to reach the canonical store:
                     // diagnosable via the error funnel, not just the console.
@@ -21403,16 +21406,18 @@ function populateProgressDashboard() {
                         window.SutraReportError(error, { where: 'writeLocalArraySafe', key }, 'warning');
                     }
                 }
-                return;
+                return false;
             }
             try {
                 localStorage.setItem(key, JSON.stringify(Array.isArray(value) ? value : []));
+                return true;
             } catch (err) {
                 console.warn(`Failed to persist ${key}`, err);
                 if (window.SutraReportError && typeof window.SutraReportError === 'function') {
                     window.SutraReportError(err, { where: 'writeLocalArraySafe', key }, 'warning');
                 }
             }
+            return false;
         }
 
         function readHomeworkWorkspaceSnapshot() {
@@ -21456,6 +21461,8 @@ function populateProgressDashboard() {
                 snapshot.push({
                     source: 'v2',
                     sourceId,
+                    notes: String(item.notes || ''),
+                    referenceUrl: normalizeExternalUrl(item.sourceUrl || item.referenceUrl || ''),
                     title: courseName ? `${courseName}: ${label}` : label,
                     kind: item.kind === 'task' || item.kind === 'general' ? 'task' : 'assignment',
                     dueDate: dueParts.dueDate,
@@ -21481,6 +21488,8 @@ function populateProgressDashboard() {
                 snapshot.push({
                     source: 'v1',
                     sourceId,
+                    notes: String(item.notes || ''),
+                    referenceUrl: normalizeExternalUrl(item.sourceUrl || item.referenceUrl || ''),
                     title: courseName ? `${courseName}: ${label}` : label,
                     dueDate: dueParts.dueDate,
                     dueTime: dueParts.dueTime,
@@ -22189,12 +22198,10 @@ function populateProgressDashboard() {
 
             desiredMap.forEach((item, id) => {
                 const existing = existingTaskMap.get(id);
-                const dueSummary = [item.dueDate ? `Due ${item.dueDate}` : '', item.dueTime ? `at ${item.dueTime}` : '']
-                    .filter(Boolean)
-                    .join(' ');
                 const nextData = {
                     title: item.title,
-                    notes: dueSummary ? `From To-do - ${dueSummary}` : 'From To-do',
+                    notes: item.notes || '',
+                    referenceUrl: item.referenceUrl || null,
                     scheduleType: 'once',
                     weeklyDays: [],
                     category: item.kind === 'task' ? 'general' : 'school',
@@ -22370,7 +22377,7 @@ function populateProgressDashboard() {
 
             const normalizedPriority = normalizePriorityValue(updates.priority || task.priority);
             const normalizedDifficulty = normalizeDifficultyValue(updates.difficulty || task.difficulty);
-            const normalizedDueDate = parseHomeworkDueDate(updates.dueDate || task.dueDate || '') || null;
+            const normalizedDueDate = parseHomeworkDueDate(Object.prototype.hasOwnProperty.call(updates, 'dueDate') ? updates.dueDate || '' : task.dueDate || '') || null;
             const normalizedDueTime = parseHomeworkDueTime(
                 updates.dueTime || task.homeworkDueTime || task.dueTime || ''
             ) || null;
@@ -22384,20 +22391,31 @@ function populateProgressDashboard() {
                 const idx = list.findIndex(item => String(item.id) === sourceId);
                 if (idx !== -1) {
                     list[idx].priority = normalizedPriority;
+                    if (Object.prototype.hasOwnProperty.call(updates, 'notes')) list[idx].notes = String(updates.notes || '');
+                    if (Object.prototype.hasOwnProperty.call(updates, 'referenceUrl')) {
+                        list[idx].sourceUrl = normalizeExternalUrl(updates.referenceUrl || '') || '';
+                        if ('referenceUrl' in list[idx]) list[idx].referenceUrl = list[idx].sourceUrl;
+                    }
+                    list[idx].updatedAt = new Date().toISOString();
                     list[idx].difficulty = normalizedDifficulty;
                     list[idx].dueDate = normalizedDueDate || '';
                     list[idx].dueTime = normalizedDueTime || '';
                     list[idx].date = normalizedDueDate || '';
                     list[idx].time = normalizedDueTime || '';
                     list[idx].due = dueCompact;
-                    writeLocalArraySafe('hwTasks:v2', list);
-                    changed = true;
+                    changed = writeLocalArraySafe('hwTasks:v2', list) === true;
                 }
             } else if (source === 'v1') {
                 const list = readLocalArraySafe('homeworkTasks:v1');
                 const idx = list.findIndex(item => String(item.id) === sourceId);
                 if (idx !== -1) {
                     list[idx].priority = normalizedPriority;
+                    if (Object.prototype.hasOwnProperty.call(updates, 'notes')) list[idx].notes = String(updates.notes || '');
+                    if (Object.prototype.hasOwnProperty.call(updates, 'referenceUrl')) {
+                        list[idx].sourceUrl = normalizeExternalUrl(updates.referenceUrl || '') || '';
+                        if ('referenceUrl' in list[idx]) list[idx].referenceUrl = list[idx].sourceUrl;
+                    }
+                    list[idx].updatedAt = new Date().toISOString();
                     list[idx].difficulty = normalizedDifficulty;
                     list[idx].dueDate = normalizedDueDate || '';
                     list[idx].date = normalizedDueDate || '';
@@ -22405,8 +22423,7 @@ function populateProgressDashboard() {
                     list[idx].dueTime = normalizedDueTime || '';
                     list[idx].time = normalizedDueTime || '';
                     list[idx].due = dueCompact;
-                    writeLocalArraySafe('homeworkTasks:v1', list);
-                    changed = true;
+                    changed = writeLocalArraySafe('homeworkTasks:v1', list) === true;
                 }
             }
 
@@ -23727,7 +23744,6 @@ function populateProgressDashboard() {
         function setTaskModalHomeworkMode(isHomeworkTask) {
             const idsToDisableForHomework = [
                 'taskTitleInput',
-                'taskNotesInput',
                 'taskScheduleInput',
                 'taskCategoryInput',
                 'taskNoteInput'
@@ -23934,6 +23950,8 @@ function populateProgressDashboard() {
                 const task = existingTask;
                 if (task && task.origin === 'homework') {
                     const updated = updateHomeworkTaskInStorage(task, {
+                        notes: taskData.notes,
+                        referenceUrl: taskData.referenceUrl,
                         priority: taskData.priority,
                         difficulty: taskData.difficulty,
                         dueDate: taskData.dueDate
@@ -43616,7 +43634,7 @@ function buildOnboardingPlanPreview() {
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Next: today'
                 : `Next: ${meta.daysLeft}d`;
-            const dateLine = meta.examDate ? new Date(meta.examDate).toLocaleDateString() : '—';
+            const dateLine = meta.examDate ? parseDate(meta.examDate).toLocaleDateString() : '—';
             const key = group.key;
             const subLabel = group.empty
                 ? 'No subjects yet'
@@ -43912,7 +43930,7 @@ function buildOnboardingPlanPreview() {
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Today'
                 : `${meta.daysLeft} day${meta.daysLeft === 1 ? '' : 's'}`;
-            const dateLine = meta.examDate ? new Date(meta.examDate).toLocaleDateString() : '—';
+            const dateLine = meta.examDate ? parseDate(meta.examDate).toLocaleDateString() : '—';
             const isAp = (id === 'ap' || (id.startsWith && id.startsWith('ap:')));
             const quickActions = isAp
                 ? `<button class="th2-card-action" type="button" onclick="event.stopPropagation(); openExamDetail('${escapeHtml(id)}');"><i class="fas fa-arrow-right"></i> Open in AP workspace</button>
