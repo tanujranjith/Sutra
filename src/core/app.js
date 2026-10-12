@@ -66228,6 +66228,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
                     // Curated keyword aliases for common icon intent.
                     const searchTerms = {
+                        'red': ['\u2764\uFE0F', '\u{1F534}', '\u{1F4D5}', '\u{1F6A9}'],
                         'heart': ['\u2764\uFE0F', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F90D}', '\u{1F90E}', '\u{1F495}', '\u{1F49E}', '\u{1F493}', '\u{1F497}', '\u{1F496}'],
                         'love': ['\u2764\uFE0F', '\u{1F49B}', '\u{1F49C}', '\u{1F495}', '\u{1F496}', '\u{1F497}', '\u{1F498}', '\u{1F49D}', '\u{1F618}', '\u{1F970}'],
                         'star': ['\u2B50', '\u{1F31F}', '\u2728', '\u{1F4AB}', '\u{1F320}'],
@@ -66350,8 +66351,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         ...matchedByKeyword
                     ]);
                     const queryWords = qRaw.split(/[\s_-]+/).filter(Boolean);
-                    const matchesQuery = emoji => candidateSet.has(emoji) && (queryWords.length < 2 || queryWords.every(word =>
-                        ((keywordMap && keywordMap[emoji]) || []).join(' ').toLowerCase().includes(word)));
+                    const extraTerms = new Map();
+                    [...Object.entries(searchTerms), ...Object.entries(emojiCategories)].forEach(([term, list]) => {
+                        const label = term.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+                        list.forEach(emoji => extraTerms.set(emoji, (extraTerms.get(emoji) || '') + ' ' + label));
+                    });
+                    const matchesQuery = emoji => {
+                        if (queryWords.length < 2) return candidateSet.has(emoji);
+                        const words = ((keywordMap && keywordMap[emoji]) || []).join(' ').toLowerCase() + ' ' + (extraTerms.get(emoji) || '');
+                        return queryWords.every(word => words.includes(word));
+                    };
                     const filteredInCategory = emojis.filter(matchesQuery);
                     if (filteredInCategory.length > 0 || currentEmojiCategory === 'All') {
                         emojis = filteredInCategory;
