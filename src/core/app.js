@@ -73185,6 +73185,15 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (note) note.removeAttribute('hidden');
         }
 
+        function formatAssistantAttachmentProblems(gate) {
+            const problems = gate && Array.isArray(gate.problems) ? gate.problems : [];
+            return problems.slice(0, 4).map(problem => {
+                if (typeof problem === 'string') return problem;
+                const item = problem || {};
+                return (item.name || 'Attachment') + ': ' + (item.plan && (item.plan.reason || item.plan.label) || 'incompatible with the selected model');
+            }).join('\n') || 'Unsupported attachment. Remove the file or select a compatible model.';
+        }
+
         function normalizeModelIdFromGeminiName(value) {
             const raw = String(value || '').trim();
             return raw.startsWith('models/') ? raw.slice('models/'.length) : raw;
@@ -75787,6 +75796,10 @@ ${cspMeta}
                         body.generationConfig.thinkingConfig = { thinkingBudget: reasoningPlan.budgetTokens, includeThoughts: false };
                         body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens || 0, reasoningPlan.minOutputTokens || 0);
                     }
+                }
+                if (reasoningPlan && reasoningPlan.apply && reasoningPlan.style === 'gemini_thinking_level') {
+                    body.generationConfig.thinkingConfig = { thinkingLevel: reasoningPlan.effort, includeThoughts: false };
+                    body.generationConfig.maxOutputTokens = Math.max(body.generationConfig.maxOutputTokens || 0, reasoningPlan.minOutputTokens || 0);
                 }
             }
             // reasoningPlan is surfaced back so performIntelligenceRequest can
@@ -78984,12 +78997,11 @@ ${cspMeta}
             if (window.flowAssistant && typeof window.flowAssistant.validateAttachmentsForSend === 'function') {
                 const gate = window.flowAssistant.validateAttachmentsForSend(provider, selectedModel);
                 if (gate && gate.ok === false) {
-                    const lines = (gate.problems || []).slice(0, 4).map(p =>
-                        `• ${p.name || 'Attachment'}: ${p.plan && (p.plan.reason || p.plan.label) || 'incompatible with the selected model'}`);
+                    const problems = formatAssistantAttachmentProblems(gate);
                     const suggestions = (gate.suggestions || []).map(s => s.hint).filter(Boolean);
                     appendChatNotice(
                         'Message not sent — attached file(s) can\'t be processed by the selected model:\n'
-                        + lines.join('\n')
+                        + problems
                         + (suggestions.length ? `\nCompatible options: ${suggestions.join(' · ')}.` : '')
                         + '\nRemove the attachment or switch models, then send again.');
                     return;
@@ -81173,11 +81185,14 @@ ${cspMeta}
                 if (window.flowAssistant && typeof window.flowAssistant.validateAttachmentsForSend === 'function') {
                     const gate = window.flowAssistant.validateAttachmentsForSend(provider, selectedModel);
                     if (gate && gate.ok === false) {
-                        asstNotice('Attachment can\'t be sent to ' + (providerConfig.label || provider) + ': ' + (gate.problems && gate.problems.length ? gate.problems.join(' ') : 'unsupported file.'));
+                        asstNotice('Attachment can\'t be sent to ' + (providerConfig.label || provider) + ':\n' + formatAssistantAttachmentProblems(gate) + '\nRemove the attachment or switch models, then send again.');
                         return;
                     }
                 }
-            } catch (e) { /* non-blocking */ }
+            } catch (e) {
+                asstNotice('Could not check the attachment. Remove it or reload Sutra before sending.');
+                return;
+            }
 
             const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
                 ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })

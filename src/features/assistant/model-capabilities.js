@@ -132,13 +132,13 @@
 
     // Model-name pattern rules (most-specific provider first). Conservative:
     // unknown models fall through to "text-only".
-    var VISION_MODEL_PATTERN = /(gpt-4o|gpt-4\.1|gpt-5|o[134](-|$)|claude-3|claude-4|claude-(opus|sonnet|haiku)|gemini-1\.5|gemini-2|gemini-flash|gemini-pro|vision|llava|scout|maverick|pixtral|qwen[^a-z]*vl)/i;
+    var VISION_MODEL_PATTERN = /(gpt-4o|gpt-4\.1|gpt-5|o[134](-|$)|claude-3|claude-4|claude-(opus|sonnet|haiku)|gemini-1\.5|gemini-[23](?:\.\d+)?-|gemini-flash|gemini-pro|vision|llava|scout|maverick|pixtral|qwen[^a-z]*vl)/i;
     // Anthropic models that accept the `document` content block (PDF input).
     var ANTHROPIC_PDF_PATTERN = /^claude-(3(\.|-)[57]|3-5|3-7|sonnet-4|opus-4|haiku-4|4)/i;
     var ANTHROPIC_PDF_FALLBACK = /claude-3\.5|claude-3-5|claude-3\.7|claude-3-7|claude-sonnet|claude-opus|claude-haiku|claude-4/i;
     // Gemini models that accept inline PDF parts.
-    var GEMINI_PDF_PATTERN = /gemini-(1\.5|2|2\.5|exp|flash|pro)/i;
-    var LONG_CONTEXT_PATTERN = /(gemini-1\.5|gemini-2|claude-3|claude-4|claude-(opus|sonnet|haiku)|gpt-4\.1|gpt-4o|gpt-5|128k|200k|1m)/i;
+    var GEMINI_PDF_PATTERN = /gemini-(1\.5|2|3(?:\.\d+)?|exp|flash|pro)/i;
+    var LONG_CONTEXT_PATTERN = /(gemini-1\.5|gemini-[23](?:\.\d+)?-|claude-3|claude-4|claude-(opus|sonnet|haiku)|gpt-4\.1|gpt-4o|gpt-5|128k|200k|1m)/i;
 
     // Conservative request-size budgets the UI enforces BEFORE building a
     // request. Providers differ; these floors avoid guaranteed failures.
@@ -471,6 +471,13 @@
             var canOff = !/2[.-]5-pro/i.test(m);
             return { supported: true, style: 'gemini_thinking', levels: ['low', 'medium', 'high'], supportsOff: canOff, defaultLevel: 'medium' };
         }
+        if (type === 'gemini' && /gemini-3(?:\.\d+)?-(?:flash|pro)(?:-|$)/i.test(m) && !/image|audio|live/i.test(m)) {
+            // GenerateContent uses thinkingLevel for Gemini 3, not the 2.5
+            // token budget. Original 3 Pro has no medium; 3.8 Flash has no minimal.
+            var originalPro = /gemini-3(?:\.0)?-pro(?:-|$)/i.test(m);
+            var minimal = /gemini-3-flash(?:-|$)|gemini-3\.1-flash-lite(?:-|$)|gemini-3\.[56]-flash(?:-|$)/i.test(m);
+            return { supported: true, style: 'gemini_thinking_level', levels: originalPro ? ['low', 'high'] : (minimal ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high']), supportsOff: false, defaultLevel: originalPro ? 'high' : 'medium' };
+        }
         return none;
     }
 
@@ -550,6 +557,7 @@
         { id: 'openai-reasoning-effort', provider: 'openai', capability: 'reasoning_effort', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENAI_EFFORT_PATTERN', note: 'o1/o3/o4 + gpt-5; o1-mini/preview excluded; gpt-5 adds minimal' },
         { id: 'openrouter-reasoning', provider: 'openrouter', capability: 'reasoning', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENROUTER_REASONING_PATTERN', note: 'unified reasoning control across most reasoning families' },
         { id: 'gemini-thinking-budget', provider: 'gemini', capability: 'thinking_budget', verifiedOn: '2026-06-01', source: 'in-repo pattern GEMINI_THINKING_PATTERN', note: 'gemini-2.5 family + flash-thinking' },
+        { id: 'gemini-thinking-level', provider: 'gemini', capability: 'thinking_level', verifiedOn: '2026-10-11', source: 'https://ai.google.dev/gemini-api/docs/generate-content/thinking', note: 'Gemini 3 GenerateContent thinkingLevel; tiers vary by model; no full off' },
         { id: 'attachment-native-image', provider: 'multi', capability: 'native_image_input', verifiedOn: '2026-06-01', source: 'in-repo adapter buildProviderRequestPayload', note: 'anthropic/gemini/openai + recognized OpenAI-compatible only' },
         { id: 'attachment-native-pdf', provider: 'multi', capability: 'native_pdf_input', verifiedOn: '2026-06-01', source: 'in-repo adapter buildProviderRequestPayload', note: 'anthropic/gemini document blocks; others fall back to local extraction' },
         { id: 'provider-streaming', provider: 'multi', capability: 'streaming', verifiedOn: '2026-07-14', source: 'in-repo consumeIntelligenceStream adapter', note: 'OpenAI-compatible, Anthropic, and Gemini adapters only' }

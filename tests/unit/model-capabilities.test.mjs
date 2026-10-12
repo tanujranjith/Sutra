@@ -5,6 +5,23 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const capabilities = require('../../src/features/assistant/model-capabilities.js');
 
+test('Gemini 3 attachments and model-specific effort tiers are supported', () => {
+  for (const model of ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.8-flash']) {
+    assert.equal(capabilities.resolveModelCapabilities('gemini', model).modalities.images, true);
+    assert.equal(capabilities.determineAttachmentProcessingPlan('gemini', model, { name: 'paper.pdf', size: 1000 }).compatible, true);
+    const plan = capabilities.resolveReasoningPlan('gemini', model, 'high');
+    assert.equal(plan.style, 'gemini_thinking_level');
+    assert.equal(plan.effort, 'high');
+    assert.equal(plan.budgetTokens, undefined);
+    assert.equal(capabilities.resolveReasoningPlan('gemini', model, 'off').apply, false);
+  }
+  assert.deepEqual(capabilities.resolveReasoningCapability('gemini', 'gemini-3-pro-preview').levels, ['low', 'high']);
+  assert.ok(capabilities.resolveReasoningCapability('gemini', 'gemini-3-flash-preview').levels.includes('minimal'));
+  assert.ok(!capabilities.resolveReasoningCapability('gemini', 'gemini-3.8-flash').levels.includes('minimal'));
+  assert.equal(capabilities.resolveReasoningPlan('gemini', 'gemini-2.5-flash', 'high').style, 'gemini_thinking');
+  assert.equal(capabilities.resolveReasoningCapability('gemini', 'unknown-future-model').supported, false);
+});
+
 test('XLSX uses bounded local extraction while legacy binary sheets explain the fallback', () => {
   const xlsx = capabilities.determineAttachmentProcessingPlan('groq', 'llama-3.3-70b-versatile', { name: 'grades.xlsx', sizeBytes: 1200 });
   assert.equal(xlsx.plan, 'local-extraction');

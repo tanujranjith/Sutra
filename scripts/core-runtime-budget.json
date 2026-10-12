@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-10T00:19:25.636Z",
-  "reviewedReason": "Bind daily backup wake handling at every Cloud entry and expose truthful automatic-backup readiness and receipts",
-  "maxBytes": 4974255,
-  "maxLines": 87175
+  "blessedAt": "2026-10-12T01:04:22.542Z",
+  "reviewedReason": "Share readable attachment failures and support Gemini 3 thinkingLevel payloads",
+  "maxBytes": 4975225,
+  "maxLines": 87190
 }

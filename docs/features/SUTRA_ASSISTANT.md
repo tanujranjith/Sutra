@@ -284,6 +284,13 @@ action APIs also obey the workspace permission mode; callers must opt into
 approved actions, and destructive/plugin actions require their separate explicit
 approval metadata. The action-card Apply control supplies reviewed metadata only
 after its existing approval and high-risk confirmation flow.
+
+Thinking effort is available in both the panel settings and the full Assistant's
+model picker when the selected model supports it. Gemini 3 uses model-specific
+`thinkingLevel` choices; Gemini 2.5 retains its token-budget control. Auto leaves
+the provider default unchanged. Gemini 3 image/PDF input is recognized, and
+attachment errors identify the file and reason instead of displaying an object.
+Provider contract: [Google GenerateContent thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
 If a referenced task, note, course, deck, or Timeline block changes after review,
 the entire plan fails closed as stale before its first mutation and must be
 reviewed again.
