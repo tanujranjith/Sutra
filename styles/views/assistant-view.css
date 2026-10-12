@@ -537,28 +537,66 @@ body.motion-off .asst-thinking-dots i,
 body.motion-off .asst-thinking-bubble::after { animation: none; }
 body.motion-off .asst-thinking-label { -webkit-text-fill-color: currentColor; color: var(--asst-text-dim); background: none; animation: none; }
 
-/* Quick-action chips */
+/* Composer effort menu and quick-action chips */
 .asst-reasoning-row {
+    position: relative;
+    flex: 0 0 auto;
+    font-size: 0.85rem;
+}
+.asst-reasoning-row[hidden], .asst-reasoning-row select[hidden], .asst-reasoning-menu[hidden] { display: none; }
+.asst-reasoning-trigger {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
-    color: var(--asst-text-dim);
-    font-size: 0.8rem;
-}
-.asst-reasoning-row[hidden] { display: none; }
-.asst-reasoning-row select {
+    gap: 12px;
     min-height: 44px;
-    max-width: 100%;
-    padding: 6px 12px;
+    padding: 8px 14px;
     border: 1px solid var(--asst-line);
-    border-radius: 12px;
-    background: var(--asst-glass);
+    border-radius: 24px;
+    background: transparent;
     color: var(--asst-text);
     font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
 }
-.asst-reasoning-row select:focus-visible { outline: 2px solid var(--asst-accent); outline-offset: 2px; }
+.asst-reasoning-trigger:hover, .asst-reasoning-trigger[aria-expanded="true"] { border-color: var(--asst-accent); background: var(--asst-glass); }
+.asst-reasoning-trigger i { font-size: 0.75em; color: var(--asst-text-dim); }
+.asst-reasoning-trigger:focus-visible, .asst-reasoning-option:focus-visible { outline: 2px solid var(--asst-accent); outline-offset: 2px; }
+.asst-reasoning-menu {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    right: 0;
+    width: 230px;
+    max-width: calc(100vw - 48px);
+    max-height: min(420px, 45dvh);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--surface-border-strong, var(--asst-line));
+    border-radius: 14px;
+    background: var(--bg-elevated);
+    color: var(--asst-text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+    z-index: 50;
+}
+.asst-reasoning-heading { padding: 8px 10px 12px; font-weight: 600; }
+.asst-reasoning-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--asst-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.asst-reasoning-option:hover, .asst-reasoning-option:focus, .asst-reasoning-option[aria-checked="true"] { background: var(--surface-bg-hover, var(--asst-glass)); }
+.asst-reasoning-option i { color: var(--asst-accent); visibility: hidden; }
+.asst-reasoning-option[aria-checked="true"] i { visibility: visible; }
 .asst-chips {
     position: relative;
     z-index: 2;
@@ -768,6 +806,7 @@ body.motion-off .asst-mic-btn.is-listening { animation: none; }
 
 .asst-ta {
     flex: 1 1 auto;
+    min-width: 0;
     background: none;
     border: none;
     outline: none;
@@ -780,7 +819,7 @@ body.motion-off .asst-mic-btn.is-listening { animation: none; }
     padding: 6px 4px;
 }
 .asst-ta::placeholder { color: var(--asst-text-dim); }
-.asst-input-foot { flex: 0 0 auto; display: flex; align-items: center; }
+.asst-input-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
 .asst-send-btn {
     width: 38px; height: 38px;
     border-radius: 12px;
@@ -857,6 +896,13 @@ body.motion-off .asst-mic-btn.is-listening { animation: none; }
     #view-assistantview .asst-chip { flex: 0 0 auto; }
     #view-assistantview .asst-input-wrap { padding: 6px 12px 12px; }
     #view-assistantview .asst-hint { display: none; }
+}
+
+/* Keep typing and effort controls inside the composer on narrow screens. */
+@media (max-width: 600px) {
+    #view-assistantview .asst-input-card { flex-wrap: wrap; }
+    #view-assistantview .asst-ta { flex: 1 1 calc(100% - 100px); }
+    #view-assistantview .asst-input-foot { flex-basis: 100%; justify-content: flex-end; }
 }
 
 /* Reduce animations for users who prefer that */

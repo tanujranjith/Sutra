@@ -20,7 +20,7 @@
         './src/features/assistant/assistant-safety.js?v=20260714-intel1',
         './src/features/assistant/model-capabilities.js?v=20261011-assistant-discovery1',
         './src/features/assistant/intelligence-diagnostics.js?v=20260714-intel1',
-        './src/features/assistant/sutra-product-knowledge.js?v=20261011-assistant-discovery1',
+        './src/features/assistant/sutra-product-knowledge.js?v=20261012-assistant-effort1',
         './src/features/assistant/sutra-capability-registry.js?v=20261001-todo-completion1',
         './src/features/assistant/action-system.js?v=20260807-agentplans2',
         './src/features/assistant/note-patch-system.js?v=20260711-note-patch1',
@@ -32,7 +32,7 @@
       styles: [
         './styles/features/sutra-assistant-help.css?v=20260729-providerwiz1',
         './styles/features/sutra-intelligence.css?v=20260610-intel1',
-        './styles/views/assistant-view.css?v=20261011-assistant-discovery1'
+        './styles/views/assistant-view.css?v=20261012-assistant-effort1'
       ],
       initialization: 'sutraAssistant.init', teardown: 'sutraAssistant.teardown',
       navigationEntries: ['assistantview'], persistenceNamespace: 'assistantChatHistory',

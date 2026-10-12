@@ -73227,6 +73227,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 : { supported: false, levels: [], supportsOff: false };
             if (!caps || !caps.supported) {
                 row.setAttribute('hidden', '');
+                if (row.id === 'asstReasoningRow') {
+                    document.getElementById('asstReasoningMenu').hidden = true;
+                    document.getElementById('asstReasoningTrigger').setAttribute('aria-expanded', 'false');
+                }
                 if (note) note.setAttribute('hidden', '');
                 return;
             }
@@ -73241,6 +73245,30 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 return opt;
             }));
             select.value = effective;
+            if (row.id === 'asstReasoningRow') {
+                const trigger = document.getElementById('asstReasoningTrigger');
+                const label = REASONING_LEVEL_LABELS[effective] || effective;
+                document.getElementById('asstReasoningValue').textContent = label;
+                trigger.setAttribute('aria-label', 'Thinking effort: ' + label);
+                trigger.setAttribute('aria-expanded', 'false');
+                document.getElementById('asstReasoningMenu').hidden = true;
+                document.getElementById('asstReasoningOptions').replaceChildren(...choices.map(level => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'asst-reasoning-option';
+                    button.dataset.effort = level;
+                    button.setAttribute('role', 'menuitemradio');
+                    button.setAttribute('aria-checked', String(level === effective));
+                    button.tabIndex = level === effective ? 0 : -1;
+                    const text = document.createElement('span');
+                    text.textContent = REASONING_LEVEL_LABELS[level] || level;
+                    const check = document.createElement('i');
+                    check.className = 'fas fa-check';
+                    check.setAttribute('aria-hidden', 'true');
+                    button.append(text, check);
+                    return button;
+                }));
+            }
             row.removeAttribute('hidden');
             if (note) note.removeAttribute('hidden');
         }
@@ -81467,6 +81495,54 @@ ${cspMeta}
             asstCache = asstReadEls();
             if (!asstCache.shell) return; // view markup absent
             const effortSelect = document.getElementById('asstReasoningSelect');
+            const effortRow = document.getElementById('asstReasoningRow');
+            const effortTrigger = document.getElementById('asstReasoningTrigger');
+            const effortMenu = document.getElementById('asstReasoningMenu');
+            if (effortSelect && effortRow && effortTrigger && effortMenu) {
+                const closeEffortMenu = (restoreFocus) => {
+                    effortMenu.hidden = true;
+                    effortTrigger.setAttribute('aria-expanded', 'false');
+                    if (restoreFocus) effortTrigger.focus();
+                };
+                const openEffortMenu = (last) => {
+                    asstCloseInputPopups();
+                    asstCloseModelPicker();
+                    effortMenu.hidden = false;
+                    effortTrigger.setAttribute('aria-expanded', 'true');
+                    const items = effortMenu.querySelectorAll('[role="menuitemradio"]');
+                    const selected = effortMenu.querySelector('[aria-checked="true"]');
+                    (last ? items[items.length - 1] : selected || items[0])?.focus();
+                };
+                effortTrigger.addEventListener('click', () => effortMenu.hidden ? openEffortMenu(false) : closeEffortMenu(false));
+                effortTrigger.addEventListener('keydown', (event) => {
+                    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                    event.preventDefault();
+                    openEffortMenu(event.key === 'ArrowUp');
+                });
+                effortMenu.addEventListener('click', (event) => {
+                    const option = event.target.closest('[data-effort]');
+                    if (!option) return;
+                    effortSelect.value = option.dataset.effort;
+                    effortSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    closeEffortMenu(true);
+                });
+                effortMenu.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape' || event.key === 'Tab') {
+                        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+                        closeEffortMenu(true);
+                        return;
+                    }
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const items = Array.from(effortMenu.querySelectorAll('[role="menuitemradio"]'));
+                    const current = items.indexOf(document.activeElement);
+                    const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                        : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                    items[index]?.focus();
+                });
+                document.addEventListener('click', (event) => { if (!effortRow.contains(event.target)) closeEffortMenu(false); });
+                document.addEventListener('focusin', (event) => { if (!effortRow.contains(event.target)) closeEffortMenu(false); });
+            }
             if (effortSelect) effortSelect.addEventListener('change', () => {
                 setWorkspacePreference('assistant.reasoningEffort', effortSelect.value, { refresh: false });
                 syncReasoningControl(getCurrentChatProvider());

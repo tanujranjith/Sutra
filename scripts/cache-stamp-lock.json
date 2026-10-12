@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "1f62cec596a4e5a3"
+    "stamp": "20261012-assistant-effort1",
+    "hash": "87088a070a63bf95"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "043449242282be2b"
+    "stamp": "20261012-assistant-effort1",
+    "hash": "5251d0cc5ae886a6"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -224,8 +224,8 @@
     "hash": "aaa57ee9deb1874c"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "5da37e67c59772bc"
+    "stamp": "20261012-assistant-effort1",
+    "hash": "63fa8cb3473fc684"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "2cdffec1e09b3093"
+    "stamp": "20261012-assistant-effort1",
+    "hash": "80bd180b68516bcb"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -728,8 +728,8 @@
     "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "dff0a93f75fe6529"
+    "stamp": "20261012-assistant-effort1",
+    "hash": "9448e7944e877ef3"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20261011-header-flow4",

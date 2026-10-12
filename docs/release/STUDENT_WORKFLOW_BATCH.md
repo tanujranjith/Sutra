@@ -71,7 +71,10 @@ Assistant, integrations, and Cloud Sync.
 
 Validation follow-ups repair the header's mirrored-space clipping, stale custom
 model overrides, provider catalog refresh/pagination, and missing GPT-6 effort
-controls. Thinking effort is visible beside the full Assistant composer. Task-list
+controls. The owner-approved Thinking effort pill is inside the full Assistant
+composer beside Send, with an upward-opening menu and keyboard navigation.
+CI coverage includes menu selection, dismissal, persistence and 320/390px layout;
+these functional and visual checks remain unrun pending authorized remote CI. Task-list
 questions read canonical task stores locally; other full-Assistant questions
 select matching workspace records under the existing privacy and token-budget
 boundaries. Model selection, reload, catalog pagination, permissions, and selective

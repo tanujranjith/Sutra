@@ -291,8 +291,12 @@ buttons such as Save as note and Create task count as explicit reviewed actions
 and still obey the selected permission mode. Generated study flashcards are
 proposed in a review card before a deck is saved.
 
-Thinking effort is available beside the full Assistant's message box, in its
-model picker, and in panel settings when the selected model supports it. GPT-6
+Thinking effort is integrated into the full Assistant's message composer beside
+Send as a **Thinking · Auto** control. Its menu opens above the composer, marks
+the current choice, and supports arrow keys, Home/End, Enter, Escape, and outside
+click dismissal. On narrow screens the controls wrap within the composer so
+typing retains space. The same setting is available in the model picker and
+panel settings when the selected model supports it. GPT-6
 families expose their supported tiers, including Extra high and Maximum;
 unavailable tiers are omitted. Gemini 3 uses model-specific
 `thinkingLevel` choices; Gemini 2.5 retains its token-budget control. Auto leaves
