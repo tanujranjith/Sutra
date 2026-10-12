@@ -76,6 +76,15 @@ async function getHeaderGeometry(page) {
       launcherRadius: parseFloat(getComputedStyle(launcher).borderTopLeftRadius) || 0,
       launcherOwnsHitTarget: !!launcherTarget && (launcherTarget === launcher || launcherTarget.closest('#commandPaletteLauncher') === launcher),
       utilityChildrenFit,
+      destinationOverflow: row.scrollWidth - row.clientWidth,
+      visibleDestinationLabelsFit: Array.from(row.children).filter(visible).every((control) => {
+        const rect = control.getBoundingClientRect();
+        const label = document.createRange();
+        label.selectNodeContents(control);
+        const labelRect = label.getBoundingClientRect();
+        return rect.left >= rowRect.left - 1 && rect.right <= rowRect.right + 1
+          && labelRect.left >= rowRect.left - 1 && labelRect.right <= rowRect.right + 1;
+      }),
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
     };
   });
@@ -162,6 +171,9 @@ test('header utilities stay clear of centered navigation across desktop and tabl
 
   // Check the actual startup layout before enabling any optional shortcut providers.
   await expectHeaderGeometry(page);
+  const startupGeometry = await getHeaderGeometry(page);
+  expect(startupGeometry.destinationOverflow).toBeLessThanOrEqual(1);
+  expect(startupGeometry.visibleDestinationLabelsFit).toBe(true);
 
   // Use the real Integrations preferences at a wide desktop size so the built-in
   // launchers are visible before the exact screenshot width is tested. The
@@ -174,6 +186,9 @@ test('header utilities stay clear of centered navigation across desktop and tabl
   await expect(page.locator('#quickAppLaunchers')).toBeVisible();
   await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
   await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
+  const desktopGeometry = await getHeaderGeometry(page);
+  expect(desktopGeometry.destinationOverflow).toBeLessThanOrEqual(1);
+  expect(desktopGeometry.visibleDestinationLabelsFit).toBe(true);
 
   const launcher = page.locator('#commandPaletteLauncher');
   await launcher.click();
@@ -261,13 +276,14 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
       const rect = element.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     };
-    const primaryControls = Array.from(document.querySelectorAll('.view-tabs > .view-tab')).filter(isVisible);
+    const primaryControls = Array.from(document.querySelectorAll('.view-tabs > .view-tab, .view-tabs > .view-tab-add')).filter(isVisible);
     const more = document.querySelector('.view-tabs > .view-more');
     if (more && isVisible(more)) primaryControls.push(more);
     const primaryRects = primaryControls.map((control) => control.getBoundingClientRect());
     const primaryLeft = Math.min(...primaryRects.map((rect) => rect.left));
     const primaryRight = Math.max(...primaryRects.map((rect) => rect.right));
     const utilityRect = document.querySelector('.nav-utility-group').getBoundingClientRect();
+    const rowRect = document.querySelector('.view-tabs').getBoundingClientRect();
     return {
       navLeft: Math.round(nav.left),
       navWidth: Math.round(nav.width),
@@ -275,13 +291,14 @@ test('desktop shell keeps Notes contextual and gives major workspaces the full c
       sidebarWidth: Math.round(sidebarRect.width),
       mainLeft: Math.round(mainRect.left),
       primaryCenter: Math.round((primaryLeft + primaryRight) / 2),
+      availableCenter: Math.round((rowRect.left + rowRect.right) / 2),
       primaryRight: Math.round(primaryRight),
       utilityLeft: Math.round(utilityRect.left)
     };
   });
   expect(geometry.navLeft).toBe(0);
   expect(geometry.navWidth).toBe(geometry.viewportWidth);
-  expect(Math.abs(geometry.primaryCenter - Math.round(geometry.viewportWidth / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(geometry.primaryCenter - geometry.availableCenter)).toBeLessThanOrEqual(2);
   expect(geometry.utilityLeft).toBeGreaterThan(geometry.primaryRight);
   expect(geometry.mainLeft).toBe(geometry.sidebarWidth);
   await expect(topNav).toBeVisible();

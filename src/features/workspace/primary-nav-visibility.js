@@ -101,7 +101,7 @@
     var wrapper = document.getElementById('moreViewsWrapper');
     if (row && typeof ResizeObserver === 'function') {
       // Utilities can change width without a window resize (clock, shortcuts).
-      // Reconcile scrolling after the shell updates its reserved space.
+      // Reconcile scrolling after flex layout updates the available tab width.
       var rowObserver = new ResizeObserver(schedule);
       rowObserver.observe(row);
     }

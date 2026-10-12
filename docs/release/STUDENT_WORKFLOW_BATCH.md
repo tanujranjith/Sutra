@@ -15,7 +15,7 @@ The listed CI cases have been prepared but have not run for this candidate.
 | Wishlist 1 — Assistant effort and Gemini | Existing effort selectors recognize supported Gemini 3 tiers; native PDF/image attachment support and readable attachment errors; thoughts remain unrequested. |
 | Wishlist 3 — Emoji choices/search | Full bundled dictionary participates in selection; multiword search combines names, categories, and aliases; accessible labels. |
 | Wishlist 4 — Integrations | Remove unimplemented Docs/Calendar/Todoist cards, retain implemented imports and configured Drive, label website launchers as shortcuts. |
-| Wishlist 6 — Command palette | Rounded, theme-aware navigation launcher, existing keyboard shortcut and canonical command handlers. Utilities sit outside the scrollable tab row; symmetric space follows their actual width to prevent overlap. |
+| Wishlist 6 — Command palette | Rounded, theme-aware navigation launcher, existing keyboard shortcut and canonical command handlers. Brand, destinations, and utilities share the header's normal flex layout. Destinations use all remaining space instead of duplicating the utility width as a left margin. |
 | Wishlist 7 — Automatic Sync and backup interface | Existing shared Cloud hub retained; two-minute foreground polling, existing return/reconnect/save triggers, independent snapshot and replication guarantees. |
 | Wishlist 8 — Plain-text paste | Ctrl/Meta+Shift+V routes plain text through both editor engines before rich content or attachments. |
 | Wishlist 9 — Paged mode | Automatic view-only Modern Editor page boundaries, manual-break alignment, one owner for page size/margins, synchronized settings controls. |

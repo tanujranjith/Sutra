@@ -328,8 +328,8 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20261011-command-launcher2",
-    "hash": "2a55b0acf4644898"
+    "stamp": "20261011-header-flow4",
+    "hash": "d2d01e3d4679216e"
   },
   "src/features/workspace/create-page-templates.js": {
     "stamp": "20261003-create-review7",
@@ -396,8 +396,8 @@
     "hash": "ba751352ef5fc163"
   },
   "src/features/workspace/primary-nav-visibility.js": {
-    "stamp": "20261011-command-launcher3",
-    "hash": "564337678ffa501c"
+    "stamp": "20261011-header-flow4",
+    "hash": "60469571a1780cb1"
   },
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",
@@ -732,8 +732,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261011-command-launcher2",
-    "hash": "eb054775cb41476f"
+    "stamp": "20261011-header-flow4",
+    "hash": "566794d464e835e9"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
