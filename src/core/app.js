@@ -34754,7 +34754,7 @@ function buildOnboardingPlanPreview() {
                 /* ---------- 53-54 Top dock ---------- */
                 { selector: '#quickAppLaunchers, #integrationsDock',
                   before: () => safeRunTutorial(() => setActiveView('today')),
-                  title: 'Integrations dock',
+                  title: 'Shortcuts dock',
                   body: 'Quick launchers for Spotify and ChatGPT. Add your own website or page shortcuts from the Create sidebar or Settings → Web shortcuts.' },
 
                 /* ---------- 54-62 Settings ---------- */
@@ -44993,6 +44993,7 @@ function buildOnboardingPlanPreview() {
   <li>Use <code>::</code> in page names to build note hierarchies.</li>
   <li>Split-screen presets can open note pairs such as assignment + notes, AP unit + notes, or essay + research.</li>
   <li>In Modern Editor Split View, each pane has its own note, caret, and undo history. Toolbar actions apply to the active pane.</li>
+  <li><strong>Ctrl/⌘+Shift+V</strong> pastes plain text in either note editor. The page icon picker searches the bundled emoji names; multiple search words narrow the results.</li>
   <li>Select text and choose <strong>Add comment on selection</strong> to start an anchored thread. Click its highlighted passage or quoted text to review, reply, resolve, or reopen it. Comments follow the active Split View note and stay in backups and version history. If a passage is removed or cannot be identified safely, the thread stays available with a changed-text notice.</li>
   <li>HTML embeds appear as live nodes in the Modern Editor. Use the embed menu to edit, resize, or remove them; previews remain sandboxed.</li>
   <li>Split View now remembers <strong>pane context</strong>, not just left/right tab choice: the selected note in each pane, plus a placeholder for selected review deck, AP class, project, calendar date, and focus preset. The state lives in <code>splitPaneContexts</code> and survives export/import.</li>
@@ -45053,7 +45054,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Command Palette, Global Search, And Quick Capture',
                     body: `
 <ul>
-  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P) is for fast actions and jumping around the app. It now includes <em>Open Review</em> and <em>Start review session</em>.</li>
+  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P or the navigation search-command button) is for fast actions and jumping around the app. It includes <em>Open Review</em> and <em>Start review session</em>.</li>
   <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, To-do, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
   <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items. For homework, “tonight” means today at 11:59 PM unless you state a specific time.</li>
@@ -45082,6 +45083,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
+  <li>Quick Capture recognizes existing class and activity names and previews their destination. You can change the class or activity before saving. Imported Homework notes and Reference URLs remain editable in task details.</li>
   <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
   <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
@@ -45330,6 +45332,7 @@ function buildOnboardingPlanPreview() {
   <li>Different paragraphs or top-level note blocks merge when that is provably safe. Incompatible edits to the same block create one item under Sync &rsaquo; <strong>Conflicts</strong>; no duplicate is added to the sidebar. Only <strong>Keep both as pages</strong> creates a second page.</li>
   <li>A delete never destroys someone's newer edit — the edit wins and the item comes back.</li>
   <li>Offline edits queue and upload when you're back online.</li>
+  <li>Unlocked Sync checks every two minutes while the tab is visible, and when it returns to the foreground. Change-triggered backups retry temporary upload contention once per minute.</li>
 </ul>
 <h3>Security model</h3>
 <ul>
@@ -45388,6 +45391,7 @@ function buildOnboardingPlanPreview() {
 <ul>
   <li>Sutra Assistant is a contextual workspace layer, not a generic chatbot. It sees the active view, the open note or active Canvas summary, your selection, and (depending on context depth) tasks, homework, timeline, review-due, AP subjects, and college items.</li>
   <li><strong>Context depth</strong> in <em>Settings &rsaquo; Assistant</em> controls how much it sees: <em>Minimal</em> (view only), <em>Current view</em> (default), or <em>Workspace-aware</em> (broader bounded summary).</li>
+  <li><strong>Effort</strong> appears for models with supported reasoning controls, including Gemini 3 text models. Available levels follow the selected model; unsupported attachment messages identify the file and reason.</li>
   <li>Above the input, an <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
   <li>Every major view also has a small <strong>Ask Sutra</strong> pill row at the top with view-relevant prompts.</li>
   <li>Sutra Assistant can <strong>propose</strong> local app actions: <code>insert_text</code>, <code>replace_selection</code>, <code>create_task</code>, <code>create_homework</code>, <code>create_timeline_block</code>, <code>create_page</code>, <code>create_review_deck</code>, <code>add_review_cards</code>, <code>create_cram_session</code>, <code>create_college_task</code>, <code>navigate</code>, plus Canvas actions such as <code>canvas_add_sticky</code>, <code>canvas_add_text</code>, <code>canvas_group_selection</code>, and <code>canvas_create_task_from_selection</code>. Each proposal becomes an <strong>action card</strong> with Apply / Decline buttons. Canvas mutations are high-risk and always require explicit approval.</li>
@@ -59043,8 +59047,8 @@ function getActiveEditor() {
         }
 
         async function runSutraCloudAutoBackup(expectedFrequency) {
-            if (!sutraCloudAutoReady() || sutraCloudRuntime.busy || !navigator.onLine
-                || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+            if (!sutraCloudAutoReady() || !navigator.onLine) return { skipped: true, reason: 'not-ready' };
+            if (sutraCloudRuntime.busy || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true, reason: 'busy' };
             // Without an atomic cross-tab lock, keep automatic backup paused.
             // Manual backups remain available without opening the Sync database.
             if (!navigator.locks) return { skipped: true, reason: 'locks-unavailable' };
@@ -59053,7 +59057,8 @@ function getActiveEditor() {
                     if (!lock) return { skipped: true, reason: 'lock-held' };
                     sutraCloudMeta = null;
                     const meta = loadSutraCloudMeta();
-                    if (!sutraCloudAutoReady() || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true };
+                    if (!sutraCloudAutoReady()) return { skipped: true, reason: 'not-ready' };
+                    if (sutraCloudRuntime.busy || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true, reason: 'busy' };
                     const frequency = meta.autoBackup.frequency;
                     if (expectedFrequency && frequency !== expectedFrequency) return { skipped: true, reason: 'schedule-changed' };
                     if (frequency === 'daily' && !getSutraCloudDailySchedule(meta).due) return { skipped: true, reason: 'not-due' };
@@ -59090,9 +59095,15 @@ function getActiveEditor() {
 
         function scheduleSutraCloudAutoBackup(delayMs = 60000) {
             if (sutraCloudAutoTimer) clearTimeout(sutraCloudAutoTimer);
-            sutraCloudAutoTimer = setTimeout(() => {
+            sutraCloudAutoTimer = setTimeout(async () => {
                 sutraCloudAutoTimer = null;
-                runSutraCloudAutoBackup('change');
+                const result = await runSutraCloudAutoBackup('change');
+                // A save during another upload still needs its own snapshot.
+                // Recheck transient contention at most once a minute; ordinary
+                // failures, unchanged work, and disabled schedules do not loop.
+                if (result && result.skipped && ['busy', 'lock-held'].includes(result.reason)
+                    && !sutraCloudAutoTimer && sutraCloudAutoReady()
+                    && loadSutraCloudMeta().autoBackup.frequency === 'change') scheduleSutraCloudAutoBackup(60000);
             }, delayMs);
         }
 
@@ -63960,8 +63971,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     if (!document.hidden && sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
                 });
                 setInterval(() => {
-                    if (sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
-                }, 5 * 60 * 1000);
+                    if (!document.hidden && sutraSyncRuntime.engine) sutraSyncRuntime.engine.noteLocalChange();
+                }, 2 * 60 * 1000);
             } catch (error) { /* non-critical */ }
         }
 
@@ -77959,7 +77970,7 @@ ${cspMeta}
                 Improved: ['First-use AI disclosure now states provider, model, context, privacy, and model-quality responsibilities.', 'Plaintext recovery filenames clearly include UNENCRYPTED.'],
                 Fixed: ['Encrypted .sutra tamper validation rejects malformed envelopes before state mutation.', 'Settings theme panel cleanup, modal contrast, and Assistant reasoning-boundary regressions.'],
                 'Privacy & Security': ['No remote release-note fetch, analytics, or tracking.', 'Assistant chats exclude API keys, hidden prompts, action fences, and provider reasoning.'],
-                Beta: ['Google Drive and Google Docs controls stay disabled unless runtime configuration is present.', 'External integrations remain optional and gated.']
+                Beta: ['Google Drive requires runtime configuration. Live Google Docs, Google Calendar, and Todoist connections are not offered.', 'External integrations remain optional and gated.']
             }
         }];
 
@@ -78026,39 +78037,6 @@ ${cspMeta}
                     permissions: 'drive.appdata only when connected',
                     privacy: 'Encrypted .sutra bytes only',
                     action: driveConfigured ? 'drive' : ''
-                },
-                {
-                    id: 'google-docs-smart-import',
-                    name: 'Google Docs Smart Import',
-                    category: 'Import',
-                    description: driveConfigured ? 'Requires explicit selected-document access before any read.' : 'Not available without Google OAuth configuration. Paste or upload fallback remains available.',
-                    status: driveConfigured ? 'Needs consent' : 'Gated',
-                    configured: driveConfigured,
-                    permissions: 'Read-only selected document when configured',
-                    privacy: 'No broad Drive scan',
-                    action: driveConfigured ? 'google-docs' : ''
-                },
-                {
-                    id: 'google-calendar',
-                    name: 'Google Calendar',
-                    category: 'Calendar',
-                    description: 'Live Google Calendar import is gated locally; .ics import/export remains available.',
-                    status: 'Gated',
-                    configured: false,
-                    permissions: 'No OAuth request in this deployment',
-                    privacy: 'No calendar request before consent',
-                    action: ''
-                },
-                {
-                    id: 'todoist',
-                    name: 'Todoist',
-                    category: 'Tasks',
-                    description: 'Coming soon as import-first, least-privilege task import.',
-                    status: 'Coming soon',
-                    configured: false,
-                    permissions: 'None requested',
-                    privacy: 'No network call',
-                    action: ''
                 }
             ];
         }
@@ -83758,8 +83736,8 @@ function syncQuickCaptureCourseField(parsed, modal) {
         opt.textContent = label;
         select.appendChild(opt);
     };
-    addOption('', 'No class');
-    courses.forEach(c => addOption(String(c.id), String(c.name || 'Class')));
+    addOption('', 'No class or activity');
+    courses.forEach(c => addOption(String(c.id), String(c.name || 'Class') + (c.type === 'misc' ? ' · Activity' : '')));
     addOption('__new__', '＋ New class…');
 
     const validValues = new Set(['', '__new__', ...courses.map(c => String(c.id))]);
@@ -83775,9 +83753,9 @@ function syncQuickCaptureCourseField(parsed, modal) {
     }
     if (help) {
         if (isNew) help.textContent = 'Type a name for the new class.';
-        else if (chosen) help.textContent = 'Sutra matched this from your text — change it if needed.';
-        else if (courses.length === 0) help.textContent = 'No classes yet — pick “＋ New class…” to create one.';
-        else help.textContent = 'Pick the class this belongs to (optional).';
+        else if (chosen) help.textContent = userTouched ? 'Using your selected class or activity.' : 'Sutra matched this from your text — change it if needed.';
+        else if (courses.length === 0) help.textContent = 'No classes or activities yet — pick “＋ New class…” to create a class.';
+        else help.textContent = 'Pick the class or activity this belongs to (optional).';
     }
 
     let selectedCourse = null;

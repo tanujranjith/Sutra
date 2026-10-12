@@ -88,9 +88,10 @@ test('integration registry truthfully gates external services and Smart Import a
 
   const registry = await page.evaluate(() => window.SutraIntegrations.registry());
   const drive = registry.find(item => item.id === 'google-drive-backup');
-  const docs = registry.find(item => item.id === 'google-docs-smart-import');
   expect(drive.status).toBe('Gated');
-  expect(docs.status).toBe('Gated');
+  for (const id of ['google-docs-smart-import', 'google-calendar', 'todoist']) {
+    expect(registry.find(item => item.id === id)).toBeUndefined();
+  }
   expect(registry.find(item => item.id === 'paste-text').status).toBe('Available');
 
   const rejected = await page.evaluate(() => window.SutraSmartImport.parse('<script>alert(1)</script>\n__proto__: polluted').rejected.length);

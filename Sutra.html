@@ -547,10 +547,10 @@
                                                             </select>
                                                         </span>
                                                     </div>
-                                                    <div class="integrations-dock" id="integrationsDock" role="group" aria-label="Integrations and shortcuts">
+                                                    <div class="integrations-dock" id="integrationsDock" role="group" aria-label="Shortcuts">
                                                         <span class="integrations-label">
                                                             <i class="fas fa-plug" aria-hidden="true"></i>
-                                                            Integrations
+                                                            Shortcuts
                                                         </span>
                                                         <div class="quick-app-launchers" id="quickAppLaunchers" role="group" aria-label="Quick launch apps">
                                                             <button type="button" class="quick-app-btn spotify" onclick="openQuickLaunchTarget('spotify')" title="Open Spotify">
@@ -4525,13 +4525,13 @@
                     <header class="cc-section-head">
                         <div class="cc-section-head-text">
                             <h2 class="cc-section-title">Integrations</h2>
-                            <p class="cc-section-copy">Launcher toggles for quick-launch services. <strong>These apply immediately.</strong></p>
+                            <p class="cc-section-copy">Available imports, backup connections, and website shortcuts. Launcher toggles apply immediately.</p>
                         </div>
                         <button type="button" class="cc-btn cc-btn-ghost cc-btn-small" data-settings-reset-section="integrations">Reset</button>
                     </header>
                     <div class="cc-group">
                         <span class="cc-group-title">Integration registry</span>
-                        <p class="cc-foot-help">Integrations are optional. Sutra works without them. Connect only the services you want to use. You can add or remove integrations later in Settings.</p>
+                        <p class="cc-foot-help">These tools are implemented and optional. Google Drive needs configuration before connection. Live Google Calendar, Google Docs, and Todoist connections are not available; use file or text import instead.</p>
                         <div id="integrationRegistryHost" class="integration-registry-host" aria-live="polite"></div>
                     </div>
                     <div class="cc-group">
@@ -4551,11 +4551,11 @@
                     <div class="cc-group">
                         <span class="cc-group-title">Quick launchers</span>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Spotify quick launch</span><span class="cc-row-help">Show the Spotify launcher in the floating dock.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">Spotify quick launch</span><span class="cc-row-help">Open the Spotify website from the dock. This does not connect your account or share workspace data.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="integrations.spotifyEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">ChatGPT quick launch</span><span class="cc-row-help">Show the ChatGPT launcher in the floating dock.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">ChatGPT quick launch</span><span class="cc-row-help">Open the ChatGPT website from the dock. This does not connect your account or share workspace data.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="integrations.chatgptEnabled"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                     </div>
@@ -5630,9 +5630,9 @@
                 <small id="quickCaptureApSubjectHelp" class="quick-capture-helper">Choose the AP subject before saving.</small>
             </label>
             <div class="quick-capture-field quick-capture-course-field" id="quickCaptureCourseField" hidden>
-                <span>Class</span>
+                <label for="quickCaptureCourse">Class or activity</label>
                 <select id="quickCaptureCourse" class="modal-input">
-                    <option value="">No class</option>
+                    <option value="">No class or activity</option>
                 </select>
                 <input id="quickCaptureNewCourse" class="modal-input" type="text" placeholder="New class name…" autocomplete="off" maxlength="120" hidden />
                 <small id="quickCaptureCourseHelp" class="quick-capture-helper">Sutra matched this from your text — change it if needed.</small>

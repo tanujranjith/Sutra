@@ -464,7 +464,7 @@ Cycle:
    pruning watermark.
 
 Triggers: confirmed local save (debounced), regained connectivity, tab becoming
-visible, manual "Sync now", periodic foreground interval. Sync errors surface in
+visible, manual "Sync now", periodic foreground interval (every two minutes). Sync errors surface in
 sync's own status UI — **never** through the local persistence-failure banner.
 
 ## 10. Snapshots & new-device bootstrap

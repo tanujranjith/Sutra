@@ -18,7 +18,7 @@ The Cloud hub has Sync and Backups sections under one account/setup surface.
 Its summary reports local saving, replication, and snapshots independently.
 After enable/unlock, Sync automatically debounces confirmed saves (2.5 seconds),
 retries after reconnect, checks when the app returns to the foreground, and
-polls periodically while an engine is active. You do not need to press Sync now
+polls every two minutes while an engine is active and the tab is visible. You do not need to press Sync now
 after editing. The vault must be unlocked again each session. Closing the app
 stops its timers; this is not an operating-system background service.
 
@@ -29,7 +29,9 @@ The app-hidden option is best effort, not a guarantee that an upload finishes
 after closing the browser. Web Locks serialize scheduled uploads across tabs;
 a durable receipt suppresses repeat uploads of the same confirmed workspace.
 Browsers without Web Locks leave automatic backups paused and still support
-manual backups. Sync's existing IndexedDB lease fallback is unchanged.
+manual backups. Change-triggered backups retry transient upload/lock contention
+once per minute while their schedule remains enabled; unchanged work and ordinary
+errors do not cause a retry loop. Sync's existing IndexedDB lease fallback is unchanged.
 
 Before the first merge, Sutra downloads an encrypted
 `sutra-before-sync-*.sutra` safety backup; setup stops if required attachment
