@@ -96,9 +96,12 @@
   }
 
   function escHtml(value) {
-    const el = document.createElement('div');
-    el.textContent = String(value || '');
-    return el.innerHTML;
+    if (window.SutraDOMSafety && typeof window.SutraDOMSafety.escapeHtml === 'function') {
+      return window.SutraDOMSafety.escapeHtml(value);
+    }
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/`/g, '&#96;');
   }
 
   function normalizeCustomCourseEmoji(rawValue) {

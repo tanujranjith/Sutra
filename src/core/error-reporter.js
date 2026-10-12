@@ -64,7 +64,7 @@
     [/([?&](?:key|api[_-]?key|access_token|token)=)[^&#\s"']+/gi, '$1[redacted]'],
     [/\bBearer\s+[A-Za-z0-9._\-]+/gi, 'Bearer [redacted]'],
     [/\bAIza[0-9A-Za-z._\-]{10,}/g, 'AIza[redacted]'],
-    [/\b(sk|gsk|xai|pplx|sess)[-_][A-Za-z0-9]{6,}/gi, '$1-[redacted]']
+    [/\b(sk|gsk|xai|pplx|sess|nvapi)[-_][A-Za-z0-9_-]{6,}/gi, '$1-[redacted]']
   ];
   function scrubSecrets(value) {
     if (typeof value !== 'string' || !value) return value;
@@ -76,12 +76,19 @@
     } catch (e) { /* regex is static; never let scrubbing throw */ }
     return out;
   }
-  function scrubDeep(value) {
+  function scrubDeep(value, depth) {
+    depth = depth || 0;
+    if (depth > 12) return '[unserializable]';
     if (typeof value === 'string') return scrubSecrets(value);
-    if (Array.isArray(value)) return value.map(scrubDeep);
+    if (Array.isArray(value)) return value.map(function (item) { return scrubDeep(item, depth + 1); });
     if (value && typeof value === 'object') {
-      var out = {};
-      try { Object.keys(value).forEach(function (k) { out[k] = scrubDeep(value[k]); }); } catch (e) { return value; }
+      var out = Object.create(null);
+      try {
+        Object.keys(value).forEach(function (k) {
+          var sensitive = /^(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|authorization|cookie)$/i.test(k);
+          out[scrubSecrets(k)] = sensitive ? '[redacted]' : scrubDeep(value[k], depth + 1);
+        });
+      } catch (e) { return '[unserializable]'; }
       return out;
     }
     return value;
@@ -159,9 +166,9 @@
    */
   function reportError(error, context, severity) {
     try {
-      var info = normalizeError(error);
-      var ctx = normalizeContext(context);
-      var sev = severity || 'error';
+      var info = scrubDeep(normalizeError(error));
+      var ctx = scrubDeep(normalizeContext(context));
+      var sev = ['debug', 'info', 'warning', 'error', 'critical'].indexOf(severity) >= 0 ? severity : 'error';
 
       // Dedupe identical (message+where) bursts so a render loop can't flood.
       var dedupeKey = sev + '|' + info.message + '|' + (ctx.where || ctx.feature || '');
@@ -191,7 +198,7 @@
         if (DEV) {
           var fn = sev === 'warning' || sev === 'info' || sev === 'debug' ? 'warn' : 'error';
           if (sev === 'debug' && console.debug) fn = 'debug';
-          (console[fn] || console.log).call(console, tag, loc, info.message, error, ctx);
+          (console[fn] || console.log).call(console, tag, loc, info.message, scrubDeep(info), scrubDeep(ctx));
         } else if (sev === 'critical' || sev === 'error') {
           (console.error || console.log).call(console, tag, loc, info.message);
         }
@@ -205,13 +212,13 @@
 
       // Broadcast for any listener (e.g. a diagnostics panel) without coupling.
       try {
-        window.dispatchEvent(new CustomEvent('sutra:error-reported', { detail: entry }));
+        window.dispatchEvent(new CustomEvent('sutra:error-reported', { detail: scrubDeep(entry) }));
       } catch (e) { /* CustomEvent always present in supported browsers */ }
 
-      return entry;
+      return scrubDeep(entry);
     } catch (fatal) {
       // The reporter itself must never break a caller.
-      try { (console.error || console.log).call(console, '[Sutra:reporter-failed]', fatal); } catch (e) {}
+      try { (console.error || console.log).call(console, '[Sutra:reporter-failed]', scrubDeep(normalizeError(fatal))); } catch (e) {}
       return null;
     }
   }
@@ -242,9 +249,9 @@
     return {
       generatedAt: now(),
       schema: 'sutra-diagnostics@1',
-      environment: env,
+      environment: scrubDeep(env),
       entryCount: entries.length,
-      entries: entries.slice()
+      entries: scrubDeep(entries)
     };
   }
 
@@ -312,7 +319,7 @@
   window.SutraDiagnostics = {
     report: reportError,
     guard: guard,
-    getEntries: function () { return entries.slice(); },
+    getEntries: function () { return scrubDeep(entries); },
     buildReport: buildReport,
     exportText: exportText,
     download: download,

@@ -6,6 +6,12 @@ your device, and how to take it with you or wipe it completely._
 
 `PRIVATE * LOCAL-FIRST * STUDENT-BUILT`
 
+Local diagnostics redact segmented provider credentials, authorization tokens,
+and credential fields before storage, console output, notifications, and export.
+Diagnostic getters return separate copies so a caller cannot alter the stored
+report. Imported Homework titles and IDs are escaped in both text and quoted
+HTML attributes without changing their stored values.
+
 ---
 
 ## 1. The local-first philosophy

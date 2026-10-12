@@ -3466,10 +3466,12 @@
         return { ok: true, message: 'Opened the Memory manager.' };
     }
 
-    function applyAction(rawAction) {
+    function applyAction(rawAction, meta) {
         const valid = validateAction(rawAction);
         if (!valid.ok) return { ok: false, message: valid.error };
         const action = normalizeActionFields(rawAction);
+        const permissionError = assistantActionPermissionError(action, meta, true);
+        if (permissionError) return { ok: false, code: 'permission_denied', message: permissionError };
         switch (action.type) {
             case 'insert_text': return applyInsertText(action);
             case 'replace_selection': return applyReplaceSelection(action);
@@ -4429,7 +4431,9 @@
                     card.dataset.confirmed = 'true';
                 }
                 applyBtn.disabled = true;
-                const result = applyActionLogged(action, Object.assign({ batchId }, opts && opts.meta || {}));
+                const result = applyActionLogged(action, Object.assign({}, opts && opts.meta || {}, {
+                    batchId, reviewed: true, destructiveApproved: card.dataset.confirmed === 'true'
+                }));
                 if (result.ok) {
                     // Receipt = what happened + deep link + inline undo. This is
                     // the closure of the propose → approve → apply loop.
@@ -5674,7 +5678,7 @@
         if (!beforeSnapshot && (action.type === 'insert_text' || action.type === 'replace_selection')) {
             beforeSnapshot = snapshotActivePage();
         }
-        const result = applyAction(action);
+        const result = applyAction(action, m);
         if (result && result.ok) {
             const i = intel();
             if (i) {
@@ -8429,15 +8433,36 @@
     const EXTRA_ACTION_DEFINITIONS = {};
 
     function resolveAssistantActionPermissions(meta, prospective) {
-        if (meta && Array.isArray(meta.permissions)) return meta.permissions;
-        if (window.SutraAssistantPrivacy && typeof window.SutraAssistantPrivacy.getActionPermissions === 'function') {
-            return window.SutraAssistantPrivacy.getActionPermissions({
+        try {
+            if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') return [];
+            const grants = window.SutraAssistantPrivacy.getActionPermissions({
                 approved: prospective === true || !!(meta && (meta.reviewed || meta.confirmed)),
                 destructiveApproved: !!(meta && meta.destructiveApproved),
                 pluginApproved: !!(meta && meta.pluginApproved)
             });
+            if (!Array.isArray(grants) || grants.some(grant => typeof grant !== 'string')) return [];
+            // Callers may narrow the policy, but cannot manufacture a grant.
+            return meta && Array.isArray(meta.permissions) ? grants.filter(grant => meta.permissions.includes(grant)) : grants.slice();
+        } catch (error) {
+            return [];
         }
-        return ['workspace.read', 'workspace.write', 'workspace.delete', 'plugin.execute'];
+    }
+
+    function assistantActionPermissionError(action, meta, prospective) {
+        const definition = getActionDefinition(action && action.type);
+        if (!definition) return 'Assistant action is unavailable.';
+        const required = Array.isArray(definition.permissions) ? definition.permissions.slice() : [];
+        if (EXTRA_ACTION_DEFINITIONS[action.type]) required.push('plugin.execute');
+        else if (!definition.readOnly) required.push('workspace.write');
+        if (definition.destructive) required.push('workspace.delete');
+        // Even read-only APIs require an available policy; a missing service
+        // must not turn a known action into an implicit grant.
+        if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') {
+            return 'Assistant permissions are unavailable. Reload Sutra before applying actions.';
+        }
+        const grants = resolveAssistantActionPermissions(meta, prospective);
+        return required.some(permission => !grants.includes(permission))
+            ? 'This action is not allowed by your Assistant permissions.' : '';
     }
 
     function registerTypedActionCatalog() {
@@ -8594,6 +8619,8 @@
         applyAction(action, meta) {
             const extra = EXTRA_ACTION_DEFINITIONS[action && action.type];
             if (extra) {
+                const permissionError = assistantActionPermissionError(action, meta, false);
+                if (permissionError) return { ok: false, code: 'permission_denied', message: permissionError };
                 try { return extra.apply(action) || { ok: false, message: 'No result.' }; }
                 catch (e) { return { ok: false, message: e && e.message || 'Action failed.' }; }
             }

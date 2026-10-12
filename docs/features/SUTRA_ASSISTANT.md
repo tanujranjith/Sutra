@@ -278,6 +278,12 @@ reference only earlier steps. The review surface shows those dependencies and
 will not apply a dependent step before its prerequisites. Review is intentionally
 available before write or destructive permission is granted; Apply performs the
 permission check. Every plan preview also binds to a bounded live-target snapshot.
+Missing, malformed, or failed permission services deny actions. Caller-supplied
+permission lists can restrict the policy but cannot expand it. Direct local
+action APIs also obey the workspace permission mode; callers must opt into
+approved actions, and destructive/plugin actions require their separate explicit
+approval metadata. The action-card Apply control supplies reviewed metadata only
+after its existing approval and high-risk confirmation flow.
 If a referenced task, note, course, deck, or Timeline block changes after review,
 the entire plan fails closed as stale before its first mutation and must be
 reviewed again.
