@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { createRequire } from 'node:module';
+import { extractFunction } from '../helpers/extract-function.mjs';
+
+const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
+const privacy = createRequire(import.meta.url)('../../src/domain/assistant-permissions.js');
+const record = (type, id, title, extra = {}) => ({ type, id, key: type + ':' + id, title, text: title, status: 'open', dates: {}, privacy: {}, metadata: {}, ...extra });
+function selector(records, permissions = { mode: 'read_only', areas: {} }) {
+  privacy.configure({ getPermissions: () => permissions });
+  return new Function('window', 'truncate', extractFunction(source, 'selectRelevantWorkspaceContext').body + ';return selectRelevantWorkspaceContext;')({
+    SutraWorkspaceEntityRegistry: { collectSearchable: () => records }, SutraAssistantPrivacy: privacy
+  }, (text, limit) => String(text || '').slice(0, limit));
+}
+
+test('to-do retrieval includes undated and distant low-priority work across stores', () => {
+  const result = selector([
+    record('task', 'undated', 'Clean locker'),
+    record('task', 'distant', 'History project', { dates: { due: '2099-12-01' }, metadata: { priority: 'low' } }),
+    record('homework', 'assignment', 'Biology worksheet'),
+    record('task', 'finished', 'Completed task', { status: 'completed' }),
+    record('college_record', 'unrelated', 'University visit')
+  ])("what's in my to-do list?");
+  assert.deepEqual(result.tasks.map(row => row.id).sort(), ['distant', 'undated']);
+  assert.equal(result.homework[0].id, 'assignment');
+  assert.equal(result.workspaceCollege, undefined);
+});
+
+test('relevant content can be found beyond the first bounded summary in any registered area', () => {
+  const records = Array.from({ length: 80 }, (_, i) => record('task', 'task-' + i, 'Ordinary task ' + i));
+  records.push(record('course_file', 'source', 'Orchid laboratory guide', { text: 'The Orchid protocol uses three violet cards.' }));
+  const result = selector(records)('Explain the Orchid protocol');
+  assert.equal(result.workspaceCourses[0].id, 'source');
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceRetrieval.selectedCount, 1);
+});
+
+test('irrelevant workspaces and a greeting do not create broad context dumps', () => {
+  const select = selector([record('task', 'task', 'Clean locker'), record('business_record', 'project', 'Client invoice'), record('life_record', 'goal', 'Read a book')]);
+  assert.deepEqual(Object.keys(select('hello')).sort(), ['workspaceRetrieval']);
+  assert.equal(select('Tell me about the book').workspaceLife[0].id, 'goal');
+  assert.equal(select('Tell me about the book').tasks, undefined);
+});
+
+test('asking about one homework topic does not attach every task', () => {
+  const records = Array.from({ length: 60 }, (_, i) => record('task', 'task-' + i, 'Ordinary task ' + i));
+  records.push(record('homework', 'biology', 'Biology worksheet'));
+  const result = selector(records)('show my biology homework');
+  assert.equal(result.homework[0].id, 'biology');
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceRetrieval.selectedCount, 1);
+});
+
+test('search obeys denied areas, sensitive flags, private locks, and source exclusions', () => {
+  const records = [
+    record('task', 'denied', 'Orchid task'),
+    record('college_record', 'cost', 'Orchid tuition', { metadata: { collection: 'applicationCosts' } }),
+    record('life_record', 'wellness', 'Orchid mood', { metadata: { domain: 'wellness' } }),
+    record('course_file', 'locked', 'Orchid private', { privacy: { locked: true } }),
+    record('course_file', 'excluded', 'Orchid excluded'),
+    record('course_file', 'allowed', 'Orchid course')
+  ];
+  const result = selector(records, { mode: 'read_only', areas: { planning: 'denied' } })('Orchid', { conversationScope: { excludedSourceIds: ['course_file:excluded'] } });
+  assert.deepEqual(result.workspaceCourses.map(row => row.id), ['allowed']);
+  assert.equal(result.tasks, undefined);
+  assert.equal(result.workspaceCollege, undefined);
+  assert.equal(result.workspaceLife, undefined);
+  const gated = privacy.filterContext({ workspaceCourses: result.workspaceCourses, workspacePlanning: [{ id: 'denied' }] });
+  assert.equal(gated.workspacePlanning, undefined);
+  assert.equal(gated.workspaceCourses[0].id, 'allowed');
+});
+
+test('large task requests report a limit rather than pretending the shortlist is complete', () => {
+  const result = selector(Array.from({ length: 60 }, (_, i) => record('task', 'id-' + i, 'Task ' + i)))('show my tasks');
+  assert.equal(result.tasks.length, 40);
+  assert.equal(result.workspaceRetrieval.matchedCount, 60);
+  assert.equal(result.workspaceRetrieval.selectedCount, 40);
+});
+
+test('the local to-do answer reads canonical planner and Homework rows without switching views', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const answer = new Function('window', 'listOpenWorkspaceTasks', extractFunction(source, 'tryReadTodoList').body + ';return tryReadTodoList;')(
+    { SutraAssistantPrivacy: privacy }, () => [
+      { store: 'planner', id: 'planner', title: 'Clean locker', completed: false },
+      { store: 'homework', id: 'homework', title: 'Biology worksheet', completed: false },
+      { store: 'planner', id: 'done', title: 'Finished', completed: true }
+    ]);
+  assert.match(answer("what's in my to-do list?").message, /2 open items/);
+  assert.match(answer("what's in my to-do list?").message, /sutra:\/\/homework\/homework/);
+  assert.ok(!answer("what's in my to-do list?").message.includes('Finished'));
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { planning: 'denied' } }) });
+  assert.match(answer("what's in my to-do list?").message, /access is off/);
+  assert.equal(answer('Explain photosynthesis'), null);
+});
