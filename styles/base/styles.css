@@ -27042,16 +27042,16 @@ body.notes-pages-mode #view-notes .editor-container {
 
 body.notes-pages-mode #view-notes .notes-pane-primary {
     /* --notes-page-pad-x is read by atelier-page-break to extend the gap full-width */
-    --notes-page-pad-x: 96px;
+    --notes-page-pad-x: var(--notes-custom-page-pad, 96px);
     background: var(--notes-page-surface);
     box-shadow: 0 1px 3px rgba(0,0,0,0.22), 0 6px 20px rgba(0,0,0,0.10);
-    padding: 96px var(--notes-page-pad-x) 120px;
-    width: 816px;
+    padding: var(--notes-custom-page-pad, 96px) var(--notes-page-pad-x) var(--notes-custom-page-pad, 120px);
+    width: var(--notes-page-width, 816px);
     max-width: calc(100% - 32px);
     margin-left: auto;
     margin-right: auto;
     border-radius: 2px;
-    min-height: 1056px;
+    min-height: var(--notes-page-height, 1056px);
     display: flex;
     flex-direction: column;
 }
@@ -27072,16 +27072,16 @@ body.notes-pages-mode #pagesToggleBtn {
 /* Responsive pages padding */
 @media (max-width: 1000px) {
     body.notes-pages-mode #view-notes .notes-pane-primary {
-        --notes-page-pad-x: 64px;
-        padding: 64px var(--notes-page-pad-x) 96px;
+        --notes-page-pad-x: min(var(--notes-custom-page-pad, 64px), 64px);
+        padding: min(var(--notes-custom-page-pad, 64px), 64px) var(--notes-page-pad-x) min(var(--notes-custom-page-pad, 96px), 96px);
         width: 100%;
     }
 }
 
 @media (max-width: 640px) {
     body.notes-pages-mode #view-notes .notes-pane-primary {
-        --notes-page-pad-x: 24px;
-        padding: 32px var(--notes-page-pad-x) 60px;
+        --notes-page-pad-x: min(var(--notes-custom-page-pad, 24px), 24px);
+        padding: min(var(--notes-custom-page-pad, 32px), 32px) var(--notes-page-pad-x) min(var(--notes-custom-page-pad, 60px), 60px);
         width: 100%;
         min-height: max(560px, calc(100dvh - 132px));
     }

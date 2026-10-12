@@ -2454,14 +2454,7 @@ function updateToolbarTimeWidget() {
                 try {
                     if (typeof loadAtelierTheme === 'function') loadAtelierTheme();
                     if (typeof applyFontSettingsFromAppSettings === 'function') applyFontSettingsFromAppSettings();
-                    // Restore page mode if it was enabled
-                    if (appSettings && (appSettings.notes && appSettings.notes.pageModeEnabled || appSettings.notesPagesMode)) {
-                        setTimeout(() => {
-                            const el = document.getElementById('settingsPageModeEnabled');
-                            if (el) el.checked = true;
-                            if (typeof applyPageModeFromSettings === 'function') applyPageModeFromSettings();
-                        }, 200);
-                    }
+                    if (typeof loadPagesMode === 'function') loadPagesMode();
                     // Restore suggesting mode
                     if (appSettings && appSettings.suggestingModeEnabled) {
                         document.body.classList.add('suggesting-mode');
@@ -38588,20 +38581,34 @@ function buildOnboardingPlanPreview() {
 
         // ===== PAGES MODE =====
         function togglePagesMode() {
-            const isPagesMode = document.body.classList.toggle('notes-pages-mode');
-            const btn = document.getElementById('pagesToggleBtn');
-            if (btn) btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+            const isPagesMode = !document.body.classList.contains('notes-pages-mode');
             if (appSettings) {
                 appSettings.notesPagesMode = isPagesMode;
+                appSettings.notes = appSettings.notes || {};
+                appSettings.notes.pageModeEnabled = isPagesMode;
                 persistAppData();
             }
+            loadPagesMode();
         }
 
         function loadPagesMode() {
-            const isPagesMode = appSettings && appSettings.notesPagesMode === true;
+            const notes = (appSettings && appSettings.notes) || {};
+            const isPagesMode = typeof notes.pageModeEnabled === 'boolean'
+                ? notes.pageModeEnabled : !!(appSettings && appSettings.notesPagesMode === true);
             document.body.classList.toggle('notes-pages-mode', isPagesMode);
             const btn = document.getElementById('pagesToggleBtn');
-            if (btn) btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+            if (btn) {
+                btn.title = isPagesMode ? 'Switch to Pageless' : 'Switch to Pages';
+                btn.setAttribute('aria-pressed', String(isPagesMode));
+            }
+            const pane = document.querySelector('#view-notes .notes-pane-primary');
+            if (pane) {
+                pane.style.setProperty('--notes-page-height', notes.defaultPageSize === 'a4' ? '1123px' : '1056px');
+                pane.style.setProperty('--notes-page-width', notes.defaultPageSize === 'a4' ? '794px' : '816px');
+                const margins = Number(notes.defaultMargins);
+                if (Number.isFinite(margins) && margins > 0) pane.style.setProperty('--notes-custom-page-pad', Math.round(margins * 3.78) + 'px');
+                else pane.style.removeProperty('--notes-custom-page-pad');
+            }
             // Sync with Settings checkbox
             const settingsCheckbox = document.getElementById('settingsPageModeEnabled');
             if (settingsCheckbox) settingsCheckbox.checked = isPagesMode;
@@ -38835,22 +38842,10 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.pageModeEnabled = enabled;
                 persistAppData();
             }
-            // Apply the setting immediately
-            document.body.classList.toggle('notes-pages-mode', enabled);
+            // The outer page card owns size and padding for both editor engines.
+            loadPagesMode();
             const editor = document.getElementById('editor');
             if (editor) {
-                if (enabled) {
-                    editor.classList.add('page-mode-active');
-                    const size = (appSettings && appSettings.notes && appSettings.notes.defaultPageSize) || 'letter';
-                    editor.style.maxWidth = size === 'a4' ? '794px' : '816px';
-                    editor.style.margin = '40px auto';
-                    editor.style.padding = '96px';
-                    editor.style.background = 'var(--editor-bg, var(--surface-bg))';
-                    editor.style.color = 'var(--text-primary)';
-                    editor.style.boxShadow = '0 4px 20px var(--shadow-soft, rgba(0, 0, 0, 0.12)), 0 1px 3px var(--shadow-hairline, rgba(0, 0, 0, 0.06))';
-                    editor.style.borderRadius = '4px';
-                    editor.style.minHeight = size === 'a4' ? '1123px' : '1056px';
-                } else {
                     editor.classList.remove('page-mode-active');
                     editor.style.maxWidth = '';
                     editor.style.margin = '';
@@ -38860,7 +38855,6 @@ function buildOnboardingPlanPreview() {
                     editor.style.boxShadow = '';
                     editor.style.borderRadius = '';
                     editor.style.minHeight = '';
-                }
             }
             if (typeof showToast === 'function') showToast(enabled ? 'Page mode ON' : 'Page mode OFF');
         }
@@ -38874,9 +38868,7 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.defaultPageSize = size;
                 persistAppData();
             }
-            // Re-apply page mode if it's enabled
-            const enabledEl = document.getElementById('settingsPageModeEnabled');
-            if (enabledEl && enabledEl.checked) applyPageModeFromSettings();
+            loadPagesMode();
         }
 
         function applyPageMarginsFromSettings() {
@@ -38888,16 +38880,7 @@ function buildOnboardingPlanPreview() {
                 appSettings.notes.defaultMargins = margins;
                 persistAppData();
             }
-            // Re-apply page mode if it's enabled
-            const enabledEl = document.getElementById('settingsPageModeEnabled');
-            if (enabledEl && enabledEl.checked) {
-                const editor = document.getElementById('editor');
-                if (editor) {
-                    // 1mm ≈ 3.78px
-                    const px = Math.round(margins * 3.78);
-                    editor.style.padding = px + 'px';
-                }
-            }
+            loadPagesMode();
         }
 
         function loadFontSettingsIntoSettings() {
@@ -38905,7 +38888,8 @@ function buildOnboardingPlanPreview() {
             const fontSize = (appSettings && appSettings.notes && appSettings.notes.fontSize) || '16';
             const lineHeight = (appSettings && appSettings.notes && appSettings.notes.lineHeight) || '1.6';
             const editorZoom = (appSettings && appSettings.notes && appSettings.notes.editorZoom) || '100';
-            const pageModeEnabled = (appSettings && appSettings.notes && appSettings.notes.pageModeEnabled) || false;
+            const pageModeEnabled = appSettings && appSettings.notes && typeof appSettings.notes.pageModeEnabled === 'boolean'
+                ? appSettings.notes.pageModeEnabled : !!(appSettings && appSettings.notesPagesMode);
             const pageSize = (appSettings && appSettings.notes && appSettings.notes.defaultPageSize) || 'letter';
 
             const fontFamilyEl = document.getElementById('settingsFontFamily');
@@ -38921,6 +38905,8 @@ function buildOnboardingPlanPreview() {
             if (zoomEl) zoomEl.value = editorZoom;
             if (pageModeEl) pageModeEl.checked = pageModeEnabled;
             if (pageSizeEl) pageSizeEl.value = pageSize;
+            const pageMarginsEl = document.getElementById('settingsPageMargins');
+            if (pageMarginsEl) pageMarginsEl.value = String((appSettings && appSettings.notes && appSettings.notes.defaultMargins) || 25.4);
 
             // Load user mode and Atelier theme into settings (Sections 22, 23)
             const userModeEl = document.getElementById('settingsUserMode');
