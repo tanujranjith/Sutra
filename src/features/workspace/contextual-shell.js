@@ -295,6 +295,38 @@
     });
   }
 
+  function initNavUtilityLayout() {
+    var shell = document.querySelector('.top-nav .tabs-shell');
+    var utilities = shell && shell.querySelector('.nav-utility-group');
+    var brand = document.querySelector('.global-app-brand');
+    if (!shell || !utilities || !brand) return;
+
+    function reserveUtilitySpace() {
+      var shellRect = shell.getBoundingClientRect();
+      if (!shellRect.width) return;
+      var utilityRect = utilities.getBoundingClientRect();
+      var brandRect = brand.getBoundingClientRect();
+      // Match the actual outer controls, including their responsive insets.
+      // Equal reserves keep the destinations centered in the viewport.
+      var reserve = Math.ceil(Math.max(shellRect.right - utilityRect.left,
+        brandRect.right - shellRect.left, 0) + 12) + 'px';
+      if (shell.style.getPropertyValue('--sutra-nav-side-reserve') !== reserve) {
+        shell.style.setProperty('--sutra-nav-side-reserve', reserve);
+      }
+    }
+
+    reserveUtilitySpace();
+    // Register before the core navigation's resize handler so its existing
+    // overflow menu measures the newly reserved row on viewport changes.
+    window.addEventListener('resize', reserveUtilitySpace);
+    if (typeof ResizeObserver === 'function') {
+      var observer = new ResizeObserver(reserveUtilitySpace);
+      observer.observe(utilities);
+      observer.observe(brand);
+      observer.observe(shell);
+    }
+  }
+
   function init() {
     var brand = document.querySelector('.global-app-brand[data-view-target]');
     if (brand) {
@@ -302,6 +334,7 @@
         activateView(brand.getAttribute('data-view-target') || 'today');
       });
     }
+    initNavUtilityLayout();
     enhanceNotesToolbar();
     initPageTreeGuides();
     settleSync(document.body && document.body.dataset.view);

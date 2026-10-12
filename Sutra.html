@@ -463,7 +463,7 @@
                 </button>
                 <div class="nav-left">
                                         <div class="tabs-shell">
-                                            <div class="view-tabs" role="group" aria-label="Workspace navigation and utilities">
+                                            <div class="view-tabs" role="group" aria-label="Workspace navigation">
                                                     <button class="view-tab active" data-view="today">Home</button>
                                                     <button id="tabHomework" class="view-tab" data-view="homework">To-do</button>
                                                     <button class="view-tab" data-view="notes">Create</button>
@@ -521,6 +521,7 @@
                                                             </div>
                                                         </div>
                                                     </div>
+                                            </div>
                                                     <div class="nav-utility-group" role="group" aria-label="Workspace utilities">
                                                     <button type="button" class="icon-btn" id="commandPaletteLauncher" onclick="bindCommandPaletteInput(); openCommandPalette('')" aria-label="Open command palette" aria-haspopup="dialog" aria-controls="commandPaletteModal" aria-keyshortcuts="Control+Shift+P Meta+Shift+P" title="Command palette (Ctrl/⌘+Shift+P)"><i class="fas fa-terminal" aria-hidden="true"></i></button>
                                                     <div id="sutraCountdownNav" role="group" aria-label="Pinned countdowns" style="display:none;"></div>
@@ -579,7 +580,6 @@
                                                         <span class="notif-bell-badge" aria-hidden="true" data-count="0"></span>
                                                     </button>
                                                     </div>
-                                            </div>
                                             <!-- Mobile toggle: shows current tab and expands the tab list when tapped -->
                                             <button class="view-tabs-toggle" aria-expanded="false" aria-label="Toggle views" title="Toggle views">
                                                 <span class="view-tabs-current">Home</span>
@@ -7903,7 +7903,7 @@
     <script src="src/features/notes/inline-ai-assist.js?v=20261003-create-review5"></script>
     <script src="src/features/notes/authoring-tools.js?v=20261004-native-link-click3"></script>
     <script src="src/features/notes/editor-v2.js?v=20261011-student-workflow1"></script>
-    <script src="src/features/workspace/contextual-shell.js?v=20260913-page-tree-guides1"></script>
+    <script src="src/features/workspace/contextual-shell.js?v=20261011-command-launcher2"></script>
     <!-- PDF.js modules cannot be imported from file:// in Chromium. Firefox's
          PDF form worker path is also kept on the stable same-thread adapter.
          Other served/PWA browsers use the smaller module + real worker path. -->
@@ -7928,7 +7928,7 @@
     <script src="src/features/study/class-dashboard-actions.js?v=20261009-issues5"></script>
     <script src="src/core/credential-vault-bridge.js?v=20260831-revoke4"></script>
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
-    <script src="src/features/workspace/primary-nav-visibility.js?v=20260812-primarynav3"></script>
+    <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-command-launcher2"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
     <script src="src/features/workspace/help-docs-refresh.js?v=20261009-daily-backup1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
@@ -8376,7 +8376,7 @@
     <link rel="stylesheet" href="styles/features/sidebar-page-actions.css?v=20260803-overflow1">
     <link rel="stylesheet" href="styles/themes/dune.css?v=20260807-dune3">
     <link rel="stylesheet" href="styles/themes/signature-presets.css?v=20260807-signaturethemes5">
-    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261011-student-workflow1">
+    <link rel="stylesheet" href="styles/views/contextual-shell.css?v=20261011-command-launcher2">
     <link rel="stylesheet" href="styles/features/notes-comments.css?v=20261009-issues5">
     <link rel="stylesheet" href="styles/themes/theme-cohesion.css?v=20261009-peach-preview1">
     <link rel="stylesheet" href="styles/features/rich-links.css?v=20261003-create-review5">

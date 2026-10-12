@@ -94,6 +94,12 @@
     // app's feature-gating attributes.
     var row = document.querySelector('.view-tabs');
     var wrapper = document.getElementById('moreViewsWrapper');
+    if (row && typeof ResizeObserver === 'function') {
+      // Utilities can change width without a window resize (clock, shortcuts).
+      // Reconcile scrolling after the shell updates its reserved space.
+      var rowObserver = new ResizeObserver(schedule);
+      rowObserver.observe(row);
+    }
     if (row && typeof MutationObserver === 'function') {
       var observer = new MutationObserver(schedule);
       observer.observe(row, {

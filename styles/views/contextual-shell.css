@@ -3,7 +3,34 @@
    the full canvas. This late layer intentionally refines existing components
    without introducing a second router or data model. */
 
-#commandPaletteLauncher { min-width: 44px; min-height: 44px; flex: 0 0 auto; }
+#commandPaletteLauncher {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--sutra-radius-pill, 999px);
+  background: transparent;
+  color: var(--sutra-color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+#commandPaletteLauncher:hover {
+  border-color: var(--sutra-color-border);
+  background: var(--sutra-color-surface);
+  color: var(--sutra-color-text);
+}
+
+#commandPaletteLauncher:focus-visible {
+  outline: 2px solid var(--sutra-color-accent);
+  outline-offset: 2px;
+}
 
 :root {
   --sutra-global-nav-height: 72px;
@@ -108,6 +135,7 @@ body[data-context-sidebar="none"] #sidebarToggle {
 }
 
 .top-nav .nav-left {
+  position: static;
   display: flex;
   align-items: center;
   flex: 1 1 100%;
@@ -116,17 +144,20 @@ body[data-context-sidebar="none"] #sidebarToggle {
 }
 
 .top-nav .tabs-shell {
+  position: static;
   width: 100%;
 }
 
 .top-nav .view-tabs {
-  position: relative;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  max-width: none !important;
-  padding: 0 var(--sutra-nav-side-reserve);
+  flex: 0 1 max(0px, calc(100% - 2 * var(--sutra-nav-side-reserve)));
+  width: max(0px, calc(100% - 2 * var(--sutra-nav-side-reserve)));
+  max-width: max(0px, calc(100% - 2 * var(--sutra-nav-side-reserve))) !important;
+  margin-inline: auto;
+  padding: 0;
   gap: 3px;
   overflow: visible !important;
   border: 0;
@@ -146,7 +177,8 @@ body[data-context-sidebar="none"] #sidebarToggle {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  max-width: calc(var(--sutra-nav-side-reserve) - clamp(18px, 2vw, 32px));
+  width: max-content;
+  max-width: none;
   transform: translateY(-50%);
 }
 
@@ -866,14 +898,6 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
 /* Responsive ------------------------------------------------------------- */
 @media (max-width: 1440px) and (min-width: 981px) {
   :root { --sutra-nav-side-reserve: 226px; }
-  .top-nav .view-tabs {
-    position: static;
-    flex: 0 1 calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve));
-    width: calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve));
-    max-width: calc(100% - var(--sutra-nav-side-reserve) - var(--sutra-nav-side-reserve)) !important;
-    margin-inline: auto;
-    padding-inline: 0;
-  }
   .top-nav .view-more,
   .top-nav .view-more-toggle { width: auto; }
   .top-nav .view-more-toggle { justify-content: center; }
@@ -928,7 +952,6 @@ body.has-full-workspace .main-content { flex: 1 1 100%; }
   .top-nav .view-tabs { gap: 1px; }
   .top-nav .view-tab { padding-inline: 7px; font-size: 0.7rem; }
   .top-nav .view-more-toggle { padding-inline: 7px; }
-  .top-nav .nav-utility-group { right: 0; }
 }
 
 /* Every overlay drawer, including tablet widths, must clear its scrim. */

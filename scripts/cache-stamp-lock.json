@@ -328,8 +328,8 @@
     "hash": "f06b4a1e281ad259"
   },
   "src/features/workspace/contextual-shell.js": {
-    "stamp": "20260913-page-tree-guides1",
-    "hash": "d2d01e3d4679216e"
+    "stamp": "20261011-command-launcher2",
+    "hash": "2a55b0acf4644898"
   },
   "src/features/workspace/create-page-templates.js": {
     "stamp": "20261003-create-review7",
@@ -396,8 +396,8 @@
     "hash": "ba751352ef5fc163"
   },
   "src/features/workspace/primary-nav-visibility.js": {
-    "stamp": "20260812-primarynav3",
-    "hash": "5df68eb2abb8212c"
+    "stamp": "20261011-command-launcher2",
+    "hash": "d422643ec98fc680"
   },
   "src/features/workspace/share-target.js": {
     "stamp": "20260712-share1",
@@ -732,8 +732,8 @@
     "hash": "83547bfefb68adb2"
   },
   "styles/views/contextual-shell.css": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "1c1a241e8d32b4f1"
+    "stamp": "20261011-command-launcher2",
+    "hash": "eb054775cb41476f"
   },
   "styles/views/custom-tabs.css": {
     "stamp": "20260913-custom-html-widget1",
