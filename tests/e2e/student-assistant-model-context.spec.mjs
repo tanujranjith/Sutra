@@ -82,7 +82,7 @@ test('Gemini refreshes an existing catalog, selections replace custom overrides,
   await expect(model.locator('option[value="gpt-6-luna"]')).toHaveCount(1);
   await model.selectOption('gpt-6-luna', { force: true });
   await expect(page.locator('#asstReasoningRow')).toBeVisible();
-  await expect(page.locator('#asstReasoningSelect option[value="xhigh"]')).toHaveCount(1);
+  await expect(page.locator('#asstReasoningOptions [data-effort="xhigh"]')).toHaveCount(1);
   await page.locator('#asstInput').click();
   await effort.click();
   await effortMenu.getByRole('menuitemradio', { name: 'Extra high', exact: true }).click();
@@ -159,4 +159,43 @@ test('Assistant reads the full to-do store locally and retrieves relevant cross-
   await page.locator('#asstInput').fill('can u summarize my todos');
   await page.locator('#asstSendBtn').click();
   await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('To-do access is off');
+});
+
+test('Workspace-aware does not override permissions; visible access settings restore task reads and persist explicit area choices', async ({ page }) => {
+  await openAssistant(page);
+  await page.evaluate(() => {
+    window.flowAtelier.tasks.push({ id: 'access-fixture', title: 'Access review worksheet', completed: false });
+    window.SutraAssistantPermissions.setMode('off');
+    window.SutraAssistantPermissions.setArea('planning', 'denied');
+    window.SutraAssistantPermissions.setArea('notes', 'denied');
+    window.setActiveView('settings');
+  });
+  await page.locator('[data-settings-nav="assistant"]').click();
+  const mode = page.locator('#assistantWorkspaceAccess');
+  await expect(mode).toHaveValue('off');
+  await page.locator('[data-pref-path="assistant.contextDepth"]').selectOption('workspace', { force: true });
+  await expect(mode).toHaveValue('off');
+  await mode.selectOption('read_only');
+  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Tasks & schedule is not allowed');
+  await page.getByText('Access by area', { exact: true }).click();
+  await page.getByLabel('Tasks & schedule access', { exact: true }).selectOption('approved');
+  await expect(page.locator('#assistantWorkspaceAccessStatus')).toContainText('Assistant can read your tasks');
+  await expect(page.getByLabel('Notes access', { exact: true })).toHaveValue('denied');
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  await page.locator('#asstInput').fill('can u summarize my todos');
+  await page.locator('#asstSendBtn').click();
+  await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('Access review worksheet');
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('access-settings-review'));
+  await page.reload();
+  await waitForAppReady(page);
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('[data-settings-nav="assistant"]').click();
+  await expect(mode).toHaveValue('read_only');
+  const permissions = await page.evaluate(() => window.SutraAssistantPermissions.get());
+  expect(permissions.areas.planning).toBe('approved');
+  expect(permissions.areas.notes).toBe('denied');
+  expect(permissions.allowLockedNotes).toBe(false);
+  expect(permissions.allowPrivateDocuments).toBe(false);
+  expect(permissions.allowFinancial).toBe(false);
+  expect(permissions.allowWellness).toBe(false);
 });
