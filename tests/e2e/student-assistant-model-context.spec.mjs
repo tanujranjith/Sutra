@@ -52,6 +52,10 @@ test('Gemini refreshes an existing catalog, selections replace custom overrides,
   const effort = page.locator('#asstReasoningTrigger');
   const effortMenu = page.getByRole('menu', { name: 'Thinking effort', exact: true });
   await expect(page.locator('.asst-input-card #asstReasoningTrigger')).toBeVisible();
+  await expect(page.locator('#asstReasoningSelect')).toBeHidden();
+  await expect(page.locator('#asstReasoningRow .nf-select')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningSelect-menu')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
   await effort.focus();
   await page.keyboard.press('ArrowDown');
   await expect(effortMenu).toBeVisible();
@@ -59,6 +63,7 @@ test('Gemini refreshes an existing catalog, selections replace custom overrides,
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
   await expect(effort).toBeFocused();
   await expect(effortMenu).toBeHidden();
   await effort.click();
@@ -94,6 +99,8 @@ test('Gemini refreshes an existing catalog, selections replace custom overrides,
   await page.evaluate(() => window.setActiveView('assistantview'));
   await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
   await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  await expect(page.locator('#asstReasoningRow .nf-select')).toHaveCount(0);
+  await expect(page.locator('#asstReasoningRow button:visible')).toHaveCount(1);
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await effort.click();

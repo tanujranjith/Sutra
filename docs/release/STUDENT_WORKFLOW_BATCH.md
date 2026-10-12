@@ -74,8 +74,11 @@ model overrides, provider catalog refresh/pagination, and missing GPT-6 effort
 controls. The owner-approved Thinking effort pill is inside the full Assistant
 composer beside Send, with an upward-opening menu and keyboard navigation.
 CI coverage includes menu selection, dismissal, persistence and 320/390px layout;
-these functional and visual checks remain unrun pending authorized remote CI. Task-list
-questions read canonical task stores locally; other full-Assistant questions
+these functional and visual checks remain unrun pending authorized remote CI.
+The hidden effort backing field explicitly opts out of the shared select enhancer
+so it cannot create a second visible dropdown; CI asserts one effort trigger
+before selection and after reload.
+Task-list questions read canonical task stores locally; other full-Assistant questions
 select matching workspace records under the existing privacy and token-budget
 boundaries. Model selection, reload, catalog pagination, permissions, and selective
 context regressions are authored for CI; they have not run locally.
