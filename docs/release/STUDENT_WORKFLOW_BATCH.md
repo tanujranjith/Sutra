@@ -80,6 +80,12 @@ select matching workspace records under the existing privacy and token-budget
 boundaries. Model selection, reload, catalog pagination, permissions, and selective
 context regressions are authored for CI; they have not run locally.
 
+The owner's chat export exposed missed task-list phrasing: "can u summarize my
+todos" and "check my homework". Local routing now recognizes those requests;
+selective provider context recognizes them independently when local routing is
+disabled. Notes-only permission failures are labeled with their area and must
+not be interpreted as missing tasks. Existing privacy settings remain intact.
+
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.
 The optional full-browser matrix should cover Firefox, WebKit, and responsive

@@ -36,8 +36,8 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261012-assistant-effort1",
-    "hash": "87088a070a63bf95"
+    "stamp": "20261012-assistant-tasks1",
+    "hash": "c8bf4539bba6b6be"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
@@ -192,8 +192,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "6bf484b12c366fb2"
+    "stamp": "20261012-assistant-tasks1",
+    "hash": "87b2e35558f2b758"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

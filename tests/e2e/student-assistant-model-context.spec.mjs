@@ -128,6 +128,20 @@ test('Assistant reads the full to-do store locally and retrieves relevant cross-
   await page.locator('#asstSendBtn').click();
   await expect(page.locator('#asstMessages')).toContainText('Orchid protocol worksheet');
   await expect(page.locator('#asstMessages')).toContainText('Clean locker');
+  for (const prompt of ['can u summarize my todos', 'check my homework']) {
+    await page.locator('#asstInput').fill(prompt);
+    await page.locator('#asstSendBtn').click();
+    const reply = page.locator('#asstMessages .asst-msg.assistant').last();
+    await expect(reply).toContainText('Orchid protocol worksheet');
+    await expect(reply).toContainText('Clean locker');
+  }
+  await page.evaluate(() => window.setWorkspacePreference('assistant.localRouting', false));
+  for (const prompt of ['can u summarize my todos', 'check my homework']) {
+    const selected = await page.evaluate(text => window.flowAssistant.buildRequestEnrichment(text, 'gemini').context, prompt);
+    expect(selected.tasks.some(row => row.id === 'undated-task')).toBe(true);
+    expect(selected.workspaceCollege).toBeUndefined();
+  }
+  await page.evaluate(() => window.setWorkspacePreference('assistant.localRouting', true));
   const context = await page.evaluate(() => window.flowAssistant.buildRequestEnrichment('Explain the Orchid protocol worksheet', 'gemini').context);
   expect(context.tasks.some(row => row.id === 'orchid-task')).toBe(true);
   expect(JSON.stringify(context)).not.toContain('Unrelated College Sentinel');
@@ -135,4 +149,7 @@ test('Assistant reads the full to-do store locally and retrieves relevant cross-
   await page.evaluate(() => window.SutraAssistantPermissions.setArea('planning', 'denied'));
   const denied = await page.evaluate(() => window.flowAssistant.buildRequestEnrichment('Explain the Orchid protocol worksheet', 'gemini').context);
   expect(JSON.stringify(denied)).not.toContain('Orchid protocol worksheet');
+  await page.locator('#asstInput').fill('can u summarize my todos');
+  await page.locator('#asstSendBtn').click();
+  await expect(page.locator('#asstMessages .asst-msg.assistant').last()).toContainText('To-do access is off');
 });

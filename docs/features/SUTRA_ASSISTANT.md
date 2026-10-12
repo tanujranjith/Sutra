@@ -304,6 +304,14 @@ the provider default unchanged. Gemini 3 image/PDF input is recognized, and
 attachment errors identify the file and reason instead of displaying an object.
 Provider contract: [Google GenerateContent thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
 
+Task-list requests accept conversational wording such as "can u summarize my
+todos" and "check my homework". With local routing enabled, they read the
+canonical task stores locally. With local routing disabled, selective retrieval
+still supplies relevant permitted task records for the provider to summarize.
+Class-specific questions stay narrowed to matching records. Denied Planning
+access produces an access explanation rather than an empty-list claim; a Notes
+retrieval permission status refers only to Notes.
+
 The full Assistant model picker refreshes the selected provider on opening,
 on provider changes, and every five minutes while visible. Cached IDs remain
 usable during a failed refresh; successful catalogs replace seed IDs, including

@@ -36,6 +36,17 @@ test('relevant content can be found beyond the first bounded summary in any regi
   assert.equal(result.workspaceRetrieval.selectedCount, 1);
 });
 
+test('conversational task summaries retrieve work without matching request verbs against task titles', () => {
+  const select = selector([record('task', 'planner', 'Clean locker'), record('homework', 'assignment', 'Biology worksheet'), record('college_record', 'unrelated', 'University visit')]);
+  for (const query of ['can u summarize my todos', 'check my homework', 'could you please summarise my to-dos', 'show all my tasks']) {
+    const context = select(query);
+    assert.equal(context.tasks[0].id, 'planner', query);
+    assert.equal(context.homework[0].id, 'assignment', query);
+    assert.equal(context.workspaceCollege, undefined, query);
+  }
+  assert.equal(select('can u summarize my biology homework').tasks, undefined);
+});
+
 test('irrelevant workspaces and a greeting do not create broad context dumps', () => {
   const select = selector([record('task', 'task', 'Clean locker'), record('business_record', 'project', 'Client invoice'), record('life_record', 'goal', 'Read a book')]);
   assert.deepEqual(Object.keys(select('hello')).sort(), ['workspaceRetrieval']);
@@ -78,6 +89,19 @@ test('large task requests report a limit rather than pretending the shortlist is
   assert.equal(result.workspaceRetrieval.selectedCount, 40);
 });
 
+test('denied Notes access is identified separately from permitted task retrieval', () => {
+  const select = selector([record('task', 'planner', 'Clean locker')], { mode: 'read_only', areas: { notes: 'denied' } });
+  const retrieve = new Function('window', 'scopedAssistantContextOptions', 'currentLockedPageAccessIds',
+    extractFunction(source, 'retrieveNoteSources').body + ';return retrieveNoteSources;')({
+      SutraAssistantPrivacy: privacy,
+      SutraNotesKnowledgeCore: { buildIndex() {}, search() {} }
+    }, options => options, () => []);
+  const notes = retrieve('check my homework');
+  assert.equal(notes.evidenceStatus, 'permission_required');
+  assert.equal(notes.scope.area, 'notes');
+  assert.equal(select('check my homework').tasks[0].id, 'planner');
+});
+
 test('the local to-do answer reads canonical planner and Homework rows without switching views', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
   const answer = new Function('window', 'listOpenWorkspaceTasks', extractFunction(source, 'tryReadTodoList').body + ';return tryReadTodoList;')(
@@ -89,7 +113,17 @@ test('the local to-do answer reads canonical planner and Homework rows without s
   assert.match(answer("what's in my to-do list?").message, /2 open items/);
   assert.match(answer("what's in my to-do list?").message, /sutra:\/\/homework\/homework/);
   assert.ok(!answer("what's in my to-do list?").message.includes('Finished'));
+  for (const query of ['can u summarize my todos', 'check my homework', 'could you please summarise my to-dos']) {
+    assert.match(answer(query).message, /Clean locker/, query);
+    assert.match(answer(query).message, /Biology worksheet/, query);
+    assert.equal(answer(query).source, 'local', query);
+  }
+  assert.equal(answer('can u summarize my biology homework'), null);
+  assert.equal(answer('check off my homework'), null);
+  assert.equal(answer('delete my tasks'), null);
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: { planning: 'denied' } }) });
   assert.match(answer("what's in my to-do list?").message, /access is off/);
+  assert.equal(answer('check my homework').grounding.scope.area, 'planning');
+  assert.equal(answer('can u summarize my todos').grounding.evidenceStatus, 'permission_required');
   assert.equal(answer('Explain photosynthesis'), null);
 });

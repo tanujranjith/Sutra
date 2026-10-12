@@ -1346,6 +1346,7 @@
             'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
             'When the user asks about "this note" or "this view", use the context block below.',
             'Sutra searches locally for each question. Relevant records appear in tasks, homework, retrievedNotes, and workspacePlanning/Courses/Learning/College/Life/Business/Overview. Each record has a real id and type. These are selected excerpts, not the entire workspace. If workspaceRetrieval.matchedCount exceeds selectedCount or contextBudget.reduced is true, disclose that the list is partial and offer to narrow it. Do not claim an empty selected result means the whole workspace is empty, or tell the user to switch views when relevant records are already present.',
+            'Permission limits are not empty data. If accessReport.mode is off, explain that Assistant workspace access is off. A notesEvidenceStatus of permission_required applies only to Notes, not to tasks or Homework; use available planning records independently. If the requested area is not in accessReport.areasRead and no matching evidence is supplied, explain the access or retrieval limitation rather than inventing an empty list or promising that switching views will grant permission.',
             'Citing your sources: when an answer draws on a specific item that is present in the context — especially context.retrievedNotes, activeNote, a task, homework assignment, or exam — cite it inline as [short label](sutra://KIND/ID). KIND is one of page, task, homework, exam. For retrievedNotes use KIND page and the EXACT noteId. Use only ids present in context; NEVER invent an id or cite absent evidence. Prefer the quoted span and heading supplied by retrievedNotes, call out stale or conflicting evidence, and clearly say when notesEvidenceStatus is missing or limited. Cite the 1–3 sources the answer most depends on. Do not put citations inside flow-actions or cite a brand-new item.',
             ...buildPersonalizationLines()
         ].join('\n');
@@ -4891,7 +4892,7 @@
         if (privacy && typeof privacy.canRead === 'function' && !privacy.canRead('notes', Object.assign({}, accessOptions, {
             approvedAreas: (options.approvedAreas || []).concat(assistantAccessIds.length ? ['notes'] : [])
         }))) {
-            return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', excludedCount: 0 };
+            return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', scope: { area: 'notes' }, excludedCount: 0 };
         }
         const b = bridge();
         const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
@@ -4944,8 +4945,8 @@
         };
         const query = String(userText || '').toLowerCase();
         const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your'.split(' '));
-        const todo = /\b(?:to[ -]?do|task(?:s| list)?|homework|assignments?)\b/i.test(query);
-        if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo'].forEach(term => stop.add(term));
+        const todo = /\b(?:to[ -]?dos?|task(?:s| list)?|homework|assignments?)\b/i.test(query);
+        if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
         const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
         const taskList = todo && terms.length === 0;
         const planning = /\b(?:plan|schedule|due|overdue|today|tomorrow|week|priorit|next step|what should i do)\b/i.test(query);
@@ -6656,10 +6657,11 @@
     // Returns { handled:true, message } when it recognized & executed a command,
     // otherwise { handled:false } so the caller sends the text to the model.
     function tryReadTodoList(userText) {
-        if (!/^(?:what(?:['’]?s| is) (?:in|on)|what are|show(?: me)?|list)(?: all)?(?: of)? (?:my |the )?(?:to[ -]?do(?: list)?|tasks|homework|assignments)[?!.]*$/i.test(String(userText || '').trim())) return null;
+        const query = String(userText || '').trim().replace(/^(?:please\s+)?(?:(?:can|could|would|will)\s+(?:you|u)\s+(?:please\s+)?)?/i, '');
+        if (!/^(?:what(?:['’]?s| is) (?:in|on)|what are|show(?: me)?|list|summari[sz]e|check)(?: all)?(?: of)? (?:my |the )?(?:to[ -]?dos?(?: list)?|tasks|homework|assignments)[?!.]*$/i.test(query)) return null;
         const privacy = window.SutraAssistantPrivacy;
-        if (!privacy || !privacy.canRead('planning')) {
-            return { handled: true, message: 'To-do access is off for Assistant. Allow Planning access in Assistant privacy settings to read your task list.', source: 'local', areasRead: [] };
+        if (!privacy || typeof privacy.canRead !== 'function' || !privacy.canRead('planning')) {
+            return { handled: true, message: 'To-do access is off for Assistant. Allow Planning access in Assistant privacy settings to read your task list.', source: 'local', areasRead: [], grounding: { evidenceStatus: 'permission_required', query: String(userText || ''), scope: { area: 'planning' } } };
         }
         const tasks = listOpenWorkspaceTasks().filter(task => !task.completed && !task.archived)
             .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')) || a.title.localeCompare(b.title));
