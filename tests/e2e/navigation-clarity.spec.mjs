@@ -35,6 +35,95 @@ async function enableAdvancedPacks(page) {
   await expect(page.locator('#moreViewsWrapper')).toBeVisible();
 }
 
+async function getHeaderGeometry(page) {
+  return page.evaluate(() => {
+    const row = document.querySelector('.view-tabs');
+    const shell = document.querySelector('.tabs-shell');
+    const utility = document.querySelector('.nav-utility-group');
+    const brand = document.querySelector('.global-app-brand');
+    const launcher = document.getElementById('commandPaletteLauncher');
+    if (!row || !shell || !utility || !brand || !launcher) return null;
+
+    const rowRect = row.getBoundingClientRect();
+    const utilityRect = utility.getBoundingClientRect();
+    const brandRect = brand.getBoundingClientRect();
+    const launcherRect = launcher.getBoundingClientRect();
+    const launcherTarget = document.elementFromPoint(
+      launcherRect.left + launcherRect.width / 2,
+      launcherRect.top + launcherRect.height / 2
+    );
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const utilityChildrenFit = Array.from(utility.children).filter(visible).every((child) => {
+      const rect = child.getBoundingClientRect();
+      return rect.left >= utilityRect.left - 1
+        && rect.right <= utilityRect.right + 1
+        && rect.top >= utilityRect.top - 1
+        && rect.bottom <= utilityRect.bottom + 1;
+    });
+
+    return {
+      utilitySharesTabsShell: utility.parentElement === row.parentElement && row.parentElement === shell,
+      rowLeft: rowRect.left,
+      rowRight: rowRect.right,
+      utilityLeft: utilityRect.left,
+      brandRight: brandRect.right,
+      launcherWidth: launcherRect.width,
+      launcherHeight: launcherRect.height,
+      launcherRadius: parseFloat(getComputedStyle(launcher).borderTopLeftRadius) || 0,
+      launcherOwnsHitTarget: !!launcherTarget && (launcherTarget === launcher || launcherTarget.closest('#commandPaletteLauncher') === launcher),
+      utilityChildrenFit,
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+}
+
+async function expectHeaderGeometry(page) {
+  await page.waitForFunction(() => {
+    const row = document.querySelector('.view-tabs');
+    const utility = document.querySelector('.nav-utility-group');
+    const brand = document.querySelector('.global-app-brand');
+    if (!row || !utility || !brand) return false;
+    return row.getBoundingClientRect().right < utility.getBoundingClientRect().left
+      && brand.getBoundingClientRect().right < row.getBoundingClientRect().left;
+  });
+
+  const geometry = await getHeaderGeometry(page);
+  expect(geometry).not.toBeNull();
+  expect(geometry.utilitySharesTabsShell).toBe(true);
+  expect(geometry.rowRight).toBeLessThan(geometry.utilityLeft);
+  expect(geometry.brandRight).toBeLessThan(geometry.rowLeft);
+  expect(geometry.launcherWidth).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherHeight).toBeGreaterThanOrEqual(44);
+  expect(geometry.launcherRadius).toBeGreaterThan(0);
+  expect(geometry.launcherOwnsHitTarget).toBe(true);
+  expect(geometry.utilityChildrenFit).toBe(true);
+  expect(geometry.documentOverflow).toBeLessThanOrEqual(1);
+}
+
+async function enableBuiltInQuickLaunchers(page) {
+  await page.evaluate(() => window.setActiveView('settings'));
+  await page.locator('#view-settings [data-settings-nav="integrations"]').click();
+
+  let changed = false;
+  for (const provider of ['spotify', 'chatgpt']) {
+    const checkbox = page.locator(`#view-settings [data-pref-path="integrations.${provider}Enabled"]`);
+    if (!(await checkbox.isChecked())) {
+      await checkbox.check();
+      changed = true;
+    }
+  }
+
+  if (changed) await page.locator('#settingsApplyBtnTop').click();
+  await page.evaluate(() => window.setActiveView('today'));
+  await expect(page.locator('#quickAppLaunchers')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
+}
+
 test('desktop navigation keeps the daily loop direct and groups advanced packs in More', async ({ page }) => {
   await openApp(page);
   await enableAdvancedPacks(page);
@@ -65,6 +154,41 @@ test('desktop navigation keeps the daily loop direct and groups advanced packs i
   await expect(page.locator('body')).toHaveAttribute('data-view', 'business');
   await expect(more).toContainText('Business');
   await expect(more).toHaveAttribute('aria-label', /current section Business/);
+});
+
+test('header utilities stay clear of centered navigation across desktop and tablet widths', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page, 1644);
+
+  // Check the actual startup layout before enabling any optional shortcut providers.
+  await expectHeaderGeometry(page);
+
+  // Use the real Integrations preferences at a wide desktop size so the built-in
+  // launchers are visible before the exact screenshot width is tested. The
+  // canonical overflow manager may compact the dock at narrower widths.
+  await page.setViewportSize({ width: 2000, height: 900 });
+  await enableBuiltInQuickLaunchers(page);
+  await expectHeaderGeometry(page);
+  await page.setViewportSize({ width: 1644, height: 900 });
+  await expectHeaderGeometry(page);
+  await expect(page.locator('#quickAppLaunchers')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.spotify')).toBeVisible();
+  await expect(page.locator('#quickAppLaunchers .quick-app-btn.chatgpt')).toBeVisible();
+
+  const launcher = page.locator('#commandPaletteLauncher');
+  await launcher.click();
+  const dialog = page.locator('#commandPaletteModal');
+  const input = page.locator('#commandPaletteInput');
+  await expect(dialog).toHaveAttribute('aria-hidden', 'false');
+  await expect(input).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveAttribute('aria-hidden', 'true');
+  await expect(dialog).not.toHaveClass(/active/);
+
+  for (const width of [1440, 1220, 981, 980, 700]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expectHeaderGeometry(page);
+  }
 });
 
 test('desktop shell keeps Notes contextual and gives major workspaces the full canvas', async ({ page }) => {

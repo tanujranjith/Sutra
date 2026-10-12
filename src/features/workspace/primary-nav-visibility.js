@@ -37,6 +37,11 @@
       return;
     }
 
+    // Wide navigation scrolls inside its own reserved row. Keep the utility
+    // dock stable instead of alternately hiding it and reclaiming its width.
+    var shell = row.closest('.tabs-shell');
+    if (shell) shell.classList.remove('tabs-shell-overflowing', 'tabs-shell-overflow-severe');
+
     Array.prototype.forEach.call(row.children, function (tab) {
       if (!tab || !tab.classList || !tab.classList.contains('view-tab') || !tab.dataset.view) return;
       // Respect app.js feature and workspace-mode gating. Those paths use
