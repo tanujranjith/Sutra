@@ -99,6 +99,10 @@ Because the engines are deterministic and tested in isolation, the academic
   on the review screen. Applied imports are logged to Assistant Activity.
 - **Deterministic stays separate from interpretation.** Grades are computed by
   the engine; the assistant may *explain* a result but never produces the number.
+- **Saved scores keep their categories.** Semester Setup reuses a category's ID
+  when its name uniquely matches an existing category. Categories with scores
+  survive an unmatched or ambiguous replacement and remain available for review
+  in Course Hub → Grades. Explicit IDs support category renames.
 
 ---
 
