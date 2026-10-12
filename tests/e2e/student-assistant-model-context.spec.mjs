@@ -42,26 +42,76 @@ test('Gemini refreshes an existing catalog, selections replace custom overrides,
   const model = picker.locator('select[aria-label="Model"]');
   await expect(model.locator('option[value="gemini-3.8-flash"]')).toHaveCount(1);
   expect(listRequests).toBe(2);
+  await model.selectOption('gemma-example', { force: true });
+  await expect(page.locator('#asstReasoningRow')).toBeHidden();
   await model.selectOption('gemini-3.8-flash', { force: true });
   await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
   await expect(picker.locator('input[aria-label="Model ID"]')).toHaveValue('');
   await expect(page.locator('#asstReasoningRow')).toBeVisible();
   await page.locator('#asstInput').click();
-  await page.locator('#asstReasoningSelect').selectOption('high', { force: true });
+  const effort = page.locator('#asstReasoningTrigger');
+  const effortMenu = page.getByRole('menu', { name: 'Thinking effort', exact: true });
+  await expect(page.locator('.asst-input-card #asstReasoningTrigger')).toBeVisible();
+  await effort.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(effortMenu).toBeVisible();
+  await expect(effortMenu.getByRole('menuitemradio', { name: 'Auto', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  await expect(effort).toBeFocused();
+  await expect(effortMenu).toBeHidden();
+  await effort.click();
+  await expect(effortMenu.getByRole('menuitemradio', { name: 'High', exact: true })).toHaveAttribute('aria-checked', 'true');
+  const anchorBounds = await effort.boundingBox();
+  const menuBounds = await effortMenu.boundingBox();
+  expect(menuBounds.y + menuBounds.height).toBeLessThanOrEqual(anchorBounds.y);
+  await page.keyboard.press('Escape');
+  await expect(effort).toBeFocused();
+  await expect(effortMenu).toBeHidden();
+  await effort.click();
+  await page.locator('#asstInput').click();
+  await expect(effortMenu).toBeHidden();
   await page.locator('#asstModelBtn').click();
   await picker.locator('select[aria-label="AI provider"]').selectOption('openai', { force: true });
   await expect(model.locator('option[value="gpt-6-luna"]')).toHaveCount(1);
   await model.selectOption('gpt-6-luna', { force: true });
   await expect(page.locator('#asstReasoningRow')).toBeVisible();
   await expect(page.locator('#asstReasoningSelect option[value="xhigh"]')).toHaveCount(1);
+  await page.locator('#asstInput').click();
+  await effort.click();
+  await effortMenu.getByRole('menuitemradio', { name: 'Extra high', exact: true }).click();
+  await expect(effort).toHaveAccessibleName('Thinking effort: Extra high');
+  await page.locator('#asstModelBtn').click();
   await picker.locator('select[aria-label="AI provider"]').selectOption('gemini', { force: true });
   await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
   await page.locator('#asstInput').click();
+  await effort.click();
+  await effortMenu.getByRole('menuitemradio', { name: 'High', exact: true }).click();
   await page.evaluate(() => window.flowAtelier.flushAppSaveNow('model-selection-review'));
   await page.reload();
   await waitForAppReady(page);
   await page.evaluate(() => window.setActiveView('assistantview'));
   await expect(page.locator('#asstModelLabel')).toHaveText('gemini-3.8-flash');
+  await expect(effort).toHaveAccessibleName('Thinking effort: High');
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await effort.click();
+    await expect(effortMenu).toBeVisible();
+    const bounds = await effortMenu.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(bounds.y).toBeGreaterThanOrEqual(0);
+    const contained = await page.locator('.asst-input-card').evaluate(card => {
+      const box = card.getBoundingClientRect();
+      return ['asstReasoningTrigger', 'asstSendBtn', 'asstInput'].every(id => {
+        const control = document.getElementById(id).getBoundingClientRect();
+        return control.left >= box.left && control.right <= box.right && control.top >= box.top && control.bottom <= box.bottom;
+      }) && document.documentElement.scrollWidth <= window.innerWidth;
+    });
+    expect(contained).toBe(true);
+    await page.keyboard.press('Escape');
+  }
 });
 
 test('Assistant reads the full to-do store locally and retrieves relevant cross-workspace context without dumping unrelated records', async ({ page }) => {
