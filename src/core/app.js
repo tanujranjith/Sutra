@@ -50183,6 +50183,16 @@ function getActiveEditor() {
             reopenLinkedPdfForNotePage(page);
         });
 
+        function notifyNotePageLoaded(pageId) {
+            // Specialized Create surfaces also need this signal after PIN unlock
+            // and removal, when the route stays on the same page.
+            try {
+                window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
+                    detail: { pageId: pageId }
+                }));
+            } catch (err) { /* lifecycle signal is best-effort */ }
+        }
+
         function loadPage(pageId) {
             purgeExpiredTemporaryPages({ silent: true });
 
@@ -50300,11 +50310,7 @@ function getActiveEditor() {
                 // Pages subscribe to this instead of polling for the active page;
                 // it also fires when the same id is re-loaded (e.g. after an import)
                 // so surface editors re-sync their visibility.
-                try {
-                    window.dispatchEvent(new CustomEvent('sutra:note-page-loaded', {
-                        detail: { pageId: pageId }
-                    }));
-                } catch (err) { /* lifecycle signal is best-effort */ }
+                notifyNotePageLoaded(pageId);
             }
         }
 
@@ -51633,6 +51639,7 @@ function getActiveEditor() {
                     updateWordCount();
                     renderPagesList();
                     reopenLinkedPdfForNotePage(page);
+                    notifyNotePageLoaded(page.id);
                     try { input.value = ''; } catch (err) {}
                     if (openDuressSetup) {
                         requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
@@ -51680,6 +51687,7 @@ function getActiveEditor() {
                     updateWordCount();
                     renderPagesList();
                     reopenLinkedPdfForNotePage(page);
+                    notifyNotePageLoaded(page.id);
                     try { input.value = ''; } catch (err) {}
                     showToast('PIN protection removed.');
                 } else {
@@ -51856,8 +51864,10 @@ function getActiveEditor() {
                     if (pageId === currentPageId) {
                         const page = pages.find(p => p.id === pageId);
                         if (page) {
+                            hideLockedPageScreen();
                             const primaryEditor = getPrimaryEditor();
                             if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                            notifyNotePageLoaded(page.id);
                         }
                     }
                 }

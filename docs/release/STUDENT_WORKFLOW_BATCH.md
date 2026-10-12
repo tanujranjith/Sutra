@@ -98,6 +98,14 @@ now uses a hidden input instead of a hidden select for its backing value, removi
 the source of the duplicate styled dropdown. UI persistence and access regressions
 are authored for GitHub CI and remain unrun locally.
 
+HTML page PIN validation exposed a missing Create lifecycle signal: unlocking
+or removing a PIN restored only the ordinary note editor. Both PIN-screen paths
+and removal from page settings now refresh the specialized surface immediately.
+The existing authorization gate still clears HTML source and iframe while locked.
+CI coverage includes incorrect PINs, unlock, source editing and durable saving,
+navigation relocking, PIN removal, reload, and unknown HTML document fields.
+These functional checks remain unrun until an authorized push allows GitHub CI.
+
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.
 The optional full-browser matrix should cover Firefox, WebKit, and responsive
