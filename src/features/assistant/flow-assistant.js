@@ -6661,7 +6661,7 @@
         if (!/^(?:what(?:['’]?s| is) (?:in|on)|what are|show(?: me)?|list|summari[sz]e|check)(?: all)?(?: of)? (?:my |the )?(?:to[ -]?dos?(?: list)?|tasks|homework|assignments)[?!.]*$/i.test(query)) return null;
         const privacy = window.SutraAssistantPrivacy;
         if (!privacy || typeof privacy.canRead !== 'function' || !privacy.canRead('planning')) {
-            return { handled: true, message: 'To-do access is off for Assistant. Allow Planning access in Assistant privacy settings to read your task list.', source: 'local', areasRead: [], grounding: { evidenceStatus: 'permission_required', query: String(userText || ''), scope: { area: 'planning' } } };
+            return { handled: true, message: 'To-do access is off for Assistant. In Settings → Assistant → Workspace access, choose Read workspace. If Tasks & schedule is blocked under Access by area, change it to Allow. Workspace-aware controls search scope; it does not grant permission.', source: 'local', areasRead: [], grounding: { evidenceStatus: 'permission_required', query: String(userText || ''), scope: { area: 'planning' } } };
         }
         const tasks = listOpenWorkspaceTasks().filter(task => !task.completed && !task.archived)
             .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')) || a.title.localeCompare(b.title));
@@ -8908,12 +8908,80 @@
         }
     }
 
+    const assistantPermissionAreas = { planning: 'Tasks & schedule', notes: 'Notes', courses: 'Courses', learning: 'Study & grades', college: 'College', life: 'Life', business: 'Business', workspace: 'Other workspace content', memory: 'Saved Assistant memory' };
+    function refreshAssistantPermissionControls() {
+        const mode = document.getElementById('assistantWorkspaceAccess');
+        const container = document.getElementById('assistantWorkspaceAreas');
+        const status = document.getElementById('assistantWorkspaceAccessStatus');
+        if (!mode || !container || !status) return;
+        const privacy = window.SutraAssistantPrivacy;
+        const controls = window.SutraAssistantPermissions;
+        const ready = privacy && typeof privacy.getPermissions === 'function' && typeof privacy.canRead === 'function' && controls && typeof controls.setMode === 'function' && typeof controls.setArea === 'function';
+        mode.disabled = !ready;
+        if (!ready) {
+            container.querySelectorAll('select').forEach(select => { select.disabled = true; });
+            status.textContent = 'Workspace access is unavailable. Reload Sutra to restore its permission controls.';
+            return;
+        }
+        const permissions = privacy.getPermissions();
+        mode.value = permissions.mode;
+        if (!container.children.length) {
+            Object.entries(assistantPermissionAreas).forEach(([area, name]) => {
+                const row = document.createElement('label');
+                row.className = 'cc-row';
+                row.setAttribute('data-setting-item', '');
+                const text = document.createElement('span');
+                text.className = 'cc-row-text';
+                text.textContent = name;
+                const control = document.createElement('span');
+                control.className = 'cc-row-control';
+                const select = document.createElement('select');
+                select.className = 'modal-input cc-select';
+                select.dataset.nativeSelect = 'true';
+                select.dataset.assistantPermissionArea = area;
+                select.setAttribute('aria-label', name + ' access');
+                [['ask', 'Use access mode'], ['approved', 'Allow'], ['denied', 'Block']].forEach(([value, label]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    select.appendChild(option);
+                });
+                control.appendChild(select);
+                row.append(text, control);
+                container.appendChild(row);
+            });
+        }
+        container.querySelectorAll('[data-assistant-permission-area]').forEach(select => {
+            select.disabled = false;
+            select.value = permissions.areas[select.dataset.assistantPermissionArea] || 'ask';
+        });
+        status.textContent = permissions.mode === 'off'
+            ? 'Workspace access is off. Workspace-aware changes search scope, not permission.'
+            : !privacy.canRead('planning')
+                ? 'Tasks & schedule is not allowed. Choose Allow for that area below to read your to-dos.'
+                : 'Assistant can read your tasks and other allowed areas. Only relevant excerpts are shared with your selected provider; locked and sensitive content stays protected.';
+    }
+    const handleAssistantPermissionChange = (event) => {
+        const target = event.target;
+        if (!target || !target.matches('[data-assistant-permission-mode], [data-assistant-permission-area]')) return;
+        try {
+            const controls = window.SutraAssistantPermissions;
+            if (target.hasAttribute('data-assistant-permission-mode')) controls.setMode(target.value);
+            else if (Object.prototype.hasOwnProperty.call(assistantPermissionAreas, target.dataset.assistantPermissionArea)) controls.setArea(target.dataset.assistantPermissionArea, target.value);
+            refreshAssistantPermissionControls();
+        } catch (error) {
+            if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { where: 'flow-assistant.permission-settings' }, 'error');
+            const status = document.getElementById('assistantWorkspaceAccessStatus');
+            if (status) status.textContent = 'Could not save workspace access. Review the current setting, then reload and try again.';
+        }
+    };
     let assistantInitialized = false;
-    const onFlowBridgeReady = () => { try { migrateLegacyTaskShapes(); } catch (e) { /* non-critical */ } };
+    const onFlowBridgeReady = () => { try { migrateLegacyTaskShapes(); refreshAssistantPermissionControls(); } catch (e) { /* non-critical */ } };
     const handleSelectionChange = () => updateContextChip();
     const handleAssistantDocumentClick = (e) => {
         const target = e.target;
         if (!target) return;
+        if (target.closest && target.closest('[data-settings-nav="assistant"]')) refreshAssistantPermissionControls();
         const askBtn = target.closest && target.closest('[data-flow-ask]');
         if (askBtn) {
             e.preventDefault();
@@ -8936,6 +9004,7 @@
             renderQuickActions();
             injectViewFlowRows();
             setupAsstSidebarResizer();
+            refreshAssistantPermissionControls();
             // Run the one-time task-shape migration when the bridge is actually
             // ready — either it is already installed (run now), or app.js will
             // fire 'sutra:flow-bridge-ready' when it finishes installing
@@ -8949,6 +9018,8 @@
             // Refresh chip/selection on common interaction events.
             document.addEventListener('selectionchange', handleSelectionChange);
             document.addEventListener('click', handleAssistantDocumentClick, true);
+            document.addEventListener('change', handleAssistantPermissionChange);
+            window.addEventListener('noteflow:view-changed', refreshAssistantPermissionControls);
         } catch (e) {
             assistantInitialized = false;
             console.warn('Sutra Assistant init failed:', e);
@@ -8959,6 +9030,11 @@
         window.removeEventListener('sutra:flow-bridge-ready', onFlowBridgeReady);
         document.removeEventListener('selectionchange', handleSelectionChange);
         document.removeEventListener('click', handleAssistantDocumentClick, true);
+        document.removeEventListener('change', handleAssistantPermissionChange);
+        window.removeEventListener('noteflow:view-changed', refreshAssistantPermissionControls);
+        document.querySelectorAll('[data-assistant-permission-mode], [data-assistant-permission-area]').forEach(control => { control.disabled = true; });
+        const accessStatus = document.getElementById('assistantWorkspaceAccessStatus');
+        if (accessStatus) accessStatus.textContent = 'Enable Sutra Assistant to manage workspace access.';
         document.querySelectorAll('.flow-activity-overlay,.flow-review-overlay,.flow-context-overlay').forEach(node => node.remove());
         const panel = document.getElementById('chatbotPanel');
         if (panel) panel.classList.remove('open');

@@ -75,9 +75,9 @@ controls. The owner-approved Thinking effort pill is inside the full Assistant
 composer beside Send, with an upward-opening menu and keyboard navigation.
 CI coverage includes menu selection, dismissal, persistence and 320/390px layout;
 these functional and visual checks remain unrun pending authorized remote CI.
-The hidden effort backing field explicitly opts out of the shared select enhancer
-so it cannot create a second visible dropdown; CI asserts one effort trigger
-before selection and after reload.
+The effort backing value uses a hidden input, which the shared select enhancer
+cannot turn into another dropdown; CI asserts one effort trigger before selection
+and after reload.
 Task-list questions read canonical task stores locally; other full-Assistant questions
 select matching workspace records under the existing privacy and token-budget
 boundaries. Model selection, reload, catalog pagination, permissions, and selective
@@ -88,6 +88,15 @@ todos" and "check my homework". Local routing now recognizes those requests;
 selective provider context recognizes them independently when local routing is
 disabled. Notes-only permission failures are labeled with their area and must
 not be interpreted as missing tasks. Existing privacy settings remain intact.
+
+Owner validation also exposed an older migration's retained Off permission mode
+with no visible way to change it. Settings → Assistant now displays Workspace
+access and per-area choices using the existing permission API. Context depth
+copy explicitly distinguishes search scope from access. No permission is enabled
+automatically, and sensitive/locked-note settings remain unchanged. The composer
+now uses a hidden input instead of a hidden select for its backing value, removing
+the source of the duplicate styled dropdown. UI persistence and access regressions
+are authored for GitHub CI and remain unrun locally.
 
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.

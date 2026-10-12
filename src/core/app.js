@@ -73238,7 +73238,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const choices = ['auto'].concat(caps.supportsOff ? ['off'] : [], caps.levels);
             const current = String(getWorkspacePreference('assistant.reasoningEffort', 'auto') || 'auto').toLowerCase();
             const effective = choices.indexOf(current) !== -1 ? current : 'auto';
-            select.replaceChildren(...choices.map(level => {
+            if (select.tagName === 'SELECT') select.replaceChildren(...choices.map(level => {
                 const opt = document.createElement('option');
                 opt.value = level;
                 opt.textContent = REASONING_LEVEL_LABELS[level] || level;

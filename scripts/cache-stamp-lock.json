@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261012-assistant-tasks1",
-    "hash": "c8bf4539bba6b6be"
+    "stamp": "20261012-assistant-access1",
+    "hash": "b4071709a9e717ef"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261012-assistant-effort1",
-    "hash": "5251d0cc5ae886a6"
+    "stamp": "20261012-assistant-access1",
+    "hash": "7570ff8dd7a2b5e3"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -192,8 +192,8 @@
     "hash": "5fadb5f3b117fbf2"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261012-assistant-tasks1",
-    "hash": "87b2e35558f2b758"
+    "stamp": "20261012-assistant-access1",
+    "hash": "a5b7764c58a2f4b9"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -224,8 +224,8 @@
     "hash": "aaa57ee9deb1874c"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261012-assistant-effort1",
-    "hash": "63fa8cb3473fc684"
+    "stamp": "20261012-assistant-access1",
+    "hash": "74ddc9b57f920812"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261012-assistant-effort1",
-    "hash": "80bd180b68516bcb"
+    "stamp": "20261012-assistant-access1",
+    "hash": "9e335d5a103c8342"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

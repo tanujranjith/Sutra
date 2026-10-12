@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-12T04:05:59.921Z",
-  "reviewedReason": "Integrate the approved capability-gated effort menu into the Assistant composer with keyboard controls",
-  "maxBytes": 4989670,
+  "blessedAt": "2026-10-12T04:44:20.577Z",
+  "reviewedReason": "Use a hidden input for the composer effort value to prevent duplicate styled selectors",
+  "maxBytes": 4989703,
   "maxLines": 87352
 }

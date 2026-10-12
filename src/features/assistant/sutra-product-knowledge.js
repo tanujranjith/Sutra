@@ -490,10 +490,11 @@
             title: 'Assistant settings & behavior',
             category: 'assistant',
             availability: 'available',
-            summary: 'Settings ▸ Assistant controls panel behavior, context depth (Workspace Access), confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
+            summary: 'Settings ▸ Assistant controls workspace access permission, context depth, panel behavior, confirmation mode, conversation memory depth, action previews, and long-term Assistant Memory.',
             body: [
                 'In **Settings ▸ Assistant** you control how the assistant works:',
-                '- **Workspace Access / context depth** — how much of your workspace it can read.',
+                '- **Workspace access** — whether it may read workspace areas. Choose Read workspace for ordinary read access; explicit area blocks remain respected.',
+                '- **Context depth** — where to search for relevant context. Workspace-aware does not grant access when Workspace access is off.',
                 '- **Confirmation & action previews** — whether proposed actions need explicit approval.',
                 '- **Conversation memory** — how many recent messages it remembers within a session.',
                 '- **Assistant Memory** — manage the long-term facts it remembers across sessions.'
@@ -537,15 +538,16 @@
         },
         {
             id: 'workspace-access',
-            title: 'Workspace Access (context depth)',
+            title: 'Workspace access and context depth',
             category: 'assistant',
             availability: 'available',
-            summary: 'Workspace Access controls how much context the assistant can read: minimal, current view only, or full workspace. Locked notes are excluded by default and require a separate one-time consent and page-PIN check when explicitly requested.',
+            summary: 'Workspace access is the permission to read; context depth chooses search scope. Workspace-aware does not override No workspace access or blocked areas. Locked notes require separate consent and a page PIN.',
             body: [
-                '**Workspace Access** (context depth) decides what the assistant can see when you send an AI request:',
+                'In Settings ▸ Assistant, **Workspace access** controls permission. Choose **Read workspace** to permit ordinary workspace reads, or **Read allowed areas** and explicitly Allow selected areas. Under **Access by area**, Block always excludes an area. To-do questions need Tasks & schedule access.',
+                '**Context depth** chooses search scope separately:',
                 '- **Minimal** — almost nothing beyond your message.',
                 '- **Current view** — only what is on the active screen / current area.',
-                '- **Full workspace** — broad context across your workspace.',
+                '- **Workspace-aware** — relevant permitted records from across your workspace; it does not send everything or grant access.',
                 'Locked-note contents are excluded by default at every depth. An explicit request about an identified locked page starts a separate one-time permission and page-PIN check; that grant applies only to the current request. API keys are never included. Change context depth in Settings ▸ Assistant or by asking the assistant.'
             ],
             keywords: ['workspace access', 'context depth', 'minimal', 'current view', 'full workspace', 'how much context', 'what can it see'],

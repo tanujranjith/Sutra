@@ -89,7 +89,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20261012-assistant-tasks1"></script>
+    <script src="src/config/feature-manifest.js?v=20261012-assistant-access1"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -4238,7 +4238,7 @@
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.autoSuggestions"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <div class="cc-row" data-setting-item>
-                            <div class="cc-row-text"><span class="cc-row-name">Context depth</span><span class="cc-row-help">How much workspace context Sutra Assistant can see. More context means richer answers but larger token use.</span></div>
+                            <div class="cc-row-text"><span class="cc-row-name">Context depth</span><span class="cc-row-help">Where Assistant searches for relevant context. Workspace access below controls permission; this setting does not grant access.</span></div>
                             <div class="cc-row-control">
                                 <select class="modal-input cc-select" data-pref-path="assistant.contextDepth">
                                     <option value="minimal">Minimal (view only)</option>
@@ -4247,6 +4247,23 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="cc-row" data-setting-item id="assistantWorkspaceAccessRow">
+                            <label class="cc-row-text" for="assistantWorkspaceAccess"><span class="cc-row-name">Workspace access</span><span class="cc-row-help">Allow Assistant to search your workspace. It selects relevant excerpts instead of sending everything. Changes still require review.</span></label>
+                            <div class="cc-row-control">
+                                <select class="modal-input cc-select" id="assistantWorkspaceAccess" data-assistant-permission-mode data-native-select="true" aria-describedby="assistantWorkspaceAccessStatus" disabled>
+                                    <option value="off">No workspace access</option>
+                                    <option value="read_only">Read workspace</option>
+                                    <option value="ask_per_area">Read allowed areas</option>
+                                    <option value="approved_actions">Read + reviewed changes</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="cc-foot-help" id="assistantWorkspaceAccessStatus" role="status">Enable Sutra Assistant to manage workspace access.</p>
+                        <details>
+                            <summary>Access by area</summary>
+                            <p class="cc-foot-help">An area set to Block stays excluded. Under Read allowed areas, choose Allow for each area you want to share. Locked pages and sensitive content retain their separate protections.</p>
+                            <div id="assistantWorkspaceAreas"></div>
+                        </details>
                         <div class="cc-row" data-setting-item>
                             <div class="cc-row-text">
                                 <span class="cc-row-name">Chat memory</span>
@@ -5070,7 +5087,7 @@
           <textarea id="asstInput" class="asst-ta" placeholder="Ask anything…" rows="1" aria-label="Message to Sutra Assistant"></textarea>
           <div class="asst-input-foot">
             <div class="asst-reasoning-row" id="asstReasoningRow" hidden>
-              <select id="asstReasoningSelect" aria-label="Thinking effort" data-native-select="true" hidden><option value="auto">Auto</option></select>
+              <input type="hidden" id="asstReasoningSelect" value="auto">
               <button class="asst-reasoning-trigger" id="asstReasoningTrigger" type="button" aria-label="Thinking effort: Auto" aria-haspopup="menu" aria-expanded="false" aria-controls="asstReasoningMenu">
                 <span>Thinking · <span id="asstReasoningValue">Auto</span></span><i class="fas fa-chevron-down" aria-hidden="true"></i>
               </button>
@@ -7926,7 +7943,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261012-assistant-effort1"></script>
+    <script src="src/core/app.js?v=20261012-assistant-access1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7940,7 +7957,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261012-assistant-effort1"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261012-assistant-access1"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>

@@ -67,20 +67,26 @@ currently see) anchors directly after the badge.
 
 ---
 
-## 3. Workspace Access — how much the Assistant can see
+## 3. Workspace access and context depth
 
-You control how much of your workspace the Assistant is allowed to read when it
-builds context for a request. This is the **Workspace Access** setting, with
-three levels:
+Settings → Assistant exposes two separate controls:
 
-- **Current Screen Only** — the Assistant sees only what is on the screen you
-  are looking at right now. The tightest scope.
-- **Current Area** — the Assistant sees the feature area you are working in
-  (for example, the current notes, the current homework view), not your entire
-  workspace.
-- **Full Workspace Context** — the Assistant may draw on signals from across
-  your whole workspace (notes, tasks, homework, AP Study, Review, and so on),
-  by way of Sutra Intelligence's derived signals.
+- **Workspace access** grants permission: No workspace access, Read workspace,
+  Read allowed areas, or Read + reviewed changes. Older migrated workspaces can
+  retain No workspace access until you explicitly change it.
+- **Context depth** chooses where to search: Minimal (view only), Current view,
+  or Workspace-aware. Choosing Workspace-aware never overrides an access denial.
+
+Under **Access by area**, set Tasks & schedule, Notes, Courses, Study & grades,
+College, Life, Business, Other workspace content, and Saved Assistant memory to
+Use access mode, Allow, or Block. Block always excludes that area. Read allowed
+areas requires Allow for each area; the other reading modes permit ordinary
+areas unless blocked. No workspace access denies every area. These controls use
+the existing canonical permissions and persist with the workspace.
+
+To read a blocked to-do list, choose **Read workspace** and ensure
+**Tasks & schedule** is not blocked. Locked pages still require their separate
+Assistant consent/PIN flow, and sensitive-content preferences remain unchanged.
 
 Choose the narrowest level that still lets the Assistant be useful. Whatever you
 pick, the context is assembled **locally** first; only the portion needed for
@@ -95,7 +101,7 @@ evidence without requiring a provider.
 The Assistant is aware of **text you have selected**. If you highlight a passage
 in a note before asking a question, that selection becomes part of the context
 for your request — useful for "rewrite this," "explain this," or "turn this into
-flashcards." Selection awareness respects your Workspace Access level.
+flashcards." Selection awareness respects both context depth and Notes access.
 
 ---
 
