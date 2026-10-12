@@ -168,6 +168,24 @@ test('assistant.useMemory defaults to ON', async ({ page }) => {
   expect(val).toBe(true);
 });
 
+test('opening the Memory manager remains available in read-only permission mode', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('read_only');
+    const command = window.flowAssistant.tryHandleCommand('open memory manager');
+    return {
+      handled: command.handled,
+      message: command.message,
+      risk: window.SutraAssistantActions.classifyRisk({ type: 'open_memory_manager' }),
+      modalOpen: !!document.querySelector('.sutra-memory-modal')
+    };
+  });
+  expect(result.handled).toBe(true);
+  expect(result.message).toContain('Opened the Memory manager');
+  expect(result.risk).toBe('read_only');
+  expect(result.modalOpen).toBe(true);
+});
+
 // The local "forget this memory?" card builds a delete_memory action carrying a
 // display-only `label`. delete_memory is a strict-validated action, so the label
 // must be tolerated (and stripped) or Apply silently fails without deleting.
@@ -255,7 +273,7 @@ test('an inferred timeline proposal applies to a real, valid block', async ({ pa
 
 test('the chat list is resizable and the width persists', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => window.flowAssistant.applyAction({ type: 'navigate', view: 'assistantview' }));
+  await page.evaluate(() => window.setActiveView('assistantview'));
   await page.waitForSelector('#asstSidebarResizer', { state: 'visible' });
   const widthOf = () => page.evaluate(() => parseInt(getComputedStyle(document.getElementById('asstSidebar')).width, 10));
   const before = await widthOf();

@@ -45037,6 +45037,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Manage Spaces</strong> is a visual manager for creating, opening, renaming, duplicating, deleting, and exporting spaces. It shows note count, Canvas count, active-space state, and recent timestamps.</li>
   <li><strong>Pinned pages</strong> appear in the Pinned section at the top of the Create tree while staying in their original hierarchy. Pin or unpin from the page row actions. Pins are scoped per space and survive rename, move, refresh, export, and restore.</li>
   <li><strong>Compact search</strong> starts as a search icon in Notes. Click to expand it; Escape clears or collapses it. Search covers note titles, tags, note content, and Canvas text where practical.</li>
+  <li><strong>Pages</strong> in the note toolbar's More menu adds automatic sheet gaps in the primary Modern Editor. Typing, paste, zoom, and width changes recalculate them. Manual breaks start a new sheet; oversized media and tables stay intact. Automatic gaps are never saved as note content. Classic Editor keeps manual breaks.</li>
   <li><strong>Resizable tables</strong> in standard notes expose column and row handles. Drag to size, then autosave, refresh, switch spaces, export, or restore without losing dimensions.</li>
   <li><strong>Canvas pages</strong> are first-class Create pages. Create one from New Page &rarr; Canvas, pin it, move it, duplicate it, search it, or back it up like any other page.</li>
   <li>Canvas supports selection, pan/zoom, freehand drawing, text, sticky notes, shapes, connectors, groups, tables, linked Sutra notes, and selected-content conversion into notes or tasks.</li>
@@ -45054,7 +45055,7 @@ function buildOnboardingPlanPreview() {
                     title: 'Command Palette, Global Search, And Quick Capture',
                     body: `
 <ul>
-  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P or the navigation search-command button) is for fast actions and jumping around the app. It includes <em>Open Review</em> and <em>Start review session</em>.</li>
+  <li><strong>Command Palette</strong> (Ctrl/⌘+Shift+P or the navigation command button) is for fast actions and jumping around the app. It includes <em>Open Review</em> and <em>Start review session</em>.</li>
   <li><strong>Global Search</strong> (Ctrl/⌘+K, Shift+Ctrl/⌘+F, or "Search everywhere…") opens a centered modal with filter chips across <em>Pages, Notes, To-do, Tasks, Timeline, and Attachments</em> — plus Review, AP Study, College, trackers, and Assistant activity in All. Trackers covers habits, goals, and reading list. Review covers decks and individual card prompts/answers.</li>
   <li>The empty state of Global Search now shows a list of <strong>recent searches</strong>; click one to re-run it. Recent searches persist in <code>settings.recentSearches</code> and travel through every backup path.</li>
   <li><strong>Quick Capture</strong> parses short phrases into tasks, homework, notes, blocks, AP sessions, or college items. For homework, “tonight” means today at 11:59 PM unless you state a specific time.</li>
@@ -75165,7 +75166,7 @@ ${cspMeta}
                         saveNoteBtn.addEventListener('click', () => {
                             const title = trimmedClean.split('\n')[0].slice(0, 80) || 'Sutra reply';
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedClean })
+                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedClean }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         });
@@ -75181,7 +75182,7 @@ ${cspMeta}
                         taskBtn.title = 'Create a task from this reply';
                         taskBtn.addEventListener('click', () => {
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLine, notes: trimmedClean })
+                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLine, notes: trimmedClean }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         });
@@ -76875,24 +76876,18 @@ ${cspMeta}
                 guidePage = materializeStudyGuidePage(validated.studyGuide, { ...meta, testId: testEntry ? testEntry.id : '' });
                 if (testEntry) testEntry.guidePageId = guidePage.id;
             }
-            let flashcardDeckResult = null;
-            if (validated.flashcards && validated.flashcards.length
-                && window.flowAssistant && typeof window.flowAssistant.applyAction === 'function') {
-                try {
-                    // Reuse the assistant's existing validated create_review_deck
-                    // action — same review-deck pipeline users already have.
-                    flashcardDeckResult = window.flowAssistant.applyAction({
-                        type: 'create_review_deck',
-                        name: ((validated.studyGuide ? validated.studyGuide.title : payload.name) + ' — Flashcards').slice(0, 120),
-                        cards: validated.flashcards.map(c => ({ front: c.front, back: c.back }))
-                    });
-                } catch (err) { console.warn('Flashcard deck creation failed', err); }
-            }
+            // Generated cards stay a proposal until the user reviews the
+            // output and chooses Apply. Reuse the canonical action-card flow.
+            const flashcardAction = validated.flashcards && validated.flashcards.length ? {
+                type: 'create_review_deck',
+                name: ((validated.studyGuide ? validated.studyGuide.title : payload.name) + ' — Flashcards').slice(0, 120),
+                cards: validated.flashcards.map(c => ({ front: c.front, back: c.back }))
+            } : null;
             persistAppData();
             try { renderPagesList(); } catch (e) { /* non-critical */ }
             try { if (typeof renderTestingHubPracticeSummary === 'function') renderTestingHubPracticeSummary(); } catch (e) { /* non-critical */ }
             recordIntelligenceDiagnostic({ kind: 'study-materials', provider, model, ok: true, validation: qualityReport.ok ? 'ok' : 'quality-warning' });
-            return { ok: true, guidePage, test: testEntry, flashcardDeck: flashcardDeckResult, requestId: result.requestId, qualityReport };
+            return { ok: true, guidePage, test: testEntry, flashcardDeck: null, flashcardAction, requestId: result.requestId, qualityReport };
         }
 
         async function regenerateGeneratedTestQuestion(testId, questionIndex, hooks = {}) {
@@ -77175,7 +77170,18 @@ ${cspMeta}
                 const links = [];
                 if (result.guidePage) links.push(`<button type="button" class="sutra-genmat-open" data-open-guide="${escapeHtml(result.guidePage.id)}">Open study guide</button>`);
                 if (result.test) links.push(`<button type="button" class="sutra-genmat-open" data-open-test="${escapeHtml(result.test.id)}">Open practice test</button>`);
-                setStatus(`<span class="sutra-genmat-ok">Done!</span> ${links.join(' ')}${studyQualityReportHtml(result.qualityReport, result.test && result.test.id)}`);
+                setStatus(`<span class="sutra-genmat-ok">${result.flashcardAction ? 'Ready — review flashcards below.' : 'Done!'}</span> ${links.join(' ')}${studyQualityReportHtml(result.qualityReport, result.test && result.test.id)}`);
+                if (result.flashcardAction) {
+                    const reviewHost = document.createElement('div');
+                    reviewHost.className = 'sutra-genmat-flashcard-review';
+                    const statusHost = body.querySelector('#genmatStatus');
+                    if (statusHost) statusHost.appendChild(reviewHost);
+                    if (window.flowAssistant && typeof window.flowAssistant.renderActionCards === 'function') {
+                        window.flowAssistant.renderActionCards(reviewHost, [result.flashcardAction]);
+                    } else {
+                        reviewHost.textContent = 'Flashcards have not been saved. Reload Sutra to restore Assistant review controls and try again.';
+                    }
+                }
                 body.querySelectorAll('[data-regenerate-test]').forEach(regenerateBtn => {
                     regenerateBtn.addEventListener('click', async () => {
                         if (regenerateBtn.disabled) return;
@@ -77230,7 +77236,7 @@ ${cspMeta}
                     if (modalHandle) modalHandle.close(true);
                     openGeneratedTestRunner(openTestBtn.getAttribute('data-open-test'));
                 });
-                showToast('Study materials saved' + (result.guidePage ? ' — guide added to Notes' : '') + (result.test ? ' — test added to Testing Hub' : ''));
+                showToast((result.guidePage || result.test ? 'Study materials saved' : 'Study materials ready') + (result.guidePage ? ' — guide added to Notes' : '') + (result.test ? ' — test added to Testing Hub' : '') + (result.flashcardAction ? ' — review flashcards before saving' : ''));
             }
 
             modalHandle = openSutraModal({
@@ -79860,7 +79866,7 @@ ${cspMeta}
                         actions.appendChild(makeAct('fa-file-circle-plus', 'Save as note', 'Create a new note with this reply as the body', () => {
                             const title = trimmedForActions.split('\n')[0].slice(0, 80) || 'Sutra reply';
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedForActions })
+                                ? window.flowAssistant.applyAction({ type: 'create_page', title, body: trimmedForActions }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         }));
@@ -79869,7 +79875,7 @@ ${cspMeta}
                     if (firstLineForTask && firstLineForTask.length < 140) {
                         actions.appendChild(makeAct('fa-square-check', 'Create task', 'Create a task from this reply', () => {
                             const result = (window.flowAssistant && window.flowAssistant.applyAction)
-                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLineForTask, notes: trimmedForActions })
+                                ? window.flowAssistant.applyAction({ type: 'create_task', title: firstLineForTask, notes: trimmedForActions }, { reviewed: true })
                                 : { ok: false, message: 'Sutra Assistant not loaded.' };
                             if (typeof showToast === 'function') showToast(result.message);
                         }));

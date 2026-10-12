@@ -1131,7 +1131,7 @@
         { type: 'delete_memory', desc: 'Forget (permanently delete) an Assistant Memory. Destructive — requires confirmation.', risk: 'high', fields: { id: 'string?', ids: 'string[]?' } },
         { type: 'clear_expired_memories', desc: 'Forget all expired Assistant Memories.', risk: 'medium', fields: {} },
         { type: 'clear_temporary_memories', desc: 'Forget all temporary (auto-expiring) Assistant Memories.', risk: 'medium', fields: {} },
-        { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'low', fields: {} }
+        { type: 'open_memory_manager', desc: 'Open the Assistant Memory manager UI.', risk: 'read_only', fields: {} }
     ];
 
     const ANCHORED_NOTE_ACTION_TYPES = new Set(['edit_note_patch', 'rename_note_heading', 'move_note_blocks', 'deduplicate_note', 'split_note']);
@@ -8477,7 +8477,7 @@
         try {
             if (!window.SutraAssistantPrivacy || typeof window.SutraAssistantPrivacy.getActionPermissions !== 'function') return [];
             const grants = window.SutraAssistantPrivacy.getActionPermissions({
-                approved: prospective === true || !!(meta && (meta.reviewed || meta.confirmed)),
+                approved: prospective === true || !!(meta && meta.reviewed),
                 destructiveApproved: !!(meta && meta.destructiveApproved),
                 pluginApproved: !!(meta && meta.pluginApproved)
             });
@@ -8593,7 +8593,7 @@
             domain: cap ? cap.domain : null,
             domainLabel: cap ? cap.domainLabel : null,
             requiredScope: cap ? cap.scope : 'none',
-            readOnly: cap ? cap.readOnly : (entry.risk === 'read_only'),
+            readOnly: !!(cap && cap.readOnly) || entry.risk === 'read_only',
             reversible: cap ? cap.reversible : UNDOABLE_TYPES.has(entry.type),
             destructive: cap ? cap.destructive : false,
             schema: typed ? typed.schema : null,

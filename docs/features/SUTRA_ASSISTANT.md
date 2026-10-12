@@ -286,7 +286,10 @@ approval metadata. The action-card Apply control supplies reviewed metadata only
 after its existing approval and high-risk confirmation flow. Local "remember
 that" commands propose a memory card and wait for Apply. Smart Import checks
 the selected destinations' permissions when Apply is clicked, and reports
-partial failures instead of implying that every destination was saved.
+partial failures instead of implying that every destination was saved. Reply
+buttons such as Save as note and Create task count as explicit reviewed actions
+and still obey the selected permission mode. Generated study flashcards are
+proposed in a review card before a deck is saved.
 
 Thinking effort is available in both the panel settings and the full Assistant's
 model picker when the selected model supports it. Gemini 3 uses model-specific

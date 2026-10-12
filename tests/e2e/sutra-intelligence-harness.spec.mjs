@@ -33,6 +33,13 @@ const STRUCTURED_OK = {
   }
 };
 
+const FLASHCARD_OUTPUT = {
+  flashcards: [
+    { id: 'fc_1', front: 'Where do light reactions occur?', back: 'In the thylakoid membrane.', sourcePages: [2] },
+    { id: 'fc_2', front: 'What does chlorophyll absorb?', back: 'Light energy, especially red and blue wavelengths.', sourcePages: [1] }
+  ]
+};
+
 async function openApp(page) {
   await page.addInitScript(() => {
     sessionStorage.setItem('sutra_intro_played', '1');
@@ -334,6 +341,55 @@ test('study-material generation creates an editable guide Note and an interactiv
   expect(persisted.roundTripTests).toBe(1);
   expect(persisted.roundTripGuide).toBe(true);
   expect(persisted.secretsLeak).toBe(false);
+});
+
+test('generated flashcards stay a proposal until an approved review-card Apply', async ({ page }) => {
+  await openApp(page);
+  await mockAnthropic(page, JSON.stringify(FLASHCARD_OUTPUT));
+  await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
+
+  const before = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  await page.evaluate((source) => {
+    window.SutraAssistantPermissions.setMode('read_only');
+    window.SutraStudyMaterials.openGenerator({ source });
+  }, PDF_SOURCE);
+  await expect(page.locator('#genmatGenerateBtn')).toBeVisible();
+  await page.locator('#genmatGuide').uncheck();
+  await page.locator('#genmatTest').uncheck();
+  await page.locator('#genmatCards').check();
+  await expect.poll(() => page.locator('#genmatGenerateBtn').isDisabled()).toBe(false);
+  await page.locator('#genmatGenerateBtn').click();
+
+  const card = page.locator('.sutra-genmat-flashcard-review .flow-action-card[data-action-type="create_review_deck"]');
+  await expect(card).toBeVisible();
+  await expect(page.locator('#genmatStatus')).toContainText('Ready — review flashcards below.');
+  await expect(card.locator('.flow-action-label')).toContainText('photosynthesis.pdf — Flashcards');
+  const proposed = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(proposed).toEqual(before);
+
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-error')).toContainText('not allowed');
+  const denied = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(denied).toEqual(before);
+
+  await page.evaluate(() => window.SutraAssistantPermissions.setMode('approved_actions'));
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-receipt')).toBeVisible();
+  const applied = await page.evaluate(() => ({
+    decks: window.getReviewTodayStats().decks,
+    cards: window.SutraReviewTesting.getItems().length
+  }));
+  expect(applied.decks).toBe(before.decks + 1);
+  expect(applied.cards).toBe(before.cards + FLASHCARD_OUTPUT.flashcards.length);
 });
 
 test('malformed and schema-invalid model output fails safely without persisting anything', async ({ page }) => {

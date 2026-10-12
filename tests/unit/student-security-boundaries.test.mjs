@@ -59,4 +59,5 @@ test('Assistant permissions fail closed and caller grants can only narrow policy
   window.SutraAssistantPrivacy = { getActionPermissions: options => options.approved ? ['workspace.read', 'workspace.write'] : ['workspace.read'] };
   assert.deepEqual(Array.from(context.resolve({ reviewed: true, permissions: ['workspace.write'] }, false)), ['workspace.write']);
   assert.deepEqual(Array.from(context.resolve({}, false)), ['workspace.read']);
+  assert.deepEqual(Array.from(context.resolve({ confirmed: true }, false)), ['workspace.read']);
 });

@@ -7,7 +7,7 @@ test('Assistant action aliases require reviewed writes in approved_actions mode'
   await waitForAppReady(page);
   await page.evaluate(() => window.SutraFeatureRegistry.enable('assistant', { test: true }));
   await page.waitForFunction(() => window.flowAssistant && window.SutraAssistantActions);
-  const result = await page.evaluate(() => {
+  const result = await page.evaluate(async () => {
     const policy = window.SutraAssistantPrivacy;
     const action = { type: 'create_task', title: 'Permission regression control' };
     const api = window.SutraAssistantActions;
@@ -25,7 +25,14 @@ test('Assistant action aliases require reviewed writes in approved_actions mode'
     const beforeReviewed = window.flowAssistant.listOpenWorkspaceTasks().some(item => item.title === action.title);
     const reviewed = api.applyAction(action, { reviewed: true });
     const afterReviewed = window.flowAssistant.listOpenWorkspaceTasks().some(item => item.title === action.title);
-    return { missing, readOnlyDenied, unreviewed, beforeReviewed, reviewed, afterReviewed };
+    const batchAction = { type: 'create_task', title: 'Confirmed but unreviewed batch action' };
+    const confirmedOnlyBatch = await api.applyBatch([batchAction], { confirmed: true });
+    const batchDeniedVisible = window.flowAssistant.listOpenWorkspaceTasks().some(item => item.title === batchAction.title);
+    const reviewedBatchAction = { type: 'create_task', title: 'Reviewed batch action' };
+    const reviewedBatch = await api.applyBatch([reviewedBatchAction], { confirmed: true, reviewed: true });
+    const reviewedBatchVisible = window.flowAssistant.listOpenWorkspaceTasks().some(item => item.title === reviewedBatchAction.title);
+    return { missing, readOnlyDenied, unreviewed, beforeReviewed, reviewed, afterReviewed,
+      confirmedOnlyBatch, batchDeniedVisible, reviewedBatch, reviewedBatchVisible };
   });
   expect(result.missing.every(item => item.ok === false)).toBe(true);
   expect(result.readOnlyDenied.ok).toBe(false);
@@ -33,4 +40,8 @@ test('Assistant action aliases require reviewed writes in approved_actions mode'
   expect(result.beforeReviewed).toBe(false);
   expect(result.reviewed.ok).toBe(true);
   expect(result.afterReviewed).toBe(true);
+  expect(result.confirmedOnlyBatch.ok).toBe(false);
+  expect(result.batchDeniedVisible).toBe(false);
+  expect(result.reviewedBatch.ok).toBe(true);
+  expect(result.reviewedBatchVisible).toBe(true);
 });

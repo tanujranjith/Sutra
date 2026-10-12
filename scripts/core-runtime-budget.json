@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-12T01:12:28.638Z",
-  "reviewedReason": "Add explicit plain-text paste handling and use the full offline emoji dictionary",
-  "maxBytes": 4978698,
-  "maxLines": 87235
+  "blessedAt": "2026-10-12T01:47:39.327Z",
+  "reviewedReason": "Preserve explicit reply actions and review generated flashcards before saving",
+  "maxBytes": 4979701,
+  "maxLines": 87214
 }
