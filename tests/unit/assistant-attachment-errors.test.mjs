@@ -28,3 +28,15 @@ test('Gemini 3 payload carries native attachments and supported effort without r
   assert.equal(result.body.contents[0].parts[1].inline_data.mime_type, 'application/pdf');
   assert.equal(result.body.contents[0].parts[1].inline_data.data, 'ZmFrZQ==');
 });
+
+test('OpenAI GPT-6 sends the selected effort through its reasoning-compatible payload', async () => {
+  const build = new Function('window', extractFunction(source, 'buildProviderRequestPayload').body + ';return buildProviderRequestPayload;')({ SutraModelCapabilities: capabilities });
+  const result = await build({ provider: 'openai', model: 'gpt-6-luna', apiKey: 'fake-only', reasoningEffort: 'xhigh', maxTokens: 1024,
+    providerConfig: { type: 'openai_compatible', chatEndpoint: 'https://api.openai.com/v1/chat/completions' },
+    messages: [{ role: 'user', content: 'Explain this task' }], attachments: [] });
+  assert.equal(result.body.model, 'gpt-6-luna');
+  assert.equal(result.body.reasoning_effort, 'xhigh');
+  assert.ok(result.body.max_completion_tokens >= 24576);
+  assert.equal(result.body.max_tokens, undefined);
+  assert.equal(result.body.temperature, undefined);
+});

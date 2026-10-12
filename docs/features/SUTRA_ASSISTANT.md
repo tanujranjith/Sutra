@@ -291,12 +291,42 @@ buttons such as Save as note and Create task count as explicit reviewed actions
 and still obey the selected permission mode. Generated study flashcards are
 proposed in a review card before a deck is saved.
 
-Thinking effort is available in both the panel settings and the full Assistant's
-model picker when the selected model supports it. Gemini 3 uses model-specific
+Thinking effort is available beside the full Assistant's message box, in its
+model picker, and in panel settings when the selected model supports it. GPT-6
+families expose their supported tiers, including Extra high and Maximum;
+unavailable tiers are omitted. Gemini 3 uses model-specific
 `thinkingLevel` choices; Gemini 2.5 retains its token-budget control. Auto leaves
 the provider default unchanged. Gemini 3 image/PDF input is recognized, and
 attachment errors identify the file and reason instead of displaying an object.
 Provider contract: [Google GenerateContent thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
+
+The full Assistant model picker refreshes the selected provider on opening,
+on provider changes, and every five minutes while visible. Cached IDs remain
+usable during a failed refresh; successful catalogs replace seed IDs, including
+removals. Gemini and Anthropic pagination is followed to completion. A dropdown
+selection replaces an earlier custom ID for that provider; discovery never
+selects a model automatically. Local endpoints support model discovery too.
+Providers without a model-list API show a labeled built-in catalog.
+
+From the Assistant view, context retrieval searches the canonical workspace
+registry locally across planning, courses/files, learning/testing, college,
+life, work, custom dashboards, portfolio, and Focus templates. Notes use the
+existing permission-aware chunk index. Only matching excerpts enter the request:
+normally up to 16 records, or 40 for a general task list, followed by the shared
+request budget. Unrelated area summaries are removed. Narrow current-view and
+minimal scopes remain available; area denials, sensitive-category flags,
+locked-page consent/PIN tickets, and source exclusions still apply. Requests
+about a particular homework topic do not include every task.
+
+“What's in my to-do list?” is a deterministic local read of planner and Homework
+stores from either Assistant surface. It includes undated and distant open work,
+deduplicates Homework mirrors, and reports when a long list is shortened. Source
+receipts identify the selected workspace records, and context inspection
+previews query-selected records rather than a whole-workspace dump.
+
+Provider references: [Google model listing](https://ai.google.dev/api/models),
+[Claude model listing](https://platform.claude.com/docs/en/api/models/list), and
+[OpenAI reasoning](https://developers.openai.com/api/docs/guides/reasoning).
 If a referenced task, note, course, deck, or Timeline block changes after review,
 the entire plan fails closed as stale before its first mutation and must be
 reviewed again.

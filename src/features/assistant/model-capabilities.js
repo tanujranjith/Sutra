@@ -404,7 +404,7 @@
 
     // OpenAI reasoning models that take `reasoning_effort` (o1/o3/o4 + gpt-5).
     // o1-mini / o1-preview do NOT accept the parameter, so they are excluded.
-    var OPENAI_EFFORT_PATTERN = /gpt-?5|(?:^|[^a-z0-9])o[34](?:[^a-z0-9]|$)|(?:^|[^a-z0-9])o1(?![-\s]?(?:mini|preview))/i;
+    var OPENAI_EFFORT_PATTERN = /gpt-?[56]|(?:^|[^a-z0-9])o[34](?:[^a-z0-9]|$)|(?:^|[^a-z0-9])o1(?![-\s]?(?:mini|preview))/i;
     // gpt-5 family additionally exposes the 'minimal' tier.
     var OPENAI_MINIMAL_PATTERN = /gpt-?5/i;
     // Groq exposes `reasoning_effort` (low/medium/high) ONLY on the gpt-oss
@@ -430,7 +430,7 @@
     var THINK_BUDGET_TOKENS = { low: 2048, medium: 6144, high: 12288 };
     // Completion-cap floors for the effort-style providers, raised so reasoning
     // tokens do not starve the final answer (the chat default is only 1024).
-    var EFFORT_OUTPUT_FLOOR = { minimal: 2048, low: 4096, medium: 8192, high: 16384 };
+    var EFFORT_OUTPUT_FLOOR = { none: 2048, minimal: 2048, low: 4096, medium: 8192, high: 16384, xhigh: 24576, max: 32768 };
     // Headroom left for the visible answer on top of the thinking budget.
     var THINK_ANSWER_HEADROOM = 4096;
 
@@ -448,6 +448,11 @@
 
         if (p === 'openai' && OPENAI_EFFORT_PATTERN.test(m)) {
             var levels = OPENAI_MINIMAL_PATTERN.test(m) ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
+            if (/gpt-?6/i.test(m)) {
+                levels = ['low', 'medium', 'high', 'xhigh', 'max'];
+                if (!/gpt-?6\.1-sol/i.test(m)) levels.unshift('minimal');
+                if (!/gpt-?6(?:\.1-sol|-astra)/i.test(m)) levels.unshift('none');
+            }
             return { supported: true, style: 'openai_effort', levels: levels, supportsOff: false, defaultLevel: 'medium' };
         }
         if (p === 'groq' && GROQ_EFFORT_PATTERN.test(m)) {
@@ -554,7 +559,7 @@
     var CAPABILITY_VERIFICATION = [
         { id: 'groq-reasoning-effort', provider: 'groq', capability: 'reasoning_effort', verifiedOn: '2026-06-01', source: 'console.groq.com/docs/reasoning', note: 'reasoning_effort only on gpt-oss models' },
         { id: 'anthropic-extended-thinking', provider: 'anthropic', capability: 'extended_thinking', verifiedOn: '2026-06-01', source: 'platform.claude.com extended-thinking docs', note: 'adaptive on 4.6+/5.x; manual budget_tokens on 3.7 & 4.0-4.5' },
-        { id: 'openai-reasoning-effort', provider: 'openai', capability: 'reasoning_effort', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENAI_EFFORT_PATTERN', note: 'o1/o3/o4 + gpt-5; o1-mini/preview excluded; gpt-5 adds minimal' },
+        { id: 'openai-reasoning-effort', provider: 'openai', capability: 'reasoning_effort', verifiedOn: '2026-10-11', source: 'https://developers.openai.com/api/docs/guides/reasoning', note: 'o1/o3/o4 + GPT-5/6; GPT-6 Astra excludes none; GPT-6.1 Sol excludes none/minimal' },
         { id: 'openrouter-reasoning', provider: 'openrouter', capability: 'reasoning', verifiedOn: '2026-06-01', source: 'in-repo pattern OPENROUTER_REASONING_PATTERN', note: 'unified reasoning control across most reasoning families' },
         { id: 'gemini-thinking-budget', provider: 'gemini', capability: 'thinking_budget', verifiedOn: '2026-06-01', source: 'in-repo pattern GEMINI_THINKING_PATTERN', note: 'gemini-2.5 family + flash-thinking' },
         { id: 'gemini-thinking-level', provider: 'gemini', capability: 'thinking_level', verifiedOn: '2026-10-11', source: 'https://ai.google.dev/gemini-api/docs/generate-content/thinking', note: 'Gemini 3 GenerateContent thinkingLevel; tiers vary by model; no full off' },

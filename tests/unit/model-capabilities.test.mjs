@@ -5,6 +5,19 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const capabilities = require('../../src/features/assistant/model-capabilities.js');
 
+test('current OpenAI reasoning families expose supported effort levels', () => {
+  for (const model of ['gpt-6-luna', 'gpt-6-sol', 'gpt-6-astra', 'gpt-6.1-sol']) {
+    const cap = capabilities.resolveReasoningCapability('openai', model);
+    assert.equal(cap.supported, true);
+    assert.ok(cap.levels.includes('xhigh'));
+    assert.equal(capabilities.resolveReasoningPlan('openai', model, 'max').effort, 'max');
+  }
+  assert.ok(capabilities.resolveReasoningCapability('openai', 'gpt-6-luna').levels.includes('none'));
+  assert.ok(!capabilities.resolveReasoningCapability('openai', 'gpt-6-astra').levels.includes('none'));
+  assert.ok(!capabilities.resolveReasoningCapability('openai', 'gpt-6.1-sol').levels.includes('minimal'));
+  assert.equal(capabilities.resolveReasoningCapability('gemini', 'gemma-example').supported, false);
+});
+
 test('Gemini 3 attachments and model-specific effort tiers are supported', () => {
   for (const model of ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.8-flash']) {
     assert.equal(capabilities.resolveModelCapabilities('gemini', model).modalities.images, true);

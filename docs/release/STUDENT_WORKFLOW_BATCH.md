@@ -69,6 +69,14 @@ Assistant, integrations, and Cloud Sync.
 
 ## Owner review before remote validation
 
+Validation follow-ups repair the header's mirrored-space clipping, stale custom
+model overrides, provider catalog refresh/pagination, and missing GPT-6 effort
+controls. Thinking effort is visible beside the full Assistant composer. Task-list
+questions read canonical task stores locally; other full-Assistant questions
+select matching workspace records under the existing privacy and token-budget
+boundaries. Model selection, reload, catalog pagination, permissions, and selective
+context regressions are authored for CI; they have not run locally.
+
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.
 The optional full-browser matrix should cover Firefox, WebKit, and responsive

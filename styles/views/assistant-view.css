@@ -538,6 +538,27 @@ body.motion-off .asst-thinking-bubble::after { animation: none; }
 body.motion-off .asst-thinking-label { -webkit-text-fill-color: currentColor; color: var(--asst-text-dim); background: none; animation: none; }
 
 /* Quick-action chips */
+.asst-reasoning-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--asst-text-dim);
+    font-size: 0.8rem;
+}
+.asst-reasoning-row[hidden] { display: none; }
+.asst-reasoning-row select {
+    min-height: 44px;
+    max-width: 100%;
+    padding: 6px 12px;
+    border: 1px solid var(--asst-line);
+    border-radius: 12px;
+    background: var(--asst-glass);
+    color: var(--asst-text);
+    font: inherit;
+}
+.asst-reasoning-row select:focus-visible { outline: 2px solid var(--asst-accent); outline-offset: 2px; }
 .asst-chips {
     position: relative;
     z-index: 2;

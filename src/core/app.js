@@ -4228,7 +4228,7 @@ function populateProgressDashboard() {
                     requireApprovalForActions: assistantSource.requireApprovalForActions !== false,
                     includeSelectionByDefault: assistantSource.includeSelectionByDefault !== false,
                     localRouting: assistantSource.localRouting !== false,
-                    reasoningEffort: normalizeSettingChoice(assistantSource.reasoningEffort, ['auto', 'off', 'minimal', 'low', 'medium', 'high'], defaults.assistant.reasoningEffort),
+                    reasoningEffort: normalizeSettingChoice(assistantSource.reasoningEffort, ['auto', 'off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], defaults.assistant.reasoningEffort),
                     personalization: {
                         nickname: String(assistantPersonalizationSource.nickname || '').trim().slice(0, 60),
                         persona: normalizeSettingChoice(assistantPersonalizationSource.persona, ['balanced', 'encouraging', 'direct', 'socratic', 'formal'], defaults.assistant.personalization.persona),
@@ -73106,6 +73106,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function setModelForProvider(provider, model) {
             const map = getModelMap();
             map[provider] = String(model || '').trim();
+            // An explicit dropdown selection replaces an older custom override.
+            setCustomModelForProvider(provider, '');
+            if (provider === getCurrentChatProvider()) {
+                if (chatCustomModelInput) chatCustomModelInput.value = '';
+                if (chatModelSelect) chatModelSelect.value = map[provider];
+            }
             if (window.SutraSafeStorage) window.SutraSafeStorage.set(CHAT_MODEL_MAP_KEY, JSON.stringify(map), { importance: 'optional' });
             else { try { localStorage.setItem(CHAT_MODEL_MAP_KEY, JSON.stringify(map)); } catch (e) { /* optional */ } }
         }
@@ -73132,14 +73138,16 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const config = CHAT_PROVIDER_CONFIG[provider];
             if (!config) return [];
             const cacheKey = `chat_models_cache_${provider}`;
-            let list = [];
+            let list = null;
             try {
-                const parsed = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+                const raw = localStorage.getItem(cacheKey);
+                const parsed = raw == null ? null : JSON.parse(raw);
                 if (Array.isArray(parsed)) list = parsed;
             } catch (error) {
                 console.warn(`Unable to parse cached models for ${provider}`, error);
             }
-            const merged = [...(config.models || []), ...list]
+            // A successful live catalog replaces seed IDs, including removals.
+            const merged = (list === null ? (config.models || []) : list)
                 .map(model => String(model || '').trim())
                 .filter(Boolean);
             return Array.from(new Set(merged))
@@ -73203,7 +73211,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         // accepts a reasoning/thinking control, and offers exactly the levels
         // that model supports. Hidden (and inert) for everything else, so the
         // request is sent unchanged when there is no real control to expose.
-        const REASONING_LEVEL_LABELS = { auto: 'Auto', off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High' };
+        const REASONING_LEVEL_LABELS = { auto: 'Auto', off: 'Off', none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum' };
         // `els` defaults to the floating panel's row/select/note; the full-screen
         // tab's model picker passes its OWN elements so both surfaces share this
         // one implementation instead of drifting apart with separate copies.
@@ -73253,34 +73261,52 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function fetchProviderModels(provider, apiKey) {
             const config = CHAT_PROVIDER_CONFIG[provider];
-            if (!config || !apiKey) return [];
+            if (!config) return [];
+            if (provider === 'local') {
+                const local = getWorkspacePreference('assistant.localEndpoint', {}) || {};
+                const base = String(local.baseUrl || '').trim().replace(/\/+$/, '');
+                if (!base) throw new Error('Configure the local endpoint base URL first.');
+                const response = await fetch(base + '/models', { method: 'GET', headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {} });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+                return (Array.isArray(data.data) ? data.data : Array.isArray(data.models) ? data.models : [])
+                    .map(item => String(item && (item.id || item.name) || '').trim()).filter(Boolean);
+            }
             // Providers with no model-listing API (e.g. Perplexity) ship a static
             // list in config.models — return it so "Refresh" still works.
             if (!String(config.modelsEndpoint || '').trim()) {
                 return Array.isArray(config.models) ? config.models.slice() : [];
             }
-            if (provider === 'gemini') {
-                const url = `${config.modelsEndpoint}?key=${encodeURIComponent(apiKey)}&pageSize=200`;
-                const resp = await fetch(url, { method: 'GET' });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-                return (Array.isArray(data.models) ? data.models : [])
-                    .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'))
-                    .map(model => normalizeModelIdFromGeminiName(model.name))
-                    .filter(Boolean);
-            }
-
-            if (provider === 'anthropic') {
-                const resp = await fetch(config.modelsEndpoint, {
-                    method: 'GET',
-                    headers: {
-                        'anthropic-version': '2023-06-01',
-                        'x-api-key': apiKey
+            if (!apiKey) return [];
+            if (provider === 'gemini' || provider === 'anthropic') {
+                const models = [];
+                const seen = new Set();
+                let cursor = '';
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 20000);
+                try {
+                    for (let page = 0; page < 100; page += 1) {
+                        const url = new URL(config.modelsEndpoint);
+                        const headers = provider === 'gemini'
+                            ? { 'x-goog-api-key': apiKey }
+                            : { 'anthropic-version': '2023-06-01', 'x-api-key': apiKey, 'anthropic-dangerous-direct-browser-access': 'true' };
+                        url.searchParams.set(provider === 'gemini' ? 'pageSize' : 'limit', provider === 'gemini' ? '1000' : '100');
+                        if (cursor) url.searchParams.set(provider === 'gemini' ? 'pageToken' : 'after_id', cursor);
+                        const resp = await fetch(url.toString(), { method: 'GET', headers, signal: controller.signal });
+                        const data = await resp.json();
+                        if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+                        const rows = provider === 'gemini' ? (data.models || []) : (data.data || []);
+                        if (!Array.isArray(rows)) throw new Error('Provider returned an invalid model list.');
+                        models.push(...rows.filter(model => provider !== 'gemini' || (Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent')))
+                            .map(model => provider === 'gemini' ? normalizeModelIdFromGeminiName(model.name) : String(model.id || '').trim()).filter(Boolean));
+                        const next = provider === 'gemini' ? String(data.nextPageToken || '') : (data.has_more ? String(data.last_id || '') : '');
+                        if (!next && !(provider === 'anthropic' && data.has_more)) return Array.from(new Set(models));
+                        if (!next || seen.has(next)) throw new Error('Provider model pagination did not advance.');
+                        seen.add(next);
+                        cursor = next;
                     }
-                });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
-                return (Array.isArray(data.data) ? data.data : []).map(model => String(model?.id || '').trim()).filter(Boolean);
+                    throw new Error('Provider model list exceeded the pagination limit.');
+                } finally { clearTimeout(timeout); }
             }
 
             const headers = { Authorization: `Bearer ${apiKey}` };
@@ -73293,16 +73319,14 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
             const modelRows = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
             const all = modelRows.map(model => String(model?.id || '').trim()).filter(Boolean);
-            if (provider === 'openai') {
-                return all.filter(model => /gpt|o\d|omni|mini|nano/i.test(model));
-            }
             return all;
         }
 
-        async function refreshModelsForCurrentProvider() {
+        async function refreshModelsForCurrentProvider(options = {}) {
             const provider = getCurrentChatProvider();
             const apiKey = getProviderApiKey(provider);
-            if (!apiKey) {
+            if (!apiKey && provider !== 'local') {
+                if (options.automatic === true) return;
                 showToast(`Save a ${CHAT_PROVIDER_CONFIG[provider].label} API key in Settings first`);
                 openProviderKeySettings();
                 return;
@@ -73313,15 +73337,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             try {
                 const fetched = await fetchProviderModels(provider, apiKey);
+                cacheModels(provider, fetched);
+                if (provider !== getCurrentChatProvider()) return;
+                renderModelOptions(provider);
+                syncReasoningControl(provider);
                 if (fetched.length) {
-                    cacheModels(provider, fetched);
-                    renderModelOptions(provider);
-                    showToast(`Loaded ${fetched.length} models for ${CHAT_PROVIDER_CONFIG[provider].label}`);
-                } else {
+                    if (options.automatic !== true) showToast(`Loaded ${fetched.length} models for ${CHAT_PROVIDER_CONFIG[provider].label}`);
+                } else if (options.automatic !== true) {
                     showToast(`No models returned by ${CHAT_PROVIDER_CONFIG[provider].label}`);
                 }
             } catch (error) {
-                showToast(`Model refresh failed: ${error.message}`);
+                if (options.automatic !== true) showToast(`Model refresh failed: ${error.message}`);
             } finally {
                 if (refreshChatModelsBtn) {
                     refreshChatModelsBtn.disabled = false;
@@ -73386,6 +73412,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 const activeProvider = getCurrentChatProvider();
                 populateKeyInputsFromStorage();
                 syncProviderUi(activeProvider);
+                refreshModelsForCurrentProvider({ automatic: true });
                 try { if (window.flowAssistant && typeof window.flowAssistant.refresh === 'function') window.flowAssistant.refresh(); } catch (e) { /* non-critical */ }
                 playAssistantOpenSparkles();
                 setTimeout(()=> chatInput.focus(), 120);
@@ -75017,6 +75044,10 @@ ${cspMeta}
             const budget = enrichment && enrichment.contextBudget;
             const areas = Array.isArray(access.areasRead) ? access.areasRead : [];
             const sources = (enrichment && Array.isArray(enrichment.sources) ? enrichment.sources : []).map(source => ({ kind: 'note', id: source.noteId, title: source.title, updatedAt: source.updatedAt, version: source.version, href: 'sutra://page/' + encodeURIComponent(source.noteId || ''), status: source.stale ? 'stale' : 'available' }));
+            ['tasks', 'homework', 'workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+                (Array.isArray(ctx[key]) ? ctx[key] : []).forEach(row => sources.push({ kind: row.type || key, id: row.id, title: row.title,
+                    href: row.type === 'task' || row.type === 'homework' ? 'sutra://' + row.type + '/' + encodeURIComponent(row.id) : '', status: 'available' }));
+            });
             const categories = ['message'].concat(areas);
             if (ctx.selection) categories.push('selected text');
             if (messages.length > 1) categories.push('recent conversation');
@@ -75361,11 +75392,9 @@ ${cspMeta}
         }
 
         function getActiveModelForProvider(provider) {
-            const customValue = chatCustomModelInput ? String(chatCustomModelInput.value || '').trim() : '';
-            if (customValue) return customValue;
-            const selected = chatModelSelect ? String(chatModelSelect.value || '').trim() : '';
-            if (selected) return selected;
-            return '';
+            // Both Assistant surfaces read the same provider-scoped selection.
+            // Hidden controls may still belong to a different provider.
+            return getSelectedModelForProvider(provider);
         }
 
         // =====================================================================
@@ -79466,6 +79495,7 @@ ${cspMeta}
             chatProviderSelect.addEventListener('change', () => {
                 const provider = getCurrentChatProvider();
                 syncProviderUi(provider);
+                refreshModelsForCurrentProvider({ automatic: true });
             });
         }
         if (chatModelSelect) {
@@ -80257,6 +80287,10 @@ ${cspMeta}
 
         // ── Topbar (title + model chip + export/clear) ───────────────────────
         function asstUpdateTopbar() {
+            syncReasoningControl(getCurrentChatProvider(), {
+                row: document.getElementById('asstReasoningRow'),
+                select: document.getElementById('asstReasoningSelect')
+            });
             const current = chatStore.conversations.find(c => c && c.id === currentChatId);
             if (asstCache.topbarTitle) {
                 asstCache.topbarTitle.textContent = (current && current.title) ? current.title : 'New chat';
@@ -80410,7 +80444,9 @@ ${cspMeta}
 
         // ── Model / provider picker popover ──────────────────────────────────
         function asstCloseModelPicker() {
-            document.getElementById('asstModelPop')?.remove();
+            const pop = document.getElementById('asstModelPop');
+            if (pop && typeof pop.disposeModelRefresh === 'function') pop.disposeModelRefresh();
+            pop?.remove();
             if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'false');
         }
         function asstOpenModelPicker() {
@@ -80430,6 +80466,7 @@ ${cspMeta}
             provLabel.textContent = 'Provider';
             pop.appendChild(provLabel);
             const provSel = document.createElement('select');
+            provSel.setAttribute('aria-label', 'AI provider');
             const curProvider = getCurrentChatProvider();
             Object.keys(CHAT_PROVIDER_CONFIG).forEach(key => {
                 const opt = document.createElement('option');
@@ -80452,6 +80489,7 @@ ${cspMeta}
             modSearch.setAttribute('aria-label', 'Search models');
             pop.appendChild(modSearch);
             const modSel = document.createElement('select');
+            modSel.setAttribute('aria-label', 'Model');
             pop.appendChild(modSel);
 
             const fillModels = (provider) => {
@@ -80513,14 +80551,19 @@ ${cspMeta}
             refreshRow.appendChild(refreshBtn);
             pop.appendChild(refreshRow);
 
-            const doRefresh = async () => {
+            let refreshSequence = 0;
+            const doRefresh = async (automatic = false) => {
                 const provider = provSel.value;
-                if (provider === 'local') {
-                    if (typeof showToast === 'function') showToast('Local models come from your endpoint — type the model ID below.');
-                    return;
-                }
+                const request = ++refreshSequence;
+                refreshBtn.disabled = false;
+                refreshIcon.classList.remove('fa-spin');
+                const config = CHAT_PROVIDER_CONFIG[provider];
+                const live = provider === 'local' || !!config.modelsEndpoint;
+                if (!live) { refreshLabel.textContent = 'Built-in catalog — provider has no model-list API'; return; }
                 const apiKey = getProviderApiKey(provider);
-                if (!apiKey) {
+                if (!apiKey && provider !== 'local') {
+                    refreshLabel.textContent = 'Add an API key to load current models';
+                    if (automatic) return;
                     if (typeof showToast === 'function') showToast('Add a ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' API key first.');
                     asstCloseModelPicker();
                     try { openProviderKeySettings(); } catch (e) { /* non-critical */ }
@@ -80531,42 +80574,47 @@ ${cspMeta}
                 refreshLabel.textContent = 'Loading…';
                 try {
                     const fetched = await fetchProviderModels(provider, apiKey);
+                    cacheModels(provider, fetched);
+                    if (!pop.isConnected || request !== refreshSequence || provider !== provSel.value) return;
                     if (fetched && fetched.length) {
-                        cacheModels(provider, fetched);
                         if (typeof renderModelOptions === 'function' && provider === getCurrentChatProvider()) renderModelOptions(provider);
                         fillModels(provider);
                         refreshLabel.textContent = 'Loaded ' + fetched.length + ' models';
-                        if (typeof showToast === 'function') showToast('Loaded ' + fetched.length + ' ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' models.');
+                        if (!automatic && typeof showToast === 'function') showToast('Loaded ' + fetched.length + ' ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + ' models.');
                     } else {
                         refreshLabel.textContent = 'No models returned';
-                        if (typeof showToast === 'function') showToast('No models returned by ' + (CHAT_PROVIDER_CONFIG[provider].label || provider) + '.');
+                        fillModels(provider);
                     }
                 } catch (err) {
+                    if (!pop.isConnected || request !== refreshSequence || provider !== provSel.value) return;
                     refreshLabel.textContent = 'Refresh failed';
-                    if (typeof showToast === 'function') showToast('Model refresh failed: ' + (err && err.message ? err.message : 'unknown error'));
+                    if (!automatic && typeof showToast === 'function') showToast('Model refresh failed: ' + (err && err.message ? err.message : 'unknown error'));
                 } finally {
-                    refreshIcon.classList.remove('fa-spin');
-                    refreshBtn.disabled = false;
-                    setTimeout(() => { if (refreshLabel.isConnected) refreshLabel.textContent = 'Refresh model list'; }, 2500);
+                    if (request === refreshSequence) {
+                        refreshIcon.classList.remove('fa-spin');
+                        refreshBtn.disabled = false;
+                    }
                 }
             };
-            refreshBtn.addEventListener('click', doRefresh);
+            refreshBtn.addEventListener('click', () => doRefresh(false));
 
             provSel.addEventListener('change', () => {
                 const next = provSel.value;
                 try { syncProviderUi(next); } catch (e) { setCurrentChatProvider(next); }
                 modSearch.value = '';
+                customInput.value = getSelectedCustomModel(next) || '';
                 fillModels(next);
                 asstUpdateTopbar();
-                // Auto-refresh if this provider has a key but no cached models yet.
-                try {
-                    if (next !== 'local' && getProviderApiKey(next) && !getCachedModels(next).length) doRefresh();
-                } catch (e) { /* non-critical */ }
+                syncReasoningControl(next, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
+                doRefresh(true);
             });
             modSel.addEventListener('change', () => {
                 const provider = provSel.value;
                 const model = String(modSel.value || '').trim();
-                if (model) { try { setModelForProvider(provider, model); } catch (e) { /* non-critical */ } }
+                if (model) {
+                    setModelForProvider(provider, model);
+                    customInput.value = '';
+                }
                 if (chatModelSelect && provider === getCurrentChatProvider()) { try { chatModelSelect.value = model; } catch (e) {} }
                 asstUpdateTopbar();
                 syncReasoningControl(provider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
@@ -80624,14 +80672,9 @@ ${cspMeta}
                 const value = String(reasoningSel.value || 'auto').toLowerCase();
                 setWorkspacePreference('assistant.reasoningEffort', value, { refresh: false });
                 if (chatReasoningSelect) { try { chatReasoningSelect.value = value; } catch (e) {} }
+                asstUpdateTopbar();
             });
             syncReasoningControl(curProvider, { row: reasoningRow, select: reasoningSel, note: reasoningNote });
-
-            // First-open convenience: if the current provider has a key but the
-            // dropdown is empty, pull the list immediately so it's never blank.
-            try {
-                if (curProvider !== 'local' && getProviderApiKey(curProvider) && !getCachedModels(curProvider).length) doRefresh();
-            } catch (e) { /* non-critical */ }
 
             const savedNote = document.createElement('p');
             savedNote.className = 'asst-model-pop-hint';
@@ -80653,6 +80696,18 @@ ${cspMeta}
             pop.appendChild(hint);
 
             topbar.appendChild(pop);
+            // Refresh even when cached models exist. Stop polling on close and
+            // while hidden; opening the picker is the network opt-in surface.
+            const autoRefresh = () => {
+                if (pop.isConnected && pop.getClientRects().length && !document.hidden && !refreshBtn.disabled) doRefresh(true);
+            };
+            const modelRefreshTimer = setInterval(autoRefresh, 5 * 60 * 1000);
+            document.addEventListener('visibilitychange', autoRefresh);
+            pop.disposeModelRefresh = () => {
+                clearInterval(modelRefreshTimer);
+                document.removeEventListener('visibilitychange', autoRefresh);
+                document.removeEventListener('click', dismiss, true);
+            };
             if (asstCache.modelBtn) asstCache.modelBtn.setAttribute('aria-expanded', 'true');
             const dismiss = (e) => {
                 if (!pop.contains(e.target) && e.target !== asstCache.modelBtn && !asstCache.modelBtn.contains(e.target)) {
@@ -80661,6 +80716,7 @@ ${cspMeta}
                 }
             };
             setTimeout(() => document.addEventListener('click', dismiss, true), 0);
+            autoRefresh();
         }
 
         // ── Context attachment helpers ───────────────────────────────────────
@@ -81410,6 +81466,12 @@ ${cspMeta}
         function asstInitView() {
             asstCache = asstReadEls();
             if (!asstCache.shell) return; // view markup absent
+            const effortSelect = document.getElementById('asstReasoningSelect');
+            if (effortSelect) effortSelect.addEventListener('change', () => {
+                setWorkspacePreference('assistant.reasoningEffort', effortSelect.value, { refresh: false });
+                syncReasoningControl(getCurrentChatProvider());
+                asstUpdateTopbar();
+            });
             asstRenderChips();
             if (asstCache.newBtn) {
                 asstCache.newBtn.addEventListener('click', () => {

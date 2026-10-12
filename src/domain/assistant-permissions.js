@@ -5,6 +5,8 @@
   var MODES = ['off', 'read_only', 'ask_per_area', 'approved_actions'];
   var adapter = null;
   var KEY_AREAS = {
+    workspacePlanning: 'planning', workspaceCourses: 'courses', workspaceLearning: 'learning',
+    workspaceCollege: 'college', workspaceLife: 'life', workspaceBusiness: 'business', workspaceOverview: 'workspace', workspaceRetrieval: 'workspace',
     activeNote: 'notes', selection: 'notes', canvas: 'notes', slides: 'notes', staleNotes: 'notes',
     tasks: 'planning', homework: 'planning', timelineUpcoming: 'planning', timelineToday: 'planning', timeline: 'planning', deadlines: 'planning', allDue: 'planning', derived: 'planning',
     review: 'learning', apStudy: 'learning', cram: 'learning', testingHub: 'learning',

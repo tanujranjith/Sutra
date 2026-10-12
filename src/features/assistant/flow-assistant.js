@@ -1345,6 +1345,7 @@
             'Formatting Sutra understands: standard Markdown — **bold**, *italics*, `inline code`, fenced ``` code blocks, bullet and numbered lists, # headings, > blockquotes, [links](url), and tables.',
             'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
             'When the user asks about "this note" or "this view", use the context block below.',
+            'Sutra searches locally for each question. Relevant records appear in tasks, homework, retrievedNotes, and workspacePlanning/Courses/Learning/College/Life/Business/Overview. Each record has a real id and type. These are selected excerpts, not the entire workspace. If workspaceRetrieval.matchedCount exceeds selectedCount or contextBudget.reduced is true, disclose that the list is partial and offer to narrow it. Do not claim an empty selected result means the whole workspace is empty, or tell the user to switch views when relevant records are already present.',
             'Citing your sources: when an answer draws on a specific item that is present in the context — especially context.retrievedNotes, activeNote, a task, homework assignment, or exam — cite it inline as [short label](sutra://KIND/ID). KIND is one of page, task, homework, exam. For retrievedNotes use KIND page and the EXACT noteId. Use only ids present in context; NEVER invent an id or cite absent evidence. Prefer the quoted span and heading supplied by retrievedNotes, call out stale or conflicting evidence, and clearly say when notesEvidenceStatus is missing or limited. Cite the 1–3 sources the answer most depends on. Do not put citations inside flow-actions or cite a brand-new item.',
             ...buildPersonalizationLines()
         ].join('\n');
@@ -4924,6 +4925,86 @@
         });
     }
 
+    // Search the canonical registry locally, then send a small set of relevant
+    // records. No second workspace store or wholesale export goes to a model.
+    function selectRelevantWorkspaceContext(userText, options = {}) {
+        const registry = window.SutraWorkspaceEntityRegistry;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!registry || !privacy || typeof registry.collectSearchable !== 'function' || typeof privacy.canRead !== 'function') return null;
+        const mapping = {
+            task: ['planning', 'tasks'], homework: ['planning', 'homework'],
+            assignment_milestone: ['planning', 'workspacePlanning'], timeline_block: ['planning', 'workspacePlanning'],
+            course: ['courses', 'workspaceCourses'], course_file: ['courses', 'workspaceCourses'], grade_record: ['courses', 'workspaceCourses'],
+            review_deck: ['learning', 'workspaceLearning'], review_card: ['learning', 'workspaceLearning'],
+            academic_record: ['learning', 'workspaceLearning'], study_record: ['learning', 'workspaceLearning'],
+            testing_exam: ['learning', 'workspaceLearning'], testing_mistake: ['learning', 'workspaceLearning'],
+            college_record: ['college', 'workspaceCollege'], life_record: ['life', 'workspaceLife'], habit: ['life', 'workspaceLife'],
+            business_record: ['business', 'workspaceBusiness'], custom_tab: ['workspace', 'workspaceOverview'],
+            portfolio_entry: ['workspace', 'workspaceOverview'], focus_template: ['workspace', 'workspaceOverview']
+        };
+        const query = String(userText || '').toLowerCase();
+        const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your'.split(' '));
+        const todo = /\b(?:to[ -]?do|task(?:s| list)?|homework|assignments?)\b/i.test(query);
+        if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo'].forEach(term => stop.add(term));
+        const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
+        const taskList = todo && terms.length === 0;
+        const planning = /\b(?:plan|schedule|due|overdue|today|tomorrow|week|priorit|next step|what should i do)\b/i.test(query);
+        const completed = /\b(?:completed|finished|done|archived)\b/i.test(query);
+        const permissions = privacy.getPermissions();
+        const allowedTypes = Object.keys(mapping).filter(type => privacy.canRead(mapping[type][0], options));
+        if (!allowedTypes.length) return {};
+        const scope = options.scope || options.conversationScope || {};
+        const excluded = new Set([].concat(scope.excludedSourceIds || [], scope.excludedNoteIds || []).map(String));
+        let records;
+        try { records = registry.collectSearchable({}, { types: allowedTypes, includePrivate: permissions.allowPrivateDocuments === true }); }
+        catch (error) { return null; }
+        const ranked = records.map(entity => {
+            const target = mapping[entity.type];
+            if (!target || !privacy.canRead(target[0], options) || excluded.has(String(entity.key)) || excluded.has(String(entity.id))) return null;
+            if (entity.privacy && entity.privacy.locked) return null;
+            const meta = entity.metadata || {};
+            const category = [meta.collection, meta.domain].join(' ');
+            if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return null;
+            if (!permissions.allowWellness && /wellness|checkins|journalentries|fitness|calories/i.test(category)) return null;
+            if (!permissions.allowPrivateDocuments && /journals|documents/i.test(category)) return null;
+            const isTask = entity.type === 'task' || entity.type === 'homework';
+            if (isTask && !completed && /^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
+            if (isTask && completed && !/^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
+            const title = String(entity.title || '').toLowerCase();
+            const text = [entity.text || '', entity.status || '', ...(entity.keywords || [])].join(' ').toLowerCase();
+            let score = terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
+            if (taskList && isTask) score += 40;
+            if (planning && target[0] === 'planning') score += 15;
+            if (score === 0) return null;
+            const match = terms.map(term => text.indexOf(term)).filter(index => index >= 0).sort((a, b) => a - b)[0] || 0;
+            return { entity, target, score, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
+        }).filter(Boolean).sort((a, b) => b.score - a.score || String(a.entity.dates && a.entity.dates.due || '9999').localeCompare(String(b.entity.dates && b.entity.dates.due || '9999')) || String(a.entity.key).localeCompare(String(b.entity.key)));
+        const result = {};
+        ranked.slice(0, taskList ? 40 : 16).forEach(({ entity, target, score, excerpt }) => {
+            if (!result[target[1]]) result[target[1]] = [];
+            result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
+                excerpt, dueDate: entity.dates && entity.dates.due || '', status: entity.status,
+                courseId: entity.courseId || '', relevance: score });
+        });
+        result.workspaceRetrieval = { matchedCount: ranked.length, selectedCount: Math.min(ranked.length, taskList ? 40 : 16), limit: taskList ? 40 : 16 };
+        return result;
+    }
+
+    function applyRelevantWorkspaceContext(ctx, userText, options = {}) {
+        if (ctx.depth === 'minimal' || (ctx.depth === 'currentView' && ctx.view !== 'assistantview')) return ctx;
+        const relevant = selectRelevantWorkspaceContext(userText, options);
+        if (!relevant) return ctx;
+        if (ctx.depth === 'currentView' && ctx.view === 'assistantview') ctx.depth = 'workspace';
+        const derived = ctx.derived;
+        ['tasks', 'homework', 'timelineUpcoming', 'timelineToday', 'timeline', 'deadlines', 'review', 'apStudy', 'college', 'life', 'business', 'cram', 'courses', 'allDue', 'testingHub', 'derived', 'customTab'].forEach(key => { delete ctx[key]; });
+        Object.assign(ctx, relevant);
+        if (/\b(?:plan|schedule|due|overdue|priorities|next step|what should i do)\b/i.test(userText) && derived) ctx.derived = derived;
+        if (!/\b(?:this|current|open|active)\s+(?:note|page|canvas|slides?)\b/i.test(userText) && !ctx.selection) {
+            delete ctx.activeNote; delete ctx.canvas; delete ctx.slides;
+        }
+        return ctx;
+    }
+
     function buildRequestEnrichment(userText, providerType, options = {}) {
         if (getPref('assistant.enabled', true) === false) return null;
         lastUserPrompt = String(userText || '');
@@ -4933,7 +5014,7 @@
             authorizedPageIds: currentLockedPageAccessIds({ lockedPageAccessTicket: accessTicket })
         });
         if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
-        let ctx = getFlowAssistantContext(accessOptions);
+        let ctx = applyRelevantWorkspaceContext(getFlowAssistantContext(accessOptions), userText, accessOptions);
         // Product-aware context: attach a SMALL set of relevant saved memories
         // and verified product-knowledge snippets so the model stays accurate
         // and personalized without a giant static prompt. Never dump everything.
@@ -4990,7 +5071,9 @@
                 explicitTargets: options.explicitTargets || [],
                 currentScreen,
                 selectedText: ctx.selection ? [{ id: 'selection', kind: 'selection', title: 'Selected text', value: ctx.selection, priority: 92 }] : [],
-                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.noteId, kind: 'note', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' })),
+                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.noteId, kind: 'note', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' }))
+                    .concat(['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].flatMap(key =>
+                        (ctx[key] || []).map(source => ({ id: source.key, kind: 'workspace-record', title: source.title, value: source, priority: 75, reason: 'Matches this question in ' + key.replace('workspace', '') })))),
                 course: ctx.course ? [{ id: ctx.course.id || ctx.course.name, kind: 'course', title: ctx.course.name, value: ctx.course }] : [],
                 dueWork: [].concat(ctx.tasks || [], ctx.homework || [], ctx.derived && ctx.derived.overdue || []).map(item => ({ id: item.id, kind: 'due-work', title: item.title || item.name, value: item })),
                 memories: (ctx.memory || []).map((text, index) => ({ id: memoryIds[index] || ('memory-' + index), kind: 'memory', title: 'Relevant saved memory', value: text })),
@@ -5023,6 +5106,9 @@
                 if (row) ctx.course = row.value; else delete ctx.course;
             }
             if (Array.isArray(ctx.retrievedNotes)) ctx.retrievedNotes = ctx.retrievedNotes.map(source => includedRows.get('note:' + source.noteId)).filter(Boolean).map(row => row.value);
+            ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+                if (Array.isArray(ctx[key])) ctx[key] = ctx[key].map(source => includedRows.get('workspace-record:' + source.key)).filter(Boolean).map(row => row.value);
+            });
             const budgetDueList = list => (Array.isArray(list) ? list : []).map(item => includedRows.get('due-work:' + item.id)).filter(Boolean).map(row => row.value);
             if (Array.isArray(ctx.tasks)) ctx.tasks = budgetDueList(ctx.tasks);
             if (Array.isArray(ctx.homework)) ctx.homework = budgetDueList(ctx.homework);
@@ -5054,7 +5140,8 @@
         // and budget diagnostics are Sutra-owned metadata, not workspace data.
         const trustedEnrichment = {
             productKnowledge: ctx.productKnowledge,
-            contextBudget: ctx.contextBudget
+            contextBudget: ctx.contextBudget,
+            contextSelectionReasons: ctx.contextSelectionReasons
         };
         ctx = filterAssistantContext(ctx, accessOptions);
         Object.keys(trustedEnrichment).forEach(key => {
@@ -6568,6 +6655,25 @@
     // --------------------------------------------------------------
     // Returns { handled:true, message } when it recognized & executed a command,
     // otherwise { handled:false } so the caller sends the text to the model.
+    function tryReadTodoList(userText) {
+        if (!/^(?:what(?:['’]?s| is) (?:in|on)|what are|show(?: me)?|list)(?: all)?(?: of)? (?:my |the )?(?:to[ -]?do(?: list)?|tasks|homework|assignments)[?!.]*$/i.test(String(userText || '').trim())) return null;
+        const privacy = window.SutraAssistantPrivacy;
+        if (!privacy || !privacy.canRead('planning')) {
+            return { handled: true, message: 'To-do access is off for Assistant. Allow Planning access in Assistant privacy settings to read your task list.', source: 'local', areasRead: [] };
+        }
+        const tasks = listOpenWorkspaceTasks().filter(task => !task.completed && !task.archived)
+            .sort((a, b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')) || a.title.localeCompare(b.title));
+        const shown = tasks.slice(0, 40);
+        const lines = [tasks.length ? '**Your to-do list** (' + tasks.length + ' open items)' : 'Your to-do list has no open items.', ''];
+        shown.forEach(task => {
+            const kind = task.store === 'homework' ? 'homework' : 'task';
+            const title = String(task.title || 'Untitled task').replace(/[\\[\]]/g, '\\$&');
+            lines.push('- [' + title + '](sutra://' + kind + '/' + encodeURIComponent(task.id) + ')' + (task.dueDate ? ' — due ' + task.dueDate : '') + (task.course ? ' · ' + task.course : ''));
+        });
+        if (shown.length < tasks.length) lines.push('', 'Showing the first ' + shown.length + ' items. Ask about a class, date, or task to narrow the list.');
+        return { handled: true, message: lines.join('\n'), source: 'local', localEngine: 'Workspace task list', claimType: 'workspace_fact', areasRead: ['planning'] };
+    }
+
     function tryHandleCommand(rawText, options = {}) {
         const text = String(rawText || '').trim();
         if (!text) return { handled: false };
@@ -6630,6 +6736,8 @@
         if (getPref('assistant.localRouting', true) === false) {
             return { handled: false };
         }
+        const todoList = tryReadTodoList(text);
+        if (todoList) return todoList;
 
         // Permission-safe local Notes Knowledge retrieval. This intentionally
         // answers only with quoted evidence and navigation links; synthesis or
@@ -7124,7 +7232,10 @@
     // Context transparency modal
     // --------------------------------------------------------------
     function buildInspectableContext() {
-        const ctx = getFlowAssistantContext({});
+        const view = getActiveViewName();
+        const input = document.getElementById(view === 'assistantview' ? 'asstInput' : 'chatInput');
+        const query = String(input && input.value || lastUserPrompt || '');
+        const ctx = applyRelevantWorkspaceContext(getFlowAssistantContext({}), query);
         const cap = getVisionCapability();
         // Surface which long-term memories the assistant could use, so users can
         // inspect exactly what saved memory informs a response. Retrieval is
@@ -7168,6 +7279,9 @@
         if (ctx.activeNote) bits.push(ctx.activeNote.locked ? 'the current note\'s title only (locked — body excluded)' : `your current note "${truncate(ctx.activeNote.title, 40)}"`);
         if (ctx.selection) bits.push('1 selected-text excerpt');
         if (count(ctx.tasks)) bits.push(`${ctx.tasks.length} task summaries`);
+        ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+            if (count(ctx[key])) bits.push(`${ctx[key].length} relevant ${key.replace('workspace', '').toLowerCase()} records`);
+        });
         if (count(ctx.homework)) bits.push(`${ctx.homework.length} homework summaries`);
         if (count(ctx.timelineUpcoming) || count(ctx.timelineToday) || count(ctx.timeline)) {
             bits.push(`${count(ctx.timelineUpcoming) + count(ctx.timelineToday) + count(ctx.timeline)} timeline blocks`);

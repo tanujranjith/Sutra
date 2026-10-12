@@ -476,6 +476,8 @@
             summary: 'Change the provider and model from the Assistant panel\'s model picker, or in Settings ▸ Integrations / Assistant.',
             body: [
                 'Open the **Sutra Assistant** panel and use the **model picker** (the provider/model chip in the chat) to switch provider or model.',
+                'The full Assistant picker refreshes available models when opened and when you change providers. Choosing a list model replaces an earlier custom ID. Providers without discovery show a built-in catalog.',
+                'For a supported model, **Thinking effort** appears beside the message box and in the picker. Assistant searches permitted workspace areas locally and sends relevant excerpts rather than your entire workspace.',
                 'You can also manage providers, keys, and the active model in **Settings ▸ Integrations** (keys) and **Settings ▸ Assistant** (behavior).'
             ],
             keywords: ['change model', 'switch model', 'model', 'pick model', 'select model', 'which model', 'change provider', 'model picker'],
