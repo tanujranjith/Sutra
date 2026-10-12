@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-12T22:45:44.259Z",
-  "reviewedReason": "Refresh canonical Create lifecycle after page PIN unlock and removal so HTML surfaces reopen without reload",
-  "maxBytes": 4990150,
-  "maxLines": 87362
+  "blessedAt": "2026-10-12T23:41:05.317Z",
+  "reviewedReason": "Scope plain-text clipboard fallback to the current classic editor and preserve normal paste while preventing delayed or duplicate insertion",
+  "maxBytes": 4993454,
+  "maxLines": 87405
 }

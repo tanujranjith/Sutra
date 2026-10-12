@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261012-html-pin1",
-    "hash": "88370d302152be05"
+    "stamp": "20261012-plain-paste1",
+    "hash": "23461e9f98f936fc"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -244,8 +244,8 @@
     "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "fea074af0d89784b"
+    "stamp": "20261012-plain-paste1",
+    "hash": "ef5a14025e9411ea"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261012-html-pin1",
-    "hash": "ef3fb7e78591dd3d"
+    "stamp": "20261012-plain-paste1",
+    "hash": "9079ae8ffb3e3b8d"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

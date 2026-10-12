@@ -80,6 +80,11 @@ well as curated categories. Search accepts glyphs, names, aliases, and multiple
 keywords (for example, "red heart"). Buttons include keyword labels for screen
 readers. Ctrl/⌘+Shift+V pastes plain text in both editors, retaining line breaks
 while bypassing rich HTML, smart links, and clipboard images.
+The shortcut uses a text-only editor insertion. If the browser does not supply
+native paste data, it can read clipboard text after the explicit shortcut;
+browser clipboard permission may be required for that fallback. A delayed read
+is discarded if the note, selection, focus, or write authorization changes.
+Ordinary Ctrl/⌘+V keeps its rich-paste behavior.
 
 Icons use the existing `page.icon` field and travel in workspace backups. Help
 pages are generated resources excluded from Sync, so their icon is a local

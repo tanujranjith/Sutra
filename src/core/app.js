@@ -40920,35 +40920,78 @@ function buildOnboardingPlanPreview() {
         // consistent across reloads and never produces reload-induced duplicates.
 
         // ===== SMART PASTE + CLIPBOARD IMAGES (Section 20) =====
-        let plainTextPasteTarget = null;
-        let plainTextPasteAt = 0;
+        let plainTextPasteRequest = null;
+        ['sutra:note-page-loaded', 'sutra:note-page-locked', 'sutra:workspace-lock-changed',
+            'sutra:workspace-remote-commit', 'noteflow:view-changed', 'pagehide'].forEach(name => {
+            window.addEventListener(name, () => { plainTextPasteRequest = null; });
+        });
+        function classicPasteEditor(target) {
+            const editor = target && target.closest && target.closest('#editor, #editorSecondary');
+            return editor && editor.isContentEditable ? editor : null;
+        }
+        function insertClassicPlainText(editor, text) {
+            if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
+            const page = pages.find(p => p.id === (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId));
+            if (!page || !canWritePageContent(page) || !text) return false;
+            const inserted = document.execCommand('insertText', false, String(text).replace(/\r\n?/g, '\n'));
+            if (inserted) savePage();
+            return inserted;
+        }
         document.addEventListener('keydown', function(event) {
-            if ((event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === 'v') {
-                plainTextPasteTarget = event.target;
-                plainTextPasteAt = Date.now();
+            if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey
+                && (String(event.key).toLowerCase() === 'v' || event.code === 'KeyV')) {
+                const editor = classicPasteEditor(event.target);
+                if (!editor) return; // Modern Editor owns its own clipboard transaction.
+                const selection = window.getSelection();
+                if (!selection || !selection.rangeCount) return;
+                const range = selection.getRangeAt(0).cloneRange();
+                const pageId = editor.id === 'editorSecondary' ? secondaryPageId : currentPageId;
+                const request = { editor, pageId, range, html: editor.innerHTML, at: Date.now(), handled: false };
+                plainTextPasteRequest = request;
+                const clipboard = navigator.clipboard;
+                if (!event.isTrusted || !clipboard || typeof clipboard.readText !== 'function') return;
+                setTimeout(() => {
+                    if (request.handled || plainTextPasteRequest !== request) return;
+                    clipboard.readText().then(text => {
+                        if (request.handled || plainTextPasteRequest !== request || !editor.isConnected
+                            || !editor.contains(document.activeElement) || editor.innerHTML !== request.html
+                            || pageId !== (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId)) return;
+                        const current = window.getSelection();
+                        if (!current || !current.rangeCount) return;
+                        const active = current.getRangeAt(0);
+                        if (active.startContainer !== range.startContainer || active.startOffset !== range.startOffset
+                            || active.endContainer !== range.endContainer || active.endOffset !== range.endOffset) return;
+                        request.handled = insertClassicPlainText(editor, text);
+                        if (request.handled) request.at = Date.now();
+                    }).catch(error => {
+                        if (request.handled || plainTextPasteRequest !== request || !editor.contains(document.activeElement)
+                            || pageId !== (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId)) return;
+                        reportError(error, { feature: 'notes', where: 'plain-text-paste',
+                            userMessage: 'Clipboard access was blocked. Allow clipboard access and try pasting again.' }, 'warning');
+                    });
+                }, 0);
             } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
-                plainTextPasteTarget = null;
+                plainTextPasteRequest = null;
             }
         }, true);
         document.addEventListener('paste', function(e) {
-            const editor = document.getElementById('editor');
-            const editorSecondary = document.getElementById('editorSecondary');
-            const isInEditor = (editor && (editor.contains(e.target) || document.activeElement === editor)) ||
-                               (editorSecondary && (editorSecondary.contains(e.target) || document.activeElement === editorSecondary));
-            if (!isInEditor) return;
+            const editor = classicPasteEditor(e.target);
+            if (!editor) return;
 
             const clipboardData = e.clipboardData || window.clipboardData;
-            if (!clipboardData) return;
-
-            const plain = e.shiftKey || (Date.now() - plainTextPasteAt < 2000 && plainTextPasteTarget === e.target);
-            plainTextPasteTarget = null;
+            const request = plainTextPasteRequest;
+            const plain = e.shiftKey || (request && request.editor === editor && Date.now() - request.at < 2000);
             if (plain) {
                 e.preventDefault();
-                const text = clipboardData.getData('text/plain');
-                if (text) document.execCommand('insertText', false, text);
-                if (typeof savePage === 'function') savePage();
+                if (request && request.handled) return;
+                const text = clipboardData && (clipboardData.getData('text/plain') || clipboardData.getData('Text') || clipboardData.getData('text/uri-list'));
+                if (insertClassicPlainText(editor, text)) {
+                    if (request) request.handled = true;
+                    plainTextPasteRequest = null;
+                }
                 return;
             }
+            if (!clipboardData || e.defaultPrevented) return;
 
             // Check for image data first
             const items = clipboardData.items;
@@ -41004,7 +41047,7 @@ function buildOnboardingPlanPreview() {
                     document.execCommand('createLink', false, url);
                 }
             }
-        });
+        }, true);
 
         // ===== STUDENT WRITING TOOLS (Section 15) =====
         async function insertFootnote() {

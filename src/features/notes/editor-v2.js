@@ -1214,7 +1214,7 @@
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
                     handleDrop: handleImageDrop,
-                    handleDOMEvents: { contextmenu: handleTableContextMenu }
+                    handleDOMEvents: { contextmenu: handleTableContextMenu, paste: handlePlainTextPaste }
                 },
                 onUpdate: function () {
                     if (state.applyingExternal > 0) return;
@@ -1255,6 +1255,7 @@
     }
 
     function destroy() {
+        state.plainPaste = null;
         cancelPendingImageOperations();
         detachContextualListeners();
         if (state.mirrorTimer) {
@@ -1983,7 +1984,12 @@
     }
 
     function onEditorKeydown(event) {
-        state.plainPaste = (event.ctrlKey || event.metaKey) && event.shiftKey && String(event.key).toLowerCase() === 'v' ? Date.now() : 0;
+        if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey
+            && (String(event.key).toLowerCase() === 'v' || event.code === 'KeyV')) {
+            beginPlainTextPaste(event);
+        } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
+            state.plainPaste = null;
+        }
         var view = state.editor && state.editor.view;
         if (event.isComposing || event.keyCode === 229 || ctx.composing || (view && view.composing)) {
             closeSlash();
@@ -2228,6 +2234,7 @@
     }
 
     function cancelPendingImageOperations(matches) {
+        state.plainPaste = null; // Lifecycle cancellation also invalidates delayed text reads.
         state.pendingImageOperations.slice().forEach(function (operation) {
             if (!matches || matches(operation)) cancelImageOperation(operation);
         });
@@ -2383,18 +2390,79 @@
         } catch (reportError) { /* diagnostics must not interrupt editor input */ }
     }
 
+    function insertPlainText(view, text) {
+        if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
+        if (!imageInsertContext(view, 'paste')) return false;
+        text = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+        if (!text) return false;
+        var transaction = view.state.tr;
+        if (view.state.selection.$from.parent.type.spec.code) {
+            transaction.insertText(text);
+        } else {
+            // Build text-only DOM, then one transaction: no recursive paste,
+            // source HTML, link paste rules, or clipboard-image handling.
+            var container = document.createElement('div');
+            text.split('\n').forEach(function (line) {
+                var paragraph = document.createElement('p');
+                if (line) paragraph.textContent = line;
+                else paragraph.appendChild(document.createElement('br'));
+                container.appendChild(paragraph);
+            });
+            var slice = engine().PMDOMParser.fromSchema(view.state.schema).parseSlice(container, {
+                preserveWhitespace: true, context: view.state.selection.$from
+            });
+            transaction.replaceSelection(slice);
+        }
+        view.dispatch(transaction.setStoredMarks([]).setMeta('preventAutolink', true).scrollIntoView());
+        scheduleMirrorFlush();
+        return true;
+    }
+
+    function beginPlainTextPaste(event) {
+        var view = state.editor && state.editor.view;
+        var context = view && imageInsertContext(view, 'paste');
+        if (!context) return;
+        var request = { at: Date.now(), handled: false, context: context };
+        state.plainPaste = request;
+        // Keep native paste enabled. Some browsers do not deliver its data for
+        // this shortcut; an explicit user gesture may read plain text instead.
+        var clipboard = window.navigator && window.navigator.clipboard;
+        if (!event.isTrusted || !clipboard || typeof clipboard.readText !== 'function') return;
+        window.setTimeout(function () {
+            if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)) return;
+            clipboard.readText().then(function (text) {
+                if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)
+                    || !view.dom.contains(document.activeElement)) return;
+                request.handled = insertPlainText(view, text);
+                if (request.handled) request.at = Date.now();
+            }).catch(function (error) {
+                if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)) return;
+                if (typeof window.SutraReportError === 'function') window.SutraReportError(error, {
+                    feature: 'notes-editor-v2', where: 'plain-text-paste',
+                    userMessage: 'Clipboard access was blocked. Allow clipboard access and try pasting again.'
+                }, 'warning');
+            });
+        }, 0);
+    }
+
+    function handlePlainTextPaste(view, event) {
+        var request = state.plainPaste;
+        var plain = event.shiftKey || (request && Date.now() - request.at < 2000);
+        if (!plain) return false;
+        event.preventDefault();
+        if (request && request.handled) return true; // Late native event after readText.
+        var data = event.clipboardData;
+        var text = data && (data.getData('text/plain') || data.getData('Text') || data.getData('text/uri-list'));
+        if (insertPlainText(view, text)) {
+            if (request) request.handled = true;
+            state.plainPaste = null;
+        }
+        return true;
+    }
+
     function handleImagePaste(view, event) {
         var data = event && event.clipboardData;
         if (!data) return false;
-        var plain = event.shiftKey || (state.plainPaste && Date.now() - state.plainPaste < 2000);
-        state.plainPaste = 0;
-        if (plain) {
-            event.preventDefault();
-            // Re-enter ProseMirror's clipboard parser in plain-text mode. Its
-            // second handlePaste pass must proceed without interception.
-            view.pasteText(data.getData('text/plain'));
-            return true;
-        }
 
         var files = [];
         var items = data.items;

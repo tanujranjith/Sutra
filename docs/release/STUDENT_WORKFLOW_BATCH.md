@@ -106,6 +106,17 @@ CI coverage includes incorrect PINs, unlock, source editing and durable saving,
 navigation relocking, PIN removal, reload, and unknown HTML document fields.
 These functional checks remain unrun until an authorized push allows GitHub CI.
 
+Owner validation found Ctrl+Shift+V could paste nothing in Create. Modern Notes
+now intercepts plain paste before rich clipboard parsing and inserts text in one
+undoable transaction. Both editors retain native paste and fall back to reading
+clipboard text only when the explicit shortcut receives no usable native data.
+Delayed reads are scoped to the unchanged note, selection, and write access;
+native events arriving after fallback insertion cannot duplicate the text.
+CI coverage uses a real system clipboard shortcut, multiline/literal text,
+undo/redo, reload, normal rich paste, missing-native-data fallback, late native
+events, and navigation while a clipboard read is pending. No functional tests
+were run locally; owner validation and GitHub CI remain pending.
+
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.
 The optional full-browser matrix should cover Firefox, WebKit, and responsive
