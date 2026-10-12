@@ -27,6 +27,19 @@ async function openApp(page) {
   await page.evaluate(() => { window.setWorkspacePreference('assistant.enabled', true); });
 }
 
+async function sendReviewedMemoryCommand(page, text) {
+  await page.evaluate((message) => {
+    window.setWorkspacePreference('assistant.localRouting', true);
+    window.SutraAssistantPermissions.setMode('approved_actions');
+    if (typeof window.toggleChat === 'function') window.toggleChat();
+    const input = document.getElementById('chatInput');
+    input.value = message;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    window.sendChat();
+  }, text);
+  await page.locator('#chatbotMessages .flow-action-card').last().waitFor();
+}
+
 test('the Intelligence Harness globals load with no provider configured', async ({ page }) => {
   await openApp(page);
   const present = await page.evaluate(() => ({
@@ -113,32 +126,32 @@ test('Assistant Memory blocks sensitive content', async ({ page }) => {
   expect(blocked).toEqual({ ok: false, blocked: true });
 });
 
-test('the intent router saves and reports memory locally', async ({ page }) => {
+test('the intent router proposes memory locally and waits for review', async ({ page }) => {
   await openApp(page);
-  const flow = await page.evaluate(() => {
-    const save = window.flowAssistant.tryHandleCommand('remember that I have band practice on Mondays');
-    const recall = window.flowAssistant.tryHandleCommand('what do you remember about me');
-    return { saveHandled: save.handled, saveSource: save.source, recall: recall.message };
-  });
-  expect(flow.saveHandled).toBe(true);
-  expect(flow.saveSource).toBe('memory');
-  expect(flow.recall).toContain('band practice');
+  await page.evaluate(() => window.SutraAssistantMemory.__resetForTests?.());
+  await sendReviewedMemoryCommand(page, 'remember that I have band practice on Mondays');
+  const card = page.locator('#chatbotMessages .flow-action-card').last();
+  await expect(card).toContainText('Save to Assistant Memory');
+  expect(await page.evaluate(() => window.SutraAssistantMemory.getAll().length)).toBe(0);
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-receipt')).toBeVisible();
+  const recall = await page.evaluate(() => window.flowAssistant.tryHandleCommand('what do you remember about me').message);
+  expect(recall).toContain('band practice');
 });
 
-test('"can you remember that…" is saved locally (not just claimed by a model)', async ({ page }) => {
+test('"can you remember that…" proposes a local write for review', async ({ page }) => {
   await openApp(page);
-  const result = await page.evaluate(() => {
-    window.SutraAssistantMemory.__resetForTests && window.SutraAssistantMemory.__resetForTests();
-    const before = window.SutraAssistantMemory.getAll().length;
-    const res = window.flowAssistant.tryHandleCommand('can you remember that i have a fitbit delivery for 2 days');
-    const after = window.SutraAssistantMemory.getAll();
-    return { handled: res.handled, source: res.source, added: after.length - before, content: after[0] && after[0].content, expires: !!(after[0] && after[0].expiresAt) };
-  });
-  expect(result.handled).toBe(true);
-  expect(result.source).toBe('memory');
-  expect(result.added).toBe(1);                    // a real memory was created
-  expect(result.content).toContain('fitbit delivery');
-  expect(result.expires).toBe(true);               // "for 2 days" → temporary expiry
+  await page.evaluate(() => window.SutraAssistantMemory.__resetForTests?.());
+  await sendReviewedMemoryCommand(page, 'can you remember that i have a fitbit delivery for 2 days');
+  const card = page.locator('#chatbotMessages .flow-action-card').last();
+  await expect(card).toContainText('Save to Assistant Memory');
+  expect(await page.evaluate(() => window.SutraAssistantMemory.getAll().length)).toBe(0);
+  await card.locator('.flow-action-apply').click();
+  await expect(card.locator('.flow-action-receipt')).toBeVisible();
+  const saved = await page.evaluate(() => window.SutraAssistantMemory.getAll());
+  expect(saved).toHaveLength(1);
+  expect(saved[0].content).toContain('fitbit delivery');
+  expect(saved[0].expiresAt).toBeTruthy(); // "for 2 days" → temporary expiry
 });
 
 test('"remember to <task>" is NOT saved as a memory', async ({ page }) => {
@@ -161,11 +174,12 @@ test('assistant.useMemory defaults to ON', async ({ page }) => {
 test('a forget-memory card (delete_memory with a label field) actually deletes', async ({ page }) => {
   await openApp(page);
   const out = await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
     const mem = window.SutraAssistantMemory;
     if (mem.__resetForTests) mem.__resetForTests();
     mem.create({ category: 'user_notes', content: 'fact to forget', source: 'user_explicit' });
     const id = mem.getAll()[0].id;
-    const res = window.flowAssistant.applyAction({ type: 'delete_memory', id, label: 'Forget: fact to forget' });
+    const res = window.flowAssistant.applyAction({ type: 'delete_memory', id, label: 'Forget: fact to forget' }, { reviewed: true, destructiveApproved: true });
     return { ok: res.ok, remaining: mem.getAll().length };
   });
   expect(out.ok).toBe(true);

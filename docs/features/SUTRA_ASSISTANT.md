@@ -283,7 +283,10 @@ permission lists can restrict the policy but cannot expand it. Direct local
 action APIs also obey the workspace permission mode; callers must opt into
 approved actions, and destructive/plugin actions require their separate explicit
 approval metadata. The action-card Apply control supplies reviewed metadata only
-after its existing approval and high-risk confirmation flow.
+after its existing approval and high-risk confirmation flow. Local "remember
+that" commands propose a memory card and wait for Apply. Smart Import checks
+the selected destinations' permissions when Apply is clicked, and reports
+partial failures instead of implying that every destination was saved.
 
 Thinking effort is available in both the panel settings and the full Assistant's
 model picker when the selected model supports it. Gemini 3 uses model-specific

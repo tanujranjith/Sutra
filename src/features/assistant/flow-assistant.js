@@ -3470,7 +3470,7 @@
         const valid = validateAction(rawAction);
         if (!valid.ok) return { ok: false, message: valid.error };
         const action = normalizeActionFields(rawAction);
-        const permissionError = assistantActionPermissionError(action, meta, true);
+        const permissionError = assistantActionPermissionError(action, meta, false);
         if (permissionError) return { ok: false, code: 'permission_denied', message: permissionError };
         switch (action.type) {
             case 'insert_text': return applyInsertText(action);
@@ -5960,6 +5960,10 @@
         const wrap = document.createElement('div');
         wrap.className = 'flow-import-review';
         const DEST = ['homework', 'tasks', 'timeline', 'notes', 'review', 'today'];
+        const destinationsForRow = (row) => Array.isArray(row.destinations)
+            ? row.destinations
+            : (Array.isArray(row.suggestedDestinations) && row.suggestedDestinations.length
+                ? row.suggestedDestinations : ['homework']);
 
         const head = document.createElement('div');
         head.className = 'flow-import-head';
@@ -5993,7 +5997,7 @@
                         ${row.duplicate ? `<span class="flow-imp-dupflag" title="${esc(row.duplicate.title || '')}">possible duplicate (${esc(row.duplicate.kind)})</span>` : ''}
                     </div>
                     <div class="flow-import-row-dests">
-                        ${DEST.map(d => `<label class="flow-imp-dest"><input type="checkbox" data-row="${esc(row.rowId)}" data-dest="${d}"${(row.destinations || []).includes(d) ? ' checked' : ''}/> ${d}</label>`).join('')}
+                        ${DEST.map(d => `<label class="flow-imp-dest"><input type="checkbox" data-row="${esc(row.rowId)}" data-dest="${d}"${destinationsForRow(row).includes(d) ? ' checked' : ''}/> ${d}</label>`).join('')}
                     </div>`;
                 table.appendChild(card);
             });
@@ -6021,7 +6025,7 @@
                 const row = findRow(id);
                 if (!row) return;
                 const dest = t.getAttribute('data-dest');
-                row.destinations = row.destinations || [];
+                row.destinations = destinationsForRow(row).slice();
                 if (t.checked) { if (!row.destinations.includes(dest)) row.destinations.push(dest); }
                 else row.destinations = row.destinations.filter(d => d !== dest);
             }
@@ -6053,21 +6057,50 @@
         applyAllBtn.addEventListener('click', () => {
             applyAllBtn.disabled = true;
             const skipDup = document.getElementById('flowImpSkipDup');
+            const destinations = new Set();
+            rows.forEach(row => {
+                if (row.__removed || !row.title || (row.duplicate && skipDup && skipDup.checked)) return;
+                destinationsForRow(row).forEach(dest => {
+                    if (dest === 'homework') destinations.add('create_homework');
+                    else if (dest === 'tasks' || dest === 'today') destinations.add('create_task');
+                    else if (dest === 'timeline' && row.dueDate) destinations.add('create_timeline_block');
+                    else if (dest === 'notes') destinations.add('create_page');
+                    else if (dest === 'review') destinations.add('create_review_deck');
+                });
+            });
+            const permissionError = Array.from(destinations)
+                .map(type => assistantActionPermissionError({ type }, { reviewed: true }, false))
+                .find(Boolean);
+            if (permissionError) {
+                status.textContent = permissionError;
+                applyAllBtn.disabled = false;
+                return;
+            }
+            const eligibleRows = rows.filter(row => !row.__removed && row.title
+                && !(row.duplicate && skipDup && skipDup.checked));
+            if (eligibleRows.length && eligibleRows.every(row => destinationsForRow(row).length === 0)) {
+                status.textContent = 'Choose at least one destination for an assignment before applying.';
+                applyAllBtn.disabled = false;
+                return;
+            }
             const batchId = makeId('batch');
             const created = [];
+            const failures = [];
             let applied = 0, skipped = 0;
             rows.forEach(row => {
                 if (row.__removed) return;
                 if (!row.title) { skipped += 1; return; }
                 if (row.duplicate && skipDup && skipDup.checked) { skipped += 1; return; }
-                (row.destinations || []).forEach(dest => {
+                destinationsForRow(row).forEach(dest => {
                     let res = null;
                     if (dest === 'homework') res = applyCreateHomework({ type: 'create_homework', title: row.title, courseName: row.course, dueDate: row.dueDate, difficulty: row.difficulty });
                     else if (dest === 'tasks' || dest === 'today') res = applyCreateTask({ type: 'create_task', title: row.title, dueDate: row.dueDate, priority: row.priority || 'medium' });
                     else if (dest === 'timeline' && row.dueDate) res = applyCreateTimelineBlock({ type: 'create_timeline_block', name: row.title, date: row.dueDate, start: '16:00', end: '17:00', category: 'study' });
+                    else if (dest === 'timeline') failures.push(`${row.title}: Timeline needs a due date.`);
                     else if (dest === 'notes') res = applyCreatePage({ type: 'create_page', title: row.title, body: `# ${row.title}\n\n${row.sourceText || ''}` });
                     else if (dest === 'review') res = applyCreateReviewDeck({ type: 'create_review_deck', name: row.title });
                     if (res && res.ok) { applied += 1; mergeCreated(created, res); }
+                    else if (res) failures.push(res.message || `Could not add ${row.title} to ${dest}.`);
                 });
             });
             const i2 = intel();
@@ -6081,8 +6114,10 @@
                 });
             }
             refreshAll();
-            status.textContent = `✓ Applied ${applied} write(s)${skipped ? `, skipped ${skipped}` : ''}.`;
-            showToast(`Imported ${applied} item write(s).`);
+            const failureSummary = failures.length
+                ? `, ${failures.length} failed${failures[0] ? `: ${failures[0]}` : ''}` : '';
+            status.textContent = `${failures.length ? '⚠' : '✓'} Applied ${applied} write(s)${skipped ? `, skipped ${skipped}` : ''}${failureSummary}.`;
+            showToast(`Imported ${applied} item write(s)${failures.length ? `; ${failures.length} failed` : ''}.`);
         });
 
         renderRows();
@@ -6886,14 +6921,20 @@
                 expiresInDays = n * (/week/i.test(span[2]) ? 7 : (/month/i.test(span[2]) ? 30 : 1));
                 category = 'temporary_context';
             }
-            // Note: applyCreateMemory defaults source to 'user_explicit', so we do NOT
-            // pass `source` here — it isn't part of the create_memory action field schema
-            // and the strict validator would (correctly) reject the unknown field, which
-            // would silently drop this deterministic on-device save.
-            const res = applyActionLogged({ type: 'create_memory', category, content: fact, expiresInDays: expiresInDays || undefined }, { userPrompt: text });
-            if (!res.ok) return { handled: true, message: res.message || 'I couldn\'t save that to memory.', source: 'memory' };
+            // Saving a memory is still a reviewed Assistant write. Present it as
+            // an action card so the canonical permission mode and Apply control
+            // decide whether it may be committed.
+            const action = {
+                type: 'create_memory', category, content: fact,
+                expiresInDays: expiresInDays || undefined,
+                label: `Save to Assistant Memory: ${truncate(fact, 60)}`
+            };
             const expNote = expiresInDays ? ` It will expire in about ${expiresInDays} day${expiresInDays === 1 ? '' : 's'}.` : '';
-            return { handled: true, source: 'memory', message: `Got it — saved to memory: "${truncate(fact, 90)}".${expNote} _(${String(category).replace(/_/g, ' ')})_\n\nYou can edit, add to, or forget it anytime in **Settings ▸ Assistant ▸ Manage Memory**, or say "undo that".` };
+            return {
+                handled: true,
+                source: 'memory',
+                message: `I can save this to Assistant Memory: "${truncate(fact, 90)}".${expNote} _(${String(category).replace(/_/g, ' ')})_ Review it before saving.\n\n${buildActionFence([action])}`
+            };
         }
         return null;
     }

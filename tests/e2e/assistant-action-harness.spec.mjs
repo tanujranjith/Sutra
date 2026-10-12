@@ -75,10 +75,11 @@ function isoDaysFromToday(offset) {
 async function seedOverdueWork(page) {
   return page.evaluate(({ past11, past12, past7 }) => {
     const fa = window.flowAssistant;
-    const r1 = fa.applyAction({ type: 'create_task', title: 'Drill weakest unit first', dueDate: past11, priority: 'high' });
-    const r2 = fa.applyAction({ type: 'create_task', title: 'Build a one-week review plan', dueDate: past12, priority: 'high' });
-    const r3 = fa.applyAction({ type: 'create_task', title: 'Run final-day checklist', dueDate: past7, priority: 'medium' });
-    const r4 = fa.applyAction({ type: 'create_homework', title: 'Weekly reflection review', courseName: 'Study Skills', dueDate: past11 });
+    window.SutraAssistantPermissions.setMode('approved_actions');
+    const r1 = fa.applyAction({ type: 'create_task', title: 'Drill weakest unit first', dueDate: past11, priority: 'high' }, { reviewed: true });
+    const r2 = fa.applyAction({ type: 'create_task', title: 'Build a one-week review plan', dueDate: past12, priority: 'high' }, { reviewed: true });
+    const r3 = fa.applyAction({ type: 'create_task', title: 'Run final-day checklist', dueDate: past7, priority: 'medium' }, { reviewed: true });
+    const r4 = fa.applyAction({ type: 'create_homework', title: 'Weekly reflection review', courseName: 'Study Skills', dueDate: past11 }, { reviewed: true });
     return { ok: r1.ok && r2.ok && r3.ok && r4.ok };
   }, { past11: isoDaysFromToday(-11), past12: isoDaysFromToday(-12), past7: isoDaysFromToday(-7) });
 }
@@ -149,6 +150,55 @@ test('action harness registry exposes definitions, risk policy, and undo metadat
   expect(result.surfaceEngineLoaded).toBe(true);
   expect(result.validationBlocksUnknown).toBe(true);
   expect(result.noDeleteTaskAction).toBe(true);
+});
+
+test('Smart Import checks reviewed permissions before writes and reports partial apply', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('read_only');
+    const host = document.createElement('div');
+    host.id = 'smart-import-permission-review';
+    document.body.appendChild(host);
+    window.flowAssistant.renderActionCards(host, [{
+      type: 'import_assignments',
+      assignments: [{
+        title: 'Smart Import permission control', course: 'Biology',
+        dueDate: '2026-10-30', type: 'quiz'
+      }]
+    }]);
+  });
+
+  const review = page.locator('#smart-import-permission-review .flow-import-review');
+  const applyAll = review.locator('.flow-action-apply-all');
+  const status = review.locator('.flow-import-status');
+  await applyAll.click();
+  await expect(status).toContainText('not allowed');
+  expect(await page.evaluate(() => window.flowAssistant.listOpenWorkspaceTasks()
+    .some(item => item.title === 'Smart Import permission control'))).toBe(false);
+
+  await review.locator('.flow-imp-dest input').evaluateAll(inputs => inputs.forEach(input => {
+    input.checked = false;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }));
+  await applyAll.click();
+  await expect(status).toContainText('Choose at least one destination');
+  expect(await page.evaluate(() => window.flowAssistant.listOpenWorkspaceTasks()
+    .some(item => item.title === 'Smart Import permission control'))).toBe(false);
+
+  await review.locator('.flow-imp-dest input[data-dest="homework"], .flow-imp-dest input[data-dest="tasks"], .flow-imp-dest input[data-dest="review"]')
+    .evaluateAll(inputs => inputs.forEach(input => {
+      input.checked = true;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }));
+  await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
+    window.createReviewDeck = undefined;
+  });
+  await applyAll.click();
+  await expect(status).toContainText('Applied 2 write(s), 1 failed');
+  await expect(status).toContainText('Review module not available');
+  expect(await page.evaluate(() => window.flowAssistant.listOpenWorkspaceTasks()
+    .some(item => item.title === 'Smart Import permission control'))).toBe(true);
 });
 
 test('"what\'s overdue" then "mark those as complete": batch card, both stores, Activity, Undo', async ({ page }) => {
@@ -224,8 +274,8 @@ test('quantifier references and ambiguity: "complete the first two" works, ambig
 
   // Ambiguity: two same-named homework items → clarification, no action card.
   await page.evaluate(() => {
-    window.flowAssistant.applyAction({ type: 'create_homework', title: 'Lab Report', courseName: 'Chemistry', dueDate: '2026-06-20' });
-    window.flowAssistant.applyAction({ type: 'create_homework', title: 'Lab Report', courseName: 'Chemistry', dueDate: '2026-06-27' });
+    window.flowAssistant.applyAction({ type: 'create_homework', title: 'Lab Report', courseName: 'Chemistry', dueDate: '2026-06-20' }, { reviewed: true });
+    window.flowAssistant.applyAction({ type: 'create_homework', title: 'Lab Report', courseName: 'Chemistry', dueDate: '2026-06-27' }, { reviewed: true });
   });
   const cardsBefore = await page.locator('#chatbotMessages .flow-action-card').count();
   await sendChatMessage(page, 'complete the lab report');
@@ -264,9 +314,9 @@ test('reschedule to tomorrow and archive guardrails (no deletion, homework prote
   // Archive a planner task: object preserved, flags set, never deleted.
   const archive = await page.evaluate(() => {
     const fa = window.flowAssistant;
-    fa.applyAction({ type: 'create_task', title: 'Stale brainstorm task', dueDate: '2026-05-01' });
+    fa.applyAction({ type: 'create_task', title: 'Stale brainstorm task', dueDate: '2026-05-01' }, { reviewed: true });
     const before = (window.flowAtelier.tasks || []).length;
-    const res = fa.applyActionLogged({ type: 'update_task_status', taskTitles: ['Stale brainstorm task'], status: 'archived' });
+    const res = fa.applyActionLogged({ type: 'update_task_status', taskTitles: ['Stale brainstorm task'], status: 'archived' }, { reviewed: true });
     const after = (window.flowAtelier.tasks || []).length;
     const t = (window.flowAtelier.tasks || []).find((x) => x.title === 'Stale brainstorm task');
     return { ok: res.ok, kept: before === after, archived: t && t.archived === true && t.isActive === false };
@@ -451,7 +501,7 @@ test('persistence: completed status survives reload; exports never contain API k
   await page.evaluate(() => {
     // Simulate a saved session key, then complete one task and persist.
     sessionStorage.setItem('groq_api_key', 'gsk_FAKE_TEST_KEY_000000000000');
-    window.flowAssistant.applyActionLogged({ type: 'update_task_status', taskTitles: ['Run final-day checklist'], status: 'completed' });
+    window.flowAssistant.applyActionLogged({ type: 'update_task_status', taskTitles: ['Run final-day checklist'], status: 'completed' }, { reviewed: true });
   });
   await page.waitForTimeout(900); // allow debounced autosave to commit
 

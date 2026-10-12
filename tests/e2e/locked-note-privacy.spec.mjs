@@ -272,12 +272,13 @@ test('Assistant bridge failure is reported and mutating actions fail closed', as
       errors.push({ message: String(error && error.message || error), context, severity });
     };
     try {
+      window.SutraAssistantPermissions.setMode('approved_actions');
       const context = window.getFlowAssistantContext({ depth: 'workspace' });
-      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' });
+      const task = window.sutraAssistant.applyAction({ type: 'create_task', title: 'Must not disappear' }, { reviewed: true });
       const block = window.sutraAssistant.applyAction({
         type: 'create_timeline_block', name: 'Must not disappear', date: '2026-08-25', start: '09:00', end: '10:00'
-      });
-      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' });
+      }, { reviewed: true });
+      const note = window.sutraAssistant.applyAction({ type: 'create_page', title: 'Must not disappear' }, { reviewed: true });
       return { context, task, block, note, errors };
     } finally {
       window.flowAtelier = originalBridge;

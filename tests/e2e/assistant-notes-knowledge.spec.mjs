@@ -67,6 +67,7 @@ test('grounded local note search shares sources across dock and full view and su
 test('structural note operations are logged, preserve sources, and undo cleanly', async ({ page }) => {
   await openApp(page);
   const result = await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('approved_actions');
     const hooks = window.__sutraPublicBetaTestHooks;
     const target = hooks.createNoteInActiveSpace('Merge target', '<p>Target opening.</p>');
     const source = hooks.createNoteInActiveSpace('Merge source', '<p>Source evidence.</p>');
@@ -76,7 +77,7 @@ test('structural note operations are logged, preserve sources, and undo cleanly'
       type: 'merge_notes',
       targetNoteId: target.id,
       sourceNoteIds: [source.id]
-    }, { userPrompt: 'merge these notes' });
+    }, { userPrompt: 'merge these notes', reviewed: true });
     const mergeState = {
       ok: merged.ok,
       activityId: merged.activityId,
@@ -90,7 +91,7 @@ test('structural note operations are logged, preserve sources, and undo cleanly'
 
     const tagged = window.flowAssistant.applyActionLogged({
       type: 'apply_note_tags', noteId: target.id, tags: ['research', 'review'], mode: 'add'
-    }, { userPrompt: 'tag this note' });
+    }, { userPrompt: 'tag this note', reviewed: true });
     const tagNames = window.flowAtelier.getPageById(target.id).tags.map(tag => tag.name || tag);
     const tagUndo = window.flowAssistant.undoActivity(tagged.activityId);
     const tagsAfterUndo = window.flowAtelier.getPageById(target.id).tags.map(tag => tag.name || tag);
@@ -104,7 +105,7 @@ test('structural note operations are logged, preserve sources, and undo cleanly'
       hunks: [{ id: 'move-section', start, end: start + before.length, before, replacement: '', label: 'Move section' }],
       newTitle: 'Split result',
       newBody: 'Move this exact section.'
-    }, { userPrompt: 'split this note' });
+    }, { userPrompt: 'split this note', reviewed: true });
     const created = window.flowAtelier.pages.find(note => note.title === 'Split result');
     const splitState = {
       ok: split.ok,

@@ -30,14 +30,37 @@ test('unknown essay target stays blank, explicit zero and real targets round-tri
 });
 
 test('SAT/ACT cards display the local date-only value instead of UTC midnight', () => {
-  const parseDate = load('parseDate');
+  // Simulate a west-of-UTC host deterministically: local calendar construction
+  // preserves October 7, while parsing UTC midnight as a date-only string lands
+  // on October 6. This keeps the regression visible on UTC CI runners too.
+  class WestOfUtcDate {
+    constructor(...args) {
+      let [year, month, day] = args;
+      if (args.length === 1 && typeof args[0] === 'string') {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args[0]);
+        [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3]) - 1];
+      } else {
+        month += 1;
+      }
+      this.year = year;
+      this.month = month;
+      this.day = day;
+    }
+    getDate() { return this.day; }
+    toLocaleDateString() {
+      return `${this.year}-${String(this.month).padStart(2, '0')}-${String(this.day).padStart(2, '0')}`;
+    }
+  }
+  const parseDate = load('parseDate', { Date: WestOfUtcDate });
   const meta = { examDate: '2026-10-07', name: 'SAT', daysLeft: 1, studyStatus: 'planning', practiceCount: 0, unresolvedMistakes: 0 };
-  const dependencies = { parseDate, escapeHtml: value => String(value), _examMeta: () => meta, _isExamTaken: () => false, _examIdIcon: () => 'fa-book' };
+  const dependencies = { Date: WestOfUtcDate, parseDate, escapeHtml: value => String(value), _examMeta: () => meta, _isExamTaken: () => false, _examIdIcon: () => 'fa-book' };
   const render = load('_renderExamCard', dependencies);
-  assert.ok(render('sat').includes(parseDate(meta.examDate).toLocaleDateString()));
+  assert.ok(render('sat').includes('2026-10-07'));
+  assert.ok(!render('sat').includes('2026-10-06'), 'UTC-midnight parsing would show the previous local day');
   assert.equal(parseDate(meta.examDate).getDate(), 7);
-  const group = load('_renderExamGroupCard', { parseDate, escapeHtml: value => String(value), _examGroupMeta: () => ({ ...meta, total: 2, remaining: 2, practice: 0, mistakes: 0 }) });
-  assert.ok(group({ key: 'sat-act', label: 'SAT/ACT' }).includes(parseDate(meta.examDate).toLocaleDateString()));
+  const group = load('_renderExamGroupCard', { Date: WestOfUtcDate, parseDate, escapeHtml: value => String(value), _examGroupMeta: () => ({ ...meta, total: 2, remaining: 2, practice: 0, mistakes: 0 }) });
+  assert.ok(group({ key: 'sat-act', label: 'SAT/ACT' }).includes('2026-10-07'));
+  assert.ok(!group({ key: 'sat-act', label: 'SAT/ACT' }).includes('2026-10-06'));
 });
 
 for (const sourceVersion of ['v1', 'v2']) {
