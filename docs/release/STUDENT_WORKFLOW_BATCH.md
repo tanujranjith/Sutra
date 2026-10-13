@@ -1,8 +1,25 @@
 # Student workflow batch: review checklist
 
 Branch: `codex/student-workflow-batch`, based on `80569e12`.
-All commits are local. Do not merge, push, or deploy until the owner validates
-the candidate and authorizes that action.
+All Git commits remain local. Do not merge, push to GitHub, or deploy to
+production until the owner validates the candidate and authorizes that action.
+
+## Authorized QA preview — October 13, 2026
+
+The owner authorized a Vercel preview for personal-assistant QA, then explicitly
+chose to retain sign-in protection and preserve the existing shareable link.
+
+- App: https://sutra-8lhn0qstc-tanuj-ranjith-s-projects.vercel.app/Sutra.html
+- Project: `tanuj-ranjith-s-projects/sutra`; environment: Preview.
+- Deployed source: `61eca9b921ab4c93f9579543127558063133996c` from this branch.
+- Vercel deployment: `dpl_AkqFedmAdWF6tWK34D1u7auyjCY9`, reported Ready.
+- Vercel ran the allowlisted artifact build and `check:deploy` successfully.
+  Chrome opened the app at its fresh-workspace onboarding screen. This is a
+  deployment availability check, not completion of the remaining QA checklist.
+- Access requires an authorized Vercel account. No existing share link was
+  replaced; production, main, and GitHub remain unchanged.
+- Browser-local workspace content and API keys are not part of the preview.
+  Unit and workflow/browser regression suites remain pending GitHub CI.
 
 ## The agreed 20 items
 
