@@ -6,8 +6,8 @@ production until the owner validates the candidate and authorizes that action.
 
 ## Authorized QA preview — October 13, 2026
 
-The owner authorized a Vercel preview for personal-assistant QA, then explicitly
-chose to retain sign-in protection and preserve the existing shareable link.
+The owner authorized a Vercel preview for personal-assistant QA and later
+authorized a shareable link so reviewers can open it without signing in.
 
 - App: https://sutra-8lhn0qstc-tanuj-ranjith-s-projects.vercel.app/Sutra.html
 - Project: `tanuj-ranjith-s-projects/sutra`; environment: Preview.
@@ -16,8 +16,11 @@ chose to retain sign-in protection and preserve the existing shareable link.
 - Vercel ran the allowlisted artifact build and `check:deploy` successfully.
   Chrome opened the app at its fresh-workspace onboarding screen. This is a
   deployment availability check, not completion of the remaining QA checklist.
-- Access requires an authorized Vercel account. No existing share link was
-  replaced; production, main, and GitHub remain unchanged.
+- The deployment's Share dialog is set to “Anyone with the link can view” and
+  Vercel confirmed that a shareable link was generated. Its Hobby warning said
+  continuing may revoke another shareable link; no specific prior link was
+  identified. Use the generated share URL; the plain deployment URL still
+  requires sign-in. Production, main, and GitHub remain unchanged.
 - Browser-local workspace content and API keys are not part of the preview.
   Unit and workflow/browser regression suites remain pending GitHub CI.
 
