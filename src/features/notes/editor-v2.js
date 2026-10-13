@@ -1214,7 +1214,7 @@
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
                     handleDrop: handleImageDrop,
-                    handleDOMEvents: { contextmenu: handleTableContextMenu, paste: handlePlainTextPaste }
+                    handleDOMEvents: { contextmenu: handleTableContextMenu, paste: handlePlainTextPaste, beforeinput: handlePlainTextInput }
                 },
                 onUpdate: function () {
                     if (state.applyingExternal > 0) return;
@@ -2234,7 +2234,7 @@
     }
 
     function cancelPendingImageOperations(matches) {
-        state.plainPaste = null; // Lifecycle cancellation also invalidates delayed text reads.
+        state.plainPaste = null;
         state.pendingImageOperations.slice().forEach(function (operation) {
             if (!matches || matches(operation)) cancelImageOperation(operation);
         });
@@ -2420,43 +2420,26 @@
 
     function beginPlainTextPaste(event) {
         var view = state.editor && state.editor.view;
-        var context = view && imageInsertContext(view, 'paste');
-        if (!context) return;
-        var request = { at: Date.now(), handled: false, context: context };
-        state.plainPaste = request;
-        // Keep native paste enabled. Some browsers do not deliver its data for
-        // this shortcut; an explicit user gesture may read plain text instead.
-        var clipboard = window.navigator && window.navigator.clipboard;
-        if (!event.isTrusted || !clipboard || typeof clipboard.readText !== 'function') return;
-        window.setTimeout(function () {
-            if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)) return;
-            clipboard.readText().then(function (text) {
-                if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)
-                    || !view.dom.contains(document.activeElement)) return;
-                request.handled = insertPlainText(view, text);
-                if (request.handled) request.at = Date.now();
-            }).catch(function (error) {
-                if (request.handled || state.plainPaste !== request || !imageInsertContextIsCurrent(context)) return;
-                if (typeof window.SutraReportError === 'function') window.SutraReportError(error, {
-                    feature: 'notes-editor-v2', where: 'plain-text-paste',
-                    userMessage: 'Clipboard access was blocked. Allow clipboard access and try pasting again.'
-                }, 'warning');
-            });
-        }, 0);
+        if (view && imageInsertContext(view, 'paste')) state.plainPaste = { at: Date.now() };
+    }
+
+    function handlePlainTextInput(view, event) {
+        if (event.inputType !== 'insertFromPaste' && event.inputType !== 'insertFromPasteAsQuotation') return false;
+        return handlePlainTextPaste(view, event);
     }
 
     function handlePlainTextPaste(view, event) {
         var request = state.plainPaste;
         var plain = event.shiftKey || (request && Date.now() - request.at < 2000);
         if (!plain) return false;
+        var data = event.clipboardData || event.dataTransfer;
+        var text = window.SutraDOMSafety.clipboardText(data) || (typeof event.data === 'string' ? event.data : '');
+        // An empty paste event may be followed by beforeinput with the actual
+        // data. Let the browser continue rather than swallowing the paste.
+        if (!text) return true; // Handled by native input, without preventDefault.
         event.preventDefault();
-        if (request && request.handled) return true; // Late native event after readText.
-        var data = event.clipboardData;
-        var text = data && (data.getData('text/plain') || data.getData('Text') || data.getData('text/uri-list'));
-        if (insertPlainText(view, text)) {
-            if (request) request.handled = true;
-            state.plainPaste = null;
-        }
+        insertPlainText(view, text);
+        state.plainPaste = null;
         return true;
     }
 

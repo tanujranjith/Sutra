@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261012-plain-paste1",
-    "hash": "23461e9f98f936fc"
+    "stamp": "20261012-native-paste2",
+    "hash": "303c5f6f476f599a"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -56,8 +56,8 @@
     "hash": "40d49239acfc800c"
   },
   "src/core/dom-safety.js": {
-    "stamp": "20260913-custom-html-safety1",
-    "hash": "b603e1a961a34644"
+    "stamp": "20261012-native-paste1",
+    "hash": "e946368f7f1faad7"
   },
   "src/core/error-reporter.js": {
     "stamp": "20261011-student-workflow1",
@@ -244,8 +244,8 @@
     "hash": "531137092617df8f"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261012-plain-paste1",
-    "hash": "ef5a14025e9411ea"
+    "stamp": "20261012-native-paste1",
+    "hash": "533414367534c941"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261003-create-review5",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261012-plain-paste1",
-    "hash": "9079ae8ffb3e3b8d"
+    "stamp": "20261012-native-paste1",
+    "hash": "cd53214bc1786859"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",

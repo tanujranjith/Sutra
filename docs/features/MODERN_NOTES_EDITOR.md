@@ -80,10 +80,11 @@ well as curated categories. Search accepts glyphs, names, aliases, and multiple
 keywords (for example, "red heart"). Buttons include keyword labels for screen
 readers. Ctrl/⌘+Shift+V pastes plain text in both editors, retaining line breaks
 while bypassing rich HTML, smart links, and clipboard images.
-The shortcut uses a text-only editor insertion. If the browser does not supply
-native paste data, it can read clipboard text after the explicit shortcut;
-browser clipboard permission may be required for that fallback. A delayed read
-is discarded if the note, selection, focus, or write authorization changes.
+The shortcut uses data from the browser's native paste or input event, then a
+text-only editor insertion. It does not call the Clipboard Read API or request
+additional clipboard permission. If the clipboard supplies HTML without a text
+format, Sutra extracts text from sanitized, inert markup. Empty paste events
+remain available for the browser's subsequent native input event.
 Ordinary Ctrl/⌘+V keeps its rich-paste behavior.
 
 Icons use the existing `page.icon` field and travel in workspace backups. Help

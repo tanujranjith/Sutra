@@ -36,16 +36,26 @@ for (const modern of [true, false]) {
         'text/html': new Blob(['<h1><strong>Formatted clipboard source</strong></h1><a href="https://example.com">link</a>'], { type: 'text/html' })
       })]);
     }, text);
+    await context.clearPermissions();
+    await page.evaluate(() => {
+      window.__clipboardReadAttempts = 0;
+      Object.defineProperty(navigator.clipboard, 'readText', { configurable: true, value: () => {
+        window.__clipboardReadAttempts++;
+        return Promise.reject(new DOMException('Denied', 'NotAllowedError'));
+      } });
+    });
     await editor.click();
     await page.keyboard.press('Control+Shift+V');
     await expect(editor).toContainText('First plain line');
     await expect(editor).toContainText('<literal>text</literal>');
-    // Give the competing native event/readText promise time to reveal duplication.
+    // Catch a second insertion from a competing native input event.
     await page.waitForTimeout(300);
     const pasted = await editor.innerHTML();
     expect((pasted.match(/First plain line/g) || [])).toHaveLength(1);
     expect(pasted).not.toMatch(/<(?:strong|b|h1|a|literal|img)(?:\s|>)/i);
     expect(pasted).not.toContain('Formatted clipboard source');
+    expect(await page.evaluate(() => window.__clipboardReadAttempts)).toBe(0);
+    await expect(page.getByText('Clipboard access was blocked.', { exact: false })).toHaveCount(0);
     expect(await editor.innerText()).toMatch(/First plain line\n\n/);
     await page.keyboard.press('Control+Z');
     await expect(editor).not.toContainText('First plain line');
@@ -64,19 +74,19 @@ for (const modern of [true, false]) {
     await expect(page.locator(modern ? '#editorV2Host strong' : '#editor strong').first()).toHaveText('Formatted clipboard source');
   });
 
-  for (const navigateBeforeRead of [false, true]) {
-    test(`plain paste clipboard fallback ${navigateBeforeRead ? 'drops a stale read' : 'inserts when native paste supplies nothing'} in ${modern ? 'Modern' : 'classic'} Editor`, async ({ page, browserName }) => {
-      test.skip(browserName !== 'chromium', 'Trusted clipboard shortcut exercised in Chromium CI.');
+  for (const delivery of ['paste', 'beforeinput', 'html-only']) {
+    test(`Shift-paste uses ${delivery} event data without clipboard permission in ${modern ? 'Modern' : 'classic'} Editor`, async ({ page, browserName }) => {
+      test.skip(browserName !== 'chromium', 'Trusted keyboard gesture exercised in Chromium CI.');
       await page.addInitScript(() => {
-        // Model the reported failure: a keyboard shortcut without usable native paste.
-        window.__blockNativePaste = true;
+        window.__clipboardReadAttempts = 0;
+        // Keep the real shortcut, but control delivery of its clipboard event.
         document.addEventListener('paste', event => {
-          if (!window.__blockNativePaste) return;
+          if (!event.isTrusted) return;
           event.preventDefault();
           event.stopImmediatePropagation();
         }, true);
         Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
-          readText: () => new Promise(resolve => { window.__resolvePlainClipboard = resolve; })
+          readText: () => { window.__clipboardReadAttempts++; return Promise.reject(new DOMException('Denied', 'NotAllowedError')); }
         } });
       });
       await openNotes(page);
@@ -87,27 +97,27 @@ for (const modern of [true, false]) {
       const editor = page.locator(modern ? '#editorV2Host .ProseMirror' : '#editor');
       await editor.click();
       await page.keyboard.press('Control+Shift+V');
-      await page.waitForFunction(() => typeof window.__resolvePlainClipboard === 'function');
-      if (navigateBeforeRead) {
-        await page.evaluate(() => {
-          const other = window.flowAtelier.pages.find(item => item.id !== window.flowAtelier.currentPageId);
-          window.loadPage(other.id);
-        });
-      }
-      await page.evaluate(() => window.__resolvePlainClipboard('Clipboard fallback text'));
-      if (navigateBeforeRead) {
-        await page.waitForTimeout(150);
-        await expect(page.locator('#view-notes')).not.toContainText('Clipboard fallback text');
-      } else {
-        await expect(editor).toContainText('Clipboard fallback text');
-        await editor.evaluate(el => {
-          window.__blockNativePaste = false;
-          const data = new DataTransfer();
-          data.setData('text/plain', 'Clipboard fallback text');
+      const emptyPasteAllowed = await editor.evaluate((el, delivery) => {
+        const allowed = el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true }));
+        const data = new DataTransfer();
+        data.setData('text/html', '<p><strong>Permission-free plain text</strong></p><p>Second line</p>');
+        if (delivery !== 'html-only') data.setData('text/plain', 'Permission-free plain text\nSecond line');
+        if (delivery === 'beforeinput') {
+          const input = new InputEvent('beforeinput', { inputType: 'insertFromPaste', bubbles: true, cancelable: true });
+          Object.defineProperty(input, 'dataTransfer', { value: data });
+          el.dispatchEvent(input);
+        } else {
           el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
-        });
-        expect(((await editor.innerHTML()).match(/Clipboard fallback text/g) || [])).toHaveLength(1);
-      }
+        }
+        return allowed;
+      }, delivery);
+      expect(emptyPasteAllowed).toBe(true);
+      await expect(editor).toContainText('Permission-free plain text');
+      await expect(editor).toContainText('Second line');
+      expect(await editor.innerHTML()).not.toMatch(/<(?:strong|b)(?:\s|>)/i);
+      await page.waitForTimeout(150);
+      expect(await page.evaluate(() => window.__clipboardReadAttempts)).toBe(0);
+      await expect(page.getByText('Clipboard access was blocked.', { exact: false })).toHaveCount(0);
     });
   }
 

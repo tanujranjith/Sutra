@@ -40942,55 +40942,32 @@ function buildOnboardingPlanPreview() {
                 && (String(event.key).toLowerCase() === 'v' || event.code === 'KeyV')) {
                 const editor = classicPasteEditor(event.target);
                 if (!editor) return; // Modern Editor owns its own clipboard transaction.
-                const selection = window.getSelection();
-                if (!selection || !selection.rangeCount) return;
-                const range = selection.getRangeAt(0).cloneRange();
-                const pageId = editor.id === 'editorSecondary' ? secondaryPageId : currentPageId;
-                const request = { editor, pageId, range, html: editor.innerHTML, at: Date.now(), handled: false };
-                plainTextPasteRequest = request;
-                const clipboard = navigator.clipboard;
-                if (!event.isTrusted || !clipboard || typeof clipboard.readText !== 'function') return;
-                setTimeout(() => {
-                    if (request.handled || plainTextPasteRequest !== request) return;
-                    clipboard.readText().then(text => {
-                        if (request.handled || plainTextPasteRequest !== request || !editor.isConnected
-                            || !editor.contains(document.activeElement) || editor.innerHTML !== request.html
-                            || pageId !== (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId)) return;
-                        const current = window.getSelection();
-                        if (!current || !current.rangeCount) return;
-                        const active = current.getRangeAt(0);
-                        if (active.startContainer !== range.startContainer || active.startOffset !== range.startOffset
-                            || active.endContainer !== range.endContainer || active.endOffset !== range.endOffset) return;
-                        request.handled = insertClassicPlainText(editor, text);
-                        if (request.handled) request.at = Date.now();
-                    }).catch(error => {
-                        if (request.handled || plainTextPasteRequest !== request || !editor.contains(document.activeElement)
-                            || pageId !== (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId)) return;
-                        reportError(error, { feature: 'notes', where: 'plain-text-paste',
-                            userMessage: 'Clipboard access was blocked. Allow clipboard access and try pasting again.' }, 'warning');
-                    });
-                }, 0);
+                plainTextPasteRequest = { editor, at: Date.now() };
             } else if (!['Control', 'Meta', 'Shift'].includes(event.key)) {
                 plainTextPasteRequest = null;
             }
         }, true);
-        document.addEventListener('paste', function(e) {
+        function handleClassicPlainTextPaste(e) {
+            if (e.type === 'beforeinput' && e.inputType !== 'insertFromPaste' && e.inputType !== 'insertFromPasteAsQuotation') return false;
             const editor = classicPasteEditor(e.target);
-            if (!editor) return;
-
-            const clipboardData = e.clipboardData || window.clipboardData;
+            if (!editor) return false;
             const request = plainTextPasteRequest;
             const plain = e.shiftKey || (request && request.editor === editor && Date.now() - request.at < 2000);
-            if (plain) {
-                e.preventDefault();
-                if (request && request.handled) return;
-                const text = clipboardData && (clipboardData.getData('text/plain') || clipboardData.getData('Text') || clipboardData.getData('text/uri-list'));
-                if (insertClassicPlainText(editor, text)) {
-                    if (request) request.handled = true;
-                    plainTextPasteRequest = null;
-                }
-                return;
-            }
+            if (!plain) return false;
+            const text = window.SutraDOMSafety.clipboardText(e.clipboardData || e.dataTransfer)
+                || (typeof e.data === 'string' ? e.data : '');
+            if (!text) return true; // Preserve the browser's subsequent input event.
+            e.preventDefault();
+            insertClassicPlainText(editor, text);
+            plainTextPasteRequest = null;
+            return true;
+        }
+        document.addEventListener('beforeinput', handleClassicPlainTextPaste, true);
+        document.addEventListener('paste', function(e) {
+            if (handleClassicPlainTextPaste(e)) return;
+            const editor = classicPasteEditor(e.target);
+            if (!editor) return;
+            const clipboardData = e.clipboardData || window.clipboardData;
             if (!clipboardData || e.defaultPrevented) return;
 
             // Check for image data first
