@@ -29,6 +29,11 @@ use tighter spacing; phone and touch controls keep their larger targets.
 
 **Add task** opens the canonical Capture composer with General task selected. **Add homework** opens the same composer with Homework selected; a class may be chosen there. When captured text names an existing Homework class or activity, Capture can preselect it and preview that destination. Students can change the class or activity before saving. The Home quick task form and its top Add task button also create general tasks in this same store. The quick form keeps the submitted text until the local write is confirmed. Class-specific add actions continue to create homework. Extracurricular classes, imports, Assignment Studio, attachment tools, scheduling, and class dashboards remain available.
 
+Capture uses the shared QuickCapture and student date/time parsers. The old,
+uncalled `parseQuickAdd`, `renderQuickAddBar`, and `bindQuickAdd` helpers have
+been removed after tracing their references. This retires an inactive parser;
+it does not migrate tasks or change legacy Homework storage identifiers.
+
 ## By Class history
 
 By Class keeps every unfinished assignment in its main class group, including past-due and undated work. Only completed assignments move into the collapsed **Completed tasks** section, regardless of due date. That section retains class grouping and counts only completed tasks.

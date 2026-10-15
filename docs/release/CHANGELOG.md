@@ -28,6 +28,8 @@ not been pushed, merged, or released. New automated regressions await CI.
   upgrade on normal unlock; clarify that UI privacy locks do not encrypt notes.
 - Bundle an original Sutra daily-loop icon set for navigation and setup,
   preserving existing labels, touch targets, and offline rendering.
+- Retire the inactive Homework quick-add parser and its uncalled UI helpers;
+  active capture continues through the canonical shared date/time parser.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

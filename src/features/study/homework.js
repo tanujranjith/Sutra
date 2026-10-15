@@ -1477,104 +1477,8 @@
     });
   }
 
-  // ---- legacy quick add (compatibility path) ----------------------------
-
-  const QUICK_WEEKDAYS = { sunday: 0, sun: 0, monday: 1, mon: 1, tuesday: 2, tue: 2, tues: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, thur: 4, thurs: 4, friday: 5, fri: 5, saturday: 6, sat: 6 };
-
-  function quickNextWeekday(targetDow) {
-    const now = startOfDay(new Date());
-    let delta = (targetDow - now.getDay() + 7) % 7;
-    if (delta === 0) delta = 7;
-    const d = new Date(now);
-    d.setDate(d.getDate() + delta);
-    return formatDateKey(d);
-  }
-
-  function parseQuickAdd(rawText) {
-    let raw = ` ${String(rawText || '').trim()} `;
-    if (!raw.trim()) return null;
-
-    const sharedParser = window.SutraStudentDateParser;
-    const sharedDate = sharedParser && typeof sharedParser.parseNaturalDate === 'function'
-      ? sharedParser.parseNaturalDate(raw, { now: new Date() })
-      : null;
-    const sharedTime = sharedParser && typeof sharedParser.parseNaturalTime === 'function'
-      ? sharedParser.parseNaturalTime(raw)
-      : null;
-
-    let difficulty = 'medium';
-    const diffMatch = raw.match(/\b(easy|medium|med|hard)\b/i);
-    if (diffMatch) {
-      const token = diffMatch[1].toLowerCase();
-      difficulty = normalizeDifficulty(token === 'med' ? 'medium' : token);
-      raw = raw.replace(diffMatch[0], ' ');
-    }
-
-    let dueTime = sharedTime && sharedTime.time ? normalizeDueTime(sharedTime.time) : '';
-    const timeMatch = raw.match(/\b(\d{1,2}:\d{2}\s*(?:am|pm)?|\d{1,2}\s*(?:am|pm))\b/i);
-    if (timeMatch) {
-      const parsed = normalizeDueTime(timeMatch[0].replace(/\s+/g, '')) || normalizeDueTime(`${timeMatch[0].replace(/[^\d]/g, '')}:00`);
-      if (parsed) { dueTime = parsed; raw = raw.replace(timeMatch[0], ' '); }
-    } else if (sharedTime && sharedTime.match) {
-      raw = raw.replace(new RegExp(escapeRegExp(sharedTime.match), 'i'), ' ');
-    }
-
-    let dueDate = '';
-    const isoMatch = raw.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-    const tomorrowMatch = raw.match(/\b(tomorrow|tmrw|tmr)\b/i);
-    const todayMatch = raw.match(/\b(today|tonight)\b/i);
-    const nextWeekMatch = raw.match(/\bnext week\b/i);
-    const mdMatch = raw.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
-    let weekdayMatch = null;
-    for (const name of Object.keys(QUICK_WEEKDAYS)) {
-      const re = new RegExp(`\\b${name}\\b`, 'i');
-      if (re.test(raw)) { weekdayMatch = { name, match: raw.match(re)[0] }; break; }
-    }
-
-    if (sharedDate && sharedDate.date) { dueDate = normalizeDueDate(sharedDate.date); raw = raw.replace(new RegExp(escapeRegExp(sharedDate.match || ''), 'i'), ' '); }
-    else if (isoMatch) { dueDate = normalizeDueDate(isoMatch[1]); raw = raw.replace(isoMatch[0], ' '); }
-    else if (todayMatch) { dueDate = formatDateKey(new Date()); raw = raw.replace(todayMatch[0], ' '); }
-    else if (tomorrowMatch) { const d = new Date(); d.setDate(d.getDate() + 1); dueDate = formatDateKey(d); raw = raw.replace(tomorrowMatch[0], ' '); }
-    else if (nextWeekMatch) { const d = new Date(); d.setDate(d.getDate() + 7); dueDate = formatDateKey(d); raw = raw.replace(nextWeekMatch[0], ' '); }
-    else if (mdMatch) {
-      const mo = Number(mdMatch[1]); const da = Number(mdMatch[2]);
-      let yr = mdMatch[3] ? Number(mdMatch[3]) : new Date().getFullYear();
-      if (yr < 100) yr += 2000;
-      const d = new Date(yr, mo - 1, da);
-      if (!Number.isNaN(d.getTime())) { dueDate = formatDateKey(d); raw = raw.replace(mdMatch[0], ' '); }
-    } else if (weekdayMatch) {
-      dueDate = quickNextWeekday(QUICK_WEEKDAYS[weekdayMatch.name]);
-      raw = raw.replace(new RegExp(`\\b${weekdayMatch.match}\\b`, 'i'), ' ');
-    }
-
-    let courseId = '';
-    let matchedName = '';
-    courses.forEach(course => {
-      const name = String(course.name || '').trim();
-      if (name && name.length > matchedName.length && new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i').test(raw)) {
-        courseId = course.id;
-        matchedName = name;
-      }
-    });
-    if (matchedName) raw = raw.replace(new RegExp(escapeRegExp(matchedName), 'i'), ' ');
-
-    const title = raw.replace(/\b(due|on|at|by)\b/ig, ' ').replace(/\s+/g, ' ').trim();
-    return { courseId, title, dueDate, dueTime, difficulty };
-  }
-
-  function renderQuickAddBar() {
-    return `
-      <div class="hw-quick-add">
-        <div class="hw-quick-add-row">
-          <div class="hw-quick-add-field">
-            <i class="fas fa-bolt" aria-hidden="true"></i>
-            <input type="text" class="hw-quick-add-input" data-quick-add-input placeholder="Try: Chem lab report due Fri 3pm hard" autocomplete="off" />
-          </div>
-          <button type="button" class="hw-quick-add-submit" data-quick-add-submit>Add</button>
-        </div>
-        <div class="hw-quick-add-preview" data-quick-add-preview></div>
-      </div>`;
-  }
+  // Capture uses the canonical QuickCapture parser; the inactive quick-add
+  // parser and its uncalled UI were retired without changing stored tasks.
 
   // Board-level "Add class / Add activity" controls. The homework-layout redesign
   // moved away from the per-lane board (renderCourseLane), which removed the only
@@ -1589,43 +1493,6 @@
       </div>`;
   }
 
-  function bindQuickAdd(board) {
-    const input = board.querySelector('[data-quick-add-input]');
-    if (!input) return;
-    const submitBtn = board.querySelector('[data-quick-add-submit]');
-    const preview = board.querySelector('[data-quick-add-preview]');
-
-    const updatePreview = () => {
-      if (!preview) return;
-      if (!input.value.trim()) { preview.textContent = ''; return; }
-      const parsed = parseQuickAdd(input.value);
-      if (!parsed) { preview.textContent = ''; return; }
-      const course = courses.find(c => String(c.id) === String(parsed.courseId));
-      const chips = [];
-      if (course) chips.push(`<span class="hw-quick-chip">${escHtml(course.name)}</span>`);
-      if (parsed.dueDate) chips.push(`<span class="hw-quick-chip">${escHtml(formatDueDateLabel(parsed.dueDate))}</span>`);
-      if (parsed.dueTime) chips.push(`<span class="hw-quick-chip">${escHtml(formatDueTimeLabel(parsed.dueTime))}</span>`);
-      chips.push(`<span class="hw-quick-chip">${escHtml(parsed.difficulty)}</span>`);
-      setSafeHTML(preview, `<span>Will add &ldquo;${escHtml(parsed.title || '…')}&rdquo;</span>${chips.join('')}`);
-    };
-
-    const submit = () => {
-      const parsed = parseQuickAdd(input.value);
-      if (!parsed || !parsed.title) { input.focus(); return; }
-      addTaskToCourse(parsed.courseId || '', {
-        title: parsed.title,
-        dueDate: parsed.dueDate,
-        dueTime: parsed.dueTime,
-        difficulty: parsed.difficulty,
-        recurrence: 'none'
-      });
-      render();
-    };
-
-    input.addEventListener('input', updatePreview);
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } });
-    if (submitBtn) submitBtn.addEventListener('click', submit);
-  }
 
   // ---- unified spreadsheet-style view ------------------------------------
   // One row per class/activity, with that subject's assignments laid out as
