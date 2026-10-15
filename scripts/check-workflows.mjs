@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs';
 const files = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
 const failures = [];
 const texts = Object.fromEntries(files.map((file) => [file, readFileSync(file, 'utf8')]));
+const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+const expectedNodeVersion = '24';
+const expectedNodeRange = '>=24 <25';
+
+if (packageJson.engines?.node !== expectedNodeRange) {
+  failures.push(`package.json: Node engine must be ${expectedNodeRange}`);
+}
 
 for (const [file, source] of Object.entries(texts)) {
   for (const match of source.matchAll(/^\s*-?\s*uses:\s*([^\s#]+)(?:\s*#.*)?$/gm)) {
@@ -12,6 +19,9 @@ for (const [file, source] of Object.entries(texts)) {
   }
   if (!/concurrency:[\s\S]*cancel-in-progress:\s*true/.test(source)) failures.push(`${file}: superseded runs are not cancelled`);
   if (!/cache:\s*npm/.test(source)) failures.push(`${file}: npm dependency cache is not configured`);
+  const nodeVersion = source.match(/^\s+NODE_VERSION:\s*["']?(\d+)["']?\s*$/m)?.[1];
+  if (nodeVersion !== expectedNodeVersion) failures.push(`${file}: NODE_VERSION must be ${expectedNodeVersion}`);
+  if (!source.includes('node-version: ${{ env.NODE_VERSION }}')) failures.push(`${file}: setup-node must use the declared NODE_VERSION`);
 }
 
 const ci = texts['.github/workflows/ci.yml'];

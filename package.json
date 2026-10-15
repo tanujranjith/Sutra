@@ -4,6 +4,9 @@
   "description": "A local-first student, life, and work workspace: notes, tasks, calendar, focus, AP prep, college apps, and more. Runs as a single static web app.",
   "author": "Tanuj Ranjith",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "homepage": "https://github.com/tanujranjith/Sutra",
   "repository": {
     "type": "git",
