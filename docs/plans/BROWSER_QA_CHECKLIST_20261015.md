@@ -1,6 +1,6 @@
 # Browser QA checklist — October 15, 2026
 
-Candidate tested: e616e71 on codex/student-workflow-batch.
+Initial candidate tested: e616e71 on codex/student-workflow-batch.
 Manual Chrome QA used http://127.0.0.1:5195/Sutra.html, an isolated local origin.
 No automated suites, provider requests, pushes, merges, deployments, remote writes,
 or source fixes were performed in this pass. Starting the static server runs its
@@ -11,6 +11,11 @@ Struck entries 1–24 retain prior user approval/manual verification; they were 
 all repeated in this pass. Newly passed items are 28, 30, 36, and 37.
 Open entries remain open even when some subchecks passed. Browser checks do not
 replace the pending CI, restore, external-service, or physical-device gates.
+
+Follow-up fixes: landing copy at 7c27546; Settings/planning at d288810.
+Manual Chrome checks on the same isolated origin passed items 31, 38, and the
+local behavior in 44. Required cache/CSP generators and the staged commit hook
+ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 
 ## Checklist
 
@@ -44,23 +49,62 @@ replace the pending CI, restore, external-service, or physical-device gates.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
 29. True browser zoom at 67%/150% across Home/Create/Assistant/Settings, plus narrow screens. Open: viewport resizing is not browser zoom; the available controls did not establish true zoom coverage.
 30. ~~Bundled Sutra icons in light/dark themes, phone navigation, and cached loading with the local server stopped.~~
-31. Settings: desktop/phone navigation, search, pending edits, Save, and Revert. NEEDS FIX: at 390×844, bottom navigation covers Save Changes. Desktop Save/Revert and reload passed; phone Back/search retained pending edits with no horizontal overflow.
+31. ~~Settings: desktop/phone navigation, search, pending edits, Save, Revert, and reload persistence; phone actions clear the bottom navigation.~~
 32. Grammar/spelling/rephrase: cheap generation, editable review, Apply, Cancel, and Undo. Partial: empty grammar review and Cancel were checked; live generation/Apply/Undo remain open.
 33. Writing guards: empty input makes no request and stale original text cannot be overwritten. Partial: empty passage disabled Generate; stale-text behavior needs a provider or CI fixture.
 34. Strengthened page PIN: wrong/right PIN, change/remove, legacy upgrade, and reload. Open: new credential entry must be performed privately by the user.
 35. Workspace lock: refresh/inactivity and retry delay. Open: user-entered QA credential required.
 36. ~~Invalid Capture dates and leap days: February 31/month 13 stay unset; February 29, 2028 parses.~~
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
-38. Weekly planning: full-week coverage and already-scheduled work deduplication. Partial / NEEDS INVESTIGATION: Sunday task appeared, and re-planning excluded its added block; the first plan proposed 06:00–07:00 today when the app clock showed 19:29.
+38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
 39. Wellness retirement: navigation/widgets/commands/Help and legacy data preservation; normal goals/habits/notes/Focus remain usable. Partial: Life dashboard omitted retired tools, and an ordinary goal saved/reloaded. Legacy portability and all discovery surfaces remain open.
 40. Spreadsheet importer: XLSX values/formulas and cached offline use. Blocked by the Chrome file-upload limitation.
 41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Open: controlled CI fault fixtures required; no deliberate faults injected into the user workspace.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
 43. Help/tutorial: current instructions, rendering, and navigation. Partial: Help opens and contains current workspace contracts; visible raw &amp; text and coverage of new writing commands still need review. No comprehensive link/tutorial pass completed.
-44. Landing-page copy and nested 404 recovery paths. NEEDS FIX: unintended question marks remain in landing copy, image descriptions, separators, and grade A?. Direct local 404 → Home navigation works; nested hosting behavior remains unverified.
+44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
+46. Save-conflict investigation: a later disposable Timeline edit raised a storage-mismatch warning. Its writer/source is unconfirmed. A single-tab planned block survived reload, but concurrent-tab save safety remains open.
 
-## Evidence from this pass
+## Follow-up fix verification
+
+- 31: corrected the responsive footer selector specificity. At 390×844, Save
+  ended at y749 and navigation started at y768; center hit testing identified
+  settingsApplyBtn. At 320×568, Save ended at y473 and navigation began at y492.
+  Save worked at both widths, Revert restored the draft baseline, and a saved
+  Comfortable density survived reload. Viewport override reset.
+- 38: the pure engine accepts an injected notBeforeMinute boundary; the browser
+  supplies the next minute and rejects elapsed starts immediately before Add.
+  A task due October 21 (day seven) appeared at 19:43 on October 15 instead of
+  06:00. Once 19:43 passed, Add refused it and kept the button available. With a
+  temporary 19:00 day-end setting, the preview rolled to October 16 at 06:00.
+  The day-end setting was restored to 22:00. A later single-tab normal plan at
+  19:47 appeared in Timeline, survived reload, and was excluded on re-planning.
+  Add all uses the same expiry guard and now preserves its failure feedback.
+  Controlled boundary/rollover and phone-hit-test regressions were prepared for
+  CI only; they were not executed locally.
+- 44: independently reviewed Luna's HomePage.html diff. Only corrupted text,
+  symbols, alt descriptions, and comments changed; JavaScript ternaries remain.
+  Chrome DOM inspection found no question marks in the landing text or image
+  labels. An unchanged copy of 404.html served from an ignored nested local
+  fixture loaded its root-relative logo; Back to home and Open Sutra reached
+  HomePage.html and Sutra.html. This checks browser path resolution, not the
+  production HTTP 404 status, /Sutra hosting prefix, or remote deployment.
+- 46: the first reload with two QA app tabs did not retain the newly added
+  block. A clean single-tab retry persisted. A later edit then showed the
+  canonical save-conflict warning: storage no longer matched the page's last
+  confirmed save, with no other open Sutra page detected. The app blocked the
+  write rather than claiming success. Cancel/reload cleared the active warning,
+  though Save Health retained the failed-save diagnostic. Cause was not proven
+  and is not fixed by these three scoped changes.
+
+Follow-up screenshots in the same ignored checklist-pass directory:
+settings-fixed-phone.png, landing-copy-fixed.png, nested-recovery-fixed.png,
+expired-plan-rejected.png, after-hours-plan-fixed.png, future-block-timeline.png.
+No secrets, provider calls, remote actions, or schema changes. Two extra harmless
+QA tasks and their disposable planning activity were used only in origin 5195.
+
+## Evidence from the initial pass (before the follow-up fixes)
 
 - 28: staged major QA Engineering. Real changed keystrokes set lower-row values
   7 and 8; Tab/Shift+Tab moved to adjacent score fields. Both values survived
