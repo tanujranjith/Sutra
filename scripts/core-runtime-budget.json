@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-12T23:41:05.317Z",
-  "reviewedReason": "Scope plain-text clipboard fallback to the current classic editor and preserve normal paste while preventing delayed or duplicate insertion",
-  "maxBytes": 4993454,
-  "maxLines": 87405
+  "blessedAt": "2026-10-15T00:04:39.923Z",
+  "reviewedReason": "Bounded QA fixes: reset capture drafts, preserve blank essay targets, canonical calendar countdowns, editable calculator errors, and truthful Drive availability",
+  "maxBytes": 4994168,
+  "maxLines": 87424
 }

@@ -17058,6 +17058,7 @@ function populateProgressDashboard() {
             let calcExpr = '';
             let calcJustEvaled = false;
             let calcPrevExpr = '';
+            let calcHasError = false;
 
             function calcFormatNumber(n) {
                 if (Object.is(n, -0)) n = 0;
@@ -17097,10 +17098,12 @@ function populateProgressDashboard() {
                         return v;
                     }
                     function parseFactor() {
-                        if (peek() === '(') { consume(); const v = parseExpr(); if (peek() === ')') consume(); return v; }
+                        if (peek() === '(') { consume(); const v = parseExpr(); if (consume() !== ')') throw new Error('parenthesis'); return v; }
                         if (peek() === '-') { consume(); return -parseFactor(); }
                         if (peek() === '+') { consume(); return parseFactor(); }
-                        const n = parseFloat(consume());
+                        const token = consume();
+                        if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?$/.test(token || '')) throw new Error('number');
+                        const n = Number(token);
                         if (isNaN(n)) throw new Error('nan');
                         return n;
                     }
@@ -17114,6 +17117,11 @@ function populateProgressDashboard() {
                 const exprEl = document.getElementById('lifeCalcExpr');
                 const resultEl = document.getElementById('lifeCalcResult');
                 if (!resultEl) return;
+                if (calcHasError) {
+                    if (exprEl) exprEl.textContent = calcExpr + ' =';
+                    resultEl.textContent = 'Error';
+                    return;
+                }
                 if (!calcExpr) {
                     if (exprEl) exprEl.textContent = '';
                     resultEl.textContent = '0';
@@ -17131,6 +17139,7 @@ function populateProgressDashboard() {
             function calcHandleButton(action) {
                 const operators = ['+', '−', '×', '÷'];
                 if (action === 'clear') {
+                    calcHasError = false;
                     calcExpr = '';
                     calcJustEvaled = false;
                     calcPrevExpr = '';
@@ -17138,6 +17147,7 @@ function populateProgressDashboard() {
                     return;
                 }
                 if (action === 'backspace') {
+                    calcHasError = false;
                     if (calcJustEvaled) { calcExpr = ''; calcJustEvaled = false; }
                     else calcExpr = calcExpr.slice(0, -1);
                     calcUpdateDisplay();
@@ -17146,6 +17156,7 @@ function populateProgressDashboard() {
                 if (action === '=') {
                     if (!calcExpr) return;
                     const result = calcTryEval(calcExpr);
+                    calcHasError = result === null;
                     if (result !== null) {
                         calcPrevExpr = calcExpr;
                         calcExpr = calcFormatNumber(result);
@@ -17158,6 +17169,7 @@ function populateProgressDashboard() {
                     if (!operators.includes(action) && action !== '%') calcExpr = '';
                     calcJustEvaled = false;
                 }
+                calcHasError = false;
                 calcExpr += action;
                 calcUpdateDisplay();
             }
@@ -42406,9 +42418,15 @@ function buildOnboardingPlanPreview() {
         function _toNum(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
         function _examDaysLeft(dateISO) {
             if (!dateISO) return null;
-            const d = new Date(String(dateISO).length <= 10 ? dateISO + 'T23:59:00' : dateISO);
+            const value = String(dateISO);
+            const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+            const d = new Date(dateOnly ? value + 'T12:00:00' : value);
             if (isNaN(d)) return null;
-            return Math.ceil((d - Date.now()) / 86400000);
+            if (dateOnly && (d.getFullYear() !== Number(dateOnly[1]) || d.getMonth() + 1 !== Number(dateOnly[2]) || d.getDate() !== Number(dateOnly[3]))) return null;
+            const now = new Date(Date.now());
+            // Compare local calendar dates, not elapsed 24-hour periods. DST
+            // and the time of day must not make two views disagree.
+            return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
         }
 
         // Deterministic readiness verdict from score gap + time pressure.
@@ -43838,8 +43856,7 @@ function buildOnboardingPlanPreview() {
             if (id.startsWith('custom:')) {
                 const exam = (testingHub.custom || []).find(c => c.id === id.slice(7));
                 if (!exam) return null;
-                const examDate = exam.examDate ? new Date(exam.examDate) : null;
-                const daysLeft = examDate ? Math.ceil((examDate - Date.now()) / 86400000) : null;
+                const daysLeft = _examDaysLeft(exam.examDate);
                 const mistakes = Array.isArray(exam.mistakes) ? exam.mistakes : [];
                 const tasks = Array.isArray(exam.tasks) ? exam.tasks : [];
                 const nextTask = (tasks.find(t => !t.done) || {}).text || null;
@@ -43859,8 +43876,7 @@ function buildOnboardingPlanPreview() {
             }
             const profile = getExamProfile(id);
             if (!profile) return null;
-            const examDate = profile.examDate ? new Date(profile.examDate) : null;
-            const daysLeft = examDate ? Math.ceil((examDate - Date.now()) / 86400000) : null;
+            const daysLeft = _examDaysLeft(profile.examDate);
             const mistakes = profile.mistakes || [];
             const tasks = profile.tasks || [];
             const nextTask = (tasks.find(t => !t.done) || {}).text || null;
@@ -54548,9 +54564,9 @@ function getActiveEditor() {
 
         function computeSutraDriveSyncState() {
             const meta = loadSutraDriveSyncMetadata();
-            if (!meta.enabled) return 'disabled';
             if (!isSutraDriveOAuthOriginSupported()) return 'needs-config';
             if (!getSutraGoogleDriveClientId()) return 'needs-config';
+            if (!meta.enabled) return 'disabled';
             if (sutraDriveSyncRuntime.syncInProgress) return sutraDriveSyncRuntime.state || 'syncing-upload';
             if (meta.duplicateWarning || sutraDriveSyncRuntime.conflictRemote) return 'conflict';
             if (meta.remoteMissing) return 'error';
@@ -54636,6 +54652,7 @@ function getActiveEditor() {
 
             const byId = (id) => document.getElementById(id);
             const enabled = meta.enabled === true;
+            const configured = isSutraDriveOAuthOriginSupported() && !!getSutraGoogleDriveClientId();
             const hasToken = hasSutraDriveAccessToken();
             const unlocked = !!sutraDriveSyncRuntime.derivedKey;
             const busy = sutraDriveSyncRuntime.syncInProgress || state === 'authorizing' || state === 'unlocking';
@@ -54661,7 +54678,16 @@ function getActiveEditor() {
             if (buttons.lock) buttons.lock.hidden = !enabled || !unlocked;
             if (buttons.disconnect) buttons.disconnect.hidden = !enabled;
             if (buttons.deleteCloud) buttons.deleteCloud.hidden = !enabled || !hasToken;
-            Object.values(buttons).forEach(btn => { if (btn) btn.disabled = busy; });
+            Object.entries(buttons).forEach(([name, btn]) => {
+                if (!btn) return;
+                const localAction = ['downloadLocal', 'lock', 'disconnect'].includes(name);
+                btn.disabled = busy || btn.hidden || (!configured && !localAction);
+                if (name === 'syncNow') btn.disabled = btn.disabled || !hasToken || !unlocked || !navigator.onLine;
+            });
+            if (buttons.connect) {
+                buttons.connect.textContent = configured ? 'Connect Google Drive' : 'Google Drive unavailable';
+                buttons.connect.title = configured ? '' : getSutraDriveStatusMessage('needs-config');
+            }
             const stayRow = byId('sutraDriveStayUnlockedRow');
             const stayToggle = byId('sutraDriveStayUnlockedToggle');
             if (stayRow) stayRow.hidden = !enabled;

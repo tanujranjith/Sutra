@@ -1779,3 +1779,5 @@ body.pref-high-contrast .cc-subtitle {
     }
     .cc-row-control > .cc-segmented { justify-content: flex-start; }
 }
+/* Settings button styles must not override runtime availability gates. */
+#sutraDriveSyncSection [hidden] { display: none !important; }
