@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261012-assistant-access1",
-    "hash": "b4071709a9e717ef"
+    "stamp": "20261014-context-budget2",
+    "hash": "62b9ea4e60ed075f"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261012-native-paste2",
-    "hash": "303c5f6f476f599a"
+    "stamp": "20261014-qa-fixes1",
+    "hash": "c18d16300cf6e191"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -188,12 +188,12 @@
     "hash": "e20b9640cd6248b1"
   },
   "src/features/assistant/assistant-safety.js": {
-    "stamp": "20260714-intel1",
-    "hash": "5fadb5f3b117fbf2"
+    "stamp": "20261014-context-budget1",
+    "hash": "d489c7e632eb70c1"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261012-assistant-access1",
-    "hash": "a5b7764c58a2f4b9"
+    "stamp": "20261014-context-budget2",
+    "hash": "ac240f7d8cf90da4"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261012-native-paste1",
-    "hash": "cd53214bc1786859"
+    "stamp": "20261014-qa-fixes1",
+    "hash": "3433c1b743e120db"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -744,8 +744,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20260821-settings16",
-    "hash": "220440ec48d87134"
+    "stamp": "20261014-drive-gates1",
+    "hash": "8c8990b6c0515a7c"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20261001-mobile-agenda1",

@@ -53,6 +53,10 @@ whether to make an encrypted safety export; only Yes opens its password screen.
   account, provider setup, or network request from Sutra.
 
 ### Google Drive
+- Until the deployment has a public OAuth client ID and a supported origin,
+  Settings → Data shows Drive as unavailable and disables connection. Actions
+  requiring a connected/unlocked session stay hidden or disabled. Manual local
+  encrypted backups remain independently available.
 - **Today:** use Sutra's encrypted **Drive sync** (Settings → Data → Google
   Drive). It uploads encrypted snapshots to Drive's `appdata` folder using only
   the `drive.appdata` scope.

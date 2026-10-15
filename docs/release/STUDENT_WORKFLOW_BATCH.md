@@ -138,6 +138,42 @@ undo/redo, reload, normal rich paste, input-event delivery, HTML-only data, and
 an API-denial sentinel asserting no clipboard read or blocked-access toast. No functional tests
 were run locally; owner validation and GitHub CI remain pending.
 
+### October 14 local QA follow-up
+
+Six confirmed problems have local fixes: capture draft details reset between
+items; blank new essay targets stay null; standard/custom exam countdowns share
+local-calendar-day logic; Life calculator errors are visible and editable;
+unconfigured Drive connection is disabled and session actions stay gated; and
+Assistant requests use bounded selective context and relevant action schemas.
+No persisted workspace schema changed.
+
+The token audit found the full Actions Bank and lengthy repeated instructions
+in every request, automatic note/memory enrichment even at Minimal depth,
+pretty-printed context/read metadata, and a budget reconstruction bug that keyed
+note excerpts by note ID and repeated one excerpt for each chunk match. The
+request builder now keys excerpts by chunk ID, excludes generated Help & Docs
+from ordinary searches, and bounds final serialized context/history as well as
+individual candidates. Conversation compression preserves message roles.
+
+Chrome on the local server confirmed canceled drafts reopen blank, a new essay
+shows the Words placeholder, SAT hub/detail both show 52 days to December 5,
+Drive exposes only a disabled unavailable control when unconfigured, invalid
+calculator input shows Error, and 2×−3 still gives −6. One cheap Gemini
+gemini-3.5-flash-lite/Low check returned QA OK with 2,568 input tokens, compared
+with 9,961 in the earlier Gemini smoke check (about 74% lower). It retrieved no
+Help & Docs. An additional literal-reply rule then removed incidental workspace
+matches for exact-output requests without workspace references; that refinement
+was not followed by another paid call.
+
+Only the owner-approved runtime integrity gates, staged hook, syntax validation,
+and generated-cache refresh ran locally. New regression tests were reviewed and
+syntax checked but not executed; GitHub CI remains pending authorization to push.
+The runtime gate initially rejected the small size increase; its budget was
+explicitly reviewed with the six-fix rationale and the full gate then passed.
+Temporary feature-pack visibility changes were restored. One additional
+synthetic essay, QA Blank Target Regression, and one cheap Assistant chat remain
+in the local QA workspace. No remote changes, push, merge, or deployment occurred.
+
 Review the local branch and the changes listed above. Once a push is explicitly
 authorized, run the existing GitHub CI against this branch's exact commit.
 The optional full-browser matrix should cover Firefox, WebKit, and responsive
