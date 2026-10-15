@@ -10,3 +10,11 @@ test('calculator handles unary signs without changing multiplication precedence'
 test('calculator rejects malformed, non-arithmetic, and non-finite expressions', () => {
   for (const expression of ['2abc+3', '2(3)', '()', '1..2', '2+', '*/2', '(2+3', '2/0', 'alert(1)', '2**3']) assert.equal(calculate(expression), null, expression);
 });
+
+test('shared calculator accepts Life keypad symbols, percentages and exponent results with bounded input', () => {
+  assert.equal(calculate('2 × −3'), -6);
+  assert.equal(calculate('50%'), 0.5);
+  assert.equal(calculate('1e+12 + 2e+12'), 3e12);
+  assert.equal(calculate('2 + * 3'), null);
+  assert.equal(calculate('('.repeat(513)), null);
+});

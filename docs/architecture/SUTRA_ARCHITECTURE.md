@@ -33,6 +33,14 @@ loads from static hosting or directly from a local file.
   Because `app.js` runs at global scope, top-level names share one namespace —
   worth keeping in mind when reading or extending it.
 
+Assistant source-card DOM construction lives in `assistant-core.js` with injected
+document, live-source resolver, navigation, and exclusion callbacks. The core
+keeps canonical state resolution and routing. Task/exam source identities and
+informational one-time PIN-read labels survive chat normalization; those labels
+never authorize later reads. Life Calculator resolves the shared
+`SutraCustomTabs.evaluateExpression` parser only on user evaluation, preserving
+the existing script load order.
+
 ### Core safety layer (loaded before everything else)
 
 The safety layer also includes **`src/core/migrations.js`**

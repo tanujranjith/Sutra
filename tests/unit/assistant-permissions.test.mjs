@@ -5,6 +5,19 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const privacy = require('../../src/domain/assistant-permissions.js');
 
+test('retrieval metadata and empty fields do not claim unrelated workspace content was sent', () => {
+  privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
+  const result = privacy.filterContext({
+    homework: [{ id: 'robotics', notes: 'Use the blue sensor' }],
+    notesEvidenceStatus: 'not_requested', retrievedNotes: [], selection: '',
+    workspaceRetrieval: { matchedCount: 1, taskDetailsOnly: true }
+  });
+  assert.deepEqual(result.accessReport.areasRead, ['planning']);
+  assert.equal(result.notesEvidenceStatus, 'not_requested');
+  privacy.configure({ getPermissions: () => ({ mode: 'off' }) });
+  assert.equal(privacy.filterContext({ workspaceRetrieval: { matchedCount: 1 } }).workspaceRetrieval, undefined);
+});
+
 test('off mode exposes only non-workspace envelope metadata', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'off' }) });
   const result = privacy.filterContext({ schema: 'x', view: 'today', tasks: [{ id: 'secret-task' }], life: { wellness: { mood: 1 } } });

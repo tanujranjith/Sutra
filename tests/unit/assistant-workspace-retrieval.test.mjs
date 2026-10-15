@@ -44,6 +44,18 @@ test('each question replaces previous cross-workspace selections rather than app
   assert.equal(ctx.workspacePlanning, undefined);
 });
 
+test('a named task-details question excludes incidental shared-prefix records and unrelated notes searches', () => {
+  const result = selector([
+    record('homework', 'robotics', 'QA Robotics prepare sensor demo', { metadata: { taskNotes: 'Use blue sensor' } }),
+    record('homework', 'chem', 'QA Chemistry worksheet'),
+    record('course', 'course', 'QA Robotics'),
+    record('life_record', 'life', 'QA Goal')
+  ])('What are the saved notes for my QA Robotics sensor demo task? One short sentence; cite the task.');
+  assert.deepEqual(result.homework.map(row => row.id), ['robotics']);
+  assert.equal(result.workspaceCourses, undefined);
+  assert.equal(result.workspaceRetrieval.taskDetailsOnly, true);
+});
+
 test('personal saved-data questions cannot be intercepted by product help', () => {
   let opened = false;
   let handedOffQuestion = '';

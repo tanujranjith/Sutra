@@ -14,6 +14,7 @@ test('workspace source identity survives saved-chat round trips without storing 
   const restored = core.normalizeMessage(JSON.parse(JSON.stringify(core.normalizeMessage(raw))));
   assert.equal(restored.sources[0].key, 'testing_exam:sat');
   assert.equal(restored.sources[1].href, 'sutra://entity/homework%3Alab');
+  assert.equal(core.normalizeSource({ kind: 'homework', id: 'lab', key: 'task:other' }).key, 'homework:lab');
   assert.equal(restored.sources[2].readOnce, true);
   assert.equal(restored.sources[2].quote, '');
   assert.doesNotMatch(JSON.stringify(restored.sources), /do not store|private locked text/);

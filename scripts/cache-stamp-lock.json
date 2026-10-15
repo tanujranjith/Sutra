@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261014-assistant-retrieval7",
-    "hash": "1cd754d49fdd2ffd"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "37fb742504967f1d"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261014-assistant-retrieval7",
-    "hash": "ace2c8ed607e539b"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "d353db61bfcf2106"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -104,8 +104,8 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20261011-assistant-discovery1",
-    "hash": "10c7326e07169997"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "52dfe20e2fcce701"
   },
   "src/domain/content-timeline.js": {
     "stamp": "20261001-content-timeline3",
@@ -176,24 +176,24 @@
     "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "615592a8f5316089"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "8515c83be55a82d8"
   },
   "src/features/assistant/action-system.js": {
     "stamp": "20260807-agentplans2",
     "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
-    "stamp": "20260714-assistant-trust1",
-    "hash": "e20b9640cd6248b1"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "86e5eb53cd8d025e"
   },
   "src/features/assistant/assistant-safety.js": {
-    "stamp": "20261014-context-budget1",
-    "hash": "d489c7e632eb70c1"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261014-assistant-retrieval7",
-    "hash": "c2d4445456122b1e"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "97c93a015e9b3cda"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -336,8 +336,8 @@
     "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "03670cd4dea1e272"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "6b513bec735419c6"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
@@ -452,8 +452,8 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261014-assistant-retrieval7",
-    "hash": "b5053bd6a49c90df"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "75fa24245451cc5a"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",
@@ -536,8 +536,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "9294ff5e78e87102"
+    "stamp": "20261015-caveat-fixes3",
+    "hash": "f558ae3c06b5b921"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",

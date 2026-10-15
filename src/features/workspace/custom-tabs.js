@@ -153,8 +153,9 @@
     // pass. Returns a number or null; never executes arbitrary code.
 
     function evalExpression(expr) {
-        var input = String(expr).replace(/\s+/g, '');
-        var tokens = input.match(/(\d+\.?\d*|\.\d+|[+\-*/()])/g);
+        var input = String(expr).replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/%/g, '/100').replace(/\s+/g, '').toLowerCase();
+        if (input.length > 512) return null;
+        var tokens = input.match(/((?:\d+\.?\d*|\.\d+)(?:e[+\-]?\d+)?|[+\-*/()])/g);
         if (!tokens) return null;
         if (tokens.join('') !== input) return null;
         var prec = { '+': 1, '-': 1, '*': 2, '/': 2, 'u-': 3, 'u+': 3 };
@@ -2773,6 +2774,7 @@
     }
 
     window.SutraCustomTabs = {
+        evaluateExpression: evalExpression,
         refresh: rebuild,
         getWidgetTypes: function () {
             return Object.keys(WIDGET_TYPES).map(function (k) {

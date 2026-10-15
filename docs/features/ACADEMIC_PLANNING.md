@@ -1,5 +1,17 @@
 # Academic Planning
 
+Quick Capture asks for a destination when distinct class/activity names match.
+Choosing a class, activity, or explicitly choosing no class resolves the prompt;
+a more specific nested name (AP Biology versus Biology) keeps its direct match.
+Semester Setup excludes metadata labels such as Teacher and Room from course
+headers. Application Sheets checkboxes name their field and college, and college
+and major Decision Matrix score edits update rankings without replacing inputs,
+so Tab and Shift+Tab keep their normal editing order.
+Life → Quick Calculator supports keyboard arithmetic, parentheses, Enter to
+evaluate, Backspace to correct, and Escape/Delete to clear. It shares the bounded,
+CSP-safe arithmetic parser with custom-tab calculators; this API is resolved
+when evaluating a user expression, after the existing custom-tabs script loads.
+
 _The semester-planning layer: Semester Setup, Grade Forecasting & GPA, the
 Assignment Studio, the rotating School Schedule, and reliable reminders. One
 coherent upgrade that reduces setup friction, improves academic decisions, helps

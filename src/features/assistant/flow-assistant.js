@@ -4999,6 +4999,8 @@
         if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
         const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
         const taskList = todo && terms.length === 0;
+        const taskDetailsOnly = todo && /\b(?:saved notes|reference url|task notes|assignment notes)\b/.test(query)
+            && !/\b(?:sat|act|exams?|calendar|grades?|college)\b/.test(query);
         const planning = /\b(?:plan|schedule|due|overdue|today|tomorrow|week|priorit|next step|what should i do)\b/i.test(query);
         const completed = /\b(?:completed|finished|done|archived)\b/i.test(query);
         const permissions = privacy.getPermissions();
@@ -5019,6 +5021,7 @@
             if (!permissions.allowWellness && /wellness|checkins|journalentries|fitness|calories/i.test(category)) return null;
             if (!permissions.allowPrivateDocuments && /journals|documents/i.test(category)) return null;
             const isTask = entity.type === 'task' || entity.type === 'homework';
+            if (taskDetailsOnly && !isTask) return null;
             if (isTask && !completed && /^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
             if (isTask && completed && !/^(?:completed|done|archived)$/i.test(entity.status || '')) return null;
             const title = String(entity.title || '').toLowerCase();
@@ -5031,8 +5034,9 @@
             const match = terms.map(term => text.indexOf(term)).filter(index => index >= 0).sort((a, b) => a - b)[0] || 0;
             return { entity, target, score, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
         }).filter(Boolean).sort((a, b) => b.score - a.score || String(a.entity.dates && a.entity.dates.due || '9999').localeCompare(String(b.entity.dates && b.entity.dates.due || '9999')) || String(a.entity.key).localeCompare(String(b.entity.key)));
+        const selected = taskDetailsOnly && ranked.length ? ranked.filter(row => row.score >= ranked[0].score * 0.75) : ranked;
         const result = {};
-        ranked.slice(0, taskList ? 40 : 16).forEach(({ entity, target, score, excerpt }) => {
+        selected.slice(0, taskList ? 40 : 16).forEach(({ entity, target, score, excerpt }) => {
             if (!result[target[1]]) result[target[1]] = [];
             result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
                 excerpt: entity.type === 'task' || entity.type === 'homework' ? undefined : excerpt,
@@ -5043,7 +5047,7 @@
                 citationUrl: 'sutra://entity/' + encodeURIComponent(entity.key),
                 courseId: entity.courseId || '', relevance: score });
         });
-        result.workspaceRetrieval = { matchedCount: ranked.length, selectedCount: Math.min(ranked.length, taskList ? 40 : 16), limit: taskList ? 40 : 16 };
+        result.workspaceRetrieval = { matchedCount: selected.length, selectedCount: Math.min(selected.length, taskList ? 40 : 16), limit: taskList ? 40 : 16, taskDetailsOnly };
         return result;
     }
 
@@ -5099,7 +5103,8 @@
                 if (hits.length) ctx.productKnowledge = hits.map(h => ({ topic: h.entry.title, summary: h.entry.summary, availability: h.entry.availability }));
             }
         } catch (e) { /* product knowledge is best-effort */ }
-        const noteRetrieval = ctx.depth === 'minimal' ? { sources: [], evidenceStatus: 'not_requested' } : retrieveNoteSources(userText, {
+        const noteRetrieval = ctx.depth === 'minimal' || (ctx.workspaceRetrieval && ctx.workspaceRetrieval.taskDetailsOnly)
+            ? { sources: [], evidenceStatus: 'not_requested' } : retrieveNoteSources(userText, {
             scope: options.scope || options.conversationScope,
             approvedAreas: accessOptions.approvedAreas,
             lockedPageAccessTicket: accessTicket,

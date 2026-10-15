@@ -15323,6 +15323,10 @@ body:not([data-theme="dark"]) .focus-timer {
     padding-left: 28px;
 }
 
+.life-calculator-shell .calc-btn-wide {
+    grid-column: span 2;
+}
+
 .calc-btn-eq {
     background: var(--accent);
     color: var(--bg-primary);

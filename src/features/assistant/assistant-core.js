@@ -30,8 +30,8 @@
   function source(raw) {
     if (!raw || typeof raw !== 'object') return null;
     if (raw.kind && raw.kind !== 'note' && raw.kind !== 'page') {
-      var entityId = value(raw.id, 240), key = value(raw.key || raw.kind + ':' + entityId, 320);
-      if (!entityId || !/^[a-z][a-z0-9_-]*:[^\s]+$/.test(key)) return null;
+      var entityId = value(raw.id, 240), key = value(raw.kind, 80) + ':' + entityId;
+      if (!entityId || !/^[a-z][a-z0-9_-]{1,63}$/.test(raw.kind)) return null;
       return { id: entityId, key: key, kind: value(raw.kind, 80), title: value(raw.title, 300),
         href: 'sutra://entity/' + encodeURIComponent(key), updatedAt: value(raw.updatedAt, 40),
         reasonCodes: ['query_match'], confidence: value(raw.confidence || 'high', 20), stale: raw.stale === true };

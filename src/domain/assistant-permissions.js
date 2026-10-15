@@ -133,6 +133,10 @@
       if (!canRead(area, options)) return;
       var value = stripSensitive(key, source[key], permissions, options);
       out[key] = value;
+      // Retrieval counts/status and empty envelopes contain no workspace body.
+      // Keep permission-filtered metadata without claiming that area was sent.
+      if (key === 'notesEvidenceStatus' || key === 'workspaceRetrieval' || value == null
+          || (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && !value.length)) return;
       if (areasRead.indexOf(area) < 0) areasRead.push(area);
       recordIds(value).forEach(function (id) { recordsRead.push({ area: area, kind: key, id: id }); });
     });

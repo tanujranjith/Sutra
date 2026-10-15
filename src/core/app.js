@@ -11475,7 +11475,10 @@ function populateProgressDashboard() {
         }
 
         function renderCollegeCheckboxInput(sheetKey, rowId, field, checked) {
-            return `<input class="college-checkbox-input" type="checkbox" data-college-sheet="${sheetKey}" data-college-row-id="${rowId}" data-college-field="${field}" ${checked ? 'checked' : ''} />`;
+            const row = getCollegeRows(sheetKey).find(item => String(item.id) === String(rowId)) || {};
+            const names = { testOptional: 'Test optional', appSubmitted: 'Application submitted', transcriptSubmitted: 'Transcript submitted', recommendationsSubmitted: 'Recommendations submitted' };
+            const label = (names[field] || String(field).replace(/([A-Z])/g, ' $1')) + ' for ' + (row.college || row.school || 'row ' + rowId);
+            return `<input class="college-checkbox-input" type="checkbox" aria-label="${escapeHtml(label)}" data-college-sheet="${escapeHtml(sheetKey)}" data-college-row-id="${escapeHtml(String(rowId))}" data-college-field="${escapeHtml(field)}" ${checked ? 'checked' : ''} />`;
         }
 
         function renderCollegeTextareaInput(sheetKey, rowId, field, value, rows = 2) {
@@ -13650,7 +13653,8 @@ function populateProgressDashboard() {
             if (!college.scores || typeof college.scores !== 'object') college.scores = {};
             college.scores[criterionId] = Math.max(0, Math.min(10, normalizeFiniteNumber(target.value, 0)));
             persistAppData();
-            renderCollegeAppWorkspace();
+            target.value = college.scores[criterionId];
+            renderCollegeAppDecisionMatrix(true);
         }
 
         function updateCollegeAppMajorDecisionScore(target) {
@@ -13662,7 +13666,8 @@ function populateProgressDashboard() {
             if (!major.scores || typeof major.scores !== 'object') major.scores = {};
             major.scores[criterionId] = Math.max(0, Math.min(10, normalizeFiniteNumber(target.value, 0)));
             persistAppData();
-            renderCollegeAppWorkspace();
+            target.value = major.scores[criterionId];
+            renderCollegeAppMajorDecisionMatrix(true);
         }
 
         function getCollegeDeadlineCountdownMeta(deadline, status) {
@@ -14141,7 +14146,25 @@ function populateProgressDashboard() {
                 .sort((a, b) => b.normalizedScore - a.normalizedScore);
         }
 
-        function renderCollegeAppDecisionMatrix() {
+        function refreshDecisionScoreCards(host, criteria, records, prefix, scoreAttribute) {
+            if (!host) return;
+            const totalWeight = criteria.reduce((sum, criterion) => sum + Math.max(0, Number(criterion.weight) || 0), 0);
+            host.querySelectorAll('input[' + scoreAttribute + ']').forEach(input => {
+                const record = records.find(row => String(row.id) === input.dataset.collegeappRowId);
+                if (!record) return;
+                const score = Math.max(0, Math.min(10, Number(record.scores && record.scores[input.getAttribute(scoreAttribute)]) || 0));
+                const row = input.closest('.' + prefix + '-card-row');
+                const bar = row && row.querySelector('.' + prefix + '-card-score-bar');
+                if (bar) bar.style.width = (score * 10) + '%';
+                if (row) row.classList.toggle(prefix + '-card-row-zero', score === 0);
+                const card = input.closest(prefix === 'dm' ? '.dm-college-card' : '.mdm-major-card');
+                const total = card && card.querySelector('.' + prefix + '-weighted-total');
+                const weighted = criteria.reduce((sum, criterion) => sum + Math.max(0, Math.min(10, Number(record.scores && record.scores[criterion.id]) || 0)) * Math.max(0, Number(criterion.weight) || 0), 0);
+                if (total) total.textContent = (totalWeight ? weighted / totalWeight : 0).toFixed(2);
+            });
+        }
+
+        function renderCollegeAppDecisionMatrix(preserveInputs = false) {
             const criteriaContainer = document.getElementById('collegeAppDecisionCriteriaBody');
             const collegesHeader = document.getElementById('collegeAppDecisionCollegesHeader');
             const collegesBody = document.getElementById('collegeAppDecisionCollegesBody');
@@ -14153,8 +14176,9 @@ function populateProgressDashboard() {
             const criteria = getCollegeAppRows('decisionCriteria');
             const colleges = getCollegeAppRows('decisionColleges');
 
+            if (preserveInputs) refreshDecisionScoreCards(collegesBody, criteria, colleges, 'dm', 'data-collegeapp-score-criterion');
             /* ------ Criteria panel (compact two-column grid) ------ */
-            if (criteriaContainer) {
+            if (criteriaContainer && !preserveInputs) {
                 if (!criteria.length) {
                     criteriaContainer.innerHTML = '<div class="dm-empty"><i class="fas fa-sliders-h"></i>No criteria yet. Add weighted criteria to start ranking schools.</div>';
                 } else {
@@ -14181,7 +14205,7 @@ function populateProgressDashboard() {
             }
 
             /* ------ College Score Cards ------ */
-            if (collegesBody) {
+            if (collegesBody && !preserveInputs) {
                 if (!colleges.length) {
                     collegesBody.innerHTML = `<div class="dm-empty"><i class="fas fa-university"></i>No colleges in matrix yet. Add at least one college to compare.</div>`;
                 } else {
@@ -14284,7 +14308,7 @@ function populateProgressDashboard() {
                 .sort((a, b) => b.normalizedScore - a.normalizedScore);
         }
 
-        function renderCollegeAppMajorDecisionMatrix() {
+        function renderCollegeAppMajorDecisionMatrix(preserveInputs = false) {
             const criteriaContainer = document.getElementById('majorDecisionCriteriaBody');
             const majorsBody = document.getElementById('majorDecisionMajorsBody');
             const rankingList = document.getElementById('majorDecisionRankingList');
@@ -14295,8 +14319,9 @@ function populateProgressDashboard() {
             const criteria = getCollegeAppRows('majorDecisionCriteria');
             const majors = getCollegeAppRows('majorDecisionMajors');
 
+            if (preserveInputs) refreshDecisionScoreCards(majorsBody, criteria, majors, 'mdm', 'data-collegeapp-major-score-criterion');
             /* ------ Criteria panel ------ */
-            if (criteriaContainer) {
+            if (criteriaContainer && !preserveInputs) {
                 if (!criteria.length) {
                     criteriaContainer.innerHTML = '<div class="mdm-empty"><i class="fas fa-sliders-h"></i>No criteria yet. Add weighted criteria to start ranking majors.</div>';
                 } else {
@@ -14318,7 +14343,7 @@ function populateProgressDashboard() {
             }
 
             /* ------ Major Score Cards ------ */
-            if (majorsBody) {
+            if (majorsBody && !preserveInputs) {
                 if (!majors.length) {
                     majorsBody.innerHTML = '<div class="mdm-empty"><i class="fas fa-graduation-cap"></i>No majors in matrix yet. Add at least one major to compare.</div>';
                 } else {
@@ -17045,6 +17070,7 @@ function populateProgressDashboard() {
                 if (dashboard) dashboard.style.display = 'none';
                 root.querySelectorAll('.life-subpage').forEach(sp => sp.style.display = 'none');
                 page.style.display = '';
+                if (pageKey === 'calculator') page.focus({ preventScroll: true });
             }
 
             // Quick-add buttons on the dashboard should also navigate to the relevant page
@@ -17069,48 +17095,8 @@ function populateProgressDashboard() {
             }
 
             function calcTryEval(expr) {
-                try {
-                    const exec = expr
-                        .replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-')
-                        .replace(/%/g, '/100');
-                    if (!/^[0-9+\-*/().e\s]+$/.test(exec)) return null;
-                    // Safe recursive-descent parser — avoids Function/eval (blocked by CSP)
-                    const tokens = exec.match(/[\d.]+(?:e[+\-]?\d+)?|[+\-*/()]/g);
-                    if (!tokens) return null;
-                    let p = 0;
-                    const peek = () => tokens[p];
-                    const consume = () => tokens[p++];
-                    function parseExpr() {
-                        let v = parseTerm();
-                        while (peek() === '+' || peek() === '-') {
-                            const op = consume(); const r = parseTerm();
-                            v = op === '+' ? v + r : v - r;
-                        }
-                        return v;
-                    }
-                    function parseTerm() {
-                        let v = parseFactor();
-                        while (peek() === '*' || peek() === '/') {
-                            const op = consume(); const r = parseFactor();
-                            if (op === '/' && r === 0) throw new Error('div0');
-                            v = op === '*' ? v * r : v / r;
-                        }
-                        return v;
-                    }
-                    function parseFactor() {
-                        if (peek() === '(') { consume(); const v = parseExpr(); if (consume() !== ')') throw new Error('parenthesis'); return v; }
-                        if (peek() === '-') { consume(); return -parseFactor(); }
-                        if (peek() === '+') { consume(); return parseFactor(); }
-                        const token = consume();
-                        if (!/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?$/.test(token || '')) throw new Error('number');
-                        const n = Number(token);
-                        if (isNaN(n)) throw new Error('nan');
-                        return n;
-                    }
-                    const result = parseExpr();
-                    if (p !== tokens.length) throw new Error('trailing');
-                    return Number.isFinite(result) ? result : null;
-                } catch { return null; }
+                const calculator = window.SutraCustomTabs;
+                return calculator && typeof calculator.evaluateExpression === 'function' ? calculator.evaluateExpression(expr) : null;
             }
 
             function calcUpdateDisplay() {
@@ -17169,6 +17155,8 @@ function populateProgressDashboard() {
                     if (!operators.includes(action) && action !== '%') calcExpr = '';
                     calcJustEvaled = false;
                 }
+                if (calcExpr.length >= 512) return;
+                if (calcHasError && /^[0-9.(]$/.test(action)) calcExpr = '';
                 calcHasError = false;
                 calcExpr += action;
                 calcUpdateDisplay();
@@ -17181,6 +17169,15 @@ function populateProgressDashboard() {
                     if (btn) calcHandleButton(btn.dataset.calc);
                 });
             }
+            const calculatorPage = document.getElementById('lifePage-calculator');
+            if (calculatorPage) calculatorPage.addEventListener('keydown', event => {
+                if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest('input, textarea, [contenteditable="true"]')) return;
+                if (event.key === 'Enter' && event.target.closest('button')) return;
+                const keys = { '*': '×', '/': '÷', '-': '−', Enter: '=', '=': '=', Backspace: 'backspace', Delete: 'clear', Escape: 'clear' };
+                const action = keys[event.key] || (/^[0-9.+()%]$/.test(event.key) ? event.key : '');
+                if (!action) return;
+                event.preventDefault(); event.stopPropagation(); calcHandleButton(action);
+            });
 
             calcUpdateDisplay();
 
@@ -45124,7 +45121,9 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>To-do keeps homework and general tasks together. Switch between <strong>All</strong>, <strong>Homework</strong>, and <strong>General</strong>; general tasks do not need a class.</li>
-  <li>Quick Capture recognizes existing class and activity names and previews their destination. You can change the class or activity before saving. Imported Homework notes and Reference URLs remain editable in task details.</li>
+  <li>Quick Capture previews class and activity matches. When several destinations match, choose one or explicitly choose no class before saving. Imported Homework notes and Reference URLs remain editable in task details.</li>
+  <li>Assistant task-details questions use the saved notes and Reference URL. Sources used lists selected tasks, exams, and notes; approved PIN reads are labeled as one-time reads.</li>
+  <li>Life → Quick Calculator accepts keyboard arithmetic, parentheses, Enter, Backspace, and Escape. College score edits keep Tab focus while updating rankings.</li>
   <li>All Tasks keeps completed work in a collapsed <strong>Completed tasks</strong> section. By Class keeps current and undated work with each class, with separate collapsed Past-due and Completed sections. Search and filters show matching tasks right away.</li>
   <li>Schedule, Complete, and More sit together on each task row. A brief completion effect follows a confirmed local save when motion is enabled.</li>
   <li>In the <strong>Extracurriculars</strong> panel, select an activity's icon tile to choose a personal icon. The choice is saved with the course and travels with workspace backups.</li>
@@ -83524,7 +83523,7 @@ function parseQuickCaptureDate(text, now) {
 
 // Resolve free text to one of the student's existing Homework courses (hwCourses:v2)
 // using the course name, its significant words, and common student shorthand
-// (math, chem, bio, ...). Returns { id, name } for the most specific match, or null.
+// (math, chem, bio, ...). Multiple distinct matches require a destination choice.
 function resolveQuickCaptureCourse(text) {
     const courses = getQuickCaptureCourses();
     if (!Array.isArray(courses) || courses.length === 0) return null;
@@ -83552,7 +83551,7 @@ function resolveQuickCaptureCourse(text) {
         music: ['music', 'band', 'orchestra', 'choir', 'chorus']
     };
 
-    let best = null;
+    const matches = [];
     courses.forEach(course => {
         if (!course || course.id === undefined || course.id === null) return;
         const name = String(course.name || '').toLowerCase();
@@ -83565,16 +83564,16 @@ function resolveQuickCaptureCourse(text) {
                 if (name.indexOf(stem) !== -1) { candidates.add(short); candidates.add(stem); }
             });
         });
-        let localScore = 0;
+        let localScore = 0, token = '';
         candidates.forEach(tok => {
             if (!tok || tok.length < 3) return;
-            if (padded.indexOf(' ' + tok + ' ') !== -1) localScore = Math.max(localScore, tok.length);
+            if (padded.indexOf(' ' + tok + ' ') !== -1 && tok.length > localScore) { localScore = tok.length; token = tok; }
         });
-        if (localScore > 0 && (!best || localScore > best.score)) {
-            best = { id: String(course.id), name: String(course.name || ''), score: localScore };
-        }
+        if (localScore > 0) matches.push({ id: String(course.id), name: String(course.name || ''), score: localScore, token });
     });
-    return best ? { id: best.id, name: best.name } : null;
+    const distinct = matches.filter(course => !matches.some(other => other.score > course.score && (' ' + other.token + ' ').includes(' ' + course.token + ' ')));
+    if (distinct.length > 1) return { ambiguous: true, candidates: distinct.map(course => ({ id: course.id, name: course.name })) };
+    return distinct.length ? { id: distinct[0].id, name: distinct[0].name } : null;
 }
 
 function parseQuickCaptureText(text, options) {
@@ -83712,7 +83711,10 @@ function parseQuickCaptureText(text, options) {
     // Resolve to an existing Homework course; an unclassified ("task") capture that
     // names a real course is almost always homework, so promote it.
     const courseMatch = resolveQuickCaptureCourse(working);
-    if (courseMatch) {
+    if (courseMatch && courseMatch.ambiguous) {
+        out.courseCandidates = courseMatch.candidates;
+        if (out.type === 'task') out.type = 'homework';
+    } else if (courseMatch) {
         out.courseId = courseMatch.id;
         out.courseName = courseMatch.name;
         // A named real course means coursework. Promote a plain task, and also a weak
@@ -83941,6 +83943,7 @@ function syncQuickCaptureCourseField(parsed, modal) {
     if (help) {
         if (isNew) help.textContent = 'Type a name for the new class.';
         else if (chosen) help.textContent = userTouched ? 'Using your selected class or activity.' : 'Sutra matched this from your text — change it if needed.';
+        else if (parsed.courseCandidates && parsed.courseCandidates.length && !userTouched) help.textContent = 'Multiple matches: ' + parsed.courseCandidates.map(course => course.name).join(', ') + '. Choose a class or activity, or explicitly choose no class.';
         else if (courses.length === 0) help.textContent = 'No classes or activities yet — pick “＋ New class…” to create a class.';
         else help.textContent = 'Pick the class or activity this belongs to (optional).';
     }
@@ -84287,6 +84290,12 @@ function submitQuickCapture() {
     const difficulty = String((difficultySelect && difficultySelect.value) || parsedCapture.difficulty || 'medium');
     const estimateMinutes = Math.max(0, Math.round(Number((estimateInput && estimateInput.value) || parsedCapture.estimateMinutes) || 0));
     const captureNotes = String((notesInput && notesInput.value) || '').trim();
+    const destination = modal.querySelector('#quickCaptureCourse');
+    if (type !== 'task' && parsedCapture.courseCandidates && destination && destination.dataset.userTouched !== '1') {
+        showToast('Choose a class or activity for these multiple matches, or choose no class.');
+        destination.focus();
+        return;
+    }
 
     try {
         switch (type) {
