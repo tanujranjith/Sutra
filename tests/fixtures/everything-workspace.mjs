@@ -401,6 +401,8 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
     operatingManual: { version: 1, preferredStudyTimes: ['16:00'], reminderStyle: 'calm', planningStyle: 'focused', accessibility: { reducedMotion: true }, notes: 'Operating manual sentinel' },
     portfolioWorkspace: { version: 1, entries: [{ id: 'portfolio-parity', title: 'Synthetic Portfolio Project', artifactPageIds: ['page-child'] }], settings: { publicByDefault: false } },
     testingHub: atomic(base, 'testingHub', {
+      takenExams: { sat: '2026-06-06', act: '2026-06-13' },
+      officialResults: { sat: { examDate: '2026-06-06', totalScore: '1450', recordedAt: EVERYTHING_STAMP, futureResultField: { sentinel: true } } },
       exams: [{ id: 'testing-exam-parity', name: 'Synthetic SAT', targetScore: 1500 }],
       practiceLogs: [{ id: 'testing-practice-parity', examId: 'testing-exam-parity', score: 1450 }],
       mistakes: [{ id: 'mistake-parity', examId: 'testing-exam-parity', topic: 'Synthetic algebra' }],

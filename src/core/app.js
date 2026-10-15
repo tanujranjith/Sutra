@@ -1077,9 +1077,11 @@ function getDefaultTestingHub() {
         // 'custom:<id>') → ISO date taken. Unified here because AP exams live in
         // apStudyWorkspace and custom exams in `custom`, so a per-profile flag
         // wouldn't cover them. A taken exam drops off the "upcoming" list and
-        // shows a Completed badge. Set via the exam card or the assistant's
+        // shows a taken/results state. Set via the exam card or the assistant's
         // update_exam_status action.
-        takenExams: {}
+        takenExams: {},
+        // Explicit official results; practice/readiness scores never populate this map.
+        officialResults: {}
     };
 }
 
@@ -1392,6 +1394,8 @@ function normalizeTestingHub(raw) {
             return acc;
         }, {})
         : {};
+    merged.officialResults = raw.officialResults && typeof raw.officialResults === 'object' && !Array.isArray(raw.officialResults)
+        ? { ...raw.officialResults } : {};
     merged.activeExam = typeof raw.activeExam === 'string' ? raw.activeExam : 'ap';
 
     // Pinned exams: validate against known types and custom ids; cap at 8 stored.
@@ -40369,12 +40373,54 @@ function buildOnboardingPlanPreview() {
         function _examTakenAt(id) {
             return id ? (_takenExamsMap()[id] || null) : null;
         }
+        function _storedExamOfficialResult(id) {
+            const result = testingHub && testingHub.officialResults && Object.hasOwn(testingHub.officialResults, id)
+                ? testingHub.officialResults[id] : null;
+            return result && typeof result === 'object' && !Array.isArray(result)
+                && typeof result.examDate === 'string' && typeof result.totalScore === 'string' && result.totalScore.trim()
+                ? result : null;
+        }
+        function _examOfficialResult(id) {
+            const result = _storedExamOfficialResult(id);
+            const takenAt = _examTakenAt(id);
+            return result && takenAt && result.examDate === String(takenAt).slice(0, 10) ? result : null;
+        }
+        function _examLifecycleLabel(id) {
+            if (!_isExamTaken(id)) return 'Upcoming';
+            return _examOfficialResult(id) ? 'Result recorded' : 'Taken · results pending';
+        }
+        async function editTestingHubExamResult(id) {
+            if (!resolveTestingHubExamId(id)) return;
+            const owner = testingHub;
+            const previous = owner.officialResults && owner.officialResults[id];
+            const previousJson = JSON.stringify(previous);
+            const takenAt = _examTakenAt(id);
+            const meta = _examMeta(id) || {};
+            const date = await atelierPrompt('Date this exam was taken:', takenAt ? String(takenAt).slice(0, 10) : (previous && previous.examDate || meta.examDate || ''), { title: 'Official exam result', inputType: 'date' });
+            if (date === null) return;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || _examDaysLeft(date) == null || _examDaysLeft(date) > 0) {
+                showToast('Enter a valid exam date today or earlier.'); return;
+            }
+            const score = await atelierPrompt('Official score or result (practice scores stay separate):', previous && previous.examDate === date ? String(previous.totalScore || '') : '', { title: 'Record official result', placeholder: 'e.g. 1450, 32, or Pass' });
+            if (score === null) return;
+            const totalScore = String(score).trim();
+            if (!totalScore || totalScore.length > 200) { showToast('Enter a result of 1–200 characters.'); return; }
+            if (testingHub !== owner || _examTakenAt(id) !== takenAt
+                || JSON.stringify(owner.officialResults && owner.officialResults[id]) !== previousJson
+                || !resolveTestingHubExamId(id)) {
+                showToast('This exam changed while you were editing. Open the result again.'); return;
+            }
+            if (!owner.officialResults || typeof owner.officialResults !== 'object' || Array.isArray(owner.officialResults)) owner.officialResults = {};
+            Object.defineProperty(owner.officialResults, id, { configurable: true, enumerable: true, writable: true,
+                value: { ...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}), examDate: date, totalScore, recordedAt: new Date().toISOString() } });
+            _setExamTaken(id, true, date);
+        }
         // Set/clear an exam's taken state by exam-card id. Persists + re-renders.
         function _setExamTaken(id, taken, dateISO) {
             if (!id) return false;
             const map = _takenExamsMap();
             if (taken) {
-                let iso = dateISO;
+                let iso = dateISO || map[id];
                 if (!iso) {
                     const d = new Date();
                     iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -40384,7 +40430,7 @@ function buildOnboardingPlanPreview() {
                 delete map[id];
             }
             try { persistAppData(); } catch (e) { /* non-critical */ }
-            try { if (activeView === 'testing' && typeof renderTestingHub === 'function') renderTestingHub(); } catch (e) { /* non-critical */ }
+            _refreshAfterExamMutation(id);
             try { rerenderActiveExamDetail(); } catch (e) { /* non-critical */ }
             return true;
         }
@@ -40523,6 +40569,10 @@ function buildOnboardingPlanPreview() {
             const practice = Array.isArray(profile.practiceTests) ? profile.practiceTests : [];
             const unresolved = (Array.isArray(profile.mistakes) ? profile.mistakes : []).filter(m => (m.status || 'unresolved') === 'unresolved');
             const mk = (o) => Object.assign({ minutes: 35, impact: 'High', actionLabel: 'Start Now', actKind: 'practice', section: '' }, o);
+            if (_isExamTaken(id)) {
+                const result = _examOfficialResult(id);
+                return mk({ title: _examLifecycleLabel(id), detail: result ? 'Official result: ' + result.totalScore : 'Your exam is finished. Record the official result when it arrives.', minutes: 2, impact: 'Low', actionLabel: result ? 'Edit result' : 'Record result', actKind: 'result' });
+            }
             if (!profile.examDate) {
                 return mk({ title: 'Set your exam date', detail: 'Add your test date so your countdown, readiness, and plan can calibrate.', minutes: 2, impact: 'High', actionLabel: 'Add date', actKind: 'setup' });
             }
@@ -40611,6 +40661,7 @@ function buildOnboardingPlanPreview() {
         function runExamNextAction(id) {
             const p = _examProfileFor(id); if (!p) return;
             const n = computeExamNextAction(id, p, getExamConfig(id));
+            if (n.actKind === 'result') return editTestingHubExamResult(id);
             if (n.actKind === 'setup') return openExamSetupPanel(id);
             if (n.actKind === 'mistakes') { return openExamMoreDetails(id, 'mistakes'); }
             return addPracticeTest(id);
@@ -40649,7 +40700,9 @@ function buildOnboardingPlanPreview() {
             if (!profile) { host.innerHTML = `<div class="exam-empty"><i class="fas fa-question-circle"></i>That exam wasn't found. It may have been deleted.</div>`; return; }
             const cfg = getExamConfig(id);
             const daysLeft = _examDaysLeft(profile.examDate);
-            const readiness = computeExamReadiness(id, profile, cfg);
+            const readiness = _isExamTaken(id)
+                ? { key: 'on-track', label: 'Prep complete', detail: 'Official results stay separate from practice scores.' }
+                : computeExamReadiness(id, profile, cfg);
             const next = computeExamNextAction(id, profile, cfg);
             const weak = rankWeakAreas(id, profile, cfg, 3);
             const series = _examScoreSeries(profile);
@@ -40660,13 +40713,15 @@ function buildOnboardingPlanPreview() {
 
             const safeShort = escapeHtml(shortLabel);
             let headline;
-            if (daysLeft == null) headline = 'No date set';
+            if (_isExamTaken(id)) headline = escapeHtml(_examLifecycleLabel(id));
+            else if (daysLeft == null) headline = 'No date set';
             else if (daysLeft < 0) headline = `${safeShort} was ${Math.abs(daysLeft)}d ago`;
             else if (daysLeft === 0) headline = `${safeShort} is today`;
             else headline = `${safeShort} in <strong>${daysLeft}</strong> day${daysLeft === 1 ? '' : 's'}`;
-            const dateDisplay = profile.examDate ? new Date(_examDaysLeft(profile.examDate) != null ? profile.examDate + 'T12:00:00' : profile.examDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Add an exam date in setup';
+            const displayDate = _isExamTaken(id) ? String(_examTakenAt(id)).slice(0, 10) : profile.examDate;
+            const dateDisplay = displayDate ? new Date(_examDaysLeft(displayDate) != null ? displayDate + 'T12:00:00' : displayDate).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Add an exam date in setup';
 
-            const focusBtnLabel = next.actKind === 'setup' ? next.actionLabel
+            const focusBtnLabel = ['setup', 'result'].includes(next.actKind) ? next.actionLabel
                 : next.actKind === 'mistakes' ? 'Review mistakes'
                 : next.section ? `Start ${next.section} ${(cfg.terminology && cfg.terminology.practiceUnit) || 'set'}` : 'Start practice';
 
@@ -40899,7 +40954,7 @@ function buildOnboardingPlanPreview() {
             const daysLeft = apNext ? apNext.daysLeft : null;
             const agg = _apPracticeAggregate();
             let headline, dateDisplay;
-            if (!apNext) { headline = 'No AP exam dated'; dateDisplay = 'Add an exam date to an AP subject'; }
+            if (!apNext) { headline = 'No upcoming AP exam'; dateDisplay = 'Add a future sitting or review your completed results below'; }
             else {
                 if (daysLeft < 0) headline = `${escapeHtml(apNext.label)} was ${Math.abs(daysLeft)}d ago`;
                 else if (daysLeft === 0) headline = `${escapeHtml(apNext.label)} is today`;
@@ -40918,7 +40973,9 @@ function buildOnboardingPlanPreview() {
             else if (avgConf >= 3) readiness = { key: 'on-track', label: 'On Track', detail: 'Steady progress — target your weakest units next.' };
             else readiness = { key: 'behind', label: 'Push needed', detail: 'Confidence is low — prioritize weak units and practice sets.' };
 
-            const nbaTitle = !subjects.length ? 'Add your first AP subject'
+            const allTaken = subjects.length > 0 && subjects.every(subject => _isExamTaken('ap:' + subject.id));
+            if (allTaken) readiness = { key: 'on-track', label: 'Prep complete', detail: 'Review official results below when they arrive.' };
+            const nbaTitle = allTaken ? 'Review exam results below' : !subjects.length ? 'Add your first AP subject'
                 : (daysLeft != null && daysLeft <= 7) ? 'Take a timed practice exam'
                 : 'Open an FRQ/MCQ set for your weakest unit';
             const hero = `
@@ -40952,7 +41009,14 @@ function buildOnboardingPlanPreview() {
                         </div>
                     </div>
                 </div>`;
-            host.innerHTML = `<div class="th2-ov th2-ov-ap">${hero}<div class="th2-ap-slot" id="th2ApWorkspaceSlot"></div></div>`;
+            const completedResults = subjects.filter(subject => _isExamTaken('ap:' + subject.id) || _storedExamOfficialResult('ap:' + subject.id)).map(subject => {
+                const subjectId = 'ap:' + subject.id;
+                const result = _storedExamOfficialResult(subjectId);
+                return `<section class="th2-card"><h3>${escapeHtml(subject.name || 'AP subject')} · ${escapeHtml(_examLifecycleLabel(subjectId))}</h3>
+                    <p>${result ? 'Saved result (' + escapeHtml(result.examDate) + '): ' + escapeHtml(result.totalScore) : 'Record your official result when it arrives.'}</p>
+                    <button class="th2-card-action" type="button" onclick="editTestingHubExamResult(${escapeHtml(JSON.stringify(subjectId))})">${result ? 'Edit saved result' : 'Record official result'}</button></section>`;
+            }).join('');
+            host.innerHTML = `<div class="th2-ov th2-ov-ap">${hero}${completedResults}<div class="th2-ap-slot" id="th2ApWorkspaceSlot"></div></div>`;
             const slot = document.getElementById('th2ApWorkspaceSlot');
             if (slot && apAnchor) { apAnchor.hidden = false; slot.appendChild(apAnchor); }
             try { if (typeof renderApBattlePlan === 'function') renderApBattlePlan(); } catch (e) { /* non-critical */ }
@@ -41452,7 +41516,7 @@ function buildOnboardingPlanPreview() {
                 if (!aps) return null;
                 const subjects = Array.isArray(aps.subjects) ? aps.subjects : [];
                 const candidates = subjects
-                    .filter(s => s && s.examDate)
+                    .filter(s => s && s.examDate && !_isExamTaken('ap:' + s.id))
                     .map(s => ({ s, when: new Date(s.examDate + 'T' + (s.examTime || '23:59') + ':00') }))
                     .filter(x => !isNaN(x.when));
                 if (!candidates.length) return null;
@@ -41836,7 +41900,8 @@ function buildOnboardingPlanPreview() {
                     ? (daysLeft != null && daysLeft <= 30 ? 'reviewing' : 'studying')
                     : 'planning';
                 let nextTask = null;
-                if (!subj.examDate) nextTask = 'Add an exam date';
+                if (_isExamTaken(id)) nextTask = _examLifecycleLabel(id);
+                else if (!subj.examDate) nextTask = 'Add an exam date';
                 else if (weakUnits.length > 0) nextTask = `Review weak unit: ${weakUnits[0].title}`;
                 else if (practiceLogs.length === 0) nextTask = 'Run a diagnostic practice set';
                 else if (daysLeft != null && daysLeft >= 0 && daysLeft <= 14) nextTask = 'Timed FRQ + MCQ mixed set';
@@ -41919,12 +41984,14 @@ function buildOnboardingPlanPreview() {
                         studyStatus: meta.studyStatus || '',
                         taken,
                         takenAt: taken ? _examTakenAt(id) : null,
+                        resultStatus: _examLifecycleLabel(id),
+                        officialResult: _examOfficialResult(id) ? _examOfficialResult(id).totalScore : null,
                         targetScore: meta.targetScore || null,
                         currentScore: meta.currentScore || null,
                         openTasks: meta.openTasks || 0,
                         unresolvedMistakes: meta.unresolvedMistakes || 0,
                         practiceCount: meta.practiceCount || 0,
-                        nextTask: meta.nextTask || ''
+                        nextTask: taken ? _examLifecycleLabel(id) : meta.nextTask || ''
                     };
                 }).filter(Boolean).filter(e => e.examDate || e.openTasks || e.practiceCount || e.currentScore != null || e.taken);
                 if (!exams.length) return null;
@@ -41948,8 +42015,9 @@ function buildOnboardingPlanPreview() {
                 const options = opts || {};
                 const id = resolveTestingHubExamId(ref);
                 if (!id) return { ok: false, error: 'no-match', ref: String(ref || '') };
+                const previousState = { id, taken: _isExamTaken(id), takenAt: _examTakenAt(id), studyStatus: (_examProfileFor(id) || {}).studyStatus || '' };
                 let changed = false;
-                if (options.taken != null) { _setExamTaken(id, !!options.taken); changed = true; }
+                if (options.taken != null) { _setExamTaken(id, !!options.taken, typeof options.takenAt === 'string' ? options.takenAt : undefined); changed = true; }
                 if (typeof options.studyStatus === 'string' && ['planning', 'studying', 'reviewing', 'ready'].includes(options.studyStatus)) {
                     const profile = _examProfileFor(id);
                     if (profile) { profile.studyStatus = options.studyStatus; changed = true; }
@@ -41958,7 +42026,7 @@ function buildOnboardingPlanPreview() {
                     try { persistAppData(); } catch (e) { /* non-critical */ }
                 }
                 const meta = _examMeta(id) || {};
-                return { ok: true, changed, examId: id, examName: meta.name || _examIdLabel(id), taken: _isExamTaken(id), studyStatus: (options.studyStatus || meta.studyStatus || '') };
+                return { ok: true, changed, previousState, examId: id, examName: meta.name || _examIdLabel(id), taken: _isExamTaken(id), studyStatus: (options.studyStatus || meta.studyStatus || '') };
             } catch (e) {
                 return { ok: false, error: 'exception' };
             }
@@ -41974,7 +42042,7 @@ function buildOnboardingPlanPreview() {
                 : meta.daysLeft < 0 ? 'past'
                 : meta.daysLeft <= 7 ? 'critical'
                 : meta.daysLeft <= 30 ? 'urgent' : '';
-            const countdownText = taken ? 'Completed'
+            const countdownText = taken ? 'Taken'
                 : meta.daysLeft === null || meta.daysLeft === undefined ? 'No date'
                 : meta.daysLeft < 0 ? 'Past'
                 : meta.daysLeft === 0 ? 'Today'
@@ -42011,8 +42079,8 @@ function buildOnboardingPlanPreview() {
                         <div class="th2-exam-card-title">
                             <h3>${escapeHtml(meta.name)}</h3>
                             ${taken
-                                ? '<span class="th2-exam-card-status th2-exam-taken-badge"><i class="fas fa-circle-check" aria-hidden="true"></i> Completed</span>'
-                                : `<span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">${escapeHtml(meta.studyStatus)}</span>`}
+                                ? '<span class="th2-exam-card-status th2-exam-taken-badge"><i class="fas fa-circle-check" aria-hidden="true"></i> ' + escapeHtml(_examLifecycleLabel(id)) + '</span>'
+                                : `<span class="th2-exam-card-status status-${escapeHtml(meta.studyStatus)}">Upcoming · ${escapeHtml(meta.studyStatus)}</span>`}
                         </div>
                         <div class="th2-exam-card-countdown">
                             <div class="th2-card-countdown-num">${escapeHtml(countdownText)}</div>
@@ -42024,9 +42092,11 @@ function buildOnboardingPlanPreview() {
                         ${targetMetaHtml}
                         ${practiceMetaHtml}
                     </div>
-                    ${meta.nextTask ? `<div class="th2-exam-card-next"><i class="fas fa-arrow-right"></i> ${escapeHtml(meta.nextTask)}</div>` : ''}
+                    ${_storedExamOfficialResult(id) && !_examOfficialResult(id) ? `<div class="th2-exam-card-next">Saved result (${escapeHtml(_storedExamOfficialResult(id).examDate)}): ${escapeHtml(_storedExamOfficialResult(id).totalScore)}</div>` : ''}
+                    ${taken || meta.nextTask ? `<div class="th2-exam-card-next"><i class="fas fa-arrow-right"></i> ${escapeHtml(taken ? (_examOfficialResult(id) ? 'Official result: ' + _examOfficialResult(id).totalScore : 'Record your result when it arrives.') : meta.nextTask)}</div>` : ''}
                     <footer class="th2-exam-card-actions">
                         ${quickActions}
+                        ${id !== 'ap' ? `<button class="th2-card-action" type="button" onclick="event.stopPropagation(); editTestingHubExamResult(${escapeHtml(JSON.stringify(id))})">${_storedExamOfficialResult(id) ? 'Edit saved result' : 'Record official result'}</button>` : ''}
                         <button class="th2-card-action" type="button" onclick="event.stopPropagation(); toggleTestingHubExamTaken('${escapeHtml(id)}')"><i class="fas ${taken ? 'fa-rotate-left' : 'fa-circle-check'}"></i> ${taken ? 'Mark not taken' : 'Mark taken'}</button>
                         <button class="th2-card-action th2-card-action-primary" type="button" onclick="event.stopPropagation(); openExamDetail('${escapeHtml(id)}')"><i class="fas fa-arrow-right"></i> Open</button>
                     </footer>
@@ -42266,7 +42336,7 @@ function buildOnboardingPlanPreview() {
         function getTestingHubKpis() {
             const exams = _allExamProfiles();
             // Next exam: include AP via apStudyWorkspace.
-            const nextNonAp = exams
+            const nextNonAp = exams.filter(e => !_isExamTaken(e.id))
                 .map(e => ({ ...e, when: e.profile.examDate ? new Date(e.profile.examDate + 'T23:59:00') : null }))
                 .filter(x => x.when && !isNaN(x.when) && (x.when - Date.now()) > -86400000)
                 .sort((a, b) => a.when - b.when)[0];
@@ -42315,7 +42385,7 @@ function buildOnboardingPlanPreview() {
         // Deterministic "Next best study action" — picks one card from a
         // priority list. Uses only local data; no external calls.
         function computeNextBestStudyAction() {
-            const exams = _allExamProfiles();
+            const exams = _allExamProfiles().filter(e => !_isExamTaken(e.id));
 
             // 1) Imminent exam: within 7 days.
             const apNext = _apNextExamMeta();
@@ -42436,7 +42506,7 @@ function buildOnboardingPlanPreview() {
             }
 
             // 7) Anything pinned? Suggest logging a practice test.
-            const pinned = _activeExamIds().filter(id => id !== 'ap');
+            const pinned = _activeExamIds().filter(id => id !== 'ap' && !_isExamTaken(id));
             if (pinned.length > 0) {
                 const target = pinned[0];
                 return {
@@ -42867,6 +42937,7 @@ function buildOnboardingPlanPreview() {
                 window.switchTestingHubSection = switchTestingHubSection;
                 window.getTestingHubAssistantSummary = getTestingHubAssistantSummary;
                 window.setTestingHubExamStatus = setTestingHubExamStatus;
+                window.editTestingHubExamResult = editTestingHubExamResult;
                 window.toggleTestingHubExamTaken = (id) => { try { _setExamTaken(id, !_isExamTaken(id)); } catch (e) {} };
                 window.openExamDetail = openExamDetail;
                 window.closeExamDetail = closeExamDetail;
@@ -43194,6 +43265,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>AP Study tracks subjects, units, sessions, practice logs, readiness, and weak areas.</li>
+  <li>Exam cards distinguish <strong>Upcoming</strong>, <strong>Taken &middot; results pending</strong>, and <strong>Result recorded</strong>. Mark taken when finished, then use <strong>Record official result</strong> when the score arrives. Practice scores stay separate. Sutra currently tracks one sitting per exam card.</li>
   <li><strong>AP Battle Plan</strong> can create a real AP Study session, create a note, log a task, or schedule a block.</li>
   <li>Linked AP subjects can open their class dashboard from the Homework bridge so course work and exam prep stay connected.</li>
   <li>AP cards from a unit can become Review cards by picking the AP class as the source when creating a card in the Review tab. Future review sessions can then study just that class.</li>
@@ -43256,8 +43328,8 @@ function buildOnboardingPlanPreview() {
                     title: 'Life, Trackers, And Business',
                     body: `
 <ul>
-  <li>Life now keeps the primary student tools up front: Habits, Sleep, Spending, Journal, and Goals.</li>
-  <li>Secondary tools such as Calories, Calculator, Books, Fitness, and Skills live under <strong>More Life Tools</strong>.</li>
+  <li>Life keeps Goals, Habits, Spending, Skills, Calculator, and Books available.</li>
+  <li>Wellness, sleep, nutrition, fitness, and Life journal tools are retired. Existing records stay preserved in backups and Sync; ordinary authored notes remain available.</li>
   <li><strong>Trackers feed Home.</strong> Habits, goals, and reading items appear in the Home tracker-summary card and inside Global Search under <em>Trackers</em>. Goals and reading items can be linked to a Review deck so the same topic shows up in Today, Search, and Review.</li>
   <li>Business remains available, but student-focused modes keep it quieter unless you switch into Business mode or already have Business data.</li>
 </ul>
@@ -43278,7 +43350,8 @@ function buildOnboardingPlanPreview() {
                     title: 'Settings, Data Health, And Safe Apply',
                     body: `
 <ul>
-  <li>Settings drafts can be <strong>Save &amp; Apply</strong> or <strong>Revert</strong> instead of silently changing the app underneath you.</li>
+  <li>Settings groups controls in a desktop sidebar. On phones, select a category and use <strong>All Settings</strong> to go back; search works across categories.</li>
+  <li>Use <strong>Save Changes</strong> or <strong>Revert</strong> for staged preferences. Switching categories keeps pending edits; controls labeled as applying immediately retain that behavior.</li>
   <li>The <strong>Workspace Health</strong> card summarizes export/import status and recent backup diagnostics.</li>
   <li><strong>Release notes</strong> now appear inside Notifications with read, unread, dismiss, and version-aware deduplication state. They are no longer a separate notification system.</li>
   <li>Timed commitment reminders and streak-at-risk notices use the same notification center and dedupe keys as deadlines, homework, calendar, and save alerts.</li>
@@ -43292,7 +43365,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li><code>.sutra</code> is the full-fidelity encrypted workspace backup format for local state, notes, settings, AP data, homework, college data, binary assets, and linked metadata. Older unencrypted <code>.sutra</code> and legacy <code>.atelier</code> files still import.</li>
-  <li>The connected-productivity additions — <code>reviewWorkspace</code> (decks, items, sessions, settings), <code>focusTemplates</code>, <code>splitPaneContexts</code>, plus <code>settings.mobileTodayMode</code> and <code>settings.recentSearches</code> — all flow through the same save/export/import path. Round-trip tests verify 19 workspace fields stay in sync.</li>
+  <li>Workspace backups preserve durable student data and required attachments. Browser layout state and credentials have separate portability rules. A restore with missing required bytes reports an incomplete recovery; keep the original backup.</li>
   <li>Export from Settings before major changes and keep multiple dated copies. Sutra will ask for a backup password and cannot recover it if forgotten.</li>
   <li>Import replaces the active workspace state, so Sutra first offers an encrypted pre-import safety snapshot. Confirm browser downloads yourself; Sutra verifies configured backup-folder writes.</li>
   <li><strong>Optional Drive sync:</strong> Settings &rsaquo; Data can upload encrypted snapshots to your Google Drive app-data folder while Sutra is open, online, unlocked, and authorized. Manual encrypted <code>.sutra</code> backups remain independent of Drive.</li>
@@ -43301,9 +43374,10 @@ function buildOnboardingPlanPreview() {
                 },
                 {
                     id: 'sutra-cloud',
-                    title: 'Sutra Cloud (Optional Encrypted Cloud Backup)',
+                    title: 'Sutra Cloud (Sync And Encrypted Backups)',
                     body: `
-<p><strong>Sutra Cloud</strong> is an optional way to back up your encrypted workspace to a cloud destination of your choice and restore it on another device. It is <strong>off by default</strong> and is <strong>backup/restore, not live sync</strong>. Open it from the <strong>Sutra Cloud</strong> button in the save bar at the bottom of the workspace.</p>
+<p><strong>Sutra Cloud</strong> brings optional Sync and encrypted backups into one hub with separate status and controls. <strong>Sync</strong> replicates changes between devices; <strong>backups</strong> preserve recoverable snapshots. Both are off until you explicitly configure them. Local saving continues independently.</p>
+<p>An authentication failure in encrypted Sync data pauses Sync without applying the unverified record or replacing the vault key. It may indicate a different key or damaged data; it is not proof of either cause. Resolve it before resuming. Automatic backup failures retry with bounded delays and report success only after a confirmed upload.</p>
 <h3>How it works</h3>
 <ul>
   <li>Your workspace is <strong>encrypted on this device</strong> into a <code>.sutra</code> file <em>before</em> anything is uploaded. The provider you choose stores <strong>only the encrypted file</strong> — it can never read your notes, tasks, or files.</li>
@@ -43435,16 +43509,16 @@ function buildOnboardingPlanPreview() {
                     title: 'Sutra Assistant (Contextual, Local-First)',
                     body: `
 <ul>
-  <li>Sutra Assistant is a contextual workspace layer, not a generic chatbot. It sees the active view, the open note or active Canvas summary, your selection, and (depending on context depth) tasks, homework, timeline, review-due, AP subjects, and college items.</li>
-  <li><strong>Context depth</strong> in <em>Settings &rsaquo; Assistant</em> controls how much it sees: <em>Minimal</em> (view only), <em>Current view</em> (default), or <em>Workspace-aware</em> (broader bounded summary).</li>
+  <li>Sutra Assistant retrieves permitted workspace content relevant to your request. Workspace-aware context does not grant access by itself: enable the areas you want in Assistant privacy settings. Sutra uses bounded retrieval rather than sending the entire workspace.</li>
+  <li><strong>Context depth</strong> in <em>Settings &rsaquo; Assistant</em> controls how much it sees: <em>Minimal</em> (view only), <em>Current view</em> (default), or <em>Workspace-aware</em> (selective access to permitted workspace areas).</li>
   <li><strong>Effort</strong> appears for models with supported reasoning controls, including Gemini 3 text models. Available levels follow the selected model; unsupported attachment messages identify the file and reason.</li>
-  <li>Above the input, an <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
+  <li>An <strong>adaptive quick actions</strong> row changes per view (Shape my day, Summarize, Selection &rarr; tasks, Generate review cards, Schedule open tasks, &hellip;).</li>
   <li>Every major view also has a small <strong>Ask Sutra</strong> pill row at the top with view-relevant prompts.</li>
   <li>Sutra Assistant can <strong>propose</strong> local app actions: <code>insert_text</code>, <code>replace_selection</code>, <code>create_task</code>, <code>create_homework</code>, <code>create_timeline_block</code>, <code>create_page</code>, <code>create_review_deck</code>, <code>add_review_cards</code>, <code>create_cram_session</code>, <code>create_college_task</code>, <code>navigate</code>, plus Canvas actions such as <code>canvas_add_sticky</code>, <code>canvas_add_text</code>, <code>canvas_group_selection</code>, and <code>canvas_create_task_from_selection</code>. Each proposal becomes an <strong>action card</strong> with Apply / Decline buttons. Canvas mutations are high-risk and always require explicit approval.</li>
-  <li>Applied actions flow through the same autosave path as anything you create by hand, so they survive <code>.atelier</code> and JSON export/import.</li>
-  <li><strong>API keys</strong> live in <code>sessionStorage</code> for this browser session only. They are <strong>never</strong> included in <code>.atelier</code> or JSON exports.</li>
-  <li>Image/vision upload is not offered &mdash; paste text from screenshots instead. The provider field accepts an exact model ID; typos fail at the provider, not in Sutra.</li>
-  <li>Command Palette (<code>Ctrl/&#8984;+K</code>) entries: <em>Ask Sutra</em>, <em>Ask Sutra about current note</em>, <em>Sutra: Shape my day</em>, <em>Sutra: Create review cards from current note</em>, <em>Sutra: Schedule my open tasks</em>, <em>Sutra: Import assignments from pasted text</em>, <em>Sutra: Change context depth</em>.</li>
+  <li>Assistant proposals require review before they change the workspace. Applied changes use normal local saving and backup paths; source disclosures identify what was used. A locked note requires separate one-time consent and PIN verification.</li>
+  <li><strong>API keys</strong> are session-only by default. You may choose encrypted device storage. Keys and provider credentials are excluded from workspace exports and Sync snapshots.</li>
+  <li>Models load from the selected provider when a key is available. Attachment and reasoning support depend on the model; incompatible files show a specific reason. Thinking effort appears inside the composer for supported models.</li>
+  <li>Command Palette (<code>Ctrl/&#8984;+Shift+P</code>) entries: <em>Ask Sutra</em>, <em>Ask Sutra about current note</em>, <em>Sutra: Shape my day</em>, <em>Sutra: Create review cards from current note</em>, <em>Sutra: Schedule my open tasks</em>, <em>Sutra: Import assignments from pasted text</em>, <em>Sutra: Change context depth</em>.</li>
 </ul>
                     `
                 },
@@ -83590,8 +83664,12 @@ function createWeeklyReviewNote() {
 function computeApBattlePlan() {
     const aps = (typeof apStudyWorkspace !== 'undefined' && apStudyWorkspace) ? apStudyWorkspace : null;
     if (!aps) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
-    const subjects = Array.isArray(aps.subjects) ? aps.subjects : [];
-    if (subjects.length === 0) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
+    const allSubjects = Array.isArray(aps.subjects) ? aps.subjects : [];
+    if (allSubjects.length === 0) return { subject: null, recommendation: 'Add an AP subject to start planning.' };
+    const hub = typeof window !== 'undefined' && window.flowAtelier ? window.flowAtelier.testingHub : null;
+    const taken = hub && hub.takenExams && typeof hub.takenExams === 'object' ? hub.takenExams : {};
+    const subjects = allSubjects.filter(subject => subject && !(Object.hasOwn(taken, 'ap:' + subject.id) && taken['ap:' + subject.id]));
+    if (!subjects.length) return { subject: null, completed: true, recommendation: 'All current AP exams are marked taken. Review their results in Testing Hub.' };
 
     // Pick the subject with the soonest exam date, else the first.
     const now = new Date();
@@ -83645,8 +83723,8 @@ function renderApBattlePlan() {
     if (!plan.subject) {
         host.innerHTML = `
             <div class="eyebrow">AP Battle Plan</div>
-            <h3>No AP subjects yet</h3>
-            <p>Add an AP subject to see a tailored study recommendation.</p>`;
+            <h3>${plan.completed ? 'AP prep complete' : 'No AP subjects yet'}</h3>
+            <p>${escapeHtml(plan.recommendation)}</p>`;
         return;
     }
     const countdown = plan.daysLeft == null ? 'Exam date not set' : `${plan.daysLeft} day${plan.daysLeft === 1 ? '' : 's'} to exam`;

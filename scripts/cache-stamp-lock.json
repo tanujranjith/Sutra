@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "1f98425b15abc276"
+    "stamp": "20261015-exam-results4",
+    "hash": "51e23e874f71e5d4"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-settings2",
-    "hash": "d7eff730534a27ad"
+    "stamp": "20261015-exam-results4",
+    "hash": "31aa793109f865d5"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -192,8 +192,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "f249a9a05f49c666"
+    "stamp": "20261015-exam-results4",
+    "hash": "ecb9dbad90e33fc8"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",

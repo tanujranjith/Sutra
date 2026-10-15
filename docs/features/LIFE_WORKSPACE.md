@@ -9,10 +9,11 @@ nutrition/calorie tracking, water, eye-break reminders, and gratitude widgets.
 They are absent from navigation, feature pickers, and Assistant retrieval.
 The Daily Journal starter template is also retired; existing notes are preserved.
 
-Retirement is not data deletion. Existing health/journal records, including
-unknown fields, remain opaque compatibility data in `lifeWorkspace`; existing
-widget configurations remain in `customTabs`. Save, backup, restore, and encrypted
-Sync keep those records. Retired widgets show a neutral notice with no active
+Retirement is not data deletion. Existing retired health and journal records,
+including unknown fields, remain opaque, portable compatibility data in
+`lifeWorkspace`; existing widget configurations remain in `customTabs`. Local
+saves, workspace exports and backups, restores, and encrypted Sync keep those
+records. Retired widgets show a neutral notice with no active
 controls. The legacy wellness-trends API reports unavailable without analyzing
 the records. Old Assistant wellness permission flags cannot re-enable retrieval.
 

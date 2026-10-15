@@ -45,7 +45,7 @@ Sutra is one app for everything a student carries:
 - **AP exam prep** — units, sessions, practice logs, weak-area tracking, exam countdowns, an automated AP Battle Plan, and a Testing Hub.
 - **Review** — spaced repetition and active recall with five study modes.
 - **College applications** — trackers, essays, scholarships, scores, and decision matrices.
-- **Life** — habits, sleep, journal, spending, goals, books, fitness, calories, and more.
+- **Life** — goals, habits, skills, spending, books, and a calculator.
 - **Projects & Work** — a local operations dashboard for projects, clients, invoices, and deadlines.
 - **Focus** — a Pomodoro-style Focus Timer with reusable templates, plus a writing-only Focus Mode.
 - **Sutra Assistant** — an optional, bring-your-own-key AI panel that reads your workspace and proposes changes you approve one card at a time.
@@ -223,7 +223,7 @@ A dashboard with summary metrics (Application Completion %, Upcoming Deadlines, 
 
 ### Life
 
-A dashboard of primary trackers — Goals, Habits, Sleep, Spending, Journal — with a *More Life Tools* group for Skills, Fitness, Calories, Calculator, and Books.
+A dashboard for Goals, Habits, Skills, Spending, Books, and a Calculator. Goals can be scheduled, and habits share data with Today’s habit tracker. Focus and ordinary notes stay in their own workspaces.
 
 ### Projects & Work
 

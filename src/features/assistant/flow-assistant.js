@@ -2937,7 +2937,7 @@
                 const sum = window.getTestingHubAssistantSummary && window.getTestingHubAssistantSummary();
                 const id0 = String(action.examId || '');
                 const match = sum && sum.exams ? sum.exams.find(e => e.id === id0 || String(e.name || '').toLowerCase() === String(action.examName || '').toLowerCase()) : null;
-                return match ? { id: match.id, taken: !!match.taken, studyStatus: match.studyStatus || '' } : null;
+                return match ? { id: match.id, taken: !!match.taken, takenAt: match.takenAt || null, studyStatus: match.studyStatus || '' } : null;
             } catch (e) { return null; }
         })();
         const res = window.setTestingHubExamStatus(ref, {
@@ -2957,7 +2957,7 @@
             message: `**${res.examName}** ${what} in the Testing Hub.`,
             payload: {
                 affected: [{ store: 'testingHub', id: res.examId, title: res.examName }],
-                undoPayload: prevTaken ? { kind: 'exam_status', item: prevTaken } : null,
+                undoPayload: (res.previousState || prevTaken) ? { kind: 'exam_status', item: res.previousState || prevTaken } : null,
                 createdObjectIds: []
             }
         };
@@ -5934,6 +5934,7 @@
                 if (typeof window !== 'undefined' && typeof window.setTestingHubExamStatus === 'function') {
                     window.setTestingHubExamStatus(payload.item.id, {
                         taken: !!payload.item.taken,
+                        takenAt: payload.item.takenAt || undefined,
                         studyStatus: payload.item.studyStatus || undefined
                     });
                     return 1;

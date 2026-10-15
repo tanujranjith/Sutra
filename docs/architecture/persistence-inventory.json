@@ -121,7 +121,7 @@
     "sharedStudySessions": { "category": "atomic", "record": "a/sharedStudySessions" },
     "operatingManual": { "category": "atomic", "record": "a/operatingManual" },
     "portfolioWorkspace": { "category": "atomic", "record": "a/portfolioWorkspace" },
-    "testingHub": { "category": "atomic", "record": "a/testingHub" },
+    "testingHub": { "category": "atomic", "record": "a/testingHub", "reason": "Includes legacy takenExams ISO-date markers and explicit officialResults keyed by exam-card ID (examDate, totalScore, recordedAt plus preserved unknown result fields). Practice scores never imply an official result. Both maps survive full backup/import and atomic Sync; reset clears both with the workspace." },
     "focusTemplates": { "category": "atomic", "record": "a/focusTemplates" },
     "customTabs": { "category": "record", "collection": "customTabs", "orderedBy": "o/customTabs" },
     "splitPaneContexts": { "category": "deviceLocal", "reason": "Pane selection, layout, filters, and scroll position describe this browser's current UI." },

@@ -210,3 +210,23 @@ notification Settings panel says this plainly:
   `SutraModalManager`'s `modalSelector`, so the academic modals inherit the
   focus trap, scroll lock, Escape handling, and focus restoration the
   modal-accessibility guard checks.
+
+## Official exam completion and results
+
+Exam cards distinguish **Upcoming**, **Taken · results pending**, and **Result
+recorded**. Mark taken when a sitting is finished; this removes that exam from
+automatic upcoming/diagnostic study recommendations. Use **Record official
+result** on the card to save its taken date and score or result text. Cancel
+leaves both untouched. Practice tests, current/readiness scores, and completed
+practice forms stay separate and never imply an official result.
+
+The existing one-date-per-exam model remains: this records one current official
+result per exam card, not a history of multiple sittings. Mark not taken reopens
+prep without deleting the saved result. A result is shown as current only while
+its date matches the taken-date marker; a later sitting stays result-pending.
+The prior result remains visible as a dated saved result, including in the AP
+overview. Recording another result replaces that card's saved result; multiple
+sittings need separate exam cards.
+Assistant status actions and Undo preserve the original taken date and do not
+change the result. Unknown result fields survive normalization, backup/import,
+and the existing atomic Testing Hub Sync record.

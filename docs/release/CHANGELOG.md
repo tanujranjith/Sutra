@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here. Dates use `YYYY-MM`.
 
+## Unreleased — local reliability and cleanup work
+
+These changes are on the local `codex/student-workflow-batch` branch. They have
+not been pushed, merged, or released. New automated regressions await CI.
+
+- Pause Sync on unauthenticated or inconsistent records while preserving local
+  data, pending changes, and the existing vault key.
+- Add bounded automatic-backup retry delays and report incomplete attachment
+  recovery instead of claiming a complete restore.
+- Scrub additional credential aliases and encoded labels in diagnostics.
+- Plan the full requested week from canonical tasks and Homework, excluding
+  work already linked to scheduled blocks.
+- Retire wellness surfaces while preserving their legacy data for portability.
+- Consolidate dedicated Assistant scripts without changing their load order.
+- Refine desktop Settings and add phone category/detail navigation with Back,
+  keyboard focus, search recovery, and preserved pending preferences.
+- Update the local spreadsheet parser to SheetJS 0.20.3 and the CI Node line to
+  24; repair nested recovery-page paths and landing-page separators.
+- Distinguish taken exams awaiting results from explicitly recorded official
+  results, retain practice scores separately, and preserve exact Undo state.
+
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 
 This release window covers the GitHub changes from 2026-07-10 through

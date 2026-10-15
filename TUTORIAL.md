@@ -19,7 +19,7 @@ A practical, step-by-step guide to using Sutra from your first launch through yo
 9. [Set up Homework](#9-set-up-homework)
 10. [Set up AP Study and the AP Battle Plan](#10-set-up-ap-study-and-the-ap-battle-plan)
 11. [Set up the College Workspace](#11-set-up-the-college-workspace)
-12. [Use the Life trackers](#12-use-the-life-trackers)
+12. [Use Life for goals, habits, and planning](#12-use-life-for-goals-habits-and-planning)
 13. [Use the Business / Freelance workspace](#13-use-the-business--freelance-workspace)
 14. [Master the Command Palette, Quick Capture, and Global Search](#14-master-the-command-palette-quick-capture-and-global-search)
 14a. [Use the Review tab (spaced repetition)](#14a-use-the-review-tab-spaced-repetition)
@@ -82,7 +82,7 @@ Open `Settings -> Data & Backups` and pick a mode:
 | **AP Crunch** | Days/weeks before an AP exam - Today, AP Study, Homework, Timeline, Notes only. |
 | **College Apps** | Senior fall - College, Notes, Today, Timeline, Homework. |
 | **Writing** | Notes-first; Today + Timeline as planning aids. |
-| **Life** | Habits, sleep, journal, spending, goals. |
+| **Life** | Goals, habits, skills, spending, books, and calculator. |
 | **Business / Freelancer** | Full operations dashboard. |
 
 Click **Save & Apply** at the top of Settings to commit the change.
@@ -110,7 +110,7 @@ You can skip steps, finish later, or rerun the wizard anytime: `Settings -> Adva
 
 1. Click `+ New Page` in the sidebar.
 2. Give it a title. Use `::` to nest, e.g. `Projects::Website::Launch`.
-3. Pick a **template** (Blank, Meeting Notes, 1:1 Check-In, Project Plan, To-Do List, Daily Journal, Weekly Review, Study Notes, Research Brief, Sprint Planner, Roadmap Plan, Client Brief, Content Brief, or Decision Log). Templates can optionally seed starter tasks - toggle this in the preview panel.
+3. Pick an available **template** (Blank, Meeting Notes, 1:1 Check-In, Project Plan, To-Do List, Weekly Review, Study Notes, Research Brief, Sprint Planner, Roadmap Plan, Client Brief, Content Brief, or Decision Log). Templates can optionally seed starter tasks - toggle this in the preview panel.
 4. Click **Create**.
 
 Now write. The editor supports:
@@ -264,17 +264,17 @@ College deadlines and essay milestones with dates also appear in the Deadline Ra
 
 ---
 
-## 12. Use the Life trackers
+## 12. Use Life for goals, habits, and planning
 
-Open the **Life** tab. The dashboard shows the primary trackers up front:
+Open the **Life** tab to work with goals, habits, skills, spending, books, and a calculator. Focus sessions and ordinary notes stay in their own workspaces.
 
 - **SMART Goals** - write goals in SMART format, set status, due dates, and schedule.
 - **Habits** - same data as Today's habit tracker.
-- **Sleep** - log nightly. Eight analytics cards: last night, 7-day average, 30-day average, goal progress %, trend, consistency / streak, sleep quality, bedtime / wake-time average.
-- **Spending** - ledger with monthly total, transaction count, average per transaction, and top category.
-- **Journal** - dated entries.
+- **Spending** - a ledger with monthly total, transaction count, average per transaction, and top category.
+- **Skills and Books** - keep track of skills you are learning and books you are reading.
+- **Calculator** - use the calculator from the Life workspace.
 
-Secondary trackers under **More Life Tools**: Skills, Fitness, Calories, Calculator, Books.
+Goals can include due dates and scheduled work. Habits use the same data as Today’s habit tracker.
 
 ---
 

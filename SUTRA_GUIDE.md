@@ -84,7 +84,7 @@ Want to add a habit? Type a name in the *Add a habit...* input under the **Habit
 Open **Notes** (or press `+ New Page` in the sidebar).
 
 1. Click **+ New Page** and give it a title. Use `::` to nest - e.g. `Bio::Unit 3::Cell Energy`.
-2. Pick a **template** (Blank, Study Notes, Daily Journal, Weekly Review, and more). Some templates can seed starter tasks - toggle that in the preview.
+2. Pick an available **template** (Blank, Study Notes, Weekly Review, and more). Some templates can seed starter tasks - toggle that in the preview.
 3. Click **Create**, and start writing.
 
 The editor gives you:
