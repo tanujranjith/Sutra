@@ -22,6 +22,13 @@ The unrelated primary checkout remains on `codex/overnight-plan`.
   tab-local workspace unlock backoff (`84470a2`).
 - Original bundled daily-loop icons with existing labels/targets (`c653c02`).
 - Inactive Homework quick-add parser/UI cleanup (`1c0966b`).
+- Active Capture/portal calendar validation, including fallback paths and leap
+  years (`bb30a1e`).
+- Restore completion delayed until both stores finish, combined save/file
+  failure reporting, and required file-key readback for metadata-only recovery
+  (`20e042a`).
+- Imported legacy task Notes/Reference URL save/reopen/reload regression,
+  including unknown-field preservation (`d788fa6`, prepared for CI only).
 
 Shared editor adapters and closure-coupled core routing remain with their owners;
 Assistant consolidation is not a wholesale runtime extraction. Sync and backups
@@ -52,6 +59,9 @@ The local disposable origin was `http://127.0.0.1:5194/Sutra.html`.
   browser-control artifact.
 - Active Capture previews “tomorrow 11pm” as 2026-10-16 at 23:00. Cancel left no
   task behind after the legacy parser cleanup.
+- Active Capture leaves “February 31st 2026” unset and recognizes
+  “February 29, 2028” as 2028-02-29. Both drafts were cancelled; a screenshot is
+  retained as `calendar-validation.png` in the candidate QA directory.
 
 Screenshots are retained under ignored `.tmp/qa-2026-10-15/` in the candidate;
 earlier Life, Settings, and exam proof is in the primary root's same ignored
@@ -80,9 +90,20 @@ QA majors. These records belong to the disposable browser origin.
   a real provider remain pending; the isolated QA origin has no provider keys.
 - The new PIN crypto/legacy upgrade/throttling and stale authorization cases
   require CI execution plus a user-entered disposable PIN for manual UI QA.
+- Manual imported-task verification could not select the disposable fixture
+  through Chrome's file chooser. Extension file-URL access remains a browser
+  prerequisite; the imported-task CI regression has been reviewed, not run.
 - Physical OS notifications and true browser zoom at 67%/150% remain unverified.
   The browser-control zoom shortcut did not change observed viewport geometry;
   a resized viewport is not evidence of browser zoom.
+
+The follow-up restore audit was read-only Luna work. The main agent independently
+confirmed both original reporting gaps, traced all affected callers, implemented
+the fixes, and reviewed the added tests. A second review identified the empty
+attachment-write-queue case, which was fixed through database-key readback.
+The final review found no further issue in those changed paths. The latest local
+runtime gate and staged hook passed at 4,913,039 bytes / 85,666 lines; this is
+still not evidence that the pending unit/E2E suites or live restore checks pass.
 
 Do not treat local implementation or these narrow manual checks as release
 approval. Validate the branch before authorizing push, merge, or deployment.
