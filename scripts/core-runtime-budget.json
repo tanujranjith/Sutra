@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-15T01:22:51.577Z",
-  "reviewedReason": "Preserve live review proposals while keeping durable history payload-free, explain unavailable previews, and resolve canonical citations",
-  "maxBytes": 4996131,
+  "blessedAt": "2026-10-15T01:25:18.995Z",
+  "reviewedReason": "Prevent Assistant reference-link double rendering; retain reviewed live proposals and canonical citation navigation",
+  "maxBytes": 4996222,
   "maxLines": 87454
 }

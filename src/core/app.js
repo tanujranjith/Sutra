@@ -73975,7 +73975,7 @@ ${cspMeta}
                     return `<a href="#" class="sutra-cite" role="button" data-cite-kind="${escapeHtml(String(kind).toLowerCase())}" data-cite-id="${escapeHtml(id)}" title="Open in Sutra"><span class="sutra-cite-mark" aria-hidden="true">↗</span>${label}</a>`;
                 });
                 s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
-                s = s.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>');
+                s = s.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/g).map(part => /^<a\b/.test(part) ? part : part.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>')).join('');
                 return s;
             }
 
@@ -75219,7 +75219,7 @@ ${cspMeta}
             }
             if (view.role === 'assistant') {
                 if (rawMessage && rawMessage.claimType === 'proposed_action' && !(view.actions && view.actions.length)) {
-                    view.displayedContent += '\n\n_This saved proposal no longer has an action preview. Regenerate it to review a new proposal. Saved chat history cannot apply changes._';
+                    view.displayedContent += '\n\n*This saved proposal no longer has an action preview. Regenerate it to review a new proposal. Saved chat history cannot apply changes.*';
                 }
                 try {
                     if (window.flowAssistant && typeof window.flowAssistant.noteAssistantReply === 'function') {

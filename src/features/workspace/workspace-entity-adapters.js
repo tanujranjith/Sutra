@@ -90,7 +90,7 @@
       priority: text(source.priority || ''),
       difficulty: text(source.difficulty || ''),
       noteId: text(source.noteId || source.linkedNoteId || ''),
-      referenceUrl: text(source.referenceUrl || ''),
+      referenceUrl: text(source.referenceUrl || source.sourceUrl || ''),
       estimateMinutes: Number(source.estimateMinutes || source.effortMinutes || source.estimate || 0) || 0
     }, extra || {});
   }

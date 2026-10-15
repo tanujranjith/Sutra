@@ -754,6 +754,7 @@
                     targetChatId: renderOptions.targetChatId || null
                 };
                 const sent = sendToProvider(prompt, providerContext, renderOptions.providerSendHandler);
+                if (sent) useBtn.disabled = true;
                 if (!sent) { renderCard(host, 'providers', hist.concat([nodeId]), renderOptions); scrollHost(host); }
             });
             foot.appendChild(useBtn);

@@ -180,7 +180,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
         { id: 'open-note', title: 'Cell respiration', content: '<p>ATP and mitochondria</p>', tags: ['biology'] },
         { id: 'locked-note', title: 'Hidden title', content: 'hidden body', isLocked: true }
       ],
-      tasks: [{ id: 'task-1', title: 'Read chapter 4', notes: 'Take notes', dueDate: '2026-08-01' }],
+      tasks: [{ id: 'task-1', title: 'Read chapter 4', notes: 'Take notes', dueDate: '2026-08-01', sourceUrl: 'https://example.com/chapter-4' }],
       timeBlocks: [{ id: 'block-1', name: 'Biology review', date: '2026-08-01', start: '16:00', end: '16:30' }],
       homeworkWorkspace: {
         courses: [{ id: 'bio', name: 'Biology' }],
@@ -250,6 +250,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
     assert.equal(searchable.some((entity) => entity.key === 'note:locked-note'), false);
     assert.equal(searchable.some((entity) => entity.key === 'private_document:private-1'), false);
     assert.equal(searchable.find((entity) => entity.key === 'note:open-note').text.includes('ATP'), true);
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.referenceUrl, 'https://example.com/chapter-4');
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:sat').dates.due, '2026-12-05');
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:act').dates.due, '2026-12-31');
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:custom:custom-exam').dates.due, '2026-11-01');

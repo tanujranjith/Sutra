@@ -52,6 +52,18 @@ test('saving a live Assistant reply retains its review payload but strips it fro
   assert.equal(context.current.messages[0].claimType, 'proposed_action');
 });
 
+test('Assistant reference links are not autolinked again inside generated anchors', () => {
+  const render = new Function('escapeHtml', functionBody(appSource, 'renderMarkdown') + ';return renderMarkdown;')(
+    text => String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+  );
+  const html = render('[Reference URL](https://example.com/robotics) and https://example.com/bare');
+  assert.equal((html.match(/<a /g) || []).length, 2);
+  assert.ok(html.includes('href="https://example.com/robotics"'));
+  assert.ok(!html.includes('href="<a'));
+  const citation = render('[https://example.com/label](sutra://entity/homework%3Arobotics)');
+  assert.equal((citation.match(/<a /g) || []).length, 1);
+});
+
 test('Quick Capture clears the previous draft before parsing a new prefill', () => {
   const ids = [
     'quickCaptureInput', 'quickCapturePreview', 'quickCaptureType', 'quickCaptureDate',
