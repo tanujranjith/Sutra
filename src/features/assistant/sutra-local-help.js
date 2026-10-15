@@ -562,11 +562,17 @@
     let providerSendHandler = null;
     function setProviderSendHandler(fn) { providerSendHandler = typeof fn === 'function' ? fn : null; }
 
-    function sendToProvider(prompt) {
+    function sendToProvider(prompt, context, handler) {
         try {
-            if (providerSendHandler) { providerSendHandler(prompt); return true; }
+            const send = typeof handler === 'function' ? handler : providerSendHandler;
+            if (send) {
+                // The second argument is additive: existing one-argument
+                // callbacks keep working, while callers can route the request
+                // to the chat that owns this Local Help card.
+                return send(prompt, context || {}) !== false;
+            }
             if (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') {
-                window.flowAssistant.askFlow(prompt, { send: true });
+                window.flowAssistant.askFlow(prompt, Object.assign({ send: true }, context || {}));
                 return true;
             }
         } catch (e) { /* ignore */ }
@@ -652,11 +658,15 @@
 
     // Render a Local Help card for a node into a host element.
     // history: array of node ids for the Back button.
-    function renderCard(host, nodeId, history) {
+    function renderCard(host, nodeId, history, options) {
         if (!host) return null;
         const node = resolveNode(nodeId);
         if (!node) return null;
         const hist = Array.isArray(history) ? history.slice() : [];
+        const renderOptions = options && typeof options === 'object' ? options : {};
+        const originalQuestion = typeof renderOptions.originalQuestion === 'string'
+            ? renderOptions.originalQuestion.trim()
+            : '';
 
         const card = elc('div', 'sutra-help-card');
         card.setAttribute('role', 'group');
@@ -718,7 +728,7 @@
                     if (ch.close) return;
                 }
                 if (ch.to) {
-                    renderCard(host, ch.to, hist.concat([nodeId]));
+                    renderCard(host, ch.to, hist.concat([nodeId]), renderOptions);
                     scrollHost(host);
                 }
             });
@@ -734,20 +744,29 @@
             useBtn.type = 'button';
             useBtn.title = hasProvider ? 'Ask the AI provider for a generated answer' : 'Connect an AI provider in Settings to use this';
             useBtn.addEventListener('click', () => {
-                const sent = sendToProvider(typeof node.useProvider === 'string' ? node.useProvider : node.title);
-                if (!sent) { renderCard(host, 'providers', hist.concat([nodeId])); scrollHost(host); }
+                const configuredPrompt = typeof node.useProvider === 'string' ? node.useProvider : node.title;
+                const prompt = originalQuestion || configuredPrompt;
+                const providerContext = {
+                    host,
+                    messagesHost: host,
+                    nodeId,
+                    originalQuestion,
+                    targetChatId: renderOptions.targetChatId || null
+                };
+                const sent = sendToProvider(prompt, providerContext, renderOptions.providerSendHandler);
+                if (!sent) { renderCard(host, 'providers', hist.concat([nodeId]), renderOptions); scrollHost(host); }
             });
             foot.appendChild(useBtn);
         }
         if (hist.length) {
             const back = elc('button', 'sutra-help-foot-btn', '← Back');
             back.type = 'button';
-            back.addEventListener('click', () => { const prev = hist[hist.length - 1]; renderCard(host, prev, hist.slice(0, -1)); scrollHost(host); });
+            back.addEventListener('click', () => { const prev = hist[hist.length - 1]; renderCard(host, prev, hist.slice(0, -1), renderOptions); scrollHost(host); });
             foot.appendChild(back);
         } else if (nodeId !== 'root') {
             const menu = elc('button', 'sutra-help-foot-btn', '☰ Help menu');
             menu.type = 'button';
-            menu.addEventListener('click', () => { renderCard(host, 'root', []); scrollHost(host); });
+            menu.addEventListener('click', () => { renderCard(host, 'root', [], renderOptions); scrollHost(host); });
             foot.appendChild(menu);
         }
         const dismiss = elc('button', 'sutra-help-foot-btn', 'Never mind');
@@ -793,7 +812,7 @@
             }
         } catch (e) { /* ignore */ }
         const targetHost = (options && options.host) || activeMessagesHost() || host;
-        renderCard(targetHost, NODES[nodeId] ? nodeId : 'root', []);
+        renderCard(targetHost, NODES[nodeId] ? nodeId : 'root', [], options || {});
         scrollHost(targetHost);
         return true;
     }

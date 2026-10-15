@@ -201,7 +201,7 @@ test('browser adapters cover the connected student loop and preserve locked-note
       },
       academicWorkspace: {},
       apStudyWorkspace: {},
-      testingHub: {},
+      testingHub: { sat: { name: 'SAT', examDate: '2026-12-05' }, act: { name: 'ACT', examDate: '2026-12-31' }, custom: [{ id: 'custom-exam', name: 'Orchid exam', examDate: '2026-11-01' }] },
       gradePlanner: {},
       collegeAppWorkspace: {},
       collegeTracker: {},
@@ -250,6 +250,9 @@ test('browser adapters cover the connected student loop and preserve locked-note
     assert.equal(searchable.some((entity) => entity.key === 'note:locked-note'), false);
     assert.equal(searchable.some((entity) => entity.key === 'private_document:private-1'), false);
     assert.equal(searchable.find((entity) => entity.key === 'note:open-note').text.includes('ATP'), true);
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:sat').dates.due, '2026-12-05');
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:act').dates.due, '2026-12-31');
+    assert.equal(searchable.find(entity => entity.key === 'testing_exam:custom:custom-exam').dates.due, '2026-11-01');
 
     assert.equal((await registry.open('note:open-note')).ok, true);
     assert.equal((await registry.open('homework:hw-1')).ok, true);

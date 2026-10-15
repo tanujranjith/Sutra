@@ -75,7 +75,7 @@
   function dateFields(record) {
     var source = record && typeof record === 'object' ? record : {};
     return {
-      due: source.dueDate || source.due || source.deadline || source.date || '',
+      due: source.dueDate || source.due || source.deadline || source.examDate || source.date || '',
       start: source.startAt || source.start || '',
       end: source.endAt || source.end || '',
       created: source.createdAt || source.created || '',
@@ -90,6 +90,7 @@
       priority: text(source.priority || ''),
       difficulty: text(source.difficulty || ''),
       noteId: text(source.noteId || source.linkedNoteId || ''),
+      referenceUrl: text(source.referenceUrl || ''),
       estimateMinutes: Number(source.estimateMinutes || source.effortMinutes || source.estimate || 0) || 0
     }, extra || {});
   }
@@ -609,12 +610,20 @@
         priority: 54,
         collect: function () {
           var workspace = sources().testingHub || {};
-          var exams = rows(workspace.customExams).concat(rows(workspace.exams));
+          // Standard exams are keyed profiles; custom profiles live in custom.
+          // Include saved profiles even when their cards/packs are not visible.
+          var standard = ['sat', 'act', 'mcat', 'gre', 'lsat', 'gmat', 'psat', 'toefl', 'ielts', 'clep', 'ib', 'state']
+            .filter(function (type) { return workspace[type] && typeof workspace[type] === 'object'; })
+            .map(function (type) { return Object.assign({}, workspace[type], { id: type, type: type }); });
+          var exams = standard.concat(rows(workspace.custom), rows(workspace.customExams), rows(workspace.exams));
+          var seen = new Set();
           return exams.filter(function (exam) { return exam && exam.id; }).map(function (exam) {
             var examId = exam.type ? String(exam.type) : ('custom:' + exam.id);
+            if (seen.has(examId)) return null;
+            seen.add(examId);
             return {
               id: examId,
-              title: exam.name || exam.title || exam.label || 'Exam',
+              title: exam.name || exam.title || exam.label || String(exam.type || 'Exam').toUpperCase(),
               text: recordText(exam),
               keywords: ['exam', 'test', exam.type, exam.status],
               status: exam.status || '',
@@ -622,7 +631,7 @@
               deepLink: { view: 'apstudy', params: { examId: examId } },
               metadata: { examId: examId, custom: !exam.type }
             };
-          });
+          }).filter(Boolean);
         },
         open: openTestingExam
       },
