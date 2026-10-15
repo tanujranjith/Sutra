@@ -186,6 +186,7 @@
     var ASSIGNMENT_RE = /\b(due|assignment|homework|hw|essay|project|lab(?:\s+report)?|read(?:ing)?|worksheet|problem set|pset|draft|presentation|paper)\b/i;
     var NO_SCHOOL_RE = /\b(no school|holiday|break|day off|teacher work\s?day|in-?service|staff development|closed)\b/i;
     var COURSE_LINE_RE = /^(?:[Pp]eriod\s*(\d+)\s*[:\-–]\s*)?([A-Z][A-Za-z0-9&\/\- ]+?)(?:\s*[—\-–:]\s*(?:Mr\.?|Mrs\.?|Ms\.?|Mx\.?|Dr\.?|Prof\.?)\s*([A-Za-z'\- ]+?))?\s*(?:\(?\s*(?:[Rr]oom|[Rr][Mm]|ROOM)\.?\s*#?\s*([A-Za-z0-9\-]+)\s*\)?)?\s*$/;
+    var COURSE_METADATA_LABEL_RE = /^(?:teacher|instructor|professor|taught by|room|classroom|location|term|semester|school year|section)\s*:/i;
     var GRADING_RE = /^([A-Za-z][A-Za-z &\/\-]+?)\s*[:\-–]?\s*(\d{1,3})\s*%/;
     var TEACHER_EMAIL_RE = /([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})/i;
 
@@ -278,7 +279,7 @@
                 || courseMatch[4]
                 || /\b(biology|chem|physics|history|math|calc|algebra|geometry|english|literature|spanish|french|german|latin|economics|gov|computer|science|art|music|band|orchestra|psych)\w*\b/i.test(lower)
             );
-            if (looksLikeCourse && !date && !/[.!?]$/.test(line)) {
+            if (looksLikeCourse && !COURSE_METADATA_LABEL_RE.test(line) && !date && !/[.!?]$/.test(line)) {
                 currentCourse = courseMatch[2].trim();
                 inGradingSection = false;
                 items.push(normalizeItem({
