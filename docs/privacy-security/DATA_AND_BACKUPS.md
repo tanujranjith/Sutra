@@ -1,5 +1,17 @@
 ﻿# Data and Backups
 
+Automatic backup failures retry with increasing session-local delays (one minute
+through thirty minutes), without marking the due daily slot as complete. A
+successful upload or unchanged-work check clears the delay. Returning online
+allows another attempt; foreground and save triggers respect the current delay.
+Local saving continues throughout. Raw provider errors are not persisted in backup
+status; diagnostic details pass through the credential scrubber.
+
+A restore whose required attachment writes fail is incomplete. Recovered content
+remains available, but Cloud, Drive, and file import callers must not show a full
+restore success. Keep the original backup, free up storage, and import again.
+Local snapshot recovery also avoids automatically reloading after this failure.
+
 _How Sutra stores your workspace locally, and how the `.sutra` backup format
 exports and restores it. For a verified, implementation-level audit of the
 persistence and round-trip behavior, see the companion

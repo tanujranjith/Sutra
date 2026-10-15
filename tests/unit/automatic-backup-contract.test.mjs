@@ -112,6 +112,62 @@ test('folder backup is gated on picker support and explains the permission', () 
   assert.match(saveNow.body, /Folder permission is required to save a backup/);
 });
 
+test('failed automatic backups back off to thirty minutes and a successful upload resets the delay', async () => {
+  let now = Date.now();
+  let fail = true;
+  let attempts = 0;
+  let reports = 0;
+  const runtime = {};
+  const meta = { autoBackup: { enabled: true, frequency: 'daily' } };
+  const compile = loadAppFunction('runSutraCloudAutoBackup', [
+    'sutraCloudAutoReady', 'sutraCloudRuntime', 'sutraCloudBackupNow', 'navigator',
+    'sutraRemoteCommitPending', 'persistenceWritesBlocked', 'loadSutraCloudMeta',
+    'window', 'persistSutraCloudMeta', 'updateSutraCloudUi', 'sutraCloudMeta',
+    'getSyncWorkspaceSnapshot', 'getSutraCloudDailySchedule', 'Date'
+  ]);
+  const upload = async () => {
+    attempts += 1;
+    if (fail) throw new Error('provider error with a fake private secret');
+    meta.lastAutoBackupHash = 'root';
+    return { uploaded: true };
+  };
+  const run = compile(() => true, runtime, upload,
+    { onLine: true, locks: { request: async (_name, _options, work) => work({}) } },
+    false, false, () => meta, {
+      SutraSyncProjection: { buildProjection: value => value, hashProjection: async () => ({}) },
+      SutraSyncProtocol: { stableStringify: JSON.stringify, hashText: async () => 'root' },
+      SutraReportError: () => { reports += 1; }
+    }, () => {}, () => {}, null, async () => ({}), () => ({ due: true }), { now: () => now });
+  for (const delay of [60000, 120000, 240000, 480000, 960000, 1800000, 1800000]) {
+    const before = attempts;
+    assert.equal((await run('daily')).error, true);
+    assert.equal(runtime.autoBackupRetryAt - now, delay);
+    assert.equal((await run('daily')).reason, 'backoff');
+    assert.equal(attempts, before + 1);
+    assert.doesNotMatch(meta.lastError, /private secret/);
+    now += delay;
+  }
+  fail = false;
+  assert.equal((await run('daily')).uploaded, true);
+  assert.equal(runtime.autoBackupFailures, 0);
+  assert.equal(runtime.autoBackupRetryAt, 0);
+  assert.equal(reports, 7);
+});
+
+test('daily scheduling retains its due slot while honoring the retry deadline', () => {
+  const timers = [];
+  const runtime = { autoBackupRetryAt: 500000 };
+  const compile = loadAppFunction('scheduleSutraCloudDailyBackup', [
+    'sutraCloudAutoTimer', 'clearTimeout', 'loadSutraCloudMeta', 'sutraCloudAutoReady',
+    'Date', 'getSutraCloudDailySchedule', 'sutraCloudRuntime', 'setTimeout', 'runSutraCloudAutoBackup'
+  ]);
+  const schedule = compile(null, () => {}, () => ({ autoBackup: { frequency: 'daily' } }),
+    () => true, { now: () => 100000 }, () => ({ due: true, nextAt: 900000 }), runtime,
+    (_work, delay) => { timers.push(delay); return 1; }, async () => ({}));
+  schedule(60000);
+  assert.deepEqual(timers, [400000]);
+});
+
 test('local saving never blocks on Sync, and Sync never throws from the save hook', () => {
   const hook = app.indexOf("notifySutraSyncLocalSave(reason, summary)");
   assert.ok(hook >= 0, 'the save hook calls Sutra Sync');

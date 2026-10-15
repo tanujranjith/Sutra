@@ -58868,6 +58868,7 @@ function getActiveEditor() {
                 const m = loadSutraCloudMeta();
                 m.lastBackupAt = new Date().toISOString();
                 m.lastError = '';
+                sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
                 if (options.auto) m.lastAutoBackupAt = m.lastBackupAt;
                 if (options.auto) m.lastAutoBackupHash = options.workspaceHash || '';
                 persistSutraCloudMeta();
@@ -58879,7 +58880,7 @@ function getActiveEditor() {
                 return { uploaded: true };
             } catch (error) {
                 const m = loadSutraCloudMeta();
-                m.lastError = error && error.message ? error.message : 'Backup failed.';
+                m.lastError = 'Backup failed. Check the destination connection and storage; details are in diagnostics.';
                 persistSutraCloudMeta();
                 // Record in the diagnostics ring buffer too (context carries no
                 // passphrase/credentials) so an exported report shows the failure.
@@ -59099,9 +59100,8 @@ function getActiveEditor() {
             if (!sutraCloudAutoReady() || meta.autoBackup.frequency !== 'daily') return;
             const now = Date.now();
             const schedule = getSutraCloudDailySchedule(meta, now);
-            // Recheck the clock at least once a minute, including after sleep or
-            // timezone changes. Failed/offline/unchanged attempts never spin.
-            const delay = schedule.due ? retryDelay : Math.min(60000, schedule.nextAt - now);
+            // Recheck calendar time; a due slot respects failure backoff.
+            const delay = schedule.due ? Math.max(retryDelay, (sutraCloudRuntime.autoBackupRetryAt || 0) - now) : Math.min(60000, schedule.nextAt - now);
             sutraCloudAutoTimer = setTimeout(async () => {
                 sutraCloudAutoTimer = null;
                 try { await runSutraCloudAutoBackup('daily'); }
@@ -59113,6 +59113,7 @@ function getActiveEditor() {
 
         async function runSutraCloudAutoBackup(expectedFrequency) {
             if (!sutraCloudAutoReady() || !navigator.onLine) return { skipped: true, reason: 'not-ready' };
+            if (Date.now() < (sutraCloudRuntime.autoBackupRetryAt || 0)) return { skipped: true, reason: 'backoff' };
             if (sutraCloudRuntime.busy || sutraRemoteCommitPending || persistenceWritesBlocked) return { skipped: true, reason: 'busy' };
             // Without an atomic cross-tab lock, keep automatic backup paused.
             // Manual backups remain available without opening the Sync database.
@@ -59136,6 +59137,7 @@ function getActiveEditor() {
                     const currentMeta = loadSutraCloudMeta();
                     if (!sutraCloudAutoReady() || JSON.stringify(currentMeta.autoBackup) !== scheduleKey) return { skipped: true, reason: 'schedule-changed' };
                     if (!hash || currentMeta.lastAutoBackupHash === hash) {
+                        sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
                         if (hash && frequency === 'daily') {
                             // A check is not a successful backup. Keep its receipt
                             // separate so unchanged work is not rehashed every minute.
@@ -59145,13 +59147,18 @@ function getActiveEditor() {
                         }
                         return { skipped: true, reason: 'unchanged' };
                     }
-                    return await sutraCloudBackupNow({
+                    const result = await sutraCloudBackupNow({
                         passphrase: sutraCloudRuntime.backupPassphrase,
                         auto: true, silent: true, label: 'Auto backup', workspaceHash: hash, autoScheduleKey: scheduleKey
                     });
+                    if (result && result.uploaded) sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
+                    return result;
                 });
             } catch (error) {
-                loadSutraCloudMeta().lastError = error.message || 'Automatic backup failed.';
+                const failures = sutraCloudRuntime.autoBackupFailures = Math.min(6, (sutraCloudRuntime.autoBackupFailures || 0) + 1);
+                sutraCloudRuntime.autoBackupRetryAt = Date.now() + Math.min(1800000, 60000 * 2 ** (failures - 1));
+                loadSutraCloudMeta().lastError = 'Automatic backup failed. Retrying with increasing delays; local saving continues.';
+                if (window.SutraReportError) window.SutraReportError(error, { where: 'sutraCloud:autoBackup' }, 'warning');
                 persistSutraCloudMeta();
                 updateSutraCloudUi();
                 return { error: true };
@@ -59202,6 +59209,7 @@ function getActiveEditor() {
                     }
                 });
                 window.addEventListener('pageshow', () => maybeSutraCloudAutoBackup('pageshow'));
+                window.addEventListener('online', () => { sutraCloudRuntime.autoBackupRetryAt = 0; maybeSutraCloudAutoBackup('online'); });
             } catch (e) { /* noop */ }
         }
 
@@ -59798,6 +59806,7 @@ function getActiveEditor() {
             const changed = !meta.autoBackup.enabled || frequency !== meta.autoBackup.frequency || dailyTime !== meta.autoBackup.dailyTime;
             meta.autoBackup = { ...meta.autoBackup, enabled, frequency, dailyTime,
                 dailyScheduleStartedAt: changed ? new Date().toISOString() : meta.autoBackup.dailyScheduleStartedAt };
+            if (changed || !enabled) sutraCloudRuntime.autoBackupFailures = sutraCloudRuntime.autoBackupRetryAt = 0;
             if (sutraCloudAutoTimer) { clearTimeout(sutraCloudAutoTimer); sutraCloudAutoTimer = null; }
             persistSutraCloudMeta();
             updateSutraCloudUi();
@@ -65328,7 +65337,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('snapshot-restore');
                 if (!attachmentResult.ok) {
                     const n = attachmentResult.failed.length || attachmentResult.total;
-                    showToast(`Restored, but ${n} attachment${n === 1 ? '' : 's'} could not be saved durably — free up space and restore again. Reloading…`, { durationMs: 5000 });
+                    showToast(`Restore incomplete: ${n || 'some'} attachments could not be saved. Keep the original backup, free up space, and restore again.`, { durationMs: 9000 });
+                    return false;
                 } else {
                     showToast('Workspace restored. Reloading…');
                 }
@@ -65586,13 +65596,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             if (Array.isArray(options.warnings) && options.warnings.length) {
                 showToast(`Imported with ${options.warnings.length} warning${options.warnings.length === 1 ? '' : 's'}.`);
             }
-            // Honest reporting: the workspace + attachment metadata are restored,
-            // but some file bytes did not reach durable storage (quota / IndexedDB
-            // failure). Tell the student exactly how many, instead of a silent
-            // "success" that loses attachments on the next reload.
+            // All callers must distinguish recovered content from a complete restore.
             if (!attachmentResult.ok) {
                 const n = attachmentResult.failed.length || attachmentResult.total;
-                showToast(`Imported, but ${n} attachment${n === 1 ? '' : 's'} could not be saved to durable storage — free up space and re-import to recover ${n === 1 ? 'it' : 'them'}. Everything else is restored.`, { durationMs: 7000 });
+                const error = new Error(`Workspace restore incomplete: ${n || 'some'} attachments could not be saved. Recovered content is available; keep the original backup, free up space, and import again.`);
+                error.code = 'restore-incomplete';
+                recordPersistenceFailure(error, { reason: 'attachment-restore', phase: 'import-save', kind: 'attachment' });
+                throw error;
             }
             return true;
         }
@@ -73532,16 +73542,6 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             chatInfo.style.display = 'none';
             // reset z-index so styles revert to CSS defaults
             chatInfo.style.zIndex = '';
-        }
-
-        // basic HTML-escaping to avoid accidental injection
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
         }
 
         function isSafeHtmlEmbedUrl(rawUrl) {

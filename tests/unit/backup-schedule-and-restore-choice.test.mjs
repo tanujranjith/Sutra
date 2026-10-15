@@ -107,7 +107,8 @@ function makeRestoreFixture(scenario = {}) {
     async function flushImportedAttachmentWrites() {
       if (lockActive) throw new Error('Attachment flush ran while the writer lock was held.');
       events.push('attachments-flushed');
-      return { ok: true, failed: [], total: 0 };
+      if (scenario.attachmentException) throw new Error('Attachment database unavailable');
+      return scenario.attachmentResult || { ok: true, failed: [], total: 0 };
     }
     async function flushAppSaveNow() {
       if (lockActive) throw new Error('Workspace save was awaited while the writer lock was held.');
@@ -115,6 +116,7 @@ function makeRestoreFixture(scenario = {}) {
     }
     function serializeWorkspace() { return { pages: [] }; }
     function isWorkspacePayload() { return true; }
+    function recordPersistenceFailure(error, context) { events.push('incomplete-restore:' + context.kind); }
 
     async ${source('applyValidatedWorkspaceImport')}
     return {
@@ -182,4 +184,32 @@ test('a changed canonical disk head aborts before replacing the workspace', asyn
   assert.equal(fixture.wasImported(), false);
   assert.ok(fixture.events.includes('lock-released'));
   assert.equal(fixture.events.includes('attachments-flushed'), false);
+});
+
+for (const scenario of [
+  { attachmentResult: { ok: false, failed: ['file-one'], total: 2 } },
+  { attachmentException: true }
+]) {
+  test('attachment persistence failure rejects full-restore success without discarding recovered content: ' + JSON.stringify(scenario), async () => {
+    const fixture = makeRestoreFixture(scenario);
+    await assert.rejects(fixture.apply({ pages: [] }), error => {
+      assert.equal(error.code, 'restore-incomplete');
+      assert.match(error.message, /Recovered content is available/);
+      assert.match(error.message, /original backup/);
+      return true;
+    });
+    assert.equal(fixture.wasImported(), true);
+    assert.ok(fixture.events.includes('workspace-save-flushed'));
+    assert.ok(fixture.events.includes('incomplete-restore:attachment'));
+    assert.equal(fixture.lockIsActive(), false);
+  });
+}
+
+test('one canonical HTML helper accepts nullish, numeric and literal markup values', () => {
+  assert.equal([...app.matchAll(/function escapeHtml\(/g)].length, 1);
+  const escape = new Function(source('escapeHtml') + '; return escapeHtml;')();
+  assert.equal(escape(null), '');
+  assert.equal(escape(undefined), '');
+  assert.equal(escape(42), '42');
+  assert.equal(escape('<a title="x">&\''), '&lt;a title=&quot;x&quot;&gt;&amp;&#39;');
 });
