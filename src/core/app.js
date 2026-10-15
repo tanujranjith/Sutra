@@ -81670,12 +81670,17 @@ function parseQuickCaptureDate(text, now) {
     const monthNames = MONTHS.concat(Object.keys(MONTH_ABBR));
     const monthIndex = (key) => (MONTHS.indexOf(key) !== -1 ? MONTHS.indexOf(key) : MONTH_ABBR[key]);
     const addDays = (n) => { const d = new Date(base); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + n); return d; };
-    const res = (d, match) => ({ date: quickCaptureLocalISO(d), match });
+    const res = (d, match) => d ? ({ date: quickCaptureLocalISO(d), match }) : null;
+    const calendarDate = (year, month, day) => {
+        const d = new Date(0); d.setFullYear(year, month, day); d.setHours(0, 0, 0, 0);
+        return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day ? d : null;
+    };
     // Month/day with no year -> this year, or next year if it has clearly passed.
     const inferYear = (monthIdx, day) => {
         const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
-        let d = new Date(base.getFullYear(), monthIdx, day); d.setHours(0, 0, 0, 0);
-        if (d.getTime() < todayMid.getTime() - 86400000) d = new Date(base.getFullYear() + 1, monthIdx, day);
+        let d = calendarDate(base.getFullYear(), monthIdx, day);
+        if (!d) return null;
+        if (d.getTime() < todayMid.getTime() - 86400000) d = calendarDate(base.getFullYear() + 1, monthIdx, day);
         return d;
     };
     let m;
@@ -81700,28 +81705,30 @@ function parseQuickCaptureDate(text, now) {
 
     if ((m = lower.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/))) {
         const y = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, day = parseInt(m[3], 10);
-        if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) { const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+        return res(calendarDate(y, mo, day), m[0]);
     }
     if ((m = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))) {
         const mo = parseInt(m[1], 10) - 1, day = parseInt(m[2], 10);
         if (mo >= 0 && mo <= 11 && day >= 1 && day <= 31) {
-            if (m[3]) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; const d = new Date(y, mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            if (m[3]) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; return res(calendarDate(y, mo, day), m[0]); }
             return res(inferYear(mo, day), m[0]);
         }
+        return null;
     }
 
     let re = new RegExp('\\b(' + monthNames.join('|') + ')\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b');
     if ((m = lower.match(re))) {
         const mo = monthIndex(m[1]), day = parseInt(m[2], 10);
         if (typeof mo === 'number' && day >= 1 && day <= 31) {
-            if (m[3]) { const d = new Date(parseInt(m[3], 10), mo, day); d.setHours(0, 0, 0, 0); return res(d, m[0]); }
+            if (m[3]) return res(calendarDate(parseInt(m[3], 10), mo, day), m[0]);
             return res(inferYear(mo, day), m[0]);
         }
+        return null;
     }
     re = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(' + monthNames.join('|') + ')\\.?\\b');
     if ((m = lower.match(re))) {
         const mo = monthIndex(m[2]), day = parseInt(m[1], 10);
-        if (typeof mo === 'number' && day >= 1 && day <= 31) return res(inferYear(mo, day), m[0]);
+        return res(inferYear(mo, day), m[0]);
     }
 
     re = new RegExp('\\b(next|this|on|by)?\\s*(' + Object.keys(WD).join('|') + ')\\b');
@@ -81737,8 +81744,11 @@ function parseQuickCaptureDate(text, now) {
         const day = parseInt(m[1], 10);
         if (day >= 1 && day <= 31) {
             const todayMid = new Date(base); todayMid.setHours(0, 0, 0, 0);
-            let d = new Date(base.getFullYear(), base.getMonth(), day); d.setHours(0, 0, 0, 0);
-            if (d.getTime() < todayMid.getTime()) d = new Date(base.getFullYear(), base.getMonth() + 1, day);
+            let d = calendarDate(base.getFullYear(), base.getMonth(), day);
+            if (d && d.getTime() < todayMid.getTime()) {
+                const nextMonth = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+                d = calendarDate(nextMonth.getFullYear(), nextMonth.getMonth(), day);
+            }
             return res(d, m[0]);
         }
     }
@@ -84229,6 +84239,10 @@ function parseHomeworkPasteText(text) {
 
     const parseDateAnywhere = (str) => {
         const s = String(str || '');
+        const calendarKey = (year, month, day) => {
+            const d = new Date(0); d.setFullYear(year, month - 1, day); d.setHours(0, 0, 0, 0);
+            return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? quickCaptureLocalISO(d) : '';
+        };
         // One shared local-date policy for portal pastes and Quick Capture.
         // It covers phrases such as "next Friday", "this weekend", and
         // "after school" before the legacy portal-format fallbacks below.
@@ -84239,22 +84253,18 @@ function parseHomeworkPasteText(text) {
             if (shared && shared.date) return shared.date;
         } catch (err) { /* retain legacy parser */ }
         const m1 = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-        if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+        if (m1) return calendarKey(Number(m1[1]), Number(m1[2]), Number(m1[3]));
         const m2 = s.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
         if (m2) {
-            const mm = String(Math.max(1, Math.min(12, Number(m2[1])))).padStart(2, '0');
-            const dd = String(Math.max(1, Math.min(31, Number(m2[2])))).padStart(2, '0');
             let yy = m2[3] ? Number(m2[3]) : now.getFullYear();
             if (yy < 100) yy += 2000;
-            return `${yy}-${mm}-${dd}`;
+            return calendarKey(yy, Number(m2[1]), Number(m2[2]));
         }
         const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
         const m3 = s.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,\s*(\d{4}))?/);
         if (m3) {
-            const mm = String(months.indexOf(m3[1]) + 1).padStart(2, '0');
-            const dd = String(Math.max(1, Math.min(31, Number(m3[2])))).padStart(2, '0');
             const yy = m3[3] ? Number(m3[3]) : now.getFullYear();
-            return `${yy}-${mm}-${dd}`;
+            return calendarKey(yy, months.indexOf(m3[1]) + 1, Number(m3[2]));
         }
         // LOCAL dates, never UTC: toISOString() rolled evening pastes in
         // western timezones one day forward ("Due Tomorrow" pasted at 9pm EDT

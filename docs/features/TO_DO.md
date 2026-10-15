@@ -34,6 +34,12 @@ uncalled `parseQuickAdd`, `renderQuickAddBar`, and `bindQuickAdd` helpers have
 been removed after tracing their references. This retires an inactive parser;
 it does not migrate tasks or change legacy Homework storage identifiers.
 
+Capture and Homework paste imports validate the actual calendar day, including
+leap years. Impossible dates remain blank in the import review instead of
+rolling into the next month or clamping a month/day. The assignment and source
+link remain available for correction. Valid ISO, slash, named-month, and legacy
+dashed portal dates remain supported.
+
 ## By Class history
 
 By Class keeps every unfinished assignment in its main class group, including past-due and undated work. Only completed assignments move into the collapsed **Completed tasks** section, regardless of due date. That section retains class grouping and counts only completed tasks.

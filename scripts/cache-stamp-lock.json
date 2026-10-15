@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-sutra-icons1",
-    "hash": "9ac74b2bbf0e57c3"
+    "stamp": "20261015-calendar-validation1",
+    "hash": "dbe14089263bccbf"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -92,8 +92,8 @@
     "hash": "1b1b901c434b66b3"
   },
   "src/core/student-date-parser.js": {
-    "stamp": "20260709-studentdate1",
-    "hash": "1390f0e0cb95697c"
+    "stamp": "20261015-calendar-validation1",
+    "hash": "43252cb131c8f6b5"
   },
   "src/core/time-utils.js": {
     "stamp": "20260712-timeu1",
