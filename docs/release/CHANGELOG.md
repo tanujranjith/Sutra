@@ -30,6 +30,10 @@ not been pushed, merged, or released. New automated regressions await CI.
   preserving existing labels, touch targets, and offline rendering.
 - Retire the inactive Homework quick-add parser and its uncalled UI helpers;
   active capture continues through the canonical shared date/time parser.
+- Reject impossible calendar dates in active Capture and Homework import
+  fallbacks while retaining valid legacy portal formats.
+- Delay restore success until workspace and file writes finish; retain both
+  failure details and avoid reloading after incomplete snapshot recovery.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

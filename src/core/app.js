@@ -60946,7 +60946,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             persistAppData();
             try { updateAtelierDataHealthUi(); } catch (err) { /* non-critical */ }
             try { syncOnboardingStatusUi(); } catch (err) { /* non-critical */ }
-            if (!options.silent) showToast('Workspace imported successfully!');
+            if (!options.silent && !options.deferSuccessToast) showToast('Workspace imported successfully!');
         }
 
         // ----------------------------------------------------------------------
@@ -63464,23 +63464,18 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 return false;
             }
             try {
-                importWorkspacePayload(snap.payload);
-                // Await durable attachment writes BEFORE the reload below — a reload
-                // mid-write would drop any blob still only in the session cache.
-                let attachmentResult = { ok: true, failed: [], total: 0 };
-                try { attachmentResult = await flushImportedAttachmentWrites(); }
-                catch (e) { attachmentResult = { ok: false, failed: [], total: 0 }; }
-                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('snapshot-restore');
-                if (!attachmentResult.ok) {
-                    const n = attachmentResult.failed.length || attachmentResult.total;
-                    showToast(`Restore incomplete: ${n || 'some'} attachments could not be saved. Keep the original backup, free up space, and restore again.`, { durationMs: 9000 });
-                    return false;
-                } else {
-                    showToast('Workspace restored. Reloading…');
-                }
-                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, attachmentResult.ok ? 700 : 1600);
+                importWorkspacePayload(snap.payload, { deferSuccessToast: true });
+                // Do not reload or announce success before both durable stores finish.
+                await flushWorkspaceRestoreWrites('snapshot-restore');
+                showToast('Workspace restored. Reloading…');
+                setTimeout(() => { try { location.reload(); } catch (e) { /* nc */ } }, 700);
                 return true;
-            } catch (e) { console.warn('restore snapshot failed', e); showToast('Restore failed — your workspace is unchanged.'); return false; }
+            } catch (e) {
+                if (window.SutraReportError) window.SutraReportError(e, { where: 'snapshot:restore' }, 'warning');
+                showToast(e && e.code === 'restore-incomplete' ? e.message
+                    : 'Restore did not finish. Recovered content may be present but is not confirmed saved. Keep the original backup and Before restore snapshot, resolve storage errors, and try again.', { durationMs: 10000 });
+                return false;
+            }
         }
         function restoreNoteFromWorkspaceSnapshot(snapId, pageId) {
             const snap = getWorkspaceSnapshots().find(s => s && s.id === snapId);
@@ -63620,6 +63615,44 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             return { ...imported, encrypted: false, legacyUnencrypted: true };
         }
 
+        async function flushWorkspaceRestoreWrites(reason) {
+            let attachmentResult = { ok: true, failed: [], total: 0 };
+            try { attachmentResult = await flushImportedAttachmentWrites(); }
+            catch (error) { attachmentResult = { ok: false, failed: [], total: 0 }; }
+            // JSON recovery files and local snapshots can contain file metadata
+            // without embedded bytes. An empty write queue does not prove those
+            // attachments exist, and the session cache is not durable storage.
+            const requiredFiles = (courseWorkspace.files || []).filter(file => file && file.storageType === 'indexeddb');
+            let storedKeys = new Set();
+            if (requiredFiles.length) {
+                try { storedKeys = new Set(await cwListStoredBlobKeys()); }
+                catch (error) {
+                    if (window.SutraReportError) window.SutraReportError(error, { where: 'restore:attachment-readback' }, 'warning');
+                }
+            }
+            const missingFiles = requiredFiles.filter(file => !file.blobKey || !storedKeys.has(String(file.blobKey)));
+            requiredFiles.forEach(file => { file.missingBlob = !file.blobKey || !storedKeys.has(String(file.blobKey)); });
+            const attachmentFailed = !attachmentResult.ok || missingFiles.length > 0;
+            let saveFailed = false;
+            try {
+                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow(reason);
+            } catch (error) {
+                saveFailed = true;
+                if (window.SutraReportError) window.SutraReportError(error, { where: 'restore:save' }, 'warning');
+                recordPersistenceFailure(new Error('Workspace restore could not confirm local saving.'), { reason: 'import-save', phase: 'import-save', kind: 'indexeddb' });
+            }
+            if (attachmentFailed || saveFailed) {
+                const n = attachmentResult.failed.length || attachmentResult.total;
+                const missing = !attachmentResult.ok ? `${n || 'Some'} attachments could not be saved. ` : '';
+                const unavailable = missingFiles.length ? `${missingFiles.length} required attachment${missingFiles.length === 1 ? '' : 's'} could not be verified in storage. ` : '';
+                const saving = saveFailed ? 'Local saving could not be confirmed. ' : '';
+                const error = new Error(`Workspace restore incomplete: ${missing}${unavailable}${saving}Recovered content is available in this session; keep the original backup, free up space, and import again.`);
+                error.code = 'restore-incomplete';
+                if (attachmentFailed) recordPersistenceFailure(error, { reason: 'attachment-restore', phase: 'import-save', kind: 'attachment' });
+                throw error;
+            }
+        }
+
         async function applyValidatedWorkspaceImport(workspacePayload, options = {}) {
             validateWorkspacePayloadForImport(workspacePayload);
             const interactiveRestore = options.skipConflictCheck !== true;
@@ -63705,25 +63738,17 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                         return false;
                     }
                     if (typeof options.canApplyNow === 'function' && options.canApplyNow() === false) return false;
-                    importWorkspacePayload(workspacePayload);
+                    importWorkspacePayload(workspacePayload, { deferSuccessToast: true });
                     return true;
                 });
                 if (!applied) return false;
             } else {
-                importWorkspacePayload(workspacePayload);
+                importWorkspacePayload(workspacePayload, { deferSuccessToast: true });
             }
             // Durability gate: block on the imported attachment blob writes so we
             // never report a successful restore while file bytes are only in the
             // in-memory session cache (an immediate reload would lose them).
-            let attachmentResult = { ok: true, failed: [], total: 0 };
-            try { attachmentResult = await flushImportedAttachmentWrites(); }
-            catch (error) { attachmentResult = { ok: false, failed: [], total: 0 }; }
-            try {
-                if (typeof flushAppSaveNow === 'function') await flushAppSaveNow('import-workspace');
-            } catch (error) {
-                recordPersistenceFailure(error, { reason: 'import-save', phase: 'import-save', kind: 'indexeddb' });
-                throw error;
-            }
+            await flushWorkspaceRestoreWrites('import-workspace');
             const restored = serializeWorkspace({ mode: 'json', includeSensitiveSettings: false });
             if (!isWorkspacePayload(restored)) throw new Error('Workspace restore verification failed.');
             if (options.legacyUnencrypted) {
@@ -63731,14 +63756,8 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
             if (Array.isArray(options.warnings) && options.warnings.length) {
                 showToast(`Imported with ${options.warnings.length} warning${options.warnings.length === 1 ? '' : 's'}.`);
-            }
-            // All callers must distinguish recovered content from a complete restore.
-            if (!attachmentResult.ok) {
-                const n = attachmentResult.failed.length || attachmentResult.total;
-                const error = new Error(`Workspace restore incomplete: ${n || 'some'} attachments could not be saved. Recovered content is available; keep the original backup, free up space, and import again.`);
-                error.code = 'restore-incomplete';
-                recordPersistenceFailure(error, { reason: 'attachment-restore', phase: 'import-save', kind: 'attachment' });
-                throw error;
+            } else if (!options.legacyUnencrypted) {
+                showToast('Workspace imported successfully!');
             }
             return true;
         }

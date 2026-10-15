@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-calendar-validation1",
-    "hash": "dbe14089263bccbf"
+    "stamp": "20261015-restore-reporting2",
+    "hash": "bd0e9ed966a485e6"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",

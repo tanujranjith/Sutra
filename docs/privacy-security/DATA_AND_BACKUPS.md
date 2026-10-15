@@ -11,6 +11,12 @@ A restore whose required attachment writes fail is incomplete. Recovered content
 remains available, but Cloud, Drive, and file import callers must not show a full
 restore success. Keep the original backup, free up storage, and import again.
 Local snapshot recovery also avoids automatically reloading after this failure.
+Restore completion messages wait for both workspace and attachment writes. If
+both fail, the recovery warning reports both problems; an apply/save error never
+claims that the original workspace is unchanged after replacement has started.
+Metadata-only JSON recovery and local snapshots also check required file keys
+against the attachment database after pending writes finish. An empty write
+queue or a copy in the session cache does not establish a complete restore.
 
 _How Sutra stores your workspace locally, and how the `.sutra` backup format
 exports and restores it. For a verified, implementation-level audit of the
