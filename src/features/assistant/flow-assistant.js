@@ -4994,7 +4994,7 @@
                 .find(turn => turn && turn.role === 'user' && String(turn.content || '').trim() !== String(userText || '').trim());
             if (previous) query += ' ' + String(previous.content || '').slice(0, 1000).toLowerCase();
         }
-        const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your'.split(' '));
+        const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your saved notes note details reference url one short sentence cite same its'.split(' '));
         const todo = /\b(?:to[ -]?dos?|task(?:s| list)?|homework|assignments?)\b/i.test(query);
         if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
         const terms = (query.match(/[\p{L}\p{N}]+/gu) || []).filter(term => term.length > 1 && !stop.has(term)).slice(0, 32);
@@ -5035,7 +5035,10 @@
         ranked.slice(0, taskList ? 40 : 16).forEach(({ entity, target, score, excerpt }) => {
             if (!result[target[1]]) result[target[1]] = [];
             result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
-                excerpt, dueDate: entity.dates && entity.dates.due || '', status: entity.status,
+                excerpt: entity.type === 'task' || entity.type === 'homework' ? undefined : excerpt,
+                notes: entity.type === 'task' || entity.type === 'homework' ? String(entity.metadata && entity.metadata.taskNotes || '') : undefined,
+                notesTruncated: entity.type === 'task' || entity.type === 'homework' ? Number(entity.metadata && entity.metadata.taskNotesLength || 0) > 1000 : undefined,
+                dueDate: entity.dates && entity.dates.due || '', status: entity.status,
                 referenceUrl: (entity.type === 'task' || entity.type === 'homework') ? String(entity.metadata && entity.metadata.referenceUrl || '') : undefined,
                 citationUrl: 'sutra://entity/' + encodeURIComponent(entity.key),
                 courseId: entity.courseId || '', relevance: score });
@@ -5051,6 +5054,7 @@
         if (ctx.depth === 'currentView' && ctx.view === 'assistantview') ctx.depth = 'workspace';
         const derived = ctx.derived;
         ['tasks', 'homework', 'timelineUpcoming', 'timelineToday', 'timeline', 'deadlines', 'review', 'apStudy', 'college', 'life', 'business', 'cram', 'courses', 'allDue', 'testingHub', 'derived', 'customTab'].forEach(key => { delete ctx[key]; });
+        ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview', 'workspaceRetrieval'].forEach(key => { delete ctx[key]; });
         Object.assign(ctx, relevant);
         if (/\b(?:plan|schedule|due|overdue|priorities|next step|what should i do)\b/i.test(userText) && derived) ctx.derived = derived;
         if (!/\b(?:this|current|open|active)\s+(?:note|page|canvas|slides?)\b/i.test(userText) && !ctx.selection) {
@@ -5244,13 +5248,26 @@
         const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();
+        // Receipts describe only evidence retained after privacy and both budget
+        // passes. A read-once marker records this send, never grants future access.
+        const sources = (ctx.retrievedNotes || []).map(source => Object.assign({}, source, {
+            kind: 'note', href: 'sutra://page/' + encodeURIComponent(source.noteId),
+            readOnce: accessOptions.authorizedPageIds.includes(String(source.noteId))
+        }));
+        ['tasks', 'homework', 'workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
+            (ctx[key] || []).forEach(row => {
+                if (!row.key || !row.type || !row.id) return;
+                sources.push({ id: row.id, key: row.key, kind: row.type, title: row.title,
+                    href: row.citationUrl, reasonCodes: ['query_match'], confidence: 'high' });
+            });
+        });
         if (accessTicket) consumeLockedPageAccess(accessTicket);
         return {
             systemPrompt,
             systemPromptParts,
             context: ctx,
-            sources: ctx.retrievedNotes || [],
-            retrieval: Object.assign({}, noteRetrieval, { sources: ctx.retrievedNotes || [] }),
+            sources,
+            retrieval: Object.assign({}, noteRetrieval, { sources, evidenceStatus: sources.length ? 'supported' : noteRetrieval.evidenceStatus }),
             providerType,
             visionCapability: cap,
             attachments,

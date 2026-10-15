@@ -102,6 +102,12 @@ Generic questions omit action schemas. Requests to change workspace content send
 up to twelve relevant schemas from the canonical Actions Bank; the complete bank
 remains available in Local Help and continues to validate all reviewed actions.
 Workspace JSON is compact, and duplicate receipt bookkeeping stays local.
+Selected task records carry a named saved-notes field (up to 1,000 characters,
+with a truncation flag), rather than relying on a general search excerpt.
+Sources used covers tasks, exams, and other selected workspace records as well
+as note excerpts. It is rebuilt after privacy filtering and request budgeting.
+One-time PIN reads are labeled for that request; the label grants no future
+access, and protected excerpts are not retained in source cards or exports.
 The automatic text-request budget is 6,000 estimated tokens including a 1,536-token
 response reserve. The final serialized prompt and conversation are measured;
 whole evidence records and older turns are omitted when needed, with a partial

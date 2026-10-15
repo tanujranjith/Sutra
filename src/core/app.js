@@ -73975,7 +73975,10 @@ ${cspMeta}
                     return `<a href="#" class="sutra-cite" role="button" data-cite-kind="${escapeHtml(String(kind).toLowerCase())}" data-cite-id="${escapeHtml(id)}" title="Open in Sutra"><span class="sutra-cite-mark" aria-hidden="true">↗</span>${label}</a>`;
                 });
                 s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
-                s = s.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/g).map(part => /^<a\b/.test(part) ? part : part.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, '<a href="$1" target="_blank" rel="noreferrer noopener">$1</a>')).join('');
+                s = s.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/g).map(part => /^<a\b/.test(part) ? part : part.replace(/(https?:\/\/[\w\-./?=&#%+~,:;@()\[\]\$]+)/g, raw => {
+                    const url = raw.replace(/[.,;:!?]+$/, '');
+                    return '<a href="' + url + '" target="_blank" rel="noreferrer noopener">' + url + '</a>' + raw.slice(url.length);
+                })).join('');
                 return s;
             }
 
@@ -74960,80 +74963,15 @@ ${cspMeta}
         } catch (e) { /* no document */ }
 
         function buildAssistantSourcesPanel(rawSources, grounding) {
-            const sources = (Array.isArray(rawSources) ? rawSources : []).filter(source => source && source.noteId).slice(0, 20);
-            if (!sources.length) return null;
-            const details = document.createElement('details');
-            details.className = 'assistant-sources';
-            const summary = document.createElement('summary');
-            summary.className = 'assistant-sources-summary';
-            const status = grounding && grounding.evidenceStatus ? String(grounding.evidenceStatus) : 'supported';
-            summary.textContent = 'Sources used (' + sources.length + ') · ' + (status === 'limited' ? 'limited evidence' : 'grounded in notes');
-            details.appendChild(summary);
-            const list = document.createElement('div');
-            list.className = 'assistant-sources-list';
-            sources.forEach(source => {
-                const live = resolveAssistantReceiptSource('note', source.noteId);
-                const unavailable = !live;
-                const locked = !!(live && live.locked);
-                const item = document.createElement('article');
-                item.className = 'assistant-source-card' + (source.stale || unavailable ? ' is-stale' : '');
-                if (!unavailable && !locked) {
-                    const open = document.createElement('button');
-                    open.type = 'button';
-                    open.className = 'assistant-source-open';
-                    open.textContent = live.title || source.title || 'Untitled note';
-                    open.setAttribute('aria-label', 'Open source note ' + (live.title || source.title || 'Untitled'));
-                    open.addEventListener('click', () => navigateToCitation('page', source.noteId));
-                    item.appendChild(open);
-                } else {
-                    const unavailableLabel = document.createElement('strong');
-                    unavailableLabel.textContent = unavailable ? 'Source no longer available' : (live.title || source.title || 'Locked note');
-                    item.appendChild(unavailableLabel);
+            const core = window.SutraAssistantCore;
+            if (!core || typeof core.buildSourcesPanel !== 'function') return null;
+            return core.buildSourcesPanel(rawSources, grounding, {
+                document, resolveSource: resolveAssistantReceiptSource,
+                openSource: source => navigateToCitation(source.noteId ? 'page' : 'entity', source.noteId || encodeURIComponent(source.key)),
+                excludeSource: id => {
+                    if (window.SutraAssistantChats) window.SutraAssistantChats.excludeSource(id);
                 }
-                if (Array.isArray(source.headingPath) && source.headingPath.length) {
-                    const heading = document.createElement('div');
-                    heading.className = 'assistant-source-heading';
-                    heading.textContent = source.headingPath.join(' › ');
-                    item.appendChild(heading);
-                }
-                if (source.quote && !unavailable && !locked) {
-                    const quote = document.createElement('blockquote');
-                    quote.className = 'assistant-source-quote';
-                    quote.textContent = source.quote;
-                    item.appendChild(quote);
-                }
-                const meta = document.createElement('div');
-                meta.className = 'assistant-source-meta';
-                const reasons = (Array.isArray(source.reasonCodes) ? source.reasonCodes : []).map(reason => String(reason).replace(/_/g, ' ')).slice(0, 3);
-                const bits = [];
-                if (source.updatedAt) {
-                    const parsed = new Date(source.updatedAt);
-                    if (!Number.isNaN(parsed.getTime())) bits.push('Updated ' + parsed.toLocaleDateString());
-                }
-                if (reasons.length) bits.push('Why: ' + reasons.join(', '));
-                if (unavailable) bits.push('Source no longer available');
-                if (locked) bits.push('Locked · body not available to Assistant');
-                if (source.stale) bits.push('May be stale');
-                if (Array.isArray(source.safetyFlags) && source.safetyFlags.length) bits.push('Untrusted instructions ignored');
-                if (source.confidence) bits.push(source.confidence + ' confidence');
-                meta.textContent = bits.join(' · ');
-                item.appendChild(meta);
-                const exclude = document.createElement('button');
-                exclude.type = 'button';
-                exclude.className = 'assistant-source-exclude';
-                exclude.textContent = 'Do not use next time';
-                exclude.setAttribute('aria-label', 'Exclude this source from the next request');
-                exclude.addEventListener('click', () => {
-                    if (!window.SutraAssistantChats || typeof window.SutraAssistantChats.excludeSource !== 'function') return;
-                    window.SutraAssistantChats.excludeSource(source.id);
-                    exclude.disabled = true;
-                    exclude.textContent = 'Excluded from next request';
-                });
-                item.appendChild(exclude);
-                list.appendChild(item);
             });
-            details.appendChild(list);
-            return details;
         }
 
         function buildAssistantClaimBadge(claimType) {
@@ -75134,6 +75072,12 @@ ${cspMeta}
                 const block = Array.isArray(timeBlocks) ? timeBlocks.find(row => row && String(row.id) === sid) : null;
                 return block ? { id: block.id, kind: 'timeline', title: block.name || block.title || 'Timeline block', updatedAt: block.updatedAt || '' } : null;
             }
+            const registry = window.SutraWorkspaceEntityRegistry;
+            if (registry && typeof registry.find === 'function') {
+                const entity = registry.find(kind + ':' + sid);
+                if (entity) return { id: entity.id, kind: entity.type, title: entity.title, updatedAt: entity.dates && entity.dates.updated || '',
+                    locked: !!(entity.privacy && entity.privacy.locked), href: 'sutra://entity/' + encodeURIComponent(entity.key) };
+            }
             return null;
         }
 
@@ -75146,11 +75090,11 @@ ${cspMeta}
             const messages = enrichment && Array.isArray(enrichment.requestMessages) ? enrichment.requestMessages : [];
             const budget = enrichment && enrichment.contextBudget;
             const areas = Array.isArray(access.areasRead) ? access.areasRead : [];
-            const sources = (enrichment && Array.isArray(enrichment.sources) ? enrichment.sources : []).map(source => ({ kind: 'note', id: source.noteId, title: source.title, updatedAt: source.updatedAt, version: source.version, href: 'sutra://page/' + encodeURIComponent(source.noteId || ''), status: source.stale ? 'stale' : 'available' }));
-            ['tasks', 'homework', 'workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
-                (Array.isArray(ctx[key]) ? ctx[key] : []).forEach(row => sources.push({ kind: row.type || key, id: row.id, title: row.title,
-                    href: row.type === 'task' || row.type === 'homework' ? 'sutra://' + row.type + '/' + encodeURIComponent(row.id) : '', status: 'available' }));
-            });
+            const sources = (enrichment && Array.isArray(enrichment.sources) ? enrichment.sources : []).map(source => ({
+                kind: source.noteId ? 'note' : source.kind, id: source.noteId || source.id, title: source.title,
+                updatedAt: source.updatedAt, version: source.version, href: source.href, readOnce: source.readOnce === true,
+                status: source.stale ? 'stale' : 'available'
+            }));
             const categories = ['message'].concat(areas);
             if (ctx.selection) categories.push('selected text');
             if (messages.length > 1) categories.push('recent conversation');

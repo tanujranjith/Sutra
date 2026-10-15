@@ -293,7 +293,7 @@
               status: task.completed ? 'completed' : (task.status || 'open'),
               dates: dateFields(task),
               deepLink: { view: 'today', params: { taskId: task.id } },
-              metadata: metadata(task)
+              metadata: metadata(task, { taskNotes: String(task.notes || '').slice(0, 1000), taskNotesLength: String(task.notes || '').length })
             };
           });
         },
@@ -352,7 +352,7 @@
               status: task.done ? 'completed' : (task.status || 'open'),
               dates: dateFields(task),
               deepLink: { view: 'homework', params: { assignmentId: task.id } },
-              metadata: metadata(task, { courseName: course.name || '', source: 'homework' })
+              metadata: metadata(task, { courseName: course.name || '', source: 'homework', taskNotes: String(task.notes || '').slice(0, 1000), taskNotesLength: String(task.notes || '').length })
             };
           });
         },

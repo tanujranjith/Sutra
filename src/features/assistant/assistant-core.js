@@ -29,18 +29,67 @@
   function id(prefix) { return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
   function source(raw) {
     if (!raw || typeof raw !== 'object') return null;
+    if (raw.kind && raw.kind !== 'note' && raw.kind !== 'page') {
+      var entityId = value(raw.id, 240), key = value(raw.key || raw.kind + ':' + entityId, 320);
+      if (!entityId || !/^[a-z][a-z0-9_-]*:[^\s]+$/.test(key)) return null;
+      return { id: entityId, key: key, kind: value(raw.kind, 80), title: value(raw.title, 300),
+        href: 'sutra://entity/' + encodeURIComponent(key), updatedAt: value(raw.updatedAt, 40),
+        reasonCodes: ['query_match'], confidence: value(raw.confidence || 'high', 20), stale: raw.stale === true };
+    }
     var noteId = value(raw.noteId || raw.id, 160), href = value(raw.href || (noteId ? 'sutra://page/' + encodeURIComponent(noteId) : ''), 500);
     if (!noteId || !/^sutra:\/\/(?:page|note)\//i.test(href)) return null;
     return {
       id: value(raw.id || noteId, 240), kind: 'note', noteId: noteId, blockId: value(raw.blockId, 240),
       title: value(raw.title || 'Untitled', 300), headingPath: (Array.isArray(raw.headingPath) ? raw.headingPath : []).map(function (part) { return value(part, 240); }).slice(0, 12),
-      quote: value(raw.quote, 1200), href: href, updatedAt: value(raw.updatedAt, 40), version: value(raw.version, 120),
+      quote: raw.readOnce === true ? '' : value(raw.quote, 1200), readOnce: raw.readOnce === true, href: href, updatedAt: value(raw.updatedAt, 40), version: value(raw.version, 120),
       sourceOffsets: raw.sourceOffsets && typeof raw.sourceOffsets === 'object' ? { start: Math.max(0, Number(raw.sourceOffsets.start) || 0), end: Math.max(0, Number(raw.sourceOffsets.end) || 0) } : null,
       score: Number.isFinite(Number(raw.score)) ? Number(raw.score) : 0, confidence: ['high', 'medium', 'low'].indexOf(raw.confidence) >= 0 ? raw.confidence : 'low',
       reasonCodes: (Array.isArray(raw.reasonCodes) ? raw.reasonCodes : []).map(function (reason) { return value(reason, 80); }).slice(0, 20),
       safetyFlags: (Array.isArray(raw.safetyFlags) ? raw.safetyFlags : []).map(function (flag) { return value(flag, 80); }).slice(0, 10),
       stale: raw.stale === true
     };
+  }
+  function buildSourcesPanel(rawSources, grounding, options) {
+    var opts = options || {}, doc = opts.document;
+    var sources = (Array.isArray(rawSources) ? rawSources : []).map(source).filter(Boolean).slice(0, 20);
+    if (!doc || !sources.length) return null;
+    function append(parent, tag, className, text) {
+      var el = doc.createElement(tag); el.className = className;
+      if (text) el.textContent = text; parent.appendChild(el); return el;
+    }
+    var details = doc.createElement('details'); details.className = 'assistant-sources';
+    append(details, 'summary', 'assistant-sources-summary', 'Sources used (' + sources.length + ') · ' +
+      (grounding && grounding.evidenceStatus === 'limited' ? 'limited evidence' : 'workspace evidence'));
+    var list = append(details, 'div', 'assistant-sources-list');
+    sources.forEach(function (row) {
+      var kind = row.noteId ? 'note' : row.kind, id = row.noteId || row.id;
+      var live = opts.resolveSource(kind, id), locked = !!(live && live.locked);
+      var item = append(list, 'article', 'assistant-source-card' + (!live || row.stale ? ' is-stale' : ''));
+      var title = live ? live.title || row.title || 'Untitled source' : 'Source no longer available';
+      var heading = append(item, live && !locked ? 'button' : 'strong', 'assistant-source-open', title);
+      if (live && !locked) {
+        heading.type = 'button'; heading.setAttribute('aria-label', 'Open source ' + title);
+        heading.addEventListener('click', function () { opts.openSource(row); });
+      }
+      if (row.headingPath && row.headingPath.length) append(item, 'div', 'assistant-source-heading', row.headingPath.join(' › '));
+      if (row.quote && live && !locked && !row.readOnce) append(item, 'blockquote', 'assistant-source-quote', row.quote);
+      var bits = [];
+      if (row.updatedAt && !Number.isNaN(new Date(row.updatedAt).getTime())) bits.push('Updated ' + new Date(row.updatedAt).toLocaleDateString());
+      if (row.reasonCodes && row.reasonCodes.length) bits.push('Why: ' + row.reasonCodes.slice(0, 3).map(function (reason) { return reason.replace(/_/g, ' '); }).join(', '));
+      if (!live) bits.push('Source no longer available');
+      if (locked) bits.push(row.readOnce ? 'Locked · read once with PIN for this request' : 'Locked · body not available to Assistant');
+      if (row.stale) bits.push('May be stale');
+      if (row.safetyFlags && row.safetyFlags.length) bits.push('Untrusted instructions ignored');
+      if (row.confidence) bits.push(row.confidence + ' confidence');
+      append(item, 'div', 'assistant-source-meta', bits.join(' · '));
+      var exclude = append(item, 'button', 'assistant-source-exclude', 'Do not use next time'); exclude.type = 'button';
+      exclude.setAttribute('aria-label', 'Exclude this source from the next request');
+      exclude.addEventListener('click', function () {
+        if (typeof opts.excludeSource !== 'function') return;
+        opts.excludeSource(row.key || row.id); exclude.disabled = true; exclude.textContent = 'Excluded from next request';
+      });
+    });
+    return details;
   }
   function message(raw) {
     var row = raw && typeof raw === 'object' ? raw : {}, role = value(row.role).toLowerCase();
@@ -111,7 +160,7 @@
     function linkScope(scope) { var target = current(); if (!target) return false; target.scope = clone(scope || { type: 'workspace' }); target.updatedAt = new Date().toISOString(); emit({ type: 'scope', conversationId: target.id }); return true; }
     return { VERSION: VERSION, load: load, getState: getState, current: function () { return clone(current()); }, createConversation: createConversation, setCurrent: setCurrent, addMessage: addMessage, linkScope: linkScope, subscribe: function (listener) { listeners.add(listener); return function () { listeners.delete(listener); }; }, registerShell: function (name, renderer) { shells.set(String(name), renderer); renderer(getState(), { type: 'shell-registered' }); return function () { shells.delete(String(name)); }; }, setInFlight: function (requestValue) { state.inFlight = requestValue ? request(requestValue) : null; emit({ type: state.inFlight ? 'request-started' : 'request-ended' }); } };
   }
-  var api = { VERSION: VERSION, normalizeSource: source, normalizeMessage: message, normalizeContext: context, normalizeRequest: request, normalizeConversation: conversation, prepareMessageView: prepareMessageView, createController: createController };
+  var api = { VERSION: VERSION, normalizeSource: source, buildSourcesPanel: buildSourcesPanel, normalizeMessage: message, normalizeContext: context, normalizeRequest: request, normalizeConversation: conversation, prepareMessageView: prepareMessageView, createController: createController };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (global) global.SutraAssistantCore = api;
 }(typeof window !== 'undefined' ? window : globalThis));

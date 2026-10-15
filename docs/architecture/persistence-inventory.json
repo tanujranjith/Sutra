@@ -151,6 +151,7 @@
     "assistantChatHistory": ["version", "currentChatId", "conversations", "legacyMigrationComplete"],
     "assistantChatHistory.conversations[]": ["id", "title", "messages", "createdAt", "updatedAt", "providerLabel", "modelLabel", "archived", "pinned", "scope", "restoredFromBackup"],
     "assistantChatHistory.conversations[].messages[]": ["id", "role", "content", "createdAt", "claimType", "sources", "grounding", "contextTags", "memoryUsedIds", "receipt", "providerLabel", "modelLabel", "favorite", "partial", "restoredFromBackup"],
+    "assistantChatHistory.conversations[].messages[].sources[]": ["id", "key", "kind", "noteId", "blockId", "title", "headingPath", "quote", "href", "updatedAt", "version", "sourceOffsets", "score", "confidence", "reasonCodes", "safetyFlags", "stale", "readOnce"],
     "courseWorkspace.files[]": ["id", "courseId", "linkedEntityType", "linkedEntityId", "name", "originalName", "mimeType", "sizeBytes", "kind", "tags", "createdAt", "updatedAt", "source", "storageType", "blobKey", "url", "description", "summary", "syncContentHash"],
     "attachmentLinks[]": ["id", "fileId", "entityType", "entityId", "createdAt"],
     "pdfDocuments[]": ["id", "fileId", "schemaVersion", "pages", "bookmarks", "checkpoints", "createdAt", "updatedAt"],

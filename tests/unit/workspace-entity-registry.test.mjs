@@ -251,6 +251,8 @@ test('browser adapters cover the connected student loop and preserve locked-note
     assert.equal(searchable.some((entity) => entity.key === 'private_document:private-1'), false);
     assert.equal(searchable.find((entity) => entity.key === 'note:open-note').text.includes('ATP'), true);
     assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.referenceUrl, 'https://example.com/chapter-4');
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotes, 'Take notes');
+    assert.equal(searchable.find(entity => entity.key === 'task:task-1').metadata.taskNotesLength, 10);
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:sat').dates.due, '2026-12-05');
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:act').dates.due, '2026-12-31');
     assert.equal(searchable.find(entity => entity.key === 'testing_exam:custom:custom-exam').dates.due, '2026-11-01');

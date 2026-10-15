@@ -13,7 +13,9 @@
     /\b(?:password|passphrase|client[_ -]?secret)\s*[:=]\s*[^\s,;]{4,}/gi
   ];
   var UNSAFE_SCHEMES = /^(?:javascript|data:text\/html|vbscript|file|filesystem):/i;
-  var ALLOWED_SOURCE_KINDS = ['note', 'page', 'task', 'homework', 'course', 'timeline', 'reviewDeck', 'reviewCard', 'exam', 'college', 'memory', 'plan', 'assignment'];
+  var ALLOWED_SOURCE_KINDS = ['note', 'page', 'task', 'homework', 'course', 'timeline', 'reviewDeck', 'reviewCard', 'exam', 'college', 'memory', 'plan', 'assignment',
+    'timeline_block', 'course_file', 'grade_record', 'review_deck', 'review_card', 'academic_record', 'study_record', 'testing_exam', 'testing_mistake',
+    'college_record', 'life_record', 'habit', 'business_record', 'custom_tab', 'portfolio_entry', 'focus_template'];
   var ACTION_REF_FIELDS = {
     noteId: 'note', targetNoteId: 'note', fromNoteId: 'note', toNoteId: 'note', sourceNoteIds: 'note', pageId: 'page', linkPageId: 'page',
     taskId: 'task', taskIds: 'task', homeworkTaskId: 'homework', homeworkIds: 'homework', courseId: 'course', blockId: 'timeline', blockIds: 'timeline',
@@ -65,7 +67,7 @@
     var id = string(row.id || row.noteId || row.taskId || row.courseId || row.blockId, 160);
     var locked = row.locked === true || row.isLocked === true;
     return {
-      id: id, kind: kind, title: redactText(string(row.title || row.name || 'Untitled', 240)), locked: locked,
+      id: id, kind: kind, title: redactText(string(row.title || row.name || 'Untitled', 240)), locked: locked, readOnce: row.readOnce === true,
       status: string(row.status || 'available', 40), href: locked ? '' : safeUrl(row.href || ''),
       updatedAt: string(row.updatedAt || row.modifiedAt || '', 40), version: string(row.version || row.versionId || '', 120),
       quote: locked ? '' : redactText(string(row.quote || row.excerpt || '', 500)), reason: redactText(string(row.reason || '', 180))
@@ -78,6 +80,7 @@
     if (!live) { source.status = 'unavailable'; source.title = source.title || 'Source no longer available'; source.href = ''; source.quote = ''; return source; }
     var current = sourceMetadata(Object.assign({}, live, { kind: source.kind, id: source.id }));
     current.status = 'available';
+    current.readOnce = source.readOnce;
     if (current.locked) { current.status = 'locked'; current.quote = ''; current.href = ''; }
     if (source.version && current.version && source.version !== current.version) current.status = 'stale';
     return current;
@@ -127,7 +130,9 @@
       if (source.status === 'unavailable') return 'Source no longer available';
       var key = source.kind + ':' + source.title.toLowerCase();
       var identity = sourceTitleCounts[key] > 1 && source.id ? ' · ' + source.id.slice(-8) : '';
-      return source.title + ' (' + source.kind + identity + (source.status !== 'available' ? ', ' + source.status : '') + ')';
+      var state = source.status === 'locked' && source.locked ? '' : (source.status !== 'available' ? source.status : '');
+      if (source.locked) state = [state, source.readOnce ? 'locked; read once with PIN for this request' : 'locked'].filter(Boolean).join('; ');
+      return source.title + ' (' + source.kind + identity + (state ? ', ' + state : '') + ')';
     }));
     appendRow(doc, body, 'Saved memory', receipt.memoryInfluenced ? receipt.memoryUsedIds.length + ' relevant item(s) influenced this answer' : 'Not used');
     appendRow(doc, body, 'Attachments', receipt.attachments.map(function (item) { return item.name + ' · ' + item.processingPath; }));

@@ -284,3 +284,14 @@ test('conversation compaction preserves message roles and the latest user messag
   assert.ok(enrichment.requestMessages[0].content.length < conversationMessages[0].content.length);
   assert.ok(enrichment.context.contextBudget.reduced, 'discarded or compressed history should be disclosed as a reduction');
 });
+
+test('source disclosures are rebuilt from retained workspace records rather than the initial broad context', () => {
+  const enrichment = createEnrichment({ depth: 'workspace', contextOverrides: {
+    homework: [{ id: 'robotics', key: 'homework:robotics', type: 'homework', title: 'Robotics demo', notes: 'Use the blue sensor', citationUrl: 'sutra://entity/homework%3Arobotics' }],
+    workspaceLearning: [{ id: 'sat', key: 'testing_exam:sat', type: 'testing_exam', title: 'SAT', dueDate: '2026-12-05', citationUrl: 'sutra://entity/testing_exam%3Asat' }]
+  } })('Show my Robotics notes and SAT date', 'gemini');
+  assert.equal(enrichment.context.homework[0].notes, 'Use the blue sensor');
+  assert.deepEqual(enrichment.sources.map(row => row.kind).sort(), ['homework', 'testing_exam']);
+  assert.equal(enrichment.retrieval.evidenceStatus, 'supported');
+  assert.ok(enrichment.sources.every(row => !('notes' in row) && !('excerpt' in row)));
+});

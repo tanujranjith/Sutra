@@ -17,10 +17,11 @@ function selector(records, permissions = { mode: 'read_only', areas: {} }, memor
 test('exam dates, task URLs and exact registry citations survive selective retrieval', () => {
   const result = selector([
     record('testing_exam', 'sat', 'SAT', { dates: { due: '2026-12-05' } }),
-    record('homework', 'robotics', 'Robotics sensor demo', { text: 'Sensor demo notes edited after reopening', metadata: { referenceUrl: 'https://example.com/robotics' } })
+    record('homework', 'robotics', 'Robotics sensor demo', { text: 'Sensor demo notes edited after reopening', metadata: { taskNotes: 'Sensor demo notes edited after reopening', referenceUrl: 'https://example.com/robotics' } })
   ])('What is my SAT date and the notes and Reference URL for my Robotics sensor demo task?');
   assert.equal(result.workspaceLearning[0].dueDate, '2026-12-05');
   assert.equal(result.homework[0].referenceUrl, 'https://example.com/robotics');
+  assert.equal(result.homework[0].notes, 'Sensor demo notes edited after reopening');
   assert.equal(result.homework[0].citationUrl, 'sutra://entity/homework%3Arobotics');
 });
 
@@ -32,6 +33,15 @@ test('task follow-up uses preceding user question only in stateful mode', () => 
   ] };
   assert.equal(selector(records, undefined, 'stateful')('What is its Reference URL?', options).homework[0].id, 'robotics');
   assert.equal(selector(records)('What is its Reference URL?', options).homework, undefined);
+});
+
+test('each question replaces previous cross-workspace selections rather than appending stale sources', () => {
+  const select = selector([record('homework', 'robotics', 'Robotics demo', { metadata: { taskNotes: 'Blue sensor' } })]);
+  const apply = new Function('selectRelevantWorkspaceContext', extractFunction(source, 'applyRelevantWorkspaceContext').body + ';return applyRelevantWorkspaceContext;')(select);
+  const ctx = apply({ depth: 'workspace', view: 'assistantview', workspaceLearning: [{ id: 'old-exam' }], workspacePlanning: [{ id: 'old-task' }] }, 'Robotics task notes');
+  assert.equal(ctx.homework[0].notes, 'Blue sensor');
+  assert.equal(ctx.workspaceLearning, undefined);
+  assert.equal(ctx.workspacePlanning, undefined);
 });
 
 test('personal saved-data questions cannot be intercepted by product help', () => {
