@@ -22,17 +22,38 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { assertCoreRuntimeIntegrity } from './lib/core-runtime-integrity.mjs';
+import { getDeployPathProblem } from './lib/deploy-path-policy.mjs';
 
 const repoRoot = resolve(process.cwd());
 const outDir = join(repoRoot, '.deploy');
+
+function assertPlainSourcePath(relPath) {
+  // lstat on the final file still follows linked ancestors. Check from the
+  // trusted checkout root outward before reading/copying an allowlisted path.
+  let source = repoRoot;
+  for (const component of relPath.split(/[\\/]/)) {
+    if (!component || component === '.' || component === '..') fail(`invalid source path: ${relPath}`);
+    source = join(source, component);
+    const info = lstatSync(source, { throwIfNoEntry: false });
+    if (!info) fail(`missing source path: ${relPath}`);
+    if (info.isSymbolicLink()) fail(`symbolic source path: ${relPath}`);
+  }
+}
+
+const outputInfo = lstatSync(outDir, { throwIfNoEntry: false });
+if (outputInfo && (outputInfo.isSymbolicLink() || !outputInfo.isDirectory())) {
+  fail('existing .deploy must be a plain directory; nothing was removed.');
+}
+assertPlainSourcePath('src/core/app.js');
 
 try {
   assertCoreRuntimeIntegrity({ appPath: join(repoRoot, 'src/core/app.js') });
@@ -42,6 +63,7 @@ try {
   process.exit(1);
 }
 
+assertPlainSourcePath('src/config/asset-manifest.generated.json');
 const assetManifest = JSON.parse(readFileSync(join(repoRoot, 'src/config/asset-manifest.generated.json'), 'utf8'));
 
 /**
@@ -121,6 +143,9 @@ const missingSource = REQUIRED_SOURCE.filter((p) => !existsSync(join(repoRoot, p
 if (missingSource.length) {
   fail(`missing required source asset(s): ${missingSource.join(', ')}`);
 }
+for (const relPath of new Set([...REQUIRED_SOURCE, ...FILES.filter(file => existsSync(join(repoRoot, file))), ...DIRS.map(dir => dir.path)])) {
+  assertPlainSourcePath(relPath);
+}
 
 // 1. Clean slate.
 rmSync(outDir, { recursive: true, force: true });
@@ -136,6 +161,10 @@ for (const file of FILES) {
     continue;
   }
   const to = join(outDir, file);
+  assertPlainSourcePath(file);
+  const sourceInfo = lstatSync(from);
+  const problem = getDeployPathProblem(file, { isDirectory: sourceInfo.isDirectory(), isSymbolicLink: sourceInfo.isSymbolicLink() });
+  if (problem) fail(`unsafe source entry ${file}: ${problem}`);
   mkdirSync(dirname(to), { recursive: true });
   cpSync(from, to);
   copiedFiles += 1;
@@ -148,13 +177,16 @@ for (const dir of DIRS) {
     fail(`allowlisted directory missing from source: ${dir.path}`);
   }
   const to = join(outDir, dir.path);
+  assertPlainSourcePath(dir.path);
   cpSync(from, to, {
     recursive: true,
     filter(src) {
-      // Always allow directories so the tree is created.
+      // Apply the same recursive policy used to verify the final artifact.
       let isDir = false;
       try {
-        isDir = statSync(src).isDirectory();
+        const info = lstatSync(src);
+        isDir = info.isDirectory();
+        if (getDeployPathProblem(relative(repoRoot, src), { isDirectory: isDir, isSymbolicLink: info.isSymbolicLink() })) return false;
       } catch {
         return false;
       }

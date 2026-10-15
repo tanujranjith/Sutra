@@ -37,6 +37,10 @@ working directory is the project root.
 ### Build
 `build-deploy-artifact` — stages the clean allowlisted GitHub Pages artifact
 under `.deploy/` (`npm run build:deploy`).
+Staging and artifact verification share `lib/deploy-path-policy.mjs`: nested
+hidden/local files, development material, sensitive file types, and symbolic
+links are rejected or omitted. Vendor license notices remain included. Source
+ancestors and the artifact root are checked before content is read or copied.
 
 ### Library (shared, not run directly)
 `lib/guardrail-scan.mjs` — pure scanners for `sutra-guardrails-check` (unit-tested
