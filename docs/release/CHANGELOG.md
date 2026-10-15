@@ -34,6 +34,11 @@ not been pushed, merged, or released. New automated regressions await CI.
   fallbacks while retaining valid legacy portal formats.
 - Delay restore success until workspace and file writes finish; retain both
   failure details and avoid reloading after incomplete snapshot recovery.
+- Retain conflict-review records before the abnormal-conflict Sync safeguard
+  pauses, preserving both versions without applying or pushing a merge.
+- Share recursive deployment path rules between staging and verification;
+  reject hidden/local files, development material, and symbolic links while
+  retaining required assets and vendor licenses.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

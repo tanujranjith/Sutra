@@ -29,6 +29,9 @@ The unrelated primary checkout remains on `codex/overnight-plan`.
   (`20e042a`).
 - Imported legacy task Notes/Reference URL save/reopen/reload regression,
   including unknown-field preservation (`d788fa6`, prepared for CI only).
+- Conflict-storm review preservation before the cycle pauses (`c909622`).
+- Shared recursive deployment path policy, source-ancestor/root link rejection,
+  and CI regression coverage (`4b59361`).
 
 Shared editor adapters and closure-coupled core routing remain with their owners;
 Assistant consolidation is not a wholesale runtime extraction. Sync and backups
@@ -104,6 +107,48 @@ attachment-write-queue case, which was fixed through database-key readback.
 The final review found no further issue in those changed paths. The latest local
 runtime gate and staged hook passed at 4,913,039 bytes / 85,666 lines; this is
 still not evidence that the pending unit/E2E suites or live restore checks pass.
+
+The automatic-Sync audit traced enabled/unlocked engine construction, immediate
+catch-up, confirmed-save debounce, foreground/reconnect triggers, the visible-tab
+two-minute poll, same-tab single-flight, and cross-tab locks/lease fallback. This
+is source review, not a new live multi-device test. It found the conflict-storm
+ordering exception: the pause happened before review records were written. The
+main agent confirmed it, moved the pause after durable review writes while
+retaining the apply/push/cursor barrier, and added assertions for both branches,
+the pending count, UI notification, and failure to write review records.
+
+The deployment audit found that directory-level copying and scattered reject
+rules did not consistently cover nested local files or symbolic links. Staging
+and verification now share one recursive path policy. Review also caught linked
+artifact roots and linked source ancestors; both are rejected before reading or
+clearing the artifact. The main agent checked the corrections and CI test
+assertions. Current vendor license/runtime names were checked against the rules;
+the actual build/artifact checks remain unexecuted pending CI.
+
+## Plan completion audit
+
+The following is an implementation/evidence map, not release approval. Every
+automated gate still needs execution against these exact local commits.
+
+| Approved requirement | Current local evidence | Remaining proof |
+| --- | --- | --- |
+| Sync integrity, scheduling, single-flight, conflict preservation | Engine/app source, Sync protocol, engine and cloud-sync regressions; storm ordering repaired | CI and live multi-device/offline/conflict checks |
+| Backup backoff/catch-up, honest completion, incomplete recovery | Canonical app paths and backup schedule/restore regressions; required-key readback | CI, real destination upload, full restore with assets |
+| Credential scrubbing and PIN safeguards | Reporter, versioned PIN helper, workspace lock, authorization regressions | CI, synthetic diagnostic export, user-entered PIN flow |
+| Weekly planning and exam lifecycle | Canonical planning engine, official-result state, reviewed tests; exam UI/reload observed | CI and broader workflow regressions |
+| Imported task notes/URL persistence | Actual import/editor paths reviewed; file-import regression added | CI; manual file selection blocked |
+| Escaping, parser, 404, landing copy, dependencies, Node, deployment/headers | Local code/config, vendored bytes, path policy; Capture calendar cases observed | Node 24 CI, artifact build/check, deployed response headers |
+| Wellness removal with portable legacy data; Assistant consolidation | Retired surfaces/compatibility fields and loaders reviewed; habit reload observed | CI round-trip and offline/load-order gates |
+| Settings desktop/phone and preserved edits | Scoped styles/behavior; phone navigation, pending edits, width and targets observed | CI and true zoom/theme regression matrix |
+| Explicit reviewed writing commands and original icons | Passage-only command/adapters/tests; open/Cancel/no-key and phone icon views observed | CI and low-cost live Apply/Undo |
+| Remaining focused caveats | Major Matrix ratings/reload observed; follow-up/source/PIN regression coverage prepared | Live Stateful/PIN disclosure, OS notifications, true 67%/150% zoom |
+| Help/current docs/changelog; proposals and license recommendation | Local documentation commits and connected-feature proposal | CI links/contracts; owner decides license and separate projects |
+
+No remaining gate is treated as passed merely because a test exists or a source
+review found no defect. Completion remains unproven until the pending evidence
+is available. Uploading the branch for CI, remote service setup, new secrets/PIN
+entry, and physical notification/zoom observations need the corresponding user
+action or authorization; current no-push/no-merge constraints remain in force.
 
 Do not treat local implementation or these narrow manual checks as release
 approval. Validate the branch before authorizing push, merge, or deployment.
