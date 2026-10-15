@@ -101,6 +101,12 @@ unregistered `window.*`, un-inventoried workspace fields) are blocked in CI by
 
 ---
 
+Dedicated Assistant scripts live together in `src/features/assistant/`, including
+`assistant-permissions.js` and `surface-assistant-actions.js`. Their positions in
+`Sutra.html` are unchanged: permissions load early, while surface actions load
+after the engines they support. Shared entity adapters, persistence, diagnostics,
+and closure-bound runtime bridges retain their existing ownership.
+
 ## 3. Feature modules
 
 Self-contained feature areas live in **`src/features/*.js`**:

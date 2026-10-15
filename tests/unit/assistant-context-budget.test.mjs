@@ -7,7 +7,7 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
 const noteCore = require('../../src/domain/notes-knowledge-core.js');
-const privacy = require('../../src/domain/assistant-permissions.js');
+const privacy = require('../../src/features/assistant/assistant-permissions.js');
 const safety = require('../../src/features/assistant/assistant-safety.js');
 const capabilities = require('../../src/features/assistant/sutra-capability-registry.js');
 

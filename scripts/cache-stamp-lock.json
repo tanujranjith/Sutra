@@ -103,10 +103,6 @@
     "stamp": "20260605-quotes1",
     "hash": "90b89bd8b0f869f9"
   },
-  "src/domain/assistant-permissions.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "8b62141875ba48b2"
-  },
   "src/domain/content-timeline.js": {
     "stamp": "20261001-content-timeline3",
     "hash": "35b4ffc3e530c876"
@@ -187,6 +183,10 @@
     "stamp": "20261015-caveat-fixes6",
     "hash": "feb2a1e8eb4256c1"
   },
+  "src/features/assistant/assistant-permissions.js": {
+    "stamp": "20261015-reliability2",
+    "hash": "8b62141875ba48b2"
+  },
   "src/features/assistant/assistant-safety.js": {
     "stamp": "20261015-caveat-fixes6",
     "hash": "044de5389b522e08"
@@ -210,6 +210,10 @@
   "src/features/assistant/note-patch-system.js": {
     "stamp": "20260711-note-patch1",
     "hash": "7f739452d174ca04"
+  },
+  "src/features/assistant/surface-assistant-actions.js": {
+    "stamp": "20260807-surfaces2",
+    "hash": "0bdf44d3dad8df1a"
   },
   "src/features/assistant/sutra-assistant-memory.js": {
     "stamp": "20260913-locked-assistant-memory1",
@@ -422,10 +426,6 @@
   "src/features/workspace/starter-packs.data.js": {
     "stamp": "20260619-packs1",
     "hash": "4f806de479b221c8"
-  },
-  "src/features/workspace/surface-assistant-actions.js": {
-    "stamp": "20260807-surfaces2",
-    "hash": "0bdf44d3dad8df1a"
   },
   "src/features/workspace/theme-presets-refresh.js": {
     "stamp": "20260810-peach-theme1",

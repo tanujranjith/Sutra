@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { extractFunction } from '../helpers/extract-function.mjs';
 
 const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
-const privacy = createRequire(import.meta.url)('../../src/domain/assistant-permissions.js');
+const privacy = createRequire(import.meta.url)('../../src/features/assistant/assistant-permissions.js');
 const record = (type, id, title, extra = {}) => ({ type, id, key: type + ':' + id, title, text: title, status: 'open', dates: {}, privacy: {}, metadata: {}, ...extra });
 function selector(records, permissions = { mode: 'read_only', areas: {} }, memoryMode = 'stateless') {
   privacy.configure({ getPermissions: () => permissions });

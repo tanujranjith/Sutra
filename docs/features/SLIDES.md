@@ -141,7 +141,7 @@ Assistant cannot create or alter image elements and never accepts a remote image
 URL or performs a network fetch.
 
 Operations are validated by the pure
-`src/features/workspace/surface-assistant-actions.js` engine before the page is
+`src/features/assistant/surface-assistant-actions.js` engine before the page is
 mutated. A batch commits through the normal page save path as one change and
 records a field-level Activity undo patch. Undo is fingerprint-bound to the
 touched slides/elements so it fails closed if the student changed them again.

@@ -6,7 +6,7 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 
 const require = createRequire(import.meta.url);
 const appSource = readFileSync(new URL('../../src/core/app.js', import.meta.url), 'utf8');
-const privacy = require('../../src/domain/assistant-permissions.js');
+const privacy = require('../../src/features/assistant/assistant-permissions.js');
 const entityRegistry = require('../../src/domain/workspace-entity-registry.js');
 const entityAdapters = require('../../src/features/workspace/workspace-entity-adapters.js');
 

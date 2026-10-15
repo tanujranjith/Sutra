@@ -120,7 +120,7 @@ later operations in the same reviewed batch can connect or group them without
 inventing durable IDs.
 
 The pure operation engine is
-`src/features/workspace/surface-assistant-actions.js`; `window.SutraCanvas`
+`src/features/assistant/surface-assistant-actions.js`; `window.SutraCanvas`
 adapts its result to the canonical page save/render path. Validation completes
 before the live page changes, the whole batch commits atomically, and Activity
 stores a field-level undo patch. Undo refuses to overwrite a touched object that

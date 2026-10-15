@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const privacy = require('../../src/domain/assistant-permissions.js');
+const privacy = require('../../src/features/assistant/assistant-permissions.js');
 
 test('retrieval metadata and empty fields do not claim unrelated workspace content was sent', () => {
   privacy.configure({ getPermissions: () => ({ mode: 'read_only', areas: {} }) });
