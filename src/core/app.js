@@ -43124,7 +43124,7 @@ function buildOnboardingPlanPreview() {
                     body: `
 <ul>
   <li>Any page can be PIN-protected from the page context menu (<strong>···</strong> → <strong>Lock with PIN</strong>).</li>
-  <li>PINs are 4–8 digits. The raw PIN is never stored — only a SHA-256 hash with a per-page random salt is persisted. This keeps the page private within your browser, but it is not full disk encryption.</li>
+  <li>PINs are 4–8 digits. The raw PIN is never stored. New or changed page PINs use a versioned PBKDF2 verifier with a random salt; older verifiers remain readable and upgrade after a successful normal unlock. This is an in-app privacy gate: local note content is not encrypted by the PIN. Use encrypted .sutra backups for portable encryption.</li>
   <li>A locked page shows a PIN entry screen instead of its content. The correct PIN unlocks it for the rest of the session.</li>
   <li><strong>Optional duress deletion:</strong> after unlocking normally, Lock settings can configure a separate 6–8 digit alternate PIN. Entering it on the lock screen permanently removes that page tree from the active workspace, Sutra Trash, and local workspace snapshots without another warning. The normal and duress PINs must differ, and duplicates never inherit the destructive PIN.</li>
   <li>Downloaded/cloud backups and another unsynced device may still contain an older copy; browser apps cannot guarantee physical secure erasure. The raw duress PIN is never stored, only a salted high-cost verifier.</li>
@@ -48664,6 +48664,11 @@ function getActiveEditor() {
             });
             if (!shouldDelete) return;
 
+            if (!pages.includes(pageToDelete) || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+                showToast('The workspace changed. Review the page again before deleting it.');
+                return;
+            }
+
             const idsToDelete = collectPageIdsForDeletion(pageId);
             if (idsToDelete.size === 0) return;
             closeSidebarPageActionsMenus();
@@ -48671,7 +48676,7 @@ function getActiveEditor() {
             // A locked note can't be deleted without proving the PIN — this also
             // guards locked sub-pages caught in a parent's deletion subtree.
             const lockCleared = await verifyLockedPagesBeforeDeletion(idsToDelete);
-            if (!lockCleared) return;
+            if (!lockCleared || !lockCleared.isCurrent()) return;
 
             executePageDeletion(idsToDelete);
         }
@@ -49322,8 +49327,8 @@ function getActiveEditor() {
 
         // =====================================================================
         // PAGE LOCK — crypto helpers
-        // Uses Web Crypto SHA-256 with a random per-page salt.
-        // The raw PIN is never stored; only the hex hash + salt are persisted.
+        // New verifiers use versioned PBKDF2 with a random per-page salt.
+        // The raw PIN is never stored. Legacy salted SHA-256 remains readable.
         // =====================================================================
 
         async function generateLockSalt() {
@@ -49333,17 +49338,36 @@ function getActiveEditor() {
         }
 
         async function hashPinWithSalt(pin, salt) {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(salt + String(pin));
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
+            if (!window.SutraPagePinCrypto) throw new Error('Secure page PIN verification is unavailable.');
+            return window.SutraPagePinCrypto.create(pin, salt);
         }
 
         async function verifyPagePin(pin, storedHash, salt) {
-            const hash = await hashPinWithSalt(pin, salt);
-            return hash === storedHash;
+            return !!(window.SutraPagePinCrypto && await window.SutraPagePinCrypto.verify(pin, storedHash, salt));
+        }
+
+        function isCurrentPageLock(page, hash, salt) {
+            return pages.includes(page) && page.id === currentPageId && activeView === 'notes'
+                && page.isLocked && page.lockHash === hash && page.lockSalt === salt
+                && !workspaceImportInProgress && !sutraRemoteCommitPending && !sutraRevocationLockActive;
+        }
+
+        async function upgradeLegacyPagePin(page, pin, hash, salt) {
+            if (!/^[0-9a-f]{64}$/i.test(String(hash || ''))) return isCurrentPageLock(page, hash, salt);
+            try {
+                const nextSalt = await generateLockSalt();
+                const nextHash = await hashPinWithSalt(pin, nextSalt);
+                if (!isCurrentPageLock(page, hash, salt)) return false;
+                if (persistenceWritesBlocked) return true;
+                page.lockHash = nextHash;
+                page.lockSalt = nextSalt;
+                page.updatedAt = new Date().toISOString();
+                savePagesToLocal();
+                return true;
+            } catch (error) {
+                reportError(error, { where: 'pageLock:upgrade' });
+                return isCurrentPageLock(page, hash, salt);
+            }
         }
 
         const PAGE_DURESS_KDF_ITERATIONS = 210000;
@@ -49437,6 +49461,9 @@ function getActiveEditor() {
         // Prompt for a locked page's PIN and verify it. Returns true once the
         // correct PIN is entered, false if the user cancels or exhausts attempts.
         async function promptAndVerifyPageLock(page) {
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const isCurrent = () => pages.includes(page) && page.isLocked && page.lockHash === expectedHash && page.lockSalt === expectedSalt;
             let label = `Enter the PIN for "${page.title || 'this note'}" to delete it.`;
             for (let attempt = 0; attempt < 5; attempt++) {
                 const pin = await showCustomPromptDialog({
@@ -49448,7 +49475,8 @@ function getActiveEditor() {
                     inputType: 'password'
                 });
                 if (pin === null) return false; // user cancelled
-                if (pin && await verifyPagePin(pin, page.lockHash, page.lockSalt)) return true;
+                if (!isCurrent()) return false;
+                if (pin && await verifyPagePin(pin, expectedHash, expectedSalt)) return isCurrent();
                 label = 'Incorrect PIN. Try again to delete this locked note.';
             }
             return false;
@@ -49478,10 +49506,17 @@ function getActiveEditor() {
                     continue;
                 }
                 const current = pages.find(entry => entry && String(entry.id) === id);
-                if (!current || !current.isLocked || !current.lockHash || !current.lockSalt) {
+                if (current !== page || !current.isLocked || !current.lockHash || !current.lockSalt) {
                     return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
                 }
-                if (await verifyPagePin(pin, current.lockHash, current.lockSalt)) {
+                const expectedHash = current.lockHash;
+                const expectedSalt = current.lockSalt;
+                const verified = await verifyPagePin(pin, expectedHash, expectedSalt);
+                if (!pages.includes(current) || !current.isLocked || current.lockHash !== expectedHash || current.lockSalt !== expectedSalt
+                    || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+                    return { ok: false, status: 'changed', message: 'The page lock changed before Assistant access could be granted.' };
+                }
+                if (verified) {
                     return { ok: true, pageId: id };
                 }
                 label = 'Incorrect PIN. Try again to allow Assistant to read this page once.';
@@ -49492,17 +49527,25 @@ function getActiveEditor() {
         // must not be deletable without the PIN. Verifies every still-locked page
         // in the deletion set; aborts the whole delete if any verification fails.
         async function verifyLockedPagesBeforeDeletion(idsToDelete) {
+            const pageList = pages;
+            const pageCount = pages.length;
+            const targets = Array.from(idsToDelete).map(id => pages.find(page => page.id === id)).filter(Boolean)
+                .map(page => ({ page, title: page.title, locked: page.isLocked, hash: page.lockHash, salt: page.lockSalt, unlocked: unlockedPageIds.has(page.id) }));
+            const isCurrent = () => pages === pageList && pages.length === pageCount && !workspaceImportInProgress && !sutraRemoteCommitPending && !sutraRevocationLockActive
+                && targets.length === idsToDelete.size && targets.every(target => pages.includes(target.page) && target.page.title === target.title
+                    && target.page.isLocked === target.locked && target.page.lockHash === target.hash && target.page.lockSalt === target.salt
+                    && unlockedPageIds.has(target.page.id) === target.unlocked);
             const lockedPages = Array.from(idsToDelete)
                 .map(id => pages.find(p => p.id === id))
                 .filter(p => p && p.isLocked && p.lockHash && !unlockedPageIds.has(p.id));
             for (const page of lockedPages) {
                 const verified = await promptAndVerifyPageLock(page);
-                if (!verified) {
+                if (!verified || !isCurrent()) {
                     showToast('Locked note was not deleted — correct PIN required.');
                     return false;
                 }
             }
-            return true;
+            return isCurrent() ? { isCurrent } : false;
         }
 
         // =====================================================================
@@ -49514,9 +49557,16 @@ function getActiveEditor() {
             if (!page) return false;
             // Flush unsaved editor content before locking so the content is captured
             if (pageId === currentPageId) savePage();
-            page.lockDuressVerifier = null;
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const expectedDuress = page.lockDuressVerifier;
             const salt = await generateLockSalt();
-            const hash = await hashPinWithSalt(pin, salt);
+            let hash;
+            try { hash = await hashPinWithSalt(pin, salt); }
+            catch (error) { reportError(error, { where: 'pageLock:create' }); return false; }
+            if (!pages.includes(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
+                || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) return false;
+            page.lockDuressVerifier = null;
             page.isLocked = true;
             page.lockHash = hash;
             page.lockSalt = salt;
@@ -49530,11 +49580,21 @@ function getActiveEditor() {
         async function changePageLock(pageId, newPin) {
             const page = pages.find(p => p.id === pageId);
             if (!page) return false;
-            if (page.lockDuressVerifier && await verifyPageDuressPin(newPin, page.lockDuressVerifier)) {
+            const expectedHash = page.lockHash;
+            const expectedSalt = page.lockSalt;
+            const expectedDuress = page.lockDuressVerifier;
+            const wasUnlocked = unlockedPageIds.has(pageId);
+            if (expectedDuress && await verifyPageDuressPin(newPin, expectedDuress)) {
                 return { ok: false, code: 'matches-duress' };
             }
             const salt = await generateLockSalt();
-            const hash = await hashPinWithSalt(newPin, salt);
+            let hash;
+            try { hash = await hashPinWithSalt(newPin, salt); }
+            catch (error) { reportError(error, { where: 'pageLock:change' }); return { ok: false, code: 'unavailable' }; }
+            if (!pages.includes(page) || page.lockHash !== expectedHash || page.lockSalt !== expectedSalt || page.lockDuressVerifier !== expectedDuress
+                || unlockedPageIds.has(pageId) !== wasUnlocked || workspaceImportInProgress || sutraRemoteCommitPending || sutraRevocationLockActive) {
+                return { ok: false, code: 'changed' };
+            }
             page.lockHash = hash;
             page.lockSalt = salt;
             page.lockedAt = new Date().toISOString();
@@ -49678,6 +49738,7 @@ function getActiveEditor() {
             const duressSetupBtn = document.getElementById('lockScreenDuressSetupBtn');
             const duressExplainerBtn = document.getElementById('lockScreenDuressExplainerBtn');
             let setupDuressAfterUnlock = false;
+            let lockVerificationPending = false;
 
             requestAnimationFrame(() => { try { input.focus(); } catch (e) {} });
 
@@ -49728,6 +49789,7 @@ function getActiveEditor() {
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (lockVerificationPending) return;
                 const pin = input.value;
                 errorEl.textContent = '';
                 input.classList.remove('pin-shake');
@@ -49741,51 +49803,64 @@ function getActiveEditor() {
                 // When configured, derive both answers before branching. This keeps
                 // ordinary unlocks and failed attempts on the same expensive path
                 // and ensures the real PIN always wins if imported data is corrupt.
-                const [normalPinOk, duressPinOk] = await Promise.all([
-                    verifyPagePin(pin, page.lockHash, page.lockSalt),
-                    page.lockDuressVerifier ? verifyPageDuressPin(pin, page.lockDuressVerifier) : Promise.resolve(false)
-                ]);
-                if (normalPinOk) {
-                    const openDuressSetup = setupDuressAfterUnlock;
-                    setupDuressAfterUnlock = false;
-                    unlockedPageIds.add(page.id);
-                    startAutoLockTimer(page.id, page.lockAutoLock);
-                    hideLockedPageScreen();
-                    // Reload the page content now that it's unlocked
-                    const primaryEditor = getPrimaryEditor();
-                    if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                    renderTagsContainer();
-                    updatePageTemporaryMeta(page);
-                    updateWordCount();
-                    renderPagesList();
-                    reopenLinkedPdfForNotePage(page);
-                    notifyNotePageLoaded(page.id);
-                    try { input.value = ''; } catch (err) {}
-                    if (openDuressSetup) {
-                        requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
-                    }
-                } else if (duressPinOk) {
-                    // No trigger-time confirmation by design: the destructive
-                    // behavior was explicitly acknowledged during setup.
-                    input.value = '';
-                    input.disabled = true;
-                    if (!performPageDuressDeletion(page)) {
-                        input.disabled = false;
-                        errorEl.textContent = 'Page was not removed because local recovery cleanup could not be verified.';
+                const expectedHash = page.lockHash;
+                const expectedSalt = page.lockSalt;
+                const expectedDuress = page.lockDuressVerifier;
+                lockVerificationPending = true;
+                try {
+                    const [normalPinOk, duressPinOk] = await Promise.all([
+                        verifyPagePin(pin, expectedHash, expectedSalt),
+                        expectedDuress ? verifyPageDuressPin(pin, expectedDuress) : Promise.resolve(false)
+                    ]);
+                    if (!isCurrentPageLock(page, expectedHash, expectedSalt) || page.lockDuressVerifier !== expectedDuress || !form.isConnected) return;
+                    if (normalPinOk) {
+                        if (!(await upgradeLegacyPagePin(page, pin, expectedHash, expectedSalt))) return;
+                        if (!form.isConnected) return;
+                        const openDuressSetup = setupDuressAfterUnlock;
+                        setupDuressAfterUnlock = false;
+                        unlockedPageIds.add(page.id);
+                        startAutoLockTimer(page.id, page.lockAutoLock);
+                        hideLockedPageScreen();
+                        // Reload the page content now that it's unlocked
+                        const primaryEditor = getPrimaryEditor();
+                        if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                        renderTagsContainer();
+                        updatePageTemporaryMeta(page);
+                        updateWordCount();
+                        renderPagesList();
+                        reopenLinkedPdfForNotePage(page);
+                        notifyNotePageLoaded(page.id);
+                        try { input.value = ''; } catch (err) {}
+                        if (openDuressSetup) {
+                            requestAnimationFrame(() => openSetLockModal(page.id, { openDuress: true }));
+                        }
+                    } else if (duressPinOk) {
+                        // No trigger-time confirmation by design: the destructive
+                        // behavior was explicitly acknowledged during setup.
+                        input.value = '';
+                        input.disabled = true;
+                        if (!performPageDuressDeletion(page)) {
+                            input.disabled = false;
+                            errorEl.textContent = 'Page was not removed because local recovery cleanup could not be verified.';
+                            input.focus();
+                        }
+                    } else {
+                        errorEl.textContent = 'Incorrect PIN. Please try again.';
+                        input.value = '';
+                        // Trigger shake
+                        input.classList.add('pin-shake');
+                        setTimeout(() => input.classList.remove('pin-shake'), 400);
                         input.focus();
                     }
-                } else {
-                    errorEl.textContent = 'Incorrect PIN. Please try again.';
-                    input.value = '';
-                    // Trigger shake
-                    input.classList.add('pin-shake');
-                    setTimeout(() => input.classList.remove('pin-shake'), 400);
-                    input.focus();
-                }
+                } catch (error) {
+                    reportError(error, { where: 'pageLock:unlock' });
+                    errorEl.textContent = 'PIN verification could not finish. The page remains locked.';
+                } finally { lockVerificationPending = false; }
             });
 
             const lockScreenRemoveBtn = document.getElementById('lockScreenRemoveBtn');
             lockScreenRemoveBtn && lockScreenRemoveBtn.addEventListener('click', async () => {
+                if (lockVerificationPending) return;
                 const pin = input.value;
                 errorEl.textContent = '';
                 input.classList.remove('pin-shake');
@@ -49796,27 +49871,36 @@ function getActiveEditor() {
                     return;
                 }
 
-                const ok = await verifyPagePin(pin, page.lockHash, page.lockSalt);
-                if (ok) {
-                    removePageLock(page.id);
-                    hideLockedPageScreen();
-                    const primaryEditor = getPrimaryEditor();
-                    if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
-                    renderTagsContainer();
-                    updatePageTemporaryMeta(page);
-                    updateWordCount();
-                    renderPagesList();
-                    reopenLinkedPdfForNotePage(page);
-                    notifyNotePageLoaded(page.id);
-                    try { input.value = ''; } catch (err) {}
-                    showToast('PIN protection removed.');
-                } else {
-                    errorEl.textContent = 'Incorrect PIN. Please try again.';
-                    input.value = '';
-                    input.classList.add('pin-shake');
-                    setTimeout(() => input.classList.remove('pin-shake'), 400);
-                    input.focus();
-                }
+                const expectedHash = page.lockHash;
+                const expectedSalt = page.lockSalt;
+                lockVerificationPending = true;
+                try {
+                    const ok = await verifyPagePin(pin, expectedHash, expectedSalt);
+                    if (!isCurrentPageLock(page, expectedHash, expectedSalt) || !form.isConnected) return;
+                    if (ok) {
+                        removePageLock(page.id);
+                        hideLockedPageScreen();
+                        const primaryEditor = getPrimaryEditor();
+                        if (primaryEditor) loadPageContentIntoEditor(primaryEditor, page);
+                        renderTagsContainer();
+                        updatePageTemporaryMeta(page);
+                        updateWordCount();
+                        renderPagesList();
+                        reopenLinkedPdfForNotePage(page);
+                        notifyNotePageLoaded(page.id);
+                        try { input.value = ''; } catch (err) {}
+                        showToast('PIN protection removed.');
+                    } else {
+                        errorEl.textContent = 'Incorrect PIN. Please try again.';
+                        input.value = '';
+                        input.classList.add('pin-shake');
+                        setTimeout(() => input.classList.remove('pin-shake'), 400);
+                        input.focus();
+                    }
+                } catch (error) {
+                    reportError(error, { where: 'pageLock:remove' });
+                    errorEl.textContent = 'PIN verification could not finish. The page remains locked.';
+                } finally { lockVerificationPending = false; }
             });
         }
 
@@ -50018,7 +50102,8 @@ function getActiveEditor() {
             document.body.classList.remove('modal-open');
             _lockModalTargetPageId = null;
 
-            await setPageLock(pageId, pin);
+            const saved = await setPageLock(pageId, pin);
+            if (!saved) { showToast('PIN protection was not changed. Reopen lock settings and try again.'); return; }
             // If currently viewing this page, show the lock screen
             if (pageId === currentPageId) {
                 const page = pages.find(p => p.id === pageId);

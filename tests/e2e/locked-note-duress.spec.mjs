@@ -73,6 +73,35 @@ async function unlockNormally(page, pageId) {
   }, { id: pageId, secret: SECRET })).toBe(true);
 }
 
+test('new page PINs are versioned and legacy locks upgrade only after a valid normal unlock', async ({ page }) => {
+  await openApp(page);
+  const { rootId } = await seedLockedTree(page, { withChild: false });
+  const modern = await page.evaluate(id => window.serializeWorkspace({ mode: 'json' }).pages.find(entry => entry.id === id).lockHash, rootId);
+  expect(modern).toMatch(/^v2\$210000\$[0-9a-f]{64}$/);
+  await page.evaluate(async ({ id, pin }) => {
+    const payload = window.serializeWorkspace({ mode: 'json' });
+    const entry = payload.pages.find(item => item.id === id);
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(entry.lockSalt + pin));
+    entry.lockHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+    window.deserializeWorkspace(payload);
+    window.loadPage(id);
+  }, { id: rootId, pin: NORMAL_PIN });
+  await submitLockPin(page, '111111');
+  await expect(page.locator('#lockScreenError')).toContainText('Incorrect PIN');
+  expect(await page.evaluate(id => window.serializeWorkspace({ mode: 'json' }).pages.find(entry => entry.id === id).lockHash, rootId))
+    .toMatch(/^[0-9a-f]{64}$/);
+  await unlockNormally(page, rootId);
+  expect(await page.evaluate(id => window.serializeWorkspace({ mode: 'json' }).pages.find(entry => entry.id === id).lockHash, rootId))
+    .toMatch(/^v2\$210000\$[0-9a-f]{64}$/);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-page-pin-upgrade'));
+  await page.reload();
+  await waitForAppReady(page);
+  expect(await page.evaluate(id => window.serializeWorkspace({ mode: 'json' }).pages.find(entry => entry.id === id).lockHash, rootId))
+    .toMatch(/^v2\$210000\$[0-9a-f]{64}$/);
+  await page.evaluate(id => window.loadPage(id), rootId);
+  await unlockNormally(page, rootId);
+});
+
 async function openLockSettings(page, pageId) {
   await page.evaluate(id => window.__sutraPublicBetaTestHooks.openPageLockSettings(id), pageId);
   await expect(page.locator('#setPageLockModal')).toHaveClass(/active/);

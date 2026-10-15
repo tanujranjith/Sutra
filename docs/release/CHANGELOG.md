@@ -24,6 +24,8 @@ not been pushed, merged, or released. New automated regressions await CI.
   results, retain practice scores separately, and preserve exact Undo state.
 - Add explicit passage-only grammar, spelling, and rephrase commands with an
   editable review, Cancel, and guarded Apply through the owning editor history.
+- Strengthen page PIN verifiers while retaining legacy verification and safe
+  upgrade on normal unlock; clarify that UI privacy locks do not encrypt notes.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

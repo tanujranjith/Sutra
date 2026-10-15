@@ -49,7 +49,7 @@
          window.SutraSafeStorage exists at first write; hardens non-canonical
          localStorage writes (Homework etc.) against quota/security failures. -->
     <script src="src/core/safe-storage.js?v=20260825-sol1-2"></script>
-    <script src="src/core/workspace-lock.js?v=20260821-lock5"></script>
+    <script src="src/core/workspace-lock.js?v=20261015-pin-guard1"></script>
     <!-- Architecture-hardening core layer. Loaded before every feature module and
          app.js so window.SutraDOMSafety / reportError / SutraFeatureGuard exist at
          first render and can capture boot-time failures.
@@ -7601,7 +7601,8 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261015-writing3"></script>
+    <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
+    <script src="src/core/app.js?v=20261015-page-pin1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>

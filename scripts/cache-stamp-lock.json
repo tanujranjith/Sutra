@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-writing3",
-    "hash": "2d7be2ca4db9abc9"
+    "stamp": "20261015-page-pin1",
+    "hash": "5c6e35c9f3ad0a4d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -75,6 +75,10 @@
     "stamp": "20260913-energy-removal-migrations1",
     "hash": "14e5d12d10823f2a"
   },
+  "src/core/page-pin-crypto.js": {
+    "stamp": "20261015-page-pin1",
+    "hash": "4e8de49b8c3fbeaf"
+  },
   "src/core/recovery-mode.js": {
     "stamp": "20260710-recovery1",
     "hash": "64ecef3c1df3b9bb"
@@ -96,8 +100,8 @@
     "hash": "0b7582713b3b44e3"
   },
   "src/core/workspace-lock.js": {
-    "stamp": "20260821-lock5",
-    "hash": "59f24828481eeeca"
+    "stamp": "20261015-pin-guard1",
+    "hash": "6d3256ba89732c71"
   },
   "src/data/daily-lock-in-quotes.js": {
     "stamp": "20260605-quotes1",

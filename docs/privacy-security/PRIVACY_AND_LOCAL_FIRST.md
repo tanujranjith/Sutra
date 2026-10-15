@@ -145,6 +145,21 @@ re-entered after a reload - the in-session "unlocked" state is intentionally
 gated behind the lock screen. The lock is part of the page's stored data and
 travels in backups, so a restored page is still locked.
 
+New and changed page PINs use PBKDF2-HMAC-SHA-256 with 210,000 iterations and a
+random 16-byte salt. The existing `lockHash` string stores the versioned
+`v2$210000$<hex verifier>`; `lockSalt` retains its existing hex salt field.
+Legacy salted SHA-256 verifiers remain accepted and are upgraded with a fresh
+salt after a successful normal page unlock, through the canonical save path.
+Assistant one-time verification and deletion checks do not silently rewrite
+the page. Unknown verifier versions fail closed. These fields already travel
+with the page through normalization, version history, backups, and encrypted
+Sync; no extra PIN field or storage is introduced. Older Sutra versions cannot
+verify the new format, so open these workspaces with the updated app.
+
+**This does not encrypt local note content.** Someone who can inspect or modify
+the browser profile can bypass an in-app lock. It protects normal Sutra screens,
+not browser developer tools, disk access, or previously exported plaintext.
+
 The same in-session authorization gate protects every page-owned plaintext
 surface. Until the page is unlocked, Sutra does not hydrate its body into the
 editor DOM or expose its body, Canvas model, Slides deck, version previews, or

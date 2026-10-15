@@ -23,6 +23,16 @@
   var inactivityTimer = 0;
   var channel = null;
   var dialogPromise = null;
+  // Best-effort, tab-local throttling for the privacy gate. This is deliberately
+  // not persisted or shared across tabs: the lock is a UI privacy control, not
+  // an encryption boundary, and a profile owner can alter local state.
+  var PIN_FAILURES_BEFORE_BACKOFF = 3;
+  var PIN_BACKOFF_BASE_MS = 1000;
+  var PIN_BACKOFF_MAX_MS = 30000;
+  var pinFailures = 0;
+  var pinRetryAt = 0;
+  var pinVerificationInFlight = false;
+  var lockRevision = 0;
 
   function safeStorage() { return global.SutraSafeStorage || null; }
   function validPin(pin) { return /^\d{4,8}$/.test(String(pin || '')); }
@@ -81,15 +91,99 @@
     return mismatch === 0;
   }
 
-  async function verifyPin(pin, targetConfig) {
-    var value = normalizeConfig(targetConfig || config);
-    if (!value || !validPin(pin)) return false;
+  function monotonicNow() {
     try {
-      return equalVerifier(await deriveVerifier(pin, value.salt, value.iterations), value.verifier);
-    } catch (error) {
-      report(error, 'verify');
+      if (global.performance && typeof global.performance.now === 'function') return global.performance.now();
+    } catch (error) { /* use the wall clock only when a monotonic clock is unavailable */ }
+    return Date.now();
+  }
+
+  function backoffAfterFailure(failures) {
+    if (failures <= PIN_FAILURES_BEFORE_BACKOFF) return 0;
+    return Math.min(PIN_BACKOFF_MAX_MS, PIN_BACKOFF_BASE_MS * Math.pow(2, failures - PIN_FAILURES_BEFORE_BACKOFF - 1));
+  }
+
+  function waitMessage(milliseconds, prefix) {
+    var seconds = Math.max(1, Math.ceil(milliseconds / 1000));
+    return (prefix || 'Too many incorrect PIN attempts.') + ' Wait ' + seconds + ' second' + (seconds === 1 ? '' : 's') + ' before trying again.';
+  }
+
+  function resetPinFailures() {
+    pinFailures = 0;
+    pinRetryAt = 0;
+  }
+
+  function adoptChangedStoredConfig(next) {
+    if (!next || configMatches(config, next)) return false;
+    config = next;
+    lockRevision += 1;
+    if (config.enabled) {
+      lock('configuration-changed', false);
+    } else {
+      locked = false;
+      applyDomState();
+    }
+    return true;
+  }
+
+  // Re-read device-local settings after an asynchronous KDF. A storage event
+  // from another tab may still be queued when the derivation finishes.
+  function authenticationStateIsCurrent(snapshot, revision) {
+    if (!snapshot || revision !== lockRevision || !configMatches(snapshot, config)) return false;
+    var stored;
+    try { stored = readConfig(); }
+    catch (error) { report(error, 'verify-readback'); return false; }
+    if (!stored) return false;
+    if (!configMatches(snapshot, stored)) {
+      adoptChangedStoredConfig(stored);
       return false;
     }
+    return true;
+  }
+
+  async function verifyPinAttempt(pin, targetConfig) {
+    var value = normalizeConfig(targetConfig || config);
+    if (!value || !validPin(pin)) return { ok: false, error: 'That PIN is incorrect.', reason: 'invalid' };
+
+    var now = monotonicNow();
+    if (pinRetryAt > now) return { ok: false, error: waitMessage(pinRetryAt - now), reason: 'throttled' };
+    if (pinVerificationInFlight) {
+      return { ok: false, error: 'A PIN check is already in progress. Wait for it to finish, then try again.', reason: 'busy' };
+    }
+
+    var activeConfig = !!config && configMatches(value, config);
+    var revision = lockRevision;
+    pinVerificationInFlight = true;
+    try {
+      var derived = await deriveVerifier(pin, value.salt, value.iterations);
+      if (activeConfig && !authenticationStateIsCurrent(value, revision)) {
+        return { ok: false, error: 'Lock settings changed while the PIN was being checked. Try again.', reason: 'stale' };
+      }
+      if (equalVerifier(derived, value.verifier)) {
+        if (activeConfig) resetPinFailures();
+        return { ok: true, config: value, revision: revision, activeConfig: activeConfig };
+      }
+      pinFailures += 1;
+      var delay = backoffAfterFailure(pinFailures);
+      pinRetryAt = delay ? monotonicNow() + delay : 0;
+      return {
+        ok: false,
+        error: delay ? waitMessage(delay, 'That PIN is incorrect.') : 'That PIN is incorrect.',
+        reason: delay ? 'throttled' : 'incorrect'
+      };
+    } catch (error) {
+      report(error, 'verify');
+      return { ok: false, error: 'PIN verification could not run. Check this browser and try again.', reason: 'unavailable' };
+    } finally {
+      pinVerificationInFlight = false;
+    }
+  }
+
+  // Keep the established public boolean result while routing every verification
+  // through the shared backoff and single-flight boundary.
+  async function verifyPin(pin, targetConfig) {
+    var result = await verifyPinAttempt(pin, targetConfig);
+    return result.ok === true;
   }
 
   function report(error, where) {
@@ -108,10 +202,19 @@
     return Number.isInteger(minutes) && minutes >= MIN_CUSTOM_TIMEOUT && minutes <= MAX_CUSTOM_TIMEOUT || minutes === 0;
   }
 
-  function writeConfig(next) {
+  function writeConfig(next, expectedCurrent) {
     var normalized = normalizeConfig(next);
     var storage = safeStorage();
     if (!normalized || !storage) return { ok: false, error: 'Browser storage is unavailable.' };
+    if (expectedCurrent) {
+      var currentStored;
+      try { currentStored = readConfig(); }
+      catch (error) { report(error, 'config-readback'); }
+      if (!configMatches(expectedCurrent, currentStored)) {
+        if (currentStored) adoptChangedStoredConfig(currentStored);
+        return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
+      }
+    }
     var result = storage.set(STORAGE_KEY, normalized, { importance: 'important', label: 'workspace lock configuration' });
     if (!result || result.ok !== true) return { ok: false, error: 'Sutra could not verify this device can save the lock configuration.' };
     var readback = readConfig();
@@ -120,6 +223,8 @@
       return { ok: false, error: 'Sutra could not verify the saved lock configuration. The lock was not enabled.' };
     }
     config = readback;
+    lockRevision += 1;
+    resetPinFailures();
     return { ok: true, config: readback };
   }
 
@@ -160,6 +265,7 @@
 
   function lock(reason, shouldBroadcast) {
     if (!config || config.enabled !== true) return false;
+    lockRevision += 1;
     locked = true;
     applyDomState();
     if (shouldBroadcast !== false) broadcast('lock');
@@ -180,12 +286,19 @@
 
   async function unlock(pin) {
     if (!config || !config.enabled) {
+      if (locked) lockRevision += 1;
       locked = false;
       applyDomState();
       return { ok: true };
     }
-    if (!(await verifyPin(pin, config))) return { ok: false, error: 'That PIN is incorrect.' };
+    var snapshot = config;
+    var verified = await verifyPinAttempt(pin, snapshot);
+    if (!verified.ok) return { ok: false, error: verified.error };
+    if (!authenticationStateIsCurrent(snapshot, verified.revision)) {
+      return { ok: false, error: 'Lock settings changed while the PIN was being checked. Try again.' };
+    }
     locked = false;
+    lockRevision += 1;
     applyDomState();
     scheduleInactivity();
     try { global.dispatchEvent(new CustomEvent('sutra:workspace-lock-changed', { detail: { locked: false, reason: 'pin' } })); } catch (ignored) {}
@@ -218,10 +331,14 @@
 
   async function changePin(currentPin, newPin) {
     if (!config || !config.enabled) return { ok: false, error: 'The workspace lock is not enabled.' };
-    if (!(await verifyPin(currentPin, config))) return { ok: false, error: 'The current PIN is incorrect.' };
-    var built = await makeConfig(newPin, config.inactivityTimeout, true);
+    var snapshot = config;
+    var verified = await verifyPinAttempt(currentPin, snapshot);
+    if (!verified.ok) return { ok: false, error: verified.error };
+    if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
+    var built = await makeConfig(newPin, snapshot.inactivityTimeout, true);
     if (!built.ok) return built;
-    var saved = writeConfig(built.config);
+    if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
+    var saved = writeConfig(built.config, snapshot);
     if (!saved.ok) return saved;
     broadcast('config');
     lock('pin-changed', false);
@@ -232,9 +349,12 @@
     if (!config || !config.enabled) return { ok: false, error: 'The workspace lock is not enabled.' };
     var nextMinutes = Number(minutes);
     if (!isValidTimeout(nextMinutes)) return { ok: false, error: 'Choose a duration from 1 minute to 24 hours.' };
-    if (!(await verifyPin(currentPin, config))) return { ok: false, error: 'The current PIN is incorrect.' };
-    var next = Object.assign({}, config, { inactivityTimeout: nextMinutes });
-    var saved = writeConfig(next);
+    var snapshot = config;
+    var verified = await verifyPinAttempt(currentPin, snapshot);
+    if (!verified.ok) return { ok: false, error: verified.error };
+    if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
+    var next = Object.assign({}, snapshot, { inactivityTimeout: nextMinutes });
+    var saved = writeConfig(next, snapshot);
     if (!saved.ok) return saved;
     broadcast('config');
     lock('timeout-changed', false);
@@ -243,10 +363,14 @@
 
   async function disable(currentPin) {
     if (!config || !config.enabled) return { ok: true };
-    if (!(await verifyPin(currentPin, config))) return { ok: false, error: 'The current PIN is incorrect.' };
-    var saved = writeConfig(Object.assign({}, config, { enabled: false }));
+    var snapshot = config;
+    var verified = await verifyPinAttempt(currentPin, snapshot);
+    if (!verified.ok) return { ok: false, error: verified.error };
+    if (!authenticationStateIsCurrent(snapshot, verified.revision)) return { ok: false, error: 'Lock settings changed. Close this dialog and try again.' };
+    var saved = writeConfig(Object.assign({}, snapshot, { enabled: false }), snapshot);
     if (!saved.ok) return saved;
     locked = false;
+    lockRevision += 1;
     applyDomState();
     broadcast('config');
     return { ok: true };
@@ -430,9 +554,30 @@
   }
 
   function receiveExternal(type) {
-    if (type === 'lock') { config = readConfig() || config; lock('another-tab', false); return; }
+    if (type === 'lock') {
+      try {
+        var latest = readConfig();
+        if (latest && !configMatches(config, latest)) {
+          config = latest;
+          lockRevision += 1;
+        }
+      } catch (error) { report(error, 'external-lock-read'); }
+      lock('another-tab', false);
+      return;
+    }
     if (type === 'config') {
-      config = readConfig();
+      var next = null;
+      try { next = readConfig(); }
+      catch (error) { report(error, 'external-config-read'); }
+      if (!next && config && config.enabled) {
+        // Losing access to the stored verifier must never turn an enabled lock
+        // into an unlocked workspace.
+        lockRevision += 1;
+        lock('configuration-unavailable', false);
+        return;
+      }
+      lockRevision += 1;
+      config = next;
       if (config && config.enabled) lock('configuration-changed', false);
       else { locked = false; applyDomState(); }
     }
