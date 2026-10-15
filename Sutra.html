@@ -101,7 +101,7 @@
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
     <script src="src/core/student-date-parser.js?v=20260709-studentdate1"></script>
-    <script src="src/components/icons/icon-paths.js?v=20261004-ci-icon-aliases1" defer></script>
+    <script src="src/components/icons/icon-paths.js?v=20261015-sutra-icons2" defer></script>
     <script src="src/components/icons/index.js?v=20260809-audit-icons1" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
          Captured very early; AtelierCustomization.isSafeMode() reads this flag.
@@ -471,7 +471,7 @@
                                                     <button id="tabHomework" class="view-tab" data-view="homework">To-do</button>
                                                     <button class="view-tab" data-view="notes">Create</button>
                                                     <button class="view-tab" data-view="timeline">Timeline</button>
-                                                    <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-graduation-cap" aria-hidden="true"></i> Review &amp; Tests</button>
+                                                    <button id="tabApStudy" class="view-tab" data-view="apstudy" title="Review &amp; Tests — exams, quizzes, cards, and study plans"><i class="fas fa-sutra-review" aria-hidden="true"></i> Review &amp; Tests</button>
                                                     <!-- Review and Cram Hub consolidated into Testing Hub. Buttons hidden but kept for backward-compat click handlers -->
                                                     <button id="tabReview" class="view-tab" data-view="review" hidden aria-hidden="true" style="display:none;">Review</button>
                                                     <button id="tabCramHub" class="view-tab" data-view="cramhub" hidden aria-hidden="true" style="display:none;" title="Cram Hub"><i class="fas fa-bolt" aria-hidden="true"></i> Cram Hub</button>
@@ -480,9 +480,9 @@
                                                     <button class="view-tab" data-view="business">Business</button>
                                                     <button id="tabCourses" class="view-tab" data-view="courses" title="Courses — your class cockpit"><i class="fas fa-book" aria-hidden="true"></i> Courses</button>
                                                     <button id="tabAllDue" class="view-tab" data-view="alldue" title="All Due — everything due across your classes"><i class="fas fa-bell" aria-hidden="true"></i> All Due</button>
-                                                    <button id="tabAssistantView" class="view-tab" data-view="assistantview" title="Sutra Assistant — full-screen AI chat"><i class="fas fa-robot" aria-hidden="true"></i> Assistant</button>
+                                                    <button id="tabAssistantView" class="view-tab" data-view="assistantview" title="Sutra Assistant — full-screen AI chat"><i class="fas fa-sutra-assistant" aria-hidden="true"></i> Assistant</button>
                                                     <button class="view-tab view-tab-utility" data-view="settings" aria-label="Settings" title="Settings">
-                                                        <i class="fas fa-cog" aria-hidden="true"></i>
+                                                        <i class="fas fa-sutra-settings" aria-hidden="true"></i>
                                                         <span class="view-tab-label">Settings</span>
                                                     </button>
                                                     <div class="view-more" id="moreViewsWrapper" hidden>
@@ -494,14 +494,14 @@
                                                         <div class="view-more-menu" id="moreViewsMenu" role="menu" aria-label="All workspace sections">
                                                             <div class="view-more-group" data-nav-group="daily" role="group" aria-labelledby="moreViewsDailyLabel">
                                                                 <span class="view-more-group-label" id="moreViewsDailyLabel">Daily loop</span>
-                                                                <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-house" aria-hidden="true"></i><span>Home</span></button>
-                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-book-open" aria-hidden="true"></i><span>To-do</span></button>
-                                                                <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-pen-to-square" aria-hidden="true"></i><span>Create</span></button>
-                                                                <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-calendar-days" aria-hidden="true"></i><span>Timeline</span></button>
+                                                                <button class="view-tab view-more-item" data-view="today" role="menuitem"><i class="fas fa-sutra-home" aria-hidden="true"></i><span>Home</span></button>
+                                                                <button class="view-tab view-more-item" data-view="homework" role="menuitem"><i class="fas fa-sutra-todo" aria-hidden="true"></i><span>To-do</span></button>
+                                                                <button class="view-tab view-more-item" data-view="notes" role="menuitem"><i class="fas fa-sutra-create" aria-hidden="true"></i><span>Create</span></button>
+                                                                <button class="view-tab view-more-item" data-view="timeline" role="menuitem"><i class="fas fa-sutra-timeline" aria-hidden="true"></i><span>Timeline</span></button>
                                                             </div>
                                                             <div class="view-more-group" data-nav-group="learning" role="group" aria-labelledby="moreViewsLearningLabel">
                                                                 <span class="view-more-group-label" id="moreViewsLearningLabel">Learning</span>
-                                                                <button class="view-tab view-more-item" data-view="apstudy" role="menuitem"><i class="fas fa-graduation-cap" aria-hidden="true"></i><span>Review &amp; Tests</span></button>
+                                                                <button class="view-tab view-more-item" data-view="apstudy" role="menuitem"><i class="fas fa-sutra-review" aria-hidden="true"></i><span>Review &amp; Tests</span></button>
                                                                 <!-- Review now lives inside Testing Hub; hidden in overflow menu too -->
                                                                 <button class="view-tab view-more-item" data-view="review" role="menuitem" hidden aria-hidden="true" style="display:none;"><span>Review</span></button>
                                                                 <button class="view-tab view-more-item" data-view="courses" role="menuitem"><i class="fas fa-book" aria-hidden="true"></i><span>Courses</span></button>
@@ -519,8 +519,8 @@
                                                             </div>
                                                             <div class="view-more-group" data-nav-group="tools" role="group" aria-labelledby="moreViewsToolsLabel">
                                                                 <span class="view-more-group-label" id="moreViewsToolsLabel">Tools</span>
-                                                                <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-robot" aria-hidden="true"></i><span>Assistant</span></button>
-                                                                <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings"><i class="fas fa-cog" aria-hidden="true"></i><span>Settings</span></button>
+                                                                <button class="view-tab view-more-item" data-view="assistantview" role="menuitem"><i class="fas fa-sutra-assistant" aria-hidden="true"></i><span>Assistant</span></button>
+                                                                <button class="view-tab view-more-item" data-view="settings" role="menuitem" aria-label="Settings"><i class="fas fa-sutra-settings" aria-hidden="true"></i><span>Settings</span></button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -7602,7 +7602,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261015-page-pin1"></script>
+    <script src="src/core/app.js?v=20261015-sutra-icons1"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7650,7 +7650,7 @@
     <!-- Local-only activation funnel (window.SutraActivation): first-capture /
          onboarding / day-2 milestones + usage counts. Device-local, no network. -->
     <script src="src/features/workspace/activation-metrics.js?v=20260702-activation1"></script>
-    <script src="src/features/workspace/mobile-nav.js?v=20261001-mobile-data-actions2"></script>
+    <script src="src/features/workspace/mobile-nav.js?v=20261015-sutra-icons2"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
     <script src="src/features/workspace/custom-tabs.js?v=20261015-reliability2"></script>

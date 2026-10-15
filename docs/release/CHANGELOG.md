@@ -26,6 +26,8 @@ not been pushed, merged, or released. New automated regressions await CI.
   editable review, Cancel, and guarded Apply through the owning editor history.
 - Strengthen page PIN verifiers while retaining legacy verification and safe
   upgrade on normal unlock; clarify that UI privacy locks do not encrypt notes.
+- Bundle an original Sutra daily-loop icon set for navigation and setup,
+  preserving existing labels, touch targets, and offline rendering.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

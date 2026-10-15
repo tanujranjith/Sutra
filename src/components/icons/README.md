@@ -1,8 +1,17 @@
-# Atelier icon system
+# Sutra icon system
 
-A fully offline, vanilla-JS icon library for NoteFlow Atelier. No CDN, no font
+A fully offline, vanilla-JS icon library for Sutra. No CDN, no font
 files, no React dependency. Every glyph is a stroke-based 24×24 SVG drawn in a
 shared Apple-leaning visual language.
+
+The original Sutra daily-loop set includes `sutra-home`, `sutra-capture`,
+`sutra-todo`, `sutra-create`, `sutra-timeline`, `sutra-review`, `sutra-focus`,
+`sutra-backup`, `sutra-assistant`, and `sutra-settings`. Navigation and setup
+reuse these bundled glyphs. They inherit `currentColor`, use the same 24×24
+viewBox and stroke weight, and keep existing button labels and dimensions.
+Use `fa-sutra-home` (and the matching names) through the existing hydrator or
+`AtelierIcons.getIconSvg('sutra-home')`. The `Atelier` global names remain
+intentional compatibility identifiers. Page emoji icons are a separate system.
 
 ## Files
 

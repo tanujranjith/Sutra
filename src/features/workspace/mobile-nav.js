@@ -18,11 +18,11 @@
   if (typeof document === 'undefined') return;
 
   var ICONS = {
-    today: 'fa-house', timeline: 'fa-calendar-days', notes: 'fa-pen-to-square',
-    homework: 'fa-book-open', apstudy: 'fa-graduation-cap', collegeapp: 'fa-university',
+    today: 'fa-sutra-home', timeline: 'fa-sutra-timeline', notes: 'fa-sutra-create',
+    homework: 'fa-sutra-todo', apstudy: 'fa-sutra-review', collegeapp: 'fa-university',
     college: 'fa-university', life: 'fa-seedling', business: 'fa-briefcase',
-    courses: 'fa-book', alldue: 'fa-bell', assistantview: 'fa-robot',
-    settings: 'fa-gear', progress: 'fa-chart-line', review: 'fa-layer-group'
+    courses: 'fa-book', alldue: 'fa-bell', assistantview: 'fa-sutra-assistant',
+    settings: 'fa-sutra-settings', progress: 'fa-chart-line', review: 'fa-sutra-review'
   };
   var MAX_ITEMS = 5;
   var navEl = null;
@@ -43,7 +43,7 @@
     save: ['saveLocalBtn', 'fa-save', 'Save locally'],
     export: ['exportFileBtn', 'fa-upload', 'Export'],
     import: ['importFileBtn', 'fa-download', 'Import'],
-    cloud: ['sutraCloudOpenBtn', 'fa-cloud', 'Data & Backup'],
+    cloud: ['sutraCloudOpenBtn', 'fa-sutra-backup', 'Data & Backup'],
     feedback: ['feedbackFabBtn', 'fa-flag', 'Report a problem']
   };
 
@@ -218,7 +218,7 @@
       button.disabled = source.disabled;
       moreActions.appendChild(button);
     });
-    moreActions.appendChild(utilityButton('focus', 'fa-clock', 'Focus timer'));
+    moreActions.appendChild(utilityButton('focus', 'fa-sutra-focus', 'Focus timer'));
     if (activeView() === 'notes') {
       moreActions.appendChild(utilityButton('pages', 'fa-bars', 'Pages'));
     }
@@ -512,7 +512,7 @@
     capture.setAttribute('data-bn-action', 'capture');
     capture.setAttribute('aria-label', 'Quick Capture');
     var ci = document.createElement('i');
-    ci.className = 'fas fa-bolt';
+    ci.className = 'fas fa-sutra-capture';
     ci.setAttribute('aria-hidden', 'true');
     var cs = document.createElement('span');
     cs.textContent = 'Capture';

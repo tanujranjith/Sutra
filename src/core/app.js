@@ -24547,26 +24547,26 @@ function populateProgressDashboard() {
         // Core daily-loop surfaces introduced during onboarding so students
         // understand what each one does before they see the navigation.
         const ONBOARDING_CORE_SURFACES = [
-            { view: 'today',    title: 'Home',      icon: 'fa-house',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
-            { view: 'capture',  title: 'Capture',   icon: 'fa-bolt',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
-            { view: 'homework', title: 'To-do',     icon: 'fa-book-open',     description: 'Homework, general tasks, and classes in one place.' },
-            { view: 'notes',    title: 'Create',    icon: 'fa-note-sticky',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
-            { view: 'timeline', title: 'Timeline',  icon: 'fa-calendar-days', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
-            { view: 'review',   title: 'Review',    icon: 'fa-layer-group',   description: 'Active recall with flashcards, learn, write, and test modes.' },
-            { view: 'focus',    title: 'Focus',     icon: 'fa-clock',         description: 'Pomodoro timer and distraction-free writing mode.' },
-            { view: 'data',     title: 'Data',      icon: 'fa-shield-halved', description: 'Your workspace is local-first. Export backups to keep it safe.' }
+            { view: 'today',    title: 'Home',      icon: 'fa-sutra-home',         description: 'Your command center: what is due, what to do next, and your plan for the day.' },
+            { view: 'capture',  title: 'Capture',   icon: 'fa-sutra-capture',          description: 'Quick Capture — the Home Capture button instantly adds assignments, notes, or tasks.' },
+            { view: 'homework', title: 'To-do',     icon: 'fa-sutra-todo',     description: 'Homework, general tasks, and classes in one place.' },
+            { view: 'notes',    title: 'Create',    icon: 'fa-sutra-create',   description: 'Hierarchical pages, rich editing, templates, and handwriting.' },
+            { view: 'timeline', title: 'Timeline',  icon: 'fa-sutra-timeline', description: 'Schedule your blocks, track events, and see what\'s ahead.' },
+            { view: 'review',   title: 'Review',    icon: 'fa-sutra-review',   description: 'Active recall with flashcards, learn, write, and test modes.' },
+            { view: 'focus',    title: 'Focus',     icon: 'fa-sutra-focus',         description: 'Pomodoro timer and distraction-free writing mode.' },
+            { view: 'data',     title: 'Data',      icon: 'fa-sutra-backup', description: 'Your workspace is local-first. Export backups to keep it safe.' }
         ];
 
         const ONBOARDING_FEATURE_VIEWS = [
-            { view: 'today',      title: 'Home',         icon: 'fa-house',         description: 'Daily Thread, streaks, and quick focus.' },
-            { view: 'timeline',   title: 'Timeline',     icon: 'fa-calendar-days', description: 'Plan blocks, track events, review by date.' },
-            { view: 'notes',      title: 'Create',       icon: 'fa-note-sticky',   description: 'Rich editor, pages, and workspace docs.' },
-            { view: 'homework',   title: 'To-do',        icon: 'fa-book-open',     description: 'Homework, general tasks, and class planning.' },
-            { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-graduation-cap', description: 'AP exam prep, units, practice logs.' },
+            { view: 'today',      title: 'Home',         icon: 'fa-sutra-home',         description: 'Daily Thread, streaks, and quick focus.' },
+            { view: 'timeline',   title: 'Timeline',     icon: 'fa-sutra-timeline', description: 'Plan blocks, track events, review by date.' },
+            { view: 'notes',      title: 'Create',       icon: 'fa-sutra-create',   description: 'Rich editor, pages, and workspace docs.' },
+            { view: 'homework',   title: 'To-do',        icon: 'fa-sutra-todo',     description: 'Homework, general tasks, and class planning.' },
+            { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-sutra-review', description: 'AP exam prep, units, practice logs.' },
             { view: 'collegeapp', title: 'College',      icon: 'fa-university',    description: 'Schools, deadlines, essays, scholarships.' },
             { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'Goals, habits, spending, books, and practical tools.' },
             { view: 'business',   title: 'Business',     icon: 'fa-briefcase',     description: 'Projects, clients, invoices, meetings.' },
-            { view: 'review',     title: 'Review',       icon: 'fa-layer-group',   description: 'Flashcards, learn, write, test, match.' }
+            { view: 'review',     title: 'Review',       icon: 'fa-sutra-review',   description: 'Flashcards, learn, write, test, match.' }
         ];
 
         const ONBOARDING_THEMES = [

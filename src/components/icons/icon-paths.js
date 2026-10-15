@@ -23,6 +23,17 @@
 
     // Canonical Atelier icons. Keys are lowercase kebab-case.
     var ATELIER_ICON_PATHS = {
+        // Sutra daily loop: original, bundled glyphs with one consistent stroke.
+        'sutra-home': '<path d="m4 10 8-6 8 6v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 20v-7h6v7M8 9h8"/>',
+        'sutra-capture': '<path d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8M12 8v8"/>',
+        'sutra-todo': '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m7 9 1.5 1.5L11 8M13 9h4M7 15h4M13 15h4"/>',
+        'sutra-create': '<path d="M13 4H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7M8 8h3M8 12h2M8 16h7"/><path d="m13 10 1-3 4-4 3 3-4 4-3 1zM17 4l3 3"/>',
+        'sutra-timeline': '<path d="M6 3v1m0 4v2m0 4v2m0 4v1M8 6h12M8 12h9M8 18h12"/><circle cx="6" cy="6" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="18" r="2"/>',
+        'sutra-review': '<path d="M4 7V5a1 1 0 0 1 1-1h12M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H8M8 12h4M8 16h4m3-1 1.5 1.5L19 13"/>',
+        'sutra-focus': '<circle cx="12" cy="13" r="7"/><path d="M10 3h4M12 3v3m5 1 2-2M12 9v4l2 2"/>',
+        'sutra-backup': '<path d="M4 14v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5M8 17h8M12 14V4m-4 4 4-4 4 4"/>',
+        'sutra-assistant': '<path d="M7 5h10a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7l-5 3v-4a3 3 0 0 1-1-2V8a3 3 0 0 1 3-3z"/><path d="M15 9h-4a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3H9"/>',
+        'sutra-settings': '<path d="M4 6h7m5 0h4M4 12h3m5 0h8M4 18h9m5 0h2"/><circle cx="13.5" cy="6" r="2.5"/><circle cx="9.5" cy="12" r="2.5"/><circle cx="15.5" cy="18" r="2.5"/>',
         // ── Navigation & layout ──────────────────────────────────────────────
         'home': '<path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.5 10.2V19a1 1 0 0 0 1 1h3.5v-5.2h4V20h3.5a1 1 0 0 0 1-1v-8.8"/>',
         'menu': '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
@@ -275,6 +286,16 @@
 
     // Maps any FA name (and a few legacy aliases) to a canonical Atelier icon.
     var FA_TO_ATELIER = {
+        'fa-sutra-home': 'sutra-home',
+        'fa-sutra-capture': 'sutra-capture',
+        'fa-sutra-todo': 'sutra-todo',
+        'fa-sutra-create': 'sutra-create',
+        'fa-sutra-timeline': 'sutra-timeline',
+        'fa-sutra-review': 'sutra-review',
+        'fa-sutra-focus': 'sutra-focus',
+        'fa-sutra-backup': 'sutra-backup',
+        'fa-sutra-assistant': 'sutra-assistant',
+        'fa-sutra-settings': 'sutra-settings',
         'fa-home': 'home',
         'fa-bars': 'menu',
         'fa-grip-lines': 'grip-lines',

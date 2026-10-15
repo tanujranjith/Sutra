@@ -28,8 +28,8 @@
     "hash": "bdaba42ae73dc103"
   },
   "src/components/icons/icon-paths.js": {
-    "stamp": "20261004-ci-icon-aliases1",
-    "hash": "81d1415f3b8b9ebf"
+    "stamp": "20261015-sutra-icons2",
+    "hash": "0930a78c09446bcc"
   },
   "src/components/icons/index.js": {
     "stamp": "20260809-audit-icons1",
@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-page-pin1",
-    "hash": "5c6e35c9f3ad0a4d"
+    "stamp": "20261015-sutra-icons1",
+    "hash": "9ac74b2bbf0e57c3"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -384,8 +384,8 @@
     "hash": "7d6954369f4defca"
   },
   "src/features/workspace/mobile-nav.js": {
-    "stamp": "20261001-mobile-data-actions2",
-    "hash": "585551cfceced47a"
+    "stamp": "20261015-sutra-icons2",
+    "hash": "4b79cdbc750b9b9d"
   },
   "src/features/workspace/notifications.js": {
     "stamp": "20261001-todo-completion1",
