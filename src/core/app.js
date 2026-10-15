@@ -13142,7 +13142,7 @@ function populateProgressDashboard() {
                 fields: [
                     { key: 'school', label: 'School', type: 'text', placeholder: 'School name' },
                     { key: 'essayType', label: 'Type', type: 'select', options: [{ value: '', label: '—' }].concat(COLLEGE_ESSAY_TYPES.map(t => ({ value: t.value, label: t.label }))), default: '' },
-                    { key: 'wordTarget', label: 'Word target', type: 'number', min: 0, max: 5000, step: 10, placeholder: 'e.g. 650' },
+                    { key: 'wordTarget', label: 'Word target', type: 'number', min: 0, max: 5000, step: 10, emptyValue: null, placeholder: 'e.g. 650' },
                     { key: 'prompt', label: 'Prompt', type: 'textarea', placeholder: 'Essay prompt...' },
                     { key: 'draftStatus', label: 'Draft Status', type: 'select', options: [
                         { value: 'brainstorming', label: 'Brainstorming' },
@@ -13471,7 +13471,11 @@ function populateProgressDashboard() {
                 const el = bodyEl.querySelector(`[data-field-key="${f.key}"]`);
                 if (!el) return;
                 let val = el.value;
-                if (f.type === 'number') val = parseFloat(val) || (f.default !== undefined ? f.default : 0);
+                if (f.type === 'number') {
+                    const number = parseFloat(val);
+                    val = String(val).trim() === '' && Object.prototype.hasOwnProperty.call(f, 'emptyValue')
+                        ? f.emptyValue : Number.isFinite(number) ? number : (f.default !== undefined ? f.default : 0);
+                }
                 seed[f.key] = val;
             });
 
@@ -83980,6 +83984,18 @@ function openQuickCaptureModal(prefillText, options) {
     setCaptureLabels(requestedType);
 
     // Fresh open -> let the parser's match drive the course picker until the user edits it.
+    // This modal is reused after both Cancel and Save; no prior draft details
+    // belong to the next capture. Apply requested type/course and prefill below.
+    if (notesInput) notesInput.value = '';
+    dateInput.value = '';
+    timeInput.value = '';
+    apSubjectSelect.value = '';
+    if (courseSelect) courseSelect.value = '';
+    if (newCourseInput) { newCourseInput.value = ''; newCourseInput.hidden = true; }
+    if (prioritySelect) prioritySelect.value = 'medium';
+    if (difficultySelect) difficultySelect.value = 'medium';
+    if (estimateInput) estimateInput.value = '';
+    modal.querySelectorAll('.quick-capture-details').forEach(details => { details.open = false; });
     if (courseSelect && courseSelect.dataset) courseSelect.dataset.userTouched = '0';
     if (typeSelect.dataset) typeSelect.dataset.manualType = '';
     if (!requestedType) typeSelect.value = 'task';
