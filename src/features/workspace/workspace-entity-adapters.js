@@ -208,7 +208,7 @@
   }
 
   function openTestingExam(entity) {
-    setView('apstudy');
+    setView('testing');
     if (typeof global.openExamDetail === 'function') global.openExamDetail(entity.metadata.examId || entity.id);
     return true;
   }

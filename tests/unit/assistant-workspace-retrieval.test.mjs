@@ -36,13 +36,30 @@ test('task follow-up uses preceding user question only in stateful mode', () => 
 
 test('personal saved-data questions cannot be intercepted by product help', () => {
   let opened = false;
+  let handedOffQuestion = '';
   const route = new Function('window', extractFunction(source, 'routeProductKnowledge').body + ';return routeProductKnowledge;')({
     SutraProductKnowledge: { answer: () => ({ entry: { id: 'notes' } }) },
-    SutraLocalHelp: { nodeIdForKnowledge: () => 'notes', open: () => { opened = true; return true; } }
+    SutraLocalHelp: { nodeIdForKnowledge: () => 'notes', open: (_node, options) => { opened = true; handedOffQuestion = options.originalQuestion; return true; } }
   });
   const question = 'What is my SAT date and the saved notes for my Robotics task?';
   assert.equal(route(question, question.toLowerCase()), null);
   assert.equal(opened, false);
+  const productQuestion = 'How do I use notes in my classes?';
+  assert.equal(route(productQuestion, productQuestion.toLowerCase()).handled, true);
+  assert.equal(handedOffQuestion, productQuestion);
+});
+
+test('Local Help provider handoff stays in the full chat composer', () => {
+  let sentSurface;
+  const input = { value: '', dispatchEvent() {}, focus() {} };
+  const ask = new Function('document', 'window', 'Event', 'pendingHelpProviderPrompt', extractFunction(source, 'askFlow').body + ';return askFlow;')(
+    { getElementById: id => id === 'asstInput' ? input : null },
+    { SutraAssistantConversationController: { send: surface => { sentSurface = surface; } } },
+    class Event {}, ''
+  );
+  ask('How do I use notes?', { send: true, nodeId: 'notes', messagesHost: { id: 'asstMessages' } });
+  assert.equal(input.value, 'How do I use notes?');
+  assert.equal(sentSurface, 'full');
 });
 
 test('reading exam facts does not infer a status-changing proposal from quoted notes', () => {

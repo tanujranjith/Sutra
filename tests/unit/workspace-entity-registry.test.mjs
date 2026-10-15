@@ -265,6 +265,8 @@ test('browser adapters cover the connected student loop and preserve locked-note
       ['course', 'bio'],
       ['course-tab', 'overview']
     ]);
+    assert.equal((await registry.open('testing_exam:sat')).ok, true);
+    assert.deepEqual(calls.at(-1), ['view', 'testing']);
   } finally {
     Object.entries(previous).forEach(([key, value]) => {
       if (value === undefined) delete globalThis[key];

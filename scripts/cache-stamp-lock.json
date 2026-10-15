@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261014-context-budget2",
-    "hash": "62b9ea4e60ed075f"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "1cd754d49fdd2ffd"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261014-qa-fixes1",
-    "hash": "c18d16300cf6e191"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "ace2c8ed607e539b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -192,8 +192,8 @@
     "hash": "d489c7e632eb70c1"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261014-context-budget2",
-    "hash": "ac240f7d8cf90da4"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "c2d4445456122b1e"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -220,8 +220,8 @@
     "hash": "336d5b60e5ec4766"
   },
   "src/features/assistant/sutra-local-help.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "aaa57ee9deb1874c"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
     "stamp": "20261012-assistant-access1",
@@ -356,8 +356,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261014-qa-fixes1",
-    "hash": "3433c1b743e120db"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "fb55028110183f84"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -452,8 +452,8 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "0d20d0b85cb74f79"
+    "stamp": "20261014-assistant-retrieval7",
+    "hash": "b5053bd6a49c90df"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",

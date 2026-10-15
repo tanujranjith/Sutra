@@ -180,3 +180,33 @@ The optional full-browser matrix should cover Firefox, WebKit, and responsive
 projects as well as the regular Chromium shards. Inspect page-gap geometry and
 the Assistant review flows in the resulting browser evidence. Keep main and
 deployment unchanged until the owner validates the result separately.
+
+### Assistant retrieval and review follow-up — October 14
+
+Fixed missing SAT/ACT records by reading the canonical keyed exam profiles and
+custom exam array in the entity adapter. Exam dates and Homework source URLs now
+reach selective retrieval. Stateful follow-ups reuse the preceding user question;
+Stateless mode does not. Selected records supply exact citation URLs. Citation
+navigation resolves the registry key, and exam links use the canonical Testing
+Hub alias so hidden packs do not redirect to a note. Reference links are no longer
+autolinked again inside generated Markdown anchors.
+
+Direct questions about saved data no longer route to generic product Help.
+“Use provider instead” preserves the original question and Assistant surface,
+skips local routing once, and retains the normal consent/privacy send gates.
+
+The missing review card was caused by saveConvo stripping the action fence from
+the active reply before rendering. Active replies now retain proposals; durable
+history/exports still strip executable payloads. Reopened proposals explain that
+they require regeneration. Read-only cards show Apply/Decline and explain the
+permission restriction; Apply continues to deny writes. Exam-status inference
+also requires an explicit status-change request when a user question is supplied.
+
+Browser QA used Gemini Flash Lite/Low and synthetic local records. SAT December
+5, 2026 and the Robotics task URL were retrieved; both source chips opened their
+correct records, including SAT with the Study pack hidden. A task proposal showed
+Apply/Decline and a read-only explanation; clicking Apply was denied. One proposal
+request used 4,346 input and 87 output tokens. Required runtime integrity checks
+and staged hooks passed. Regression suites were authored/syntax checked but not
+run locally; GitHub CI remains pending a separately authorized push. Successful
+PIN-consented retrieval remains a manual check. No push, merge or deployment.

@@ -353,6 +353,23 @@ minimal scopes remain available; area denials, sensitive-category flags,
 locked-page consent/PIN tickets, and source exclusions still apply. Requests
 about a particular homework topic do not include every task.
 
+Standard Testing Hub profiles (including SAT/ACT) remain searchable even when
+their feature pack is hidden. Selected task records include their saved Reference
+URL, and records supply exact canonical citation URLs rather than asking the
+model to construct links from registry keys. In Stateful mode, a follow-up such
+as “that task's URL” can reuse the preceding user question for retrieval; Stateless
+mode does not read conversation history. Product Help does not intercept direct
+questions about saved workspace data. Its “Use provider instead” control preserves
+the original question, stays in the same Assistant surface, and skips local
+routing once while retaining the normal privacy and consent gates.
+
+Live action proposals survive saving the reply long enough to render Apply and
+Decline. Read-only access shows the proposal with a permission explanation; Apply
+still checks the current policy. Durable chat history and exports continue to
+strip action payloads, so a saved/reopened proposal requires regeneration rather
+than replaying an old action. A missing preview is explicitly explained, and
+unexpected preview failures are reported without applying the action.
+
 “What's in my to-do list?” is a deterministic local read of planner and Homework
 stores from either Assistant surface. It includes undated and distant open work,
 deduplicates Homework mirrors, and reports when a long list is shortened. Source
