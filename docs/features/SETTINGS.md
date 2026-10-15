@@ -11,6 +11,8 @@ changes, then choose **Save Changes** or **Revert**. Moving between categories
 keeps those pending values. Controls labeled as applying immediately (including
 provider credentials) retain that separate behavior. The compact phone layout
 omits the decorative preview rail and keeps touch targets at least 44 pixels.
+The pending-changes bar stays above the phone navigation, safe-area inset, and
+any active Focus player, so Save Changes and Revert remain reachable.
 
 Settings navigation is presentation state only. It introduces no workspace
 fields, migrations, or changes to backup and Sync content.

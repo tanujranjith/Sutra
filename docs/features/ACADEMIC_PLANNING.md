@@ -94,6 +94,9 @@ under `module.exports` for Node and are executed by
   by the end of the selected preview, including overdue work. It preserves
   task/homework source IDs and skips items already linked to Timeline blocks;
   intelligence summaries remain attention signals rather than planning inputs.
+  Browser previews trim today's free windows to the next available minute.
+  Future days retain their full working hours. If a suggested start passes while
+  the preview stays open, Add refuses that block and asks for a fresh plan.
 
 Because the engines are deterministic and tested in isolation, the academic
 *decisions* never depend on a model being available, online, or correct.

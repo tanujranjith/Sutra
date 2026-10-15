@@ -350,7 +350,9 @@
         gap: 8px;
     }
 
-    #view-settings .cc-action-bar {
+    /* Match the Settings layer's specificity so its phone footer cannot
+       replace the clearance reserved for the fixed navigation/player. */
+    #view-settings .cc-page .cc-action-bar {
         bottom: calc(
             var(--sutra-mobile-nav-height, 4.75rem) +
             var(--sutra-focus-player-height, 0px) +

@@ -168,8 +168,8 @@
     "hash": "d4f582d3908c34dd"
   },
   "src/features/academic/planning-engine.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "36e08e407d80dfbf"
+    "stamp": "20261015-remaining-time2",
+    "hash": "9887123df511fd84"
   },
   "src/features/academic/school-schedule.js": {
     "stamp": "20260816-home-labels1",
@@ -368,8 +368,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261014-assistant-retrieval7",
-    "hash": "fb55028110183f84"
+    "stamp": "20261015-settings-planning1",
+    "hash": "0fd6c6fb101a4c29"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -708,8 +708,8 @@
     "hash": "d250ec565ffba14d"
   },
   "styles/responsive/student-workspaces-polish.css": {
-    "stamp": "20261001-qa-touch5",
-    "hash": "39f771422b0dc3ae"
+    "stamp": "20261015-settings-clearance1",
+    "hash": "cf2e46e5af40c139"
   },
   "styles/themes/dune.css": {
     "stamp": "20260807-dune3",

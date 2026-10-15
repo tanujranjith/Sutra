@@ -25,6 +25,44 @@ test('weekly planning includes medium-priority work due on day five', () => {
   assert.ok(plan.blocks.some(block => block.sourceKind === 'task' && block.sourceId === 'day-five'));
 });
 
+test('remaining-time planning trims today without mutating windows or future capacity', () => {
+  const freeWindowsByDate = windowsForWeek();
+  const before = structuredClone(freeWindowsByDate);
+  const plan = planning.planWork({
+    today, dates, notBeforeMinute: 990,
+    prefs: { spread: false },
+    items: [{ id: 'remaining', title: 'Remaining work', dueDate: dates[1], estimateMinutes: 60 }],
+    freeWindowsByDate
+  });
+  assert.equal(plan.blocks.length, 1);
+  assert.equal(plan.blocks[0].date, dates[1]);
+  assert.equal(plan.blocks[0].start, '09:00');
+  assert.deepEqual(freeWindowsByDate, before);
+});
+
+test('today previews use remaining time and respect an elapsed due-time cutoff', () => {
+  const freeWindowsByDate = windowsForWeek();
+  const items = [{ id: 'today', title: 'Today work', dueDate: today, estimateMinutes: 30 }];
+  const available = planning.planWork({ today, dates: [today], notBeforeMinute: 961, items, freeWindowsByDate });
+  assert.equal(available.blocks[0].start, '16:01');
+  const elapsed = planning.planWork({
+    today, dates: [today], notBeforeMinute: 961,
+    items: [{ ...items[0], dueTime: '16:00' }], freeWindowsByDate
+  });
+  assert.equal(elapsed.blocks.length, 0);
+  assert.equal(elapsed.unplaced.length, 1);
+});
+
+test('after-hours previews never schedule elapsed dates or past working windows', () => {
+  const items = [{ id: 'late', title: 'Late work', estimateMinutes: 30 }];
+  const freeWindowsByDate = { ...windowsForWeek(), '2026-05-31': [{ start: 540, end: 1020 }] };
+  const day = planning.planWork({ today, dates: [today], notBeforeMinute: 1440, items, freeWindowsByDate });
+  assert.equal(day.blocks.length, 0);
+  const week = planning.planWork({ today, dates: ['2026-05-31', ...dates], notBeforeMinute: 1440, items, freeWindowsByDate });
+  assert.equal(week.blocks[0].date, dates[1]);
+  assert.equal(week.blocks[0].start, '09:00');
+});
+
 test('weekly planning excludes already scheduled work by typed source link', () => {
   const items = planning.collectPlanningItems({
     dates,
@@ -136,6 +174,7 @@ test('browser preview reads canonical Tasks and Homework rather than capped atte
   const result = window.SutraPlanningEngine.buildPreview('week');
   const sources = Array.from(result.blocks, block => block.sourceKind + ':' + block.sourceId).sort();
   assert.deepEqual(sources, ['homework:hw-live', 'task:task-live']);
+  assert.ok(result.blocks.filter(block => block.date === today).every(block => block.startMin >= 721));
 });
 
 test('historical or removed blocks do not suppress open work, and legacy preview links still match', () => {

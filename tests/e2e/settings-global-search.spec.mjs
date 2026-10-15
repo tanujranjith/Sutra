@@ -110,6 +110,17 @@ test('Settings mobile hierarchy stays contained and keeps the canonical Save and
   await page.locator('[data-pref-path="appearance.density"] [data-value="compact"]').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
   await expect(page.locator('#settingsApplyBtn')).toBeEnabled();
+  await page.locator('#settingsApplyBtn').scrollIntoViewIfNeeded();
+  const saveClearance = await page.locator('#settingsApplyBtn').evaluate(button => {
+    const rect = button.getBoundingClientRect();
+    const nav = document.getElementById('sutraBottomNav');
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      aboveNavigation: !!nav && rect.bottom <= nav.getBoundingClientRect().top,
+      receivesClick: hit === button || button.contains(hit)
+    };
+  });
+  expect(saveClearance).toEqual({ aboveNavigation: true, receivesClick: true });
   await page.locator('#settingsBackToCategories').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
   await page.locator('[data-settings-nav="appearance"]').click();

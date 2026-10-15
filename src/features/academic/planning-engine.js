@@ -306,8 +306,13 @@
         var prefs = resolvePrefs(input.prefs);
         var today = input.today || isoLocal(new Date());
         var dates = (Array.isArray(input.dates) && input.dates.length)
-            ? input.dates.slice().sort()
+            ? input.dates.filter(function (dk) { return dk >= today; }).sort()
             : [today];
+        // The caller supplies the clock boundary, keeping this engine pure.
+        // Future days retain their full windows; today starts at the next
+        // available minute rather than the beginning of working hours.
+        var notBeforeMinute = Number.isFinite(input.notBeforeMinute)
+            ? Math.max(0, Math.min(1440, Math.ceil(input.notBeforeMinute))) : 0;
         // working copy of free windows so carving doesn't touch caller data
         var freeByDate = {};
         dates.forEach(function (dk) {
@@ -315,7 +320,7 @@
             // Clamp window bounds into [0, 1439] so a placed slot's HH:MM string can
             // never desync from its minute value (minutesToHHMM caps at 23:59).
             freeByDate[dk] = src.map(function (w) {
-                return { start: Math.max(0, Math.round(w.start)), end: Math.min(24 * 60 - 1, Math.round(w.end)) };
+                return { start: Math.max(dk === today ? notBeforeMinute : 0, Math.round(w.start)), end: Math.min(24 * 60 - 1, Math.round(w.end)) };
             })
                 .filter(function (w) { return w.end > w.start; })
                 .sort(function (a, b) { return a.start - b.start; });
@@ -600,9 +605,9 @@
         return items;
     }
 
-    function nextDates(count) {
+    function nextDates(count, now) {
         var dates = [];
-        var base = new Date();
+        var base = now || new Date();
         for (var i = 0; i < count; i++) {
             var d = new Date(base.getTime());
             d.setDate(d.getDate() + i);
@@ -613,9 +618,12 @@
 
     // Build a preview for day or week. Returns the plan object (no writes).
     function buildPreview(scope) {
-        var dates = scope === 'week' ? nextDates(7) : [isoLocalToday()];
+        var now = new Date();
+        var today = isoLocal(now);
+        var dates = scope === 'week' ? nextDates(7, now) : [today];
         return planWork({
-            today: isoLocalToday(),
+            today: today,
+            notBeforeMinute: now.getHours() * 60 + now.getMinutes() + 1,
             dates: dates,
             items: gatherItems(dates),
             freeWindowsByDate: gatherFreeWindows(dates),
@@ -633,6 +641,17 @@
 
     // Apply a single previewed block to the real timeline via the existing helper.
     function applyBlock(block) {
+        var now = new Date();
+        var today = isoLocal(now);
+        var start = hhmmToMinutes(block.start);
+        // A preview can sit open past its start time or across midnight.
+        // Recheck immediately before writing, including Add all.
+        if (block.date < today || (block.date === today
+            && (start === null || start * 60000 <= now.getHours() * 3600000
+                + now.getMinutes() * 60000 + now.getSeconds() * 1000 + now.getMilliseconds()))) {
+            toast('This suggested time has passed. Close the preview and plan again.');
+            return false;
+        }
         var fa = global.flowAtelier;
         if (!fa || typeof fa.addCalendarBlockForTemplate !== 'function') { toast('Scheduling is not available.'); return false; }
         var id = fa.addCalendarBlockForTemplate({
@@ -672,11 +691,17 @@
                 }
                 if (e.target.closest('[data-plan-apply-all]')) {
                     var n = 0;
+                    var attempted = 0;
                     (lastPreview ? lastPreview.blocks : []).forEach(function (b, i) {
                         var btn = modal.querySelector('[data-plan-apply="' + i + '"]');
-                        if (btn && !btn.disabled && applyBlock(b)) { btn.textContent = 'Added ✓'; btn.disabled = true; btn.classList.add('is-applied'); n++; }
+                        if (btn && !btn.disabled) {
+                            attempted++;
+                            if (applyBlock(b)) { btn.textContent = 'Added ✓'; btn.disabled = true; btn.classList.add('is-applied'); n++; }
+                        }
                     });
-                    toast(n ? 'Added ' + n + ' block' + (n === 1 ? '' : 's') + ' to your timeline.' : 'Nothing left to add.');
+                    if (n) toast('Added ' + n + ' block' + (n === 1 ? '' : 's') + ' to your timeline.'
+                        + (attempted > n ? ' Replan the blocks that could not be added.' : ''));
+                    else if (!attempted) toast('Nothing left to add.');
                 }
             });
         }
