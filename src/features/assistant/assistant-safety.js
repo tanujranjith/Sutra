@@ -182,7 +182,7 @@
     if (typeof value === 'string') return value.slice(0, 1200);
     if (value == null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.slice(0, 12).map(function (item) { return compactContextValue(item, depth + 1); });
-    var out = {}, essential = /^(?:id|title|name|type|kind|date|dueDate|dueTime|start|end|status|priority|course|courseId|noteId|taskId|homeworkId|blockId|deckId|cardId|examId|planId|href|source|sourceId|linked\w*|relationship\w*|locked|isLocked|version|versionId|updatedAt|createdAt|excerpt|quote|content|body|patchContent)$/i;
+    var out = {}, essential = /^(?:id|title|name|type|kind|role|date|dueDate|dueTime|start|end|status|priority|course|courseId|noteId|taskId|homeworkId|blockId|deckId|cardId|examId|planId|href|source|sourceId|linked\w*|relationship\w*|locked|isLocked|version|versionId|updatedAt|createdAt|excerpt|quote|content|body|patchContent)$/i;
     Object.keys(value).forEach(function (key) {
       if (!essential.test(key)) return;
       var compacted = compactContextValue(value[key], depth + 1);

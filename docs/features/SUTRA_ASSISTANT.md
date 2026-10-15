@@ -92,6 +92,23 @@ Choose the narrowest level that still lets the Assistant be useful. Whatever you
 pick, the context is assembled **locally** first; only the portion needed for
 your message is included when a request is sent to your chosen provider.
 
+Minimal does not automatically retrieve note excerpts or saved memories. Ordinary
+requests exclude generated Help & Docs pages; explicit documentation questions
+can retrieve them. Note evidence is limited to four excerpts, at most two per
+note, and each excerpt keeps its own chunk ID so budgeting cannot repeat one
+excerpt in place of several distinct matches.
+
+Generic questions omit action schemas. Requests to change workspace content send
+up to twelve relevant schemas from the canonical Actions Bank; the complete bank
+remains available in Local Help and continues to validate all reviewed actions.
+Workspace JSON is compact, and duplicate receipt bookkeeping stays local.
+The automatic text-request budget is 6,000 estimated tokens including a 1,536-token
+response reserve. The final serialized prompt and conversation are measured;
+whole evidence records and older turns are omitted when needed, with a partial
+context warning. User-supplied messages and attachments are never silently cut
+to fit this budget; large explicit inputs can still exceed it. Estimates are
+conservative character estimates, not provider tokenizer counts.
+
 With local routing enabled, requests such as “search my notes for…” and “what do
 my notes say about…” run entirely on-device and return quoted, clickable note
 evidence without requiring a provider.

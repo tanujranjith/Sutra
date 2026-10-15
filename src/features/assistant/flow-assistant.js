@@ -1297,57 +1297,49 @@
     //             user edits Assistant settings — effectively static per session).
     //   dynamic — the end-of-prompt reminder + the live "Current context" JSON
     //             (tasks/homework/testingHub/memory/etc — changes every turn).
-    function buildSystemPromptParts(context) {
-        const bankText = renderActionsBankText(buildActionsBank());
-        const staticText = [
-            'You are Sutra Assistant, the contextual assistant inside Sutra — a local-first student / creator operating system.',
+    function selectPromptActionBank(userText) {
+        const query = String(userText || '').toLowerCase().replace(/\bfinish\b|\bcheck off\b/g, 'complete').replace(/\blaunch\b/g, 'open');
+        // The full catalog remains the local validation/help authority. Only
+        // action requests need its schemas in the provider's prompt.
+        if (!/\b(?:add|create|make|write|draft|rewrite|edit|update|change|mark|complete|delete|remove|move|rename|organize|schedule|reschedule|plan|import|export|save|remember|generate|build|set|log|start|stop|archive|duplicate|insert|turn|convert|split|merge|group|arrange|connect|open|undo)\b/.test(query)) return { domains: [], totalActions: 0 };
+        const stop = new Set('a an the to for of in on my me i you can could please this that with and it some help'.split(' '));
+        const terms = (query.match(/[a-z0-9]+/g) || []).filter(term => term.length > 2 && !stop.has(term));
+        const bank = buildActionsBank();
+        const ranked = bank.domains.flatMap(domain => domain.actions.map(action => {
+            const type = action.type.replace(/_/g, ' ');
+            const text = (type + ' ' + action.description).toLowerCase();
+            const score = terms.reduce((sum, term) => sum + (type.includes(term) ? 4 : text.includes(term) ? 1 : 0), 0);
+            return { action, domain, score };
+        })).filter(row => row.score > 0).sort((a, b) => b.score - a.score).slice(0, 12);
+        const domains = bank.domains.map(domain => ({ ...domain, actions: ranked.filter(row => row.domain === domain).map(row => row.action) })).filter(domain => domain.actions.length);
+        return { domains, totalActions: ranked.length };
+    }
+
+    function buildSystemPromptParts(context, userText = '') {
+        const bank = selectPromptActionBank(userText);
+        const bankText = renderActionsBankText(bank);
+        const staticText = bank.totalActions ? [
+            'You are Sutra Assistant, the contextual assistant in a private, local-first student workspace.',
             ...HARD_AGENT_RULES,
-            'The app has views: today, notes, homework, timeline, review, cramhub, apstudy, collegeapp, life, business, courses, alldue, testing (Testing Hub — AP exams, SAT/ACT/etc., scores, practice tests, mistakes), settings.',
-            'All data stays on the user\'s device. No backend.',
-            '',
-            'You can propose local app actions. When you want the user to change app state, append a single fenced block at the end of your reply:',
-            '```flow-actions',
-            '[ { "type": "create_task", "title": "Draft outline", "dueDate": "2026-05-26", "priority": "high" } ]',
-            '```',
-            'Rules for action proposals:',
-            '- Use only the action types in the Actions Bank below.',
-            '- One JSON array per block. Include a "label" field on each action that is a short human-readable description.',
-            '- Never put more than ~8 actions in one reply.',
-            '- When a request truly needs multiple ordered atomic actions, give every action a stable "planActionId" and add "dependsOn": ["earlier-id"] where a step requires an earlier result. Dependencies may reference only earlier actions in the same array. Sutra will review the dependency plan and apply it in order.',
-            '- Do not use dependency metadata when one higher-level workflow action already captures the whole request.',
-            '- For Canvas, prefer one canvas_edit_board action containing up to 24 reviewed operations. Use context.canvas.pageId and stable object ids. New add operations may declare a short clientId so later connect/group/arrange operations in the same action can reference it. Never invent ids for existing objects.',
-            '- For Slides, prefer one slides_edit_deck action containing up to 24 reviewed operations. Use context.slides.id and its stable slide/element ids. Create only text, shapes, and charts; never invent data URLs, external image URLs, or claim to fetch an image.',
-            '- The user must confirm each action; do not assume anything is applied. Sutra renders every action as an approval card the user must click — so PROPOSE, never declare. Say "I can mark that as taken — approve the card below" or "Want me to…?", NOT "I\'ve marked…" / "I\'ll mark…". Never claim a change happened; you cannot apply anything yourself.',
-            '- If the user just asked a question, do NOT propose actions. Only propose when the action is clearly useful.',
-            '- If context.canvas is present, it is a bounded summary of the active Canvas page. Use Canvas actions only for that active Canvas, and expect explicit user confirmation.',
-            '- For dates, prefer ISO YYYY-MM-DD. Times are HH:MM 24h.',
-            '- Prefer the higher-level workflow actions when the user wants a plan: import_assignments (one action with an "assignments" array), create_study_plan / create_exam_plan / create_assignment_plan (these produce LINKED objects), plan_day / plan_week / triage_deadlines. Use a single workflow action instead of many atomic ones when it captures the intent.',
-            '- When parsing pasted assignment text or a screenshot, return ONE import_assignments action whose "assignments" array has objects with: title, course, dueDate (YYYY-MM-DD), dueTime, type, priority, difficulty, sourceText, confidence (0-1).',
-            '- For note rewrites, heading renames, block moves, deduplication, and splits, use the corresponding anchored note action. Copy activeNote.id, activeNote.versionId, and activeNote.contentHash into noteId, versionId, and baseHash; anchor each hunk with exact before text plus start/end offsets. Never guess offsets for a note that is not fully present in context.',
-            '- The "derived" object in the context already contains locally-computed risk signals (overdue, overloaded days, review debt, low-confidence AP subjects, unscheduled priorities, nextBestAction). Use it; do not recompute it.',
-            '- To complete, reopen, archive, or reschedule EXISTING tasks/homework, use update_task_status / reschedule_tasks with the exact "id" values from context items (derived.overdue, derived.dueSoon, tasks, homework). When the user says "those"/"these", they mean the items you just listed — include their ids. Never create duplicates, and never delete or archive as a substitute for completing.',
-            '- Testing Hub EXAMS (context.testingHub — AP subjects, SAT, ACT, etc.) are NOT tasks. To mark an exam as taken/finished/done, or to reopen it, use update_exam_status with the examName (or examId). NEVER use update_task_status for an exam, and NEVER substitute an unrelated homework assignment — if the exam name does not match a task, that is expected; use update_exam_status. Exams have no due-date reschedule; only taken state and study status (planning/studying/reviewing/ready).',
-            '- NEVER compute grade percentages, GPAs, or required scores yourself. Propose the read-only grade actions (run_grade_what_if, solve_target_grade, rank_missing_work_by_grade_impact, explain_grade_risk) — Sutra computes them locally and shows the result.',
-            '',
-            'Product accuracy & memory rules (important):',
-            '- NEVER invent Sutra features, screens, settings, actions, or memories. If unsure whether something exists, say so or ask — do not guess.',
-            '- Only describe features present in context.productKnowledge (when provided) or the Actions Bank. Do not claim a capability that is not there.',
-            '- context.memory (when present) holds the user\'s saved long-term memories that Sutra retrieved as relevant. Use them to personalize; do NOT repeat them verbatim unless asked.',
-            '- NEVER write or change memory on your own. To save a memory, propose a create_memory action (the user confirms). Never infer or store sensitive memories (passwords, keys, financial, medical, precise location, locked-note content).',
-            '- When a target, date, or intent is ambiguous, ask one short clarifying question instead of guessing.',
-            '- Use Sutra\'s deterministic local systems for grade math and schedule-conflict detection — never do that math yourself.',
-            '',
-            '════════ ACTIONS BANK — everything you are able to propose; use ONLY these types ════════',
+            'Propose changes only when requested, using a single fenced flow-actions block containing a JSON array of at most eight actions. Each action needs type and a short label. Use ONLY the schemas below. The user must review and Apply; never claim a proposal changed anything.',
+            'Copy existing IDs from evidence. Never guess target IDs, note offsets, versionId or baseHash. Anchored note edits require exact before text, start/end offsets, noteId, versionId and baseHash; ask for the note if it is not fully available.',
+            'Prefer a higher-level workflow action to many atomic edits. For ordered dependent actions, give stable planActionId and dependsOn referencing only earlier actions in the same reply.',
+            'Canvas/Slides operations require the active board/deck and stable object IDs. Create only supported text/shapes/charts; never invent image URLs or data URLs. Keep at most 24 operations in one board/deck action.',
+            'Dates use YYYY-MM-DD, times HH:MM. Import assignments as one import_assignments action. Deterministic grade math and schedule conflicts must use Sutra engines, not guessed calculations.',
+            'ACTIONS AVAILABLE FOR THIS REQUEST:',
             bankText,
-            '════════════════════════════════════════════════════════════════════════════════════',
-            '',
-            'When you write prose, prefer short markdown bullets over long paragraphs.',
-            'Formatting Sutra understands: standard Markdown — **bold**, *italics*, `inline code`, fenced ``` code blocks, bullet and numbered lists, # headings, > blockquotes, [links](url), and tables.',
-            'For math/symbols, Sutra renders LaTeX between single dollars for inline (e.g. $x^2$, $a \\rightarrow b$, $\\frac{3}{4}$) and double dollars for display ($$ ... $$). Write math that way, OR use plain Unicode symbols (→, ×, ÷, ≤, ≥, ≠, ±, °, π, √). Do NOT escape the dollar signs (no \\$), do NOT wrap a whole sentence in dollars, and keep the LaTeX valid so it renders. Never emit a lone "$\\rightarrow$"-style token inside otherwise-plain prose without valid surrounding LaTeX.',
-            'When the user asks about "this note" or "this view", use the context block below.',
-            'Sutra searches locally for each question. Relevant records appear in tasks, homework, retrievedNotes, and workspacePlanning/Courses/Learning/College/Life/Business/Overview. Each record has a real id and type. These are selected excerpts, not the entire workspace. If workspaceRetrieval.matchedCount exceeds selectedCount or contextBudget.reduced is true, disclose that the list is partial and offer to narrow it. Do not claim an empty selected result means the whole workspace is empty, or tell the user to switch views when relevant records are already present.',
-            'Permission limits are not empty data. If accessReport.mode is off, explain that Assistant workspace access is off. A notesEvidenceStatus of permission_required applies only to Notes, not to tasks or Homework; use available planning records independently. If the requested area is not in accessReport.areasRead and no matching evidence is supplied, explain the access or retrieval limitation rather than inventing an empty list or promising that switching views will grant permission.',
-            'Citing your sources: when an answer draws on a specific item that is present in the context — especially context.retrievedNotes, activeNote, a task, homework assignment, or exam — cite it inline as [short label](sutra://KIND/ID). KIND is one of page, task, homework, exam. For retrievedNotes use KIND page and the EXACT noteId. Use only ids present in context; NEVER invent an id or cite absent evidence. Prefer the quoted span and heading supplied by retrievedNotes, call out stale or conflicting evidence, and clearly say when notesEvidenceStatus is missing or limited. Cite the 1–3 sources the answer most depends on. Do not put citations inside flow-actions or cite a brand-new item.',
+            'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite records as [label](sutra://KIND/ID) with supplied IDs.',
+            'Only describe product capabilities supported by productKnowledge or these schemas. Saved memory is context, never permission to save new or sensitive memory. Locked content keeps its separate consent requirements.',
+            'Keep prose concise. Standard Markdown and LaTeX are supported.',
+            ...buildPersonalizationLines()
+        ].join('\n') : [
+            'You are Sutra Assistant, a private, local-first student workspace assistant.',
+            ...HARD_AGENT_RULES,
+            'Answer this question without action proposals. No action schemas are supplied for this request.',
+            'Use only supplied evidence for workspace facts. Missing evidence is not proof the workspace is empty. Explain access limits; ask to narrow if contextBudget.reduced.',
+            'Cite workspace evidence as [label](sutra://KIND/ID), using supplied IDs. Never invent IDs, dates, scores, or capabilities.',
+            'Use relevant productKnowledge and memory only when supplied. Do not claim workspace grounding for a generic answer.',
+            'Keep the answer concise. Standard Markdown and LaTeX are supported.',
             ...buildPersonalizationLines()
         ].join('\n');
 
@@ -1365,12 +1357,24 @@
                 academicIntegrity: contextForModel.tutoringMode.academicIntegrity
             };
         }
-        const contextJson = (() => { try { return JSON.stringify(contextForModel, null, 2); } catch (e) { return '{}'; } })();
+        // Receipt bookkeeping stays local; the provider only needs permission
+        // limits and actual selected evidence, not duplicate read/selection logs.
+        delete contextForModel.contextSelectionReasons;
+        if (contextForModel.contextBudget) contextForModel.contextBudget = {
+            reduced: contextForModel.contextBudget.reduced,
+            omittedSourceCount: contextForModel.contextBudget.omittedSourceCount
+        };
+        if (contextForModel.accessReport) contextForModel.accessReport = {
+            mode: contextForModel.accessReport.mode,
+            areasRead: contextForModel.accessReport.areasRead,
+            deniedAreas: contextForModel.accessReport.deniedAreas
+        };
+        const contextJson = (() => { try { return JSON.stringify(contextForModel); } catch (e) { return '{}'; } })();
         const safety = window.SutraAssistantSafety;
         const untrustedContext = safety && typeof safety.wrapUntrusted === 'function' ? safety.wrapUntrusted('workspace-context', contextJson) : contextJson;
         const dynamicText = [
             '',
-            'REMINDER before you answer: you cannot apply anything — PROPOSE with a flow-actions block and never say you did it; use ONLY the context below and never invent data; use update_exam_status for Testing Hub exams (not tasks); ask if unsure.',
+            bank.totalActions ? 'Proposals require review; never claim they were applied. Use only supplied evidence and action schemas.' : 'Answer the question using supplied evidence when relevant; do not propose changes or invent workspace facts.',
             tutoringInstruction ? 'TRUSTED TUTORING CONTRACT: ' + tutoringInstruction : '',
             integrityInstruction ? 'TRUSTED ACADEMIC-INTEGRITY BOUNDARY: ' + integrityInstruction : '',
             '',
@@ -4895,7 +4899,9 @@
             return { schema: 'sutra-note-retrieval/1', query: String(userText || ''), sources: [], evidenceStatus: 'permission_required', scope: { area: 'notes' }, excludedCount: 0 };
         }
         const b = bridge();
-        const pages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
+        const allPages = b ? (Array.isArray(b.pages) ? b.pages : []) : [];
+        const wantsHelp = /\b(?:help\s*(?:&|and)\s*docs|documentation|sutra\s+(?:help|features|settings))\b|\b(?:how|where)\b.{0,50}\bsutra\b/i.test(String(userText || ''));
+        const pages = allPages.filter(page => page && (wantsHelp || !(page.systemRole === 'help-docs' || page.builtInId === 'help-docs' || page.id === 'help_page' || (page.isSystemPage && String(page.title || '').toLowerCase() === 'help & docs'))));
         // The editor's unlock set is intentionally not used here. A page PIN
         // entered to edit a note must not silently authorize Assistant access.
         const unlockedIds = new Set(assistantAccessIds);
@@ -4916,14 +4922,25 @@
         const scope = options.scope && typeof options.scope === 'object'
             ? options.scope
             : { type: 'all' };
-        return core.search(notesKnowledgeCache.index, userText, {
+        const result = core.search(notesKnowledgeCache.index, userText, {
             scope,
             currentNoteId: active && active.id || '',
             limit: options.limit || 8,
+            quoteLength: 700,
             staleAfterDays: 180,
             excludedSourceIds: Array.isArray(scope.excludedSourceIds) ? scope.excludedSourceIds : [],
             excludedNoteIds: Array.isArray(scope.excludedNoteIds) ? scope.excludedNoteIds : []
         });
+        const seen = new Set();
+        const perNote = new Map();
+        result.sources = result.sources.filter(source => {
+            const key = source.noteId + ':' + source.quote;
+            const count = perNote.get(source.noteId) || 0;
+            if (!source.id || source.score < 6 || seen.has(key) || seen.has('id:' + source.id) || count >= 2) return false;
+            seen.add(key); seen.add('id:' + source.id); perNote.set(source.noteId, count + 1); return true;
+        }).slice(0, 4);
+        result.evidenceStatus = result.sources.length ? 'supported' : 'missing';
+        return result;
     }
 
     // Search the canonical registry locally, then send a small set of relevant
@@ -5014,6 +5031,11 @@
             lockedPageAccessTicket: accessTicket,
             authorizedPageIds: currentLockedPageAccessIds({ lockedPageAccessTicket: accessTicket })
         });
+        // Literal-output instructions do not need incidental keyword matches
+        // from the workspace. Explicit workspace references still retrieve.
+        const literalReply = /\b(?:reply|respond|say|answer)\s+(?:(?:with|using)\s+)?(?:only|exactly|just)\b/i.test(String(userText || ''))
+            && !/\b(?:my|our|this|current|active|workspace|notes?|tasks?|to[ -]?dos?|homework|assignments?|calendar|schedule|grades?|courses?|exams?|essays?|college|documents?|pages?|attachments?|files?)\b/i.test(String(userText || ''));
+        if (literalReply) accessOptions.depth = 'minimal';
         if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
         let ctx = applyRelevantWorkspaceContext(getFlowAssistantContext(accessOptions), userText, accessOptions);
         // Product-aware context: attach a SMALL set of relevant saved memories
@@ -5021,7 +5043,7 @@
         // and personalized without a giant static prompt. Never dump everything.
         try {
             const mem = memStore();
-            if (mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
+            if (ctx.depth !== 'minimal' && mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
                 const snips = mem.buildPromptSnippets(userText, { feature: getActiveViewName() }, { limit: 5 });
                 if (snips && snips.length) {
                     ctx.memory = snips.map(s => s.text);
@@ -5037,7 +5059,7 @@
                 if (hits.length) ctx.productKnowledge = hits.map(h => ({ topic: h.entry.title, summary: h.entry.summary, availability: h.entry.availability }));
             }
         } catch (e) { /* product knowledge is best-effort */ }
-        const noteRetrieval = retrieveNoteSources(userText, {
+        const noteRetrieval = ctx.depth === 'minimal' ? { sources: [], evidenceStatus: 'not_requested' } : retrieveNoteSources(userText, {
             scope: options.scope || options.conversationScope,
             approvedAreas: accessOptions.approvedAreas,
             lockedPageAccessTicket: accessTicket,
@@ -5072,7 +5094,7 @@
                 explicitTargets: options.explicitTargets || [],
                 currentScreen,
                 selectedText: ctx.selection ? [{ id: 'selection', kind: 'selection', title: 'Selected text', value: ctx.selection, priority: 92 }] : [],
-                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.noteId, kind: 'note', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' }))
+                linked: (ctx.retrievedNotes || []).map(source => ({ id: source.id, kind: 'note-excerpt', title: source.title, value: source, priority: 82, reason: 'Relevant unlocked note evidence' }))
                     .concat(['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].flatMap(key =>
                         (ctx[key] || []).map(source => ({ id: source.key, kind: 'workspace-record', title: source.title, value: source, priority: 75, reason: 'Matches this question in ' + key.replace('workspace', '') })))),
                 course: ctx.course ? [{ id: ctx.course.id || ctx.course.name, kind: 'course', title: ctx.course.name, value: ctx.course }] : [],
@@ -5083,10 +5105,10 @@
             });
             const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
             contextBudget = safety.budgetContext(selection, {
-                maxTokens: Number(options.contextLimitTokens) || (providerType === 'gemini' ? 24000 : 16000),
-                reserveResponseTokens: Number(options.reserveResponseTokens) || 3072,
+                maxTokens: Math.min(6000, Number(options.contextLimitTokens) || 6000),
+                reserveResponseTokens: Number(options.reserveResponseTokens) || 1536,
                 attachmentTokens,
-                systemTokens: 3800
+                systemTokens: safety.estimateTokens(buildSystemPromptParts({ view: ctx.view, depth: ctx.depth }, userText).static) + safety.estimateTokens(userText) + 512
             });
             const included = new Set(contextBudget.included.map(item => item.kind + ':' + item.id));
             const includedRows = new Map(contextBudget.included.map(item => [item.kind + ':' + item.id, item]));
@@ -5106,7 +5128,7 @@
                 const row = includedRows.get('course:' + (ctx.course.id || ctx.course.name));
                 if (row) ctx.course = row.value; else delete ctx.course;
             }
-            if (Array.isArray(ctx.retrievedNotes)) ctx.retrievedNotes = ctx.retrievedNotes.map(source => includedRows.get('note:' + source.noteId)).filter(Boolean).map(row => row.value);
+            if (Array.isArray(ctx.retrievedNotes)) ctx.retrievedNotes = ctx.retrievedNotes.map(source => includedRows.get('note-excerpt:' + source.id)).filter(Boolean).map(row => row.value);
             ['workspacePlanning', 'workspaceCourses', 'workspaceLearning', 'workspaceCollege', 'workspaceLife', 'workspaceBusiness', 'workspaceOverview'].forEach(key => {
                 if (Array.isArray(ctx[key])) ctx[key] = ctx[key].map(source => includedRows.get('workspace-record:' + source.key)).filter(Boolean).map(row => row.value);
             });
@@ -5155,7 +5177,34 @@
         if (tutoringContract && tutoringContract.ok) ctx.tutoringMode = { id: tutoringContract.mode, label: tutoringContract.label, instruction: tutoringContract.instruction, academicIntegrity: tutoringContract.integrity };
         // caching (Anthropic/Gemini) can send the static ~70% separately
         // instead of re-transmitting it whole on every message.
-        const systemPromptParts = buildSystemPromptParts(ctx);
+        let systemPromptParts = buildSystemPromptParts(ctx, userText);
+        const requestMessages = budgetedConversation.concat([{ role: 'user', content: String(userText || '').trim() }]);
+        if (safety && typeof safety.estimateTokens === 'function') {
+            const attachmentTokens = getAttachments().reduce((sum, attachment) => sum + safety.estimateTokens(attachment.extractedText || '') + Math.ceil((Number(attachment.sizeBytes) || 0) / 4096), 0);
+            const inputLimit = Math.max(0, Math.min(6000, Number(options.contextLimitTokens) || 6000) - (Number(options.reserveResponseTokens) || 1536) - attachmentTokens);
+            const estimateRequest = () => safety.estimateTokens(systemPromptParts.static + '\n' + systemPromptParts.dynamic) + safety.estimateTokens(requestMessages);
+            const pruneOrder = ['memory', 'retrievedNotes', 'workspaceOverview', 'workspaceBusiness', 'workspaceLife', 'workspaceCollege', 'workspaceLearning', 'workspaceCourses', 'workspacePlanning', 'timelineUpcoming', 'timelineToday', 'timeline', 'deadlines', 'review', 'apStudy', 'college', 'life', 'business', 'cram', 'courses', 'allDue', 'testingHub', 'customTab', 'homework', 'tasks', 'derived', 'productKnowledge', 'course', 'canvas', 'slides', 'activeNote'];
+            let omitted = 0;
+            for (const key of pruneOrder) {
+                while (ctx[key] && estimateRequest() > inputLimit) {
+                    if (Array.isArray(ctx[key]) && ctx[key].length > 1) ctx[key].pop();
+                    else delete ctx[key];
+                    omitted += 1;
+                    systemPromptParts = buildSystemPromptParts(ctx, userText);
+                }
+            }
+            while (requestMessages.length > 1 && estimateRequest() > inputLimit) { requestMessages.shift(); omitted += 1; }
+            if (omitted) {
+                ctx.contextBudget = { ...(ctx.contextBudget || {}), reduced: true, canNarrow: true, omittedSourceCount: ((ctx.contextBudget || {}).omittedSourceCount || 0) + omitted };
+                if (contextBudget) {
+                    contextBudget.reduced = true; contextBudget.canNarrow = true;
+                    for (let index = 0; index < omitted; index += 1) contextBudget.omitted.push({ kind: 'context', id: 'serialized-budget-' + index, omittedReason: 'serialized request budget' });
+                    contextBudget.reductionReasons.push(omitted + ' source(s) omitted to bound the serialized request.');
+                }
+            }
+            ctx.contextBudget = { ...(ctx.contextBudget || {}), inputLimitTokens: inputLimit, estimatedInputTokens: estimateRequest() };
+            systemPromptParts = buildSystemPromptParts(ctx, userText);
+        }
         const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();
@@ -5169,7 +5218,7 @@
             providerType,
             visionCapability: cap,
             attachments,
-            requestMessages: budgetedConversation.concat([{ role: 'user', content: String(userText || '').trim() }]),
+            requestMessages,
             contextBudget
         };
     }
