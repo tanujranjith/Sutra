@@ -1,0 +1,94 @@
+# Student workflow branch: local implementation handoff
+
+Branch: `codex/student-workflow-batch`. All checkpoints are local. No push,
+merge, deployment, production setting, or remote database change was performed.
+The unrelated primary checkout remains on `codex/overnight-plan`.
+
+## Implemented locally
+
+- Backup retry/backoff and incomplete-asset restore reporting (`4b73d52`).
+- Node 24 CI configuration, nested recovery paths, landing copy (`1303c6d`).
+- Full-week canonical planning and scheduled-work deduplication (`81d0274`).
+- Diagnostic credential aliases and bounded encoded-label scrubbing (`781a79a`).
+- Safe Sync pauses on unauthenticated/inconsistent remote records (`c6dfc55`).
+- Wellness retirement with legacy fields preserved for portability (`cdcadaf`).
+- Dedicated Assistant script consolidation with load order preserved (`2700316`).
+- Desktop/phone Settings refinement and vendored SheetJS 0.20.3 (`ef1ab88`).
+- Official exam results, pending states, exact Undo state, and active Help/docs
+  updates (`504b677`).
+- Explicit passage-only `/grammar`, `/spelling`, `/rephrase`; editable review,
+  Cancel, and guarded Apply; Classic slash-menu click repair (`d3a9fa4`).
+- Versioned page PINs, legacy upgrade, stale authorization rejection, and
+  tab-local workspace unlock backoff (`84470a2`).
+- Original bundled daily-loop icons with existing labels/targets (`c653c02`).
+- Inactive Homework quick-add parser/UI cleanup (`1c0966b`).
+
+Shared editor adapters and closure-coupled core routing remain with their owners;
+Assistant consolidation is not a wholesale runtime extraction. Sync and backups
+retain independent guarantees. No code attempts to repair unauthenticated cloud
+content by replacing a key, overwriting a record, or discarding local work.
+
+## Observed manual Chrome checks
+
+The local disposable origin was `http://127.0.0.1:5194/Sutra.html`.
+
+- A normal Life habit still saves and survives reload after wellness retirement.
+- Phone Settings categories and Back preserve pending edits; primary category
+  controls measure 44px, the decorative preview is hidden, and there is no
+  document overflow at the checked phone width.
+- SAT mark-taken, pending-result, Cancel, explicit QA result, reopen, and reload
+  preserve the recorded result. The grouped exam list renders normally.
+- Modern/Classic selected passage commands preserve text on open and Cancel.
+  Empty explicit passages disable Generate. A no-key attempt reports an error
+  without changing the note. Full-chat Cancel retains its original draft and
+  creates no conversation message. Classic pointer activation was rechecked
+  after repairing hover replacement of the clicked row.
+- Phone All sections shows the bundled icons; measured viewport and document
+  width were both 390px. The temporary viewport override was reset.
+- Major Matrix excludes the staged unrated major. Ratings 9×5 and 8×4 with total
+  criterion weight 38 produce 2.03. Scores and exclusion survive reload.
+  Programmatic numeric fill did not commit a native change; actual changed
+  keystrokes followed by Tab did. No product workaround was added for that
+  browser-control artifact.
+- Active Capture previews “tomorrow 11pm” as 2026-10-16 at 23:00. Cancel left no
+  task behind after the legacy parser cleanup.
+
+Screenshots are retained under ignored `.tmp/qa-2026-10-15/` in the candidate;
+earlier Life, Settings, and exam proof is in the primary root's same ignored
+path. Staging includes a QA habit, SAT result, QA Passage Writing note, and two
+QA majors. These records belong to the disposable browser origin.
+
+## Verification limits and remaining gates
+
+- The approved `npm run check:runtime` gate and staged core hook passed for core
+  changes, including the latest icon-reference checkpoint. This covers the
+  27 runtime assertions and runtime/static-server guard self-tests only.
+- One sandboxed static-server self-test could not start its localhost server;
+  the same approved gate passed with the necessary local-server permission.
+- Owning CSP/asset/cache/guardrail generators were run and their diffs reviewed.
+  No sink/storage ceiling was increased. Generation is not a claim that the
+  full static/asset/deploy verification suite passed.
+- New/updated unit and Playwright regressions have been written and reviewed,
+  but **not executed**. They are queued for GitHub CI under the user's testing
+  restriction. CI cannot test unpublished local commits without a later
+  user-authorized push. Local installed Node is 20; Node 24 CI is still pending.
+- Live Sync bootstrap/conflicts/recovery, automatic backup upload/restore with
+  required assets, current deployment artifact/headers, and credential exclusion
+  across real export paths still require their automated/integration gates.
+- No live provider generation requests were made during this implementation.
+  Stateful follow-ups, successful one-time PIN reads, and writing Apply/Undo with
+  a real provider remain pending; the isolated QA origin has no provider keys.
+- The new PIN crypto/legacy upgrade/throttling and stale authorization cases
+  require CI execution plus a user-entered disposable PIN for manual UI QA.
+- Physical OS notifications and true browser zoom at 67%/150% remain unverified.
+  The browser-control zoom shortcut did not change observed viewport geometry;
+  a resized viewport is not evidence of browser zoom.
+
+Do not treat local implementation or these narrow manual checks as release
+approval. Validate the branch before authorizing push, merge, or deployment.
+
+## Decisions prepared, not implemented
+
+See [connected-feature proposals](CONNECTED_FEATURES_PROPOSAL_20261015.md) for
+ChatGPT plan access, Calendar, API/MCP, hosted quotas, automations, and licensing.
+The proposal recommends keeping Apache-2.0 for now; the owner makes the decision.

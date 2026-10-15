@@ -473,7 +473,13 @@ npm run check:network                   # approved-origin/CDN guard
 npm run test:e2e                        # Chromium, Firefox, WebKit Playwright matrix
 ```
 
-Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/features/BRAND_ASSETS.md`](docs/features/BRAND_ASSETS.md).
+Brand icons are generated from two canonical master PNGs (`assets/brand/sutra/`) with `python scripts/generate-sutra-brand-assets.py` (requires Pillow). Full reference: [`docs/features/BRAND_ASSETS.md`](docs/features/BRAND_ASSETS.md). The bundled daily-loop SVG glyphs use the existing [local icon system](src/components/icons/README.md).
+
+Local October reliability work and its unperformed CI gates are recorded in the
+[student workflow handoff](docs/plans/STUDENT_WORKFLOW_HANDOFF_20261015.md).
+[Connected-feature proposals](docs/plans/CONNECTED_FEATURES_PROPOSAL_20261015.md)
+cover subscription authentication, Calendar, API/MCP, quotas, automations, and
+the licensing decision; these are not shipped features.
 
 Per the release process, the suite also includes rebrand and responsive guards (`scripts/sutra-rebrand-check.mjs`, `scripts/sutra-responsive-check.mjs`) and a `node --check` syntax pass over each `src` JS file. A browser QA harness is provided at `scripts/sutra-persistence-qa.js`.
 
