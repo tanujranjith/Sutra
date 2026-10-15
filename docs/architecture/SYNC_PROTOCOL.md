@@ -316,6 +316,9 @@ Field-aware resolution:
 - Eight novel conflict ids within sixty seconds trips the `conflict-storm`
   circuit breaker before remote apply or push. Local saving and the durable
   outbox continue, but cloud sync pauses for review instead of creating a loop.
+  Detected conflicts must be durably stored and made available for review before
+  the breaker pauses the cycle. A review-store failure still aborts without
+  applying, pushing, or advancing the cursor.
 - Each unresolved alternate branch is written to the device-local conflict
   store before the selected merged value is applied or pushed. A rejected
   conflict-store transaction aborts the cycle; it is never treated as an

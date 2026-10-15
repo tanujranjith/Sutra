@@ -43,6 +43,9 @@ bytes are missing. Normative technical spec:
 Sutra Sync remains a beta while browser, installed-PWA, mobile, account-change,
 offline, conflict, and revoke-and-wipe behavior continues to be validated on
 real devices. Keep a recent encrypted `.sutra` backup in a separate location.
+The abnormal-conflict safeguard retains detected alternate versions in the
+device-local review store before pausing. It does not apply a remote winner,
+push merged changes, or advance the cursor during that paused cycle.
 Revoked devices lose cloud access immediately, but an offline device can
 process a requested local wipe only after it reconnects. Sync is useful for
 replication, but it is not the only copy you should rely on for recovery.

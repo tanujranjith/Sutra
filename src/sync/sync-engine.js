@@ -276,7 +276,7 @@
           now: nowFn()
         });
 
-        // Conflict artifacts are advisory records, never workspace pages.
+        // Conflict artifacts retain alternate branches, never workspace pages.
         // Detect a rapid stream of NEW deterministic conflict ids before any
         // remote state is applied or pushed. This fail-closed circuit breaker
         // keeps local saving available while preventing a regression from
@@ -311,6 +311,7 @@
           uniqueConflictIds[nextConflict.id] = true;
           if (!storedConflictIds[nextConflict.id]) novelConflictCount += 1;
         }
+        var conflictStormCount = 0;
         if (novelConflictCount > 0) {
           var burst = await store.getMeta('conflictBurstV1');
           var burstNow = nowFn();
@@ -321,13 +322,7 @@
           burst.count = Number(burst.count || 0) + novelConflictCount;
           await store.setMeta('conflictBurstV1', burst);
           if (burst.count >= CONFLICT_STORM_LIMIT) {
-            // Baseline and cursor deliberately remain unchanged. The durable
-            // outbox already contains the user's edits and will retry only
-            // after explicit Resume/Sync now recovery.
-            var stormError = new Error('Sync paused after detecting an abnormal conflict loop. Local saving is still available; review conflicts, then resume sync.');
-            stormError.code = 'conflict-storm';
-            stormError.conflicts = burst.count;
-            throw stormError;
+            conflictStormCount = burst.count;
           }
         }
 
@@ -343,6 +338,20 @@
             conflict.id = conflict.recordKey + '|' + (conflict.loserOpId || conflict.winnerOpId || 'undetermined');
           }
           await store.putConflict(conflict);
+        }
+
+        if (conflictStormCount) {
+          // Even the breaker must retain both branches for review. Announce
+          // only records whose durable writes above have all succeeded, while
+          // leaving the displayed workspace, cursor, baseline and outbox intact.
+          status.conflictsPending = (await store.listConflicts()).length;
+          if (typeof bridge.onConflicts === 'function') {
+            try { bridge.onConflicts(newConflicts); } catch (conflictCallbackError) { /* advisory */ }
+          }
+          var stormError = new Error('Sync paused after detecting an abnormal conflict loop. Local saving is still available; review conflicts, then resume sync.');
+          stormError.code = 'conflict-storm';
+          stormError.conflicts = conflictStormCount;
+          throw stormError;
         }
 
         var mergedHashes = await projectionApi.hashProjection({ records: mergeResult.mergedRecords });

@@ -305,7 +305,7 @@
     "./src/state/workspace-normalizers.js?v=20260825-oxremed1",
     "./src/sync/sync-crypto.js?v=20261015-reliability2",
     "./src/sync/sync-diff.js?v=20260716-sync6",
-    "./src/sync/sync-engine.js?v=20261015-reliability2",
+    "./src/sync/sync-engine.js?v=20261015-conflict-review1",
     "./src/sync/sync-merge.js?v=20260807-duress2",
     "./src/sync/sync-projection.js?v=20260906-notificationlocal1",
     "./src/sync/sync-protocol.js?v=20260913-energy-removal-sync1",

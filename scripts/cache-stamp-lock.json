@@ -496,8 +496,8 @@
     "hash": "949e9c15ba5ad93d"
   },
   "src/sync/sync-engine.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "8fd0b9ecb80be539"
+    "stamp": "20261015-conflict-review1",
+    "hash": "6932bd5c514d5c21"
   },
   "src/sync/sync-merge.js": {
     "stamp": "20260807-duress2",

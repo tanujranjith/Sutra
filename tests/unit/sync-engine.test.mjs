@@ -578,6 +578,8 @@ test('conflict storm circuit breaker pauses before apply or push and preserves t
   await A.engine.syncNow();
   const serverOpsBeforeBreaker = server.state.ops.length;
   const baselineBeforeBreaker = await B.store.getBaseline();
+  const notices = [];
+  B.bridge.onConflicts = conflicts => notices.push(conflicts);
 
   const outcome = await B.engine.syncNow();
   assert.equal(outcome.error?.code, 'conflict-storm');
@@ -586,6 +588,43 @@ test('conflict storm circuit breaker pauses before apply or push and preserves t
   assert.equal((await B.store.getBaseline()).cursor, baselineBeforeBreaker.cursor, 'breaker must not advance the cursor');
   assert.equal((await B.store.getOutbox()).length, 8, 'local edits remain durably queued');
   assert.ok(B.bridge.holder.workspace.pages.every(page => page.body.startsWith('B ')), 'remote state is not applied after the breaker trips');
+  const retained = await B.store.listConflicts();
+  assert.equal(retained.length, 8, 'every detected conflict remains available for review');
+  assert.equal(B.engine.getStatus().conflictsPending, 8);
+  assert.equal(notices.length, 1, 'review UI is notified even though the remote workspace was not applied');
+  for (const conflict of retained) {
+    const bodies = [conflict.localValue.body, conflict.remoteValue.body].sort();
+    assert.deepEqual(bodies, [`A ${conflict.localValue.id}`, `B ${conflict.localValue.id}`], 'both complete branches survive the breaker');
+  }
+});
+
+test('conflict storm cannot publish review records or apply when their durable writes fail', async t => {
+  const server = transportApi.createMemoryServer();
+  const keyBytes = syncCrypto.generateVaultKeyBytes();
+  const workspace = starterWorkspace();
+  workspace.pages = Array.from({ length: 8 }, (_, index) => ({ id: `storm-write-${index}`, title: `Storm ${index}`, body: 'base' }));
+  const A = await makeDevice(server, 'device-a', keyBytes, workspace);
+  const B = await makeDevice(server, 'device-b', keyBytes, workspace);
+  t.after(() => { A.engine.stop(); B.engine.stop(); });
+  await A.engine.syncNow();
+  await B.engine.syncNow();
+  A.bridge.holder.workspace.pages.forEach(page => { page.body = `A ${page.id}`; });
+  B.bridge.holder.workspace.pages.forEach(page => { page.body = `B ${page.id}`; });
+  await A.engine.syncNow();
+  const baseline = await B.store.getBaseline();
+  const serverOps = server.state.ops.length;
+  const applies = B.bridge.holder.applies;
+  let notices = 0;
+  B.bridge.onConflicts = () => { notices += 1; };
+  B.store.putConflict = async () => { throw new Error('Review store unavailable'); };
+
+  const result = await B.engine.syncNow();
+  assert.match(result.error?.message || '', /Review store unavailable/);
+  assert.equal(notices, 0);
+  assert.equal(B.bridge.holder.applies, applies);
+  assert.equal(server.state.ops.length, serverOps);
+  assert.equal((await B.store.getBaseline()).cursor, baseline.cursor);
+  assert.equal((await B.store.getOutbox()).length, 8);
 });
 
 test('delete on A vs edit on B: the edit survives everywhere', async () => {
