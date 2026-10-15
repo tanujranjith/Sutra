@@ -1,5 +1,10 @@
 # Sutra Assistant
 
+Retired wellness, health-tracking, and Life journal records remain portable in
+backups but are excluded from Assistant retrieval and context, including when an
+older workspace contains an enabled wellness-access flag. See
+[Life workspace](LIFE_WORKSPACE.md).
+
 _Sutra is a private, local-first workspace for students. The local Assistant
 experience is available in every fresh workspace; connecting an AI provider is
 optional. Sutra Assistant is the part of Sutra that can answer questions, summarize

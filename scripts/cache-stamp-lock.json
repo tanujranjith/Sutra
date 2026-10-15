@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "359ff289de76c6b7"
+    "stamp": "20261015-reliability2",
+    "hash": "1f98425b15abc276"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "62fc2dc995959c27"
+    "stamp": "20261015-reliability2",
+    "hash": "307419543d63806d"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -60,8 +60,8 @@
     "hash": "e946368f7f1faad7"
   },
   "src/core/error-reporter.js": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "5939e30d9f976df0"
+    "stamp": "20261015-reliability2",
+    "hash": "0aa73672ebee93a3"
   },
   "src/core/feature-guard.js": {
     "stamp": "20260825-sol1-1",
@@ -104,8 +104,8 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "52dfe20e2fcce701"
+    "stamp": "20261015-reliability2",
+    "hash": "8b62141875ba48b2"
   },
   "src/domain/content-timeline.js": {
     "stamp": "20261001-content-timeline3",
@@ -144,8 +144,8 @@
     "hash": "8a017b92eaa6e86f"
   },
   "src/domain/student-life.js": {
-    "stamp": "20260913-energy-removal-life1",
-    "hash": "86973127ffdda611"
+    "stamp": "20261015-reliability2",
+    "hash": "9e0c79bcf4117514"
   },
   "src/domain/workspace-entity-registry.js": {
     "stamp": "20260728-entity1",
@@ -168,8 +168,8 @@
     "hash": "d4f582d3908c34dd"
   },
   "src/features/academic/planning-engine.js": {
-    "stamp": "20260616-plan1",
-    "hash": "c0069d1ff403727b"
+    "stamp": "20261015-reliability2",
+    "hash": "36e08e407d80dfbf"
   },
   "src/features/academic/school-schedule.js": {
     "stamp": "20260816-home-labels1",
@@ -192,8 +192,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "97c93a015e9b3cda"
+    "stamp": "20261015-reliability2",
+    "hash": "f249a9a05f49c666"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -224,8 +224,8 @@
     "hash": "230ed0fe472ce61f"
   },
   "src/features/assistant/sutra-product-knowledge.js": {
-    "stamp": "20261012-assistant-access1",
-    "hash": "74ddc9b57f920812"
+    "stamp": "20261015-reliability2",
+    "hash": "c300f97999504e62"
   },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
@@ -336,8 +336,8 @@
     "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "6b513bec735419c6"
+    "stamp": "20261015-reliability2",
+    "hash": "1b2cef3067faaa1c"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
     "stamp": "20260905-quote-focus1",
@@ -452,8 +452,8 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "75fa24245451cc5a"
+    "stamp": "20261015-reliability2",
+    "hash": "42a1b193b84bff24"
   },
   "src/persistence/revocation-wipe.js": {
     "stamp": "20260831-revoke5",
@@ -480,16 +480,16 @@
     "hash": "9d3be0ba07f108c3"
   },
   "src/sync/sync-crypto.js": {
-    "stamp": "20260917-sync-encryption1",
-    "hash": "1f11dd3cd9f06cef"
+    "stamp": "20261015-reliability2",
+    "hash": "d2216832ed6fe9bd"
   },
   "src/sync/sync-diff.js": {
     "stamp": "20260716-sync6",
     "hash": "949e9c15ba5ad93d"
   },
   "src/sync/sync-engine.js": {
-    "stamp": "20260825-sol1-1",
-    "hash": "78f62e7f2ba0ed4d"
+    "stamp": "20261015-reliability2",
+    "hash": "8fd0b9ecb80be539"
   },
   "src/sync/sync-merge.js": {
     "stamp": "20260807-duress2",

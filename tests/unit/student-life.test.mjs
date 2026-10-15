@@ -188,25 +188,15 @@ test('financial runway reports a gap when outflow exceeds inflow', () => {
 
 /* ------------------------------------------------------------- Wellness */
 
-test('wellness trends average within window, flag low sleep, stay non-medical', () => {
-  const now = '2026-07-10T12:00:00Z';
-  const ws = { lifeWorkspace: {
+test('retired wellness trend API does not interpret legacy mood, stress, or sleep data', () => {
+  const trends = life.getWellnessTrends({ lifeWorkspace: {
     wellness: { checkIns: [
-      { createdAt: '2026-07-09T12:00:00Z', stress: 8 },
-      { createdAt: '2026-07-08T12:00:00Z', stress: 7 },
-      { createdAt: '2026-01-01T12:00:00Z', stress: 1 } // outside window
+      { createdAt: '2026-07-09T12:00:00Z', mood: 'low', stress: 8 },
+      { createdAt: '2026-07-08T12:00:00Z', mood: 'low', stress: 7 }
     ] },
     sleepTracker: { entries: [{ date: '2026-07-09', totalSleepMinutes: 360 }] }
-  } };
-  const trends = life.getWellnessTrends(ws, { now, days: 14 });
-  assert.equal(trends.samples.checkIns, 2, 'old check-in excluded');
-  assert.equal(trends.averages.stress, 7.5);
-  assert.equal(Object.prototype.hasOwnProperty.call(trends.averages, 'energy'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(trends.direction, 'energy'), false);
-  assert.equal(trends.averages.sleepMinutes, 360);
-  assert.ok(trends.signals.some((s) => /Stress has been high/.test(s)));
-  assert.ok(trends.signals.some((s) => /below seven hours/.test(s)));
-  assert.match(trends.disclaimer, /not medical/i);
+  } }, { now: '2026-07-10T12:00:00Z', days: 14 });
+  assert.deepEqual(trends, { available: false, reason: 'retired', signals: [] });
 });
 
 /* --------------------------------------------------------- Emergency Week */

@@ -336,7 +336,6 @@
         { key: 'notes', label: 'Notes' },
         { key: 'time', label: 'Time' },
         { key: 'tools', label: 'Tools' },
-        { key: 'wellness', label: 'Wellness' },
         { key: 'reading', label: 'Reading & Review' },
         { key: 'overview', label: 'Overview & Trends' },
         { key: 'mini_os', label: 'College · Life · Business' },
@@ -420,7 +419,7 @@
         },
         counter: {
             label: 'Tally Counter', icon: 'fa-plus-minus', cat: 'focus',
-            desc: 'Count anything — water, pages, reps.',
+            desc: 'Count pages, study sessions, or finished assignments.',
             render: renderCounterWidget,
             setup: setupCounterWidget
         },
@@ -1778,165 +1777,6 @@
         return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
     }
 
-    // --- Wellness: Water Tracker ---
-
-    function setupWaterWidget() {
-        return promptText({ title: 'Daily water goal', label: 'How many glasses a day?', placeholder: '8', inputType: 'number' }).then(function (val) {
-            if (val == null) return null;
-            var goal = Math.max(1, Math.min(50, Math.round(Number(val) || 8)));
-            return { goal: goal, count: 0, dateKey: localDateKey() };
-        });
-    }
-
-    function adjustWater(tab, widget, delta) {
-        var todayK = localDateKey();
-        mutateTab(tab.id, function (t) {
-            var w = findWidget(t, widget.id);
-            if (!w) return;
-            if (!w.config || typeof w.config !== 'object') w.config = {};
-            if (w.config.dateKey !== todayK) { w.config.dateKey = todayK; w.config.count = 0; }
-            w.config.count = Math.max(0, Math.min(50, (Number(w.config.count) || 0) + delta));
-        }, { rerender: false });
-        rerenderWidgetBody(tab.id, widget.id);
-    }
-
-    function renderWaterWidget(body, tab, widget) {
-        var cfg = widget.config || {};
-        var todayK = localDateKey();
-        if (cfg.dateKey !== todayK) {
-            // New day — reset the count so the tracker starts fresh.
-            mutateTab(tab.id, function (t) {
-                var w = findWidget(t, widget.id);
-                if (!w) return;
-                if (!w.config || typeof w.config !== 'object') w.config = {};
-                w.config.dateKey = todayK;
-                w.config.count = 0;
-            }, { rerender: false });
-            cfg = { goal: cfg.goal, count: 0, dateKey: todayK };
-        }
-        var goal = Math.max(1, Number(cfg.goal) || 8);
-        var count = Math.max(0, Number(cfg.count) || 0);
-        var pct = Math.min(100, Math.round((count / goal) * 100));
-        body.appendChild(el('p', 'ctab-countdown-title', 'Water'));
-        var track = el('div', 'ctab-progress-track');
-        var fill = el('div', 'ctab-progress-fill');
-        fill.style.width = pct + '%';
-        track.appendChild(fill);
-        body.appendChild(track);
-        body.appendChild(el('p', 'ctab-progress-label', count + ' / ' + goal + ' glasses'));
-        var row = el('div', 'ctab-counter-row');
-        row.appendChild(btn('ctab-counter-btn', '', function () { adjustWater(tab, widget, -1); }, { title: 'Remove a glass', icon: 'fa-minus' }));
-        row.appendChild(btn('ctab-counter-btn', '', function () { adjustWater(tab, widget, 1); }, { title: 'Add a glass', icon: 'fa-plus' }));
-        body.appendChild(row);
-    }
-
-    // --- Wellness: 20-20-20 Break Reminder ---
-
-    function renderEyeBreakWidget(body, tab, widget) {
-        var cfg = widget.config || {};
-        var workMs = Math.max(1, Number(cfg.intervalMin) || 20) * 60000;
-        var breakMs = 20000;
-        var banner = el('div', 'ctab-break-banner');
-        banner.style.display = 'none';
-        var display = el('div', 'ctab-clock-time', '20:00');
-        body.appendChild(banner);
-        body.appendChild(display);
-
-        function pad(n) { return (n < 10 ? '0' : '') + n; }
-        function paint() {
-            if (!cfg.running) {
-                banner.style.display = 'none';
-                var d = Math.floor(workMs / 1000);
-                display.textContent = pad(Math.floor(d / 60)) + ':' + pad(d % 60);
-                return;
-            }
-            var now = Date.now();
-            if (!cfg.endsAt || now >= Number(cfg.endsAt)) {
-                var nextPhase = cfg.phase === 'break' ? 'work' : 'break';
-                var nextEnds = now + (nextPhase === 'break' ? breakMs : workMs);
-                cfg.phase = nextPhase;
-                cfg.endsAt = nextEnds;
-                mutateTab(tab.id, function (t) {
-                    var w = findWidget(t, widget.id);
-                    if (w && w.config) { w.config.phase = nextPhase; w.config.endsAt = nextEnds; }
-                }, { rerender: false });
-            }
-            var rem = Math.max(0, Math.floor((Number(cfg.endsAt) - now) / 1000));
-            if (cfg.phase === 'break') {
-                banner.style.display = '';
-                banner.textContent = 'Look 20 ft away — ' + rem + 's';
-                display.textContent = '00:' + pad(rem);
-            } else {
-                banner.style.display = 'none';
-                display.textContent = pad(Math.floor(rem / 60)) + ':' + pad(rem % 60);
-            }
-        }
-        paint();
-        if (cfg.running) startTimer(tab.id, widget.id, paint, 1000);
-
-        var row = el('div', 'ctab-focus-row');
-        row.appendChild(btn('ctab-focus-btn', cfg.running ? 'Stop' : 'Start', function () {
-            mutateTab(tab.id, function (t) {
-                var w = findWidget(t, widget.id);
-                if (!w) return;
-                if (!w.config || typeof w.config !== 'object') w.config = {};
-                if (w.config.running) { w.config.running = false; w.config.endsAt = null; w.config.phase = 'work'; }
-                else { w.config.running = true; w.config.phase = 'work'; w.config.endsAt = Date.now() + workMs; }
-            }, { rerender: false });
-            rerenderWidgetBody(tab.id, widget.id);
-        }, { icon: cfg.running ? 'fa-stop' : 'fa-play' }));
-        body.appendChild(row);
-        body.appendChild(el('p', 'ctab-list-meta', 'Every 20 min, look 20 ft away for 20 sec.'));
-    }
-
-    // --- Wellness: Gratitude Prompt ---
-
-    var GRATITUDE_PROMPTS = [
-        'What went well today?',
-        'Who are you grateful for right now?',
-        'What is one small win from today?',
-        'What made you smile recently?',
-        'What are you looking forward to?',
-        'What is something you have that others might wish for?'
-    ];
-
-    function renderGratitudeWidget(body, tab, widget) {
-        var cfg = widget.config || {};
-        var len = GRATITUDE_PROMPTS.length;
-        var idx = (((Number(cfg.promptIndex) || 0) % len) + len) % len;
-        var todayK = localDateKey();
-        var entries = (cfg.entries && typeof cfg.entries === 'object') ? cfg.entries : {};
-        body.appendChild(el('p', 'ctab-quote-text', GRATITUDE_PROMPTS[idx]));
-        var area = document.createElement('textarea');
-        area.className = 'ctab-scratchpad ctab-gratitude-text';
-        area.placeholder = 'Write a line…';
-        area.value = typeof entries[todayK] === 'string' ? entries[todayK] : '';
-        area.addEventListener('input', function () {
-            var key = tab.id + ':' + widget.id;
-            if (scratchpadTimers[key]) clearTimeout(scratchpadTimers[key]);
-            scratchpadTimers[key] = setTimeout(function () {
-                delete scratchpadTimers[key];
-                mutateTab(tab.id, function (t) {
-                    var w = findWidget(t, widget.id);
-                    if (!w) return;
-                    if (!w.config || typeof w.config !== 'object') w.config = {};
-                    if (!w.config.entries || typeof w.config.entries !== 'object') w.config.entries = {};
-                    w.config.entries[todayK] = area.value;
-                }, { rerender: false });
-            }, 600);
-        });
-        body.appendChild(area);
-        body.appendChild(btn('ctab-add-btn', 'New prompt', function () {
-            mutateTab(tab.id, function (t) {
-                var w = findWidget(t, widget.id);
-                if (!w) return;
-                if (!w.config || typeof w.config !== 'object') w.config = {};
-                w.config.promptIndex = (idx + 1) % len;
-            }, { rerender: false });
-            rerenderWidgetBody(tab.id, widget.id);
-        }, { icon: 'fa-rotate' }));
-    }
-
     // --- Reading: Currently Reading ---
 
     function setupReadingWidget() {
@@ -2324,9 +2164,6 @@
 
     // Register the interactive widgets (function declarations above are hoisted).
     var INTERACTIVE_WIDGET_SPECS = [
-        { type: 'water', label: 'Water Tracker', icon: 'fa-glass-water', cat: 'wellness', desc: 'Count glasses toward a daily goal.', render: renderWaterWidget, setup: setupWaterWidget },
-        { type: 'eyebreak', label: '20-20-20 Breaks', icon: 'fa-eye', cat: 'wellness', desc: 'Eye-rest reminders while you work.', render: renderEyeBreakWidget },
-        { type: 'gratitude', label: 'Gratitude Prompt', icon: 'fa-heart', cat: 'wellness', desc: 'One line a day, with a rotating prompt.', render: renderGratitudeWidget },
         { type: 'reading', label: 'Currently Reading', icon: 'fa-book-open', cat: 'reading', desc: 'Track pages through a book.', render: renderReadingWidget, setup: setupReadingWidget },
         { type: 'flashcard', label: 'Flashcard of the Day', icon: 'fa-clone', cat: 'reading', desc: 'One card from your decks to review.', render: renderFlashcardWidget },
         { type: 'decision', label: 'Decision Spinner', icon: 'fa-dice', cat: 'tools', desc: 'Let chance pick from your options.', render: renderDecisionWidget },
@@ -2396,6 +2233,10 @@
         clearTimer(timerKey(tab.id, widget.id));
         while (body.firstChild) body.removeChild(body.firstChild);
         var spec = WIDGET_TYPES[widget.type];
+        if (['water', 'eyebreak', 'gratitude'].indexOf(widget.type) !== -1) {
+            body.appendChild(emptyMsg('This feature has been retired. Its saved data remains in your workspace and backups.'));
+            return;
+        }
         if (!spec) {
             // Forward compat: a widget type from a newer version — keep the data,
             // explain rather than crash or silently drop.

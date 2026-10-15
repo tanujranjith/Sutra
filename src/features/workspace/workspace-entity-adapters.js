@@ -721,12 +721,8 @@
         collect: function () {
           var workspace = sources().lifeWorkspace || {};
           var out = collectNamedCollections(workspace, [
-            'goals', 'habits', 'skills', 'fitness', 'calories', 'books', 'spending',
-            'recurringExpenses', 'journals'
+            'goals', 'habits', 'skills', 'books', 'spending', 'recurringExpenses'
           ], 'life', 'life');
-          if (workspace.wellness) {
-            out = out.concat(collectNamedCollections(workspace.wellness, ['checkIns', 'journalEntries'], 'wellness', 'life'));
-          }
           return out;
         },
         open: function () { return setView('life'); }

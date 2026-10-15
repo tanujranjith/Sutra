@@ -27,7 +27,7 @@
   // rather than nested inside their owning area object. stripSensitive()
   // additionally removes nested occurrences inside area values.
   var PRIVATE_TOP_LEVEL_KEYS = ['privateDocuments'];
-  var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress'];
+  var WELLNESS_TOP_LEVEL_FIELDS = ['wellness', 'wellnessTrends', 'sleep', 'mood', 'stress', 'fitness', 'calories', 'journals', 'sleepTracker', 'checkIns', 'journalEntries', 'latestCheckIn'];
   var FINANCIAL_TOP_LEVEL_FIELDS = ['applicationCosts', 'costs', 'financialAid', 'financialAidDeadlines', 'scholarships', 'runway', 'spending', 'income', 'tuition'];
   var PRIVATE_KEYS = new Set(PRIVATE_TOP_LEVEL_KEYS.map(function (key) { return key.toLowerCase(); }));
   var WELLNESS_KEYS = new Set(WELLNESS_TOP_LEVEL_FIELDS.map(function (key) { return key.toLowerCase(); }));
@@ -57,7 +57,7 @@
       mode: mode,
       areas: areas,
       allowLockedNotes: source.allowLockedNotes === true,
-      allowWellness: source.allowWellness === true,
+      allowWellness: false, // Retired features remain in backups, never in Assistant context.
       allowFinancial: source.allowFinancial === true,
       allowPrivateDocuments: source.allowPrivateDocuments === true
     };
@@ -103,6 +103,7 @@
       return value.map(function (entry) { return stripSensitive('', entry, permissions, options); })
         .filter(function (entry) { return entry !== undefined; });
     }
+    if (['water', 'eyebreak', 'gratitude'].indexOf(value.type) !== -1 && Object.prototype.hasOwnProperty.call(value, 'config')) return undefined;
     var locked = value.locked === true || value.isLocked === true;
     var allowedLockedFields = new Set(['id', 'noteId', 'title', 'locked', 'isLocked', 'type']);
     var scopedAccess = hasScopedLockedAccess(value, options);

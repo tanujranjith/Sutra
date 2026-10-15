@@ -700,11 +700,6 @@
             }
             const habits = Array.isArray(lw.habits) ? lw.habits : [];
             if (habits.length) out.habitCount = habits.length;
-            const checkIns = (lw.wellness && Array.isArray(lw.wellness.checkIns)) ? lw.wellness.checkIns : [];
-            if (checkIns.length) {
-                const latest = checkIns[checkIns.length - 1];
-                out.latestCheckIn = { mood: latest.mood || '', stress: latest.stress };
-            }
             const budgets = (lw.spendingBudgets && typeof lw.spendingBudgets === 'object') ? lw.spendingBudgets : {};
             if (Object.keys(budgets).length) out.budgetCategories = Object.keys(budgets).length;
             return Object.keys(out).length ? out : null;
@@ -825,7 +820,7 @@
             const tabs = api.getTabs() || [];
             const tab = tabs.find(t => t && t.id === id);
             if (!tab) return null;
-            const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).map(w => {
+            const widgets = (Array.isArray(tab.widgets) ? tab.widgets : []).filter(w => w && !['water', 'eyebreak', 'gratitude'].includes(w.type)).map(w => {
                 const cfg = (w && w.config) || {};
                 const entry = { type: w.type };
                 switch (w.type) {
@@ -5018,7 +5013,7 @@
             const meta = entity.metadata || {};
             const category = [meta.collection, meta.domain].join(' ');
             if (!permissions.allowFinancial && /cost|financial|invoice|finance|spend|expense|income|budget|scholarship|tuition/i.test(category)) return null;
-            if (!permissions.allowWellness && /wellness|checkins|journalentries|fitness|calories/i.test(category)) return null;
+            if (/wellness|checkins|journalentries|fitness|calories|sleeptracker|journals/i.test(category)) return null;
             if (!permissions.allowPrivateDocuments && /journals|documents/i.test(category)) return null;
             const isTask = entity.type === 'task' || entity.type === 'homework';
             if (taskDetailsOnly && !isTask) return null;

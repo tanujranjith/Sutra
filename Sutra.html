@@ -42,7 +42,7 @@
     <link rel="stylesheet" href="styles/features/workspace-lock.css?v=20260816-lock2">
     <link rel="stylesheet" href="styles/features/workspace-startup.css?v=20260925-hydration1">
 
-    
+
     <!-- Atelier offline icon system (replaces Font Awesome CDN). -->
     <script src="assets/vendor/jszip/jszip.min.js?v=3.10.1"></script>
     <!-- Defensive browser-storage wrapper. Loaded before all feature modules so
@@ -56,7 +56,7 @@
            - error-reporter.js: window.reportError + global error/rejection capture + diagnostics
            - dom-safety.js:     central sanitize/escape/sandbox helpers (no raw user HTML)
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
-    <script src="src/core/error-reporter.js?v=20261011-student-workflow1"></script>
+    <script src="src/core/error-reporter.js?v=20261015-reliability2"></script>
     <script src="src/core/dom-safety.js?v=20261012-native-paste1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
     <script src="src/core/migrations.js?v=20260913-energy-removal-migrations1"></script>
@@ -70,10 +70,10 @@
     <script src="src/domain/planner.js?v=20260710-planner1"></script>
     <script src="src/domain/mastery.js?v=20260710-mastery1"></script>
     <script src="src/domain/learning-engine.js?v=20260710-learning1"></script>
-    <script src="src/domain/student-life.js?v=20260913-energy-removal-life1"></script>
+    <script src="src/domain/student-life.js?v=20261015-reliability2"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
-    <script src="src/domain/assistant-permissions.js?v=20261015-caveat-fixes6"></script>
+    <script src="src/domain/assistant-permissions.js?v=20261015-reliability2"></script>
     <!-- Durable chat normalization must be ready before workspace hydration,
          even when the optional Assistant feature pack is disabled. -->
     <script src="src/features/assistant/assistant-core.js?v=20261015-caveat-fixes6"></script>
@@ -85,14 +85,14 @@
          app.js holds only the bridge). Protocol/crypto/merge run headless in
          Node tests. Load order: protocol first, engine last, all before app.js. -->
     <script src="src/sync/sync-protocol.js?v=20260913-energy-removal-sync1"></script>
-    <script src="src/sync/sync-crypto.js?v=20260917-sync-encryption1"></script>
+    <script src="src/sync/sync-crypto.js?v=20261015-reliability2"></script>
     <script src="src/sync/sync-projection.js?v=20260906-notificationlocal1"></script>
     <script src="src/sync/sync-diff.js?v=20260716-sync6"></script>
     <script src="src/sync/sync-merge.js?v=20260807-duress2"></script>
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
-    <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20261015-caveat-fixes6"></script>
+    <script src="src/sync/sync-engine.js?v=20261015-reliability2"></script>
+    <script src="src/config/feature-manifest.js?v=20261015-reliability2"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -116,8 +116,8 @@
       })();
     </script>
 
-    
-    
+
+
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
     <link rel="stylesheet" href="styles/base/styles.css?v=20261015-caveat-fixes6">
@@ -285,12 +285,12 @@
     <div class="app-container" inert aria-hidden="true">
         <!-- Mobile Sidebar Overlay -->
         <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
-        
+
         <!-- Sidebar Toggle Button -->
         <button class="sidebar-toggle-btn neumo-btn" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle Sidebar">
             <i class="fas fa-chevron-left"></i>
         </button>
-        
+
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar" role="navigation" aria-label="Pages and workspace tools">
             <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
@@ -387,15 +387,15 @@
                 <div class="timer-finish-at" id="timerFinishAt"></div>
                 <div class="timer-progress"><div class="timer-progress-bar" id="timerProgress"></div></div>
             </div>
-            
+
             <!-- Tags Filter -->
             <div class="sidebar-tags-filter" id="sidebarTagsFilter" style="display: none;">
                 <div class="sidebar-tags-filter-title">Filter by tags</div>
                 <div class="sidebar-tags-list" id="sidebarTagsList"></div>
             </div>
-            
+
             <div class="pages-list" id="pagesList"></div>
-            
+
             <div class="sidebar-new-page">
                 <div class="sidebar-new-page-row">
                     <button class="new-page-btn" onclick="createNewPage()" aria-label="Create new page" title="New Page">
@@ -2486,8 +2486,8 @@
                         <div class="life-header-actions">
                             <button class="neumo-btn" id="lifeQuickAddGoalBtn" type="button"><i class="fas fa-plus"></i> Goal</button>
                             <button class="neumo-btn" id="lifeQuickAddHabitBtn" type="button"><i class="fas fa-plus"></i> Habit</button>
-                            <button class="neumo-btn" id="lifeQuickAddSleepBtn" type="button"><i class="fas fa-plus"></i> Sleep</button>
-                            <button class="neumo-btn" id="lifeQuickJournalTopBtn" type="button"><i class="fas fa-book"></i> Quick Journal</button>
+
+
                         </div>
                     </div>
 
@@ -2510,8 +2510,8 @@
                         </div>
                     </div>
 
-                    <!-- Daily check-in card -->
-                    <div id="lifeCheckInCard" class="life-checkin-card"></div>
+                    <!-- Dedicated wellness features are retired; saved records remain portable. -->
+
 
                     <!-- Synthesized life cockpit — one place that reads your data -->
                     <section id="lifeCockpit" class="life-cockpit" aria-label="Life cockpit"></section>
@@ -2530,7 +2530,7 @@
                         <div class="life-dashboard-section-head">
                             <div>
                                 <h3>Core Life Tools</h3>
-                                <p>Keep the student essentials up front: goals, habits, sleep, money, and reflection.</p>
+                                <p>Keep the student essentials up front: goals, habits, money, and practical tools.</p>
                             </div>
                         </div>
                         <div class="life-nav-grid life-nav-grid--core">
@@ -2542,18 +2542,12 @@
                                 <i class="fas fa-check-double"></i>
                                 <span>Habit Tracker</span>
                             </button>
-                            <button class="life-nav-btn" data-life-page="sleep">
-                                <i class="fas fa-moon"></i>
-                                <span>Sleep Tracker</span>
-                            </button>
+
                             <button class="life-nav-btn" data-life-page="spending">
                                 <i class="fas fa-wallet"></i>
                                 <span>Spending Tracker</span>
                             </button>
-                            <button class="life-nav-btn" data-life-page="journal">
-                                <i class="fas fa-journal-whills"></i>
-                                <span>Daily Journal</span>
-                            </button>
+
                         </div>
                     </section>
 
@@ -2569,14 +2563,8 @@
                                 <i class="fas fa-brain"></i>
                                 <span>Skills Tracker</span>
                             </button>
-                            <button class="life-nav-btn" data-life-page="fitness">
-                                <i class="fas fa-dumbbell"></i>
-                                <span>Fitness Tracker</span>
-                            </button>
-                            <button class="life-nav-btn" data-life-page="calories">
-                                <i class="fas fa-fire"></i>
-                                <span>Calorie Tracker</span>
-                            </button>
+
+
                             <button class="life-nav-btn" data-life-page="calculator">
                                 <i class="fas fa-calculator"></i>
                                 <span>Quick Calculator</span>
@@ -2585,10 +2573,7 @@
                                 <i class="fas fa-book-open"></i>
                                 <span>Book Tracker</span>
                             </button>
-                            <button class="life-nav-btn" data-life-page="wellness">
-                                <i class="fas fa-spa"></i>
-                                <span>Wellness &amp; Reset</span>
-                            </button>
+
                         </div>
                     </section>
                 </div>
@@ -2676,141 +2661,6 @@
                     </div>
                 </div>
 
-                <!-- Fitness Tracker page -->
-                <div id="lifePage-fitness" class="life-subpage" style="display:none;">
-                    <button class="life-back-btn" data-life-back><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
-                    <div class="glass-card academic-module-card">
-                        <div class="academic-module-head">
-                            <h3>Fitness Tracker</h3>
-                            <button class="neumo-btn" id="lifeAddFitnessBtn" type="button">+ Add Fitness Entry</button>
-                        </div>
-                        <div class="college-table-wrap">
-                            <table class="college-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Activity</th>
-                                        <th>Duration (min)</th>
-                                        <th>Intensity</th>
-                                        <th>Notes</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="lifeFitnessTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Calorie Tracker page -->
-                <div id="lifePage-calories" class="life-subpage" style="display:none;">
-                    <button class="life-back-btn" data-life-back><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
-                    <div class="glass-card academic-module-card">
-                        <div class="academic-module-head">
-                            <h3>Calorie Tracker</h3>
-                            <button class="neumo-btn" id="lifeAddCalorieBtn" type="button">+ Add Entry</button>
-                        </div>
-                        <div class="college-table-wrap">
-                            <table class="college-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Meal</th>
-                                        <th>Calories</th>
-                                        <th>Protein (g)</th>
-                                        <th>Carbs (g)</th>
-                                        <th>Fat (g)</th>
-                                        <th>Notes</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="lifeCaloriesTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sleep Tracker page -->
-                <div id="lifePage-sleep" class="life-subpage" style="display:none;">
-                    <button class="life-back-btn" data-life-back><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
-
-                    <div class="life-sleep-summary-grid summary-grid">
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Last Night</div>
-                            <div class="summary-value" id="lifeSleepLastNightValue">&mdash;</div>
-                            <div class="summary-meta" id="lifeSleepLastNightMeta">Add your first entry to see last-night sleep.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">7-Day Average</div>
-                            <div class="summary-value" id="lifeSleepAvg7Value">&mdash;</div>
-                            <div class="summary-meta">Average sleep duration in the last 7 days.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">30-Day Average</div>
-                            <div class="summary-value" id="lifeSleepAvg30Value">&mdash;</div>
-                            <div class="summary-meta">Average sleep duration in the last 30 days.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Goal Progress</div>
-                            <div class="summary-value" id="lifeSleepGoalProgressValue">0%</div>
-                            <div class="summary-meta">Nights that hit your sleep goal this week.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Trend</div>
-                            <div class="summary-value" id="lifeSleepTrendValue">Not enough data</div>
-                            <div class="summary-meta" id="lifeSleepTrendMeta">Trend compares last 7 days with the prior 7 days.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Consistency</div>
-                            <div class="summary-value" id="lifeSleepConsistencyValue">0%</div>
-                            <div class="summary-meta" id="lifeSleepConsistencyMeta">Goal streak: 0 nights</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Sleep Quality</div>
-                            <div class="summary-value" id="lifeSleepQualityValue">&mdash;</div>
-                            <div class="summary-meta" id="lifeSleepQualityMeta">Average rating over the last 30 days.</div>
-                        </div>
-                        <div class="glass-card summary-card">
-                            <div class="summary-label">Avg Bedtime / Wake</div>
-                            <div class="summary-value" id="lifeSleepBedtimeWakeValue">&mdash; &rarr; &mdash;</div>
-                            <div class="summary-meta" id="lifeSleepBedtimeWakeMeta">Average bedtime and wake time over the last 14 days.</div>
-                        </div>
-                    </div>
-
-                    <div class="glass-card academic-module-card life-sleep-goal-card">
-                        <div class="life-sleep-goal-row">
-                            <label for="lifeSleepTargetMinutesInput"><strong>Sleep Goal (minutes)</strong></label>
-                            <input id="lifeSleepTargetMinutesInput" type="number" min="120" max="960" step="15" class="college-input" value="480" />
-                            <span class="life-sleep-goal-label" id="lifeSleepTargetMinutesLabel">8h</span>
-                        </div>
-                    </div>
-
-                    <div class="glass-card academic-module-card">
-                        <div class="academic-module-head">
-                            <h3>Sleep Log</h3>
-                            <button class="neumo-btn" id="lifeAddSleepBtn" type="button">+ Add Entry</button>
-                        </div>
-                        <div class="college-table-wrap">
-                            <table class="college-table life-sleep-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Bedtime</th>
-                                        <th>Fell Asleep</th>
-                                        <th>Wake</th>
-                                        <th>Duration</th>
-                                        <th>Quality (1-5)</th>
-                                        <th>Wake-Ups</th>
-                                        <th>Tags</th>
-                                        <th>Notes</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="lifeSleepTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- Calculator page -->
                 <div id="lifePage-calculator" class="life-subpage" tabindex="0" role="region" aria-label="Quick Calculator" style="display:none;">
@@ -2953,204 +2803,6 @@
                     <div id="lifeSpendingSummary" style="display:none;"></div>
                 </div>
 
-                <!-- Wellness / Reset page -->
-                <div id="lifePage-wellness" class="life-subpage" style="display:none;">
-                    <button class="life-back-btn" data-life-back><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
-                    <div class="wellness-header">
-                        <div>
-                            <div class="eyebrow">Wellness</div>
-                            <h2>Mind &amp; Wellness</h2>
-                            <p class="wellness-subcopy">A calm space for a quick check-in, a guided reset, and private reflection.</p>
-                        </div>
-                    </div>
-
-                    <div class="wellness-tabs" role="tablist" aria-label="Wellness sections">
-                        <button class="wellness-tab is-active" data-wellness-tab="checkin" role="tab" aria-selected="true" type="button">Today's Check-In</button>
-                        <button class="wellness-tab" data-wellness-tab="breathing" role="tab" aria-selected="false" type="button">Reset Breathing</button>
-                        <button class="wellness-tab" data-wellness-tab="journal" role="tab" aria-selected="false" type="button">Reflection</button>
-                        <button class="wellness-tab" data-wellness-tab="patterns" role="tab" aria-selected="false" type="button">Patterns</button>
-                    </div>
-
-                    <!-- Check-In panel -->
-                    <div class="wellness-panel is-active" data-wellness-panel="checkin" role="tabpanel">
-                        <div class="glass-card wellness-card">
-                            <div class="wellness-card-head">
-                                <h3>Today's Check-In</h3>
-                                <span class="wellness-card-meta" id="wellnessCheckInMeta">No entries yet today.</span>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label class="wellness-label">Mood</label>
-                                <div class="wellness-mood-row" id="wellnessMoodRow" role="radiogroup" aria-label="Select mood"></div>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label for="wellnessStressInput" class="wellness-label">Stress level <span class="wellness-slider-value" id="wellnessStressValue">5</span></label>
-                                <input id="wellnessStressInput" class="wellness-slider" type="range" min="0" max="10" step="1" value="5" aria-label="Stress level from 0 to 10">
-                                <div class="wellness-slider-marks"><span>Calm</span><span>Tense</span></div>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label class="wellness-label">Sleep quality</label>
-                                <div class="wellness-sleep-row" id="wellnessSleepRow" role="radiogroup" aria-label="Select sleep quality"></div>
-                            </div>
-
-                            <div class="wellness-field">
-                                <label for="wellnessNoteInput" class="wellness-label">Optional note</label>
-                                <textarea id="wellnessNoteInput" class="wellness-textarea" rows="3" maxlength="600" placeholder="Anything on your mind?"></textarea>
-                            </div>
-
-                            <div class="wellness-actions">
-                                <button id="wellnessSaveCheckInBtn" class="neumo-btn wellness-primary-btn" type="button">Save Check-In</button>
-                            </div>
-
-                            <div class="wellness-recent" id="wellnessRecentCheckIns" aria-live="polite"></div>
-                        </div>
-                    </div>
-
-                    <!-- Breathing panel -->
-                    <div class="wellness-panel" data-wellness-panel="breathing" role="tabpanel">
-                        <div class="glass-card wellness-card wellness-breathing-card">
-                            <div class="wellness-card-head">
-                                <h3>Reset Breathing</h3>
-                                <span class="wellness-card-meta" id="wellnessBreathSessionsMeta">Sessions: 0</span>
-                            </div>
-
-                            <div class="wellness-breath-options" role="group" aria-label="Breathing options">
-                                <div class="wellness-breath-option-group">
-                                    <span class="wellness-label">Pattern</span>
-                                    <div class="wellness-chip-row" id="wellnessPatternChips" role="radiogroup" aria-label="Breathing pattern"></div>
-                                </div>
-                                <div class="wellness-breath-option-group">
-                                    <span class="wellness-label">Duration</span>
-                                    <div class="wellness-chip-row" id="wellnessDurationChips" role="radiogroup" aria-label="Session duration"></div>
-                                </div>
-                                <div class="wellness-breath-option-group">
-                                    <span class="wellness-label">Comfort</span>
-                                    <label class="wellness-toggle">
-                                        <input type="checkbox" id="wellnessReducedMotionToggle">
-                                        <span>Reduced motion</span>
-                                    </label>
-                                    <label class="wellness-toggle">
-                                        <input type="checkbox" id="wellnessSoundToggle">
-                                        <span>Sound</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div class="wellness-orb-stage" id="wellnessOrbStage" aria-live="polite">
-                                <div class="wellness-orb-aura" aria-hidden="true"></div>
-                                <div class="wellness-orb-ripple wellness-orb-ripple--1" aria-hidden="true"></div>
-                                <div class="wellness-orb-ripple wellness-orb-ripple--2" aria-hidden="true"></div>
-                                <div class="wellness-orb" id="wellnessOrb" aria-hidden="true">
-                                    <div class="wellness-orb-core"></div>
-                                </div>
-                                <div class="wellness-orb-cue" id="wellnessOrbCue" role="status">Ready</div>
-                                <div class="wellness-orb-timer" id="wellnessOrbTimer">--:--</div>
-                            </div>
-
-                            <div class="wellness-breath-controls">
-                                <button id="wellnessBreathStartBtn" class="neumo-btn wellness-primary-btn" type="button" aria-label="Start breathing exercise">Start</button>
-                                <button id="wellnessBreathPauseBtn" class="neumo-btn" type="button" aria-label="Pause breathing exercise" disabled>Pause</button>
-                                <button id="wellnessBreathResumeBtn" class="neumo-btn" type="button" aria-label="Resume breathing exercise" hidden>Resume</button>
-                                <button id="wellnessBreathEndBtn" class="neumo-btn" type="button" aria-label="End breathing exercise" disabled>End</button>
-                            </div>
-
-                            <section class="wellness-audio-panel is-disabled" id="wellnessAudioPanel" aria-label="Breathing audio settings" aria-hidden="true">
-                                <div class="wellness-audio-head">
-                                    <span class="wellness-audio-title">Sound</span>
-                                    <span class="wellness-audio-sub">Optional. Off by default. Generated locally — no streaming.</span>
-                                </div>
-                                <p class="wellness-audio-blocked-hint" id="wellnessAudioBlockedHint" hidden>Tap Start to enable sound.</p>
-                                <p class="wellness-audio-blocked-hint" id="wellnessAudioUnsupportedHint" hidden>Audio is not supported in this browser.</p>
-                                <div class="wellness-audio-grid">
-                                    <div class="wellness-audio-row">
-                                        <span class="wellness-label">Ambient</span>
-                                        <div class="wellness-chip-row" id="wellnessAmbientChips" role="radiogroup" aria-label="Ambient sound"></div>
-                                    </div>
-                                    <div class="wellness-audio-row wellness-audio-row--inline">
-                                        <label class="wellness-toggle">
-                                            <input type="checkbox" id="wellnessBreathingCuesToggle">
-                                            <span>Breathing cues</span>
-                                        </label>
-                                        <button type="button" id="wellnessMuteBtn" class="neumo-btn wellness-mute-btn" aria-pressed="false" aria-label="Mute audio">Mute</button>
-                                    </div>
-                                    <div class="wellness-audio-row">
-                                        <label for="wellnessVolumeInput" class="wellness-label">Volume <span class="wellness-slider-value" id="wellnessVolumeValue">35%</span></label>
-                                        <input id="wellnessVolumeInput" class="wellness-slider" type="range" min="0" max="1" step="0.01" value="0.35" aria-label="Audio volume from 0 to 100 percent">
-                                    </div>
-                                </div>
-                            </section>
-
-                            <p class="wellness-disclaimer">
-                                Sutra is not a medical or crisis service. If you are in immediate danger or may hurt yourself, contact emergency services or a crisis hotline right away.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Reflection / Journal panel -->
-                    <div class="wellness-panel" data-wellness-panel="journal" role="tabpanel">
-                        <div class="glass-card wellness-card">
-                            <div class="wellness-card-head">
-                                <h3>Reflection</h3>
-                                <span class="wellness-card-meta">Stays on this device.</span>
-                            </div>
-                            <div class="wellness-field">
-                                <span class="wellness-label">Choose a prompt</span>
-                                <div class="wellness-chip-row" id="wellnessPromptChips" role="radiogroup" aria-label="Reflection prompt"></div>
-                            </div>
-                            <div class="wellness-field">
-                                <label for="wellnessJournalBody" class="wellness-label">Your reflection</label>
-                                <textarea id="wellnessJournalBody" class="wellness-textarea wellness-textarea--tall" rows="6" maxlength="4000" placeholder="Write freely. Nothing leaves this device."></textarea>
-                            </div>
-                            <div class="wellness-actions">
-                                <button id="wellnessSaveJournalBtn" class="neumo-btn wellness-primary-btn" type="button">Save Entry</button>
-                            </div>
-                            <div class="wellness-journal-list" id="wellnessJournalList" aria-live="polite"></div>
-                        </div>
-                    </div>
-
-                    <!-- Patterns panel -->
-                    <div class="wellness-panel" data-wellness-panel="patterns" role="tabpanel">
-                        <div class="glass-card wellness-card">
-                            <div class="wellness-card-head">
-                                <h3>Patterns</h3>
-                                <span class="wellness-card-meta">Lightweight trends from your check-ins.</span>
-                            </div>
-                            <div class="wellness-pattern-grid" id="wellnessPatternGrid"></div>
-                            <div class="wellness-empty" id="wellnessPatternsEmpty" hidden>
-                                Add a few check-ins to start seeing patterns. Three or more entries unlocks a weekly view.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Daily Journal page -->
-                <div id="lifePage-journal" class="life-subpage" style="display:none;">
-                    <button class="life-back-btn" data-life-back><i class="fas fa-arrow-left"></i> Back to Dashboard</button>
-                    <div class="glass-card academic-module-card">
-                        <div class="academic-module-head">
-                            <h3>Daily Journal</h3>
-                            <button class="neumo-btn" id="lifeQuickJournalBtn" type="button">Quick Create Today</button>
-                        </div>
-                        <!-- Reflection prompts + non-medical disclaimer (rendered by renderLifeJournalPrompts) -->
-                        <div id="lifeJournalPrompts"></div>
-                        <div class="college-table-wrap">
-                            <table class="college-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Title</th>
-                                        <th>Mood &amp; signals</th>
-                                        <th>Entry</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="lifeJournalTableBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
 
             </section>
 
@@ -5545,7 +5197,7 @@
                     <span class="feature-toggle-icon"><i class="fas fa-seedling" aria-hidden="true"></i></span>
                     <span class="feature-toggle-copy">
                         <span class="feature-toggle-title">Life</span>
-                        <span class="feature-toggle-description">SMART goals, habits, skills, spending, books, fitness, and journal.</span>
+                        <span class="feature-toggle-description">Goals, habits, skills, spending, books, and practical tools.</span>
                     </span>
                     <span class="feature-toggle-switch" aria-hidden="true"><span class="feature-toggle-switch-handle"></span></span>
                 </label>
@@ -5888,7 +5540,7 @@
     <div class="theme-panel" id="themePanel">
         <div class="theme-panel-header">
             <h3 class="theme-panel-title">Theme Settings</h3>
-            
+
             <div class="apply-mode-toggle">
                 <button class="mode-btn active" onclick="setApplyMode('current', event)">
                     Current Page Only
@@ -7044,7 +6696,6 @@
                         <option value="oneonone">1:1 Check-In</option>
                         <option value="project">Project Plan</option>
                         <option value="todo">To-Do List</option>
-                        <option value="journal">Daily Journal</option>
                         <option value="weekly">Weekly Review</option>
                         <option value="notes">Study Notes</option>
                     </optgroup>
@@ -7681,7 +7332,7 @@
         <button onclick="removeLink()" title="Remove Link" aria-label="Remove link"><i class="fas fa-unlink"></i></button>
     </div>
 
-    
+
 
     <!-- Small Chatbot (local-only, uses user's own provider API keys) -->
     <link rel="stylesheet" href="styles/legacy/workspace-overrides.css?v=20260703-voice1">
@@ -7839,7 +7490,7 @@
 
     <link rel="stylesheet" href="styles/legacy/refinement.css?v=20260616-cssextract1">
 
-    
+
 
     <style id="active-view-hard-guard">
         .view {
@@ -7912,7 +7563,7 @@
     <!-- Planning engine — deterministic scheduling, deadline ranking,
          rescheduling, and daily plan generation for the command center.
          No DOM coupling; pure data transformations on provided inputs. -->
-    <script src="src/features/academic/planning-engine.js?v=20260616-plan1"></script>
+    <script src="src/features/academic/planning-engine.js?v=20261015-reliability2"></script>
     <!-- Starter Packs: local, declarative workspace seeds (window.SUTRA_STARTER_PACKS).
          Pure data, no logic; the app.js controller previews + applies on demand. -->
     <script src="src/features/workspace/starter-packs.data.js?v=20260619-packs1"></script>
@@ -7948,7 +7599,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261015-caveat-fixes6"></script>
+    <script src="src/core/app.js?v=20261015-reliability2"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7970,7 +7621,7 @@
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
-    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261015-caveat-fixes6"></script>
+    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261015-reliability2"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
     <script src="src/features/workspace/slides.js?v=20261004-slides-lines-menus1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
@@ -7999,7 +7650,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20261001-mobile-data-actions2"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20261015-caveat-fixes6"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20261015-reliability2"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>

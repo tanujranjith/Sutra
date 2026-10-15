@@ -395,7 +395,7 @@
             summary: 'Beyond academics, Sutra includes a College workspace (applications, essays, deadlines), a Life workspace, and a Business workspace.',
             body: [
                 '- **College** — track applications, essays, scholarships, and college deadlines and tasks.',
-                '- **Life** — a personal workspace for life tracking and journaling.',
+                '- **Life** — a personal workspace for goals, habits, spending, books, and practical tools.',
                 '- **Business** — a professional/business workspace for work projects.',
                 'All three persist in your workspace and travel inside a `.sutra` export like everything else.'
             ],

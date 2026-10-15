@@ -5859,23 +5859,17 @@ function populateProgressDashboard() {
             normalized.skills = Array.isArray(source.skills)
                 ? source.skills.map(row => createLifeSkillRow(row))
                 : defaults.skills;
-            normalized.fitness = Array.isArray(source.fitness)
-                ? source.fitness.map(row => createLifeFitnessRow(row))
-                : defaults.fitness;
-            normalized.calories = Array.isArray(source.calories)
-                ? source.calories.map(row => createLifeCalorieRow(row))
-                : defaults.calories;
+            normalized.fitness = cloneSerializable(source.fitness, defaults.fitness);
+            normalized.calories = cloneSerializable(source.calories, defaults.calories);
             normalized.books = Array.isArray(source.books)
                 ? source.books.map(row => createLifeBookRow(row))
                 : defaults.books;
             normalized.spending = Array.isArray(source.spending)
                 ? source.spending.map(row => createLifeSpendingRow(row))
                 : defaults.spending;
-            normalized.journals = Array.isArray(source.journals)
-                ? source.journals.map(row => createLifeJournalRow(row))
-                : defaults.journals;
-            normalized.sleepTracker = normalizeLifeSleepTracker(source.sleepTracker || defaults.sleepTracker);
-            normalized.wellness = normalizeWellnessData(source.wellness || defaults.wellness);
+            normalized.journals = cloneSerializable(source.journals, defaults.journals);
+            normalized.sleepTracker = cloneSerializable(source.sleepTracker, defaults.sleepTracker);
+            normalized.wellness = cloneSerializable(source.wellness, defaults.wellness);
             if (source.onboardingSeeded !== false) {
                 normalized.goals = normalized.goals.filter(row => {
                     const title = String(row.title || '').trim();
@@ -5892,14 +5886,6 @@ function populateProgressDashboard() {
                     const name = String(row.name || '').trim();
                     return name !== 'Public speaking';
                 });
-                normalized.fitness = normalized.fitness.filter(row => {
-                    const activity = String(row.activity || '').trim();
-                    return activity !== 'Run';
-                });
-                normalized.calories = normalized.calories.filter(row => {
-                    const meal = String(row.meal || '').trim();
-                    return meal !== 'Lunch';
-                });
                 normalized.books = normalized.books.filter(row => {
                     const title = String(row.title || '').trim();
                     return title !== 'Atomic Habits';
@@ -5907,10 +5893,6 @@ function populateProgressDashboard() {
                 normalized.spending = normalized.spending.filter(row => {
                     const category = String(row.category || '').trim();
                     return category !== 'Food';
-                });
-                normalized.journals = normalized.journals.filter(row => {
-                    const content = String(row.content || '').trim();
-                    return content !== 'Today I made progress on my weekly priorities.';
                 });
             }
             return normalized;
@@ -9421,7 +9403,7 @@ function populateProgressDashboard() {
                 analyzeEssayReuse: essay => engine.analyzeEssayReuse(collegeAppWorkspace.essayOrganizer, essay),
                 compareDecisionMatrix: () => engine.scoreDecisionMatrix(collegeAppWorkspace.decisionMatrix),
                 getFinancialRunway: (options = {}) => engine.computeFinancialRunway(getSutra2DomainSnapshot(), options),
-                getWellnessTrends: (options = {}) => engine.getWellnessTrends(getSutra2DomainSnapshot(), options),
+                getWellnessTrends: () => ({ available: false, reason: 'retired', signals: [] }),
                 previewEmergencyWeek: (options = {}) => engine.buildEmergencyWeek(getSutra2DomainSnapshot(), options),
                 applyEmergencyWeek(options = {}) {
                     requireReviewedStudentLife(options, 'Emergency Week plans');
@@ -9794,7 +9776,7 @@ function populateProgressDashboard() {
                     return { changedIds: [`assistantPermissions.areas.${name}`], warnings: [], undo: null, persistenceStatus: 'scheduled' };
                 },
                 setSensitive(area, allowed) {
-                    const keys = { locked_notes: 'allowLockedNotes', wellness: 'allowWellness', financial: 'allowFinancial', private_documents: 'allowPrivateDocuments' };
+                    const keys = { locked_notes: 'allowLockedNotes', financial: 'allowFinancial', private_documents: 'allowPrivateDocuments' };
                     const key = keys[String(area || '')];
                     if (!key) throw new Error('Unknown sensitive assistant area.');
                     ensureAssistantPermissionState()[key] = allowed === true;
@@ -13277,7 +13259,7 @@ function populateProgressDashboard() {
                 title: 'Add Habit',
                 fields: [
                     { key: 'name', label: 'Habit Name', type: 'text', placeholder: 'e.g. Read 30 minutes' },
-                    { key: 'category', label: 'Category', type: 'text', placeholder: 'e.g. Health, Learning, Mindfulness' },
+                    { key: 'category', label: 'Category', type: 'text', placeholder: 'e.g. Learning, Projects, Personal' },
                     { key: 'targetPerWeek', label: 'Target per Week', type: 'number', min: 1, max: 14, default: 7, placeholder: '7' }
                 ],
                 createFn: seed => createLifeHabitRow(seed)
@@ -13390,6 +13372,7 @@ function populateProgressDashboard() {
         let _addItemModalContext = null;
 
         function openAddItemModal(collectionKey, workspace) {
+            if (workspace === 'life' && ['fitness', 'calories', 'journals', 'sleepEntries'].includes(collectionKey)) return;
             const config = ADD_ITEM_FIELD_CONFIGS[collectionKey];
             if (!config) return;
             const modal = document.getElementById('addItemModal');
@@ -15600,6 +15583,7 @@ function populateProgressDashboard() {
         }
 
         function addLifeRow(collectionKey) {
+            if (['fitness', 'calories', 'journals', 'sleepEntries'].includes(collectionKey)) return;
             openAddItemModal(collectionKey, 'life');
         }
 
@@ -15873,54 +15857,6 @@ function populateProgressDashboard() {
             `).join('');
         }
 
-        function renderLifeFitnessRows() {
-            const body = document.getElementById('lifeFitnessTableBody');
-            if (!body) return;
-            const rows = getLifeRows('fitness');
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="6">No fitness logs yet. Add workouts and activity sessions.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="activity" value="${escapeHtml(String(row.activity || ''))}" placeholder="Activity"></td>
-                    <td><input type="number" min="0" class="college-input" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="durationMinutes" value="${escapeHtml(String(row.durationMinutes || 0))}"></td>
-                    <td>
-                        <select class="college-select" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="intensity">
-                            <option value="light" ${row.intensity === 'light' ? 'selected' : ''}>Light</option>
-                            <option value="moderate" ${row.intensity === 'moderate' ? 'selected' : ''}>Moderate</option>
-                            <option value="high" ${row.intensity === 'high' ? 'selected' : ''}>High</option>
-                        </select>
-                    </td>
-                    <td><textarea class="college-textarea" rows="1" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="notes" placeholder="Notes">${escapeHtml(String(row.notes || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="fitness" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete fitness row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
-        function renderLifeCalorieRows() {
-            const body = document.getElementById('lifeCaloriesTableBody');
-            if (!body) return;
-            const rows = getLifeRows('calories').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="8">No calorie entries yet. Add meals to track daily intake.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="meal" value="${escapeHtml(String(row.meal || ''))}" placeholder="Meal"></td>
-                    <td><input type="number" min="0" step="1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="calories" value="${escapeHtml(String(Math.max(0, Math.round(normalizeFiniteNumber(row.calories, 0)))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="protein" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.protein, 0))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="carbs" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.carbs, 0))))}"></td>
-                    <td><input type="number" min="0" step="0.1" class="college-input" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="fat" value="${escapeHtml(String(Math.max(0, normalizeFiniteNumber(row.fat, 0))))}"></td>
-                    <td><textarea class="college-textarea" rows="1" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="notes" placeholder="Notes">${escapeHtml(String(row.notes || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="calories" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete calorie row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
         function renderLifeBookRows() {
             const body = document.getElementById('lifeBooksTableBody');
             if (!body) return;
@@ -16038,31 +15974,6 @@ function populateProgressDashboard() {
             }
         }
 
-        function renderLifeJournalRows() {
-            const body = document.getElementById('lifeJournalTableBody');
-            if (!body) return;
-            const rows = getLifeRows('journals').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-            if (!rows.length) {
-                body.innerHTML = '<tr class="college-empty-row"><td colspan="5">No journal entries yet. Use Quick Create to add today\'s entry.</td></tr>';
-                return;
-            }
-            body.innerHTML = rows.map(row => `
-                <tr>
-                    <td><input type="date" class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="date" value="${escapeHtml(String(row.date || ''))}"></td>
-                    <td><input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="title" value="${escapeHtml(String(row.title || ''))}" placeholder="Title"></td>
-                    <td>
-                        <input class="college-input" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="mood" value="${escapeHtml(String(row.mood || ''))}" placeholder="Mood">
-                        <div class="life-journal-signals">
-                            <input type="number" min="0" max="10" class="college-input college-essay-meta-num" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="stress" value="${row.stress == null ? '' : escapeHtml(String(row.stress))}" placeholder="Stress" aria-label="Stress 0-10 (optional)">
-                        </div>
-                        <input class="college-input college-essay-next" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="tags" value="${escapeHtml((row.tags || []).join(', '))}" placeholder="Tags (comma-separated)" aria-label="Tags">
-                    </td>
-                    <td><textarea class="college-textarea" rows="2" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" data-life-field="content" placeholder="Entry">${escapeHtml(String(row.content || ''))}</textarea></td>
-                    <td class="college-row-actions"><button type="button" class="icon-btn life-delete-row-btn" data-life-collection="journals" data-life-row-id="${escapeHtml(String(row.id))}" aria-label="Delete journal row"><i class="fas fa-trash"></i></button></td>
-                </tr>
-            `).join('');
-        }
-
         // ---- Spending budgets + recurring expenses ----
         function renderLifeBudgets() {
             const el = document.getElementById('lifeBudgetsCard');
@@ -16162,31 +16073,6 @@ function populateProgressDashboard() {
         }
 
         // ---- Journal reflection prompts + non-medical disclaimer ----
-        const LIFE_JOURNAL_PROMPTS = [
-            'What went well today?',
-            'What felt heavy today?',
-            'One thing I am grateful for',
-            'What will I do differently tomorrow?',
-            'How did I take care of myself today?',
-            'What am I avoiding, and why?'
-        ];
-        function renderLifeJournalPrompts() {
-            const el = document.getElementById('lifeJournalPrompts');
-            if (!el) return;
-            el.innerHTML = `
-                <div class="life-journal-promptbar">
-                    ${LIFE_JOURNAL_PROMPTS.map((p, i) => `<button type="button" class="neumo-btn neumo-btn--ghost life-prompt-btn" data-life-action="journal-prompt" data-cc-target="${i}">${escapeHtml(p)}</button>`).join('')}
-                </div>
-                <div class="life-wellness-disclaimer"><i class="fas fa-circle-info" aria-hidden="true"></i><span>These reflection tools are for personal journaling only &mdash; not medical, psychological, or crisis advice. If you&rsquo;re struggling, please reach out to a qualified professional or a local crisis line.</span></div>`;
-        }
-        function createLifeJournalFromPrompt(idx) {
-            const prompt = LIFE_JOURNAL_PROMPTS[Number(idx)];
-            if (!prompt) return;
-            getLifeRows('journals').unshift(createLifeJournalRow({ date: today(), title: prompt, prompt, content: '' }));
-            persistAppData(); renderLifeWorkspace();
-            showToast('Journal prompt added.');
-        }
-
         function renderLifeSpendingSummary() {
             const summaryEl = document.getElementById('lifeSpendingSummary');
             const monthlyValueEl = document.getElementById('lifeMonthlySpendValue');
@@ -16216,468 +16102,8 @@ function populateProgressDashboard() {
             }
         }
 
-        function getLifeSleepTrackerState() {
-            if (!lifeWorkspace || typeof lifeWorkspace !== 'object') {
-                lifeWorkspace = getDefaultLifeWorkspace();
-            }
-            if (!lifeWorkspace.sleepTracker || typeof lifeWorkspace.sleepTracker !== 'object') {
-                lifeWorkspace.sleepTracker = getDefaultLifeSleepTracker();
-            }
-            lifeWorkspace.sleepTracker = normalizeLifeSleepTracker(lifeWorkspace.sleepTracker);
-            return lifeWorkspace.sleepTracker;
-        }
-
-        function getLifeSleepEntries() {
-            const tracker = getLifeSleepTrackerState();
-            if (!Array.isArray(tracker.entries)) tracker.entries = [];
-            return tracker.entries;
-        }
-
-        function formatLifeSleepDuration(totalMinutes) {
-            const mins = Math.max(0, Math.round(normalizeFiniteNumber(totalMinutes, 0)));
-            if (!mins) return '\u2014';
-            const hours = Math.floor(mins / 60);
-            const rem = mins % 60;
-            if (hours && rem) return `${hours}h ${rem}m`;
-            if (hours) return `${hours}h`;
-            return `${rem}m`;
-        }
-
-        function formatLifeSleepClock(minutesValue) {
-            if (!Number.isFinite(minutesValue)) return '\u2014';
-            return formatTimelineAxisLabelForMinutes(minutesValue);
-        }
-
-        function parseLifeDateKeyToDate(value) {
-            const key = String(value || '').trim();
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
-            const dateObj = parseDate(key);
-            if (!(dateObj instanceof Date) || Number.isNaN(dateObj.getTime())) return null;
-            dateObj.setHours(0, 0, 0, 0);
-            return dateObj;
-        }
-
-        function averageLifeSleepMinutes(entries) {
-            if (!Array.isArray(entries) || !entries.length) return null;
-            const values = entries
-                .map(entry => Math.max(0, Math.round(normalizeFiniteNumber(entry.totalSleepMinutes, 0))))
-                .filter(value => value > 0);
-            if (!values.length) return null;
-            return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-        }
-
-        function averageLifeClockMinutes(values) {
-            if (!Array.isArray(values) || !values.length) return null;
-            let sin = 0;
-            let cos = 0;
-            values.forEach(value => {
-                if (!Number.isFinite(value)) return;
-                const normalized = ((value % (24 * 60)) + (24 * 60)) % (24 * 60);
-                const angle = (normalized / (24 * 60)) * (Math.PI * 2);
-                sin += Math.sin(angle);
-                cos += Math.cos(angle);
-            });
-            if (sin === 0 && cos === 0) return null;
-            let angle = Math.atan2(sin, cos);
-            if (angle < 0) angle += Math.PI * 2;
-            return Math.round((angle / (Math.PI * 2)) * (24 * 60)) % (24 * 60);
-        }
-
-        function getLifeCircularMinuteDistance(a, b) {
-            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-            const fullDay = 24 * 60;
-            const diff = Math.abs(a - b) % fullDay;
-            return diff > (fullDay / 2) ? fullDay - diff : diff;
-        }
-
-        function getLifeSleepAnalytics() {
-            const tracker = getLifeSleepTrackerState();
-            const allEntries = getLifeSleepEntries().slice().sort((a, b) => {
-                const byDate = String(b.date || '').localeCompare(String(a.date || ''));
-                if (byDate !== 0) return byDate;
-                return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
-            });
-
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
-            const recentEntries = (days) => {
-                const start = new Date(now);
-                start.setDate(start.getDate() - Math.max(0, days - 1));
-                return allEntries.filter(entry => {
-                    const dateObj = parseLifeDateKeyToDate(entry.date);
-                    return !!(dateObj && dateObj >= start && dateObj <= now);
-                });
-            };
-
-            const entries7 = recentEntries(7);
-            const entries14 = recentEntries(14);
-            const entries30 = recentEntries(30);
-            const previous7Start = new Date(now);
-            previous7Start.setDate(previous7Start.getDate() - 13);
-            const previous7End = new Date(now);
-            previous7End.setDate(previous7End.getDate() - 7);
-            const previous7 = allEntries.filter(entry => {
-                const dateObj = parseLifeDateKeyToDate(entry.date);
-                return !!(dateObj && dateObj >= previous7Start && dateObj <= previous7End);
-            });
-
-            const avg7 = averageLifeSleepMinutes(entries7);
-            const avg30 = averageLifeSleepMinutes(entries30);
-            const previousAvg7 = averageLifeSleepMinutes(previous7);
-
-            let trendLabel = 'Not enough data';
-            let trendDetail = '';
-            if (Number.isFinite(avg7) && Number.isFinite(previousAvg7)) {
-                const delta = avg7 - previousAvg7;
-                if (Math.abs(delta) < 15) trendLabel = 'Stable';
-                else trendLabel = delta > 0 ? 'Improving' : 'Declining';
-                const magnitude = formatLifeSleepDuration(Math.abs(delta));
-                trendDetail = `${delta >= 0 ? '+' : '-'}${magnitude} vs prior week`;
-            }
-
-            const bedtimeValues = entries14
-                .map(entry => parseTimeToMinutes(normalizeLifeSleepTimeValue(entry.bedtime)))
-                .filter(value => Number.isFinite(value));
-            const wakeValues = entries14
-                .map(entry => parseTimeToMinutes(normalizeLifeSleepTimeValue(entry.wakeTime)))
-                .filter(value => Number.isFinite(value));
-            const avgBedtime = averageLifeClockMinutes(bedtimeValues);
-            const avgWake = averageLifeClockMinutes(wakeValues);
-
-            let consistencyScore = 0;
-            if (bedtimeValues.length) {
-                const averageBedtime = Number.isFinite(avgBedtime) ? avgBedtime : bedtimeValues[0];
-                const variance = bedtimeValues.reduce((sum, value) => {
-                    const distance = getLifeCircularMinuteDistance(value, averageBedtime) || 0;
-                    return sum + (distance * distance);
-                }, 0) / bedtimeValues.length;
-                const deviation = Math.sqrt(variance);
-                consistencyScore = Math.max(0, Math.min(100, Math.round(100 - (deviation / 180) * 100)));
-            }
-
-            const targetMinutes = Math.max(120, Math.min(16 * 60, Math.round(normalizeFiniteNumber(tracker.targetSleepMinutes, LIFE_SLEEP_DEFAULT_TARGET_MINUTES))));
-            const goalHits7 = entries7.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) >= targetMinutes).length;
-            const goalProgressPercent = entries7.length ? Math.round((goalHits7 / entries7.length) * 100) : 0;
-
-            const byDate = new Map();
-            allEntries.forEach(entry => {
-                const key = String(entry.date || '');
-                if (!key || byDate.has(key)) return;
-                byDate.set(key, entry);
-            });
-            let goalStreak = 0;
-            const latestEntry = allEntries[0] || null;
-            if (latestEntry) {
-                let cursor = parseLifeDateKeyToDate(latestEntry.date);
-                while (cursor) {
-                    const key = dateKey(cursor);
-                    const current = byDate.get(key);
-                    if (!current) break;
-                    const minutes = Math.max(0, normalizeFiniteNumber(current.totalSleepMinutes, 0));
-                    if (minutes < targetMinutes) break;
-                    goalStreak += 1;
-                    cursor = new Date(cursor);
-                    cursor.setDate(cursor.getDate() - 1);
-                }
-            }
-
-            const avgSleepQuality = entries30.length
-                ? (entries30.reduce((sum, entry) => sum + Math.max(1, Math.min(5, normalizeFiniteNumber(entry.sleepQuality, 3))), 0) / entries30.length)
-                : null;
-            const underGoalNights = entries30.filter(entry => Math.max(0, normalizeFiniteNumber(entry.totalSleepMinutes, 0)) < targetMinutes).length;
-
-            return {
-                entries: allEntries,
-                latestEntry,
-                avg7,
-                avg30,
-                avgBedtime,
-                avgWake,
-                trendLabel,
-                trendDetail,
-                consistencyScore,
-                targetMinutes,
-                goalProgressPercent,
-                goalStreak,
-                avgSleepQuality,
-                underGoalNights
-            };
-        }
-
-        function renderLifeSleepSummary() {
-            const analytics = getLifeSleepAnalytics();
-            const latestValueEl = document.getElementById('lifeSleepLastNightValue');
-            const latestMetaEl = document.getElementById('lifeSleepLastNightMeta');
-            const avg7El = document.getElementById('lifeSleepAvg7Value');
-            const avg30El = document.getElementById('lifeSleepAvg30Value');
-            const goalProgressEl = document.getElementById('lifeSleepGoalProgressValue');
-            const trendEl = document.getElementById('lifeSleepTrendValue');
-            const trendMetaEl = document.getElementById('lifeSleepTrendMeta');
-            const consistencyEl = document.getElementById('lifeSleepConsistencyValue');
-            const consistencyMetaEl = document.getElementById('lifeSleepConsistencyMeta');
-            const qualityEl = document.getElementById('lifeSleepQualityValue');
-            const qualityMetaEl = document.getElementById('lifeSleepQualityMeta');
-            const bedtimeWakeEl = document.getElementById('lifeSleepBedtimeWakeValue');
-            const bedtimeWakeMetaEl = document.getElementById('lifeSleepBedtimeWakeMeta');
-            const goalTargetInput = document.getElementById('lifeSleepTargetMinutesInput');
-            const goalTargetLabel = document.getElementById('lifeSleepTargetMinutesLabel');
-
-            if (goalTargetInput) {
-                goalTargetInput.value = String(Math.max(120, Math.min(16 * 60, analytics.targetMinutes)));
-            }
-            if (goalTargetLabel) {
-                goalTargetLabel.textContent = formatLifeSleepDuration(analytics.targetMinutes);
-            }
-
-            if (latestValueEl) {
-                latestValueEl.textContent = analytics.latestEntry
-                    ? formatLifeSleepDuration(analytics.latestEntry.totalSleepMinutes)
-                    : '\u2014';
-            }
-            if (latestMetaEl) {
-                latestMetaEl.textContent = analytics.latestEntry
-                    ? `${analytics.latestEntry.date} \u2022 ${formatLifeSleepClock(parseTimeToMinutes(analytics.latestEntry.bedtime))} to ${formatLifeSleepClock(parseTimeToMinutes(analytics.latestEntry.wakeTime))}`
-                    : 'Add your first entry to see last-night sleep.';
-            }
-            if (avg7El) avg7El.textContent = Number.isFinite(analytics.avg7) ? formatLifeSleepDuration(analytics.avg7) : '\u2014';
-            if (avg30El) avg30El.textContent = Number.isFinite(analytics.avg30) ? formatLifeSleepDuration(analytics.avg30) : '\u2014';
-            if (goalProgressEl) {
-                goalProgressEl.textContent = `${analytics.goalProgressPercent}%`;
-                goalProgressEl.setAttribute('title', `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`);
-            }
-            if (trendEl) trendEl.textContent = analytics.trendLabel;
-            if (trendMetaEl) trendMetaEl.textContent = analytics.trendDetail || 'Trend compares last 7 days with the prior 7 days.';
-            if (consistencyEl) consistencyEl.textContent = `${analytics.consistencyScore}%`;
-            if (consistencyMetaEl) consistencyMetaEl.textContent = `Goal streak: ${analytics.goalStreak} night${analytics.goalStreak === 1 ? '' : 's'}`;
-            if (qualityEl) {
-                if (Number.isFinite(analytics.avgSleepQuality)) {
-                    qualityEl.textContent = `${analytics.avgSleepQuality.toFixed(1)} / 5`;
-                } else {
-                    qualityEl.textContent = '\u2014';
-                }
-            }
-            if (qualityMetaEl) {
-                qualityMetaEl.textContent = `${analytics.underGoalNights} under-goal night${analytics.underGoalNights === 1 ? '' : 's'} in the last 30 days.`;
-            }
-            if (bedtimeWakeEl) {
-                bedtimeWakeEl.textContent = `${formatLifeSleepClock(analytics.avgBedtime)} \u2192 ${formatLifeSleepClock(analytics.avgWake)}`;
-            }
-            if (bedtimeWakeMetaEl) {
-                bedtimeWakeMetaEl.textContent = 'Average bedtime and wake time over the last 14 days.';
-            }
-        }
-
-        function renderLifeSleepRows() {
-            const body = document.getElementById('lifeSleepTableBody');
-            if (!body) return;
-            const entries = getLifeSleepEntries().slice().sort((a, b) => {
-                const byDate = String(b.date || '').localeCompare(String(a.date || ''));
-                if (byDate !== 0) return byDate;
-                return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''));
-            });
-
-            if (!entries.length) {
-                body.innerHTML = `
-                    <tr class="college-empty-row">
-                        <td colspan="10">
-                            <div class="empty-state">
-                                <div class="empty-title">No sleep entries yet</div>
-                                <div class="empty-subtitle">Track bedtime, wake time, and sleep quality to build better routines.</div>
-                                <button class="neumo-btn life-empty-cta-btn" id="lifeSleepEmptyAddBtn" type="button"><i class="fas fa-plus"></i> Add First Entry</button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            const ratingOptions = (selected) => [1, 2, 3, 4, 5]
-                .map(value => `<option value="${value}" ${Number(selected) === value ? 'selected' : ''}>${value}</option>`)
-                .join('');
-
-            body.innerHTML = entries.map(entry => {
-                const durationLabel = formatLifeSleepDuration(entry.totalSleepMinutes);
-                const tagsText = Array.isArray(entry.tags) ? entry.tags.join(', ') : '';
-                return `
-                    <tr>
-                        <td data-label="Date"><input type="date" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="date" value="${escapeHtml(String(entry.date || ''))}"></td>
-                        <td data-label="Bedtime"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="bedtime" value="${escapeHtml(String(entry.bedtime || ''))}"></td>
-                        <td data-label="Fell Asleep"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="timeFellAsleep" value="${escapeHtml(String(entry.timeFellAsleep || ''))}"></td>
-                        <td data-label="Wake"><input type="time" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeTime" value="${escapeHtml(String(entry.wakeTime || ''))}"></td>
-                        <td data-label="Duration"><span class="life-sleep-duration-badge">${escapeHtml(durationLabel)}</span></td>
-                        <td data-label="Quality"><select class="college-select" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="sleepQuality">${ratingOptions(entry.sleepQuality)}</select></td>
-                        <td data-label="Wake-Ups"><input type="number" min="0" max="20" class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="wakeUpsCount" value="${escapeHtml(String(entry.wakeUpsCount || 0))}"></td>
-                        <td data-label="Tags"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="tagsInput" value="${escapeHtml(String(tagsText))}" placeholder="caffeine, stress"></td>
-                        <td data-label="Notes"><input class="college-input" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" data-life-sleep-field="notes" value="${escapeHtml(String(entry.notes || ''))}" placeholder="Notes"></td>
-                        <td class="college-row-actions">
-                            <button type="button" class="icon-btn life-delete-sleep-btn" data-life-sleep-row-id="${escapeHtml(String(entry.id))}" aria-label="Delete sleep entry"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function updateLifeSleepField(target) {
-            if (!target || !target.dataset) return;
-            const rowId = target.dataset.lifeSleepRowId;
-            const field = target.dataset.lifeSleepField;
-            if (!rowId || !field) return;
-            const tracker = getLifeSleepTrackerState();
-            const row = tracker.entries.find(item => String(item.id) === String(rowId));
-            if (!row) return;
-            const nextRow = { ...row };
-
-            if (field === 'date') {
-                const normalizedDate = String(target.value || '').trim();
-                nextRow.date = /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) ? normalizedDate : row.date || today();
-            } else if (field === 'bedtime' || field === 'timeFellAsleep' || field === 'wakeTime') {
-                const normalizedTime = normalizeLifeSleepTimeValue(target.value);
-                nextRow[field] = normalizedTime;
-                if (target.value !== normalizedTime) target.value = normalizedTime;
-            } else if (field === 'sleepQuality') {
-                nextRow[field] = Math.max(1, Math.min(5, Math.round(normalizeFiniteNumber(target.value, row[field] || 3))));
-            } else if (field === 'wakeUpsCount') {
-                nextRow.wakeUpsCount = Math.max(0, Math.min(20, Math.round(normalizeFiniteNumber(target.value, row.wakeUpsCount || 0))));
-            } else if (field === 'tagsInput') {
-                nextRow.tags = normalizeLifeSleepTagList(
-                    String(target.value || '')
-                        .split(',')
-                        .map(tag => String(tag || '').trim())
-                        .filter(Boolean)
-                );
-            } else if (field === 'notes') {
-                nextRow.notes = String(target.value || '');
-            }
-
-            const duration = computeLifeSleepDurationMinutes(nextRow.timeFellAsleep || nextRow.bedtime, nextRow.wakeTime);
-            if (!Number.isFinite(duration)) {
-                showToast('Sleep entry needs a valid bedtime and wake time.');
-                renderLifeWorkspace();
-                return;
-            }
-            nextRow.totalSleepMinutes = duration;
-            nextRow.updatedAt = new Date().toISOString();
-            Object.assign(row, nextRow);
-            persistAppData();
-            renderLifeWorkspace();
-        }
-
-        function updateLifeSleepTargetMinutes(value) {
-            const tracker = getLifeSleepTrackerState();
-            tracker.targetSleepMinutes = Math.max(120, Math.min(16 * 60, Math.round(normalizeFiniteNumber(value, LIFE_SLEEP_DEFAULT_TARGET_MINUTES))));
-            persistAppData();
-            renderLifeWorkspace();
-        }
-
-        async function removeLifeSleepEntry(rowId) {
-            const tracker = getLifeSleepTrackerState();
-            const entry = tracker.entries.find(item => String(item.id) === String(rowId));
-            if (!entry) return;
-            const confirmed = await showCustomConfirmDialog({
-                title: 'Delete Sleep Entry',
-                message: `Delete the sleep entry for ${entry.date || 'this day'}?`,
-                confirmText: 'Delete Entry',
-                cancelText: 'Keep Entry',
-                confirmVariant: 'danger'
-            });
-            if (!confirmed) return;
-            tracker.entries = tracker.entries.filter(item => String(item.id) !== String(rowId));
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Sleep entry deleted.');
-        }
-
-        function quickCreateTodayJournal() {
-            const todayDate = today();
-            const existing = getLifeRows('journals').find(row => String(row.date || '') === todayDate);
-            if (existing) {
-                showToast('Today\'s journal already exists.');
-                return;
-            }
-            getLifeRows('journals').unshift(createLifeJournalRow({
-                date: todayDate,
-                title: `Journal ${todayDate}`,
-                mood: 'Neutral',
-                content: 'Highlights:\nWins:\nWhat I learned:\nTomorrow focus:'
-            }));
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Today\'s journal created.');
-        }
-
+        // Life cockpit — goals, habits, budget signals, and goal drawer.
         // =================================================================
-        // Life cockpit — daily check-in, synthesized signals, goal drawer.
-        // =================================================================
-
-        const LIFE_MOODS = [
-            { value: 'great', label: '😄 Great', score: 5 },
-            { value: 'good', label: '🙂 Good', score: 4 },
-            { value: 'okay', label: '😐 Okay', score: 3 },
-            { value: 'low', label: '😕 Low', score: 2 },
-            { value: 'rough', label: '😣 Rough', score: 1 }
-        ];
-        const LIFE_MOOD_SCORE = LIFE_MOODS.reduce((m, x) => { m[x.value] = x.score; return m; }, {});
-
-        function lifeCheckInLocalKey(c) {
-            try { return dateKey(new Date(c.createdAt)); } catch (_) { return ''; }
-        }
-        function getLifeCheckIns() {
-            return (lifeWorkspace.wellness && Array.isArray(lifeWorkspace.wellness.checkIns)) ? lifeWorkspace.wellness.checkIns : [];
-        }
-        function getLifeTodayCheckIn() {
-            const tk = today();
-            return getLifeCheckIns().find(c => lifeCheckInLocalKey(c) === tk) || null;
-        }
-        function getLifeRecentCheckIns(days) {
-            const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - (days - 1));
-            return getLifeCheckIns().filter(c => { const d = new Date(c.createdAt); return !isNaN(d.getTime()) && d >= cutoff; });
-        }
-        function saveLifeCheckIn(values) {
-            if (!lifeWorkspace.wellness || typeof lifeWorkspace.wellness !== 'object') lifeWorkspace.wellness = getDefaultWellnessData();
-            if (!Array.isArray(lifeWorkspace.wellness.checkIns)) lifeWorkspace.wellness.checkIns = [];
-            const existing = getLifeTodayCheckIn();
-            const payload = normalizeWellnessCheckIn({
-                id: existing ? existing.id : undefined,
-                createdAt: existing ? existing.createdAt : new Date().toISOString(),
-                mood: values.mood, stress: values.stress, sleep: values.sleep || '', note: values.note || ''
-            });
-            if (existing) Object.assign(existing, payload);
-            else lifeWorkspace.wellness.checkIns.push(payload);
-            if (lifeWorkspace.wellness.checkIns.length > 400) lifeWorkspace.wellness.checkIns = lifeWorkspace.wellness.checkIns.slice(-400);
-            persistAppData();
-            renderLifeWorkspace();
-            showToast('Check-in saved.');
-        }
-
-        function renderLifeCheckInCard() {
-            const el = document.getElementById('lifeCheckInCard');
-            if (!el) return;
-            const todayCI = getLifeTodayCheckIn();
-            const mood = todayCI ? todayCI.mood : 'good';
-            const stress = todayCI ? todayCI.stress : 5;
-            el.innerHTML = `
-                <div class="glass-card life-checkin">
-                    <div class="life-checkin-head">
-                        <div>
-                            <div class="life-checkin-eyebrow">Daily check-in</div>
-                            <h3>${todayCI ? "Today's check-in" : 'How are you today?'}</h3>
-                        </div>
-                        ${todayCI ? '<span class="cc-pill cc-tone-positive">Logged</span>' : ''}
-                    </div>
-                    <div class="life-checkin-grid">
-                        <label class="life-checkin-field"><span>Mood</span>
-                            <select class="cc-input" id="lifeCheckInMood">${LIFE_MOODS.map(m => `<option value="${m.value}" ${mood === m.value ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
-                        </label>
-                        <label class="life-checkin-field"><span>Stress <b id="lifeCheckInStressVal">${stress}</b>/10</span>
-                            <input type="range" min="0" max="10" id="lifeCheckInStress" value="${stress}" class="cc-range">
-                        </label>
-                    </div>
-                    <div class="life-checkin-actions">
-                        <button type="button" class="neumo-btn neumo-btn--primary" data-life-action="save-checkin"><i class="fas fa-check" aria-hidden="true"></i> ${todayCI ? 'Update check-in' : 'Save check-in'}</button>
-                        <button type="button" class="neumo-btn neumo-btn--ghost" data-life-action="quick-journal"><i class="fas fa-feather" aria-hidden="true"></i> Journal a moment</button>
-                    </div>
-                </div>`;
-        }
 
         // ---- Cockpit compute helpers ----
         function getLifeActiveGoals() {
@@ -16765,7 +16191,6 @@ function populateProgressDashboard() {
         }
         // "One next life action" — a single, local heuristic suggestion.
         function getLifeNextAction() {
-            if (!getLifeTodayCheckIn()) return { text: "Log today's check-in", action: 'cc-life-checkin' };
             const habits = getLifeRows('habits');
             const todayKey = today();
             const doneToday = (lifeWorkspace.habitCompletions && Array.isArray(lifeWorkspace.habitCompletions[todayKey])) ? lifeWorkspace.habitCompletions[todayKey].map(String) : [];
@@ -16779,7 +16204,7 @@ function populateProgressDashboard() {
                 if (milestone && milestone.title) return { text: `Goal step: ${milestone.title}`, action: 'cc-life-open-goal', target: focus.id };
                 return { text: `Advance: ${focus.title || 'your goal'}`, action: 'cc-life-open-goal', target: focus.id };
             }
-            return { text: 'Reflect in your journal', action: 'cc-life-page', target: 'journal' };
+            return { text: 'Choose your next goal', action: 'cc-life-page', target: 'goals' };
         }
 
         function renderLifeCockpit() {
@@ -16787,33 +16212,16 @@ function populateProgressDashboard() {
             if (!container) return;
             const cc = commandCenter();
             if (!cc) { container.innerHTML = ''; return; }
-            const hasData = getLifeRows('goals').length || getLifeRows('habits').length || getLifeRows('spending').length || getLifeSleepEntries().length || getLifeCheckIns().length;
+            const hasData = getLifeRows('goals').length || getLifeRows('habits').length || getLifeRows('spending').length;
             if (!hasData) {
                 container.innerHTML = cc.emptyStateHtml({
                     icon: 'fa-compass', title: 'Your cockpit fills in as you track',
-                    message: 'Log a check-in, add a goal or habit, or record a night of sleep — this panel will synthesize it into one calm view.',
+                    message: 'Add a goal or habit, or record spending to see your next useful action.',
                     actionLabel: 'Add a goal', action: 'cc-life-page', target: 'goals'
                 });
                 return;
             }
             const signals = [];
-
-            // Check-in status
-            const todayCI = getLifeTodayCheckIn();
-            signals.push({ id: "checkin", icon: "fa-heart", label: "Daily check-in", value: todayCI ? "Logged" : "Not yet", meta: "Track mood, stress, and sleep", tone: todayCI ? "positive" : "neutral", action: "cc-life-checkin" });
-
-            // Sleep last night
-            const sleep = (typeof getLifeSleepAnalytics === 'function') ? getLifeSleepAnalytics() : null;
-            if (sleep && sleep.latestEntry) {
-                const mins = Math.max(0, normalizeFiniteNumber(sleep.latestEntry.totalSleepMinutes, 0));
-                signals.push({
-                    id: 'sleep', icon: 'fa-moon', label: 'Last night',
-                    value: formatLifeSleepDuration(mins),
-                    meta: `Goal hit ${sleep.goalProgressPercent}% of last 7 · ${sleep.trendLabel}`,
-                    tone: mins >= sleep.targetMinutes ? 'positive' : 'warn',
-                    action: 'cc-life-page', target: 'sleep'
-                });
-            }
 
             // Habit streak leader + weekly consistency
             const topStreak = getLifeTopHabitStreak();
@@ -17028,22 +16436,14 @@ function populateProgressDashboard() {
             const root = document.getElementById('view-life');
             if (!root) return;
             lifeWorkspace = normalizeLifeWorkspace(lifeWorkspace);
-            try { renderLifeCheckInCard(); } catch (err) { /* non-critical */ }
             try { renderLifeCockpit(); } catch (err) { /* non-critical */ }
             try { renderLifeBudgets(); } catch (err) { /* non-critical */ }
-            try { renderLifeJournalPrompts(); } catch (err) { /* non-critical */ }
             renderLifeGoalRows();
             renderLifeHabitRows();
             renderLifeSkillRows();
-            renderLifeFitnessRows();
-            renderLifeCalorieRows();
             renderLifeBookRows();
             renderLifeSpendingRows();
-            renderLifeJournalRows();
-            renderLifeSleepRows();
-            renderLifeSleepSummary();
             renderLifeSummary();
-            try { renderWellnessSection(); } catch (err) { /* non-critical */ }
             try { renderPinnedSection('life'); refreshPinStarStates('life'); } catch (err) { /* non-critical */ }
         }
 
@@ -17077,8 +16477,6 @@ function populateProgressDashboard() {
             const lifeQuickAddPageMap = {
                 lifeQuickAddGoalBtn: 'goals',
                 lifeQuickAddHabitBtn: 'habits',
-                lifeQuickAddSleepBtn: 'sleep',
-                lifeQuickJournalTopBtn: 'journal'
             };
 
             let calcExpr = '';
@@ -17189,34 +16587,16 @@ function populateProgressDashboard() {
                     const ccTarget = ccActionBtn.dataset.ccTarget || '';
                     if (action === 'cc-life-page') { lifeShowPage(ccTarget || 'goals'); return; }
                     if (action === 'cc-life-open-goal') { openLifeGoalDrawer(ccTarget); return; }
-                    if (action === 'cc-life-checkin') {
-                        const card = document.getElementById('lifeCheckInCard');
-                        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const moodSel = document.getElementById('lifeCheckInMood');
-                        if (moodSel) moodSel.focus();
-                        return;
-                    }
                 }
 
                 const lifeActionBtn = event.target.closest('[data-life-action]');
                 if (lifeActionBtn) {
                     const act = lifeActionBtn.dataset.lifeAction;
-                    if (act === 'save-checkin') {
-                        const moodEl = document.getElementById('lifeCheckInMood');
-                        const stressEl = document.getElementById('lifeCheckInStress');
-                        saveLifeCheckIn({
-                            mood: moodEl ? moodEl.value : '',
-                            stress: stressEl ? stressEl.value : 5
-                        });
-                        return;
-                    }
-                    if (act === 'quick-journal') { quickCreateTodayJournal(); lifeShowPage('journal'); return; }
                     if (act === 'add-budget') { addLifeBudgetCap(); return; }
                     if (act === 'del-budget') { deleteLifeBudgetCap(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'add-recurring') { addLifeRecurring(); return; }
                     if (act === 'del-recurring') { deleteLifeRecurring(lifeActionBtn.dataset.ccTarget); return; }
                     if (act === 'toggle-excuse') { toggleLifeHabitExcusedToday(lifeActionBtn.dataset.ccTarget); return; }
-                    if (act === 'journal-prompt') { createLifeJournalFromPrompt(lifeActionBtn.dataset.ccTarget); return; }
                 }
 
                 // Nav grid buttons
@@ -17233,19 +16613,14 @@ function populateProgressDashboard() {
                     return;
                 }
 
-                const addButton = event.target.closest('#lifeAddGoalBtn, #lifeAddHabitBtn, #lifeAddSkillBtn, #lifeAddFitnessBtn, #lifeAddCalorieBtn, #lifeAddBookBtn, #lifeAddSpendingBtn, #lifeAddSleepBtn, #lifeSleepEmptyAddBtn, #lifeQuickAddGoalBtn, #lifeQuickAddHabitBtn, #lifeQuickAddSleepBtn');
+                const addButton = event.target.closest('#lifeAddGoalBtn, #lifeAddHabitBtn, #lifeAddSkillBtn, #lifeAddBookBtn, #lifeAddSpendingBtn, #lifeQuickAddGoalBtn, #lifeQuickAddHabitBtn');
                 if (addButton) {
                     const map = {
                         lifeAddGoalBtn: 'goals',
                         lifeQuickAddGoalBtn: 'goals',
                         lifeAddHabitBtn: 'habits',
                         lifeQuickAddHabitBtn: 'habits',
-                        lifeAddSleepBtn: 'sleepEntries',
-                        lifeSleepEmptyAddBtn: 'sleepEntries',
-                        lifeQuickAddSleepBtn: 'sleepEntries',
                         lifeAddSkillBtn: 'skills',
-                        lifeAddFitnessBtn: 'fitness',
-                        lifeAddCalorieBtn: 'calories',
                         lifeAddBookBtn: 'books',
                         lifeAddSpendingBtn: 'spending'
                     };
@@ -17257,39 +16632,15 @@ function populateProgressDashboard() {
                     return;
                 }
 
-                const sleepDeleteBtn = event.target.closest('.life-delete-sleep-btn');
-                if (sleepDeleteBtn) {
-                    removeLifeSleepEntry(sleepDeleteBtn.dataset.lifeSleepRowId);
-                    return;
-                }
-
                 const deleteBtn = event.target.closest('.life-delete-row-btn');
                 if (deleteBtn) {
                     removeLifeRow(deleteBtn.dataset.lifeCollection, deleteBtn.dataset.lifeRowId);
                     return;
                 }
 
-                const quickJournalBtn = event.target.closest('#lifeQuickJournalBtn, #lifeQuickJournalTopBtn');
-                if (quickJournalBtn) {
-                    quickCreateTodayJournal();
-                    // Navigate to journal page if triggered from dashboard
-                    if (quickJournalBtn.id === 'lifeQuickJournalTopBtn') lifeShowPage('journal');
-                }
             });
 
             root.addEventListener('change', (event) => {
-                const sleepTargetInput = event.target && event.target.id === 'lifeSleepTargetMinutesInput'
-                    ? event.target
-                    : null;
-                if (sleepTargetInput) {
-                    updateLifeSleepTargetMinutes(sleepTargetInput.value);
-                    return;
-                }
-                const sleepFieldEl = event.target.closest('[data-life-sleep-field]');
-                if (sleepFieldEl) {
-                    updateLifeSleepField(sleepFieldEl);
-                    return;
-                }
                 const habitCheckbox = event.target.closest('[data-life-habit-row-id]');
                 if (habitCheckbox) {
                     toggleLifeHabitForToday(habitCheckbox.dataset.lifeHabitRowId, !!habitCheckbox.checked);
@@ -17305,1390 +16656,22 @@ function populateProgressDashboard() {
                     updateLifeField(fieldEl);
                 }
             });
-
-            // Live value label for the daily check-in slider.
-            root.addEventListener('input', (event) => {
-                if (event.target.id === 'lifeCheckInStress') { const v = document.getElementById('lifeCheckInStressVal'); if (v) v.textContent = event.target.value; }
-            });
-
             // Ensure dashboard is visible on init
             lifeShowDashboard();
-
-            initWellnessUI();
             initLifePinnedUI();
             renderLifeWorkspace();
         }
         // ------------------ end Life Workspace ------------------
-
-        // ------------------ Wellness section ------------------
-        const WELLNESS_MOOD_OPTIONS = [
-            { value: 'calm',     emoji: '🌿', label: 'Calm' },
-            { value: 'okay',     emoji: '🙂', label: 'Okay' },
-            { value: 'tired',    emoji: '😴', label: 'Tired' },
-            { value: 'stressed', emoji: '😣', label: 'Stressed' },
-            { value: 'low',      emoji: '☁️', label: 'Low' },
-            { value: 'great',    emoji: '✨', label: 'Great' }
-        ];
-        const WELLNESS_SLEEP_OPTIONS = [
-            { value: 'restful',  label: 'Restful' },
-            { value: 'okay',     label: 'Okay' },
-            { value: 'broken',   label: 'Broken' },
-            { value: 'short',    label: 'Short' }
-        ];
-        const WELLNESS_PROMPT_OPTIONS = [
-            { value: 'overwhelm',  label: 'What is overwhelming me?' },
-            { value: 'next',       label: 'What is one next action?' },
-            { value: 'release',    label: 'What can I let go of right now?' },
-            { value: 'gratitude',  label: 'One thing I appreciate today.' },
-            { value: 'free',       label: 'Free reflection' }
-        ];
-        const WELLNESS_DURATION_OPTIONS = [
-            { value: 60,  label: '1 min' },
-            { value: 120, label: '2 min' },
-            { value: 300, label: '5 min' }
-        ];
-        const WELLNESS_BREATH_PATTERNS = [
-            { id: 'calm-focus',  label: 'Calm Focus',   phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 4 }, { name: 'exhale', sec: 6 }] },
-            { id: 'box',         label: 'Box',          phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 4 }, { name: 'exhale', sec: 4 }, { name: 'rest', sec: 4 }] },
-            { id: 'deep-exhale', label: 'Deep Exhale',  phases: [{ name: 'inhale', sec: 4 }, { name: 'exhale', sec: 6 }] },
-            { id: '4-7-8',       label: '4-7-8',        phases: [{ name: 'inhale', sec: 4 }, { name: 'hold', sec: 7 }, { name: 'exhale', sec: 8 }] }
-        ];
-        const WELLNESS_PHASE_LABEL = {
-            idle: 'Ready',
-            inhale: 'Breathe In',
-            hold: 'Hold',
-            exhale: 'Breathe Out',
-            rest: 'Rest',
-            complete: 'Complete'
-        };
-
-        const wellnessBreathState = {
-            running: false,
-            paused: false,
-            patternId: 'calm-focus',
-            durationSec: 120,
-            elapsedSec: 0,
-            phase: 'idle',
-            phaseIndex: 0,
-            phaseElapsedSec: 0,
-            timerHandle: null,
-            lastTickAt: 0,
-            reducedMotion: false,
-            promptValue: 'overwhelm',
-            soundEnabled: false,
-            ambientSound: 'off',
-            breathingCuesEnabled: false,
-            volume: 0.35,
-            muted: false
-        };
-
-        const WELLNESS_AMBIENT_OPTIONS = [
-            { value: 'off',            label: 'Off' },
-            { value: 'soft-ambient',   label: 'Soft Ambient' },
-            { value: 'rain',           label: 'Rain' },
-            { value: 'ocean',          label: 'Ocean' },
-            { value: 'white-noise',    label: 'White Noise' },
-            { value: 'gentle-chimes',  label: 'Gentle Chimes' }
-        ];
-
-        // ----- Wellness Audio Engine (Web Audio API, generated only) -----
-        // Audio is created lazily on the first user interaction (Start/Play or
-        // ambient toggle) so we comply with browser autoplay rules. Nothing
-        // is fetched from the network — every sound is synthesized.
-        const wellnessAudio = {
-            ctx: null,
-            masterGain: null,
-            ambient: null,         // active ambient handle, see makers below
-            ambientId: 'off',
-            noiseBuffer: null,     // shared white-noise loop buffer
-            chimeTimer: null,
-            blockedHintShown: false
-        };
-
-        function wellnessAudioSupported() {
-            return !!(typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext));
-        }
-
-        function wellnessAudioEffectiveGain() {
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled || w.breathing.muted) return 0;
-            const v = Number(w.breathing.volume);
-            return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.35;
-        }
-
-        function wellnessAudioEnsureContext() {
-            if (wellnessAudio.ctx) return wellnessAudio.ctx;
-            if (!wellnessAudioSupported()) return null;
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AC();
-                const masterGain = ctx.createGain();
-                masterGain.gain.value = wellnessAudioEffectiveGain();
-                masterGain.connect(ctx.destination);
-                wellnessAudio.ctx = ctx;
-                wellnessAudio.masterGain = masterGain;
-                return ctx;
-            } catch (err) {
-                return null;
-            }
-        }
-
-        function wellnessAudioResume() {
-            const ctx = wellnessAudio.ctx;
-            if (!ctx) return Promise.resolve(false);
-            if (ctx.state !== 'suspended') return Promise.resolve(true);
-            try {
-                const p = ctx.resume();
-                return (p && typeof p.then === 'function') ? p.then(() => true).catch(() => false) : Promise.resolve(true);
-            } catch (err) { return Promise.resolve(false); }
-        }
-
-        function wellnessAudioApplyVolume(transitionSec = 0.18) {
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (!ctx || !gain) return;
-            const target = wellnessAudioEffectiveGain();
-            try {
-                const now = ctx.currentTime;
-                gain.gain.cancelScheduledValues(now);
-                gain.gain.setValueAtTime(gain.gain.value, now);
-                gain.gain.linearRampToValueAtTime(Math.max(0.0001, target || 0.0001), now + transitionSec);
-                if (target <= 0) {
-                    gain.gain.linearRampToValueAtTime(0, now + transitionSec + 0.01);
-                }
-            } catch (err) {}
-        }
-
-        function wellnessAudioGetNoiseBuffer() {
-            if (wellnessAudio.noiseBuffer) return wellnessAudio.noiseBuffer;
-            const ctx = wellnessAudio.ctx;
-            if (!ctx) return null;
-            const len = Math.floor(ctx.sampleRate * 2.0);
-            const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-            const data = buf.getChannelData(0);
-            for (let i = 0; i < len; i += 1) data[i] = (Math.random() * 2 - 1) * 0.7;
-            wellnessAudio.noiseBuffer = buf;
-            return buf;
-        }
-
-        function wellnessAudioMakeFadeGain(ctx, peak, attackSec) {
-            const g = ctx.createGain();
-            const t0 = ctx.currentTime;
-            g.gain.setValueAtTime(0.0001, t0);
-            g.gain.linearRampToValueAtTime(Math.max(0.0001, peak), t0 + Math.max(0.05, attackSec));
-            return g;
-        }
-
-        function wellnessAudioMakeSoftAmbient(ctx) {
-            // Layered sine/triangle pad with slow LFO modulation. Warm and quiet.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.35, 2.4);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 900;
-            lp.Q.value = 0.5;
-            lp.connect(fade);
-            const tones = [
-                { type: 'sine',     freq: 110,    gain: 0.18 },
-                { type: 'sine',     freq: 165,    gain: 0.12 },
-                { type: 'triangle', freq: 220,    gain: 0.07 },
-                { type: 'sine',     freq: 277.18, gain: 0.05 }
-            ];
-            const oscs = [];
-            tones.forEach(spec => {
-                const osc = ctx.createOscillator();
-                osc.type = spec.type;
-                osc.frequency.value = spec.freq;
-                const g = ctx.createGain();
-                g.gain.value = spec.gain;
-                // Slow gain LFO for breathing pad feel.
-                const lfo = ctx.createOscillator();
-                lfo.type = 'sine';
-                lfo.frequency.value = 0.05 + Math.random() * 0.04;
-                const lfoGain = ctx.createGain();
-                lfoGain.gain.value = spec.gain * 0.35;
-                lfo.connect(lfoGain);
-                lfoGain.connect(g.gain);
-                osc.connect(g);
-                g.connect(lp);
-                osc.start();
-                lfo.start();
-                oscs.push({ osc, lfo, g, lfoGain });
-            });
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    oscs.forEach(({ osc, lfo, g, lfoGain }) => {
-                        try { osc.stop(); } catch (e) {}
-                        try { lfo.stop(); } catch (e) {}
-                        try { osc.disconnect(); } catch (e) {}
-                        try { lfo.disconnect(); } catch (e) {}
-                        try { g.disconnect(); } catch (e) {}
-                        try { lfoGain.disconnect(); } catch (e) {}
-                    });
-                    try { lp.disconnect(); } catch (e) {}
-                    try { fade.disconnect(); } catch (e) {}
-                }
-            };
-        }
-
-        function wellnessAudioMakeNoiseSource(ctx) {
-            const buf = wellnessAudioGetNoiseBuffer();
-            if (!buf) return null;
-            const src = ctx.createBufferSource();
-            src.buffer = buf;
-            src.loop = true;
-            return src;
-        }
-
-        function wellnessAudioMakeRain(ctx) {
-            // Filtered noise with tiny randomized amplitude wobble.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.22, 1.4);
-            fade.connect(out);
-            const hp = ctx.createBiquadFilter();
-            hp.type = 'highpass';
-            hp.frequency.value = 900;
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 4500;
-            lp.connect(fade);
-            hp.connect(lp);
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(hp);
-            src.start();
-            // Slow random gain modulation for natural rain.
-            const wobble = ctx.createGain();
-            wobble.gain.value = 1;
-            // Reroute: hp -> wobble -> lp
-            try { hp.disconnect(); } catch (e) {}
-            hp.connect(wobble);
-            wobble.connect(lp);
-            const lfo = ctx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.15;
-            const lfoGain = ctx.createGain();
-            lfoGain.gain.value = 0.18;
-            lfo.connect(lfoGain);
-            lfoGain.connect(wobble.gain);
-            lfo.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    try { lfo.stop(); } catch (e) {}
-                    [src, hp, lp, wobble, lfo, lfoGain, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeOcean(ctx) {
-            // Filtered noise with slow pulsing volume — smooth rise and fall.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.28, 2.0);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 800;
-            lp.Q.value = 0.4;
-            const wobble = ctx.createGain();
-            wobble.gain.value = 0.5;
-            lp.connect(wobble);
-            wobble.connect(fade);
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(lp);
-            src.start();
-            const lfo = ctx.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.11;
-            const lfoGain = ctx.createGain();
-            lfoGain.gain.value = 0.45;
-            lfo.connect(lfoGain);
-            lfoGain.connect(wobble.gain);
-            lfo.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    try { lfo.stop(); } catch (e) {}
-                    [src, lp, wobble, lfo, lfoGain, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeWhiteNoise(ctx) {
-            // Quiet filtered noise — keep volume low by default.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.16, 1.0);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 6000;
-            const hp = ctx.createBiquadFilter();
-            hp.type = 'highpass';
-            hp.frequency.value = 120;
-            const src = wellnessAudioMakeNoiseSource(ctx);
-            if (!src) return null;
-            src.connect(hp);
-            hp.connect(lp);
-            lp.connect(fade);
-            src.start();
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    try { src.stop(); } catch (e) {}
-                    [src, hp, lp, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                }
-            };
-        }
-
-        function wellnessAudioMakeGentleChimes(ctx) {
-            // Warm low pad + occasional very soft bell-like tones at random.
-            const out = ctx.createGain();
-            out.gain.value = 1;
-            const fade = wellnessAudioMakeFadeGain(ctx, 0.28, 2.4);
-            fade.connect(out);
-            const lp = ctx.createBiquadFilter();
-            lp.type = 'lowpass';
-            lp.frequency.value = 1200;
-            lp.connect(fade);
-            const padOsc = ctx.createOscillator();
-            padOsc.type = 'sine';
-            padOsc.frequency.value = 196; // G3
-            const padGain = ctx.createGain();
-            padGain.gain.value = 0.16;
-            padOsc.connect(padGain);
-            padGain.connect(lp);
-            padOsc.start();
-            const chimeNotes = [523.25, 659.25, 783.99, 880.0, 987.77]; // C5, E5, G5, A5, B5
-            let stopped = false;
-            const scheduledNodes = [];
-            const scheduleChime = () => {
-                if (stopped) return;
-                const t = ctx.currentTime + 0.05;
-                const freq = chimeNotes[Math.floor(Math.random() * chimeNotes.length)];
-                const osc = ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, t);
-                const g = ctx.createGain();
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.linearRampToValueAtTime(0.12, t + 0.05);
-                g.gain.exponentialRampToValueAtTime(0.0002, t + 3.2);
-                osc.connect(g);
-                g.connect(lp);
-                osc.start(t);
-                osc.stop(t + 3.4);
-                scheduledNodes.push({ osc, g });
-                osc.onended = () => {
-                    try { osc.disconnect(); } catch (e) {}
-                    try { g.disconnect(); } catch (e) {}
-                };
-                const nextDelayMs = 8000 + Math.random() * 7000;
-                wellnessAudio.chimeTimer = setTimeout(scheduleChime, nextDelayMs);
-            };
-            wellnessAudio.chimeTimer = setTimeout(scheduleChime, 2200 + Math.random() * 2500);
-            return {
-                output: out,
-                fadeGain: fade,
-                stop() {
-                    stopped = true;
-                    if (wellnessAudio.chimeTimer) {
-                        clearTimeout(wellnessAudio.chimeTimer);
-                        wellnessAudio.chimeTimer = null;
-                    }
-                    try { padOsc.stop(); } catch (e) {}
-                    [padOsc, padGain, lp, fade].forEach(n => { try { n.disconnect(); } catch (e) {} });
-                    scheduledNodes.forEach(({ osc, g }) => {
-                        try { osc.stop(); } catch (e) {}
-                        try { osc.disconnect(); } catch (e) {}
-                        try { g.disconnect(); } catch (e) {}
-                    });
-                }
-            };
-        }
-
-        function wellnessAudioStopAmbient(fadeSec = 0.6) {
-            const ctx = wellnessAudio.ctx;
-            const handle = wellnessAudio.ambient;
-            wellnessAudio.ambient = null;
-            wellnessAudio.ambientId = 'off';
-            if (!handle) return;
-            const cleanup = () => {
-                try { handle.stop && handle.stop(); } catch (e) {}
-                try { handle.output && handle.output.disconnect(); } catch (e) {}
-            };
-            if (!ctx) { cleanup(); return; }
-            const t0 = ctx.currentTime;
-            try {
-                const fade = handle.fadeGain;
-                if (fade) {
-                    const cur = fade.gain.value;
-                    fade.gain.cancelScheduledValues(t0);
-                    fade.gain.setValueAtTime(Math.max(0.0001, cur), t0);
-                    fade.gain.linearRampToValueAtTime(0.0001, t0 + Math.max(0.05, fadeSec));
-                }
-            } catch (err) {}
-            setTimeout(cleanup, Math.max(80, fadeSec * 1000 + 80));
-        }
-
-        function wellnessAudioStartAmbient(id) {
-            if (!wellnessAudioSupported()) return;
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled) { wellnessAudioStopAmbient(0.4); return; }
-            const wantId = String(id || 'off');
-            if (wantId === 'off') { wellnessAudioStopAmbient(0.5); return; }
-            const ctx = wellnessAudioEnsureContext();
-            if (!ctx) return;
-            if (wellnessAudio.ambientId === wantId && wellnessAudio.ambient) return;
-            wellnessAudioStopAmbient(0.35);
-            let handle = null;
-            if (wantId === 'soft-ambient') handle = wellnessAudioMakeSoftAmbient(ctx);
-            else if (wantId === 'rain') handle = wellnessAudioMakeRain(ctx);
-            else if (wantId === 'ocean') handle = wellnessAudioMakeOcean(ctx);
-            else if (wantId === 'white-noise') handle = wellnessAudioMakeWhiteNoise(ctx);
-            else if (wantId === 'gentle-chimes') handle = wellnessAudioMakeGentleChimes(ctx);
-            if (!handle) return;
-            try { handle.output.connect(wellnessAudio.masterGain); } catch (e) {}
-            wellnessAudio.ambient = handle;
-            wellnessAudio.ambientId = wantId;
-        }
-
-        function wellnessAudioPlayCue(name) {
-            if (!wellnessAudioSupported()) return;
-            const w = getWellnessData();
-            if (!w.breathing.soundEnabled || !w.breathing.breathingCuesEnabled) return;
-            const ctx = wellnessAudioEnsureContext();
-            if (!ctx || !wellnessAudio.masterGain) return;
-            const t0 = ctx.currentTime + 0.01;
-            const fade = ctx.createGain();
-            fade.gain.setValueAtTime(0.0001, t0);
-            fade.connect(wellnessAudio.masterGain);
-            const osc = ctx.createOscillator();
-            osc.type = 'sine';
-            let stopAt = t0 + 1.5;
-            if (name === 'inhale') {
-                osc.frequency.setValueAtTime(220, t0);
-                osc.frequency.linearRampToValueAtTime(330, t0 + 1.4);
-                fade.gain.linearRampToValueAtTime(0.18, t0 + 0.25);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.6);
-                stopAt = t0 + 1.7;
-            } else if (name === 'exhale') {
-                osc.frequency.setValueAtTime(330, t0);
-                osc.frequency.linearRampToValueAtTime(220, t0 + 1.6);
-                fade.gain.linearRampToValueAtTime(0.18, t0 + 0.3);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.8);
-                stopAt = t0 + 1.9;
-            } else if (name === 'hold') {
-                osc.frequency.setValueAtTime(280, t0);
-                fade.gain.linearRampToValueAtTime(0.06, t0 + 0.4);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 1.2);
-                stopAt = t0 + 1.3;
-            } else if (name === 'rest') {
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 0.2);
-                stopAt = t0 + 0.3;
-            } else if (name === 'complete') {
-                osc.frequency.setValueAtTime(523.25, t0);
-                fade.gain.linearRampToValueAtTime(0.2, t0 + 0.25);
-                fade.gain.linearRampToValueAtTime(0.0001, t0 + 2.2);
-                stopAt = t0 + 2.4;
-            } else {
-                return;
-            }
-            osc.connect(fade);
-            try { osc.start(t0); } catch (e) {}
-            try { osc.stop(stopAt); } catch (e) {}
-            osc.onended = () => {
-                try { osc.disconnect(); } catch (e) {}
-                try { fade.disconnect(); } catch (e) {}
-            };
-        }
-
-        function wellnessAudioFadeForPause() {
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (!ctx || !gain) return;
-            try {
-                const now = ctx.currentTime;
-                gain.gain.cancelScheduledValues(now);
-                gain.gain.setValueAtTime(gain.gain.value, now);
-                gain.gain.linearRampToValueAtTime(0.0001, now + 0.45);
-            } catch (err) {}
-        }
-
-        function wellnessAudioFullStop(fadeSec = 0.45) {
-            wellnessAudioStopAmbient(fadeSec);
-            const ctx = wellnessAudio.ctx;
-            const gain = wellnessAudio.masterGain;
-            if (ctx && gain) {
-                try {
-                    const now = ctx.currentTime;
-                    gain.gain.cancelScheduledValues(now);
-                    gain.gain.setValueAtTime(gain.gain.value, now);
-                    gain.gain.linearRampToValueAtTime(0.0001, now + fadeSec);
-                } catch (err) {}
-            }
-        }
-
-        function wellnessAudioOnSoundEnabledChange(enabled) {
-            if (!enabled) {
-                wellnessAudioFullStop(0.5);
-                return;
-            }
-            // Defer ambient start until user explicitly activates ambient or
-            // starts a session, to keep "audio off by default" honest.
-        }
-
-        function wellnessAudioApplyHintVisibility() {
-            const hint = document.getElementById('wellnessAudioBlockedHint');
-            if (!hint) return;
-            const w = getWellnessData();
-            const ctx = wellnessAudio.ctx;
-            const blocked = w.breathing.soundEnabled && (!ctx || ctx.state === 'suspended');
-            const wantsSound = w.breathing.ambientSound !== 'off' || w.breathing.breathingCuesEnabled;
-            hint.hidden = !(blocked && wantsSound);
-        }
-        // ----- end Wellness Audio Engine -----
-
-        function getWellnessData() {
-            if (!lifeWorkspace || typeof lifeWorkspace !== 'object') return getDefaultWellnessData();
-            if (!lifeWorkspace.wellness || typeof lifeWorkspace.wellness !== 'object') {
-                lifeWorkspace.wellness = getDefaultWellnessData();
-            }
-            const w = lifeWorkspace.wellness;
-            if (!Array.isArray(w.checkIns)) w.checkIns = [];
-            if (!Array.isArray(w.journalEntries)) w.journalEntries = [];
-            if (!w.breathing || typeof w.breathing !== 'object') w.breathing = getDefaultWellnessBreathingPrefs();
-            return w;
-        }
-
-        function persistWellness() {
-            try { persistAppData(); } catch (err) { /* non-critical */ }
-        }
-
-        function prefersReducedMotionMedia() {
-            try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-            catch (err) { return false; }
-        }
-
-        function isWellnessReducedMotion() {
-            const w = getWellnessData();
-            return !!w.breathing.reducedMotion || prefersReducedMotionMedia();
-        }
-
-        function escapeWellnessText(value) {
-            return String(value || '').replace(/[&<>"']/g, ch => (
-                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
-            ));
-        }
-
-        function formatWellnessTimer(seconds) {
-            const total = Math.max(0, Math.round(seconds));
-            const m = Math.floor(total / 60);
-            const s = total % 60;
-            return `${m}:${String(s).padStart(2, '0')}`;
-        }
-
-        function renderWellnessMoodChips() {
-            const row = document.getElementById('wellnessMoodRow');
-            if (!row) return;
-            const selected = row.dataset.selectedMood || '';
-            row.innerHTML = WELLNESS_MOOD_OPTIONS.map(opt => `
-                <button type="button" class="wellness-mood-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-mood="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}"
-                    aria-label="Mood: ${escapeWellnessText(opt.label)}">
-                    <span class="wellness-mood-emoji" aria-hidden="true">${opt.emoji}</span>
-                    <span class="wellness-mood-label">${escapeWellnessText(opt.label)}</span>
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessSleepChips() {
-            const row = document.getElementById('wellnessSleepRow');
-            if (!row) return;
-            const selected = row.dataset.selectedSleep || '';
-            row.innerHTML = WELLNESS_SLEEP_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-sleep="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessPromptChips() {
-            const row = document.getElementById('wellnessPromptChips');
-            if (!row) return;
-            const selected = wellnessBreathState.promptValue;
-            row.innerHTML = WELLNESS_PROMPT_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-prompt="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessPatternChips() {
-            const row = document.getElementById('wellnessPatternChips');
-            if (!row) return;
-            const selected = wellnessBreathState.patternId;
-            row.innerHTML = WELLNESS_BREATH_PATTERNS.map(pat => `
-                <button type="button" class="wellness-pill-chip${selected === pat.id ? ' is-selected' : ''}"
-                    data-wellness-pattern="${pat.id}"
-                    role="radio" aria-checked="${selected === pat.id ? 'true' : 'false'}">
-                    ${escapeWellnessText(pat.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessDurationChips() {
-            const row = document.getElementById('wellnessDurationChips');
-            if (!row) return;
-            const selected = wellnessBreathState.durationSec;
-            row.innerHTML = WELLNESS_DURATION_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-duration="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessAmbientChips() {
-            const row = document.getElementById('wellnessAmbientChips');
-            if (!row) return;
-            const w = getWellnessData();
-            const selected = w.breathing.ambientSound || 'off';
-            row.innerHTML = WELLNESS_AMBIENT_OPTIONS.map(opt => `
-                <button type="button" class="wellness-pill-chip${selected === opt.value ? ' is-selected' : ''}"
-                    data-wellness-ambient="${opt.value}"
-                    role="radio" aria-checked="${selected === opt.value ? 'true' : 'false'}">
-                    ${escapeWellnessText(opt.label)}
-                </button>
-            `).join('');
-        }
-
-        function renderWellnessAudioPanel() {
-            const panel = document.getElementById('wellnessAudioPanel');
-            if (!panel) return;
-            const w = getWellnessData();
-            const enabled = !!w.breathing.soundEnabled;
-            const supported = wellnessAudioSupported();
-            panel.classList.toggle('is-disabled', !enabled || !supported);
-            panel.setAttribute('aria-hidden', enabled && supported ? 'false' : 'true');
-            const cuesToggle = document.getElementById('wellnessBreathingCuesToggle');
-            if (cuesToggle) {
-                cuesToggle.checked = !!w.breathing.breathingCuesEnabled;
-                cuesToggle.disabled = !enabled || !supported;
-            }
-            const muteBtn = document.getElementById('wellnessMuteBtn');
-            if (muteBtn) {
-                const isMuted = !!w.breathing.muted;
-                muteBtn.dataset.muted = isMuted ? 'true' : 'false';
-                muteBtn.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
-                muteBtn.disabled = !enabled || !supported;
-                muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
-            }
-            const volumeInput = document.getElementById('wellnessVolumeInput');
-            if (volumeInput) {
-                const v = Number(w.breathing.volume);
-                volumeInput.value = String(Number.isFinite(v) ? v : 0.35);
-                volumeInput.disabled = !enabled || !supported;
-            }
-            const volumeOut = document.getElementById('wellnessVolumeValue');
-            if (volumeOut) {
-                const v = Number(w.breathing.volume);
-                const pct = Math.round((Number.isFinite(v) ? v : 0.35) * 100);
-                volumeOut.textContent = `${pct}%`;
-            }
-            const unsupportedHint = document.getElementById('wellnessAudioUnsupportedHint');
-            if (unsupportedHint) unsupportedHint.hidden = supported;
-            renderWellnessAmbientChips();
-            wellnessAudioApplyHintVisibility();
-        }
-
-        function renderWellnessRecentCheckIns() {
-            const host = document.getElementById('wellnessRecentCheckIns');
-            if (!host) return;
-            const w = getWellnessData();
-            const recent = w.checkIns.slice(-5).reverse();
-            if (!recent.length) {
-                host.innerHTML = '<p class="wellness-empty wellness-empty--inline">No check-ins yet. Save your first one above.</p>';
-                return;
-            }
-            host.innerHTML = `
-                <div class="wellness-recent-head">Recent check-ins</div>
-                <ul class="wellness-recent-list">
-                    ${recent.map(entry => {
-                        const date = new Date(entry.createdAt);
-                        const stamp = isNaN(date) ? '' : date.toLocaleString();
-                        const mood = WELLNESS_MOOD_OPTIONS.find(m => m.value === entry.mood);
-                        const sleep = WELLNESS_SLEEP_OPTIONS.find(s => s.value === entry.sleep);
-                        return `
-                            <li class="wellness-recent-item">
-                                <span class="wellness-recent-stamp">${escapeWellnessText(stamp)}</span>
-                                <span class="wellness-recent-meta">
-                                    ${mood ? `<span class="wellness-recent-emoji" aria-hidden="true">${mood.emoji}</span>` : ''}
-                                    Stress ${entry.stress}${sleep ? ` · ${escapeWellnessText(sleep.label)}` : ""}
-                                </span>
-                                ${entry.note ? `<p class="wellness-recent-note">${escapeWellnessText(entry.note)}</p>` : ''}
-                            </li>`;
-                    }).join('')}
-                </ul>`;
-        }
-
-        function renderWellnessCheckInMeta() {
-            const meta = document.getElementById('wellnessCheckInMeta');
-            if (!meta) return;
-            const w = getWellnessData();
-            const today = new Date().toDateString();
-            const todayCount = w.checkIns.filter(c => {
-                const d = new Date(c.createdAt);
-                return !isNaN(d) && d.toDateString() === today;
-            }).length;
-            meta.textContent = todayCount > 0
-                ? `${todayCount} check-in${todayCount === 1 ? '' : 's'} today.`
-                : 'No entries yet today.';
-        }
-
-        function renderWellnessJournalList() {
-            const host = document.getElementById('wellnessJournalList');
-            if (!host) return;
-            const w = getWellnessData();
-            const recent = w.journalEntries.slice(-10).reverse();
-            if (!recent.length) {
-                host.innerHTML = '<p class="wellness-empty wellness-empty--inline">No reflections yet.</p>';
-                return;
-            }
-            host.innerHTML = `
-                <div class="wellness-recent-head">Recent reflections</div>
-                <ul class="wellness-journal-entries">
-                    ${recent.map(entry => {
-                        const date = new Date(entry.createdAt);
-                        const stamp = isNaN(date) ? '' : date.toLocaleString();
-                        const promptOpt = WELLNESS_PROMPT_OPTIONS.find(p => p.value === entry.prompt);
-                        const promptLabel = promptOpt ? promptOpt.label : 'Reflection';
-                        return `
-                            <li class="wellness-journal-entry" data-wellness-journal-id="${escapeWellnessText(entry.id)}">
-                                <div class="wellness-journal-entry-head">
-                                    <span class="wellness-journal-entry-prompt">${escapeWellnessText(promptLabel)}</span>
-                                    <span class="wellness-journal-entry-stamp">${escapeWellnessText(stamp)}</span>
-                                    <button type="button" class="wellness-journal-delete" data-wellness-journal-delete="${escapeWellnessText(entry.id)}" aria-label="Delete reflection">×</button>
-                                </div>
-                                <p class="wellness-journal-entry-body">${escapeWellnessText(entry.body)}</p>
-                            </li>`;
-                    }).join('')}
-                </ul>`;
-        }
-
-        function computeWellnessPatterns() {
-            const w = getWellnessData();
-            const checkIns = w.checkIns.slice();
-            const total = checkIns.length;
-            if (total === 0) return null;
-            const now = Date.now();
-            const lastWeek = checkIns.filter(c => {
-                const d = new Date(c.createdAt).getTime();
-                return Number.isFinite(d) && (now - d) <= 7 * 24 * 3600 * 1000;
-            });
-            const avg = (arr, key) => arr.length
-                ? (arr.reduce((s, c) => s + (Number(c[key]) || 0), 0) / arr.length).toFixed(1)
-                : '—';
-            const moodCounts = {};
-            checkIns.forEach(c => { if (c.mood) moodCounts[c.mood] = (moodCounts[c.mood] || 0) + 1; });
-            const topMoodValue = Object.keys(moodCounts).sort((a, b) => moodCounts[b] - moodCounts[a])[0] || '';
-            const topMood = WELLNESS_MOOD_OPTIONS.find(m => m.value === topMoodValue) || null;
-            const sleepCounts = {};
-            checkIns.forEach(c => { if (c.sleep) sleepCounts[c.sleep] = (sleepCounts[c.sleep] || 0) + 1; });
-            const topSleepValue = Object.keys(sleepCounts).sort((a, b) => sleepCounts[b] - sleepCounts[a])[0] || '';
-            const topSleep = WELLNESS_SLEEP_OPTIONS.find(s => s.value === topSleepValue) || null;
-            return {
-                total,
-                lastWeekCount: lastWeek.length,
-                avgStressWeek: avg(lastWeek, 'stress'),
-                avgStressAll: avg(checkIns, 'stress'),
-                topMood,
-                topSleep
-            };
-        }
-
-        function renderWellnessPatterns() {
-            const host = document.getElementById('wellnessPatternGrid');
-            const empty = document.getElementById('wellnessPatternsEmpty');
-            if (!host || !empty) return;
-            const p = computeWellnessPatterns();
-            if (!p || p.total < 1) {
-                host.innerHTML = '';
-                empty.hidden = false;
-                return;
-            }
-            empty.hidden = p.total >= 3 ? true : false;
-            const cells = [
-                { label: 'Check-ins logged', value: String(p.total), sub: `${p.lastWeekCount} in last 7 days` },
-                { label: 'Avg stress (7d)', value: p.avgStressWeek, sub: `Overall ${p.avgStressAll}` },
-                {
-                    label: 'Most common mood',
-                    value: p.topMood ? `${p.topMood.emoji} ${p.topMood.label}` : '—',
-                    sub: p.topSleep ? `Sleep often ${p.topSleep.label.toLowerCase()}` : ''
-                }
-            ];
-            host.innerHTML = cells.map(cell => `
-                <div class="wellness-pattern-cell">
-                    <div class="wellness-pattern-label">${escapeWellnessText(cell.label)}</div>
-                    <div class="wellness-pattern-value">${escapeWellnessText(cell.value)}</div>
-                    ${cell.sub ? `<div class="wellness-pattern-sub">${escapeWellnessText(cell.sub)}</div>` : ''}
-                </div>
-            `).join('');
-        }
-
-        function renderWellnessBreathSessionsMeta() {
-            const meta = document.getElementById('wellnessBreathSessionsMeta');
-            if (!meta) return;
-            const w = getWellnessData();
-            meta.textContent = `Sessions: ${w.breathing.sessionsCompleted || 0}`;
-        }
-
-        function syncWellnessBreathPrefsFromState() {
-            const w = getWellnessData();
-            wellnessBreathState.patternId = w.breathing.preferredPattern || 'calm-focus';
-            wellnessBreathState.durationSec = w.breathing.preferredDuration || 120;
-            wellnessBreathState.reducedMotion = !!w.breathing.reducedMotion;
-            wellnessBreathState.soundEnabled = !!w.breathing.soundEnabled;
-            wellnessBreathState.ambientSound = w.breathing.ambientSound || 'off';
-            wellnessBreathState.breathingCuesEnabled = !!w.breathing.breathingCuesEnabled;
-            wellnessBreathState.volume = Number.isFinite(w.breathing.volume) ? w.breathing.volume : 0.35;
-            wellnessBreathState.muted = !!w.breathing.muted;
-        }
-
-        function renderWellnessBreathToggles() {
-            const reduced = document.getElementById('wellnessReducedMotionToggle');
-            if (reduced) reduced.checked = wellnessBreathState.reducedMotion;
-            const stage = document.getElementById('wellnessOrbStage');
-            if (stage) stage.classList.toggle('is-reduced', isWellnessReducedMotion());
-            const sound = document.getElementById('wellnessSoundToggle');
-            if (sound) {
-                const supported = wellnessAudioSupported();
-                sound.checked = !!wellnessBreathState.soundEnabled && supported;
-                sound.disabled = !supported;
-            }
-        }
-
-        function renderWellnessSection() {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            const w = getWellnessData();
-            renderWellnessMoodChips();
-            renderWellnessSleepChips();
-            renderWellnessPromptChips();
-            syncWellnessBreathPrefsFromState();
-            renderWellnessPatternChips();
-            renderWellnessDurationChips();
-            renderWellnessBreathToggles();
-            renderWellnessAudioPanel();
-            renderWellnessCheckInMeta();
-            renderWellnessRecentCheckIns();
-            renderWellnessJournalList();
-            renderWellnessPatterns();
-            renderWellnessBreathSessionsMeta();
-            updateWellnessOrbVisualState();
-        }
-
-        function setWellnessActiveTab(tabKey) {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            root.querySelectorAll('.wellness-tab').forEach(btn => {
-                const isActive = btn.dataset.wellnessTab === tabKey;
-                btn.classList.toggle('is-active', isActive);
-                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            });
-            root.querySelectorAll('.wellness-panel').forEach(panel => {
-                panel.classList.toggle('is-active', panel.dataset.wellnessPanel === tabKey);
-            });
-            if (tabKey !== 'breathing') {
-                if (wellnessBreathState.running) wellnessBreathPause();
-                wellnessAudioFullStop(0.4);
-            }
-        }
-
-        function saveWellnessCheckIn() {
-            const moodRow = document.getElementById('wellnessMoodRow');
-            const sleepRow = document.getElementById('wellnessSleepRow');
-            const stressInput = document.getElementById('wellnessStressInput');
-            const noteInput = document.getElementById('wellnessNoteInput');
-            const w = getWellnessData();
-            const entry = normalizeWellnessCheckIn({
-                id: `wci_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                createdAt: new Date().toISOString(),
-                mood: moodRow ? (moodRow.dataset.selectedMood || '') : '',
-                stress: stressInput ? Number(stressInput.value) : 5,
-                sleep: sleepRow ? (sleepRow.dataset.selectedSleep || '') : '',
-                note: noteInput ? noteInput.value.trim() : ''
-            });
-            w.checkIns.push(entry);
-            persistWellness();
-            // Reset note + selections; keep sliders mid-range
-            if (noteInput) noteInput.value = '';
-            if (moodRow) { delete moodRow.dataset.selectedMood; }
-            if (sleepRow) { delete sleepRow.dataset.selectedSleep; }
-            renderWellnessSection();
-            try { showToast && showToast('Check-in saved.'); } catch (err) { /* non-critical */ }
-        }
-
-        function saveWellnessJournalEntry() {
-            const bodyEl = document.getElementById('wellnessJournalBody');
-            const body = bodyEl ? bodyEl.value.trim() : '';
-            if (!body) {
-                try { showToast && showToast('Add a few words first.'); } catch (err) { /* non-critical */ }
-                return;
-            }
-            const w = getWellnessData();
-            const promptOpt = WELLNESS_PROMPT_OPTIONS.find(p => p.value === wellnessBreathState.promptValue);
-            const entry = normalizeWellnessJournalEntry({
-                id: `wj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                createdAt: new Date().toISOString(),
-                prompt: promptOpt ? promptOpt.value : 'free',
-                body
-            });
-            w.journalEntries.push(entry);
-            persistWellness();
-            if (bodyEl) bodyEl.value = '';
-            renderWellnessJournalList();
-        }
-
-        function deleteWellnessJournalEntry(id) {
-            const w = getWellnessData();
-            const idx = w.journalEntries.findIndex(e => e.id === id);
-            if (idx === -1) return;
-            w.journalEntries.splice(idx, 1);
-            persistWellness();
-            renderWellnessJournalList();
-        }
-
-        // Breathing exercise engine
-        function getCurrentWellnessPattern() {
-            return WELLNESS_BREATH_PATTERNS.find(p => p.id === wellnessBreathState.patternId)
-                || WELLNESS_BREATH_PATTERNS[0];
-        }
-
-        function updateWellnessOrbVisualState() {
-            const orb = document.getElementById('wellnessOrb');
-            const cue = document.getElementById('wellnessOrbCue');
-            const stage = document.getElementById('wellnessOrbStage');
-            const timer = document.getElementById('wellnessOrbTimer');
-            if (!orb || !cue || !stage || !timer) return;
-            const phase = wellnessBreathState.phase;
-            const pattern = getCurrentWellnessPattern();
-            const phaseDef = pattern.phases[wellnessBreathState.phaseIndex] || null;
-            const phaseSec = phaseDef ? phaseDef.sec : 0;
-            const reduced = isWellnessReducedMotion();
-            stage.dataset.phase = phase;
-            stage.classList.toggle('is-reduced', reduced);
-            stage.classList.toggle('is-running', wellnessBreathState.running && !wellnessBreathState.paused);
-            cue.textContent = WELLNESS_PHASE_LABEL[phase] || 'Ready';
-            // Drive orb scale via inline transform when not reduced; otherwise keep at base size.
-            if (reduced || !wellnessBreathState.running) {
-                orb.style.transition = 'transform 600ms cubic-bezier(0.22,1,0.36,1)';
-                orb.style.transform = (phase === 'inhale' || phase === 'hold') ? 'scale(1.06)' : 'scale(0.94)';
-            } else if (phaseSec > 0) {
-                orb.style.transition = `transform ${phaseSec}s cubic-bezier(0.45, 0, 0.25, 1)`;
-                if (phase === 'inhale') orb.style.transform = 'scale(1.32)';
-                else if (phase === 'hold') orb.style.transform = 'scale(1.32)';
-                else if (phase === 'exhale') orb.style.transform = 'scale(0.78)';
-                else if (phase === 'rest') orb.style.transform = 'scale(0.78)';
-                else orb.style.transform = 'scale(1)';
-            } else {
-                orb.style.transition = 'transform 600ms cubic-bezier(0.22,1,0.36,1)';
-                orb.style.transform = 'scale(1)';
-            }
-            const remaining = Math.max(0, wellnessBreathState.durationSec - wellnessBreathState.elapsedSec);
-            timer.textContent = wellnessBreathState.running || wellnessBreathState.elapsedSec > 0
-                ? formatWellnessTimer(remaining)
-                : formatWellnessTimer(wellnessBreathState.durationSec);
-        }
-
-        function clearWellnessTimer() {
-            if (wellnessBreathState.timerHandle) {
-                clearInterval(wellnessBreathState.timerHandle);
-                wellnessBreathState.timerHandle = null;
-            }
-        }
-
-        function wellnessBreathStart() {
-            if (wellnessBreathState.running) return;
-            const w = getWellnessData();
-            wellnessBreathState.running = true;
-            wellnessBreathState.paused = false;
-            wellnessBreathState.elapsedSec = 0;
-            wellnessBreathState.phaseElapsedSec = 0;
-            wellnessBreathState.phaseIndex = 0;
-            const firstPhase = getCurrentWellnessPattern().phases[0].name;
-            wellnessBreathState.phase = firstPhase;
-            wellnessBreathState.lastTickAt = performance.now();
-            // Persist preferred pattern + duration
-            w.breathing.preferredPattern = wellnessBreathState.patternId;
-            w.breathing.preferredDuration = wellnessBreathState.durationSec;
-            persistWellness();
-            // The Start click is a user gesture — safe to create/resume the
-            // AudioContext now per browser autoplay policy. Audio still only
-            // plays if Sound is enabled and an ambient sound or cues are picked.
-            if (w.breathing.soundEnabled) {
-                wellnessAudioEnsureContext();
-                wellnessAudioResume().then(() => {
-                    wellnessAudioApplyVolume(0.25);
-                    if (w.breathing.ambientSound && w.breathing.ambientSound !== 'off') {
-                        wellnessAudioStartAmbient(w.breathing.ambientSound);
-                    }
-                    wellnessAudioApplyHintVisibility();
-                });
-                if (w.breathing.breathingCuesEnabled) {
-                    wellnessAudioPlayCue(firstPhase);
-                }
-            }
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-            wellnessBreathState.timerHandle = setInterval(wellnessBreathTick, 250);
-        }
-
-        function wellnessBreathPause() {
-            if (!wellnessBreathState.running || wellnessBreathState.paused) return;
-            wellnessBreathState.paused = true;
-            clearWellnessTimer();
-            wellnessAudioFadeForPause();
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-        }
-
-        function wellnessBreathResume() {
-            if (!wellnessBreathState.running || !wellnessBreathState.paused) return;
-            wellnessBreathState.paused = false;
-            wellnessBreathState.lastTickAt = performance.now();
-            wellnessBreathState.timerHandle = setInterval(wellnessBreathTick, 250);
-            const w = getWellnessData();
-            if (w.breathing.soundEnabled) {
-                wellnessAudioResume().then(() => wellnessAudioApplyVolume(0.4));
-            }
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-        }
-
-        function wellnessBreathEnd(completed) {
-            const wasRunning = wellnessBreathState.running;
-            wellnessBreathState.running = false;
-            wellnessBreathState.paused = false;
-            clearWellnessTimer();
-            if (completed && wasRunning) {
-                const w = getWellnessData();
-                w.breathing.sessionsCompleted = (w.breathing.sessionsCompleted || 0) + 1;
-                w.breathing.lastCompletedAt = new Date().toISOString();
-                persistWellness();
-                wellnessBreathState.phase = 'complete';
-                if (w.breathing.soundEnabled && w.breathing.breathingCuesEnabled) {
-                    wellnessAudioPlayCue('complete');
-                }
-            } else {
-                wellnessBreathState.phase = 'idle';
-            }
-            wellnessBreathState.phaseElapsedSec = 0;
-            wellnessBreathState.phaseIndex = 0;
-            wellnessBreathState.elapsedSec = wellnessBreathState.elapsedSec; // keep for display until next start
-            wellnessAudioFullStop(completed ? 1.4 : 0.6);
-            wellnessUpdateBreathButtons();
-            updateWellnessOrbVisualState();
-            renderWellnessBreathSessionsMeta();
-            if (completed) {
-                try { showToast && showToast('Session complete. Nicely done.'); } catch (err) { /* non-critical */ }
-            }
-        }
-
-        function wellnessBreathTick() {
-            if (!wellnessBreathState.running || wellnessBreathState.paused) return;
-            const now = performance.now();
-            const dt = Math.max(0, (now - wellnessBreathState.lastTickAt) / 1000);
-            wellnessBreathState.lastTickAt = now;
-            wellnessBreathState.elapsedSec += dt;
-            wellnessBreathState.phaseElapsedSec += dt;
-            const pattern = getCurrentWellnessPattern();
-            const currentPhase = pattern.phases[wellnessBreathState.phaseIndex];
-            if (currentPhase && wellnessBreathState.phaseElapsedSec >= currentPhase.sec) {
-                wellnessBreathState.phaseElapsedSec = 0;
-                wellnessBreathState.phaseIndex = (wellnessBreathState.phaseIndex + 1) % pattern.phases.length;
-                const nextPhaseName = pattern.phases[wellnessBreathState.phaseIndex].name;
-                wellnessBreathState.phase = nextPhaseName;
-                wellnessAudioPlayCue(nextPhaseName);
-                updateWellnessOrbVisualState();
-            } else {
-                // Update timer text without restarting transitions
-                const timer = document.getElementById('wellnessOrbTimer');
-                if (timer) {
-                    const remaining = Math.max(0, wellnessBreathState.durationSec - wellnessBreathState.elapsedSec);
-                    timer.textContent = formatWellnessTimer(remaining);
-                }
-            }
-            if (wellnessBreathState.elapsedSec >= wellnessBreathState.durationSec) {
-                wellnessBreathEnd(true);
-            }
-        }
-
-        function wellnessUpdateBreathButtons() {
-            const startBtn = document.getElementById('wellnessBreathStartBtn');
-            const pauseBtn = document.getElementById('wellnessBreathPauseBtn');
-            const resumeBtn = document.getElementById('wellnessBreathResumeBtn');
-            const endBtn = document.getElementById('wellnessBreathEndBtn');
-            if (!startBtn || !pauseBtn || !resumeBtn || !endBtn) return;
-            const running = wellnessBreathState.running;
-            const paused = wellnessBreathState.paused;
-            startBtn.disabled = running;
-            startBtn.hidden = running;
-            pauseBtn.disabled = !running || paused;
-            pauseBtn.hidden = !running || paused;
-            resumeBtn.disabled = !running || !paused;
-            resumeBtn.hidden = !(running && paused);
-            endBtn.disabled = !running;
-        }
-
-        function initWellnessUI() {
-            const root = document.getElementById('lifePage-wellness');
-            if (!root) return;
-            if (root.dataset.bound === 'true') {
-                renderWellnessSection();
-                return;
-            }
-            root.dataset.bound = 'true';
-
-            // Tab switching
-            root.addEventListener('click', (event) => {
-                const tabBtn = event.target.closest('[data-wellness-tab]');
-                if (tabBtn) {
-                    setWellnessActiveTab(tabBtn.dataset.wellnessTab);
-                    return;
-                }
-                const moodBtn = event.target.closest('[data-wellness-mood]');
-                if (moodBtn) {
-                    const row = document.getElementById('wellnessMoodRow');
-                    if (row) row.dataset.selectedMood = moodBtn.dataset.wellnessMood;
-                    renderWellnessMoodChips();
-                    return;
-                }
-                const sleepBtn = event.target.closest('[data-wellness-sleep]');
-                if (sleepBtn) {
-                    const row = document.getElementById('wellnessSleepRow');
-                    if (row) row.dataset.selectedSleep = sleepBtn.dataset.wellnessSleep;
-                    renderWellnessSleepChips();
-                    return;
-                }
-                const promptBtn = event.target.closest('[data-wellness-prompt]');
-                if (promptBtn) {
-                    wellnessBreathState.promptValue = promptBtn.dataset.wellnessPrompt;
-                    renderWellnessPromptChips();
-                    return;
-                }
-                const patternBtn = event.target.closest('[data-wellness-pattern]');
-                if (patternBtn && !wellnessBreathState.running) {
-                    wellnessBreathState.patternId = patternBtn.dataset.wellnessPattern;
-                    const w = getWellnessData();
-                    w.breathing.preferredPattern = wellnessBreathState.patternId;
-                    persistWellness();
-                    renderWellnessPatternChips();
-                    return;
-                }
-                const durBtn = event.target.closest('[data-wellness-duration]');
-                if (durBtn && !wellnessBreathState.running) {
-                    const v = Number(durBtn.dataset.wellnessDuration);
-                    if ([60, 120, 300].includes(v)) {
-                        wellnessBreathState.durationSec = v;
-                        const w = getWellnessData();
-                        w.breathing.preferredDuration = v;
-                        persistWellness();
-                        renderWellnessDurationChips();
-                        updateWellnessOrbVisualState();
-                    }
-                    return;
-                }
-                if (event.target.closest('#wellnessSaveCheckInBtn')) {
-                    saveWellnessCheckIn();
-                    return;
-                }
-                if (event.target.closest('#wellnessSaveJournalBtn')) {
-                    saveWellnessJournalEntry();
-                    return;
-                }
-                const delBtn = event.target.closest('[data-wellness-journal-delete]');
-                if (delBtn) {
-                    deleteWellnessJournalEntry(delBtn.dataset.wellnessJournalDelete);
-                    return;
-                }
-                if (event.target.closest('#wellnessBreathStartBtn')) { wellnessBreathStart(); return; }
-                if (event.target.closest('#wellnessBreathPauseBtn')) { wellnessBreathPause(); return; }
-                if (event.target.closest('#wellnessBreathResumeBtn')) { wellnessBreathResume(); return; }
-                if (event.target.closest('#wellnessBreathEndBtn')) { wellnessBreathEnd(false); return; }
-
-                const ambientBtn = event.target.closest('[data-wellness-ambient]');
-                if (ambientBtn) {
-                    const v = String(ambientBtn.dataset.wellnessAmbient || 'off');
-                    const w = getWellnessData();
-                    w.breathing.ambientSound = v;
-                    wellnessBreathState.ambientSound = v;
-                    persistWellness();
-                    renderWellnessAmbientChips();
-                    if (w.breathing.soundEnabled) {
-                        wellnessAudioEnsureContext();
-                        wellnessAudioResume().then(() => {
-                            wellnessAudioApplyVolume(0.25);
-                            wellnessAudioStartAmbient(v);
-                            wellnessAudioApplyHintVisibility();
-                        });
-                    }
-                    return;
-                }
-                const muteBtn = event.target.closest('#wellnessMuteBtn');
-                if (muteBtn) {
-                    const w = getWellnessData();
-                    w.breathing.muted = !w.breathing.muted;
-                    wellnessBreathState.muted = w.breathing.muted;
-                    persistWellness();
-                    wellnessAudioApplyVolume(0.18);
-                    renderWellnessAudioPanel();
-                    return;
-                }
-            });
-
-            root.addEventListener('input', (event) => {
-                const stress = event.target.closest('#wellnessStressInput');
-                if (stress) {
-                    const out = document.getElementById('wellnessStressValue');
-                    if (out) out.textContent = String(stress.value);
-                    return;
-                }
-                const volume = event.target.closest('#wellnessVolumeInput');
-                if (volume) {
-                    const v = Math.max(0, Math.min(1, Number(volume.value)));
-                    const w = getWellnessData();
-                    w.breathing.volume = v;
-                    wellnessBreathState.volume = v;
-                    const out = document.getElementById('wellnessVolumeValue');
-                    if (out) out.textContent = `${Math.round(v * 100)}%`;
-                    wellnessAudioApplyVolume(0.12);
-                    return;
-                }
-            });
-
-            root.addEventListener('change', (event) => {
-                const reduced = event.target.closest('#wellnessReducedMotionToggle');
-                if (reduced) {
-                    const w = getWellnessData();
-                    w.breathing.reducedMotion = !!reduced.checked;
-                    wellnessBreathState.reducedMotion = w.breathing.reducedMotion;
-                    persistWellness();
-                    renderWellnessBreathToggles();
-                    updateWellnessOrbVisualState();
-                    return;
-                }
-                const sound = event.target.closest('#wellnessSoundToggle');
-                if (sound) {
-                    const w = getWellnessData();
-                    const wantOn = !!sound.checked && wellnessAudioSupported();
-                    w.breathing.soundEnabled = wantOn;
-                    wellnessBreathState.soundEnabled = wantOn;
-                    persistWellness();
-                    if (wantOn) {
-                        // The toggle itself is a user gesture — set up the
-                        // context now so the AudioContext is unblocked.
-                        wellnessAudioEnsureContext();
-                        wellnessAudioResume().then(() => {
-                            wellnessAudioApplyVolume(0.18);
-                            if (w.breathing.ambientSound && w.breathing.ambientSound !== 'off') {
-                                wellnessAudioStartAmbient(w.breathing.ambientSound);
-                            }
-                            wellnessAudioApplyHintVisibility();
-                        });
-                    } else {
-                        wellnessAudioOnSoundEnabledChange(false);
-                    }
-                    renderWellnessAudioPanel();
-                    return;
-                }
-                const cues = event.target.closest('#wellnessBreathingCuesToggle');
-                if (cues) {
-                    const w = getWellnessData();
-                    w.breathing.breathingCuesEnabled = !!cues.checked;
-                    wellnessBreathState.breathingCuesEnabled = w.breathing.breathingCuesEnabled;
-                    persistWellness();
-                    return;
-                }
-                const volume = event.target.closest('#wellnessVolumeInput');
-                if (volume) {
-                    const v = Math.max(0, Math.min(1, Number(volume.value)));
-                    const w = getWellnessData();
-                    w.breathing.volume = v;
-                    wellnessBreathState.volume = v;
-                    persistWellness();
-                    wellnessAudioApplyVolume(0.12);
-                    return;
-                }
-            });
-
-            // Stop audio cleanly if user navigates away (tab hidden, switches
-            // browser tab, locks screen, etc.). Pause the running session too.
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    if (wellnessBreathState.running && !wellnessBreathState.paused) {
-                        wellnessBreathPause();
-                    }
-                    wellnessAudioFullStop(0.3);
-                }
-            });
-
-            // Stop audio when the wellness subpage is hidden (Back to dashboard
-            // or navigation to another life subpage). Watching display:none on
-            // the panel covers the existing back-button + nav-grid flow without
-            // patching every caller.
-            try {
-                const obs = new MutationObserver(() => {
-                    const hidden = root.style.display === 'none' || root.offsetParent === null;
-                    if (hidden) {
-                        if (wellnessBreathState.running && !wellnessBreathState.paused) {
-                            wellnessBreathPause();
-                        }
-                        wellnessAudioFullStop(0.4);
-                    }
-                });
-                obs.observe(root, { attributes: true, attributeFilter: ['style'] });
-            } catch (err) { /* non-critical */ }
-
-            // Belt-and-braces: stop audio if the page is being unloaded.
-            window.addEventListener('pagehide', () => { wellnessAudioFullStop(0.05); });
-
-            renderWellnessSection();
-            wellnessUpdateBreathButtons();
-        }
-        // ------------------ end Wellness section ------------------
 
         // ------------------ Pinned pages (Life + College) ------------------
         const PINNED_PAGE_META = {
             life: {
                 goals:      { label: 'SMART Goals',      icon: 'fa-bullseye' },
                 habits:     { label: 'Habit Tracker',    icon: 'fa-check-double' },
-                sleep:      { label: 'Sleep Tracker',    icon: 'fa-moon' },
                 spending:   { label: 'Spending Tracker', icon: 'fa-wallet' },
-                journal:    { label: 'Daily Journal',    icon: 'fa-journal-whills' },
                 skills:     { label: 'Skills Tracker',   icon: 'fa-brain' },
-                fitness:    { label: 'Fitness Tracker',  icon: 'fa-dumbbell' },
-                calories:   { label: 'Calorie Tracker',  icon: 'fa-fire' },
                 calculator: { label: 'Quick Calculator', icon: 'fa-calculator' },
                 books:      { label: 'Book Tracker',     icon: 'fa-book-open' },
-                wellness:   { label: 'Wellness & Reset', icon: 'fa-spa' }
             },
             collegeapp: {
                 tracker:        { label: 'College Tracker',         icon: 'fa-university' },
@@ -18713,7 +16696,7 @@ function populateProgressDashboard() {
                 <div class="pin-nav-card-wrap">
                     <button class="${cls} pin-nav-card" ${dataAttr}="${pageId}">
                         <i class="fas ${meta.icon}"></i>
-                        <span>${escapeWellnessText(meta.label)}</span>
+                        <span>${escapeHtml(meta.label)}</span>
                     </button>
                     <button type="button" class="pin-star-btn${isPinned ? ' is-pinned' : ''}"
                         data-pin-toggle="${tab}:${pageId}"
@@ -24111,9 +22094,7 @@ function populateProgressDashboard() {
                         const lw = lifeWorkspace || {};
                         return !!(
                             (Array.isArray(lw.habits) && lw.habits.length) ||
-                            (lw.sleepTracker && Array.isArray(lw.sleepTracker.entries) && lw.sleepTracker.entries.length) ||
                             (Array.isArray(lw.goals) && lw.goals.length) ||
-                            (Array.isArray(lw.journals) && lw.journals.length) ||
                             (Array.isArray(lw.spending) && lw.spending.length) ||
                             (Array.isArray(lw.books) && lw.books.length)
                         );
@@ -26579,7 +24560,7 @@ function populateProgressDashboard() {
             { view: 'homework',   title: 'To-do',        icon: 'fa-book-open',     description: 'Homework, general tasks, and class planning.' },
             { view: 'apstudy',    title: 'Testing Hub',  icon: 'fa-graduation-cap', description: 'AP exam prep, units, practice logs.' },
             { view: 'collegeapp', title: 'College',      icon: 'fa-university',    description: 'Schools, deadlines, essays, scholarships.' },
-            { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'SMART goals, habits, journals, fitness.' },
+            { view: 'life',       title: 'Life',         icon: 'fa-seedling',      description: 'Goals, habits, spending, books, and practical tools.' },
             { view: 'business',   title: 'Business',     icon: 'fa-briefcase',     description: 'Projects, clients, invoices, meetings.' },
             { view: 'review',     title: 'Review',       icon: 'fa-layer-group',   description: 'Flashcards, learn, write, test, match.' }
         ];
@@ -52421,36 +50402,6 @@ function getActiveEditor() {
 <ul><li></li></ul>
 <h3>Done</h3>
 <div class="checklist-item"><input type="checkbox" checked><span contenteditable="true">Completed task</span></div>`
-            },
-            journal: {
-                name: 'Daily Journal',
-                icon: PAGE_ICONS.JOURNAL,
-                description: 'Capture intention, gratitude, and learning with a repeatable daily structure.',
-                sections: ['Morning intention', 'Focus blocks', 'Events and notes', 'Gratitude', 'Evening reflection'],
-                category: 'general',
-                connectsTo: ['createsTasks'],
-                studentPriority: 5,
-                suggestedTitle: () => `Journal - ${formatTemplateDate()}`,
-                starterTasks: [
-                    { title: 'Write evening reflection', dueOffsetDays: 0, priority: 'medium', difficulty: 'easy', category: 'personal' },
-                    { title: 'Run weekly journal review', scheduleType: 'weekly', weeklyDays: [0], priority: 'low', difficulty: 'easy', category: 'personal' }
-                ],
-                content: () => `<h2>Daily Journal</h2>
-<p><strong>Date:</strong> ${formatTemplateDate(new Date(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-<h3>Morning Intention</h3>
-<p>What matters most today?</p>
-<h3>Focus Blocks</h3>
-<table><thead><tr><th>Block</th><th>Goal</th><th>Outcome</th></tr></thead><tbody>
-<tr><td>AM</td><td></td><td></td></tr>
-<tr><td>PM</td><td></td><td></td></tr></tbody></table>
-<h3>Events and Notes</h3>
-<p><br></p>
-<h3>Gratitude</h3>
-<ul><li></li><li></li><li></li></ul>
-<h3>Evening Reflection</h3>
-<p><strong>What went well:</strong> </p>
-<p><strong>What to improve:</strong> </p>
-<p><strong>Carry-forward item:</strong> </p>`
             },
             weekly: {
                 name: 'Weekly Review',
@@ -85241,7 +83192,6 @@ function getCommandPaletteCommands() {
         { id: 'add-college-scholarship', label: 'Add scholarship', hint: 'New scholarship in College', hidden: modeHides('collegeapp'), run: () => { closeCommandPalette(); try { setActiveView('collegeapp'); showCollegeAppPage('scholarships'); addCollegeAppRow('scholarships'); } catch (err) {} } },
         { id: 'add-life-goal', label: 'Add life goal', hint: 'New SMART goal in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('goals'); } catch (err) {} } },
         { id: 'add-life-habit', label: 'Add habit', hint: 'New habit in Life', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); addLifeRow('habits'); } catch (err) {} } },
-        { id: 'life-daily-checkin', label: 'Daily check-in', hint: 'Log mood, stress, and sleep', hidden: modeHides('life'), run: () => { closeCommandPalette(); try { setActiveView('life'); const m = document.getElementById('lifeCheckInMood'); if (m && m.scrollIntoView) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (m) m.focus(); } catch (err) {} } },
         { id: 'add-business-project', label: 'Add business project', hint: 'New project in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('project'); } catch (err) {} } },
         { id: 'add-business-invoice', label: 'Add invoice', hint: 'New invoice in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('invoice'); } catch (err) {} } },
         { id: 'add-business-meeting', label: 'Add meeting', hint: 'New meeting in Business', hidden: modeHides('business'), run: () => { closeCommandPalette(); try { setActiveView('business'); if (window.NoteFlowBusiness && window.NoteFlowBusiness.openEntity) window.NoteFlowBusiness.openEntity('meeting'); } catch (err) {} } },
