@@ -90,6 +90,10 @@ under `module.exports` for Node and are executed by
   and confidence scoring.
 - **`assignment-studio.js`** — `normalizeStudio` / `computeProgress` (milestones
   weighted double vs. subtasks).
+- **`planning-engine.js`** — plans from all open canonical Tasks and Homework due
+  by the end of the selected preview, including overdue work. It preserves
+  task/homework source IDs and skips items already linked to Timeline blocks;
+  intelligence summaries remain attention signals rather than planning inputs.
 
 Because the engines are deterministic and tested in isolation, the academic
 *decisions* never depend on a model being available, online, or correct.
@@ -194,6 +198,9 @@ notification Settings panel says this plainly:
 
 - `npm run check:academic` — executes all four engines in Node (rotation math,
   grade math, syllabus extraction, studio progress).
+- `tests/unit/planning-engine.test.mjs` — covers the weekly due-date boundary,
+  day-five medium-priority work, source-typed Timeline links, completed/deleted
+  rows, and planner capacity.
 - `tests/e2e/academic-upgrade.spec.mjs` — registration + export round-trip,
   reload persistence, rotation/holiday/study-windows, the Grade Planner UI and
   scenario solver, the Semester Setup local-extract-and-approve path, Studio

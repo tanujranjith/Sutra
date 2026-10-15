@@ -188,6 +188,114 @@
         return bits.length ? bits.join(', ') : 'open work';
     }
 
+    function validDateKey(value) {
+        var key = String(value || '').slice(0, 10);
+        var parsed = /^\d{4}-\d{2}-\d{2}$/.test(key) ? parseISO(key) : null;
+        return parsed && isoLocal(parsed) === key ? key : '';
+    }
+
+    function sourceKind(value) {
+        var kind = String(value || '').toLowerCase().trim();
+        if (kind === 'task' || kind === 'tasks') return 'task';
+        if (kind === 'homework' || kind === 'hw' || kind === 'assignment') return 'homework';
+        return '';
+    }
+
+    function isOpenSourceItem(item) {
+        if (!item || typeof item !== 'object') return false;
+        var status = String(item.status || '').toLowerCase();
+        return item.completed !== true && item.done !== true && item.deleted !== true
+            && item.isDeleted !== true && !item.deletedAt && item.isActive !== false
+            && item.archived !== true
+            && ['done', 'completed', 'deleted', 'trashed', 'archived'].indexOf(status) === -1;
+    }
+
+    function legacyPlannerBlockMatches(block, item) {
+        if (String(block.source || '').toLowerCase() !== 'planner_preview'
+            || String(block.sourceNoteId || '') !== String(item.id || '')) return false;
+        var name = String(block.name || '').trim();
+        var title = String(item.title || '').trim();
+        if (!name || !title) return false;
+        // Older previews stored only sourceNoteId, without the work type. Match
+        // their exact title (including the planner's chunk suffix) to avoid
+        // treating equal IDs from task and homework as the same source.
+        return name === title || name.indexOf(title + ' (') === 0;
+    }
+
+    function hasScheduledSource(item, blocks, today) {
+        var kind = sourceKind(item.kind);
+        var id = String(item.id || '');
+        if (!kind || !id) return false;
+        return (Array.isArray(blocks) ? blocks : []).some(function (block) {
+            if (!isOpenSourceItem(block)) return false;
+            var date = validDateKey(block.date);
+            if (date && today && date < today) return false;
+            var blockKind = sourceKind(block.sourceType) || sourceKind(block.sourceKind) || sourceKind(block.source);
+            var source = String(block.source || '').toLowerCase();
+            var sourceMatch = /^planner_preview:(task|homework)$/.exec(source);
+            if (!blockKind && sourceMatch) blockKind = sourceMatch[1];
+            var sourceKeyMatch = /^(task|homework):(.+)$/i.exec(String(block.sourceKey || ''));
+            if (!blockKind && sourceKeyMatch) blockKind = sourceKind(sourceKeyMatch[1]);
+            if (blockKind && blockKind !== kind) return false;
+
+            var linkedIds = kind === 'task'
+                ? [block.taskId, block.linkedTaskId]
+                : [block.homeworkId, block.assignmentId, block.linkedHomeworkId];
+            if (linkedIds.some(function (linkedId) { return linkedId != null && String(linkedId) === id; })) return true;
+            if (blockKind === kind) {
+                if (block.sourceId != null && String(block.sourceId) === id) return true;
+                if (block.sourceNoteId != null && String(block.sourceNoteId) === id) return true;
+                if (sourceKeyMatch && sourceKind(sourceKeyMatch[1]) === kind && sourceKeyMatch[2] === id) return true;
+            }
+            return !blockKind && legacyPlannerBlockMatches(block, item);
+        });
+    }
+
+    // Convert the canonical workspace rows into the bounded planner input.
+    // This stays pure so date-range, identity, completion, and schedule-link
+    // behavior can be checked without booting the browser adapter.
+    function collectPlanningItems(input) {
+        input = input || {};
+        var dates = (Array.isArray(input.dates) ? input.dates : []).map(validDateKey).filter(Boolean).sort();
+        var lastDate = dates.length ? dates[dates.length - 1] : '';
+        if (!lastDate) return [];
+        var items = [];
+        var seen = Object.create(null);
+        function addRows(rows, kind) {
+            (Array.isArray(rows) ? rows : []).forEach(function (raw) {
+                if (!isOpenSourceItem(raw)) return;
+                // The app task array also contains homework mirrors. The
+                // authoritative homework store below supplies those rows.
+                if (kind === 'task' && (raw.origin === 'homework' || raw.homeworkSourceId)) return;
+                var id = raw.id == null ? '' : String(raw.id);
+                var title = String(raw.title || raw.text || raw.task || '').trim();
+                var rawDate = raw.dueDate || raw.date || raw.due;
+                var dueDate = validDateKey(rawDate);
+                if (!id || !title || (rawDate && !dueDate) || dueDate > lastDate) return;
+                if (!dueDate && String(raw.priority || '').toLowerCase() !== 'high') return;
+                var key = kind + ':' + id;
+                if (seen[key]) return;
+                var item = {
+                    id: id,
+                    kind: kind,
+                    title: title,
+                    courseName: String(raw.courseName || raw.course || raw.subject || raw.className || ''),
+                    dueDate: dueDate,
+                    dueTime: raw.dueTime || raw.time || '',
+                    priority: raw.priority || 'medium',
+                    difficulty: raw.difficulty || 'medium',
+                    estimateMinutes: Number(raw.estimateMinutes || raw.estimatedMinutes || raw.effortMinutes || raw.estimate) || 0
+                };
+                if (hasScheduledSource(item, input.timeBlocks, validDateKey(input.today))) return;
+                seen[key] = true;
+                items.push(item);
+            });
+        }
+        addRows(input.tasks, 'task');
+        addRows(input.homeworkTasks, 'homework');
+        return items;
+    }
+
     /**
      * Build a non-overlapping plan PREVIEW. Does not mutate inputs, writes nothing.
      * @returns { blocks:[{date,start,end,startMin,endMin,title,category,sourceKind,
@@ -380,6 +488,7 @@
         planWork: planWork,
         analyzePlan: analyzePlan,
         expandExamPrep: expandExamPrep,
+        collectPlanningItems: collectPlanningItems,
         minutesToHHMM: minutesToHHMM,
         hhmmToMinutes: hhmmToMinutes,
         DEFAULT_PREFS: DEFAULT_PREFS
@@ -420,55 +529,61 @@
         return out;
     }
 
-    // Map flow-intelligence context items into planner work items.
-    function gatherItems() {
+    // Gather all open canonical work rows; intelligence summaries are capped
+    // and intentionally optimized for attention signals, not planning inputs.
+    function gatherItems(dates) {
         var items = [];
         try {
+            var fa = global.flowAtelier;
+            var hw = global.SutraHomework;
+            var homeworkTasks = null;
+            var homeworkCourses = [];
+            if (hw && typeof hw.getTasks === 'function') homeworkTasks = hw.getTasks();
+            if (hw && typeof hw.getCourses === 'function') homeworkCourses = hw.getCourses() || [];
+            if (!Array.isArray(homeworkTasks)) {
+                var store = global.SutraHomeworkStore;
+                var snapshot = store && typeof store.getSnapshot === 'function' ? store.getSnapshot() : null;
+                homeworkTasks = snapshot && Array.isArray(snapshot.tasks) ? snapshot.tasks : [];
+                if (!homeworkCourses.length && snapshot && Array.isArray(snapshot.courses)) homeworkCourses = snapshot.courses;
+            }
+            var courseNames = Object.create(null);
+            homeworkCourses.forEach(function (course) {
+                if (course && course.id != null) courseNames[String(course.id)] = String(course.name || '');
+            });
+            items = collectPlanningItems({
+                today: isoLocalToday(),
+                dates: dates,
+                tasks: fa && Array.isArray(fa.tasks) ? fa.tasks : [],
+                homeworkTasks: homeworkTasks,
+                timeBlocks: fa && Array.isArray(fa.timeBlocks) ? fa.timeBlocks : []
+            });
+            var hwById = Object.create(null);
+            homeworkTasks.forEach(function (task) { if (task && task.id != null) hwById[String(task.id)] = task; });
+            items.forEach(function (item) {
+                var raw = item.kind === 'homework' ? hwById[item.id] : null;
+                if (raw) item.courseName = item.courseName || courseNames[String(raw.courseId || '')] || '';
+                // Use the Homework module's calibration so block sizes reflect
+                // the student's logged times rather than a generic default.
+                if (item.kind === 'homework' && !item.estimateMinutes && hw
+                    && typeof hw.getTaskById === 'function'
+                    && typeof hw.calibratedEstimateMinutes === 'function') {
+                    try {
+                        var task = hw.getTaskById(item.id) || raw;
+                        var estimate = task && hw.calibratedEstimateMinutes(task);
+                        if (estimate && estimate.minutes > 0) {
+                            item.estimateMinutes = estimate.minutes;
+                            item.calibrated = !!estimate.adjusted;
+                        }
+                    } catch (e) { /* keep default sizing */ }
+                }
+            });
+
             var intel = global.sutraIntelligence || global.flowIntelligence;
             var ctx = intel && typeof intel.deriveStudentContext === 'function' ? intel.deriveStudentContext() : null;
             if (ctx) {
-                var seen = {};
-                // Homework context items carry no estimate; without this every block
-                // falls back to the default study-block length. Pull the task's
-                // calibrated estimate (logged actual-time history) so block sizing
-                // reflects how long this student's work really takes.
-                var hw = global.SutraHomework;
-                var canCalibrate = hw && typeof hw.getTaskById === 'function'
-                    && typeof hw.calibratedEstimateMinutes === 'function';
-                var push = function (arr, kind) {
-                    (Array.isArray(arr) ? arr : []).forEach(function (it) {
-                        var key = (it.kind || kind) + ':' + (it.id || it.title);
-                        if (seen[key]) return;
-                        seen[key] = true;
-                        var item = {
-                            id: it.id || key, kind: it.kind || kind, title: it.title || 'Work',
-                            courseName: it.courseName || '', dueDate: it.dueDate || '',
-                            priority: it.priority || 'medium', difficulty: it.difficulty || 'medium',
-                            estimateMinutes: it.estimateMinutes || 0
-                        };
-                        if (!item.estimateMinutes && item.kind === 'homework' && canCalibrate) {
-                            try {
-                                var task = hw.getTaskById(item.id);
-                                if (task) {
-                                    var est = hw.calibratedEstimateMinutes(task);
-                                    if (est && est.minutes > 0) {
-                                        item.estimateMinutes = est.minutes;
-                                        item.calibrated = !!est.adjusted;
-                                    }
-                                    if (task.dueTime) item.dueTime = task.dueTime;
-                                }
-                            } catch (e) { /* keep default sizing */ }
-                        }
-                        items.push(item);
-                    });
-                };
-                push(ctx.overdue, 'task');
-                push(ctx.dueSoon, 'task');
-                push(ctx.unscheduledHighPriority, 'task');
-
                 // Reverse-plan study sessions backward from upcoming exams.
                 var examSrc = (ctx.missingExamBlocks || []).concat(ctx.lowConfidenceApSubjects || []);
-                var seenExam = {};
+                var seenExam = Object.create(null);
                 var exams = [];
                 examSrc.forEach(function (ex) {
                     var key = ex.name || ex.id;
@@ -477,10 +592,8 @@
                     exams.push({ id: ex.id || key, name: ex.name, examDate: ex.examDate, confidence: ex.confidence });
                 });
                 expandExamPrep(exams, { today: isoLocalToday() }).forEach(function (it) {
-                    var k = it.kind + ':' + it.id;
-                    if (seen[k]) return;
-                    seen[k] = true;
-                    items.push(it);
+                    var isPresent = items.some(function (item) { return item.kind === it.kind && String(item.id) === String(it.id); });
+                    if (!isPresent) items.push(it);
                 });
             }
         } catch (e) { /* none */ }
@@ -504,7 +617,7 @@
         return planWork({
             today: isoLocalToday(),
             dates: dates,
-            items: gatherItems(),
+            items: gatherItems(dates),
             freeWindowsByDate: gatherFreeWindows(dates),
             prefs: gatherPrefs()
         });
@@ -525,7 +638,8 @@
         var id = fa.addCalendarBlockForTemplate({
             date: block.date, start: block.start, end: block.end,
             name: block.title, category: block.category || 'study',
-            source: 'planner_preview', sourceNoteId: block.sourceId || ''
+            source: block.sourceKind ? 'planner_preview:' + block.sourceKind : 'planner_preview',
+            sourceNoteId: block.sourceId || ''
         });
         if (id) { try { global.SutraActivation && global.SutraActivation.record('plan'); } catch (e) { /* non-critical */ } }
         return !!id;
