@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "note": "Blessed maximum size of src/core/app.js. Growth requires an explicit reason and --allow-growth; decomposition should lower this file.",
-  "blessedAt": "2026-10-15T00:04:39.923Z",
-  "reviewedReason": "Bounded QA fixes: reset capture drafts, preserve blank essay targets, canonical calendar countdowns, editable calculator errors, and truthful Drive availability",
-  "maxBytes": 4994168,
-  "maxLines": 87424
+  "blessedAt": "2026-10-15T01:22:51.577Z",
+  "reviewedReason": "Preserve live review proposals while keeping durable history payload-free, explain unavailable previews, and resolve canonical citations",
+  "maxBytes": 4996131,
+  "maxLines": 87454
 }

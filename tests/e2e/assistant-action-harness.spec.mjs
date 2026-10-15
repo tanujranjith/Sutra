@@ -201,6 +201,33 @@ test('Smart Import checks reviewed permissions before writes and reports partial
     .some(item => item.title === 'Smart Import permission control'))).toBe(true);
 });
 
+test('read-only workspace still shows task review controls and explains the permission', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.SutraAssistantPermissions.setMode('read_only');
+    const host = document.createElement('div');
+    host.id = 'read-only-task-action-review';
+    document.body.appendChild(host);
+    window.flowAssistant.renderActionCards(host, [
+      { type: 'create_task', title: 'Review the chemistry outline', label: 'Create chemistry review task' }
+    ]);
+  });
+
+  const review = page.locator('#read-only-task-action-review');
+  const taskCard = review.locator('.flow-action-card[data-action-type="create_task"]');
+  await expect(taskCard).toBeVisible();
+  await expect(taskCard.locator('.flow-action-apply')).toBeVisible();
+  await expect(taskCard.locator('.flow-action-apply')).toBeEnabled();
+  await expect(taskCard.locator('.flow-action-decline')).toBeVisible();
+  await expect(taskCard.locator('.flow-action-permission-note'))
+    .toContainText('Read + reviewed changes in Settings → Assistant');
+
+  await taskCard.locator('.flow-action-apply').click();
+  await expect(taskCard.locator('.flow-action-error')).toContainText('not allowed');
+  expect(await page.evaluate(() => window.flowAssistant.listOpenWorkspaceTasks()
+    .some(item => item.title === 'Review the chemistry outline'))).toBe(false);
+});
+
 test('"what\'s overdue" then "mark those as complete": batch card, both stores, Activity, Undo', async ({ page }) => {
   await openApp(page);
   await seedOverdueWork(page);

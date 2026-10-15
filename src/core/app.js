@@ -56195,11 +56195,15 @@ function getActiveEditor() {
                 .trim();
         }
 
-        function sanitizeAssistantChatMessage(raw) {
+        function sanitizeAssistantChatMessage(raw, options = {}) {
             if (!raw || typeof raw !== 'object') return null;
             const role = String(raw.role || '').toLowerCase();
             if (!['user', 'assistant', 'notice', 'error'].includes(role)) return null;
-            const content = stripAssistantHiddenPayloads(raw.content || raw.text || '');
+            // Active proposals must survive the save-before-render seam. Durable
+            // history and exports still use the default payload-stripped form.
+            const content = options.preserveProposals === true && role === 'assistant'
+                ? String(raw.content || raw.text || '').replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '').trim()
+                : stripAssistantHiddenPayloads(raw.content || raw.text || '');
             if (!content) return null;
             const out = { role, content };
             if (['external_sourced_fact', 'workspace_fact', 'saved_memory_preference', 'deterministic_calculation', 'deterministic_inference', 'inference', 'recommendation', 'proposed_action', 'generative_suggestion'].includes(raw.claimType)) out.claimType = raw.claimType;
@@ -74226,10 +74230,12 @@ ${cspMeta}
         function saveConvo() {
             const current = ensureCurrentConversation();
             const now = new Date().toISOString();
-            const cleaned = (Array.isArray(convo) ? convo : [])
+            convo = (Array.isArray(convo) ? convo : [])
+                .map(message => sanitizeAssistantChatMessage(message, { preserveProposals: true }))
+                .filter(Boolean);
+            const cleaned = convo
                 .map(sanitizeAssistantChatMessage)
                 .filter(Boolean);
-            convo = cleaned;
             current.messages = cleaned;
             current.updatedAt = now;
             current.title = current.title && current.title !== 'New chat' ? current.title : inferChatTitle(cleaned);
@@ -74918,6 +74924,15 @@ ${cspMeta}
             kind = String(kind || '').toLowerCase();
             id = String(id || '');
             try {
+                if (kind === 'entity') {
+                    const registry = window.SutraWorkspaceEntityRegistry;
+                    if (registry && typeof registry.open === 'function') {
+                        Promise.resolve(registry.open(decodeURIComponent(id))).then(result => {
+                            if (!result || !result.ok) showToast('This source is no longer available.');
+                        }).catch(error => { if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { source: 'assistant-citation' }); });
+                    }
+                    return;
+                }
                 if (kind === 'page' || kind === 'note') {
                     const p = Array.isArray(pages) ? pages.find(pg => String(pg.id) === id) : null;
                     if (p && typeof loadPage === 'function') { loadPage(p.id); return; }
@@ -75203,6 +75218,9 @@ ${cspMeta}
                 };
             }
             if (view.role === 'assistant') {
+                if (rawMessage && rawMessage.claimType === 'proposed_action' && !(view.actions && view.actions.length)) {
+                    view.displayedContent += '\n\n_This saved proposal no longer has an action preview. Regenerate it to review a new proposal. Saved chat history cannot apply changes._';
+                }
                 try {
                     if (window.flowAssistant && typeof window.flowAssistant.noteAssistantReply === 'function') {
                         window.flowAssistant.noteAssistantReply(view.displayedContent || view.cleanContent || '');
@@ -75210,6 +75228,18 @@ ${cspMeta}
                 } catch (e) { /* non-critical */ }
             }
             return view;
+        }
+
+        function renderAssistantActionReview(host, actions) {
+            try {
+                window.flowAssistant.renderActionCards(host, actions, {});
+            } catch (error) {
+                if (typeof window.SutraReportError === 'function') window.SutraReportError(error, { source: 'assistant-action-review' });
+                const notice = document.createElement('p');
+                notice.className = 'flow-action-error';
+                notice.textContent = 'The action preview could not be displayed. Nothing was applied. Try regenerating the proposal.';
+                host.appendChild(notice);
+            }
         }
 
         function appendMessage(role, text, preStoredThoughts, index, buildOpts) {
@@ -75367,7 +75397,7 @@ ${cspMeta}
                     asstRenderMathIn(answerHost); // typeset any $...$ / $$...$$ LaTeX via KaTeX
                     if (flowResult && flowResult.actions && flowResult.actions.length) {
                         try {
-                            window.flowAssistant.renderActionCards(bubble, flowResult.actions, {});
+                            renderAssistantActionReview(bubble, flowResult.actions);
                         } catch (e) { console.warn('Sutra Assistant action render failed:', e); }
                     }
                     actions.style.visibility = '';
@@ -80023,7 +80053,7 @@ ${cspMeta}
                 asstStreamInto(streamHost, cleanForActions, finalHtml, () => {
                     asstRenderMathIn(streamHost); // typeset LaTeX once the final HTML is committed
                     if (flowResult && flowResult.actions && flowResult.actions.length) {
-                        try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                        renderAssistantActionReview(bubble, flowResult.actions);
                     }
                     actions.style.visibility = '';
                     if (typeof opts.onStreamDone === 'function') { try { opts.onStreamDone(); } catch (e) { /* non-critical */ } }
@@ -80032,7 +80062,7 @@ ${cspMeta}
                 renderActionsNow();
                 col.appendChild(actions);
                 if (role === 'assistant' && flowResult && flowResult.actions && flowResult.actions.length) {
-                    try { window.flowAssistant.renderActionCards(bubble, flowResult.actions, {}); } catch (e) { /* non-critical */ }
+                    renderAssistantActionReview(bubble, flowResult.actions);
                 }
             }
 

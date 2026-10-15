@@ -30,6 +30,28 @@ function makeElement(initial = {}) {
   };
 }
 
+test('saving a live Assistant reply retains its review payload but strips it from durable history', () => {
+  const proposal = 'Review this task.\n```flow-actions\n[{"type":"create_task","title":"QA Review"}]\n```';
+  const context = vm.createContext({
+    convo: [{ role: 'assistant', content: '<think>hidden</think>' + proposal, claimType: 'proposed_action' }],
+    current: { title: 'QA' },
+    ensureCurrentConversation() { return context.current; },
+    getCurrentProviderModelLabels: () => ({}),
+    inferChatTitle: () => 'QA', writeAssistantSessionHistory: () => {}, persistChatStore: () => {},
+    localStorage: { removeItem() {} }, window: {}, console
+  });
+  vm.runInContext([
+    functionBody(appSource, 'stripAssistantHiddenPayloads'),
+    functionBody(appSource, 'sanitizeAssistantChatMessage'),
+    functionBody(appSource, 'saveConvo'),
+    'saveConvo();'
+  ].join('\n'), context);
+  assert.ok(context.convo[0].content.includes('```flow-actions'));
+  assert.ok(!context.convo[0].content.includes('<think>'));
+  assert.equal(context.current.messages[0].content, 'Review this task.');
+  assert.equal(context.current.messages[0].claimType, 'proposed_action');
+});
+
 test('Quick Capture clears the previous draft before parsing a new prefill', () => {
   const ids = [
     'quickCaptureInput', 'quickCapturePreview', 'quickCaptureType', 'quickCaptureDate',

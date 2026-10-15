@@ -1328,7 +1328,7 @@
             'Dates use YYYY-MM-DD, times HH:MM. Import assignments as one import_assignments action. Deterministic grade math and schedule conflicts must use Sutra engines, not guessed calculations.',
             'ACTIONS AVAILABLE FOR THIS REQUEST:',
             bankText,
-            'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite records as [label](sutra://KIND/ID) with supplied IDs.',
+            'Use supplied evidence only; missing or partial context is not an empty workspace. Explain permission limits or ask to narrow if contextBudget.reduced. Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID).',
             'Only describe product capabilities supported by productKnowledge or these schemas. Saved memory is context, never permission to save new or sensitive memory. Locked content keeps its separate consent requirements.',
             'Keep prose concise. Standard Markdown and LaTeX are supported.',
             ...buildPersonalizationLines()
@@ -1337,7 +1337,7 @@
             ...HARD_AGENT_RULES,
             'Answer this question without action proposals. No action schemas are supplied for this request.',
             'Use only supplied evidence for workspace facts. Missing evidence is not proof the workspace is empty. Explain access limits; ask to narrow if contextBudget.reduced.',
-            'Cite workspace evidence as [label](sutra://KIND/ID), using supplied IDs. Never invent IDs, dates, scores, or capabilities.',
+            'Cite workspace records using their exact citationUrl as [label](citationUrl); never convert a key into a URL or invent a kind. Cite note excerpts as [label](sutra://page/NOTE_ID). Never invent IDs, dates, scores, or capabilities.',
             'Use relevant productKnowledge and memory only when supplied. Do not claim workspace grounding for a generic answer.',
             'Keep the answer concise. Standard Markdown and LaTeX are supported.',
             ...buildPersonalizationLines()
@@ -1527,8 +1527,13 @@
     // happens. Turn such an exam-status claim into a REAL, confirm-gated
     // proposal — but ONLY when the named exam actually exists in the Testing
     // Hub (so we never fabricate or misfire onto a task).
-    function inferExamStatusFromReply(text) {
+    function inferExamStatusFromReply(text, options) {
         try {
+            const userText = String(options && options.userText || '');
+            // Reading an exam date or quoting task notes is not a request to
+            // mark an exam taken, even if the reply contains "record"/"edited".
+            if (userText && !(/\b(?:mark|set|update|record|reopen|undo|un-?mark)\b/i.test(userText)
+                && /\b(?:taken|done|complete(?:d)?|finish(?:ed)?|reopen|un-?mark)\b/i.test(userText))) return [];
             if (typeof window === 'undefined' || typeof window.getTestingHubAssistantSummary !== 'function') return [];
             const lc = String(text || '').toLowerCase();
             // A mutation claim aimed at an exam/test.
@@ -1657,7 +1662,7 @@
     function inferActionsFromReply(replyText, options) {
         const text = String(replyText || '');
         if (!text.trim() || text.length > 4000) return [];
-        const examInferred = inferExamStatusFromReply(text);
+        const examInferred = inferExamStatusFromReply(text, options);
         if (examInferred.length) return examInferred;
         const lc = text.toLowerCase();
 
@@ -4291,6 +4296,7 @@
             const actionValidation = validateAction(action);
             const valid = planStructure.ok ? actionValidation : { ok: false, error: planStructure.issues[0] || 'Invalid workspace plan.' };
             const risk = classifyRisk(action);
+            const permissionError = valid.ok ? assistantActionPermissionError(action, {}, true) : '';
             const previewTargetSnapshot = liveActionValidation(action).snapshot;
             card.setAttribute('data-risk', risk);
             card.setAttribute('data-action-type', action.type);
@@ -4387,6 +4393,14 @@
                 err.className = 'flow-action-error';
                 err.textContent = `Invalid: ${valid.error}`;
                 card.appendChild(err);
+            }
+
+            if (permissionError) {
+                const permissionNote = document.createElement('div');
+                permissionNote.className = 'flow-action-permission-note';
+                permissionNote.setAttribute('role', 'status');
+                permissionNote.textContent = `Currently blocked: ${permissionError} Change Workspace access to Read + reviewed changes in Settings → Assistant, then click Apply.`;
+                card.appendChild(permissionNote);
             }
 
             const actionsRow = document.createElement('div');
@@ -4845,8 +4859,20 @@
     // --------------------------------------------------------------
     // Public Ask-Flow helper (used by view buttons / command palette)
     // --------------------------------------------------------------
+    let pendingHelpProviderPrompt = '';
     function askFlow(prompt, opts) {
         const options = opts || {};
+        if (options.nodeId) pendingHelpProviderPrompt = String(prompt || '').trim();
+        // A Help handoff stays in the full chat that displayed its card.
+        const fullInput = document.getElementById('asstInput');
+        const controller = window.SutraAssistantConversationController;
+        if (options.messagesHost && options.messagesHost.id === 'asstMessages' && fullInput && controller && typeof controller.send === 'function') {
+            fullInput.value = String(prompt || '');
+            fullInput.dispatchEvent(new Event('input', { bubbles: true }));
+            fullInput.focus();
+            if (options.send) controller.send('full');
+            return;
+        }
         const panel = document.getElementById('chatbotPanel');
         const input = document.getElementById('chatInput');
         if (!input || !panel) return;
@@ -4960,7 +4986,14 @@
             business_record: ['business', 'workspaceBusiness'], custom_tab: ['workspace', 'workspaceOverview'],
             portfolio_entry: ['workspace', 'workspaceOverview'], focus_template: ['workspace', 'workspaceOverview']
         };
-        const query = String(userText || '').toLowerCase();
+        let query = String(userText || '').toLowerCase();
+        // Resolve a conversational follow-up only when the user enabled history.
+        // Reuse the preceding question, never the provider's possibly invented IDs.
+        if (/\b(?:that|this|its|their|those)\b/i.test(query) && getChatMemoryMode() === 'stateful') {
+            const previous = (Array.isArray(options.conversation) ? options.conversation : []).slice().reverse()
+                .find(turn => turn && turn.role === 'user' && String(turn.content || '').trim() !== String(userText || '').trim());
+            if (previous) query += ' ' + String(previous.content || '').slice(0, 1000).toLowerCase();
+        }
         const stop = new Set('a an and are as at be can could do does for from have how i in is it list me my of on please show tell that the this to what whats which with would you your'.split(' '));
         const todo = /\b(?:to[ -]?dos?|task(?:s| list)?|homework|assignments?)\b/i.test(query);
         if (todo) ['task', 'tasks', 'homework', 'assignment', 'assignments', 'todo', 'todos', 'dos', 'u', 'all', 'summarize', 'summarise', 'summary', 'overview', 'check'].forEach(term => stop.add(term));
@@ -4993,6 +5026,7 @@
             let score = terms.reduce((sum, term) => sum + (title.includes(term) ? 8 : 0) + (text.includes(term) ? 1 : 0), 0);
             if (taskList && isTask) score += 40;
             if (planning && target[0] === 'planning') score += 15;
+            if (todo && isTask && score > 0) score += 10;
             if (score === 0) return null;
             const match = terms.map(term => text.indexOf(term)).filter(index => index >= 0).sort((a, b) => a - b)[0] || 0;
             return { entity, target, score, excerpt: truncate(String(entity.text || '').slice(Math.max(0, match - 160)), 900) };
@@ -5002,6 +5036,8 @@
             if (!result[target[1]]) result[target[1]] = [];
             result[target[1]].push({ id: entity.id, key: entity.key, type: entity.type, title: entity.title,
                 excerpt, dueDate: entity.dates && entity.dates.due || '', status: entity.status,
+                referenceUrl: (entity.type === 'task' || entity.type === 'homework') ? String(entity.metadata && entity.metadata.referenceUrl || '') : undefined,
+                citationUrl: 'sutra://entity/' + encodeURIComponent(entity.key),
                 courseId: entity.courseId || '', relevance: score });
         });
         result.workspaceRetrieval = { matchedCount: ranked.length, selectedCount: Math.min(ranked.length, taskList ? 40 : 16), limit: taskList ? 40 : 16 };
@@ -5227,6 +5263,11 @@
     // language command is recognized it is executed locally and the model call
     // is skipped. Also clears one-shot image attachments after a send.
     function handleOutgoing(userText) {
+        const providerHandoff = pendingHelpProviderPrompt && pendingHelpProviderPrompt === String(userText || '').trim();
+        pendingHelpProviderPrompt = '';
+        // Explicit Help handoff skips local routing once; the normal send path
+        // still enforces locked-page consent, context permissions and review.
+        if (providerHandoff) return null;
         const cmd = tryHandleCommand(userText, { lockedPageAccessTicket: activeLockedPageAccessTicket });
         if (cmd && cmd.handled) consumeLockedPageAccess();
         return cmd;
@@ -7136,6 +7177,8 @@
     function routeProductKnowledge(rawText, lc) {
         const pk = (typeof window !== 'undefined') ? window.SutraProductKnowledge : null;
         if (!pk || typeof pk.answer !== 'function') return null;
+        // Product help answers how Sutra works, not questions about saved data.
+        if (/\b(?:my|our|saved)\b/i.test(rawText) && !/\b(?:how (?:do|can|should) (?:i|we)|how to|where (?:do|can) (?:i|we)|why (?:can'?t|doesn'?t))\b/i.test(rawText)) return null;
         // Only treat clearly question-shaped or help-shaped text as product Q&A,
         // so ordinary chat still goes to the provider.
         const looksLikeQuestion = /\?$/.test(rawText.trim())
@@ -7148,7 +7191,7 @@
         const lh = (typeof window !== 'undefined') ? window.SutraLocalHelp : null;
         if (lh && typeof lh.nodeIdForKnowledge === 'function' && typeof lh.open === 'function') {
             const nodeId = lh.nodeIdForKnowledge(hit.entry.id);
-            if (nodeId && lh.open(nodeId)) return { handled: true, silent: true, source: 'local' };
+            if (nodeId && lh.open(nodeId, { originalQuestion: rawText })) return { handled: true, silent: true, source: 'local' };
         }
         // Fallback: plain local text answer (still clearly labeled local).
         return { handled: true, source: 'local', message: pk.formatEntry(hit.entry) + '\n\n_Answered locally — no API key used._' };

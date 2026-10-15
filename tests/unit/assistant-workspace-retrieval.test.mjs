@@ -7,12 +7,53 @@ import { extractFunction } from '../helpers/extract-function.mjs';
 const source = readFileSync(new URL('../../src/features/assistant/flow-assistant.js', import.meta.url), 'utf8');
 const privacy = createRequire(import.meta.url)('../../src/domain/assistant-permissions.js');
 const record = (type, id, title, extra = {}) => ({ type, id, key: type + ':' + id, title, text: title, status: 'open', dates: {}, privacy: {}, metadata: {}, ...extra });
-function selector(records, permissions = { mode: 'read_only', areas: {} }) {
+function selector(records, permissions = { mode: 'read_only', areas: {} }, memoryMode = 'stateless') {
   privacy.configure({ getPermissions: () => permissions });
-  return new Function('window', 'truncate', extractFunction(source, 'selectRelevantWorkspaceContext').body + ';return selectRelevantWorkspaceContext;')({
+  return new Function('window', 'truncate', 'getChatMemoryMode', extractFunction(source, 'selectRelevantWorkspaceContext').body + ';return selectRelevantWorkspaceContext;')({
     SutraWorkspaceEntityRegistry: { collectSearchable: () => records }, SutraAssistantPrivacy: privacy
-  }, (text, limit) => String(text || '').slice(0, limit));
+  }, (text, limit) => String(text || '').slice(0, limit), () => memoryMode);
 }
+
+test('exam dates, task URLs and exact registry citations survive selective retrieval', () => {
+  const result = selector([
+    record('testing_exam', 'sat', 'SAT', { dates: { due: '2026-12-05' } }),
+    record('homework', 'robotics', 'Robotics sensor demo', { text: 'Sensor demo notes edited after reopening', metadata: { referenceUrl: 'https://example.com/robotics' } })
+  ])('What is my SAT date and the notes and Reference URL for my Robotics sensor demo task?');
+  assert.equal(result.workspaceLearning[0].dueDate, '2026-12-05');
+  assert.equal(result.homework[0].referenceUrl, 'https://example.com/robotics');
+  assert.equal(result.homework[0].citationUrl, 'sutra://entity/homework%3Arobotics');
+});
+
+test('task follow-up uses preceding user question only in stateful mode', () => {
+  const records = [record('homework', 'robotics', 'Robotics sensor demo', { metadata: { referenceUrl: 'https://example.com/robotics' } })];
+  const options = { conversation: [
+    { role: 'user', content: 'What are my Robotics sensor demo notes?' },
+    { role: 'assistant', content: 'Invented unrelated target' }
+  ] };
+  assert.equal(selector(records, undefined, 'stateful')('What is its Reference URL?', options).homework[0].id, 'robotics');
+  assert.equal(selector(records)('What is its Reference URL?', options).homework, undefined);
+});
+
+test('personal saved-data questions cannot be intercepted by product help', () => {
+  let opened = false;
+  const route = new Function('window', extractFunction(source, 'routeProductKnowledge').body + ';return routeProductKnowledge;')({
+    SutraProductKnowledge: { answer: () => ({ entry: { id: 'notes' } }) },
+    SutraLocalHelp: { nodeIdForKnowledge: () => 'notes', open: () => { opened = true; return true; } }
+  });
+  const question = 'What is my SAT date and the saved notes for my Robotics task?';
+  assert.equal(route(question, question.toLowerCase()), null);
+  assert.equal(opened, false);
+});
+
+test('reading exam facts does not infer a status-changing proposal from quoted notes', () => {
+  const infer = new Function('window', 'truncate', extractFunction(source, 'inferExamStatusFromReply').body + ';return inferExamStatusFromReply;')({
+    getTestingHubAssistantSummary: () => ({ exams: [{ id: 'sat', name: 'SAT', taken: false }] })
+  }, text => text);
+  const reply = 'Your SAT test date is December 5 as listed in the record; your task notes were updated.';
+  assert.deepEqual(infer(reply, { userText: 'What is my SAT date and my task notes?' }), []);
+  assert.deepEqual(infer('Your SAT test is completed.', { userText: 'Which tests are completed?' }), []);
+  assert.equal(infer('I can mark SAT as taken.', { userText: 'Mark SAT as taken' })[0].type, 'update_exam_status');
+});
 
 test('to-do retrieval includes undated and distant low-priority work across stores', () => {
   const result = selector([
