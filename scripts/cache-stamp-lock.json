@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "307419543d63806d"
+    "stamp": "20261015-settings2",
+    "hash": "d7eff730534a27ad"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -744,8 +744,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20261014-drive-gates1",
-    "hash": "8c8990b6c0515a7c"
+    "stamp": "20261015-settings2",
+    "hash": "13ff84ce63fec855"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20261001-mobile-agenda1",

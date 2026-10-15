@@ -19,7 +19,7 @@ artifact checks.
 | `assets/vendor/katex/` | KaTeX | 0.16.11 | MIT | — | github.com/KaTeX/KaTeX | Notes math rendering |
 | `assets/vendor/editor/` | Sutra Notes Editor v2 bundle | 3.27.3 upstream TipTap/M Pro deps, locally built | Reviewed bundle (MIT-family) | — | internal build from tiptap.dev pro/free packages | `editor.editorV2Enabled` flagged editor |
 | `assets/vendor/office/` | Mammoth (`mammoth.browser.min.js`) | 1.8.0 | BSD-2-Clause | `deb07bf230d1cb3e190bc5adc6743f35c6531b6571d1e5469b24f452a7f0f4ab` | npm `mammoth@1.8.0` / github.com/mwilliamson/mammoth.js | DOCX import (on demand, same-origin) |
-| `assets/vendor/office/` | SheetJS Community (`xlsx.full.min.js`) | 0.18.5 | Apache-2.0 | `c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99` | npm `xlsx@0.18.5` / sheetjs.com | XLSX/XLS import/export (on demand, same-origin) |
+| `assets/vendor/office/` | SheetJS Community (`xlsx.full.min.js`) | 0.20.3 | Apache-2.0 | `cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41` | [Official SheetJS CDN standalone build](https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js) | XLSX/XLS import/export (on demand, same-origin) |
 
 ## Rules
 

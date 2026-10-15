@@ -77,8 +77,13 @@ test('Settings mobile hierarchy stays contained and keeps the canonical Save and
   await page.setViewportSize({ width: 390, height: 844 });
   await openSettings(page);
 
-  await expect(page.locator('#settingsCategorySelect')).toBeVisible();
+  await expect(page.locator('#settingsCategorySelect')).toBeHidden();
+  await expect(page.locator('.cc-sidebar')).toBeVisible();
+  await expect(page.locator('.cc-main')).toBeHidden();
+  await page.locator('[data-settings-nav="appearance"]').click();
   await expect(page.locator('.cc-sidebar')).toBeHidden();
+  await expect(page.locator('#settingsBackToCategories')).toBeVisible();
+  await expect(page.locator('[data-settings-section="appearance"] .cc-section-title')).toBeFocused();
   await expect(page.locator('.cc-page-header-actions')).toBeHidden();
   const mobileLayout = await page.evaluate(() => {
     const discovery = document.querySelector('#view-settings .cc-discovery');
@@ -94,7 +99,7 @@ test('Settings mobile hierarchy stays contained and keeps the canonical Save and
   });
   expect(mobileLayout.documentWidth).toBeLessThanOrEqual(mobileLayout.viewportWidth + 1);
   expect(mobileLayout.searchBeforeBody).toBe(true);
-  expect(mobileLayout.firstSectionTop).toBeLessThan(380);
+  expect(mobileLayout.firstSectionTop).toBeLessThan(450);
   expect(mobileLayout.optionGroups).toEqual([
     'Essentials',
     'Planning & learning',
@@ -105,9 +110,22 @@ test('Settings mobile hierarchy stays contained and keeps the canonical Save and
   await page.locator('[data-pref-path="appearance.density"] [data-value="compact"]').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
   await expect(page.locator('#settingsApplyBtn')).toBeEnabled();
+  await page.locator('#settingsBackToCategories').click();
+  await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'true');
+  await page.locator('[data-settings-nav="appearance"]').click();
+  await expect(page.locator('[data-pref-path="appearance.density"] [data-value="compact"]')).toHaveAttribute('aria-checked', 'true');
   await page.locator('#settingsRevertBtn').click();
   await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'false');
 
-  await page.locator('#settingsCategorySelect').selectOption('data');
+  await page.locator('#settingsBackToCategories').click();
+  await expect(page.locator('[data-settings-nav="appearance"]')).toBeFocused();
+  await page.locator('[data-settings-nav="data"]').click();
   await expect(page.locator('[data-settings-section="data"]')).toBeVisible();
+  await page.locator('#settingsBackToCategories').click();
+  await page.fill('#settingsSearchInput', 'zzzz-no-setting');
+  await expect(page.locator('#settingsSearchEmpty')).toBeVisible();
+  await expect(page.locator('#settingsBackToCategories')).toBeVisible();
+  await page.locator('#settingsBackToCategories').click();
+  await expect(page.locator('#settingsSearchInput')).toHaveValue('');
+  await expect(page.locator('.cc-sidebar')).toBeVisible();
 });

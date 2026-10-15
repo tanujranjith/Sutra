@@ -3466,7 +3466,7 @@ function populateProgressDashboard() {
         function openSutraStorageHealthPanel() {
             try {
                 if (typeof setActiveView === 'function') setActiveView('settings');
-                if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory('data', { skipSearch: false });
+                if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory('data', { skipSearch: false, openDetail: true });
                 setTimeout(() => {
                     const target = document.getElementById('sutraHealthTechnicalDetails') || document.getElementById('atelierDataHealthExport');
                     if (target && typeof target.focus === 'function') target.focus();
@@ -31282,6 +31282,21 @@ function buildOnboardingPlanPreview() {
             } catch (error) { /* non-critical */ }
         }
 
+        function setSettingsMobileView(view, options = {}) {
+            const shell = document.querySelector('#view-settings .cc-page');
+            if (!shell) return;
+            const detail = view === 'detail';
+            shell.dataset.settingsMobileView = detail ? 'detail' : 'categories';
+            if (options.focus !== true || !window.matchMedia('(max-width: 760px)').matches) return;
+            const target = detail
+                ? shell.querySelector('[data-settings-section].active .cc-section-title')
+                : shell.querySelector('[data-settings-nav].active:not([hidden])');
+            if (target) {
+                if (detail) target.setAttribute('tabindex', '-1');
+                target.focus();
+            }
+        }
+
         function setActiveSettingsCategory(category, options = {}) {
             const requested = String(category || '').trim().toLowerCase();
             const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
@@ -31322,6 +31337,7 @@ function buildOnboardingPlanPreview() {
             if (options.skipSearch !== true) {
                 filterSettingsControlsBySearch();
             }
+            if (options.openDetail === true) setSettingsMobileView('detail', { focus: true });
             updateSettingsDraftUi();
             updateSettingsPreviewCard();
             // Lazily render the Mods & Customization panels when that category opens.
@@ -31421,6 +31437,7 @@ function buildOnboardingPlanPreview() {
                     ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories} categor${matchingCategories === 1 ? 'y' : 'ies'}.`
                     : 'Search by setting, feature, or task.';
             }
+            if (query) setSettingsMobileView('detail');
             updateSettingsContextualPreview(query);
         }
 
@@ -31552,7 +31569,7 @@ function buildOnboardingPlanPreview() {
                 if (button.dataset.bound === 'true') return;
                 button.dataset.bound = 'true';
                 button.addEventListener('click', () => {
-                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance', { clearSearch: true });
+                    setActiveSettingsCategory(button.getAttribute('data-settings-nav') || 'appearance', { clearSearch: true, openDetail: true });
                 });
             });
 
@@ -31560,7 +31577,7 @@ function buildOnboardingPlanPreview() {
             if (mobileSelect && mobileSelect.dataset.bound !== 'true') {
                 mobileSelect.dataset.bound = 'true';
                 mobileSelect.addEventListener('change', () => {
-                    setActiveSettingsCategory(mobileSelect.value || 'appearance', { clearSearch: true });
+                    setActiveSettingsCategory(mobileSelect.value || 'appearance', { clearSearch: true, openDetail: true });
                 });
             }
 
@@ -31573,6 +31590,14 @@ function buildOnboardingPlanPreview() {
                         event.preventDefault();
                         clearSettingsSearch({ focus: true });
                     }
+                });
+            }
+            const backToCategories = document.getElementById('settingsBackToCategories');
+            if (backToCategories && backToCategories.dataset.bound !== 'true') {
+                backToCategories.dataset.bound = 'true';
+                backToCategories.addEventListener('click', () => {
+                    clearSettingsSearch();
+                    setSettingsMobileView('categories', { focus: true });
                 });
             }
             const searchClearBtn = document.getElementById('settingsSearchClearBtn');
@@ -32324,7 +32349,7 @@ function buildOnboardingPlanPreview() {
         function gotoTutorialSettingsSection(section) {
             safeRunTutorial(() => setActiveView('settings'));
             if (typeof setActiveSettingsCategory === 'function') {
-                safeRunTutorial(() => setActiveSettingsCategory(section));
+                safeRunTutorial(() => setActiveSettingsCategory(section, { openDetail: true }));
             }
         }
 
@@ -62997,7 +63022,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         async function importSpreadsheetFile(file) {
             // Pinned + vendored locally (see importDocxFile note above).
-            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.18.5', 'XLSX', { local: true });
+            const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.20.3', 'XLSX', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             const sheetNames = workbook.SheetNames || [];
@@ -76125,7 +76150,7 @@ ${cspMeta}
                     else if (action === 'ics') {
                         try { triggerCalendarIcsImport(); } catch (_) {}
                     } else if (action === 'drive') {
-                        try { setActiveSettingsCategory('data'); document.getElementById('sutraDriveConnectBtn')?.focus(); } catch (_) {}
+                        try { setActiveSettingsCategory('data', { openDetail: true }); document.getElementById('sutraDriveConnectBtn')?.focus(); } catch (_) {}
                     } else {
                         showToast('This integration is gated in this deployment.');
                     }
@@ -82878,7 +82903,7 @@ function globalSearchAll(query) {
                     action: () => {
                         try {
                             setActiveView('settings');
-                            if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory(row.category, { skipSearch: false });
+                            if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory(row.category, { skipSearch: false, openDetail: true });
                         } catch (err) {}
                     }
                 });
