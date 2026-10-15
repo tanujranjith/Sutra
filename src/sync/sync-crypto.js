@@ -31,6 +31,58 @@
     return error;
   }
 
+  function getCanonicalRecordKeyInfo(value) {
+    if (typeof value !== 'string') return null;
+    var parsed = protocolApi.parseRecordKey(value);
+    if (!parsed) return null;
+    var canonical;
+    try {
+      canonical = parsed.type === 'collection'
+        ? protocolApi.collectionKey(parsed.collection, parsed.id)
+        : parsed.type === 'atomic'
+          ? protocolApi.atomicKey(parsed.section)
+          : protocolApi.orderingKey(parsed.name);
+    } catch (error) {
+      return null;
+    }
+    return canonical === value ? parsed : null;
+  }
+
+  function isSafeRecordKeyIdentifier(value) {
+    return typeof value === 'string' && value.length <= 128
+      && /^[A-Za-z0-9._%/-]+$/.test(value)
+      && !!getCanonicalRecordKeyInfo(value);
+  }
+
+  function hasCanonicalOpRecord(op) {
+    var parsed = op && getCanonicalRecordKeyInfo(op.recordKey);
+    if (!parsed) return false;
+    if (op.kind !== 'upsert' || parsed.type !== 'collection') return true;
+    if (!op.payload || typeof op.payload !== 'object' || Array.isArray(op.payload)) return false;
+    var id = op.payload.id;
+    var validId = (typeof id === 'string' && id.length > 0)
+      || (typeof id === 'number' && Number.isFinite(id));
+    return validId && String(id) === parsed.id;
+  }
+
+  function createIntegrityError(stage, identifier) {
+    var labels = { operation: 'operation', snapshot: 'snapshot', attachment: 'attachment' };
+    var safeStage = Object.prototype.hasOwnProperty.call(labels, stage) ? stage : 'operation';
+    var safeIdentifier = '';
+    if (safeStage === 'operation' && isSafeRecordKeyIdentifier(identifier)) {
+      safeIdentifier = identifier;
+    } else if (safeStage === 'attachment' && /^[0-9a-f]{64}$/.test(String(identifier || ''))) {
+      safeIdentifier = 'sha256:' + String(identifier).slice(0, 12);
+    }
+    var message = 'Sync could not verify encrypted ' + labels[safeStage] + ' data';
+    if (safeIdentifier) message += ' (' + safeIdentifier + ')';
+    message += '. Sync is paused to protect your workspace.';
+    var error = SyncVaultUnlockError(message, 'encryption-error');
+    error.stage = safeStage;
+    if (safeIdentifier) error.identifier = safeIdentifier;
+    return error;
+  }
+
   function getCrypto() {
     var cryptoObj = (global && global.crypto) || (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
     if (!cryptoObj || !cryptoObj.subtle) throw new Error('WebCrypto (crypto.subtle) is unavailable.');
@@ -224,7 +276,7 @@
   // as AAD, so relabeled/rerouted envelopes fail decryption.
   async function encryptOpEnvelope(vaultKey, op) {
     var opErrors = protocolApi.validateOp(op);
-    if (opErrors.length) throw new Error('Refusing to encrypt malformed op: ' + opErrors.join('; '));
+    if (opErrors.length || !hasCanonicalOpRecord(op)) throw new Error('Refusing to encrypt malformed op.');
     var meta = protocolApi.envelopeMeta(op);
     var aad = protocolApi.stableStringify(meta);
     var sealed = await encryptWithAad(vaultKey, encodeText(protocolApi.stableStringify(op)), aad);
@@ -239,18 +291,31 @@
 
   async function decryptOpEnvelope(vaultKey, envelope) {
     var envelopeErrors = protocolApi.validateEnvelope(envelope);
-    if (envelopeErrors.length) throw new Error('Malformed sync envelope: ' + envelopeErrors.join('; '));
+    if (envelopeErrors.length) throw createIntegrityError('operation', envelope && envelope.meta && envelope.meta.recordKey);
     var aad = protocolApi.stableStringify(envelope.meta);
-    var plainBytes = await decryptWithAad(vaultKey, envelope.iv, envelope.ct, aad);
-    var op = JSON.parse(new TextDecoder().decode(plainBytes));
+    var plainBytes;
+    try {
+      plainBytes = await decryptWithAad(vaultKey, envelope.iv, envelope.ct, aad);
+    } catch (error) {
+      throw createIntegrityError('operation', envelope.meta.recordKey);
+    }
+    var op;
+    try {
+      op = JSON.parse(new TextDecoder().decode(plainBytes));
+    } catch (error) {
+      throw createIntegrityError('operation', envelope.meta.recordKey);
+    }
+    if (!op || typeof op !== 'object' || Array.isArray(op)) {
+      throw createIntegrityError('operation', envelope.meta.recordKey);
+    }
     if (op.opId !== envelope.meta.opId || op.deviceId !== envelope.meta.deviceId
       || op.lamport !== envelope.meta.lamport || op.recordKey !== envelope.meta.recordKey
       || op.kind !== envelope.meta.kind || op.protocolVersion !== envelope.meta.protocolVersion
       || op.schemaVersion !== envelope.meta.schemaVersion) {
-      throw SyncVaultUnlockError('Sync envelope metadata does not match its contents.', 'encryption-error');
+      throw createIntegrityError('operation', envelope.meta.recordKey);
     }
     var opErrors = protocolApi.validateOp(op);
-    if (opErrors.length) throw new Error('Decrypted op failed validation: ' + opErrors.join('; '));
+    if (opErrors.length || !hasCanonicalOpRecord(op)) throw createIntegrityError('operation', envelope.meta.recordKey);
     return op;
   }
 
@@ -273,11 +338,45 @@
       || envelope.meta.protocolVersion !== protocolApi.PROTOCOL_VERSION
       || !Number.isInteger(envelope.meta.schemaVersion) || envelope.meta.schemaVersion < 1
       || !Number.isInteger(envelope.meta.cursor) || envelope.meta.cursor < 0) {
-      throw new Error('Malformed snapshot envelope.');
+      throw createIntegrityError('snapshot');
     }
     var aad = SNAPSHOT_AAD_PREFIX + ':' + protocolApi.stableStringify(envelope.meta);
-    var plainBytes = await decryptWithAad(vaultKey, envelope.iv, envelope.ct, aad);
-    return JSON.parse(new TextDecoder().decode(plainBytes));
+    var plainBytes;
+    try {
+      plainBytes = await decryptWithAad(vaultKey, envelope.iv, envelope.ct, aad);
+    } catch (error) {
+      throw createIntegrityError('snapshot');
+    }
+    var snapshot;
+    try {
+      snapshot = JSON.parse(new TextDecoder().decode(plainBytes));
+    } catch (error) {
+      throw createIntegrityError('snapshot');
+    }
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)
+      || !snapshot.records || typeof snapshot.records !== 'object' || Array.isArray(snapshot.records)) {
+      throw createIntegrityError('snapshot');
+    }
+    var recordKeys = Object.keys(snapshot.records);
+    for (var i = 0; i < recordKeys.length; i += 1) {
+      var parsedKey = getCanonicalRecordKeyInfo(recordKeys[i]);
+      if (!parsedKey) {
+        throw createIntegrityError('snapshot');
+      }
+      if (parsedKey.type === 'collection') {
+        var record = snapshot.records[recordKeys[i]];
+        if (!record || typeof record !== 'object' || Array.isArray(record)) {
+          throw createIntegrityError('snapshot');
+        }
+        var recordId = record.id;
+        var validRecordId = (typeof recordId === 'string' && recordId.length > 0)
+          || (typeof recordId === 'number' && Number.isFinite(recordId));
+        if (!validRecordId || String(recordId) !== parsedKey.id) {
+          throw createIntegrityError('snapshot');
+        }
+      }
+    }
+    return snapshot;
   }
 
   // Asset envelope: raw bytes, AAD-bound to the plaintext content hash so a
@@ -291,8 +390,14 @@
 
   async function decryptAssetBytes(vaultKey, envelope) {
     if (!envelope || envelope.v !== 1 || envelope.alg !== 'A256GCM'
-      || !/^[0-9a-f]{64}$/.test(String(envelope.hash || ''))) throw new Error('Malformed asset envelope.');
-    return decryptWithAad(vaultKey, envelope.iv, envelope.ct, ASSET_AAD_PREFIX + String(envelope.hash));
+      || !/^[0-9a-f]{64}$/.test(String(envelope.hash || ''))) {
+      throw createIntegrityError('attachment', envelope && envelope.hash);
+    }
+    try {
+      return await decryptWithAad(vaultKey, envelope.iv, envelope.ct, ASSET_AAD_PREFIX + String(envelope.hash));
+    } catch (error) {
+      throw createIntegrityError('attachment', envelope.hash);
+    }
   }
 
   function buildRecoveryKitText(wrappedBlob, context) {
@@ -335,6 +440,7 @@
     KDF_MIN_ITERATIONS: KDF_MIN_ITERATIONS,
     KDF_MAX_ITERATIONS: KDF_MAX_ITERATIONS,
     SyncVaultUnlockError: SyncVaultUnlockError,
+    createIntegrityError: createIntegrityError,
     generateVaultKeyBytes: generateVaultKeyBytes,
     importVaultKey: importVaultKey,
     wrapVaultKey: wrapVaultKey,

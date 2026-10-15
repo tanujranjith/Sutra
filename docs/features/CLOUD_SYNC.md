@@ -218,7 +218,9 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   upload on reconnect.
 - **"Update Sutra to keep syncing"** — another device runs a newer Sutra and
   pushed data this version cannot understand yet. Update this device; nothing
-  was changed locally.
+  was changed locally. An unsupported future protocol pauses before decryption;
+  when the protocol is supported but its workspace schema is newer, Sutra
+  authenticates the encrypted envelope before asking you to update.
 - **"Sign in again"** — the account session expired; this never deletes local
   data. Sign in again when ready.
 - **"Safely signed this browser out"** — the Supabase session was still bound
@@ -243,7 +245,14 @@ and the app shows its usual reload prompt. Keep one active tab per device.
   before changing the cloud vault. Do not create a replacement key or delete
   the cloud vault just to make the warning disappear; deleting the vault is a
   permanent, all-device action that should only happen after a separate
-  confirmed recovery copy exists.
+  confirmed recovery copy exists. For an attachment failure, Sutra may already
+  have applied authenticated record metadata before it downloads and verifies
+  the referenced bytes. It does not roll that metadata apply back; it pauses
+  before committing the cycle's cursor/baseline/outbox acknowledgement,
+  acknowledging the device cursor, or compacting a snapshot. The local
+  workspace and queued operations remain available, and explicit Resume retries
+  the missing attachment. Ordinary network or local-storage download failures
+  remain pending and retry on a later cycle.
 - **Old conflict-copy pages** — use **Clean up old conflict copies**. Sutra first
   requires a fresh encrypted `.sutra` safety backup. It consolidates only
   verified exact semantic duplicates without children; unique or contained

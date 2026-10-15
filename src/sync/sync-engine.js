@@ -127,12 +127,16 @@
           protocolError.code = 'update-required';
           throw protocolError;
         }
-        if (Number(meta.schemaVersion) > schemaVersion) {
-          var schemaError = new Error('Another device syncs a newer workspace format (v' + meta.schemaVersion + '). Update Sutra on this device to continue.');
+        // Schema metadata is AAD-bound but untrusted until authentication
+        // succeeds; otherwise a server could relabel tampered ciphertext as
+        // a legitimate future schema and bypass the integrity pause.
+        var op = await cryptoApi.decryptOpEnvelope(vaultKey, envelopes[i]);
+        if (Number(op.schemaVersion) > schemaVersion) {
+          var schemaError = new Error('Another device syncs a newer workspace format (v' + op.schemaVersion + '). Update Sutra on this device to continue.');
           schemaError.code = 'update-required';
           throw schemaError;
         }
-        ops.push(await cryptoApi.decryptOpEnvelope(vaultKey, envelopes[i]));
+        ops.push(op);
       }
       return ops;
     }
@@ -188,18 +192,30 @@
         // local state with the vault instead of diff-deleting either side.
         var remoteBaseRecords = null;
         var pullFromCursor = baseline.cursor;
+        var bootstrapSnapshotCursor = null;
         if (!storedBaseline && typeof transport.getSnapshot === 'function') {
           var snapshotResult = await transport.getSnapshot();
           if (snapshotResult && snapshotResult.ok !== false && snapshotResult.snapshot) {
-            var snapshotValue = await cryptoApi.decryptSnapshotEnvelope(vaultKey, snapshotResult.snapshot);
-            if (snapshotValue && snapshotValue.records && typeof snapshotValue.records === 'object') {
-              remoteBaseRecords = snapshotValue.records;
-              // The cursor comes from the envelope's AAD-authenticated meta —
-              // never from the transport response, which a hostile server
-              // could inflate to make the client skip ops after the snapshot.
-              pullFromCursor = Number(snapshotResult.snapshot.meta && snapshotResult.snapshot.meta.cursor) || 0;
-              await store.setMeta('lastSnapshotCursor', pullFromCursor);
+            var snapshotMeta = snapshotResult.snapshot.meta || {};
+            if (Number(snapshotMeta.protocolVersion) > protocolApi.PROTOCOL_VERSION) {
+              var snapshotProtocolError = new Error('A newer Sutra on another device uses sync protocol v' + snapshotMeta.protocolVersion + '. Update Sutra to keep syncing.');
+              snapshotProtocolError.code = 'update-required';
+              throw snapshotProtocolError;
             }
+            // As with operations, only an authenticated schema version can
+            // trigger the local update-required state.
+            var snapshotValue = await cryptoApi.decryptSnapshotEnvelope(vaultKey, snapshotResult.snapshot);
+            if (Number(snapshotMeta.schemaVersion) > schemaVersion) {
+              var snapshotSchemaError = new Error('Another device syncs a newer workspace format (v' + snapshotMeta.schemaVersion + '). Update Sutra on this device to continue.');
+              snapshotSchemaError.code = 'update-required';
+              throw snapshotSchemaError;
+            }
+            remoteBaseRecords = snapshotValue.records;
+            // The cursor comes from the envelope's AAD-authenticated meta —
+            // never from the transport response, which a hostile server
+            // could inflate to make the client skip ops after the snapshot.
+            pullFromCursor = Number(snapshotMeta.cursor) || 0;
+            bootstrapSnapshotCursor = pullFromCursor;
           }
         }
 
@@ -415,11 +431,13 @@
           acknowledgedHashes = mergeResult.remoteHashes;
         }
 
+        var committedMeta = { lastServerCursor: finalCursor, lamport: lamportCounter };
+        if (bootstrapSnapshotCursor !== null) committedMeta.lastSnapshotCursor = bootstrapSnapshotCursor;
         await store.commitCycleState({
           baseline: { cursor: finalCursor, records: acknowledgedRecords, hashes: acknowledgedHashes },
           outboxOps: [],
           tombstones: mergeResult.tombstones,
-          meta: { lastServerCursor: finalCursor, lamport: lamportCounter }
+          meta: committedMeta
         });
 
         // `lastSeenCursor` is the server's pruning acknowledgement, not a
@@ -466,8 +484,10 @@
     // the workspace references that the server lacks (BEFORE ops referencing
     // it push), and downloads every referenced blob missing locally (records
     // already applied show the app's missing-blob state until the bytes
-    // arrive). Upload failures throw (the cycle retries); download failures
-    // stay pending and retry on later cycles.
+    // arrive). Upload failures throw (the cycle retries); ordinary download
+    // and local-storage failures stay pending and retry on later cycles.
+    // Authentication or content-hash failures pause the cycle because they
+    // indicate that the encrypted attachment cannot be trusted.
     async function syncAssets() {
       if (typeof bridge.getSyncAssetInventory !== 'function') return { uploaded: 0, downloaded: 0, pending: 0 };
       if (typeof transport.putAsset !== 'function' || typeof transport.getAsset !== 'function') return { uploaded: 0, downloaded: 0, pending: 0 };
@@ -510,19 +530,43 @@
             var text = new TextDecoder().decode(plainBytes);
             var checkHash = await protocolApi.hashText(text);
             if (checkHash !== ref.hash) {
-              await store.setAssetState(ref.hash, { hash: ref.hash, status: 'failed-integrity', blobKey: ref.blobKey });
+              throw cryptoApi.createIntegrityError('attachment', ref.hash);
+            }
+            var stored = await bridge.storeSyncAssetDataUrl(ref.blobKey, text);
+            if (stored === false) {
+              await store.setAssetState(ref.hash, {
+                hash: ref.hash,
+                status: 'pending-download',
+                blobKey: ref.blobKey,
+                error: 'download-storage-pending'
+              });
               pending += 1;
               continue;
             }
-            await bridge.storeSyncAssetDataUrl(ref.blobKey, text);
             await store.setAssetState(ref.hash, { hash: ref.hash, status: 'uploaded' });
             downloaded += 1;
           } catch (downloadError) {
+            if (downloadError && downloadError.name === 'SyncVaultUnlockError' && downloadError.stage === 'attachment') {
+              var integrityError = cryptoApi.createIntegrityError('attachment', ref.hash);
+              status.assetsPending = Math.max(status.assetsPending, pending + 1);
+              try {
+                await store.setAssetState(ref.hash, {
+                  hash: ref.hash,
+                  status: 'failed-integrity',
+                  blobKey: ref.blobKey,
+                  error: integrityError.message
+                });
+              } catch (stateError) {
+                // Preserve the integrity pause even if its local status write
+                // fails; never downgrade it into a transient download retry.
+              }
+              throw integrityError;
+            }
             await store.setAssetState(ref.hash, {
               hash: ref.hash,
               status: 'pending-download',
               blobKey: ref.blobKey,
-              error: String(downloadError && downloadError.message ? downloadError.message : downloadError)
+              error: 'download-pending'
             });
             pending += 1; // record stays applied with the app's missing-blob state; retried next cycle
           }
@@ -561,7 +605,16 @@
       if (!vaultKey) return { ok: false, reason: 'locked' };
       var baseline = await store.getBaseline();
       if (!baseline || !baseline.records) return { ok: false, reason: 'no-baseline' };
-      var assets = await syncAssets();
+      var assets;
+      try {
+        assets = await syncAssets();
+      } catch (error) {
+        if (error && error.name === 'SyncVaultUnlockError') {
+          paused = true;
+          setState('encryption-error', error);
+        }
+        throw error;
+      }
       status.assetsPending = assets.pending;
       if (assets.pending > 0) return { ok: false, reason: 'assets-pending', pending: assets.pending };
       var ok = await uploadSnapshot(Number(baseline.cursor) || 0, baseline.records);
@@ -600,6 +653,7 @@
         if (paused && status.state === 'paused') {
           outcome = { error: error };
         } else if (error && error.code === 'update-required') {
+          paused = true;
           setState('update-required', error);
         } else if (error && (error.code === 'auth-expired' || error.code === 'unauthorized')) {
           paused = true;

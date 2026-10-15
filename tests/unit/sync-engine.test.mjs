@@ -1,12 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { webcrypto } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const engineApi = require('../../src/sync/sync-engine.js');
 const transportApi = require('../../src/sync/sync-transport.js');
 const syncCrypto = require('../../src/sync/sync-crypto.js');
 const projectionApi = require('../../src/sync/sync-projection.js');
+const protocolApi = require('../../src/sync/sync-protocol.js');
+
+async function encryptTextForEnvelope(key, plaintext, aad) {
+  const iv = webcrypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await webcrypto.subtle.encrypt({
+    name: 'AES-GCM',
+    iv,
+    additionalData: new TextEncoder().encode(aad),
+    tagLength: 128
+  }, key, new TextEncoder().encode(plaintext));
+  return {
+    iv: Buffer.from(iv).toString('base64'),
+    ct: Buffer.from(ciphertext).toString('base64')
+  };
+}
 
 // In-memory stand-in for SutraSyncStore (same API surface the engine uses).
 function makeMemoryStore() {
@@ -71,6 +87,212 @@ function starterWorkspace() {
     settings: { theme: 'dark', preferences: {} }
   };
 }
+
+function workspaceWithAssetReference(hash) {
+  return {
+    ...starterWorkspace(),
+    courseWorkspace: {
+      courses: [{ id: 'course-asset', name: 'Biology' }],
+      files: [{
+        id: 'file-asset', courseId: 'course-asset', name: 'lab.pdf', kind: 'file',
+        storageType: 'indexeddb', blobKey: 'blob-remote', syncContentHash: hash
+      }],
+      resourceLinks: [], relationships: [], settings: {}
+    }
+  };
+}
+
+function makeAssetBridge(initialWorkspace, blobs = new Map()) {
+  const base = makeBridge(initialWorkspace);
+  return {
+    ...base,
+    getSyncAssetInventory: async () => {
+      const files = (base.holder.workspace.courseWorkspace && base.holder.workspace.courseWorkspace.files) || [];
+      return files
+        .filter((file) => file.blobKey && file.syncContentHash)
+        .map((file) => ({ hash: file.syncContentHash, blobKey: file.blobKey, present: blobs.has(file.blobKey) }));
+    },
+    readSyncAssetDataUrl: async (hash) => {
+      const files = (base.holder.workspace.courseWorkspace && base.holder.workspace.courseWorkspace.files) || [];
+      const file = files.find((candidate) => candidate.syncContentHash === hash);
+      return file && blobs.has(file.blobKey) ? blobs.get(file.blobKey) : null;
+    },
+    storeSyncAssetDataUrl: async (blobKey, dataUrl) => { blobs.set(blobKey, dataUrl); return true; },
+    blobs
+  };
+}
+
+async function seedRemoteAssetReference(hash, vaultKeyBytes) {
+  const server = transportApi.createMemoryServer();
+  const store = makeMemoryStore();
+  const bridge = makeAssetBridge(workspaceWithAssetReference(hash));
+  const engine = engineApi.create({
+    store,
+    transport: transportApi.createMemoryTransport(server, { deviceId: 'device-asset-source' }),
+    bridge,
+    identity: { deviceId: 'device-asset-source', schemaVersion: 5 },
+    vaultKey: await syncCrypto.importVaultKey(vaultKeyBytes),
+    debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const outcome = await engine.syncNow();
+  assert.ok(!outcome.error, String(outcome.error));
+  assert.ok(server.state.ops.length > 0, 'asset reference metadata must be available to the joining device');
+  return server;
+}
+
+test('authenticated malformed operation plaintext pauses before apply or cycle acknowledgement', async () => {
+  const store = makeMemoryStore();
+  const bridge = makeBridge(starterWorkspace());
+  const vaultKey = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const meta = {
+    opId: 'remote-device:1', deviceId: 'remote-device', lamport: 1,
+    recordKey: protocolApi.collectionKey('pages', 'remote-page'), kind: 'upsert',
+    protocolVersion: protocolApi.PROTOCOL_VERSION, schemaVersion: 5
+  };
+  const sealed = await encryptTextForEnvelope(vaultKey, '{malformed json', protocolApi.stableStringify(meta));
+  const envelope = { v: 1, alg: 'A256GCM', meta, ...sealed };
+  let pushCalls = 0;
+  let touchCalls = 0;
+  const transport = {
+    async pull({ cursor }) {
+      return cursor === 0 ? { ok: true, ops: [envelope], cursor: 1 } : { ok: true, ops: [], cursor };
+    },
+    async push() { pushCalls += 1; return { ok: true, cursor: 1 }; },
+    async touchDevice() { touchCalls += 1; return { ok: true }; }
+  };
+  const engine = engineApi.create({
+    store, transport, bridge,
+    identity: { deviceId: 'device-malformed-op', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+
+  const outcome = await engine.syncNow();
+  const status = engine.getStatus();
+  assert.ok(outcome.error);
+  assert.equal(status.state, 'encryption-error');
+  assert.match(status.lastError, /operation data/);
+  assert.ok(!status.lastError.includes(envelope.ct), 'status must not include ciphertext');
+  assert.equal(bridge.holder.applies, 0, 'malformed plaintext must be rejected before workspace apply');
+  assert.equal(store.state.baseline, null);
+  assert.ok((await store.getOutbox()).length > 0, 'the local outbox remains queued');
+  assert.equal(status.lastCursor, 0);
+  assert.equal(status.lastSyncAt, null);
+  assert.equal(pushCalls, 0);
+  assert.equal(touchCalls, 0);
+});
+
+test('authenticated malformed snapshot pauses before apply; future snapshot schema remains update-required', async () => {
+  const vaultKey = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const snapshotMeta = { protocolVersion: protocolApi.PROTOCOL_VERSION, schemaVersion: 5, cursor: 4 };
+  const snapshotAad = 'sutra-sync-snapshot:v1:' + protocolApi.stableStringify(snapshotMeta);
+  const sealed = await encryptTextForEnvelope(vaultKey, '{malformed json', snapshotAad);
+  const snapshot = { v: 1, alg: 'A256GCM', meta: snapshotMeta, ...sealed };
+  const store = makeMemoryStore();
+  const bridge = makeBridge(starterWorkspace());
+  let pullCalls = 0;
+  const engine = engineApi.create({
+    store,
+    transport: {
+      async getSnapshot() { return { ok: true, snapshot }; },
+      async pull() { pullCalls += 1; return { ok: true, ops: [], cursor: 4 }; }
+    },
+    bridge,
+    identity: { deviceId: 'device-malformed-snapshot', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+
+  const outcome = await engine.syncNow();
+  assert.ok(outcome.error);
+  assert.equal(engine.getStatus().state, 'encryption-error');
+  assert.match(engine.getStatus().lastError, /snapshot data/);
+  assert.equal(bridge.holder.applies, 0);
+  assert.equal(store.state.baseline, null);
+  assert.equal(store.state.meta.has('lastSnapshotCursor'), false);
+  assert.equal(engine.getStatus().lastSyncAt, null);
+  assert.equal(pullCalls, 0);
+
+  const futureSnapshot = await syncCrypto.encryptSnapshotEnvelope(vaultKey, { records: {} }, { cursor: 0, schemaVersion: 99 });
+  let futurePullCalls = 0;
+  const futureStore = makeMemoryStore();
+  const futureBridge = makeBridge(starterWorkspace());
+  const futureEngine = engineApi.create({
+    store: futureStore,
+    transport: {
+      async getSnapshot() { return { ok: true, snapshot: futureSnapshot }; },
+      async pull() { futurePullCalls += 1; throw new Error('future snapshot must stop before pull'); }
+    },
+    bridge: futureBridge,
+    identity: { deviceId: 'device-future-snapshot', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const futureOutcome = await futureEngine.syncNow();
+  assert.ok(futureOutcome.error);
+  assert.equal(futureEngine.getStatus().state, 'update-required', 'an authenticated newer workspace schema needs an update');
+  assert.equal(futureBridge.holder.applies, 0);
+  const futureRetry = await futureEngine.syncNow();
+  assert.equal(futureRetry.skipped, true, 'update-required pauses automatic retries');
+  assert.equal(futurePullCalls, 0);
+
+  const tamperedCt = (futureSnapshot.ct[0] === 'A' ? 'B' : 'A') + futureSnapshot.ct.slice(1);
+  const tamperedStore = makeMemoryStore();
+  const tamperedBridge = makeBridge(starterWorkspace());
+  const tamperedEngine = engineApi.create({
+    store: tamperedStore,
+    transport: {
+      async getSnapshot() { return { ok: true, snapshot: { ...futureSnapshot, ct: tamperedCt } }; },
+      async pull() { throw new Error('tampered snapshot must stop before pull'); }
+    },
+    bridge: tamperedBridge,
+    identity: { deviceId: 'device-tampered-future-snapshot', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+  const tamperedOutcome = await tamperedEngine.syncNow();
+  assert.ok(tamperedOutcome.error);
+  assert.equal(tamperedEngine.getStatus().state, 'encryption-error', 'tampering must be detected before schema classification');
+  assert.equal(tamperedBridge.holder.applies, 0);
+});
+
+test('attachment integrity failure during snapshot bootstrap does not persist its cursor', async () => {
+  const content = 'data:application/pdf;base64,c25hcHNob3QtYXNzZXQ=';
+  const hash = await protocolApi.hashText(content);
+  const vaultKeyBytes = syncCrypto.generateVaultKeyBytes();
+  const server = await seedRemoteAssetReference(hash, vaultKeyBytes);
+  const vaultKey = await syncCrypto.importVaultKey(vaultKeyBytes);
+  const cursor = server.state.head;
+  const records = projectionApi.buildProjection(workspaceWithAssetReference(hash)).records;
+  const snapshot = await syncCrypto.encryptSnapshotEnvelope(vaultKey, { records }, { cursor, schemaVersion: 5 });
+  assert.equal(server.putSnapshot({ snapshot, cursor }).ok, true);
+
+  const store = makeMemoryStore();
+  const bridge = makeAssetBridge(starterWorkspace());
+  const wrongKey = await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes());
+  const badAsset = await syncCrypto.encryptAssetBytes(wrongKey, new TextEncoder().encode(content), hash);
+  const baseTransport = transportApi.createMemoryTransport(server, { deviceId: 'device-snapshot-asset' });
+  const engine = engineApi.create({
+    store,
+    transport: { ...baseTransport, async getAsset() { return { envelope: badAsset }; } },
+    bridge,
+    identity: { deviceId: 'device-snapshot-asset', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+
+  const outcome = await engine.syncNow();
+  assert.ok(outcome.error);
+  assert.equal(engine.getStatus().state, 'encryption-error');
+  assert.equal(bridge.holder.applies > 0, true, 'snapshot metadata may apply before attachment verification');
+  assert.equal(store.state.baseline, null);
+  assert.equal(store.state.meta.has('lastSnapshotCursor'), false);
+  assert.equal(store.state.meta.has('lastServerCursor'), false);
+  assert.ok((await store.getOutbox()).length > 0);
+  assert.equal(engine.getStatus().lastCursor, 0);
+  assert.equal(engine.getStatus().lastSyncAt, null);
+});
 
 async function makeDevice(server, deviceId, vaultKeyBytes, workspace = starterWorkspace()) {
   const store = makeMemoryStore();
@@ -459,13 +681,24 @@ test('ops from a future schema pause the engine without mutating state', async (
     hash: 'a'.repeat(64), payload: { id: 'pfuture' },
     schemaVersion: 99, protocolVersion: 1, clientTime: '2026-07-15T00:00:00.000Z'
   };
-  server.push({ ops: [await syncCrypto.encryptOpEnvelope(vaultKey, futureOp)], cursor: server.state.head, deviceId: 'device-z' });
+  const futureEnvelope = await syncCrypto.encryptOpEnvelope(vaultKey, futureOp);
+  server.push({ ops: [futureEnvelope], cursor: server.state.head, deviceId: 'device-z' });
 
   const before = JSON.stringify(A.bridge.holder.workspace);
   const outcome = await A.engine.syncNow();
   assert.ok(outcome.error);
   assert.equal(A.engine.getStatus().state, 'update-required');
   assert.equal(JSON.stringify(A.bridge.holder.workspace), before, 'workspace untouched');
+  assert.equal((await A.engine.syncNow()).skipped, true, 'update-required pauses automatic retries');
+
+  const futureRow = server.state.ops.find((row) => row.envelope.meta.opId === futureEnvelope.meta.opId);
+  futureRow.envelope.ct = (futureRow.envelope.ct[0] === 'A' ? 'B' : 'A') + futureRow.envelope.ct.slice(1);
+  const B = await makeDevice(server, 'device-b', keyBytes);
+  const beforeTampered = JSON.stringify(B.bridge.holder.workspace);
+  const tamperedOutcome = await B.engine.syncNow();
+  assert.ok(tamperedOutcome.error);
+  assert.equal(B.engine.getStatus().state, 'encryption-error', 'tampered future-schema ciphertext must fail authentication first');
+  assert.equal(JSON.stringify(B.bridge.holder.workspace), beforeTampered);
 });
 
 test('tampered remote envelopes abort the cycle without mutating state', async () => {
@@ -739,6 +972,135 @@ test('attachments: encrypted blobs flow device-to-device by content hash', async
   assert.equal(blobsB.get('blob-1'), fileDataUrl, 'blob downloaded, decrypted, and stored under the record blobKey');
   assert.ok(B.bridge.holder.workspace.courseWorkspace.files.some(f => f.id === 'file-1'));
   assert.equal(engineB.getStatus().assetsPending, 0);
+});
+
+test('attachment authentication and hash failures pause before acknowledgement and resume safely', async () => {
+  const content = 'data:application/pdf;base64,cmVjb3ZlcmFibGU=';
+  const hash = await protocolApi.hashText(content);
+  const vaultKeyBytes = syncCrypto.generateVaultKeyBytes();
+  const server = await seedRemoteAssetReference(hash, vaultKeyBytes);
+
+  for (const failureMode of ['decrypt', 'hash']) {
+    const store = makeMemoryStore();
+    const baseline = { cursor: 0, records: {}, hashes: {} };
+    await store.setBaseline(baseline);
+    const bridge = makeAssetBridge(starterWorkspace());
+    const vaultKey = await syncCrypto.importVaultKey(vaultKeyBytes);
+    const badKey = failureMode === 'decrypt'
+      ? await syncCrypto.importVaultKey(syncCrypto.generateVaultKeyBytes())
+      : vaultKey;
+    const badContent = failureMode === 'hash' ? 'data:application/pdf;base64,bm90LXRoZS1hc2g=' : content;
+    const badEnvelope = await syncCrypto.encryptAssetBytes(badKey, new TextEncoder().encode(badContent), hash);
+    const goodEnvelope = await syncCrypto.encryptAssetBytes(vaultKey, new TextEncoder().encode(content), hash);
+    let getAssetResult = { envelope: badEnvelope };
+    let pushCalls = 0;
+    let touchCalls = 0;
+    let snapshotCalls = 0;
+    const baseTransport = transportApi.createMemoryTransport(server, { deviceId: `device-asset-${failureMode}` });
+    const transport = {
+      ...baseTransport,
+      async getAsset() { return getAssetResult; },
+      async push(input) { pushCalls += 1; return baseTransport.push(input); },
+      async touchDevice(input) { touchCalls += 1; return baseTransport.touchDevice(input); },
+      async putSnapshot(input) { snapshotCalls += 1; return baseTransport.putSnapshot(input); }
+    };
+    const engine = engineApi.create({
+      store, transport, bridge,
+      identity: { deviceId: `device-asset-${failureMode}`, schemaVersion: 5 },
+      vaultKey, debounceMs: 0,
+      timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+    });
+
+    const failed = await engine.syncNow();
+    const status = engine.getStatus();
+    assert.ok(failed.error, `${failureMode} failure must reject the cycle`);
+    assert.equal(status.state, 'encryption-error');
+    assert.match(status.lastError, /attachment data \(sha256:/);
+    assert.ok(status.lastError.includes(hash.slice(0, 12)), 'status may expose only a bounded hash prefix');
+    assert.ok(!status.lastError.includes(hash), 'status must not expose the full hash');
+    assert.ok(!status.lastError.includes(badEnvelope.ct), 'status must not expose ciphertext');
+    assert.equal(bridge.holder.applies > 0, true, 'authenticated record metadata may already have applied');
+    assert.deepEqual(await store.getBaseline(), baseline, 'the acknowledged local baseline stays unchanged');
+    const queuedBeforeResume = await store.getOutbox();
+    assert.ok(queuedBeforeResume.length > 0, 'the local outbox remains queued');
+    assert.equal(status.lastCursor, 0);
+    assert.equal(status.lastSyncAt, null);
+    assert.equal((await store.getAssetState(hash)).status, 'failed-integrity');
+    assert.equal(pushCalls, 0, 'integrity failure stops before push');
+    assert.equal(touchCalls, 0, 'integrity failure stops before cursor acknowledgement');
+    assert.equal(snapshotCalls, 0, 'integrity failure stops before compaction');
+    await assert.rejects(
+      () => engine.compactNow(),
+      (error) => error.name === 'SyncVaultUnlockError' && error.stage === 'attachment'
+    );
+    assert.equal(snapshotCalls, 0, 'manual compaction also stops on attachment integrity failure');
+    assert.equal((await engine.syncNow()).skipped, true, 'integrity state requires explicit resume');
+
+    getAssetResult = { envelope: goodEnvelope };
+    engine.resume();
+    assert.deepEqual(await store.getOutbox(), queuedBeforeResume, 'resume preserves the queued operations');
+    const recovered = await engine.syncNow();
+    assert.ok(!recovered.error, String(recovered.error));
+    assert.equal(engine.getStatus().state, 'idle');
+    assert.equal(engine.getStatus().assetsPending, 0);
+    assert.equal(bridge.blobs.get('blob-remote'), content);
+    assert.equal((await store.getAssetState(hash)).status, 'uploaded');
+  }
+});
+
+test('transient attachment download and local storage failures stay pending and retry', async () => {
+  const content = 'data:application/pdf;base64,cGVuZGluZy1yZXRyeQ==';
+  const hash = await protocolApi.hashText(content);
+  const vaultKeyBytes = syncCrypto.generateVaultKeyBytes();
+  const server = await seedRemoteAssetReference(hash, vaultKeyBytes);
+  const store = makeMemoryStore();
+  const bridge = makeAssetBridge(starterWorkspace());
+  const vaultKey = await syncCrypto.importVaultKey(vaultKeyBytes);
+  const goodEnvelope = await syncCrypto.encryptAssetBytes(vaultKey, new TextEncoder().encode(content), hash);
+  let getAssetCalls = 0;
+  let storeCalls = 0;
+  const storeAsset = bridge.storeSyncAssetDataUrl;
+  bridge.storeSyncAssetDataUrl = async (blobKey, dataUrl) => {
+    storeCalls += 1;
+    if (storeCalls === 1) return false;
+    return storeAsset(blobKey, dataUrl);
+  };
+  const baseTransport = transportApi.createMemoryTransport(server, { deviceId: 'device-asset-retry' });
+  const transport = {
+    ...baseTransport,
+    async getAsset() {
+      getAssetCalls += 1;
+      if (getAssetCalls === 1) throw new Error('raw provider response must stay private');
+      return { envelope: goodEnvelope };
+    }
+  };
+  const engine = engineApi.create({
+    store, transport, bridge,
+    identity: { deviceId: 'device-asset-retry', schemaVersion: 5 },
+    vaultKey, debounceMs: 0,
+    timers: { now: () => 1800000000000, setTimeout: () => 1, clearTimeout: () => {} }
+  });
+
+  const networkPending = await engine.syncNow();
+  assert.ok(!networkPending.error, String(networkPending.error));
+  assert.equal(engine.getStatus().state, 'idle');
+  assert.equal(engine.getStatus().assetsPending, 1);
+  assert.equal((await store.getAssetState(hash)).status, 'pending-download');
+  assert.equal((await store.getAssetState(hash)).error, 'download-pending');
+  assert.ok(!String(engine.getStatus().lastError || '').includes('raw provider response'));
+
+  const storagePending = await engine.syncNow();
+  assert.ok(!storagePending.error, String(storagePending.error));
+  assert.equal(engine.getStatus().state, 'idle');
+  assert.equal(engine.getStatus().assetsPending, 1);
+  assert.equal((await store.getAssetState(hash)).error, 'download-storage-pending');
+
+  const recovered = await engine.syncNow();
+  assert.ok(!recovered.error, String(recovered.error));
+  assert.equal(engine.getStatus().state, 'idle');
+  assert.equal(engine.getStatus().assetsPending, 0);
+  assert.equal(bridge.blobs.get('blob-remote'), content);
+  assert.equal((await store.getAssetState(hash)).status, 'uploaded');
 });
 
 test('compaction refuses to publish a complete snapshot while a required asset is missing', async () => {
