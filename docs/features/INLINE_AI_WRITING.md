@@ -1,5 +1,36 @@
 # Inline AI writing help
 
+## Explicit passage commands
+
+Use `/grammar`, `/spelling`, or `/rephrase` in either Notes editor or Assistant
+chat. In Notes, select ordinary text within one paragraph and press `/`, then
+choose the command. The selection stays untouched while the menu and review
+are open. A command typed at a caret opens a blank **Passage to edit** field;
+enter the text explicitly. There is no automatic paragraph or whole-note
+fallback for these three commands. In chat, enter `/grammar your passage`
+(or the other commands), then Send to open the review.
+
+Edit the passage and instruction, then choose **Generate draft**. This sends
+only that passage and instruction through the configured provider. It excludes
+chat history, workspace retrieval, and attachments. The limit is 8,000 passage
+characters. Opening the review, an empty passage, and Cancel make no provider
+generation request. Provider credentials and the normal send disclosure remain
+required for generation.
+
+Review or edit the returned plain-text draft, then choose **Apply** or **Cancel**.
+In Notes, Apply replaces only the captured selection or slash query and supports
+the owning editor's Undo. In chat it returns the reviewed text to the composer;
+it does not send a second message. Editing the original text, changing its page
+or conversation, locking, or applying remote changes invalidates the review.
+
+To protect authored structure, selection commands reject links, code, embedded
+items, mixed formatting, and selections spanning paragraph boundaries. The
+Modern Editor preserves the selection's uniform text marks. In Classic Notes,
+select within one text run; a selection containing markup is rejected. Existing
+general writing help below keeps its separate paragraph-context behavior.
+
+## General writing help
+
 In the Modern Notes editor, open **Sutra Assistant writing help** from the
 slash menu (`/ai` remains a search alias), the toolbar, or the selection
 toolbar. The writing workspace opens

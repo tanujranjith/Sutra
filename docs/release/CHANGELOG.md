@@ -22,6 +22,8 @@ not been pushed, merged, or released. New automated regressions await CI.
   24; repair nested recovery-page paths and landing-page separators.
 - Distinguish taken exams awaiting results from explicitly recorded official
   results, retain practice scores separately, and preserve exact Undo state.
+- Add explicit passage-only grammar, spelling, and rephrase commands with an
+  editable review, Cancel, and guarded Apply through the owning editor history.
 
 ## 2026-08 - Student command center, Sync Beta, and workspace safety
 

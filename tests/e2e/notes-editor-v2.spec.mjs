@@ -1,6 +1,203 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppHydrated } from './helpers/app-ready.mjs';
 
+// Generation is stubbed only in CI fixtures. These workflows spend no credits.
+async function stageWritingProvider(page) {
+  await page.evaluate(() => {
+    window.setWorkspacePreference('assistant.enabled', true, {});
+    window.applyWorkspacePreferences({});
+    window.__qaWritingRequests = [];
+    window.SutraIntelligenceBridge.generateText = async options => {
+      window.__qaWritingRequests.push({ userText: options.userText, attachments: options.attachments });
+      return { ok: true, text: 'This is a corrected sentence.' };
+    };
+  });
+}
+
+async function selectEditorTextAndWait(page, editor, text) {
+  await editor.click();
+  await editor.press('Home');
+  await editor.press('Shift+End');
+  await page.waitForFunction(expected => window.getSelection()?.toString() === expected, text);
+}
+
+test('passage writing command reviews, cancels, applies edited text, and supports Undo', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'QA passage writing');
+  await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  const original = 'This are a sentence.';
+  await editor.fill(original);
+  await editor.press('Home');
+  await editor.press('Shift+End');
+  await page.waitForFunction(text => window.getSelection().toString() === text, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText(original);
+
+  await editor.press('Home');
+  await editor.press('Shift+End');
+  await page.waitForFunction(text => window.getSelection().toString() === text, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+  await review.getByLabel('Assistant draft — edit before accepting').fill('This is my reviewed sentence.');
+  const request = await page.evaluate(() => window.__qaWritingRequests[0]);
+  expect(JSON.parse(request.userText).passage).toBe(original);
+  expect(request.attachments).toBeUndefined();
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText('This is my reviewed sentence.');
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toHaveText(original);
+});
+
+test('empty writing slash command requires an explicit passage and Cancel preserves the query', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await createBlankNote(page, 'QA explicit passage');
+  await enableEditorV2(page);
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  await editor.fill('/spelling');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/spelling' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue('');
+  await expect(review.getByRole('button', { name: 'Generate draft', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText('/spelling');
+});
+
+test('Classic Notes writing command cancels, applies through undo, and persists the undone text after reload', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await enableEditorV2(page);
+  await createBlankNote(page, 'QA Classic writing command');
+  await page.evaluate(() => {
+    window.setWorkspacePreference('editor.editorV2Enabled', false, {});
+    window.applyWorkspacePreferences({});
+  });
+  const editor = page.locator('#editor');
+  await expect(editor).toBeVisible();
+  await stageWritingProvider(page);
+  const original = 'This are a Classic Notes sentence.';
+  await editor.fill(original);
+
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('#slashMenuItems .slash-menu-item').filter({ hasText: '/grammar' }).click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveText(original);
+
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('#slashMenuItems .slash-menu-item').filter({ hasText: '/grammar' }).click();
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  const preview = review.getByLabel('Assistant draft — edit before accepting');
+  await expect(preview).toHaveValue('This is a corrected sentence.');
+  await preview.fill('My reviewed Classic Notes sentence.');
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText('My reviewed Classic Notes sentence.');
+
+  await editor.press('ControlOrMeta+z');
+  await expect(editor).toHaveText(original);
+  await page.evaluate(() => window.flowAtelier.flushAppSaveNow('e2e-classic-writing-undo'));
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await openNotesView(page);
+  await expect(page.locator('#pageTitle')).toHaveValue('QA Classic writing command');
+  await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#editor')).toHaveText(original);
+});
+
+test('full Assistant writing review returns an editable draft to its composer and preserves pending context', async ({ page }) => {
+  await openApp(page);
+  await stageWritingProvider(page);
+  await page.evaluate(() => window.setActiveView('assistantview'));
+  const input = page.locator('#asstInput');
+  await expect(input).toBeVisible();
+
+  await page.locator('#asstCtxBtn').click();
+  await page.locator('.asst-ctx-dropdown-item').filter({ hasText: 'Paste custom text' }).click();
+  const contextText = 'UNRELATED_CONTEXT_SENTINEL';
+  await page.locator('#atelierDialogTextarea').fill(contextText);
+  await page.locator('#atelierDialogConfirm').click();
+  await expect(page.locator('#asstContextBar')).toContainText(contextText);
+
+  const attachment = await page.evaluate(async () => {
+    const file = new File(['ATTACHMENT_SENTINEL'], 'unrelated-writing-context.txt', { type: 'text/plain' });
+    await window.flowAssistant.addAttachmentFromFile(file);
+    return window.flowAssistant.getAttachments().length;
+  });
+  expect(attachment).toBe(1);
+  const messagesBefore = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
+    .messages.map(message => ({ role: message.role, content: message.content })));
+
+  const passage = 'This are an explicit Assistant composer passage.';
+  await input.fill('/grammar ' + passage);
+  await page.locator('#asstSendBtn').click();
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(passage);
+  expect(await page.evaluate(() => window.__qaWritingRequests.length)).toBe(0);
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  const preview = review.getByLabel('Assistant draft — edit before accepting');
+  await expect(preview).toHaveValue('This is a corrected sentence.');
+  const reviewedText = 'My editable reviewed Assistant draft.';
+  await preview.fill(reviewedText);
+  const request = await page.evaluate(() => window.__qaWritingRequests[0]);
+  const payload = JSON.parse(request.userText);
+  expect(Object.keys(payload).sort()).toEqual(['instruction', 'operation', 'passage']);
+  expect(payload.operation).toBe('grammar');
+  expect(payload.passage).toBe(passage);
+  expect(request.attachments).toBeUndefined();
+  expect(request.userText).not.toContain(contextText);
+  expect(request.userText).not.toContain('ATTACHMENT_SENTINEL');
+
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(input).toHaveValue(reviewedText);
+  const messagesAfter = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent()
+    .messages.map(message => ({ role: message.role, content: message.content })));
+  expect(messagesAfter).toEqual(messagesBefore);
+  expect(await page.evaluate(() => window.flowAssistant.getAttachments().length)).toBe(1);
+  await expect(page.locator('#asstContextBar')).toContainText(contextText);
+});
+
+test('editing the original note while a writing review is open prevents Apply', async ({ page }) => {
+  await openApp(page);
+  await openNotesView(page);
+  await enableEditorV2(page);
+  await createBlankNote(page, 'QA stale writing source');
+  await stageWritingProvider(page);
+  const editor = page.locator('#editorV2Host .ProseMirror');
+  const original = 'This are the selected source sentence.';
+  await editor.fill(original);
+  await selectEditorTextAndWait(page, editor, original);
+  await editor.press('/');
+  await page.locator('.editor-v2-slash-item').filter({ hasText: '/grammar' }).click();
+
+  const review = page.locator('.sutra-inline-ai-workbench');
+  await expect(review.getByLabel('Passage to edit')).toHaveValue(original);
+  await review.getByRole('button', { name: 'Generate draft', exact: true }).click();
+  await expect(review.getByLabel('Assistant draft — edit before accepting')).toHaveValue('This is a corrected sentence.');
+
+  const newerText = 'A newer source edit must stay untouched.';
+  await editor.fill(newerText);
+  await review.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toHaveText(newerText);
+  await expect(review).toBeHidden();
+});
+
 // Modern Notes Editor (TipTap engine, shipped 2026-07-07; enabled by default
 // with editor.editorV2Enabled as a compatibility toggle). Regression coverage:
 //   1. THE bug: typing "1. item" produces ONE ordered-list marker — the typed

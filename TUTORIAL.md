@@ -121,6 +121,7 @@ Now write. The editor supports:
 - `Tab` and `Shift+Tab` to indent and outdent list items.
 - `Ctrl/Cmd+Shift+M` to toggle the markdown shortcut on the current selection.
 - A live **word count** in the page header.
+- **Passage writing commands:** select ordinary text within one paragraph and press `/`, then choose `/grammar`, `/spelling`, or `/rephrase`. At a caret, enter the passage in the review explicitly. Generate sends only the shown passage and instruction; review the editable draft and choose Apply or Cancel. Note changes support Undo. The same commands in Assistant chat return reviewed text to the composer without sending a second message.
 - **Autosave** every 1 s by default (configurable in `Settings -> Editor`).
 
 Try assigning the page an emoji icon (page row icon menu), tagging it (tags input near the title), or marking it favorite for quick access.

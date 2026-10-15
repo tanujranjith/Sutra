@@ -1802,6 +1802,7 @@
     /* ---- Slash-command insert menu ---- */
     function slashItemDefs() {
         return [
+            ...['grammar', 'spelling', 'rephrase'].map(function (command) { return { label: '/' + command, keywords: command, icon: 'fa-magic', deferred: true, writingCommand: true, run: function (range) { if (state.authoring) state.authoring.openWriting(command, range); } }; }),
             { label: 'Sutra Assistant writing help', keywords: 'ai writing help', icon: 'fa-magic', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAI(range); } },
             { label: 'Sutra Assistant general help', icon: 'fa-robot', deferred: true, run: function (range) { if (state.authoring) state.authoring.openAssistantGeneral(range); } },
             { label: 'Link', icon: 'fa-link', deferred: true, run: function (range) { if (state.authoring) state.authoring.openRichLink(null, range); } },
@@ -1968,7 +1969,10 @@
         var editor = state.editor;
         if (!item || !range || !editor || range.editor !== editor) return closeSlash();
         var current = currentSlashQuery();
-        if (!current || current.editor !== range.editor || current.from !== range.from || current.to !== range.to || current.text !== range.text) return closeSlash();
+        if (range.selection) {
+            var selection = editor.state.selection;
+            if (editor.state.doc !== range.doc || selection.from !== range.from || selection.to !== range.to) return closeSlash();
+        } else if (!current || current.editor !== range.editor || current.from !== range.from || current.to !== range.to || current.text !== range.text) return closeSlash();
         closeSlash();
         if (item.deferred) {
             // Leave the query intact until the user approves the dialog result.
@@ -1995,13 +1999,27 @@
             closeSlash();
             return;
         }
+        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && state.editor && state.editor.isEditable && !state.editor.state.selection.empty) {
+            var selected = state.editor.state.selection;
+            ctx.slashRange = { from: selected.from, to: selected.to, text: state.editor.state.doc.textBetween(selected.from, selected.to), editor: state.editor, doc: state.editor.state.doc, selection: true };
+            ctx.slashFilter = ''; ctx.slashActiveIndex = 0; ctx.slashOpen = true;
+            ctx.slashItems = slashItemDefs().filter(function (item) { return item.writingCommand; });
+            renderSlashMenu(); positionSlashMenu();
+            event.preventDefault(); event.stopPropagation(); return;
+        }
         if (!ctx.slashOpen) return;
+        if (ctx.slashRange && ctx.slashRange.selection && (/^[a-z]$/i.test(event.key) || event.key === 'Backspace')) {
+            ctx.slashFilter = event.key === 'Backspace' ? ctx.slashFilter.slice(0, -1) : ctx.slashFilter + event.key.toLowerCase();
+            ctx.slashItems = slashItemDefs().filter(function (item) { return item.writingCommand && item.keywords.indexOf(ctx.slashFilter) === 0; });
+            ctx.slashActiveIndex = 0; renderSlashMenu();
+            event.preventDefault(); event.stopPropagation(); return;
+        }
         var handled = true;
         if (event.key === 'ArrowDown') {
-            ctx.slashActiveIndex = (ctx.slashActiveIndex + 1) % ctx.slashItems.length;
+            ctx.slashActiveIndex = ctx.slashItems.length ? (ctx.slashActiveIndex + 1) % ctx.slashItems.length : 0;
             renderSlashMenu();
         } else if (event.key === 'ArrowUp') {
-            ctx.slashActiveIndex = (ctx.slashActiveIndex - 1 + ctx.slashItems.length) % ctx.slashItems.length;
+            ctx.slashActiveIndex = ctx.slashItems.length ? (ctx.slashActiveIndex - 1 + ctx.slashItems.length) % ctx.slashItems.length : 0;
             renderSlashMenu();
         } else if (event.key === 'Enter' || event.key === 'Tab') {
             chooseSlashItem(ctx.slashActiveIndex);

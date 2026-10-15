@@ -274,6 +274,38 @@
             });
             return commit(ed.state.tr.replaceWith(from, to, nodes));
         }
+        function writingSelectionMarks(token) {
+            if (token.from === token.to) return [];
+            var doc = token.doc;
+            if (!doc.resolve(token.from).parent.isTextblock || doc.resolve(token.from).parent !== doc.resolve(token.to).parent) return null;
+            var marks = null, safe = true;
+            doc.nodesBetween(token.from, token.to, function (node) {
+                if (node.isLeaf && !node.isText) safe = false;
+                if (!node.isText) return;
+                var next = node.marks || [];
+                if (next.some(function (mark) { return ['code', 'link'].indexOf(mark.type.name) !== -1; })) safe = false;
+                if (marks && (marks.length !== next.length || marks.some(function (mark, index) { return !mark.eq(next[index]); }))) safe = false;
+                if (!marks) marks = next;
+            });
+            return safe ? marks || [] : null;
+        }
+        async function openWriting(command, range) {
+            var token = captureSlash(range);
+            var writing = global.SutraWritingCommands;
+            if (!token || !writing) return false;
+            var ed = editor();
+            var marks = writingSelectionMarks(token);
+            if (!marks) { report('Select text with consistent formatting within one paragraph, without links, code, or embedded items.'); return false; }
+            var selectedText = !range || range.selection ? ed.state.doc.textBetween(token.from, token.to, '\n') : '';
+            var result = await writing.open(command, { text: selectedText, isCurrent: function () { return current(token); } });
+            if (!result || !current(token)) return false;
+            var nodes = [];
+            result.text.replace(/\r\n?/g, '\n').split('\n').forEach(function (line, index) {
+                if (index) nodes.push(ed.state.schema.nodes.hardBreak.create());
+                if (line) nodes.push(ed.state.schema.text(line, marks));
+            });
+            return commit(ed.state.tr.replaceWith(token.from, token.to, nodes));
+        }
         function openAssistantGeneral(range) {
             var token = captureSlash(range);
             var assistant = global.flowAssistant;
@@ -400,7 +432,7 @@
             });
             return [timeline, richLink, nativeLinks];
         }
-        return { buildExtensions: buildExtensions, openRichLink: openRichLink, openAI: openAI,
+        return { buildExtensions: buildExtensions, openRichLink: openRichLink, openAI: openAI, openWriting: openWriting,
             openAssistantGeneral: openAssistantGeneral,
             openTimeline: openTimeline, captureContentTimelineInsertion: capture,
             insertContentTimeline: insertContentTimeline, getContentTimelineSelection: getContentTimelineSelection,

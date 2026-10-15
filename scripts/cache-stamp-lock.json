@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-exam-results4",
-    "hash": "31aa793109f865d5"
+    "stamp": "20261015-writing3",
+    "hash": "2d7be2ca4db9abc9"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -231,6 +231,10 @@
     "stamp": "20261015-reliability2",
     "hash": "c300f97999504e62"
   },
+  "src/features/assistant/writing-commands.js": {
+    "stamp": "20261015-writing1",
+    "hash": "7e2abfa02918290c"
+  },
   "src/features/customization/customization.js": {
     "stamp": "20260816-home-labels1",
     "hash": "aa47919cbc00fe63"
@@ -244,16 +248,16 @@
     "hash": "b6d35b5d814e4343"
   },
   "src/features/notes/authoring-tools.js": {
-    "stamp": "20261004-native-link-click3",
-    "hash": "531137092617df8f"
+    "stamp": "20261015-writing1",
+    "hash": "7c3eaf564274f6b8"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261012-native-paste1",
-    "hash": "533414367534c941"
+    "stamp": "20261015-writing1",
+    "hash": "0e414b7583ad9a79"
   },
   "src/features/notes/inline-ai-assist.js": {
-    "stamp": "20261003-create-review5",
-    "hash": "3443ec7ea7c18f67"
+    "stamp": "20261015-writing2",
+    "hash": "b736c6e09b155799"
   },
   "src/features/notes/rich-links.js": {
     "stamp": "20261003-create-review5",

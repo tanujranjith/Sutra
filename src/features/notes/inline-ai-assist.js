@@ -50,7 +50,8 @@
     function setPending(session, pending) {
         session.pending = pending;
         session.instruction.disabled = pending || session.stale;
-        session.generate.disabled = pending || session.stale || !session.instruction.value.trim();
+        if (session.sourceInput) session.sourceInput.disabled = pending || session.stale;
+        session.generate.disabled = pending || session.stale || !session.instruction.value.trim() || (session.sourceInput && !session.sourceInput.value.trim());
         session.generate.hidden = pending;
         session.cancelRequest.hidden = !pending;
         session.root.setAttribute('aria-busy', pending ? 'true' : 'false');
@@ -144,6 +145,10 @@
 
     function requestDraft(session) {
         if (session.closed || session.pending || session.stale) return;
+        if (session.sourceInput) {
+            session.contextText = session.sourceInput.value;
+            if (!session.contextText.trim()) { setError(session, 'Enter the passage you want to change.'); session.sourceInput.focus(); return; }
+        }
         var instruction = session.instruction.value;
         if (!instruction.trim()) {
             setError(session, 'Enter an instruction before generating a draft.');
@@ -198,7 +203,7 @@
             session.hasDraft = true;
             session.replace.disabled = !session.selectedText || !session.selectedText.trim();
             session.insert.disabled = false;
-            session.replace.hidden = false;
+            session.replace.hidden = session.options.command;
             session.insert.hidden = false;
             setStatus(session, 'Draft ready. Review or edit it, then choose how to use it.');
             session.preview.focus();
@@ -227,16 +232,17 @@
         root.setAttribute('aria-busy', 'false');
 
         var header = element('header', 'sutra-inline-ai-header');
-        var heading = element('h2', 'sutra-inline-ai-title', 'Note writing help');
+        var heading = element('h2', 'sutra-inline-ai-title', options.title || 'Note writing help');
         heading.id = 'sutraInlineAiAssistTitle_' + id;
-        var backButton = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary sutra-inline-ai-back', 'Back to chat');
+        var backButton = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary sutra-inline-ai-back', options.command ? 'Cancel' : 'Back to chat');
         backButton.type = 'button';
         header.appendChild(heading);
         header.appendChild(backButton);
 
         var body = element('div', 'sutra-inline-ai-body');
-        var disclosure = element('p', 'sutra-inline-ai-disclosure',
-            'Generate sends the instruction and note text shown here through your configured Sutra Assistant provider. Review its send confirmation before continuing. Nothing is sent until you choose Generate, and your note changes only after you approve a draft.');
+        var disclosure = element('p', 'sutra-inline-ai-disclosure', options.command
+            ? 'Generate sends only the passage and editing instruction shown here to your configured provider. Chat history, workspace context, and attachments are excluded. Review the editable draft; Apply returns it to the original text field. Nothing is sent before Generate.'
+            : 'Generate sends the instruction and note text shown here through your configured Sutra Assistant provider. Review its send confirmation before continuing. Nothing is sent until you choose Generate, and your note changes only after you approve a draft.');
 
         var instructionLabel = element('label', 'sutra-inline-ai-label', 'What should Sutra do?');
         instructionLabel.htmlFor = 'sutraInlineAiInstruction_' + id;
@@ -244,13 +250,20 @@
         instruction.id = instructionLabel.htmlFor;
         instruction.rows = 3;
         instruction.maxLength = 2000;
-        instruction.value = 'Improve clarity while preserving my meaning.';
+        instruction.value = options.instruction || 'Improve clarity while preserving my meaning.';
         instruction.setAttribute('spellcheck', 'true');
 
         var contextDetails = element('details', 'sutra-inline-ai-context');
         contextDetails.open = true;
-        var contextSummary = element('summary', '', 'Note passage included');
-        var contextText = element('pre', 'sutra-inline-ai-context-text', options.contextText);
+        var contextSummary = element('summary', '', options.command ? 'Passage to edit — only this text is sent' : 'Note passage included');
+        var sourceInput = options.command ? element('textarea', 'sutra-inline-ai-textarea sutra-inline-ai-source') : null;
+        if (sourceInput) {
+            sourceInput.rows = 5; sourceInput.maxLength = 8000;
+            sourceInput.value = options.contextText || '';
+            sourceInput.setAttribute('aria-label', 'Passage to edit');
+            sourceInput.placeholder = 'Enter the text you want to change. Your note and chat history are not included.';
+        }
+        var contextText = sourceInput || element('pre', 'sutra-inline-ai-context-text', options.contextText);
         contextDetails.appendChild(contextSummary);
         contextDetails.appendChild(contextText);
 
@@ -284,7 +297,7 @@
         body.appendChild(instructionLabel);
         body.appendChild(instruction);
         body.appendChild(contextDetails);
-        body.appendChild(selectionDetails);
+        if (!options.command) body.appendChild(selectionDetails);
         body.appendChild(status);
         body.appendChild(error);
         body.appendChild(previewWrap);
@@ -299,7 +312,7 @@
         replace.type = 'button';
         replace.disabled = true;
         replace.hidden = true;
-        var insert = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary', 'Insert at selection');
+        var insert = element('button', 'sutra-inline-ai-button sutra-inline-ai-secondary', options.command ? 'Apply' : 'Insert at selection');
         insert.type = 'button';
         insert.disabled = true;
         insert.hidden = true;
@@ -319,6 +332,7 @@
             replace: replace,
             insert: insert,
             instruction: instruction,
+            sourceInput: sourceInput,
             preview: preview,
             previewWrap: previewWrap,
             status: status,
@@ -361,6 +375,9 @@
         if (!doc.body) return Promise.resolve(null);
 
         var normalized = {
+            command: options.command === true,
+            title: safeText(options.title).slice(0, 120),
+            instruction: safeText(options.instruction).slice(0, 2000),
             contextText: safeText(options.contextText),
             selectedText: typeof options.selectedText === 'string' && options.selectedText.length ? options.selectedText : null,
             request: options.request,
@@ -394,6 +411,7 @@
             replace: ui.replace,
             insert: ui.insert,
             instruction: ui.instruction,
+            sourceInput: ui.sourceInput,
             preview: ui.preview,
             previewWrap: ui.previewWrap,
             status: ui.status,
@@ -439,7 +457,7 @@
             }
         };
         session.onInput = function (event) {
-            if (event.target === session.instruction) {
+            if (event.target === session.instruction || event.target === session.sourceInput) {
                 if (session.hasDraft) {
                     session.hasDraft = false;
                     session.preview.value = '';
@@ -448,10 +466,10 @@
                     session.insert.disabled = true;
                     session.replace.hidden = true;
                     session.insert.hidden = true;
-                    setStatus(session, 'Instruction changed. Generate a new draft before accepting it.');
+                    setStatus(session, 'Passage or instruction changed. Generate a new draft before accepting it.');
                 }
                 setError(session, '');
-                session.generate.disabled = session.pending || session.stale || !session.instruction.value.trim();
+                session.generate.disabled = session.pending || session.stale || !session.instruction.value.trim() || (session.sourceInput && !session.sourceInput.value.trim());
             } else if (event.target === session.preview && !session.stale) {
                 session.replace.disabled = !session.hasDraft || !session.selectedText || !session.selectedText.trim() || !session.preview.value.trim();
                 session.insert.disabled = !session.hasDraft || !session.preview.value.trim();
@@ -494,13 +512,14 @@
         }
 
         currentSession = session;
+        setPending(session, false);
         if (session.restoreFullscreen) panel.classList.remove('fullscreen');
         panel.classList.add('sutra-inline-ai-mode');
         var header = panel.querySelector('.chatbot-header');
         if (header && header.parentNode === panel) panel.insertBefore(session.root, header.nextSibling);
         else panel.insertBefore(session.root, panel.firstChild);
         global.setTimeout(function () {
-            if (!session.closed && ownerIsCurrent(session)) session.instruction.focus();
+            if (!session.closed && ownerIsCurrent(session)) (session.sourceInput && !session.sourceInput.value.trim() ? session.sourceInput : session.instruction).focus();
         }, 150);
         return promise;
     }

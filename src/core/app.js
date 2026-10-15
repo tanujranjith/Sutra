@@ -43160,6 +43160,7 @@ function buildOnboardingPlanPreview() {
   <li><strong>Slides</strong> has a thumbnail rail, compact Insert / History / Slide menus, Fit and zoom controls, object formatting, speaker notes, and presentation mode. Sheets keeps its formula bar and main formatting actions near the grid, with more tools in Format / Data / Structure / File.</li>
   <li><strong>Custom timelines</strong> can be inserted from the toolbar in Notes, Canvas, and Slides (under Insert). They belong to that page and do not create schedule events. Sheets does not offer timelines.</li>
   <li>Click a note link to copy, edit, or remove its link formatting while keeping the text. Arrow keys keep the selected slash command visible. <strong>AI writing help</strong> opens in the right Assistant panel and only changes the note after you approve a draft.</li>
+  <li><strong>/grammar, /spelling, /rephrase:</strong> select ordinary text within one paragraph and press /, or type a command at the caret and enter a passage explicitly. In Assistant chat, enter the command followed by your passage. Opening the review sends nothing. Generate sends only the displayed passage and instruction; review or edit the draft, then Apply or Cancel. Note changes support Undo; chat changes return to the composer without sending another message.</li>
   <li>Canvas text and sticky notes keep their edits when resized or zoomed. Linked note cards show a readable opening excerpt; locked note contents remain protected. HTML pages keep secondary actions in the three-dot menu.</li>
 </ul>
                     `
@@ -69769,6 +69770,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
 
         // ==================== SLASH COMMANDS ====================
         const slashCommands = [
+            ...['grammar', 'spelling', 'rephrase'].map(id => ({ id, icon: 'fa-wand-magic-sparkles', title: '/' + id, desc: 'Edit only selected or explicitly entered text', writingCommand: true })),
             { id: 'ai', icon: 'fa-wand-magic-sparkles', title: 'Sutra Assistant writing help', desc: 'Open the Assistant with a writing prompt', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || 'Help me improve the writing in this note while preserving my meaning.', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
             { id: 'assistant', icon: 'fa-robot', title: 'Sutra Assistant general help', desc: 'Open the Assistant mini panel', action: () => { const input = document.getElementById('chatInput'); if (window.flowAssistant && typeof window.flowAssistant.askFlow === 'function') window.flowAssistant.askFlow(input && input.value || '', { send: false }); else showToast('Sutra Assistant is unavailable.'); } },
             { id: 'h1', icon: 'fa-heading', title: 'Heading 1', desc: 'Large section heading', action: () => formatBlock('h1') },
@@ -69809,6 +69811,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         let slashMenuSelectedIndex = 0;
         let slashTriggerRange = null;
         let slashFilterText = '';
+        let slashWritingSelection = false;
         let slashCommandExecuting = false;
         
         function initSlashCommands() {
@@ -69816,6 +69819,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             
             editor.addEventListener('keydown', handleSlashKeydown);
             editor.addEventListener('input', handleSlashInput);
+            document.getElementById('slashMenu').addEventListener('mousedown', event => event.preventDefault());
         }
         
         function handleSlashInput(e) {
@@ -69850,7 +69854,21 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function handleSlashKeydown(e) {
+            const selection = window.getSelection();
+            const editor = document.getElementById('editor');
+            if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && selection && selection.rangeCount && !selection.isCollapsed) {
+                const selected = selection.getRangeAt(0);
+                if (editor && editor.isContentEditable && editor.contains(selected.commonAncestorContainer)) {
+                    e.preventDefault(); slashWritingSelection = true; slashTriggerRange = selected.cloneRange();
+                    showSlashMenu(); renderSlashMenuItems(getFilteredCommands()); return;
+                }
+            }
             if (!slashMenuVisible) return;
+            if (slashWritingSelection && (/^[a-z]$/i.test(e.key) || e.key === 'Backspace')) {
+                e.preventDefault();
+                slashFilterText = e.key === 'Backspace' ? slashFilterText.slice(0, -1) : slashFilterText + e.key.toLowerCase();
+                slashMenuSelectedIndex = 0; renderSlashMenuItems(getFilteredCommands()); return;
+            }
             
             const filteredCommands = getFilteredCommands();
             
@@ -69907,8 +69925,9 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         }
         
         function getFilteredCommands() {
-            if (!slashFilterText) return slashCommands;
-            return slashCommands.filter(cmd => 
+            const candidates = slashWritingSelection ? slashCommands.filter(cmd => cmd.writingCommand) : slashCommands;
+            if (!slashFilterText) return candidates;
+            return candidates.filter(cmd =>
                 cmd.title.toLowerCase().includes(slashFilterText) ||
                 cmd.id.toLowerCase().includes(slashFilterText)
             );
@@ -69938,7 +69957,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
         function hideSlashMenu(cleanupEditor = false) {
             // On explicit cancel (Escape), remove the "/" and any typed filter text
             // so they don't end up as stray content in the note.
-            if (cleanupEditor && slashTriggerRange) {
+            if (cleanupEditor && !slashWritingSelection && slashTriggerRange) {
                 try {
                     const sel = window.getSelection();
                     if (sel && sel.rangeCount) {
@@ -69955,6 +69974,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             slashMenuVisible = false;
             slashTriggerRange = null;
             slashFilterText = '';
+            slashWritingSelection = false;
         }
         
         function renderSlashMenuItems(commands) {
@@ -69969,8 +69989,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             
             container.innerHTML = commands.map((cmd, index) => `
                 <div class="slash-menu-item ${index === slashMenuSelectedIndex ? 'selected' : ''}" 
-                     onclick="executeSlashCommand(slashCommands.find(c => c.id === '${cmd.id}'))"
-                     onmouseenter="slashMenuSelectedIndex = ${index}; renderSlashMenuItems(getFilteredCommands());">
+                     onclick="executeSlashCommand(slashCommands.find(c => c.id === '${cmd.id}'))">
                     <div class="slash-menu-item-icon">
                         <i class="fas ${cmd.icon}"></i>
                     </div>
@@ -69980,6 +69999,12 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                     </div>
                 </div>
             `).join('');
+            container.querySelectorAll('.slash-menu-item').forEach((item, index) => {
+                item.addEventListener('mouseenter', () => {
+                    slashMenuSelectedIndex = index;
+                    container.querySelectorAll('.slash-menu-item').forEach((row, rowIndex) => row.classList.toggle('selected', rowIndex === index));
+                });
+            });
             menu.scrollTop = previousScrollTop;
             const selected = container.querySelector('.slash-menu-item.selected');
             if (selected) {
@@ -69993,10 +70018,52 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             }
         }
         
+        async function openClassicWritingCommand(command, range, selected) {
+            const editor = document.getElementById('editor');
+            const pageId = currentPageId;
+            const page = pages.find(item => item.id === pageId);
+            const writing = window.SutraWritingCommands;
+            if (!editor || !page || !range || !writing || !canWritePageContent(page)) return;
+            const baseline = editor.innerHTML;
+            const original = range.toString();
+            if (selected && (!original.trim() || range.cloneContents().querySelector('*')
+                || range.startContainer.parentElement?.closest('a, code, pre') || range.endContainer.parentElement?.closest('a, code, pre'))) {
+                showToast('Select ordinary text within one paragraph, without links, code, or embedded items.'); return;
+            }
+            if (!selected && !/^\/[a-z]*$/i.test(original)) return;
+            const isCurrent = () => currentPageId === pageId && pages.find(item => item.id === pageId) === page
+                && editor === document.getElementById('editor') && editor.isContentEditable && !workspaceImportInProgress
+                && canWritePageContent(page) && baseline === editor.innerHTML
+                && editor.contains(range.startContainer) && editor.contains(range.endContainer) && range.toString() === original;
+            const result = await writing.open(command, { text: selected ? original : '', isCurrent });
+            if (!result || !isCurrent()) return;
+            noteUndoManager.cancelPendingPushes();
+            noteUndoManager.push(editor);
+            editor.focus();
+            const selection = window.getSelection();
+            selection.removeAllRanges(); selection.addRange(range);
+            if (!document.execCommand('insertText', false, result.text)) { showToast('Could not apply the draft. Your original text is unchanged.'); return; }
+            noteUndoManager.push(editor);
+            queueSaveForEditor(editor);
+            updateWordCount();
+        }
+
         async function executeSlashCommand(command) {
             // Insert-once guard: ignore re-entrant calls (e.g. Enter + click racing) so a
             // command never fires twice and duplicates a block.
             if (slashCommandExecuting) return;
+            if (command && command.writingCommand) {
+                const selection = window.getSelection();
+                if (!slashTriggerRange || !selection || !selection.rangeCount) return;
+                const range = slashTriggerRange.cloneRange();
+                const selected = slashWritingSelection;
+                if (!selected) range.setEnd(selection.getRangeAt(0).endContainer, selection.getRangeAt(0).endOffset);
+                hideSlashMenu(); slashCommandExecuting = true;
+                try { await openClassicWritingCommand(command.id, range, selected); }
+                catch (error) { showToast('Writing help could not open. Your text was left unchanged.'); }
+                finally { slashCommandExecuting = false; }
+                return;
+            }
             // Remove the slash and any filter text, leaving the caret where the slash was so
             // the command inserts at the expected position.
             if (slashTriggerRange) {
@@ -75830,7 +75897,7 @@ ${cspMeta}
                     const localEndpointCfg = isLocalProvider ? getWorkspacePreference('assistant.localEndpoint', {}) : null;
                     if (isLocalProvider && !model && localEndpointCfg && localEndpointCfg.model) model = String(localEndpointCfg.model).trim();
                     if (!apiKey && !isLocalProvider) {
-                        return { ok: false, errorCategory: 'auth', errorMessage: `No ${providerConfig.label} API key on file. Add one in Settings ▸ Integrations.` };
+                        return { ok: false, errorCategory: 'auth', errorMessage: `No ${providerConfig.label} API key on file. Add one in Settings ▸ Assistant.` };
                     }
                     if (!model) {
                         return { ok: false, errorCategory: 'unavailable-model', errorMessage: 'Choose a model first (Sutra Assistant panel or Settings).' };
@@ -77061,6 +77128,16 @@ ${cspMeta}
             if (!chatInput || !messagesEl) return;
             const text = (typeof opts.presetText === 'string' && opts.presetText) ? opts.presetText : chatInput.value.trim();
             if (!text) return;
+            const writing = window.SutraWritingCommands;
+            const writingCommand = writing && writing.parse(text);
+            if (writingCommand) {
+                const originalDraft = chatInput.value;
+                const conversation = convo;
+                const isCurrent = () => chatInput.isConnected && chatInput.value === originalDraft && convo === conversation;
+                const result = await writing.open(writingCommand.command, { text: writingCommand.text, isCurrent });
+                if (result && isCurrent()) { chatInput.value = result.text; chatInput.dispatchEvent(new Event('input', { bubbles: true })); chatInput.focus(); }
+                return;
+            }
             clearChatNotices();
             if (!opts.skipUserPush) {
                 appendMessage('user', text);
@@ -79012,6 +79089,7 @@ ${cspMeta}
 
         // ── Slash commands, @-mentions, and image attachments ───────────────
         const ASST_SLASH_COMMANDS = [
+            ...['grammar', 'spelling', 'rephrase'].map(command => ({ cmd: '/' + command, icon: 'fa-feather', desc: 'Edit only the passage you supply', prompt: '/' + command + ' ' })),
             { cmd: '/summarize', icon: 'fa-list-check', desc: 'Summarize the current note', prompt: 'Summarize the key points from my current note.', send: true },
             { cmd: '/quiz',      icon: 'fa-circle-question', desc: 'Quiz me on the current note', prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true },
             { cmd: '/explain',   icon: 'fa-lightbulb', desc: 'Explain a concept simply', prompt: 'Explain this concept to me simply, with an example: ' },
@@ -79264,6 +79342,17 @@ ${cspMeta}
             asstCloseInputPopups();
             const text = input.value.trim();
             if (!text) return;
+            const writing = window.SutraWritingCommands;
+            const writingCommand = writing && writing.parse(text);
+            if (writingCommand) {
+                const originalDraft = input.value;
+                const conversation = convo;
+                const isCurrent = () => input.isConnected && asstCache.input === input && input.value === originalDraft
+                    && convo === conversation && activeView === 'assistantview';
+                const result = await writing.open(writingCommand.command, { text: writingCommand.text, isCurrent });
+                if (result && isCurrent()) { input.value = result.text; asstAutosize(); asstUpdateSendDisabled(); input.focus(); }
+                return;
+            }
             input.value = '';
             asstAutosize();
             asstUpdateSendDisabled();
