@@ -85,6 +85,7 @@ test('distinct classes and activities require a choice while nested class names 
   assert.deepEqual(Array.from(result.courseCandidates, row => row.id).sort(), ['chem', 'robotics']);
   const specific = buildQuickCaptureParser([{ id: 'bio', name: 'Biology' }, { id: 'ap-bio', name: 'AP Biology' }]);
   assert.equal(specific('AP Biology worksheet due Friday').courseId, 'ap-bio');
+  assert.equal(specific('Biology and AP Biology joint worksheet due Friday').courseCandidates.length, 2);
   const shorthand = buildQuickCaptureParser([{ id: 'chem1', name: 'Chemistry I' }, { id: 'chem2', name: 'Chemistry II' }]);
   assert.equal(shorthand('chem homework').courseCandidates.length, 2);
 });

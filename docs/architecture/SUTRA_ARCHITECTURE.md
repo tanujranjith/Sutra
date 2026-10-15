@@ -41,6 +41,11 @@ never authorize later reads. Life Calculator resolves the shared
 `SutraCustomTabs.evaluateExpression` parser only on user evaluation, preserving
 the existing script load order.
 
+The pure Assistant model/normalization module loads before workspace hydration,
+outside the optional Assistant pack, so disabled/lazy Assistant UI cannot discard
+saved source identities. Missing source cards can recover metadata from their
+saved response receipt; this does not retrieve bodies or grant access.
+
 ### Core safety layer (loaded before everything else)
 
 The safety layer also includes **`src/core/migrations.js`**
@@ -406,7 +411,8 @@ cascade and the global-scope execution order both depend on it. Do not reorder.
 
 1. **`<head>`** — `assets/vendor/jszip` → core **safety layer** (`safe-storage` →
    `error-reporter` → `dom-safety` → `feature-guard` → `migrations`) →
-   **`src/state/workspace-normalizers.js`** → `src/sync/*` in protocol-to-engine
+   **`src/state/workspace-normalizers.js`** → domain modules and the pure
+   `features/assistant/assistant-core.js` chat normalizer → `src/sync/*` in protocol-to-engine
    dependency order → `components/icons/*` →
    stylesheets `styles/features/startup-intro.css`, `styles/base/styles.css`,
    `styles/themes/sutra-pro.css`, `styles/features/sutra-intelligence.css` →

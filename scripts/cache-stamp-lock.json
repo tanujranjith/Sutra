@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-caveat-fixes3",
-    "hash": "37fb742504967f1d"
+    "stamp": "20261015-caveat-fixes6",
+    "hash": "359ff289de76c6b7"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-caveat-fixes3",
-    "hash": "d353db61bfcf2106"
+    "stamp": "20261015-caveat-fixes6",
+    "hash": "62fc2dc995959c27"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -104,7 +104,7 @@
     "hash": "90b89bd8b0f869f9"
   },
   "src/domain/assistant-permissions.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "52dfe20e2fcce701"
   },
   "src/domain/content-timeline.js": {
@@ -176,7 +176,7 @@
     "hash": "9593e26f2e7eefa4"
   },
   "src/features/academic/semester-setup.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "8515c83be55a82d8"
   },
   "src/features/assistant/action-system.js": {
@@ -184,15 +184,15 @@
     "hash": "7168f34034a3e5ce"
   },
   "src/features/assistant/assistant-core.js": {
-    "stamp": "20261015-caveat-fixes3",
-    "hash": "86e5eb53cd8d025e"
+    "stamp": "20261015-caveat-fixes6",
+    "hash": "feb2a1e8eb4256c1"
   },
   "src/features/assistant/assistant-safety.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "97c93a015e9b3cda"
   },
   "src/features/assistant/flow-intelligence.js": {
@@ -336,7 +336,7 @@
     "hash": "56818cb5d03e08eb"
   },
   "src/features/workspace/custom-tabs.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "6b513bec735419c6"
   },
   "src/features/workspace/daily-lock-in-quote.js": {
@@ -452,7 +452,7 @@
     "hash": "d4abd9130eddb8f1"
   },
   "src/features/workspace/workspace-entity-adapters.js": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "75fa24245451cc5a"
   },
   "src/persistence/revocation-wipe.js": {
@@ -536,7 +536,7 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261015-caveat-fixes3",
+    "stamp": "20261015-caveat-fixes6",
     "hash": "f558ae3c06b5b921"
   },
   "styles/base/tokens.css": {

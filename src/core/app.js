@@ -56228,8 +56228,9 @@ function getActiveEditor() {
             if (raw.restoredFromBackup === true) out.restoredFromBackup = true;
             if (raw.favorite === true) out.favorite = true;
             if (raw.partial === true) out.partial = true;
-            if (Array.isArray(raw.sources) && raw.sources.length) {
-                out.sources = raw.sources.map(source => {
+            const sourceRows = Array.isArray(raw.sources) && raw.sources.length ? raw.sources : raw.receipt && raw.receipt.sources;
+            if (Array.isArray(sourceRows) && sourceRows.length) {
+                out.sources = sourceRows.map(source => {
                     try {
                         if (window.SutraAssistantCore && typeof window.SutraAssistantCore.normalizeSource === 'function') {
                             return window.SutraAssistantCore.normalizeSource(source);
@@ -83571,7 +83572,9 @@ function resolveQuickCaptureCourse(text) {
         });
         if (localScore > 0) matches.push({ id: String(course.id), name: String(course.name || ''), score: localScore, token });
     });
-    const distinct = matches.filter(course => !matches.some(other => other.score > course.score && (' ' + other.token + ' ').includes(' ' + course.token + ' ')));
+    const distinct = matches.filter(course => !matches.some(other => other.score > course.score
+        && (' ' + other.token + ' ').includes(' ' + course.token + ' ')
+        && !padded.replace(new RegExp('\\b' + other.token + '\\b', 'g'), ' ').includes(' ' + course.token + ' ')));
     if (distinct.length > 1) return { ambiguous: true, candidates: distinct.map(course => ({ id: course.id, name: course.name })) };
     return distinct.length ? { id: distinct[0].id, name: distinct[0].name } : null;
 }

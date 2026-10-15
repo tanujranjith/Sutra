@@ -73,7 +73,10 @@
     <script src="src/domain/student-life.js?v=20260913-energy-removal-life1"></script>
     <script src="src/domain/icalendar.js?v=20260807-ics3"></script>
     <script src="src/domain/import-engine.js?v=20260913-content-limits-import1"></script>
-    <script src="src/domain/assistant-permissions.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/domain/assistant-permissions.js?v=20261015-caveat-fixes6"></script>
+    <!-- Durable chat normalization must be ready before workspace hydration,
+         even when the optional Assistant feature pack is disabled. -->
+    <script src="src/features/assistant/assistant-core.js?v=20261015-caveat-fixes6"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
     <script src="src/boot/legacy-workspace-migration.js?v=20260913-energy-removal-legacy1"></script>
     <script src="src/persistence/workspace-coordinator.js?v=20260710-coordinator1"></script>
@@ -89,7 +92,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20260825-sol1-1"></script>
-    <script src="src/config/feature-manifest.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/config/feature-manifest.js?v=20261015-caveat-fixes6"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -117,7 +120,7 @@
     
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261015-caveat-fixes3">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261015-caveat-fixes6">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -7893,7 +7896,7 @@
     <script src="src/features/academic/school-schedule.js?v=20260816-home-labels1"></script>
     <script src="src/features/academic/grade-planner.js?v=20261011-student-workflow1"></script>
     <script src="src/features/academic/assignment-studio.js?v=20260813-pdf1"></script>
-    <script src="src/features/academic/semester-setup.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/features/academic/semester-setup.js?v=20261015-caveat-fixes6"></script>
     <!-- Shared command-center UI foundation for the College/Life/Business tabs.
          Loaded before app.js so the core can use window.SutraCommandCenter via
          *Safe() wrappers; owns no data, degrades to no-ops if it fails to load. -->
@@ -7945,7 +7948,7 @@
          data through configureGlobalSearchBridge(). -->
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
-    <script src="src/core/app.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/core/app.js?v=20261015-caveat-fixes6"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7967,7 +7970,7 @@
     <!-- Desktop Notes sidebar actions: compact overflow menu that reuses the
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
-    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/features/workspace/workspace-entity-adapters.js?v=20261015-caveat-fixes6"></script>
     <script src="src/features/workspace/office-interoperability.js?v=20260822-office4"></script>
     <script src="src/features/workspace/slides.js?v=20261004-slides-lines-menus1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
@@ -7996,7 +7999,7 @@
     <script src="src/features/workspace/mobile-nav.js?v=20261001-mobile-data-actions2"></script>
     <!-- Custom Tabs — user-composed widget dashboards. Loads after app.js and
          mobile-nav so it can attach to the live tab row + core bridge. -->
-    <script src="src/features/workspace/custom-tabs.js?v=20261015-caveat-fixes3"></script>
+    <script src="src/features/workspace/custom-tabs.js?v=20261015-caveat-fixes6"></script>
     <!-- Web Share Target — accepts shared text, URLs, files, and images from
          the OS share sheet when Sutra is installed as a PWA. -->
     <script src="src/features/workspace/share-target.js?v=20260712-share1"></script>

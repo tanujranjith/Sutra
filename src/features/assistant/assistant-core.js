@@ -99,7 +99,8 @@
       claimType: ['external_sourced_fact', 'workspace_fact', 'saved_memory_preference', 'deterministic_calculation', 'deterministic_inference', 'inference', 'recommendation', 'proposed_action', 'generative_suggestion'].indexOf(row.claimType) >= 0 ? row.claimType : '',
       memoryUsedIds: (Array.isArray(row.memoryUsedIds) ? row.memoryUsedIds : []).map(function (memoryId) { return value(memoryId, 120); }).slice(0, 20),
       providerLabel: value(row.providerLabel, 80), modelLabel: value(row.modelLabel, 120), receipt: sanitizeReceipt(row.receipt),
-      sources: (Array.isArray(row.sources) ? row.sources : []).map(source).filter(Boolean).slice(0, 20), favorite: row.favorite === true,
+      sources: (Array.isArray(row.sources) && row.sources.length ? row.sources :
+        row.receipt && Array.isArray(row.receipt.sources) ? row.receipt.sources : []).map(source).filter(Boolean).slice(0, 20), favorite: row.favorite === true,
       grounding: row.grounding && typeof row.grounding === 'object' ? { evidenceStatus: value(row.grounding.evidenceStatus, 40), query: value(row.grounding.query, 1000), scope: clone(row.grounding.scope || null) } : null
     };
   }

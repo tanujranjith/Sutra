@@ -20,6 +20,13 @@ test('workspace source identity survives saved-chat round trips without storing 
   assert.doesNotMatch(JSON.stringify(restored.sources), /do not store|private locked text/);
 });
 
+test('saved receipt metadata recovers a source card previously omitted during startup', () => {
+  const restored = core.normalizeMessage({ role: 'assistant', content: 'Saved answer', sources: [],
+    receipt: { provider: 'Gemini', sources: [{ kind: 'homework', id: 'lab', title: 'Lab', status: 'unverified' }] } });
+  assert.equal(restored.sources[0].key, 'homework:lab');
+  assert.equal(restored.sources[0].href, 'sutra://entity/homework%3Alab');
+});
+
 test('sources panel resolves workspace records, labels one-time reads, and hides protected quotes', () => {
   const doc = { createElement(tag) { return { tag, children: [], handlers: {}, textContent: '',
     setAttribute() {}, appendChild(child) { this.children.push(child); }, addEventListener(type, fn) { this.handlers[type] = fn; } }; } };
