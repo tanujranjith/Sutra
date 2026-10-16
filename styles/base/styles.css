@@ -30582,6 +30582,17 @@ body[data-theme="dark"] .today-mobile-rightnow .neumo-btn.is-recover { color: #f
     width: 92vw;
 }
 
+/* Keep generation controls and errors readable over busy note content. The
+   active theme's primary surface is an opaque, theme-aware color; theme presets
+   that style all modal cards as glass should not make this dialog translucent. */
+#aiThemeModal .ai-theme-modal-content {
+    background: var(--bg-primary, #ffffff) !important;
+    color: var(--text-primary);
+    border-color: var(--surface-border-strong, var(--surface-border));
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
 .ai-theme-subtitle {
     font-size: 13px;
     color: var(--text-secondary);
@@ -30745,12 +30756,61 @@ body[data-theme="dark"] .today-mobile-rightnow .neumo-btn.is-recover { color: #f
 
 .ai-theme-error {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     line-height: 1.55;
     padding: 14px;
     border-radius: 10px;
-    border: 1px solid var(--surface-border);
-    background: var(--surface-bg);
+    border: 1px solid var(--surface-border-strong, var(--surface-border));
+    background: var(--bg-primary, #ffffff);
+    overflow-wrap: anywhere;
+}
+
+.ai-theme-chat-card {
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid var(--surface-border-strong, var(--surface-border));
+    border-radius: 12px;
+    background: var(--bg-primary, #ffffff);
+    color: var(--text-primary);
+}
+
+.ai-theme-chat-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.35;
+}
+
+.ai-theme-chat-description,
+.ai-theme-chat-guidance,
+.ai-theme-chat-status {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ai-theme-chat-description {
+    margin: 4px 0 12px;
+}
+
+.ai-theme-chat-guidance {
+    margin: 12px 0 6px;
+}
+
+.ai-theme-chat-status {
+    min-height: 1.5em;
+    margin: 8px 0;
+}
+
+.ai-theme-chat-swatches {
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+.ai-theme-chat-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .ai-theme-footer {

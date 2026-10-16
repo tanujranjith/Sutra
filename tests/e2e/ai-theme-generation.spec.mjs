@@ -116,6 +116,142 @@ test('Gemini theme generation requests JSON mode and safely recovers a fenced re
   expect(requestBody.generationConfig.responseMimeType).toBe('application/json');
 });
 
+test('normalizes a provider-wrapped theme response through the strict palette sanitizer', async ({ page }) => {
+  await openApp(page);
+  await mockAnthropic(page, JSON.stringify({ theme: THEME_OK }));
+  await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
+
+  const result = await page.evaluate(() => window.SutraThemeAI.generate('warm Japanese stationery'));
+  const fenced = await page.evaluate(theme => window.SutraThemeAI.parseChatTheme(
+    `Here is the palette:\n\`\`\`json\n${JSON.stringify({ palette: theme }, null, 2).replace(/\n}/, '\n,}')}\n\`\`\``
+  ), THEME_OK);
+  expect(result.ok).toBe(true);
+  expect(result.theme.name).toBe('Kyoto Paper');
+  expect(result.theme.colors.accent).toBe('#9c6b4a');
+  expect(Object.keys(result.theme.colors).sort()).toEqual(['accent', 'bgPrimary', 'bgSecondary', 'button', 'sidebar', 'textPrimary']);
+  Object.values(result.theme.colors).forEach(value => expect(value).toMatch(/^#[0-9a-f]{6}$/));
+  expect(fenced.ok).toBe(true);
+  expect(fenced.theme.name).toBe('Kyoto Paper');
+});
+
+test('theme chat mode keeps only bounded theme turns and can be explicitly turned off', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const longHistory = [];
+    for (let i = 0; i < 9; i += 1) {
+      longHistory.push({ role: 'user', content: i === 0 ? '/theme Make a dark Sutra theme' : `Refinement ${i}` });
+      longHistory.push({ role: 'assistant', content: `Theme reply ${i}` });
+    }
+    const history = [
+      { role: 'user', content: 'Unrelated private workspace context' },
+      { role: 'user', content: '/theme Make a dark futuristic theme' },
+      { role: 'assistant', content: '{"name":"Night Study","colors":{"accent":"#4c8ed9"}}' }
+    ];
+    return {
+      first: window.SutraThemeAI.buildChatRequest('/theme Make a dark futuristic theme', [history[0]]),
+      followup: window.SutraThemeAI.buildChatRequest('make it warmer', history),
+      off: window.SutraThemeAI.buildChatRequest('/theme off', history),
+      afterOff: window.SutraThemeAI.buildChatRequest('make it warmer', history.concat({ role: 'user', content: '/theme off' })),
+      naturalSutra: window.SutraThemeAI.buildChatRequest('Create a dark Sutra theme', []),
+      colorPalette: window.SutraThemeAI.buildChatRequest('Create a warm color palette', []),
+      generic: window.SutraThemeAI.buildChatRequest('Make me a dark futuristic theme', []),
+      slideDeck: window.SutraThemeAI.buildChatRequest('Create a color palette theme for my slide deck', []),
+      bounded: window.SutraThemeAI.buildChatRequest('Make the theme cooler', longHistory)
+    };
+  });
+  expect(result.first.active).toBe(true);
+  expect(result.first.messages).toEqual([{ role: 'user', content: 'Make a dark futuristic theme' }]);
+  expect(result.followup.messages.map(message => message.content)).toEqual([
+    'Make a dark futuristic theme',
+    '{"name":"Night Study","colors":{"accent":"#4c8ed9"}}',
+    'make it warmer'
+  ]);
+  expect(JSON.stringify(result.followup.messages)).not.toContain('Unrelated private workspace context');
+  expect(result.off).toMatchObject({ active: false, disabled: true });
+  expect(result.afterOff).toBeNull();
+  expect(result.naturalSutra.active).toBe(true);
+  expect(result.colorPalette.active).toBe(true);
+  expect(result.generic).toBeNull();
+  expect(result.slideDeck).toBeNull();
+  expect(result.bounded.messages).toHaveLength(11); // five previous pairs plus the current turn
+  expect(result.bounded.messages[0].role).toBe('user');
+  expect(result.bounded.messages.at(-1).role).toBe('user');
+  expect(result.bounded.messages.filter(message => message.role === 'user')).toHaveLength(6);
+  result.bounded.messages.forEach((message, index, all) => {
+    expect(message.content.length).toBeLessThanOrEqual(1200);
+    if (index) expect(message.role).not.toBe(all[index - 1].role);
+  });
+});
+
+test('Assistant theme response card validates before rendering and never previews automatically or renders stale chats', async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(payload => {
+    const controller = window.SutraAssistantConversationController;
+    const conversation = controller.create({ title: 'Create a theme' });
+    const themeHistory = [{ role: 'user', content: '/theme Create a calm theme' }];
+    const host = document.createElement('div');
+    host.textContent = 'raw response';
+    const before = (window.serializeWorkspace({ mode: 'json' }).settings.customThemes || []).length;
+    const valid = window.SutraThemeAI.renderChatTheme(JSON.stringify({ theme: payload }), host, conversation.id, themeHistory);
+    const afterRender = (window.serializeWorkspace({ mode: 'json' }).settings.customThemes || []).length;
+    const previewing = window.SutraThemeAI.isPreviewing();
+    const card = host.querySelector('.ai-theme-chat-card');
+    const staleHost = document.createElement('div');
+    staleHost.textContent = 'keep this message';
+    const stale = window.SutraThemeAI.renderChatTheme(JSON.stringify({ theme: payload }), staleHost, 'another-chat', themeHistory);
+    const ordinaryHost = document.createElement('div');
+    ordinaryHost.textContent = 'ordinary answer';
+    const ordinary = window.SutraThemeAI.renderChatTheme(JSON.stringify({ theme: payload }), ordinaryHost, conversation.id, []);
+    const partialHost = document.createElement('div');
+    partialHost.textContent = 'partial color object';
+    const partial = window.SutraThemeAI.renderChatTheme(JSON.stringify({ colors: { accent: '#9c6b4a' } }), partialHost, conversation.id, themeHistory);
+    const invalid = window.SutraThemeAI.parseChatTheme(JSON.stringify({ colors: { accent: 'not-a-color' } }));
+    return {
+      valid: valid.ok,
+      title: card && card.querySelector('.ai-theme-chat-title').textContent,
+      buttons: card && card.querySelectorAll('button').length,
+      previewing,
+      before,
+      afterRender,
+      stale: stale.stale,
+      staleText: staleHost.textContent,
+      ordinary: ordinary.ordinary,
+      ordinaryText: ordinaryHost.textContent,
+      partial: partial.ordinary,
+      partialText: partialHost.textContent,
+      invalid: invalid.ok,
+      invalidError: invalid.errorMessage
+    };
+  }, THEME_OK);
+  expect(result.valid).toBe(true);
+  expect(result.title).toBe('Kyoto Paper');
+  expect(result.buttons).toBe(3);
+  expect(result.previewing).toBe(false);
+  expect(result.afterRender).toBe(result.before);
+  expect(result.stale).toBe(true);
+  expect(result.staleText).toBe('keep this message');
+  expect(result.ordinary).toBe(true);
+  expect(result.ordinaryText).toBe('ordinary answer');
+  expect(result.partial).toBe(true);
+  expect(result.partialText).toBe('partial color object');
+  expect(result.invalid).toBe(false);
+  expect(result.invalidError).toContain('Nothing changed');
+});
+
+test('Create your own theme opens a new Assistant chat with /theme prefilled but does not send', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('button')].find(item => /Open Theme Panel/i.test(item.textContent || ''));
+    if (button) button.click();
+    document.getElementById('aiThemeGenerateCard').click();
+  });
+  await expect(page.locator('#view-assistantview')).toHaveClass(/active/);
+  await expect(page.locator('#asstInput')).toHaveValue('/theme ', { timeout: 3000 });
+  const current = await page.evaluate(() => window.SutraAssistantConversationController.getCurrent());
+  expect(current.title).toBe('Create a theme');
+  expect(current.messages).toEqual([]);
+});
+
 test('validation repairs garbage, rejects unsafe values, and fills safe defaults (no network)', async ({ page }) => {
   await openApp(page);
   const out = await page.evaluate(() => {
@@ -326,6 +462,31 @@ test('malformed (non-JSON) model output is rejected as a validation error', asyn
   const res = await page.evaluate(async () => await window.SutraThemeAI.generate('prose please'));
   expect(res.ok).toBe(false);
   expect(res.errorCategory).toBe('validation');
+  expect(res.errorMessage).toContain('usable theme palette');
+});
+
+test('malformed output shows an accessible readable error and never changes the saved themes', async ({ page }) => {
+  await openApp(page);
+  await mockAnthropic(page, 'Sure, the theme should feel calm and inviting.');
+  await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
+  await page.evaluate(() => {
+    window.applyPresetTheme('dark');
+    window.SutraThemeAI.openModal();
+  });
+  const before = await page.evaluate(() => (window.serializeWorkspace({ mode: 'json' }).settings.customThemes || []).length);
+  await page.fill('#aiThemePromptInput', 'a calm dark theme');
+  await page.click('#aiThemeGenerateBtn');
+
+  const error = page.locator('#aiThemeErrorSection');
+  await expect(error).toBeVisible();
+  await expect(error).toHaveAttribute('role', 'alert');
+  await expect(error).toContainText('Nothing changed');
+  await expect(page.locator('#aiThemeRegenerateBtn')).toBeVisible();
+  await expect(page.locator('#aiThemeOpenSettingsBtn')).toBeHidden();
+  const surface = await page.evaluate(() => getComputedStyle(document.querySelector('#aiThemeModal .ai-theme-modal-content')).backgroundColor);
+  expect(surface).toMatch(/^rgb\(/); // an opaque theme surface, never the translucent modal glass
+  const after = await page.evaluate(() => (window.serializeWorkspace({ mode: 'json' }).settings.customThemes || []).length);
+  expect(after).toBe(before);
 });
 
 test('backward compatibility: importing a workspace with no customThemes does not break theming', async ({ page }) => {
@@ -351,15 +512,18 @@ test('backward compatibility: importing a workspace with no customThemes does no
   expect(out.themeAiUsable).toBe(true);
 });
 
-test('Sutra Assistant routes a natural-language theme request to the generator', async ({ page }) => {
+test('theme requests stay in the normal Assistant chat pipeline instead of opening the old generator modal', async ({ page }) => {
   await openApp(page);
-  await mockAnthropic(page, JSON.stringify(THEME_OK), { delayMs: 200 });
-  await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
-  const handled = await page.evaluate(() => {
-    const r = window.flowAssistant.tryHandleCommand('make me a dark futuristic theme');
-    return { handled: r.handled, message: r.message, modalActive: document.getElementById('aiThemeModal').classList.contains('active') };
+  const routing = await page.evaluate(() => {
+    const naturalLanguage = window.flowAssistant.tryHandleCommand('make me a dark futuristic theme');
+    const command = window.flowAssistant.tryHandleCommand('/theme a dark futuristic theme');
+    return {
+      naturalHandled: naturalLanguage.handled,
+      commandHandled: command.handled,
+      modalActive: document.getElementById('aiThemeModal').classList.contains('active')
+    };
   });
-  expect(handled.handled).toBe(true);
-  expect(handled.message).toMatch(/theme/i);
-  expect(handled.modalActive).toBe(true);
+  expect(routing.naturalHandled).toBe(false);
+  expect(routing.commandHandled).toBe(false);
+  expect(routing.modalActive).toBe(false);
 });

@@ -34559,11 +34559,15 @@ function buildOnboardingPlanPreview() {
             'Soft pastel study aesthetic'
         ]);
         const AI_THEME_MAX_PROMPT = 600;
+        const AI_THEME_CHAT_MAX_TURNS = 6;
+        const AI_THEME_CHAT_MAX_MESSAGE_CHARS = 1200;
         const AI_THEME_MIN_CONTRAST = 4.5;
         // Modal/working state for the in-progress generated theme (not yet applied).
         let aiThemeModalState = null; // { theme, previousTheme, lastPrompt, requestId }
         // Live-preview state — survives the modal closing so the floating banner works.
         let aiThemePreviewState = null; // { savedBodyTheme, savedBodyThemeKey, theme }
+        // Ephemeral link to the Assistant conversation that created the current preview.
+        let aiThemeChatConversationId = null;
         let aiThemeUiBound = false;
 
         function aiThemeProviderStatus() {
@@ -34716,6 +34720,171 @@ function buildOnboardingPlanPreview() {
             return lines.join('\n');
         }
 
+        // Models sometimes wrap an otherwise valid theme in a small JSON
+        // envelope (for example {"theme": {...}}). Unwrap only known object
+        // containers; the result still goes through the same allowlisted color
+        // sanitizer and contrast repair below.
+        function normalizeAiThemeEnvelope(value) {
+            let candidate = value;
+            const wrappers = ['theme', 'palette', 'customTheme', 'result', 'data'];
+            const colorFields = [
+                ...AI_THEME_TOKEN_KEYS,
+                'background', 'backgroundPrimary', 'bg', 'surface', 'backgroundSecondary',
+                'surfaceSecondary', 'panel', 'bg2', 'text', 'foreground', 'ink', 'fg',
+                'accentColor', 'primary', 'brand', 'highlight', 'sidebarBg', 'nav',
+                'navigation', 'buttonBg', 'buttons', 'action'
+            ];
+            const hasThemeColors = (payload) => {
+                if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+                const colors = payload.colors;
+                const source = colors && typeof colors === 'object' && !Array.isArray(colors) ? colors : payload;
+                return colorFields.some((key) => {
+                    if (!Object.prototype.hasOwnProperty.call(source, key) || source[key] == null) return false;
+                    const raw = String(source[key]).trim();
+                    return /^#[0-9a-fA-F]{6}$/.test(raw)
+                        || /^#[0-9a-fA-F]{3}$/.test(raw)
+                        || /^rgba?\(\s*\d+[\s,]+\d+[\s,]+\d+/i.test(raw);
+                });
+            };
+            const findThemePayload = (candidate, depth) => {
+                if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+                if (hasThemeColors(candidate)) return candidate;
+                if (depth >= 3) return null;
+                for (const key of wrappers) {
+                    const found = findThemePayload(candidate[key], depth + 1);
+                    if (found) return found;
+                }
+                return null;
+            };
+            return findThemePayload(value, 0);
+        }
+
+        function isAiThemeCreationRequest(value) {
+            const text = String(value || '').trim();
+            if (!text || /^\/theme\s+off\b/i.test(text)) return false;
+            const refersToSutra = /\bsutra\b/i.test(text);
+            if (!refersToSutra && /\b(?:slides?|deck|presentation|document)\b/i.test(text)) return false;
+            const appOrWorkspace = /\b(?:sutra|app|application|workspace)\b/i.test(text);
+            const paletteRequest = /\b(?:color|colour)\s+palette\b/i.test(text);
+            if (!appOrWorkspace && !paletteRequest) return false;
+            return /\b(?:create|generate|make|design|build|invent|craft|suggest|give(?:\s+me)?|come\s+up\s+with)\b[\s\S]{0,120}\b(?:theme|palette|color\s+scheme|colour\s+scheme)\b/i.test(text)
+                || /\b(?:i\s+(?:want|need)|i(?:'d|\s+would)\s+like|help\s+me|can\s+you|could\s+you)\b[\s\S]{0,100}\b(?:theme|palette|color\s+scheme|colour\s+scheme)\b/i.test(text);
+        }
+
+        function isAiThemeChatHistory(history) {
+            let enabled = false;
+            (Array.isArray(history) ? history : []).forEach((message) => {
+                if (!message || message.role !== 'user') return;
+                const content = String(message.content || '').trim();
+                if (/^\/theme\s+off(?:\s|$)/i.test(content)) enabled = false;
+                else if (/^\/theme(?:\s|$)/i.test(content) || isAiThemeCreationRequest(content)) enabled = true;
+            });
+            return enabled;
+        }
+
+        // Dedicated theme chats use the shared Assistant provider/model/effort and
+        // disclosure path, but send only the theme request and its bounded theme
+        // conversation. General workspace enrichment and attachments stay out.
+        function buildAiThemeChatRequest(text, history) {
+            const currentText = String(text || '').trim();
+            if (/^\/theme\s+off(?:\s|$)/i.test(currentText)) return { active: false, disabled: true };
+            const prior = Array.isArray(history) ? history : [];
+            let lastThemeOff = -1;
+            prior.forEach((message, index) => {
+                if (message && message.role === 'user' && /^\/theme\s+off(?:\s|$)/i.test(String(message.content || '').trim())) {
+                    lastThemeOff = index;
+                }
+            });
+            const firstThemeTurn = prior.findIndex((message, index) => index > lastThemeOff && message && message.role === 'user'
+                && (/^\/theme(?:\s|$)/i.test(String(message.content || '').trim())
+                    || isAiThemeCreationRequest(message.content)));
+            const isExplicitThemeTurn = /^\/theme(?:\s|$)/i.test(currentText);
+            const isNaturalThemeTurn = isAiThemeCreationRequest(currentText);
+            if (!isExplicitThemeTurn && firstThemeTurn < 0 && !isNaturalThemeTurn) return null;
+
+            let userText = currentText.replace(/^\/theme\s*/i, '').trim();
+            if (userText.length > AI_THEME_MAX_PROMPT) userText = userText.slice(0, AI_THEME_MAX_PROMPT);
+            if (!userText) {
+                return {
+                    active: true,
+                    systemPrompt: buildAiThemeSystemPrompt(),
+                    messages: [],
+                    errorMessage: 'Add a short description after /theme before sending.'
+                };
+            }
+
+            // A natural-language theme request can start in an existing Assistant
+            // chat; only include turns from that theme request onward. A new /theme
+            // session starts with the current message and does not inherit unrelated
+            // earlier chat context.
+            const themeHistory = firstThemeTurn >= 0 ? prior.slice(firstThemeTurn) : [];
+            const normalizeUserText = (value) => String(value || '').trim().replace(/^\/theme\s*/i, '').trim().slice(0, AI_THEME_MAX_PROMPT);
+            let historyMessages = themeHistory
+                .filter((message) => message && (message.role === 'user' || message.role === 'assistant'))
+                .slice(-(AI_THEME_CHAT_MAX_TURNS * 2))
+                .map((message) => {
+                    let content = String(message.content || '').trim();
+                    if (message.role === 'user') content = normalizeUserText(content);
+                    if (content.length > AI_THEME_CHAT_MAX_MESSAGE_CHARS) content = content.slice(0, AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+                    return { role: message.role, content };
+                })
+                .filter((message) => message.content);
+            // Regenerate reuses an already-persisted user turn without duplicating it.
+            if (historyMessages.length && historyMessages[historyMessages.length - 1].role === 'user'
+                && normalizeUserText(historyMessages[historyMessages.length - 1].content) === userText) {
+                historyMessages.pop();
+            }
+            // Provider chat APIs expect user-led alternating turns. The current
+            // request is the sixth user turn at most, so keep only five prior pairs.
+            historyMessages = historyMessages.slice(-(AI_THEME_CHAT_MAX_TURNS * 2 - 2));
+            if (historyMessages[0] && historyMessages[0].role === 'assistant') historyMessages.shift();
+            const sequencedHistory = [];
+            historyMessages.forEach((message) => {
+                const previous = sequencedHistory[sequencedHistory.length - 1];
+                if (previous && previous.role === message.role) {
+                    previous.content = `${previous.content}\n\n${message.content}`.slice(-AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+                } else {
+                    sequencedHistory.push({ ...message });
+                }
+            });
+            historyMessages = sequencedHistory;
+            const lastHistoryMessage = historyMessages[historyMessages.length - 1];
+            if (lastHistoryMessage && lastHistoryMessage.role === 'user') {
+                lastHistoryMessage.content = `${lastHistoryMessage.content}\n\n${userText}`.slice(-AI_THEME_CHAT_MAX_MESSAGE_CHARS);
+            } else {
+                historyMessages.push({ role: 'user', content: userText });
+            }
+            return { active: true, systemPrompt: buildAiThemeSystemPrompt(), messages: historyMessages, responseMimeType: 'application/json' };
+        }
+
+        function hasCompleteAiThemeChatPalette(text) {
+            const parsed = parseStructuredIntelligenceJson(text);
+            if (!parsed.ok) return false;
+            const payload = normalizeAiThemeEnvelope(parsed.value);
+            const colors = payload && payload.colors && typeof payload.colors === 'object' ? payload.colors : payload;
+            if (!colors) return false;
+            return AI_THEME_TOKEN_KEYS.every((key) => {
+                const raw = String(colors[key] || '').trim();
+                return /^#[0-9a-fA-F]{6}$/.test(raw) || /^#[0-9a-fA-F]{3}$/.test(raw);
+            });
+        }
+
+        function parseAiThemeChatResponse(text) {
+            const parsed = parseStructuredIntelligenceJson(text);
+            if (!parsed.ok) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The reply did not contain a usable theme palette. Nothing changed. Ask Assistant to return the theme format, or revise your description.' };
+            }
+            const payload = normalizeAiThemeEnvelope(parsed.value);
+            if (!payload) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The reply did not contain a usable theme palette. Nothing changed. Ask Assistant to return the theme format, or revise your description.' };
+            }
+            const validated = validateAiThemePayload(payload, { fallbackName: 'Generated Theme' });
+            if (!validated.ok) {
+                return { ok: false, errorCategory: 'validation', errorMessage: 'The generated palette could not be validated. Nothing changed.' };
+            }
+            return { ok: true, theme: validated.theme };
+        }
+
         // The single AI request path for both first-pass generation and refinement.
         // Only the theme description, the token schema, and (when refining) the current
         // generated theme are ever sent — never any other workspace content.
@@ -34774,10 +34943,18 @@ function buildOnboardingPlanPreview() {
                 return {
                     ok: false,
                     errorCategory: 'validation',
-                    errorMessage: 'The model returned output that was not a valid theme. Nothing was changed — try again or switch models.'
+                    errorMessage: 'The model reply did not contain a usable theme palette. Nothing changed. Try a shorter description, or change the selected model in Assistant before generating again.'
                 };
             }
-            const validated = validateAiThemePayload(parsed.value, {
+            const themePayload = normalizeAiThemeEnvelope(parsed.value);
+            if (!themePayload) {
+                return {
+                    ok: false,
+                    errorCategory: 'validation',
+                    errorMessage: 'The model reply did not contain a usable theme palette. Nothing changed. Try a shorter description, or change the selected model in Assistant before generating again.'
+                };
+            }
+            const validated = validateAiThemePayload(themePayload, {
                 baseColors: currentTheme && currentTheme.colors,
                 currentTheme,
                 fallbackName: currentTheme && currentTheme.name ? currentTheme.name : 'Generated Theme'
@@ -34962,6 +35139,99 @@ function buildOnboardingPlanPreview() {
             return row;
         }
 
+        // Build a review card inside the caller's dedicated answer container. Invalid
+        // replies leave that container untouched so the Assistant can show its normal
+        // response plus an actionable validation notice.
+        function renderAiThemeChatResponse(text, host, conversationId, history) {
+            if (!host || typeof host.replaceChildren !== 'function') {
+                return { ok: false, errorCategory: 'render', errorMessage: 'The theme preview could not be displayed.' };
+            }
+            if (conversationId && currentChatId && String(currentChatId) !== String(conversationId)) {
+                return { ok: false, stale: true, errorCategory: 'stale-conversation' };
+            }
+            if (!isAiThemeChatHistory(Array.isArray(history) ? history : convo)) return { ok: false, ordinary: true };
+            if (!hasCompleteAiThemeChatPalette(text)) return { ok: false, ordinary: true };
+            const parsed = parseAiThemeChatResponse(text);
+            if (!parsed.ok) return parsed;
+            if (conversationId) aiThemeChatConversationId = String(conversationId);
+            const theme = parsed.theme;
+            const card = document.createElement('section');
+            card.className = 'ai-theme-chat-card';
+            card.setAttribute('aria-label', `Theme preview: ${theme.name}`);
+
+            const title = document.createElement('h4');
+            title.className = 'ai-theme-chat-title';
+            title.textContent = theme.name || 'Generated theme';
+            card.appendChild(title);
+            if (theme.description) {
+                const description = document.createElement('p');
+                description.className = 'ai-theme-chat-description';
+                description.textContent = theme.description;
+                card.appendChild(description);
+            }
+
+            const swatches = buildAiThemeSwatchRow(theme);
+            swatches.classList.add('ai-theme-chat-swatches');
+            const labels = ['Background', 'Panel', 'Sidebar', 'Accent', 'Button', 'Text'];
+            const values = [theme.colors.bgPrimary, theme.colors.bgSecondary, theme.colors.sidebar, theme.colors.accent, theme.colors.button, theme.colors.textPrimary];
+            swatches.querySelectorAll('.ai-theme-swatch').forEach((swatch, index) => {
+                swatch.setAttribute('role', 'img');
+                swatch.setAttribute('aria-label', `${labels[index]} ${values[index]}`);
+            });
+            card.appendChild(swatches);
+
+            const guidance = document.createElement('p');
+            guidance.className = 'ai-theme-chat-guidance';
+            guidance.textContent = isAiThemeChatHistory(convo)
+                ? 'Theme mode is on. Describe refinements here, or type /theme off to return to regular Assistant. Review the colors before you preview or apply.'
+                : 'Theme mode is off. Send /theme followed by a description to start again. You can still preview or apply this earlier palette.';
+            card.appendChild(guidance);
+
+            const status = document.createElement('div');
+            status.className = 'ai-theme-chat-status';
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            const actions = document.createElement('div');
+            actions.className = 'ai-theme-chat-actions';
+            const previewBtn = document.createElement('button');
+            previewBtn.type = 'button';
+            previewBtn.className = 'btn btn-secondary';
+            previewBtn.textContent = 'Preview';
+            const applyBtn = document.createElement('button');
+            applyBtn.type = 'button';
+            applyBtn.className = 'btn btn-primary';
+            applyBtn.textContent = 'Apply theme';
+            const revertBtn = document.createElement('button');
+            revertBtn.type = 'button';
+            revertBtn.className = 'btn btn-secondary';
+            revertBtn.textContent = 'Revert preview';
+            revertBtn.disabled = true;
+            previewBtn.addEventListener('click', () => {
+                if (startAiThemePreview(theme)) {
+                    status.textContent = `${theme.name} is previewing. Your saved theme has not changed.`;
+                    revertBtn.disabled = false;
+                }
+            });
+            applyBtn.addEventListener('click', () => {
+                const created = applyGeneratedAiTheme(theme);
+                if (created) {
+                    status.textContent = `${theme.name} was applied and saved as a custom theme.`;
+                    applyBtn.disabled = true;
+                    applyBtn.textContent = 'Applied';
+                    revertBtn.disabled = true;
+                }
+            });
+            revertBtn.addEventListener('click', () => {
+                revertAiThemePreview();
+                status.textContent = 'The saved theme has been restored.';
+                revertBtn.disabled = true;
+            });
+            actions.append(previewBtn, applyBtn, revertBtn);
+            card.append(status, actions);
+            host.replaceChildren(card);
+            return { ok: true, theme, element: card };
+        }
+
         function renderAiThemeResult(theme, previousTheme) {
             const els = getAiThemeEls();
             if (!els.result) return;
@@ -35084,6 +35354,63 @@ function buildOnboardingPlanPreview() {
             }
         }
 
+        function openAssistantThemePrompt(options = {}) {
+            const opts = options && typeof options === 'object' ? options : {};
+            if (asstInFlight) {
+                showToast('Stop the current Assistant response before starting a theme chat.');
+                return false;
+            }
+            if (!isViewEnabled('assistantview')) {
+                try { setFeatureViewEnabled('assistantview', true, { markSetupComplete: false, syncActiveView: false }); } catch (e) { /* surface below */ }
+            }
+            if (!isViewEnabled('assistantview')) {
+                showToast('Turn on Sutra Assistant in Settings to create a theme.');
+                return false;
+            }
+            const controller = window.SutraAssistantConversationController;
+            if (!controller || typeof controller.create !== 'function' || typeof controller.select !== 'function') {
+                showToast('Sutra Assistant is not ready. Reload the app and try again.');
+                return false;
+            }
+
+            let conversation = null;
+            let reusedThemeChat = false;
+            if (opts.reuseThemeChat === true && aiThemeChatConversationId) {
+                if (controller.select(aiThemeChatConversationId)) {
+                    conversation = typeof controller.getCurrent === 'function' ? controller.getCurrent() : { id: aiThemeChatConversationId };
+                    reusedThemeChat = true;
+                }
+            }
+            if (!conversation) {
+                const seed = opts.theme ? { title: 'Refine a theme' } : { title: 'Create a theme' };
+                conversation = controller.create(seed);
+            }
+            if (!conversation || !conversation.id) {
+                showToast('Could not open a theme conversation. Try again.');
+                return false;
+            }
+            aiThemeChatConversationId = conversation.id;
+            closeAiThemeModal();
+            const themePanel = document.getElementById('themePanel');
+            if (themePanel && themePanel.classList.contains('active')) toggleThemePanel();
+            try { setActiveView('assistantview'); } catch (e) { /* controller render below may still be available */ }
+            try { if (typeof controller.render === 'function') controller.render('full'); } catch (e) { /* non-critical */ }
+
+            const initialPrompt = reusedThemeChat
+                ? 'Refine the current theme: '
+                : (opts.theme
+                    ? '/theme Refine this current palette: ' + JSON.stringify({ name: opts.theme.name, colors: opts.theme.colors }) + '\nRequested adjustment: '
+                    : '/theme ');
+            const input = document.getElementById('asstInput');
+            if (input && input.isConnected && currentChatId === conversation.id && activeView === 'assistantview') {
+                input.value = initialPrompt;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.focus();
+                try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) { /* textarea may not allow selection */ }
+            }
+            return true;
+        }
+
         function cancelAiThemeRequest() {
             if (aiThemeModalState && aiThemeModalState.requestId) {
                 try { cancelIntelligenceRequest(aiThemeModalState.requestId); } catch (e) { /* non-critical */ }
@@ -35158,7 +35485,7 @@ function buildOnboardingPlanPreview() {
             });
             if (bannerRefine) bannerRefine.addEventListener('click', () => {
                 const theme = aiThemePreviewState && aiThemePreviewState.theme;
-                openAiThemeModal(theme ? { theme } : {});
+                openAssistantThemePrompt({ reuseThemeChat: true, theme });
             });
             if (bannerRevert) bannerRevert.addEventListener('click', () => { revertAiThemePreview(); });
         }
@@ -35223,11 +35550,11 @@ function buildOnboardingPlanPreview() {
             const card = document.getElementById('aiThemeGenerateCard');
             if (!card || card.dataset.bound === 'true') return;
             card.dataset.bound = 'true';
-            card.addEventListener('click', () => openAiThemeModal());
+            card.addEventListener('click', () => openAssistantThemePrompt());
             card.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    openAiThemeModal();
+                    openAssistantThemePrompt();
                 }
             });
         }
@@ -63183,10 +63510,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             // Pinned + vendored locally (see importDocxFile note above).
             const XLSX = await loadExternalScript('assets/vendor/office/xlsx.full.min.js?v=0.20.3', 'XLSX', { local: true });
             const arrayBuffer = await readFileAsArrayBuffer(file);
-            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const workbook = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true });
             const sheetNames = workbook.SheetNames || [];
             if (!sheetNames.length) return '<p>(No sheets found)</p>';
-            const formulaReport = window.SutraOfficeInterop.fillMissingFormulaResults(workbook);
+            const formulaReport = await window.SutraOfficeInterop.fillMissingFormulaResults(workbook,
+                /\.xlsx$/i.test(String(file.name || '')) ? { xlsxSource: arrayBuffer } : undefined);
 
             const blocks = [];
             if (formulaReport.calculated) blocks.push('<p>Missing formula results were calculated locally. Imported notes are a static snapshot; use Sheets to keep formulas editable.</p>');
@@ -75952,6 +76280,10 @@ ${cspMeta}
                 // Deterministic, network-free validation/repair + contrast helpers.
                 validate: (raw, opts) => validateAiThemePayload(raw, opts || {}),
                 contrastRatio: (colors) => getContrastRatio(colors.textPrimary, colors.bgPrimary),
+                buildChatRequest: buildAiThemeChatRequest,
+                parseChatTheme: parseAiThemeChatResponse,
+                renderChatTheme: (text, host, conversationId, history) => renderAiThemeChatResponse(text, host, conversationId, history),
+                openAssistantPrompt: openAssistantThemePrompt,
                 // Preview / apply / UI entry points.
                 preview: startAiThemePreview,
                 revertPreview: revertAiThemePreview,
@@ -78114,7 +78446,13 @@ ${cspMeta}
                 if (finalThoughts && finalThoughts.length) bubble.appendChild(asstBuildThinking(finalThoughts));
                 const answer = document.createElement('div');
                 finalHtml = renderMarkdown(displayedClean || '');
-                if (opts.stream) {
+                const themeRenderResult = window.SutraThemeAI && typeof window.SutraThemeAI.renderChatTheme === 'function'
+                    && window.SutraThemeAI.renderChatTheme(text, answer, currentChatId,
+                        Number.isInteger(opts.index) && opts.index >= 0 ? convo.slice(0, opts.index + 1) : convo);
+                const renderedTheme = themeRenderResult && themeRenderResult.ok === true;
+                if (renderedTheme) {
+                    cleanForActions = answer.textContent || cleanForActions;
+                } else if (opts.stream) {
                     streamHost = answer; // filled by asstStreamInto below
                     answer.className = 'asst-stream-host';
                 } else {
@@ -79459,6 +79797,21 @@ ${cspMeta}
                 if (result && isCurrent()) { input.value = result.text; asstAutosize(); asstUpdateSendDisabled(); input.focus(); }
                 return;
             }
+            const themeChatRequest = window.SutraThemeAI && typeof window.SutraThemeAI.buildChatRequest === 'function'
+                ? window.SutraThemeAI.buildChatRequest(text, convo) : null;
+            if (themeChatRequest && themeChatRequest.errorMessage) {
+                asstNotice(themeChatRequest.errorMessage);
+                return;
+            }
+            if (themeChatRequest && themeChatRequest.disabled) {
+                convo.push({ role: 'user', content: text }, { role: 'assistant', content: 'Theme creation is off for this chat. Your saved theme is unchanged.' });
+                saveConvo();
+                input.value = '';
+                asstAutosize();
+                asstUpdateSendDisabled();
+                asstRenderAll();
+                return;
+            }
             input.value = '';
             asstAutosize();
             asstUpdateSendDisabled();
@@ -79479,7 +79832,7 @@ ${cspMeta}
             }
 
             let lockedPageAccess = { ok: true, needed: false, ticket: null };
-            if (window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+            if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
                 lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(text);
                 if (!lockedPageAccess || lockedPageAccess.ok !== true) {
                     window.flowAssistant.consumeLockedPageAccess();
@@ -79489,7 +79842,7 @@ ${cspMeta}
             }
             // Command layer — natural-language commands run locally, no model call.
             try {
-                if (window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
+                if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.handleOutgoing === 'function') {
                     const cmd = window.flowAssistant.handleOutgoing(text);
                     if (cmd && cmd.handled) {
                         // Local Help / Memory manager render their own interactive
@@ -79520,8 +79873,12 @@ ${cspMeta}
         // `sendText` is what the model receives (may carry a context block).
         // opts.pushUser=false is used by Regenerate (user turn already present).
         async function asstSendCore(displayText, sendText, opts = {}) {
+            const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
+            const themeCandidate = window.SutraThemeAI && typeof window.SutraThemeAI.buildChatRequest === 'function'
+                ? window.SutraThemeAI.buildChatRequest(displayText, conversationSnapshot) : null;
+            const themeChatRequest = themeCandidate && themeCandidate.active ? themeCandidate : null;
             let lockedPageAccess = { ok: true, needed: false, ticket: opts.lockedPageAccessTicket || null };
-            if (!opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
+            if (!themeChatRequest && !opts.lockedAccessChecked && window.flowAssistant && typeof window.flowAssistant.prepareLockedPageAccessForPrompt === 'function') {
                 lockedPageAccess = await window.flowAssistant.prepareLockedPageAccessForPrompt(displayText);
                 if (!lockedPageAccess || lockedPageAccess.ok !== true) {
                     window.flowAssistant.consumeLockedPageAccess();
@@ -79529,7 +79886,6 @@ ${cspMeta}
                     return;
                 }
             }
-            const conversationSnapshot = Array.isArray(convo) ? convo.slice() : [];
             const provider = getCurrentChatProvider();
             const providerConfig = CHAT_PROVIDER_CONFIG[provider];
             const isLocalProvider = provider === 'local';
@@ -79581,7 +79937,12 @@ ${cspMeta}
                 return;
             }
 
-            const flowEnrichment = (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
+            const flowEnrichment = themeChatRequest ? {
+                systemPrompt: themeChatRequest.systemPrompt,
+                requestMessages: themeChatRequest.messages,
+                sources: [], attachments: [],
+                context: { depth: 'none', accessReport: { areasRead: [] }, memoryUsedIds: [] }
+            } : (typeof window !== 'undefined' && window.flowAssistant && typeof window.flowAssistant.buildRequestEnrichment === 'function')
                 ? window.flowAssistant.buildRequestEnrichment(sendText, providerConfig.type, { conversation: conversationSnapshot, conversationScope: ensureCurrentConversation().scope, lockedPageAccessTicket: lockedPageAccess.ticket })
                 : null;
             try { window.flowAssistant.consumeLockedPageAccess(lockedPageAccess.ticket); } catch (error) { /* best effort */ }
@@ -79642,9 +80003,10 @@ ${cspMeta}
                     workspaceAccess: preSendReceipt && preSendReceipt.workspaceAccess,
                     allowedCategories: preSendReceipt && preSendReceipt.transmittedCategories,
                     transmittedCategories: preSendReceipt && preSendReceipt.transmittedCategories,
-                    maxTokens: 2048,
+                    maxTokens: themeChatRequest ? 4096 : 2048,
                     reasoningEffort: getWorkspacePreference('assistant.reasoningEffort', 'auto'),
-                    stream: true,
+                    responseMimeType: themeChatRequest ? 'application/json' : undefined,
+                    stream: !themeChatRequest,
                     onDelta: (textSoFar) => {
                         if (currentChatId !== sendChatId) return; // stale — don't touch a transcript the user has left
                         if (!livePlaceholder) {
@@ -79684,12 +80046,18 @@ ${cspMeta}
                     });
                     return;
                 }
-                try { if (window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
+                try { if (!themeChatRequest && window.flowAssistant && typeof window.flowAssistant.consumeAttachments === 'function') window.flowAssistant.consumeAttachments(); } catch (e) { /* ignore */ }
 
                 const assistantText = result.text || '(no response)';
                 const { clean: _splitClean } = splitThinkBlocks(assistantText);
-                const persistClean = _splitClean || assistantText;
-                const parsedActions = window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
+                let persistClean = _splitClean || assistantText;
+                if (themeChatRequest) {
+                    const preparedTheme = window.SutraThemeAI.parseChatTheme(persistClean);
+                    persistClean = preparedTheme && preparedTheme.ok
+                        ? JSON.stringify({ name: preparedTheme.theme.name, description: preparedTheme.theme.description, colors: preparedTheme.theme.colors })
+                        : ((preparedTheme && preparedTheme.errorMessage) || 'The selected model did not return a complete theme. Nothing changed. Try a shorter description or change the model or thinking effort, then send again.');
+                }
+                const parsedActions = !themeChatRequest && window.flowAssistant && typeof window.flowAssistant.parseActions === 'function'
                     ? window.flowAssistant.parseActions(persistClean, { userText: displayText || sendText }) : null;
                 const actionTypes = parsedActions && Array.isArray(parsedActions.actions) ? parsedActions.actions.map(action => action.type).filter(Boolean) : [];
                 const responseReceipt = buildAssistantResponseReceipt(flowEnrichment, { local: false, provider: providerConfig.label, model: selectedModel, dataTransmitted: result.dataSent !== false, actionsProposed: actionTypes });

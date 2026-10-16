@@ -78,8 +78,8 @@
          even when the optional Assistant feature pack is disabled. -->
     <script src="src/features/assistant/assistant-core.js?v=20261015-caveat-fixes6"></script>
     <script src="src/persistence/workspace-db.js?v=20260818-storage-journal4"></script>
-    <script src="src/persistence/workspace-coordinator.js?v=20261015-boot-cas1"></script>
-    <script src="src/boot/legacy-workspace-migration.js?v=20261015-boot-cas1"></script>
+    <script src="src/persistence/workspace-coordinator.js?v=20261015-boot-cas2"></script>
+    <script src="src/boot/legacy-workspace-migration.js?v=20261015-boot-cas2"></script>
     <script src="src/persistence/storage-hygiene.js?v=20260710-hygiene1"></script>
     <!-- Sutra Sync: incremental E2E-encrypted multi-device sync (pure modules;
          app.js holds only the bridge). Protocol/crypto/merge run headless in
@@ -92,7 +92,7 @@
     <script src="src/sync/sync-store.js?v=20260805-device-session1"></script>
     <script src="src/sync/sync-transport.js?v=20260825-sol2-1"></script>
     <script src="src/sync/sync-engine.js?v=20261015-conflict-review1"></script>
-    <script src="src/config/feature-manifest.js?v=20261015-exam-results4"></script>
+    <script src="src/config/feature-manifest.js?v=20261015-theme-chat5"></script>
     <script src="src/features/feature-registry.js?v=20260917-features-style-reuse1"></script>
     <script src="src/core/startup-health.js?v=20260620-health1"></script>
     <script src="src/state/persistence-state.js?v=20260904-legacycheckpoint1"></script>
@@ -120,7 +120,7 @@
 
 <link rel="stylesheet" href="styles/features/startup-intro.css">
     <link rel="stylesheet" href="styles/base/tokens.css?v=20260807-themefocus1">
-    <link rel="stylesheet" href="styles/base/styles.css?v=20261015-caveat-fixes6">
+    <link rel="stylesheet" href="styles/base/styles.css?v=20261015-theme-chat1">
     <link rel="stylesheet" href="styles/features/ios-install-guide.css?v=20260905-install-layering2">
     <link rel="stylesheet" href="styles/views/timeline-calendar.css?v=20261001-mobile-agenda1">
     <!-- Assistant layout is critical shell chrome. The feature registry reuses
@@ -5803,7 +5803,7 @@
         </div>
 
         <div class="theme-ai-generate">
-            <div class="ai-theme-card" id="aiThemeGenerateCard" role="button" tabindex="0" aria-label="Generate a theme with Sutra Assistant">
+            <div class="ai-theme-card" id="aiThemeGenerateCard" role="button" tabindex="0" aria-label="Create your own theme in Assistant">
                 <span class="ai-theme-card-head">
                     <span class="ai-theme-card-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -5813,8 +5813,8 @@
                     </span>
                     <span class="ai-theme-card-badge sutra-exp-badge">Experimental</span>
                 </span>
-                <span class="ai-theme-card-title">Generate a theme with Sutra Assistant</span>
-                <span class="ai-theme-card-desc">Describe a look and Sutra Assistant will build a custom theme for you.</span>
+                <span class="ai-theme-card-title">Create your own theme</span>
+                <span class="ai-theme-card-desc">Opens Assistant with theme creation ready. Choose your model and thinking effort, then describe your look.</span>
             </div>
         </div>
 
@@ -7024,7 +7024,7 @@
                         <button class="neumo-btn" type="button" id="aiThemeRefineBtn">Refine</button>
                     </div>
                 </div>
-                <div id="aiThemeErrorSection" hidden>
+                <div id="aiThemeErrorSection" hidden role="alert">
                     <div class="ai-theme-error" id="aiThemeErrorMessage"></div>
                 </div>
             </div>
@@ -7589,7 +7589,7 @@
     <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
     <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261015-import-save-safety2"></script>
+    <script src="src/core/app.js?v=20261015-theme-chat4"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7603,7 +7603,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-xlsx-help3"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-theme-chat-help4"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -7612,7 +7612,7 @@
          canonical handlers rendered by app.js. -->
     <script src="src/ui/sidebar-page-actions-menu.js?v=20260803-overflow1"></script>
     <script src="src/features/workspace/workspace-entity-adapters.js?v=20261015-reliability2"></script>
-    <script src="src/features/workspace/office-interoperability.js?v=20261015-formula-cache1"></script>
+    <script src="src/features/workspace/office-interoperability.js?v=20261015-formula-cache2"></script>
     <script src="src/features/workspace/slides.js?v=20261004-slides-lines-menus1"></script>
     <script src="src/features/workspace/sheets-engine.js?v=20260822-sheets-v2-3"></script>
     <script src="src/features/workspace/create-page-templates.js?v=20261003-create-review7"></script>

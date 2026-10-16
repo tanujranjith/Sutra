@@ -41,6 +41,20 @@ marketplace, and all customization travels inside your workspace backup.
 
 ---
 
+## Creating a theme with Assistant
+
+The theme-generation card opens a dedicated Assistant chat with `/theme ` ready
+in the composer. Describe the look, choose the provider/model and supported
+thinking effort with the normal chat controls, then send. Opening the card sends
+nothing. Theme requests include only the brief and bounded theme conversation,
+not unrelated workspace content or attachments. Refinements stay in the chat.
+
+A validated reply offers Preview, Apply, and Revert. Preview is temporary; Apply
+saves a normal custom theme. Invalid output changes nothing and does not retry
+automatically. Only recognized color tokens pass through the existing sanitizer
+and contrast repair. `/theme off` returns that chat to ordinary Assistant use.
+Built-in presets and manual customization remain available without AI.
+
 ## CSS Overrides
 
 Write CSS that is injected **after** the built-in and theme styles, so your rules

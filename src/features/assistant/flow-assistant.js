@@ -6810,30 +6810,6 @@
         // if a keyword like "ap"/"exam" would otherwise match Product Knowledge.
         const ACTION_VERB_RE = /^(?:mark|set|check|complete|finish|reopen|un-?complete|un-?check|archive|delete|remove|schedule|reschedule|move|push|shift|snooze)\b/;
 
-        // ---- Theme generation (Sutra Assistant) ----
-        // Routes natural-language theme requests to the AI theme generator, which
-        // rides the same Intelligence harness and first-class custom-theme pipeline.
-        const themeAI = (typeof window !== 'undefined') ? window.SutraThemeAI : null;
-        if (themeAI && typeof themeAI.openWithPrompt === 'function') {
-            // Refine the theme currently being previewed/generated (in place).
-            if (typeof themeAI.isPreviewing === 'function' && themeAI.isPreviewing()
-                && /\b(accent|sidebar|background|contrast|saturation|saturated|palette|hue|theme|colou?rs?|tone|text)\b/.test(lc)
-                && /\b(make|warm|cool|soften|soft|increase|decrease|less|more|darken|lighten|brighten|reduce|boost|raise|lower|tweak|adjust|punch|mute|tone down)\b/.test(lc)) {
-                try { themeAI.refineActive(text); } catch (e) { /* non-critical */ }
-                return { handled: true, message: `On it — refining the previewed theme: "${truncate(text, 120)}". The preview updates in place; use the banner to Apply or Revert.` };
-            }
-            // Generate a brand-new theme from a description.
-            const themeMatch = m(/^(?:please\s+)?(?:make|generate|create|design|build|whip up|cook up)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:custom\s+)?theme\b[:,]?\s*(.*)$/)
-                || m(/^(?:please\s+)?make\s+sutra\s+(?:feel|look)\s+(?:like\s+)?(.+)$/)
-                || m(/^(?:please\s+)?(?:make|generate|create|design|build|give me|i want|i'd like|can you (?:make|design|create))\s+(?:me\s+)?(?:a\s+|an\s+)?(.*?)\s+theme\b[.!?]?$/)
-                || m(/^theme[:,]\s*(.+)$/);
-            if (themeMatch) {
-                const brief = String(themeMatch[1] || '').trim() || text;
-                try { themeAI.openWithPrompt(brief); } catch (e) { /* non-critical */ }
-                return { handled: true, message: `Opening the theme generator and designing: "${truncate(brief, 120)}". You'll be able to preview, refine, and apply it from the Themes panel.` };
-            }
-        }
-
         // ---- Assistant Memory commands (local, deterministic) ----
         // Kept local even in AI-only mode: the chat model shouldn't freelance
         // memory writes, and these are consent-first + deterministic.

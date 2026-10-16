@@ -58,14 +58,46 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
 38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
 39. Wellness retirement: navigation/widgets/commands/Help and legacy data preservation; normal goals/habits/notes/Focus remain usable. Partial: Life dashboard omitted retired tools, and an ordinary goal saved/reloaded. Legacy portability and all discovery surfaces remain open.
-40. Spreadsheet importer: XLSX values/formulas and cached offline use. Partial: native Sheets import, recalculation, reload, and cached import with the QA server stopped passed. General Import Workspace / Docs imported the numbers into a note but left the formula-result cell blank for the exported workbook. That route remains open.
+40. ~~Spreadsheet importer: native Sheets formulas/reload/cached use, plus general XLSX-to-note import displaying the previously blank formula result and retaining it after reload.~~
 41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Partial: malformed JSON and corrupt .sutra rejection preserved the existing task; missing required attachment bytes produced a persistent incomplete-restore warning. Simulated workspace/attachment write failures remain for controlled CI fixtures.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
 43. Help/tutorial: current instructions, rendering, and navigation. Partial: refreshed Settings and explicit writing-command instructions render; the known double-escaped customization heading now displays a normal ampersand. Comprehensive tutorial/link and table-of-contents navigation review remains open.
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
-46. Save-conflict investigation: a later disposable Timeline edit raised a storage-mismatch warning. Its writer/source is unconfirmed. A single-tab planned block survived reload, but concurrent-tab save safety remains open.
+46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
 47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
+
+## Import and save-conflict fixes
+
+Manual Chrome QA on isolated origin 5196 verified the original exported
+`QA Import Workbook.xlsx`: general document import now produces 2, 3, and 5,
+with an explicit static-snapshot notice. Reload retains all three values.
+The original export omitted formula caches, and SheetJS could fabricate a zero
+or omit uncached cells. New exports include typed results; old XLSX files use
+bounded source-XML cache metadata plus the canonical local Sheets evaluator.
+Supplied caches remain authoritative. CI regressions cover actual file-picker
+import, cacheless formulas, cached zero/false/text/errors, and reload.
+
+Reviewed a concrete unsafe startup writer: legacy recovery/onboarding repair
+previously replaced the canonical root outside the normal coordinator/CAS path.
+It now reads under the writer lock, conditionally commits, journals atomically,
+publishes the shared canonical hash, and discards superseded candidates. Boot
+and app coordinators in one document share an identity. This fixes that writer;
+the exact cause of the earlier warning cannot be proven retrospectively.
+
+Chrome Timeline QA created `QA Save Safety 46`, reloaded, then opened a second
+tab and saved `QA Newer Tab 46`. The stale tab was blocked with an attributed
+another-page warning. Reloading retained both saved blocks and excluded its
+attempted stale block. After closing the second tab and reloading the first,
+renaming the original block to `QA Save Safety 46 Edited` saved and survived
+another reload without an active conflict warning. Controlled startup
+interleaving/failure tests are prepared but remain pending GitHub CI (item 45).
+
+Required runtime integrity and its self-tests passed; its temporary server
+self-test required sandbox escalation. Local commits 7207a2c and 7a9d459 record
+the initial fixes. No unit/E2E suites, provider requests, pushes, merges,
+deployments, or remote changes. Disposable screenshots are under ignored
+`.tmp/qa-2026-10-15/import-save-fixes/`.
 
 ## Settings and Help follow-up
 
