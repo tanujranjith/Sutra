@@ -237,8 +237,11 @@ test('Pages mode paginates long paragraphs and keeps auto gaps out of stored con
   expect(reloaded.textIntersections).toBe(0);
   expectPageBoundaries(reloaded);
 
+  await page.locator('.notes-toolbar-overflow-toggle').click();
   await page.locator('#editorZoomDisplay').click();
   await expect(page.locator('#editorZoomDisplay')).toHaveText('100%');
+  // Each tool action dismisses More note tools; reopen it for Zoom In.
+  await page.locator('.notes-toolbar-overflow-toggle').click();
   await page.locator('.toolbar-zoom-controls button[onclick="adjustEditorZoom(10)"]').click();
   await expect(page.locator('#editorZoomDisplay')).toHaveText('110%');
   await expect.poll(async () => (await inspectLayout(page)).textIntersections).toBe(0);
