@@ -95,6 +95,7 @@ async function inspectLayout(page) {
       };
     });
     let textIntersections = 0;
+    const intersectionSamples = [];
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
     let text;
     while ((text = walker.nextNode())) {
@@ -108,6 +109,13 @@ async function inspectLayout(page) {
           const bottom = gap.clientBottom;
           if (rect.bottom > top + 1 && rect.top < bottom - 1 && rect.right > paneRect.left && rect.left < paneRect.right) {
             textIntersections += 1;
+            if (intersectionSamples.length < 12) {
+              intersectionSamples.push({
+                gapIndex: gaps.indexOf(gap),
+                textTop: (rect.top - paneRect.top) / paneScale,
+                textBottom: (rect.bottom - paneRect.top) / paneScale
+              });
+            }
           }
         }
       }
@@ -118,6 +126,7 @@ async function inspectLayout(page) {
       paneScale,
       gaps,
       textIntersections,
+      intersectionSamples,
       manualWidgets: editor.querySelectorAll('[data-notes-auto-page-reason="manual"]').length
     };
   });
@@ -146,7 +155,7 @@ test('Pages mode paginates long paragraphs and keeps auto gaps out of stored con
   const desktop = await inspectLayout(page);
   expect(desktop.manualWidgets).toBe(1);
   expect(desktop.gaps.length).toBeGreaterThanOrEqual(2);
-  expect(desktop.textIntersections).toBe(0);
+  expect(desktop.textIntersections, JSON.stringify(desktop)).toBe(0);
   expectPageBoundaries(desktop);
 
   const initialStorage = await page.evaluate(() => window.SutraNotesEditorV2.getStorageHtml());

@@ -800,7 +800,7 @@
                 var manualTarget = pageBottom + gapHeight + topPadding;
                 var manualHeight = Math.max(0, manualTarget - top);
                 if (manualHeight > 0) {
-                    breaks.push({ pos: event.pos, height: manualHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, reason: 'manual',
+                    breaks.push({ pos: event.pos, height: manualHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, anchorKind: event.type, reason: 'manual',
                         marginLeft: event.marginLeft, marginRight: event.marginRight });
                     insertedHeight += manualHeight;
                 }
@@ -818,7 +818,7 @@
             var target = pageBottom + gapHeight + topPadding;
             var spacerHeight = Math.max(0, target - top);
             if (spacerHeight > 0) {
-                breaks.push({ pos: event.pos, height: spacerHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, reason: 'automatic',
+                breaks.push({ pos: event.pos, height: spacerHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, anchorKind: event.type, reason: 'automatic',
                     marginLeft: event.marginLeft, marginRight: event.marginRight });
                 insertedHeight += spacerHeight;
                 pageStart = pageBottom + gapHeight;
@@ -1090,6 +1090,8 @@
                             spacer.setAttribute('data-notes-auto-page-reason', entry.reason || 'automatic');
                             spacer.setAttribute('data-notes-auto-page-target', String(entry.pageBoundary));
                             spacer.setAttribute('data-notes-auto-page-gap-offset', String(entry.gapOffset));
+                            spacer.setAttribute('data-notes-auto-page-anchor-kind', entry.anchorKind || '');
+                            spacer.setAttribute('data-notes-auto-page-anchor-pos', String(entry.pos));
                             spacer.setAttribute('contenteditable', 'false');
                             spacer.setAttribute('aria-hidden', 'true');
                             var relativeHostScale = metrics.relativeHostScale;
@@ -1105,7 +1107,25 @@
                             return spacer;
                         }
 
-                        function alignGapWidgetsToPageBoundaries(root, metrics) {
+                        function pageLayoutAnchorTop(view, spacer, metrics) {
+                            var anchorKind = spacer.getAttribute('data-notes-auto-page-anchor-kind');
+                            var anchorPos = Number(spacer.getAttribute('data-notes-auto-page-anchor-pos'));
+                            if (!Number.isInteger(anchorPos) || anchorPos < 0 || anchorPos > view.state.doc.content.size) return null;
+                            try {
+                                if (anchorKind === 'atom') {
+                                    var atom = view.nodeDOM(anchorPos);
+                                    var atomRect = atom && atom.getBoundingClientRect ? atom.getBoundingClientRect() : null;
+                                    return atomRect && Number.isFinite(atomRect.top) ? paneYFromClientY(atomRect.top, metrics) : null;
+                                }
+                                if (anchorKind === 'line' || anchorKind === 'manual') {
+                                    var coords = view.coordsAtPos(anchorPos, 1);
+                                    return coords && Number.isFinite(coords.top) ? paneYFromClientY(coords.top, metrics) : null;
+                                }
+                            } catch (e) { /* stale or temporarily unmeasurable anchors skip flow correction */ }
+                            return null;
+                        }
+
+                        function alignGapWidgetsToPageBoundaries(view, root, metrics) {
                             Array.prototype.forEach.call(root.querySelectorAll('.notes-page-auto-break[data-notes-auto-page-target]'), function (spacer) {
                                 var pageBoundary = Number(spacer.getAttribute('data-notes-auto-page-target'));
                                 var gapOffsetInPlan = Number(spacer.getAttribute('data-notes-auto-page-gap-offset'));
@@ -1113,6 +1133,22 @@
                                 var gap = spacer && spacer.querySelector('.notes-page-auto-break-gap');
                                 var spacerRect = spacer && spacer.getBoundingClientRect ? spacer.getBoundingClientRect() : null;
                                 if (!gap || !spacerRect || metrics.relativeHostScale <= 0) return;
+
+                                // Planned heights use the original, unpaginated coordinates. Once earlier
+                                // widgets enter the document, measure this event's own anchor after its
+                                // widget and correct flow before painting the divider. This avoids both
+                                // accumulated line-box drift and accidentally measuring a later caption.
+                                var actualAnchorTop = pageLayoutAnchorTop(view, spacer, metrics);
+                                if (actualAnchorTop != null) {
+                                    var expectedTextTop = pageBoundary + metrics.gapHeight + metrics.topPadding;
+                                    var correction = expectedTextTop - actualAnchorTop;
+                                    if (Number.isFinite(correction) && Math.abs(correction) > 0.25) {
+                                        var flowHeight = spacerRect.height / metrics.rootScale;
+                                        spacer.style.height = (Math.max(0, flowHeight + correction) / metrics.relativeHostScale) + 'px';
+                                        spacerRect = spacer.getBoundingClientRect();
+                                    }
+                                }
+
                                 var spacerTop = paneYFromClientY(spacerRect.top, metrics);
                                 var gapOffset = pageBoundary - spacerTop;
                                 if (!Number.isFinite(gapOffset)) return;
@@ -1180,7 +1216,8 @@
                             }).join(':') + ':' + plan.map(function (entry) {
                                 return entry.pos + ':' + Math.round(entry.height * 10) + ':' + Math.round(entry.gapOffset * 10)
                                     + ':' + Math.round((entry.pageBoundary || 0) * 10)
-                                    + ':' + Math.round((entry.marginLeft || 0) * 10) + ':' + Math.round((entry.marginRight || 0) * 10);
+                                    + ':' + Math.round((entry.marginLeft || 0) * 10) + ':' + Math.round((entry.marginRight || 0) * 10)
+                                    + ':' + (entry.anchorKind || '');
                             }).join('|');
                             plan.forEach(function (entry) {
                                 if (entry.pos < 0 || entry.pos > view.state.doc.content.size) return;
@@ -1192,7 +1229,7 @@
                                 }));
                             });
                             setDecorations(view, eng.DecorationSet.create(view.state.doc, decorations), nextSignature);
-                            alignGapWidgetsToPageBoundaries(root, metrics);
+                            alignGapWidgetsToPageBoundaries(view, root, metrics);
                         }
 
                         function schedule() {

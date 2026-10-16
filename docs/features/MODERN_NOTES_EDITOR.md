@@ -53,8 +53,10 @@ editor. Oversized atomic images, embeds, drawings, and tables remain intact
 and can span sheet intervals; they are never clipped to manufacture a gap.
 The Classic Editor retains authored manual page breaks.
 
-Painted gaps align to the measured sheet boundary after their decorations mount;
-the spacer remains view-only and does not change stored note content.
+After decorations mount, each spacer adjusts from its own line or block's
+rendered position so inline layout offsets do not accumulate across sheets.
+Painted gaps then align to the measured sheet boundary. The spacer remains
+view-only and does not change stored note content.
 
 ## Page tags
 

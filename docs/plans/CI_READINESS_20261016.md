@@ -25,6 +25,43 @@ that pending automated tests have passed.
   no unit or browser suite was run on the user's PC. Required asset/CSP/cache
   generation remains within the earlier local-integrity exception.
 
+## Browser failure repairs
+
+Run `38919181517` at `ff02520` passed the static, unit, build, and artifact
+gates, but Chromium reported 46 failures, 674 passes, one flaky test, and three
+skips. Repairs on this branch preserve the original safety assertions:
+
+- Assistant fixtures configure providers through `SutraProviderMeta`, rather
+  than changing hidden legacy controls. Approved actions are explicitly enabled
+  in the test that reviews and applies them; standard-model fixtures exercise
+  the `max_tokens` compatibility retry without changing reasoning-model rules.
+- Saved-memory permission is checked before retrieval, denied memory selection
+  metadata is removed, and usage is recorded only for authorized memories that
+  survive both prompt budgets. Unit and browser regressions cover denial.
+- Classic plain-text paste creates an immediate undo history entry; Shift+Z
+  redo handles the uppercase browser key value.
+- Help & Docs uses namespaced live Modern Editor anchors and canonical stored
+  anchors, with explicit read-only accessibility state. Painted page gaps are
+  aligned after the editor's gap widgets enter the DOM.
+- Settings and academic fixtures use the current disclosures, category labels,
+  and pack opt-in. Backup rollback tests retain detailed failure assertions while
+  expecting the deliberately safe public status message.
+- The retained legacy theme modal is tested through its explicit API. The Themes
+  card's approved Assistant `/theme` entry has separate end-to-end coverage.
+
+All test data and provider responses are synthetic. No unit or browser suite was
+run locally for these repairs. Required runtime integrity checks (including the
+temporary static-server guard), the staged core hook, and owned asset/CSP/cache
+generators ran locally. The browser result for the final revision remains pending
+until its GitHub CI run completes. No main merge or production promotion occurred.
+
+Run `38939631344` at `51c0393` passed all non-browser gates and reported 719
+Chromium passes, two failures, and three skips. The remaining failures were the
+stale Themes-card/modal expectation (corrected in `7a512ff`) and long-paragraph
+pagination: painted gaps aligned, but 32 text rectangles still intersected them.
+The next CI revision checks that pagination regression before the full editor
+shard; the original no-intersection, boundary, and persistence assertions remain.
+
 ## Vercel inspection
 
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:

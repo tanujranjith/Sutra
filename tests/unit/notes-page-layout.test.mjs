@@ -33,6 +33,8 @@ test('long text moves the first overflowing line past paper, gap, and next-page 
   assert.equal(breaks[0].pos, 20);
   assert.equal(breaks[0].height, 282);
   assert.equal(breaks[0].gapOffset, 126);
+  assert.equal(breaks[0].pageBoundary, 1056);
+  assert.equal(breaks[0].anchorKind, 'line');
   assert.equal(930 + breaks[0].height, 1212);
 });
 
@@ -70,7 +72,21 @@ test('a stored manual break starts a fresh page and keeps later content on that 
   assert.equal(breaks.length, 1);
   assert.equal(breaks[0].reason, 'manual');
   assert.equal(breaks[0].pos, 20);
+  assert.equal(breaks[0].pageBoundary, 1056);
+  assert.equal(breaks[0].anchorKind, 'manual');
   assert.equal(550 + breaks[0].height, 1212);
+});
+
+test('an overflowing atomic block retains its geometry anchor for post-widget alignment', () => {
+  const breaks = plan([
+    { type: 'line', pos: 10, top: 900, bottom: 928 },
+    { type: 'atom', pos: 20, top: 930, bottom: 1120 }
+  ]);
+
+  assert.equal(breaks.length, 1);
+  assert.equal(breaks[0].pos, 20);
+  assert.equal(breaks[0].pageBoundary, 1056);
+  assert.equal(breaks[0].anchorKind, 'atom');
 });
 
 test('oversized atomic content is kept intact and following text is aligned to a later sheet', () => {
