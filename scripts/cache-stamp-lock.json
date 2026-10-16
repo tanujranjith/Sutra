@@ -28,8 +28,8 @@
     "hash": "bdaba42ae73dc103"
   },
   "src/components/icons/icon-paths.js": {
-    "stamp": "20261015-sutra-icons2",
-    "hash": "0930a78c09446bcc"
+    "stamp": "20261016-preview-icons",
+    "hash": "74cc8744664406bf"
   },
   "src/components/icons/index.js": {
     "stamp": "20260809-audit-icons1",
@@ -60,8 +60,8 @@
     "hash": "e946368f7f1faad7"
   },
   "src/core/error-reporter.js": {
-    "stamp": "20261015-reliability2",
-    "hash": "0aa73672ebee93a3"
+    "stamp": "20261016-nested-credentials2",
+    "hash": "197f3cfaa0bb0696"
   },
   "src/core/feature-guard.js": {
     "stamp": "20260825-sol1-1",

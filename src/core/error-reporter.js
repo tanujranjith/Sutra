@@ -112,14 +112,20 @@
     // Capture bounded field labels followed by `:` or `=`. The value boundary
     // is scanned linearly so quoted passphrases and multi-word header values
     // are redacted without a backtracking-heavy expression.
-    var labels = /(^|[?&#\s,;{(\[])(["']?)([a-z0-9_%+.\- \t]{1,96}?)\2[ \t]*[:=][ \t]*/gi;
+    var labels = /(^|[?&#\s,;:{(\[])(["']?)([a-z0-9_%+.\- \t]{1,96}?)\2[ \t]*[:=]/gi;
     var result = '';
     var copiedThrough = 0;
     var match;
     while ((match = labels.exec(value))) {
       var fieldName = match[3];
-      if (!isSensitiveFieldName(fieldName)) continue;
+      if (!isSensitiveFieldName(fieldName)) {
+        // Revisit only the final delimiter of an ordinary label; it can expose
+        // a credential label, as in `Error:passphrase=...` or `Error: passphrase=...`.
+        labels.lastIndex = match.index + match[0].length - 1;
+        continue;
+      }
       var valueStart = labels.lastIndex;
+      while (valueStart < value.length && /[ \t]/.test(value.charAt(valueStart))) valueStart += 1;
       var valueEnd = findCredentialValueEnd(value, valueStart, fieldName);
       if (valueEnd.end <= valueStart) continue;
       result += value.slice(copiedThrough, valueStart);

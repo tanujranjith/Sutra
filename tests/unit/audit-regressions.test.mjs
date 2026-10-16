@@ -139,7 +139,8 @@ test('diagnostics scrubber redacts a Gemini key carried in a URL query', () => {
 });
 
 test('diagnostics scrubber redacts Bearer tokens and sk-/gsk- keys', () => {
-  assert.ok(/Bearer \[redacted\]/.test(diagnostics.scrubSecrets('Authorization: Bearer sk-abcdef123456ghijkl')));
+  assert.ok(/Bearer \[redacted\]/.test(diagnostics.scrubSecrets('Bearer sk-abcdef123456ghijkl')));
+  assert.equal(diagnostics.scrubSecrets('Authorization: Bearer sk-abcdef123456ghijkl'), 'Authorization: [redacted]');
   assert.ok(!/sk-abcdef123456/.test(diagnostics.scrubSecrets('key sk-abcdef123456ghijkl here')));
 });
 

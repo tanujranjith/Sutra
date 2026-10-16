@@ -114,6 +114,38 @@ test('diagnostics scrub credential aliases from fields and labeled text at every
   assert.equal(api.scrubSecrets(17), 17);
 });
 
+test('diagnostics scrub credentials after ordinary, nested, quoted, and encoded labels', () => {
+  const window = { addEventListener() {}, dispatchEvent() {}, showToast() {} };
+  const context = vm.createContext({ window, location: {
+    hostname: 'localhost', protocol: 'https:', href: 'https://sutra.example/'
+  }, navigator: { userAgent: 'test', language: 'en' }, CustomEvent: class { constructor(type, init) { this.detail = init.detail; } },
+  console: Object.fromEntries(['error', 'warn', 'log', 'debug'].map(name => [name, () => {}])) });
+  vm.runInContext(source('src/core/error-reporter.js'), context);
+  const api = window.SutraDiagnostics;
+  const secret = 'FAKE_NESTED_PASS_PHRASE_017';
+  const values = [
+    'Error:passphrase=' + secret,
+    'Error: pass_phrase=' + secret,
+    'Error: access_token=' + secret,
+    'Error:diagnostic:passphrase=' + secret,
+    'Error: "pass phrase"=' + secret,
+    'Error:%2570ass%2570hrase=' + secret
+  ];
+
+  for (const value of values) {
+    const scrubbed = api.scrubSecrets(value);
+    assert.ok(!scrubbed.includes(secret), 'nested credential value should be redacted');
+    assert.ok(scrubbed.includes('[redacted]'), 'redaction marker should remain visible');
+  }
+  assert.equal(api.scrubSecrets('Error: Saved assignment count: 3'), 'Error: Saved assignment count: 3');
+  assert.equal(api.scrubSecrets('Error: public key: enabled'), 'Error: public key: enabled');
+
+  const error = new Error('safe message');
+  error.stack = 'Error:passphrase=' + secret;
+  const entry = api.report(error, { where: 'diagnostic stack' }, 'warning');
+  assert.ok(!JSON.stringify([entry, api.getEntries(), api.exportText()]).includes(secret), 'stack copies and exports must stay scrubbed');
+});
+
 test('Homework escaping protects quoted attributes without changing source data', () => {
   const text = source('src/features/study/homework.js');
   const helper = text.slice(text.indexOf('  function escHtml(value)'), text.indexOf('  function normalizeCustomCourseEmoji'));

@@ -56,7 +56,7 @@
            - error-reporter.js: window.reportError + global error/rejection capture + diagnostics
            - dom-safety.js:     central sanitize/escape/sandbox helpers (no raw user HTML)
            - feature-guard.js:  per-feature init isolation + degraded-state badge -->
-    <script src="src/core/error-reporter.js?v=20261015-reliability2"></script>
+    <script src="src/core/error-reporter.js?v=20261016-nested-credentials2"></script>
     <script src="src/core/dom-safety.js?v=20261012-native-paste1"></script>
     <script src="src/core/feature-guard.js?v=20260825-sol1-1"></script>
     <script src="src/core/migrations.js?v=20260913-energy-removal-migrations1"></script>
@@ -101,7 +101,7 @@
          portal paste import, Timeline scheduling, and Today. Kept before the
          feature scripts so every entry point resolves phrases consistently. -->
     <script src="src/core/student-date-parser.js?v=20261015-calendar-validation1"></script>
-    <script src="src/components/icons/icon-paths.js?v=20261015-sutra-icons2" defer></script>
+    <script src="src/components/icons/icon-paths.js?v=20261016-preview-icons" defer></script>
     <script src="src/components/icons/index.js?v=20260809-audit-icons1" defer></script>
     <!-- Customization Safe Mode: hold Shift while the app loads to skip custom CSS + plugins.
          Captured very early; AtelierCustomization.isSafeMode() reads this flag.

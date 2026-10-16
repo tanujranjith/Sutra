@@ -1,8 +1,29 @@
 # Local QA and CI readiness — October 16, 2026
 
-Branch: `codex/student-workflow-batch`. No push, merge, deployment, or remote
-configuration change is authorized. This report records inspection and prepared
-coverage; it does not claim that pending automated tests have passed.
+Branch: `codex/student-workflow-batch`. The initial inspection and preparation
+below preceded push authorization. On October 16 the user authorized uploading
+this branch for GitHub CI after preflight review. No merge, production promotion,
+or remote configuration change is authorized. Prepared coverage is not a claim
+that pending automated tests have passed.
+
+## Initial CI execution
+
+- The branch was pushed at `b28b216`; GitHub confirmed `main` remained at
+  `80569e1`. Vercel reported a successful protected branch preview build.
+- Initial encoding and intelligence-harness gates exposed intentional encoding
+  examples and stale prompt wording. Narrow checker/expectation corrections were
+  reviewed and committed at `ded63c8` and `8a3e6e4`.
+- All static checks passed in CI at `8a3e6e4`. Node 24 did not discover unit tests
+  from the old directory argument; `9b8e839` uses an explicit quoted test glob.
+- CI run `38917983086` executed 867 unit tests: 846 passed, 21 failed, none skipped.
+  Repairs cover async extraction fixtures, canonical Sync identities/source
+  inventory samples, calculator dependency setup, XML-escaping expectations,
+  recovery-adapter discovery, missing icon mappings, and nested credential labels
+  in diagnostic error stacks. Those repairs require another CI run.
+- One security-fix subagent inadvertently ran a synthetic reporter reproduction
+  and an intermediate syntax check locally. Further local execution was stopped;
+  no unit or browser suite was run on the user's PC. Required asset/CSP/cache
+  generation remains within the earlier local-integrity exception.
 
 ## Vercel inspection
 

@@ -253,6 +253,7 @@
         'exclamation-circle': '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r="0.9" fill="currentColor" stroke="none"/>',
         'clipboard-check': '<rect x="6" y="5" width="12" height="15" rx="1.5"/><path d="M9 4h6v3H9z"/><path d="m9 13 2.5 2.5L15 12"/>',
         'th-list': '<rect x="3" y="5" width="3.5" height="3.5"/><rect x="3" y="10" width="3.5" height="3.5"/><rect x="3" y="15" width="3.5" height="3.5"/><path d="M9 7h12"/><path d="M9 12h12"/><path d="M9 17h12"/>',
+        'square': '<rect x="4" y="4" width="16" height="16" rx="2"/>',
         'check-square': '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 12.5 2.5 2.5L16 9"/>',
         'sticky-note': '<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5"/>',
         'link-icon': '<path d="M9 13.5l5-5"/><path d="M6.5 11.5a3 3 0 0 1 0-4l2-2a3 3 0 0 1 4 4"/><path d="M11 15.5a3 3 0 0 1 0 4l-2 2a3 3 0 0 1-4-4"/>',
@@ -474,6 +475,8 @@
         'fa-unlock-alt': 'unlock',
         'fa-key': 'key',
         'fa-seedling': 'seedling',
+        'fa-leaf': 'seedling',
+        'fa-square': 'square',
         'fa-spa': 'spa',
         'fa-dumbbell': 'dumbbell',
 
