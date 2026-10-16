@@ -59,6 +59,9 @@ test('everything fixture survives actual diff, merge, and projection bootstrap',
     notificationsState: { lastActiveAt: 123, lastDigest: 456, lastWeeklyReviewAt: 789, lastWeeklyNudge: 101112 }
   }, 'device-a');
 
+  // Inspect the transferred value before projection could hide a dropped field
+  // on both sides of the canonical comparison.
+  assert.deepEqual(deviceB.lifeWorkspace, deviceA.lifeWorkspace);
   const comparison = comparePortableWorkspaces(deviceA, deviceB);
   assert.deepEqual(comparison.differences, [], JSON.stringify(comparison.differences.slice(0, 20), null, 2));
   assert.equal(deviceB.workspaceMeta.lastWriterTabId, 'device-b');

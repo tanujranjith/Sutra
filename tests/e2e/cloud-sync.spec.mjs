@@ -1201,6 +1201,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         await enableSync(B.page);
         await syncNow(B.page);
         const stateB = await readEverythingState(B.page);
+        expect(stateB.snapshot.lifeWorkspace).toEqual(seededA.snapshot.lifeWorkspace);
         const bootstrapParity = comparePortableWorkspaces(seededA.snapshot, stateB.snapshot);
         expect(bootstrapParity.differences, JSON.stringify(bootstrapParity.differences.slice(0, 25), null, 2)).toEqual([]);
         expect(stateB.localState).toEqual(seededA.localState);
@@ -1302,6 +1303,7 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
         await syncNow(B.page);
         const expectedB = await readEverythingState(B.page);
         const reverseA = await readEverythingState(A.page);
+        expect(reverseA.snapshot.lifeWorkspace).toEqual(expectedB.snapshot.lifeWorkspace);
         const reverseParity = comparePortableWorkspaces(expectedB.snapshot, reverseA.snapshot);
         expect(reverseParity.differences, JSON.stringify(reverseParity.differences.slice(0, 25), null, 2)).toEqual([]);
         expect(reverseA.localState).toEqual(reverseLocalState);
@@ -1326,6 +1328,8 @@ test.describe('Sutra Sync — two-device convergence (mocked backend)', () => {
           readEverythingState(B.page)
         ]);
         const reloadParity = comparePortableWorkspaces(reloadedB.snapshot, reloadedA.snapshot);
+        expect(reloadedA.snapshot.lifeWorkspace).toEqual(expectedB.snapshot.lifeWorkspace);
+        expect(reloadedB.snapshot.lifeWorkspace).toEqual(expectedB.snapshot.lifeWorkspace);
         expect(reloadParity.differences, JSON.stringify(reloadParity.differences.slice(0, 25), null, 2)).toEqual([]);
         expect(reloadedA.attachment).toBe(REPLACEMENT_ATTACHMENT);
         expect(reloadedB.attachment).toBe(REPLACEMENT_ATTACHMENT);

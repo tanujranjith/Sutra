@@ -295,6 +295,35 @@ export function createEverythingWorkspace(baseWorkspace = {}) {
       skills: [{ id: 'skill-parity', name: 'Synthetic skill', level: 3 }],
       fitness: [{ id: 'fitness-parity', activity: 'Walk', duration: 30 }],
       calories: [{ id: 'calorie-parity', meal: 'Synthetic lunch', calories: 500 }],
+      sleepTracker: {
+        targetSleepMinutes: 425,
+        entries: [{
+          id: 'sleep-parity', date: '2026-07-15', totalSleepMinutes: 390,
+          note: 'Synthetic retired sleep entry',
+          futureEntryMetadata: { measuredMinutes: 0, verified: false }
+        }],
+        futureSleepValue: 0
+      },
+      wellness: {
+        checkIns: [{
+          id: 'wellness-check-in-parity', createdAt: EVERYTHING_STAMP,
+          mood: 'steady', stress: 2, sleep: 'synthetic', note: 'Synthetic retired check-in',
+          futureCheckInMetadata: { source: 'parity-fixture', rating: 0, retained: false }
+        }],
+        journalEntries: [{
+          id: 'wellness-journal-parity', createdAt: EVERYTHING_STAMP,
+          prompt: 'Synthetic retired prompt', body: 'Synthetic retired wellness reflection'
+        }],
+        breathing: {
+          preferredPattern: 'box', preferredDuration: 300,
+          reducedMotion: false, soundEnabled: false, ambientSound: 'off',
+          breathingCuesEnabled: false, volume: 0.35, muted: false,
+          sessionsCompleted: 2, lastCompletedAt: EVERYTHING_STAMP,
+          futureBreathingValue: false,
+          futureBreathingMetadata: { completedSessions: 0, preserved: false }
+        },
+        futureWellnessMetadata: { nested: { count: 0, archived: false } }
+      },
       books: [{ id: 'book-parity', title: 'Synthetic Book', status: 'reading' }],
       spending: [{ id: 'spend-parity', description: 'Synthetic notebook', amount: 12.5 }],
       journals: [{ id: 'journal-parity', title: 'Synthetic reflection', content: 'Journal sentinel' }]
