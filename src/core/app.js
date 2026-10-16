@@ -33176,7 +33176,7 @@ function buildOnboardingPlanPreview() {
                 { selector: '#lifeDashboard',
                   before: () => tutorialRevealView('life'),
                   title: 'Life trackers',
-                  body: 'Goals (SMART), Habits, Skills, Fitness, Books, Spending, and Journal live here. Each is a focused mini-tracker that surfaces a tiny summary back on Home so nothing gets buried.' },
+                  body: 'Goals, habits, skills, books, spending, and a calculator live here. Focus sessions and ordinary notes stay in their own workspaces. Retired health and journal records are preserved in backups without active tracking controls.' },
 
                 /* ---------- 52 Business ---------- */
                 { selector: '#businessDashboardRoot',
@@ -77966,6 +77966,9 @@ ${cspMeta}
                             : null;
                     }
                 };
+                // Presence-only hints may have rendered before this registry
+                // existed; refresh them once its key checks are available.
+                updateChatKeyBanner();
             } catch (_) {}
         }
 
@@ -78990,6 +78993,11 @@ ${cspMeta}
                 col.appendChild(actions);
                 if (role === 'assistant' && flowResult && flowResult.actions && flowResult.actions.length) {
                     renderAssistantActionReview(bubble, flowResult.actions);
+                }
+                // Structured theme cards render immediately rather than through
+                // the text streamer, but still complete the pending send.
+                if (role === 'assistant' && opts.stream && typeof opts.onStreamDone === 'function') {
+                    opts.onStreamDone();
                 }
             }
 

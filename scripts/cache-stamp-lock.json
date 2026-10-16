@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20261015-boot-cas2",
-    "hash": "199b2dbae7548326"
+    "stamp": "20261015-life-recovery3",
+    "hash": "981e9e7de35c46ae"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-theme-chat5",
-    "hash": "cbd5fc72814ff4d5"
+    "stamp": "20261015-response-contrast11",
+    "hash": "e680c75d31774a4f"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-settings-search8",
-    "hash": "536aaa4f3eea4e8f"
+    "stamp": "20261015-qa-followups10",
+    "hash": "967ba0671422d93b"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -740,8 +740,8 @@
     "hash": "7bb9325f231114c9"
   },
   "styles/views/assistant-view.css": {
-    "stamp": "20261012-assistant-effort1",
-    "hash": "9448e7944e877ef3"
+    "stamp": "20261015-response-contrast2",
+    "hash": "7da71421aba7befe"
   },
   "styles/views/contextual-shell.css": {
     "stamp": "20261011-header-flow4",

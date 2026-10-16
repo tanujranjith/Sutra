@@ -104,6 +104,16 @@ async function stubFetchRetryThenOk(page, payload) {
 
 test('a reported-usage response renders an accessible Response details chip with tokens + latency', async ({ page }) => {
   await openApp(page);
+  // Pin a light palette so the chip background cannot silently use a dark
+  // fallback while its labels and values inherit light-theme text colors.
+  await page.evaluate(() => {
+    document.body.dataset.theme = 'light';
+    document.body.style.setProperty('--bg-elevated', '#ffffff');
+    document.body.style.setProperty('--surface-border', 'rgba(31, 41, 55, 0.18)');
+    document.body.style.setProperty('--text-primary', '#1f2937');
+    document.body.style.setProperty('--text-secondary', '#475569');
+    document.body.style.setProperty('--accent-strong', '#1d4ed8');
+  });
   await configureProvider(page, { provider: 'openai', key: 'test-openai-key', model: 'gpt-4o-mini' });
   await stubFetch(page, OPENAI_REPLY_WITH_USAGE);
   await send(page, 'Give me a detailed study plan for AP Biology unit 3.');
@@ -127,6 +137,21 @@ test('a reported-usage response renders an accessible Response details chip with
   await expect(body).toContainText('Total');
   // Cache read tokens were reported (>0) → a cache-hit row is shown.
   await expect(body).toContainText('Cache hit');
+
+  const latency = chip.locator('.asst-response-stat').filter({ hasText: 'Latency' }).first();
+  const colors = await latency.evaluate((row) => ({
+    background: getComputedStyle(row).backgroundColor,
+    label: getComputedStyle(row.querySelector('.asst-response-stat-k')).color,
+    value: getComputedStyle(row.querySelector('.asst-response-stat-v')).color
+  }));
+  expect(colors.background).toBe('rgb(255, 255, 255)');
+  expect(colors.label).toBe('rgb(31, 41, 55)');
+  expect(colors.value).toBe('rgb(31, 41, 55)');
+
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const focusStyle = await summary.evaluate((el) => getComputedStyle(el).outlineStyle);
+  expect(focusStyle).toBe('solid');
 
   // Collapse again — the disclosure toggles.
   await summary.click();
