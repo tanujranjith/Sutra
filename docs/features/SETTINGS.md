@@ -6,8 +6,12 @@ categories remain available; Business, Advanced, and Customization are under
 **Advanced & packs**. The global Sutra navigation remains unchanged.
 On phones, choose a category, then use **All Settings** to return to the list.
 Keyboard focus follows the selected category and returns to it when going back.
-Search is available in either view and shows matching controls across categories;
-returning to All Settings clears the search without discarding pending edits.
+Search is available in either view and understands common student wording,
+multiword requests, and small spelling mistakes. Results name the exact setting,
+category, and help text. Selecting a result opens its category and any collapsed
+group, then takes focus to the real control. Matching controls remain visible
+below the results for direct editing. Clearing the search restores the normal
+category view without discarding pending edits.
 
 Preference controls retain their existing staged behavior: review the pending
 changes, then choose **Save Changes** or **Revert**. Moving between categories
@@ -34,6 +38,13 @@ The compact phone layout omits the workspace preview and keeps touch targets at
 least 44 pixels.
 The pending-changes bar stays above the phone navigation, safe-area inset, and
 any active Focus player, so Save Changes and Revert remain reachable.
+The optional app-update notice sits above this action bar on desktop and phones.
+
+Workspace search uses the same field-level Settings index and intent ranking.
+Category names are indexed separately from their navigation descriptions, so
+phone and desktop results stay consistent. Search uses labels and help text,
+not entered credentials or other current field values. Selecting an export or
+other action result focuses its control without activating it.
 
 Settings navigation and disclosure state are presentation state only. They introduce no workspace
 fields, migrations, or changes to backup and Sync content.

@@ -777,6 +777,97 @@ body {
 .cc-search-clear[hidden],
 .cc-search-shortcut[hidden] { display: none; }
 
+#view-settings .cc-search-results {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 var(--cc-gap-group);
+    padding: 16px;
+    border: 1px solid var(--cc-border-quiet);
+    border-radius: var(--cc-radius-card);
+    background: color-mix(in srgb, var(--cc-surface-quiet) 82%, transparent);
+}
+#view-settings .cc-search-results[hidden] { display: none; }
+#view-settings .cc-search-results-heading {
+    margin: 0;
+    color: var(--cc-text-secondary);
+    font-size: 0.76rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+#view-settings .cc-search-results-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+#view-settings .cc-search-result-button {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+    min-height: 64px;
+    padding: 10px 12px;
+    border: 1px solid var(--cc-border-quiet);
+    border-radius: 10px;
+    background: var(--cc-surface);
+    color: var(--cc-text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+#view-settings .cc-search-result-button:hover {
+    border-color: color-mix(in srgb, var(--cc-accent) 48%, var(--cc-border-soft));
+    background: var(--cc-row-hover);
+}
+#view-settings .cc-search-result-button:focus-visible {
+    outline: 2px solid var(--cc-accent);
+    outline-offset: 2px;
+}
+#view-settings .cc-search-result-title {
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+#view-settings .cc-search-result-category {
+    color: var(--cc-accent);
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+#view-settings .cc-search-result-copy {
+    color: var(--cc-text-secondary);
+    font-size: 0.76rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+#view-settings .cc-search-results-more {
+    margin: 0;
+    color: var(--cc-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+}
+#view-settings [data-setting-item].is-search-target,
+#view-settings .atelier-setting-row.is-search-target,
+#view-settings .settings-row.is-search-target,
+#view-settings .settings-card.is-search-target,
+#view-settings .is-search-target {
+    border-radius: 8px;
+    outline: 2px solid color-mix(in srgb, var(--cc-accent) 68%, transparent);
+    outline-offset: 3px;
+    background: color-mix(in srgb, var(--cc-accent-soft) 44%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+    #view-settings .cc-search-result-button { transition: none; }
+}
+
 .cc-search-empty {
     display: grid;
     align-self: start;
@@ -2176,4 +2267,17 @@ body.pref-high-contrast #view-settings .cc-page {
     --cc-border-soft: color-mix(in srgb, var(--text-primary) 60%, transparent);
     --cc-border-quiet: color-mix(in srgb, var(--text-primary) 45%, transparent);
     --cc-text-secondary: var(--text-primary);
+}
+
+/* Keep the optional update prompt clear of Settings' sticky save controls. */
+body:has(#view-settings.active) .sutra-update-banner {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 180px);
+    overflow-y: auto;
+}
+@media (max-width: 640px) {
+    body:has(#view-settings.active) .sutra-update-banner {
+        bottom: calc(156px + env(safe-area-inset-bottom, 0px));
+        max-height: calc(100dvh - 240px);
+    }
 }

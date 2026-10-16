@@ -2846,7 +2846,7 @@
         <div class="cc-discovery">
             <div class="cc-search" role="search">
                 <i class="fas fa-magnifying-glass cc-search-icon" aria-hidden="true"></i>
-                <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Search settings…" aria-label="Search all settings" aria-describedby="settingsSearchHint" autocomplete="off" />
+                <input id="settingsSearchInput" class="cc-search-input" type="search" placeholder="Try “turn on dark mode” or “save automatically”…" aria-label="Search all settings" aria-describedby="settingsSearchHint" aria-controls="settingsSearchResultsList" aria-expanded="false" autocomplete="off" />
                 <kbd class="cc-search-shortcut" id="settingsSearchShortcut" aria-hidden="true">/</kbd>
                 <button type="button" class="cc-search-clear" id="settingsSearchClearBtn" aria-label="Clear settings search" title="Clear search" hidden>
                     <i class="fas fa-xmark" aria-hidden="true"></i>
@@ -3045,6 +3045,11 @@
                 </div>
 
                 <button type="button" class="cc-btn cc-btn-ghost" id="settingsBackToCategories"><i class="fas fa-chevron-left" aria-hidden="true"></i> All Settings</button>
+                <section class="cc-search-results" id="settingsSearchResults" aria-label="Matching settings" hidden>
+                    <h2 class="cc-search-results-heading">Matching settings</h2>
+                    <ul class="cc-search-results-list" id="settingsSearchResultsList"></ul>
+                    <p class="cc-search-results-more" id="settingsSearchResultsMore" hidden></p>
+                </section>
                 <div class="cc-search-empty" id="settingsSearchEmpty" hidden>
                     <span class="cc-search-empty-icon" aria-hidden="true"><i class="fas fa-magnifying-glass"></i></span>
                     <h2>No settings found</h2>
@@ -3981,7 +3986,7 @@
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.includeSelectionByDefault"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <label class="cc-row cc-row-toggle" data-setting-item>
-                            <span class="cc-row-text"><span class="cc-row-name">Answer simple requests locally (no AI)</span><span class="cc-row-help">Off (default): every message goes to your AI model, so nothing is intercepted by built-in help cards or command shortcuts. Turn on to answer product questions and simple task commands instantly, offline, without an API key. Theme generation and memory always stay local.</span></span>
+                            <span class="cc-row-text"><span class="cc-row-name">Answer simple requests locally (no AI)</span><span class="cc-row-help">Turn on to answer product questions and simple task commands locally, without an API key. Memory-management commands stay local. Theme creation uses the provider and model you select in Assistant.</span></span>
                             <span class="cc-row-control"><span class="cc-switch"><input type="checkbox" data-pref-path="assistant.localRouting"><span class="cc-switch-track"><span class="cc-switch-thumb"></span></span></span></span>
                         </label>
                         <div class="cc-row" data-setting-item>
@@ -7586,10 +7591,10 @@
     <!-- Workspace-wide search: pure ranking engine + modal controller. Both are
          shell scripts that must load before app.js, which wires live workspace
          data through configureGlobalSearchBridge(). -->
-    <script src="src/features/search/global-search-engine.js?v=20261001-todo-completion1"></script>
-    <script src="src/features/search/global-search-modal.js?v=20260917-search-focus2"></script>
+    <script src="src/features/search/global-search-engine.js?v=20261015-search-typos4"></script>
+    <script src="src/features/search/global-search-modal.js?v=20261015-search-keyboard3"></script>
     <script src="src/core/page-pin-crypto.js?v=20261015-page-pin1"></script>
-    <script src="src/core/app.js?v=20261015-theme-chat4"></script>
+    <script src="src/core/app.js?v=20261015-settings-search8"></script>
     <script src="src/features/workspace/content-timeline-editor.js?v=20261001-content-timeline3"></script>
     <script src="src/features/workspace/folder-workspace.js?v=20261001-folders4"></script>
     <script src="src/features/workspace/backup-progress.js?v=20261001-backup-progress1"></script>
@@ -7603,7 +7608,7 @@
     <script src="src/features/workspace/pdf-workspace.js?v=20261001-authoring6"></script>
     <script src="src/features/workspace/primary-nav-visibility.js?v=20261011-header-flow4"></script>
     <script src="src/features/workspace/theme-presets-refresh.js?v=20260810-peach-theme1"></script>
-    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-theme-chat-help4"></script>
+    <script src="src/features/workspace/help-docs-refresh.js?v=20261015-search-help6"></script>
     <!-- Small post-load UX repairs from the audited shell; core state remains canonical. -->
     <script src="src/features/workspace/audit-fixes.js?v=20260918-glass-clearance5"></script>
     <script src="src/features/workspace/canvas-shape-picker.js?v=20260808-canvaspicker1"></script>
@@ -8024,7 +8029,7 @@
     <link rel="stylesheet" href="styles/features/notes-toolbar.css?v=20260709-toolbar-fields">
     <link rel="stylesheet" href="styles/features/global-search.css?v=20260917-search-focus1">
     <link rel="stylesheet" href="styles/responsive/mobile.css?v=20261001-mobile-data-actions1">
-    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20261015-settings-option3-qa4">
+    <link rel="stylesheet" href="styles/views/settings-redesign.css?v=20261015-settings-search8">
     <link rel="stylesheet" href="styles/features/customization.css?v=20260601-handwriting-mods">
     <link rel="stylesheet" href="styles/features/notifications.css?v=20260723-mobilemodal2">
     <link rel="stylesheet" href="styles/features/daily-quotes.css?v=20260807-customquotes1">

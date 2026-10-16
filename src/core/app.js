@@ -31373,30 +31373,429 @@ function buildOnboardingPlanPreview() {
             if (settingsBody) settingsBody.dataset.preview = showPreview ? 'true' : 'false';
         }
 
+        // Rank only local Settings labels and control metadata. The small alias
+        // dictionary covers common student wording; bounded one-edit matching
+        // catches a typo without turning unrelated searches into broad results.
+        function rankSettingsSearchCandidates(query, candidates) {
+            const normalize = value => String(value || '').slice(0, 800)
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+                .replace(/\bto[\s-]+do\b/gi, 'todo')
+                .replace(/\bauto[\s-]+save\b/gi, 'autosave')
+                .replace(/\be[\s-]+mail\b/gi, 'email')
+                .replace(/&/g, ' and ')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+            const stopWords = new Set([
+                'a', 'an', 'and', 'are', 'can', 'could', 'do', 'does', 'for', 'how',
+                'i', 'in', 'is', 'it', 'me', 'my', 'of', 'on', 'or', 'please', 'the',
+                'this', 'to', 'what', 'where', 'which', 'with', 'you', 'your', 'setting',
+                'settings', 'option', 'options', 'control', 'controls', 'find', 'search',
+                'show', 'change', 'set', 'turn', 'toggle', 'make', 'want', 'need'
+            ]);
+            const stem = token => {
+                const knownPlurals = { classes: 'class', glasses: 'glass' };
+                if (knownPlurals[token]) return knownPlurals[token];
+                if (token.length > 5 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+                if (token.length > 4 && token.endsWith('s')
+                    && !/(?:ss|us|is|ws)$/.test(token)) return token.slice(0, -1);
+                return token;
+            };
+            const tokenize = value => Array.from(new Set(normalize(value)
+                .split(' ')
+                .slice(0, 48)
+                .filter(Boolean)
+                .map(stem)
+                .filter(token => token.length > 1 && !stopWords.has(token))));
+            const queryTokens = tokenize(String(query || '').slice(0, 256)).slice(0, 8);
+            if (!queryTokens.length) return [];
+
+            const phraseAliases = {
+                'dark mode': ['theme', 'color scheme'],
+                'light mode': ['theme', 'color scheme'],
+                'dark theme': ['theme', 'color'],
+                'light theme': ['theme', 'color'],
+                'colour scheme': ['theme', 'color'],
+                'color scheme': ['theme', 'color'],
+                'bigger text': ['font size', 'accessibility text size'],
+                'larger text': ['font size', 'accessibility text size'],
+                'text bigger': ['font size', 'accessibility text size'],
+                'text larger': ['font size', 'accessibility text size'],
+                'screen reader': ['accessibility'],
+                'automatic save': ['autosave interval'],
+                'save automatically': ['autosave interval'],
+                'cloud backup': ['backup export'],
+                'backup password': ['encrypted workspace backup', 'encrypted backup'],
+                'backup passphrase': ['encrypted backup'],
+                'backup restore': ['backup recovery'],
+                'calendar feed': ['calendar source'],
+                'class schedule': ['calendar schedule'],
+                'to do list': ['todo tasks']
+            };
+            const wordAliases = {
+                dark: ['theme'], light: ['theme'], color: ['theme'], colour: ['theme'],
+                look: ['appearance', 'theme'], appearance: ['theme'],
+                typeface: ['font'], typography: ['font'], font: ['typography'],
+                bigger: ['size', 'font'], larger: ['size', 'font'], readable: ['readability'],
+                unreadable: ['readability', 'contrast', 'font'], alert: ['notification'],
+                reminder: ['notification'], ping: ['notification'],
+                homework: ['task', 'assignment'], assignment: ['homework', 'task'],
+                todo: ['homework', 'task'], due: ['deadline', 'calendar'],
+                deadline: ['due', 'calendar'], backup: ['export', 'restore'],
+                restore: ['backup', 'recovery'], recover: ['backup', 'recovery'],
+                cloud: ['sync', 'backup'], sync: ['cloud', 'backup'], google: ['integrations'],
+                chat: ['assistant'], assistant: ['chat'], animation: ['motion'],
+                motion: ['animation'], timer: ['focus'], focus: ['timer'],
+                zoom: ['scale', 'font'], accessibility: ['readability', 'contrast'],
+                password: ['encrypted', 'passphrase'], passphrase: ['password', 'encrypted']
+            };
+            const variants = [];
+            const seenVariants = new Set();
+            const addVariant = (tokens, kind, penalty = 0) => {
+                const clean = Array.from(new Set(tokens.filter(Boolean)));
+                if (!clean.length) return;
+                const key = clean.join(' ');
+                if (seenVariants.has(key) || variants.length >= 12) return;
+                seenVariants.add(key);
+                variants.push({ tokens: clean, kind, penalty });
+            };
+            addVariant(queryTokens, 'direct');
+            const queryPhrase = queryTokens.join(' ');
+            (phraseAliases[queryPhrase] || []).forEach(alias => addVariant(tokenize(alias), 'phrase', 8));
+            queryTokens.forEach((token, index) => {
+                (wordAliases[token] || []).slice(0, 3).forEach(alias => {
+                    const aliasTokens = tokenize(alias);
+                    addVariant([...queryTokens.slice(0, index), ...aliasTokens, ...queryTokens.slice(index + 1)], 'alias', 12);
+                });
+            });
+
+            const oneEditAway = (left, right) => {
+                if (left === right || Math.abs(left.length - right.length) > 1) return false;
+                if (left.length < 5 || right.length < 5) return false;
+                if (left.length === right.length) {
+                    const differences = [];
+                    for (let index = 0; index < left.length; index += 1) {
+                        if (left[index] !== right[index]) differences.push(index);
+                    }
+                    return differences.length === 1
+                        || (differences.length === 2
+                            && differences[1] === differences[0] + 1
+                            && left[differences[0]] === right[differences[1]]
+                            && left[differences[1]] === right[differences[0]]);
+                }
+                const shorter = left.length < right.length ? left : right;
+                const longer = left.length < right.length ? right : left;
+                let shortIndex = 0;
+                let longIndex = 0;
+                let skipped = false;
+                while (shortIndex < shorter.length && longIndex < longer.length) {
+                    if (shorter[shortIndex] === longer[longIndex]) {
+                        shortIndex += 1;
+                        longIndex += 1;
+                    } else if (skipped) {
+                        return false;
+                    } else {
+                        skipped = true;
+                        longIndex += 1;
+                    }
+                }
+                return true;
+            };
+            const fieldWeights = [
+                ['name', 100], ['path', 82], ['control', 72], ['description', 58],
+                ['group', 38], ['category', 30], ['keywords', 52]
+            ];
+            const indexedCandidates = (Array.isArray(candidates) ? candidates.slice(0, 400) : [])
+                .map((candidate, candidateIndex) => {
+                    if (!candidate || typeof candidate !== 'object') return null;
+                    const fieldTokenWeights = new Map();
+                    fieldWeights.forEach(([field, weight]) => tokenize(candidate[field]).forEach(fieldToken => {
+                        fieldTokenWeights.set(fieldToken, Math.max(fieldTokenWeights.get(fieldToken) || 0, weight));
+                    }));
+                    return {
+                        candidate,
+                        candidateIndex,
+                        fieldTokenWeights,
+                        fieldTokens: Array.from(fieldTokenWeights.keys())
+                    };
+                })
+                .filter(Boolean);
+            const vocabulary = new Set(indexedCandidates.flatMap(entry => entry.fieldTokens));
+            const vocabularyTokens = Array.from(vocabulary);
+            const exactOrPrefixTokens = new Set(queryTokens.filter(token => vocabularyTokens.some(fieldToken =>
+                fieldToken === token || (token.length >= 4 && fieldToken.startsWith(token))
+            )));
+            const ranked = [];
+            indexedCandidates.forEach(({ candidate, candidateIndex, fieldTokenWeights }) => {
+                let best = null;
+                variants.forEach(variant => {
+                    let score = -variant.penalty;
+                    let matched = 0;
+                    variant.tokens.forEach(token => {
+                        let tokenScore = 0;
+                        const exactScore = fieldTokenWeights.get(token) || 0;
+                        if (exactScore) tokenScore = exactScore;
+                        else fieldTokenWeights.forEach((weight, fieldToken) => {
+                            if (token.length >= 4 && fieldToken.startsWith(token)) {
+                                tokenScore = Math.max(tokenScore, Math.round(weight * 0.72));
+                            } else if (variant.kind === 'direct'
+                                && !exactOrPrefixTokens.has(token)
+                                && oneEditAway(token, fieldToken)) {
+                                tokenScore = Math.max(tokenScore, Math.round(weight * 0.46));
+                            }
+                        });
+                        if (tokenScore) {
+                            matched += 1;
+                            score += tokenScore;
+                        }
+                    });
+                    const complete = matched === variant.tokens.length;
+                    const result = {
+                        candidate,
+                        score,
+                        matchedTokens: matched,
+                        totalTokens: variant.tokens.length,
+                        coverage: matched / variant.tokens.length,
+                        complete,
+                        matchType: complete ? variant.kind : 'related',
+                        candidateIndex
+                    };
+                    if (!best || result.complete && !best.complete
+                        || (result.complete === best.complete && result.score > best.score)) best = result;
+                });
+                if (best && best.matchedTokens) ranked.push(best);
+            });
+
+            const sortResults = (left, right) => right.score - left.score || left.candidateIndex - right.candidateIndex;
+            const complete = ranked.filter(result => result.complete).sort(sortResults);
+            if (complete.length) return complete;
+            return ranked
+                .filter(result => result.coverage >= (queryTokens.length < 3 ? 0.5 : 0.4) && result.score >= 28)
+                .sort(sortResults);
+        }
+
+        function collectSettingsSearchCandidates(sections) {
+            const rowSelector = '[data-setting-item], .atelier-setting-row, .settings-row, .settings-card';
+            const interactiveSelector = 'a[href]:not([aria-disabled="true"]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="radio"]';
+            const text = element => String(element && (element.innerText || element.textContent) || '').replace(/\s+/g, ' ').trim().slice(0, 320);
+            const controlText = control => control && !control.matches('input, textarea, select, .nf-select-trigger') ? text(control) : '';
+            const visibleControl = control => {
+                if (!control || control.hidden || control.closest('[hidden]')) return false;
+                if (control.getAttribute('aria-hidden') !== 'true') return true;
+                if (!control.matches('select.nf-select-native')) return false;
+                const trigger = control.closest('.nf-select')?.querySelector('.nf-select-trigger');
+                return !!trigger && !trigger.hidden && trigger.getAttribute('aria-hidden') !== 'true';
+            };
+            const visibleTarget = control => control && control.matches('select')
+                ? control.closest('.nf-select')?.querySelector('.nf-select-trigger') || control
+                : control;
+            const targetFor = item => {
+                const controls = Array.from(item.querySelectorAll(interactiveSelector)).filter(visibleControl);
+                return visibleTarget(controls.find(control => control.matches('[role="radio"][aria-checked="true"], input:checked'))
+                    || controls.find(control => control.matches('[data-pref-path]'))
+                    || controls[0]
+                    || item); // Disabled/read-only settings remain discoverable by their labels.
+            };
+            const results = [];
+            const seenItems = new Set();
+
+            sections.forEach(section => {
+                const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
+                const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
+                const categoryName = text(navButton && navButton.querySelector('.cc-sidebar-item-name, .atelier-settings-nav-btn-title'))
+                    || text(section.querySelector('.cc-section-title')) || category;
+                const categoryDescription = text(section.querySelector(':scope > .cc-section-head .cc-section-copy'));
+                const rows = Array.from(section.querySelectorAll(rowSelector))
+                    .filter(item => !item.hidden && !item.parentElement?.closest(rowSelector));
+
+                const addCandidate = (item, target, standalone = false) => {
+                    if (!item || !target || seenItems.has(item)) return;
+                    seenItems.add(item);
+                    const title = text(item.querySelector('.cc-row-name, .setting-name, .setting-title, .cc-feature-toggle span'));
+                    const group = item.closest('.cc-group');
+                    const groupName = text(group && group.querySelector('.cc-group-title'));
+                    const help = Array.from(item.querySelectorAll('.cc-row-help, .cc-foot-help, .setting-help, .cc-section-copy'))
+                        .slice(0, 4).map(text).filter(Boolean).join(' ').slice(0, 800);
+                    const controlTexts = Array.from(item.querySelectorAll(interactiveSelector))
+                        .filter(visibleControl)
+                        .slice(0, 32)
+                        .map(control => [control.getAttribute('aria-label'), control.getAttribute('title'), control.getAttribute('placeholder'), control.id,
+                            controlText(control), ...Array.from(control.querySelectorAll('option')).slice(0, 32).map(text)]
+                            .filter(Boolean).join(' ').slice(0, 240));
+                    const targetMeta = [target.getAttribute('aria-label'), target.getAttribute('title'), target.getAttribute('placeholder'), target.id,
+                        target.getAttribute('data-pref-path'), target.getAttribute('name')].filter(Boolean).join(' ');
+                    const pathControl = item.matches('[data-pref-path]') ? item : item.querySelector('[data-pref-path]');
+                    const path = String(pathControl && pathControl.getAttribute('data-pref-path') || '');
+                    const fallbackName = target.getAttribute('aria-label') || controlText(target) || path || groupName || categoryName;
+                    results.push({
+                        item,
+                        target,
+                        category,
+                        name: title || fallbackName,
+                        categoryName,
+                        group: groupName,
+                        path,
+                        control: [targetMeta, ...controlTexts].filter(Boolean).join(' ').slice(0, 800),
+                        description: help.slice(0, 800),
+                        context: [groupName, standalone ? categoryDescription : ''].filter(Boolean).join(' '),
+                        keywords: [categoryName, groupName].filter(Boolean).join(' '),
+                        standalone
+                    });
+                };
+
+                rows.forEach(item => addCandidate(item, targetFor(item)));
+                Array.from(section.querySelectorAll(interactiveSelector)).filter(visibleControl).forEach(control => {
+                    if (control.closest(rowSelector)) return;
+                    const item = control.closest('.cc-data-health-row, .cc-feature-toggle, .cc-setting-row') || control;
+                    addCandidate(item, visibleTarget(control), true);
+                });
+            });
+            return results;
+        }
+
+        function navigateToSettingsSearchCandidate(candidate, options = {}) {
+            if (!candidate || !candidate.item || !candidate.target || !candidate.item.isConnected || !candidate.target.isConnected) return false;
+            if (options.openSettings === true && typeof setActiveView === 'function') setActiveView('settings');
+            const keepQuery = options.preserveQuery === true;
+            setActiveSettingsCategory(candidate.category, {
+                clearSearch: !keepQuery,
+                skipSearch: keepQuery,
+                openDetail: true
+            });
+            let disclosure = candidate.item.closest('details');
+            while (disclosure) {
+                disclosure.open = true;
+                disclosure = disclosure.parentElement && disclosure.parentElement.closest('details');
+            }
+            document.querySelectorAll('#view-settings .is-search-target').forEach(node => node.classList.remove('is-search-target'));
+            candidate.item.classList.add('is-search-target');
+            if (candidate.target === candidate.item && !candidate.target.hasAttribute('tabindex')) {
+                candidate.target.setAttribute('tabindex', '-1');
+            }
+            candidate.target.focus({ preventScroll: true });
+            candidate.item.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'center',
+                inline: 'nearest'
+            });
+            return true;
+        }
+
+        function searchSettingsForGlobalSearch(query, options = {}) {
+            const cleanQuery = String(query || '').trim().slice(0, 256);
+            if (!cleanQuery) return [];
+            const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
+            const candidates = collectSettingsSearchCandidates(sections);
+            const limit = Math.max(1, Math.min(12, Number(options.limit) || 8));
+            return rankSettingsSearchCandidates(cleanQuery, candidates).slice(0, limit).map(result => {
+                const candidate = result.candidate;
+                const id = candidate.path || candidate.target.id || `${candidate.category}:${candidate.name}:${result.candidateIndex}`;
+                return {
+                    id: `setting:${id}`,
+                    title: `Settings: ${candidate.name}`,
+                    context: [candidate.categoryName, candidate.description || candidate.context || candidate.group].filter(Boolean).join(' · '),
+                    settingsSearchScore: Math.max(0, Math.min(300, result.score)),
+                    action: () => navigateToSettingsSearchCandidate(candidate, { openSettings: true })
+                };
+            });
+        }
+
+        function renderSettingsSearchResults(query, results, totalMatches) {
+            const panel = document.getElementById('settingsSearchResults');
+            const list = document.getElementById('settingsSearchResultsList');
+            const more = document.getElementById('settingsSearchResultsMore');
+            const input = document.getElementById('settingsSearchInput');
+            if (!panel || !list) return;
+            list.replaceChildren();
+            if (list.dataset.keyboardBound !== 'true') {
+                list.dataset.keyboardBound = 'true';
+                list.addEventListener('keydown', moveSettingsSearchResultFocus);
+            }
+            const limit = 8;
+            results.slice(0, limit).forEach(result => {
+                const candidate = result.candidate;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'cc-search-result-button';
+                button.setAttribute('data-settings-search-result', '');
+                button.setAttribute('aria-label', `${candidate.name}, ${candidate.categoryName}. ${candidate.description || candidate.context || candidate.group || 'Go to setting'}`);
+
+                const title = document.createElement('span');
+                title.className = 'cc-search-result-title';
+                title.textContent = candidate.name;
+                const category = document.createElement('span');
+                category.className = 'cc-search-result-category';
+                category.textContent = candidate.categoryName;
+                button.append(title, category);
+                if (candidate.description || candidate.context || candidate.group) {
+                    const copy = document.createElement('span');
+                    copy.className = 'cc-search-result-copy';
+                    copy.textContent = candidate.description || candidate.context || candidate.group;
+                    button.append(copy);
+                }
+                button.addEventListener('click', () => {
+                    navigateToSettingsSearchCandidate(candidate, { preserveQuery: true });
+                });
+                const li = document.createElement('li');
+                li.append(button);
+                list.append(li);
+            });
+            panel.hidden = !query || results.length === 0;
+            if (input) input.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+            if (more) {
+                const remaining = Math.max(0, totalMatches - Math.min(results.length, limit));
+                more.hidden = remaining === 0;
+                more.textContent = remaining ? `${remaining} more matching setting${remaining === 1 ? '' : 's'} stay visible below.` : '';
+            }
+        }
+
+        function moveSettingsSearchResultFocus(event) {
+            const results = Array.from(document.querySelectorAll('#settingsSearchResults [data-settings-search-result]'));
+            if (!results.length || !['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) return false;
+            if (event.key === 'Escape' && results.includes(document.activeElement)) {
+                event.preventDefault();
+                document.getElementById('settingsSearchInput')?.focus();
+                return true;
+            }
+            const currentIndex = results.indexOf(document.activeElement);
+            if (currentIndex < 0 && event.key !== 'ArrowDown') return false;
+            let nextIndex = currentIndex;
+            if (event.key === 'ArrowDown') nextIndex = currentIndex < 0 ? 0 : Math.min(results.length - 1, currentIndex + 1);
+            if (event.key === 'ArrowUp') nextIndex = currentIndex < 0 ? -1 : Math.max(-1, currentIndex - 1);
+            if (event.key === 'Home') nextIndex = 0;
+            if (event.key === 'End') nextIndex = results.length - 1;
+            event.preventDefault();
+            if (nextIndex < 0) document.getElementById('settingsSearchInput')?.focus();
+            else results[nextIndex].focus();
+            return true;
+        }
+
         function filterSettingsControlsBySearch() {
             const searchInput = document.getElementById('settingsSearchInput');
-            const query = String(searchInput && searchInput.value || '').trim().toLowerCase();
+            const query = String(searchInput && searchInput.value || '').trim();
             const sections = Array.from(document.querySelectorAll('#view-settings [data-settings-section]'));
             if (!sections.length) return;
+            const candidates = collectSettingsSearchCandidates(sections);
+            const ranked = query ? rankSettingsSearchCandidates(query, candidates) : [];
+            const matchingItems = new Set(ranked.map(result => result.candidate.item));
             let visibleCount = 0;
-            let matchingCategories = 0;
+            const matchingCategories = new Set();
+            candidates.forEach(candidate => {
+                const show = !query || matchingItems.has(candidate.item);
+                candidate.item.style.display = show ? '' : 'none';
+                candidate.item.classList.remove('is-search-target');
+                if (show && query) {
+                    visibleCount += 1;
+                    matchingCategories.add(candidate.category);
+                }
+            });
             sections.forEach(section => {
                 const category = String(section.getAttribute('data-settings-section') || '').toLowerCase();
                 const isActive = category === activeSettingsCategory;
                 const navButton = document.querySelector(`#view-settings [data-settings-nav="${category}"]`);
-                const candidates = Array.from(section.querySelectorAll('[data-setting-item], .atelier-setting-row, .settings-row, .settings-card'));
-                const categoryText = `${navButton ? navButton.textContent : ''} ${section.querySelector('.cc-section-title')?.textContent || ''} ${section.querySelector('.cc-section-copy')?.textContent || ''}`.toLowerCase();
-                const categoryMatches = !!query && categoryText.includes(query);
-                let sectionMatches = 0;
-                candidates.forEach(item => {
-                    const text = String(item.textContent || '').toLowerCase();
-                    const show = !query || categoryMatches || text.includes(query);
-                    item.style.display = show ? '' : 'none';
-                    if (show) sectionMatches += 1;
-                });
-                if (!candidates.length && (categoryMatches || String(section.textContent || '').toLowerCase().includes(query))) {
-                    sectionMatches = 1;
-                }
+                const sectionMatches = candidates.filter(candidate => candidate.category === category && matchingItems.has(candidate.item)).length;
                 // With a query, Settings behaves like a global search: every
                 // category containing a match is shown, so results retain their
                 // labels and controls instead of forcing the student to search
@@ -31408,8 +31807,18 @@ function buildOnboardingPlanPreview() {
                     navButton.hidden = !!query && sectionMatches === 0;
                     navButton.setAttribute('aria-hidden', navButton.hidden ? 'true' : 'false');
                 }
-                if (sectionMatches && query) matchingCategories += 1;
-                if (query) visibleCount += sectionMatches;
+                section.querySelectorAll('.cc-group').forEach(group => {
+                    const hasMatch = Array.from(matchingItems).some(item => group.contains(item));
+                    if (query && !hasMatch) {
+                        if (!group.hasAttribute('data-settings-search-display')) {
+                            group.setAttribute('data-settings-search-display', group.style.display);
+                        }
+                        group.style.display = 'none';
+                    } else if (group.hasAttribute('data-settings-search-display')) {
+                        group.style.display = group.getAttribute('data-settings-search-display');
+                        group.removeAttribute('data-settings-search-display');
+                    }
+                });
             });
 
             document.querySelectorAll('#view-settings .cc-sidebar-group').forEach(group => {
@@ -31428,6 +31837,7 @@ function buildOnboardingPlanPreview() {
             if (settingsMain) settingsMain.classList.toggle('is-searching', !!query);
             const emptyState = document.getElementById('settingsSearchEmpty');
             if (emptyState) emptyState.hidden = !query || visibleCount > 0;
+            renderSettingsSearchResults(query, ranked, visibleCount);
             const clearButton = document.getElementById('settingsSearchClearBtn');
             if (clearButton) clearButton.hidden = !query;
             const shortcut = document.getElementById('settingsSearchShortcut');
@@ -31437,7 +31847,7 @@ function buildOnboardingPlanPreview() {
             const searchHint = document.getElementById('settingsSearchHint');
             if (searchHint) {
                 searchHint.textContent = query
-                    ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories} categor${matchingCategories === 1 ? 'y' : 'ies'}.`
+                    ? `${visibleCount} match${visibleCount === 1 ? '' : 'es'} across ${matchingCategories.size} categor${matchingCategories.size === 1 ? 'y' : 'ies'}.`
                     : 'Search by setting, feature, or task.';
             }
             if (query) setSettingsMobileView('detail');
@@ -31589,6 +31999,7 @@ function buildOnboardingPlanPreview() {
                 searchInput.dataset.bound = 'true';
                 searchInput.addEventListener('input', filterSettingsControlsBySearch);
                 searchInput.addEventListener('keydown', event => {
+                    if (moveSettingsSearchResultFocus(event)) return;
                     if (event.key === 'Escape' && searchInput.value) {
                         event.preventDefault();
                         clearSettingsSearch({ focus: true });
@@ -78062,6 +78473,7 @@ ${cspMeta}
                 openClassDashboardDrawer: (id) => (_origOpenClassDashboard ? (_origOpenClassDashboard(id), true) : undefined),
                 createWeeklyReviewNote: () => (_origWeeklyReview ? (_origWeeklyReview(), true) : undefined),
                 startFocusSession: (taskId, opts) => (_origStartFocus ? (_origStartFocus(taskId, opts), true) : undefined),
+                searchSettings: (query, options) => searchSettingsForGlobalSearch(query, options),
                 openGlobalSearchPanel: (q) => (_origGlobalSearch ? (_origGlobalSearch(q), true) : undefined),
                 openTaskModal: (taskId, preset) => (_origOpenTaskModal ? (_origOpenTaskModal(taskId, preset), true) : undefined),
                 createTask: (input, options) => createCanonicalTask(input, options),
@@ -79533,6 +79945,8 @@ ${cspMeta}
 
         // ── Slash commands, @-mentions, and image attachments ───────────────
         const ASST_SLASH_COMMANDS = [
+            { cmd: '/theme', icon: 'fa-palette', desc: 'Create and refine a theme with preview', prompt: '/theme ' },
+            { cmd: '/theme off', icon: 'fa-comment', desc: 'Return this theme chat to ordinary Assistant', prompt: '/theme off' },
             ...['grammar', 'spelling', 'rephrase'].map(command => ({ cmd: '/' + command, icon: 'fa-feather', desc: 'Edit only the passage you supply', prompt: '/' + command + ' ' })),
             { cmd: '/summarize', icon: 'fa-list-check', desc: 'Summarize the current note', prompt: 'Summarize the key points from my current note.', send: true },
             { cmd: '/quiz',      icon: 'fa-circle-question', desc: 'Quiz me on the current note', prompt: 'Quiz me on the material in my current note. Ask one question at a time.', send: true },
@@ -83534,33 +83948,15 @@ function globalSearchAll(query) {
 
     // Settings and data-safety surfaces.
     try {
-        [
-            { id: 'settings-data', title: 'Settings: Data & backups', context: 'Backup Health, export, restore, diagnostics', category: 'data' },
-            { id: 'settings-assistant', title: 'Settings: Assistant', context: 'Context, confirmation, providers, memory', category: 'assistant' },
-            { id: 'settings-customization', title: 'Settings: Glass & appearance', context: 'Themes, density, custom CSS', category: 'appearance' },
-            { id: 'settings-school', title: 'Settings: School schedule', context: 'Weekly, A/B, rotating cycle schedule setup', category: 'academic' }
-        ].forEach(row => {
-            if (results.settings.length >= MAX) return;
-            const haystack = `${row.title} ${row.context}`.toLowerCase();
-            if (haystack.includes(q)) {
-                results.settings.push({
-                    id: row.id,
-                    title: row.title,
-                    context: row.context,
-                    action: () => {
-                        try {
-                            setActiveView('settings');
-                            if (typeof setActiveSettingsCategory === 'function') setActiveSettingsCategory(row.category, { skipSearch: false, openDetail: true });
-                        } catch (err) {}
-                    }
-                });
-            }
-        });
+        if (window.flowAtelier && typeof window.flowAtelier.searchSettings === 'function') {
+            results.settings = window.flowAtelier.searchSettings(query, { limit: MAX });
+        }
     } catch (err) {}
 
     // Rank every category by relevance so the best matches surface first.
     try {
         Object.keys(results).forEach(cat => {
+            if (cat === 'settings') return; // The shared Settings ranker owns intent relevance.
             results[cat].sort((a, b) =>
                 sutraFuzzyScore((b.title || '') + ' ' + (b.context || ''), q)
                 - sutraFuzzyScore((a.title || '') + ' ' + (a.context || ''), q));
@@ -83765,6 +84161,7 @@ function collectGlobalSearchRecords(query) {
                         metadata: { context: String(hit.context || '') },
                         timestamp: 0,
                         prematched: true,
+                        settingsSearchScore: pair[1] === 'setting' ? hit.settingsSearchScore : undefined,
                         action: typeof hit.action === 'function' ? hit.action : null
                     });
                 });

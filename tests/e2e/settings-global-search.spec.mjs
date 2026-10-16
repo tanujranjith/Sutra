@@ -16,6 +16,38 @@ async function openSettings(page) {
   await expect(page.locator('#view-settings')).toBeVisible();
 }
 
+test('update notice leaves Settings Save and Revert reachable on desktop and phone', async ({ page }) => {
+  await openSettings(page);
+  // The notice is presentation-only; avoid depending on a live SW upgrade.
+  await page.evaluate(() => {
+    const banner = document.createElement('div');
+    banner.className = 'sutra-update-banner';
+    banner.textContent = 'A new Sutra version is ready. Your workspace stays saved locally.';
+    document.body.appendChild(banner);
+  });
+  for (const viewport of [{ width: 1642, height: 966 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    if (viewport.width < 640 && await page.locator('#settingsBackToCategories').isVisible()) {
+      await page.locator('#settingsBackToCategories').click();
+    }
+    await page.locator('[data-settings-nav="appearance"]').click();
+    await page.locator('[data-pref-path="appearance.density"] [data-value="spacious"]').click();
+    const clearance = await page.evaluate(() => {
+      const banner = document.querySelector('.sutra-update-banner:not([hidden])').getBoundingClientRect();
+      return ['settingsApplyBtn', 'settingsRevertBtn'].map(id => {
+        const button = document.getElementById(id);
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return { clear: banner.bottom <= rect.top, reachable: hit === button || button.contains(hit) };
+      });
+    });
+    expect(clearance).toEqual([{ clear: true, reachable: true }, { clear: true, reachable: true }]);
+    await page.locator('#settingsRevertBtn').click();
+    await expect(page.locator('#settingsActionBar')).toHaveAttribute('data-pending', 'false');
+    if (viewport.width < 640) await page.locator('#settingsBackToCategories').click();
+  }
+});
+
 test('Settings hierarchy keeps everyday controls visible and advanced packs disclosed on demand', async ({ page }) => {
   await openSettings(page);
 
@@ -71,6 +103,59 @@ test('Settings search supports results, recovery, clear, and keyboard focus', as
   await page.keyboard.press('Escape');
   await expect(page.locator('#settingsSearchInput')).toHaveValue('');
   await expect(page.locator('#settingsSearchInput')).toBeFocused();
+});
+
+test('Settings search understands everyday phrases and typos, then focuses the real control', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSettings(page);
+
+  await page.fill('#settingsSearchInput', 'turn on dark mode');
+  await expect(page.locator('#settingsSearchResults')).toBeVisible();
+  await expect(page.locator('#settingsSearchEmpty')).toBeHidden();
+  const themeResult = page.locator('#settingsSearchResults .cc-search-result-button').filter({ hasText: 'Theme' }).first();
+  await expect(themeResult).toContainText('Appearance');
+  await expect(page.locator('#settingsSearchResults .cc-search-result-button').filter({ hasText: /^Density/ })).toHaveCount(0);
+  await expect(page.locator('#settingsSearchResults .cc-search-result-category').first()).toHaveText('Appearance');
+  await themeResult.click();
+  await expect(page.locator('#settingsChooseThemeBtn')).toBeFocused();
+  const targetState = await page.locator('#settingsChooseThemeBtn').evaluate(control => ({
+    highlighted: control.closest('[data-setting-item]')?.classList.contains('is-search-target') === true,
+    section: control.closest('[data-settings-section]')?.getAttribute('data-settings-section')
+  }));
+  expect(targetState).toEqual({ highlighted: true, section: 'appearance' });
+  await page.locator('#settingsSearchInput').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(themeResult).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#settingsChooseThemeBtn')).toBeFocused();
+
+  await page.fill('#settingsSearchInput', 'calender');
+  await expect(page.locator('#settingsSearchResults')).toBeVisible();
+  await expect(page.locator('#settingsSearchResults')).toContainText('Calendar');
+  await expect(page.locator('#settingsSearchEmpty')).toBeHidden();
+
+  await page.fill('#settingsSearchInput', 'save automatically');
+  await expect(page.locator('#settingsSearchResults')).toContainText('Autosave interval');
+  await expect(page.locator('#settingsSearchEmpty')).toBeHidden();
+  await page.locator('#settingsSearchResults .cc-search-result-button').filter({ hasText: 'Autosave interval' }).click();
+  const autosave = page.locator('[data-pref-path="editor.autosaveMs"]');
+  const autosaveTrigger = autosave.locator('xpath=..').locator('.nf-select-trigger');
+  await expect(autosaveTrigger).toBeFocused();
+  await autosaveTrigger.click();
+  await page.getByRole('option', { name: '8 s', exact: true }).click();
+  await expect(autosave.locator('xpath=ancestor::*[@data-setting-item]')).toHaveClass(/is-dirty/);
+
+  await page.fill('#settingsSearchInput', 'backup password');
+  await expect(page.locator('#settingsSearchResults')).toContainText('Encrypted Workspace Backup');
+  await expect(page.locator('#settingsSearchEmpty')).toBeHidden();
+  await expect(page.locator('[data-setting-item]').filter({ has: page.locator('.cc-row-name').filter({ hasText: /^Recent messages$/ }) })).toBeHidden();
+  await page.locator('#settingsSearchResults .cc-search-result-button').filter({ hasText: 'Encrypted Workspace Backup' }).click();
+  await expect(page.locator('#exportAtelierWorkspaceBtn')).toBeFocused();
+
+  await page.locator('#settingsBackToCategories').click();
+  await page.locator('[data-settings-nav="editor"]').click();
+  await expect(autosave).toHaveValue('8000');
+  await expect(autosave.locator('xpath=ancestor::*[@data-setting-item]')).toHaveClass(/is-dirty/);
 });
 
 test('Settings mobile hierarchy stays contained and keeps the canonical Save and Revert bar', async ({ page }) => {

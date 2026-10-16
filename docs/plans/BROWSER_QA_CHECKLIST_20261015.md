@@ -66,6 +66,68 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
 46. ~~Save-conflict fix: startup recovery/repair now coordinates conditional writes, journals replaced roots, and identifies accepted writes. Timeline create/edit/reload and genuine two-tab stale-write protection passed manually.~~
 47. ~~Settings option 3 redesign: independently reviewed, compared with the selected mockup, and checked in Chrome on desktop, tablet, and 390px/320px phones; staged preview, Revert, Save/reload, searchable disclosures, and Dark theme verified.~~
+48. Theme creation in Assistant: CTA/prefill, empty-command guard, staged inline palette review, explicit Preview/Revert/Apply, reload, and /theme off passed manually. Live selected-provider generation/refinement remains pending; mocked full-chat CI coverage is prepared.
+49. ~~Settings and workspace search upgrade: everyday phrases/typos, relevant field-level results, exact-control focus, shared workspace Settings results, keyboard navigation, draft/disclosure preservation, and phone containment passed manual Chrome QA. Luna diffs and privacy boundaries independently reviewed; automated regressions remain under item 45.~~
+
+## Search follow-up
+
+Two narrowly scoped Luna xhigh agents upgraded Settings and workspace search;
+the parent reviewed all diffs and corrected responsive category-label noise,
+alias noise, backup-export priority, read-only-control focus, filtering of
+unrelated rows/groups, and loss of Settings relevance in the global bridge.
+The parent also fixed the app-update notice intercepting Settings Save/Revert.
+
+Manual Chrome checks on isolated origin 5196:
+
+- `turn on dark mode` finds Theme first in Settings; `calender` finds Calendar
+  controls, and `backup password` prioritizes Encrypted Workspace Backup.
+- `save automatically`, ArrowDown, Enter focuses the visible Autosave selector.
+  Selecting an export search result focuses its button without activating it.
+- Workspace access remains searchable while its control is unavailable; its
+  explanatory row receives keyboard focus without changing access.
+- Spacious density remains staged through search/clear; matching disclosures
+  open for `glass blur` and return to their prior collapsed state after clear.
+  Revert restores Comfortable and clears the pending indicator.
+- Workspace search `theem note` ranks and opens QA Theme Note; changing the query
+  to an unmatched string and immediately pressing Enter does not open stale
+  results. Global Settings: Theme opens Settings and focuses Choose theme.
+  Settings' own relevance order survives the global search bridge.
+- At a 390 x 844 viewport, search result buttons exceed 44px and document width
+  does not exceed the viewport. Desktop and phone Save/Revert receive clicks
+  above the real app-update notice. The viewport override was reset.
+
+Search indexes labels/help/metadata rather than current field values. Locked
+note bodies remain excluded by the existing collector and engine guards; this
+boundary was reviewed, with controlled privacy regressions left to CI. No new
+durable workspace fields, credentials, provider requests, or remote actions.
+Required core integrity checks passed; unit/E2E suites were prepared but not run.
+Screenshots (ignored): .tmp/qa-2026-10-15/settings-search-desktop.png and
+settings-search-phone.png.
+
+## Theme chat follow-up
+
+Local commit 7f4869c moves the theme-generation card into a dedicated Assistant
+chat with `/theme ` prefilled. Existing provider/model/thinking controls are
+used; the brief and bounded theme-only history replace workspace enrichment.
+Attachments are neither sent nor consumed by theme requests. Opening the card
+and submitting an empty `/theme` make no paid request. Validated replies are
+stored in existing message content and render explicit palette review controls;
+there are no new durable fields or plugin installations.
+
+Parent independently reviewed both Luna xhigh theme/routing implementations,
+corrected ordinary-message rendering of false results, preserved past palette
+cards after `/theme off`, guarded chat switching/in-flight requests, closed the
+theme panel on navigation, and retained unused attachments. Manual Chrome QA
+verified the actual CTA and empty-command response. A harmless JSON fixture,
+imported through the visible file chooser into disposable origin 5196, staged
+a synthetic reply. Preview changed the appearance temporarily, Revert restored
+it, Apply saved QA Paper Theme, and reload listed that custom theme as selected.
+The palette card survived reload and remained visible after `/theme off` with
+the ordinary-chat acknowledgement. This verifies client review/persistence,
+not live AI generation. No provider requests or real credentials were used.
+The fixture replaced only earlier disposable QA records, whose prior checks
+remain documented above. Required core integrity/self-tests and staged hook
+passed; full provider mocks and automated suites remain pending GitHub CI.
 
 ## Import and save-conflict fixes
 

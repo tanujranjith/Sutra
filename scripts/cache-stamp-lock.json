@@ -8,7 +8,7 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20261015-boot-cas1",
+    "stamp": "20261015-boot-cas2",
     "hash": "199b2dbae7548326"
   },
   "src/boot/startup-intro.js": {
@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-exam-results4",
-    "hash": "51e23e874f71e5d4"
+    "stamp": "20261015-theme-chat5",
+    "hash": "cbd5fc72814ff4d5"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-import-save-safety2",
-    "hash": "18b1fa206312b456"
+    "stamp": "20261015-settings-search8",
+    "hash": "536aaa4f3eea4e8f"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261015-exam-results4",
-    "hash": "ecb9dbad90e33fc8"
+    "stamp": "20261015-theme-chat5",
+    "hash": "9800654b22267363"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -268,12 +268,12 @@
     "hash": "afa4425de87f1917"
   },
   "src/features/search/global-search-engine.js": {
-    "stamp": "20261001-todo-completion1",
-    "hash": "f616cbaa16815ffe"
+    "stamp": "20261015-search-typos4",
+    "hash": "dcc4676d4104dba6"
   },
   "src/features/search/global-search-modal.js": {
-    "stamp": "20260917-search-focus2",
-    "hash": "d38461e08fe14a83"
+    "stamp": "20261015-search-keyboard3",
+    "hash": "248a6be736e7a032"
   },
   "src/features/study/ap-study.js": {
     "stamp": "20260913-content-limits-ap1",
@@ -368,8 +368,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261015-xlsx-help3",
-    "hash": "ff1facf1844be931"
+    "stamp": "20261015-search-help6",
+    "hash": "aee0c787b075096b"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -392,8 +392,8 @@
     "hash": "eeadd011283c2ee3"
   },
   "src/features/workspace/office-interoperability.js": {
-    "stamp": "20261015-formula-cache1",
-    "hash": "c020f7e8251404d6"
+    "stamp": "20261015-formula-cache2",
+    "hash": "33231c2e093874bc"
   },
   "src/features/workspace/pdf-engine.js": {
     "stamp": "20260823-pdf4",
@@ -476,7 +476,7 @@
     "hash": "dc3d5bce423b7532"
   },
   "src/persistence/workspace-coordinator.js": {
-    "stamp": "20261015-boot-cas1",
+    "stamp": "20261015-boot-cas2",
     "hash": "f4aad605ec573abb"
   },
   "src/persistence/workspace-db.js": {
@@ -548,8 +548,8 @@
     "hash": "4b6ca894ca81bf4f"
   },
   "styles/base/styles.css": {
-    "stamp": "20261015-caveat-fixes6",
-    "hash": "f558ae3c06b5b921"
+    "stamp": "20261015-theme-chat1",
+    "hash": "7e8136d9fcbd1cf6"
   },
   "styles/base/tokens.css": {
     "stamp": "20260807-themefocus1",
@@ -756,8 +756,8 @@
     "hash": "376e4e3482668660"
   },
   "styles/views/settings-redesign.css": {
-    "stamp": "20261015-settings-option3-qa4",
-    "hash": "b3380e3becf25de3"
+    "stamp": "20261015-settings-search8",
+    "hash": "b907773b895b71cd"
   },
   "styles/views/timeline-calendar.css": {
     "stamp": "20261001-mobile-agenda1",
