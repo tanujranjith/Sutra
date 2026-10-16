@@ -168,6 +168,69 @@
   function formulaText(cell) { return String(cell && cell.f || '').replace(/^=/, ''); }
   function hasMissingFormulaResult(cell) { return !!(cell && cell.f && (cell.v === undefined || cell.v === null)); }
   function showFormulaLiteral(cell) { var value = '=' + formulaText(cell); cell.v = value; cell.t = 's'; cell.w = value; }
+  function cachedFormulaValueFromXml(type, raw) {
+    if (raw === '') return '';
+    if (type === 'b') return raw === '1';
+    if (type === 'e' || type === 'str' || type === 'inlineStr') return raw;
+    if (!type || type === 'n') { var numeric = Number(raw); return Number.isFinite(numeric) ? numeric : raw; }
+    return raw;
+  }
+  async function scanXlsxFormulaCaches(source) {
+    validateOfficeInput(source);
+    var Zip = zipApi(); var zip = await Zip.loadAsync(source); validateOfficePackage(zip);
+    var workbookFile = zip.file('xl/workbook.xml'); var relsFile = zip.file('xl/_rels/workbook.xml.rels');
+    if (!workbookFile || !relsFile) throw new Error('Formula results could not be checked because this is not a readable XLSX workbook.');
+    var workbookXml = parseXml(await readTextPart(workbookFile, 'workbook.xml')); var relsXml = parseXml(await readTextPart(relsFile, 'workbook relationships')); var relationships = Object.create(null);
+    Array.from(relsXml.querySelectorAll('Relationship')).forEach(function (rel) {
+      if (rel.getAttribute('TargetMode') !== 'External') relationships[rel.getAttribute('Id')] = rel.getAttribute('Target');
+    });
+    var sheetNodes = Array.from(workbookXml.querySelectorAll('sheet'));
+    if (sheetNodes.length > MAX_XLSX_SHEETS) throw new Error('Formula results could not be checked because the workbook has more than 32 sheets.');
+    var records = []; var cellCount = 0;
+    for (var i = 0; i < sheetNodes.length; i += 1) {
+      var sheetNode = sheetNodes[i]; var relId = sheetNode.getAttribute('r:id') || sheetNode.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+      var target = relationships[relId];
+      if (!target || target.charAt(0) === '\\' || target.indexOf('..') !== -1) throw new Error('Formula results could not be checked because a worksheet relationship is unsafe.');
+      var path = target.charAt(0) === '/' ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
+      if (!/^xl\/worksheets\/[^/]+\.xml$/i.test(path)) throw new Error('Formula results could not be checked because a worksheet relationship is unsafe.');
+      var sheetFile = zip.file(path);
+      if (!sheetFile) throw new Error('Formula results could not be checked because a worksheet part is missing.');
+      var sheetXml = parseXml(await readTextPart(sheetFile, 'worksheet ' + (i + 1))); var cellNodes = Array.from(sheetXml.querySelectorAll('c'));
+      cellCount += cellNodes.length;
+      if (cellCount > MAX_XLSX_CELLS) throw new Error('Formula results could not be checked because the workbook exceeds the 250,000-cell safety limit.');
+      cellNodes.forEach(function (cellNode) {
+        var formulaNode = cellNode.querySelector('f'); if (!formulaNode) return;
+        var address = cellNode.getAttribute('r'); var ref = engine().parseA1(address);
+        if (!ref) throw new Error('Formula results could not be checked because a worksheet contains an invalid cell reference.');
+        var valueNode = cellNode.querySelector('v');
+        records.push({ sheetName: sheetNode.getAttribute('name') || ('Sheet' + (i + 1)), address: engine().columnLabel(ref.col) + String(ref.row + 1), formula: formulaNode.textContent || '', type: cellNode.getAttribute('t') || '', hasValue: !!valueNode, value: valueNode ? valueNode.textContent || '' : '' });
+      });
+    }
+    return records;
+  }
+  function applyXlsxFormulaCacheMetadata(parsedWorkbook, records) {
+    var sheets = parsedWorkbook && parsedWorkbook.Sheets || {};
+    (records || []).forEach(function (record) {
+      var sheet = sheets[record.sheetName]; if (!sheet || typeof sheet !== 'object') return;
+      var cell = sheet[record.address];
+      if (!cell || typeof cell !== 'object') {
+        if (!record.formula) return;
+        cell = sheet[record.address] = { f: record.formula, t: record.type || 'n' };
+      } else if (!cell.f && record.formula) cell.f = record.formula;
+      if (!record.hasValue) {
+        cell.v = null;
+        delete cell.w;
+        return;
+      }
+      if (cell.v === undefined || cell.v === null) {
+        cell.v = cachedFormulaValueFromXml(record.type, record.value);
+        if (record.type) cell.t = record.type;
+        else if (!cell.t) cell.t = 'n';
+        delete cell.w;
+        if (record.type === 'str' || record.type === 'e' || record.value === '') cell.w = record.value;
+      }
+    });
+  }
   function parseFormulaReference(value, defaultSheet) {
     var source = String(value || '').trim().replace(/^=/, ''); var bang = source.lastIndexOf('!'); var sheetName = defaultSheet;
     if (bang !== -1) {
@@ -223,7 +286,13 @@
     if (typeof value === 'string') return { type: 'str', value: value };
     return null;
   }
-  function fillMissingFormulaResults(parsedWorkbook) {
+  function fillMissingFormulaResults(parsedWorkbook, options) {
+    if (options && options.xlsxSource) {
+      return scanXlsxFormulaCaches(options.xlsxSource).then(function (records) {
+        applyXlsxFormulaCacheMetadata(parsedWorkbook, records);
+        return fillMissingFormulaResults(parsedWorkbook);
+      });
+    }
     var report = { calculated: 0, unavailable: 0 };
     if (!parsedWorkbook || typeof parsedWorkbook !== 'object' || !parsedWorkbook.Sheets || typeof parsedWorkbook.Sheets !== 'object') return report;
     var sheetNames = Array.isArray(parsedWorkbook.SheetNames) ? parsedWorkbook.SheetNames.filter(function (name) { return typeof name === 'string' && name; }) : Object.keys(parsedWorkbook.Sheets).filter(function (name) { return name.charAt(0) !== '!'; });

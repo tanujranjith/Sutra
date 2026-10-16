@@ -79,7 +79,7 @@ function createSpreadsheetFixture({ omitFormulaCache = false } = {}) {
     </row>
     <row r="2">
       <c r="A2" t="n"><v>12.5</v></c>
-      <c r="B2"><f>A2*2</f>${omitFormulaCache ? '' : '<v>25</v>'}</c>
+      <c r="B2" t="n"><f>A2*2</f>${omitFormulaCache ? '' : '<v>25</v>'}</c>
       <c r="C2" s="1" t="n"><v>45292</v></c>
     </row>
   </sheetData>
