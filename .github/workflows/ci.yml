@@ -29,10 +29,10 @@ env:
 jobs:
   build-and-check:
     name: Build, static checks, and unit tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -41,7 +41,7 @@ jobs:
       - run: npm run test:unit
       - run: npm run build:deploy
       - run: npm run check:deploy
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy/
@@ -53,19 +53,19 @@ jobs:
     name: Browser tests (Chromium shard ${{ matrix.shard }}, verified artifact)
     needs: build-and-check
     if: ${{ github.event_name != 'schedule' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy
@@ -99,9 +99,9 @@ jobs:
           npx playwright test --workers=2 --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-chromium-failure-${{ github.sha }}
+          name: playwright-chromium-failure-${{ github.sha }}-${{ matrix.shard }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
           include-hidden-files: true
@@ -111,7 +111,7 @@ jobs:
     name: Browser compatibility (${{ matrix.label }}, verified artifact)
     needs: build-and-check
     if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_browser_matrix) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       # Sutra is a large classic-script application. Running every engine in one
       # two-worker Playwright process caused independent browser contexts to
@@ -121,30 +121,64 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: Desktop Chrome
+          - label: Desktop Chrome shard 1
             id: chrome
             project_args: --project=chrome
             browser_install: chrome
-          - label: Desktop Firefox
+            shard: 1
+          - label: Desktop Chrome shard 2
+            id: chrome
+            project_args: --project=chrome
+            browser_install: chrome
+            shard: 2
+          - label: Desktop Chrome shard 3
+            id: chrome
+            project_args: --project=chrome
+            browser_install: chrome
+            shard: 3
+          - label: Desktop Firefox shard 1
             id: firefox
             project_args: --project=firefox
             browser_install: firefox
-          - label: Desktop WebKit
+            shard: 1
+          - label: Desktop Firefox shard 2
+            id: firefox
+            project_args: --project=firefox
+            browser_install: firefox
+            shard: 2
+          - label: Desktop Firefox shard 3
+            id: firefox
+            project_args: --project=firefox
+            browser_install: firefox
+            shard: 3
+          - label: Desktop WebKit shard 1
             id: webkit
             project_args: --project=webkit
             browser_install: webkit
+            shard: 1
+          - label: Desktop WebKit shard 2
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 2
+          - label: Desktop WebKit shard 3
+            id: webkit
+            project_args: --project=webkit
+            browser_install: webkit
+            shard: 3
           - label: Responsive devices
             id: responsive
             project_args: --project=mobile-chromium --project=mobile-webkit --project=tablet --project=narrow-desktop
             browser_install: chromium firefox webkit
+            shard: full
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-deploy-${{ github.sha }}
           path: .deploy
@@ -159,12 +193,17 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
           SUTRA_SERVE_ROOT: .deploy
-        run: npx playwright test --workers=1 ${{ matrix.project_args }}
+        run: |
+          if [ "${{ matrix.id }}" = "responsive" ]; then
+            npx playwright test --workers=1 ${{ matrix.project_args }}
+          else
+            npx playwright test --workers=1 ${{ matrix.project_args }} --shard=${{ matrix.shard }}/3
+          fi
       - name: Upload failure diagnostics
         if: ${{ failure() && !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-compatibility-failure-${{ github.sha }}-${{ matrix.id }}
+          name: playwright-compatibility-failure-${{ github.sha }}-${{ matrix.id }}-${{ matrix.shard }}
           path: .tmp/playwright-results/
           if-no-files-found: ignore
           include-hidden-files: true
