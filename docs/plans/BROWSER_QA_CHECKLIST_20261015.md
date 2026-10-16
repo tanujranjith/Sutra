@@ -43,7 +43,7 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 22. ~~Calculator negatives, parentheses, keyboard entry, errors, and recovery.~~
 23. ~~HTML-page PIN unlock and source preservation.~~
 24. ~~US Letter default and A4 selection.~~
-25. Imported task Notes/Reference URL editing, reopen/reload, and unknown fields. Blocked: Chrome extension file chooser did not deliver the import selection.
+25. ~~Imported task Notes/Reference URL editing, reopen/reload, and unknown fields.~~
 26. Stateful follow-up: correct task/URL and matching citations. Open: no provider key in this separate QA origin.
 27. Successful one-time PIN read: accurate source disclosure and editor stays locked. Open: needs user-entered QA PIN plus a provider.
 28. ~~Major Matrix keyboard editing: lower rows, Tab/Shift+Tab, ranking update, and reload persistence.~~
@@ -58,13 +58,43 @@ ran; automated unit/E2E suites remain unrun locally and pending GitHub CI.
 37. ~~Official exam Upcoming/Taken/Pending/Recorded states, reopen, reload, and separate practice scores.~~
 38. ~~Weekly planning: seven-day coverage, future starts, after-hours rollover, expired-preview rejection, single-tab schedule persistence, and already-scheduled work deduplication.~~
 39. Wellness retirement: navigation/widgets/commands/Help and legacy data preservation; normal goals/habits/notes/Focus remain usable. Partial: Life dashboard omitted retired tools, and an ordinary goal saved/reloaded. Legacy portability and all discovery surfaces remain open.
-40. Spreadsheet importer: XLSX values/formulas and cached offline use. Blocked by the Chrome file-upload limitation.
-41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Open: controlled CI fault fixtures required; no deliberate faults injected into the user workspace.
+40. Spreadsheet importer: XLSX values/formulas and cached offline use. Partial: native Sheets import, recalculation, reload, and cached import with the QA server stopped passed. General Import Workspace / Docs imported the numbers into a note but left the formula-result cell blank for the exported workbook. That route remains open.
+41. Incomplete restore: missing required assets and durable-save failure report failure without presenting success. Partial: malformed JSON and corrupt .sutra rejection preserved the existing task; missing required attachment bytes produced a persistent incomplete-restore warning. Simulated workspace/attachment write failures remain for controlled CI fixtures.
 42. Sync safety: unauthenticated/corrupt encrypted content and conflict storms preserve data. Open: controlled CI/service fixtures required; remote data/configuration not changed.
 43. Help/tutorial: current instructions, rendering, and navigation. Partial: Help opens and contains current workspace contracts; visible raw &amp; text and coverage of new writing commands still need review. No comprehensive link/tutorial pass completed.
 44. ~~Landing-page copy and local nested recovery paths: punctuation, image descriptions, grade display, logo, and both recovery links.~~
 45. CI/hosting: Node 24, required suites, allowlisted artifact, offline resources, and security headers. Open: no push authorized; broad automated checks remain for GitHub CI.
 46. Save-conflict investigation: a later disposable Timeline edit raised a storage-mismatch warning. Its writer/source is unconfirmed. A single-tab planned block survived reload, but concurrent-tab save safety remains open.
+47. Settings option 3 redesign: implementation received from GPT-6.1 Sol high; parent diff review, visual comparison, responsive checks, and Save/Revert/reload validation pending. The earlier approval of item 31 does not validate this replacement layout.
+
+## Import retry evidence — October 15, 2026
+
+Manual Chrome checks used the fresh isolated origin 5196. The refreshed extension
+accepted file uploads. Import first opens a confirmation and then a separate
+document-import dialog; only the second Choose File opens the browser picker.
+
+- 25: restored one legacy task from a harmless JSON fixture. Original Notes and
+  Reference URL appeared in the edit dialog. Edited both, reopened, reloaded,
+  and reopened again: both edits persisted. The actual unencrypted JSON export
+  saved by the user in D:/Downloads retained the edited values and the synthetic
+  legacyUnknownField portability marker. No personal export was inspected.
+- 40: created a disposable Sheets workbook through the UI with A1=2, A2=3,
+  A3=SUM(A1:A2), exported XLSX, and imported the saved file through Sheets.
+  Formula text and result 5 were retained; A1=7 recalculated A3=10 and survived
+  reload. With server 5196 stopped, cached reload, editing/recalculation, and
+  another native Sheets XLSX import worked. The server was restarted afterward.
+  The general document-import route created a note table containing 2 and 3,
+  but its formula-result cell was blank. That limitation is not fixed here.
+- 41: invalid pages JSON and invalid package bytes failed before replacement;
+  the edited task remained available. A recovery JSON fixture with one indexedDB
+  attachment reference and deliberately absent bytes produced the persistent
+  attachment failure / Workspace restore incomplete banner. It told the user
+  recovered content remains available and to keep the original backup. This
+  fixture was applied only to the disposable origin, not the user's workspace.
+
+Screenshots in ignored .tmp/qa-2026-10-15/checklist-pass/: imported-task-reloaded.png,
+xlsx-formula-reloaded.png, xlsx-cached-import.png, incomplete-restore-warning.png.
+No provider calls, automated suites, pushes, merges, deployments, or remote writes.
 
 ## Follow-up fix verification
 
