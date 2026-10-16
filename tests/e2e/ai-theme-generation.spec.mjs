@@ -384,17 +384,14 @@ test('refine updates the current theme in place (and exposes a before/after)', a
   expect(refined.theme.colors.accent).not.toBe(first.theme.colors.accent);
 });
 
-test('the Themes panel card opens the modal, shows loading, then a result with swatches', async ({ page }) => {
+test('the legacy theme modal shows loading, then a result with swatches', async ({ page }) => {
   await openApp(page);
   await mockAnthropic(page, JSON.stringify(THEME_OK), { delayMs: 700 });
   await armProvider(page, 'anthropic', 'claude-sonnet-4-20250514');
 
-  // Open the theme panel and click the AI card.
-  await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('button')].find(b => /Open Theme Panel/i.test(b.textContent || ''));
-    if (btn) btn.click();
-    document.getElementById('aiThemeGenerateCard').click();
-  });
+  // The Themes card now opens Assistant with /theme (covered by
+  // assistant-theme-chat.spec.mjs). Exercise the retained modal API directly.
+  await page.evaluate(() => window.SutraThemeAI.openModal());
   await expect(page.locator('#aiThemeModal')).toHaveClass(/active/);
   await expect(page.locator('#aiThemeComposeSection')).toBeVisible();
 
