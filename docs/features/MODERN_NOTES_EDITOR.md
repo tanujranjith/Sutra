@@ -67,6 +67,14 @@ Choose **All** to clear the tag filter. Tag entry belongs to the page that opene
 it, so changing pages cannot attach an unfinished tag to another page. Locked
 pages and blocked persistence writes do not accept tag edits.
 
+## Help & Docs
+
+The generated **Help & Docs** reference is read-only in the Modern Editor.
+Its table-of-contents and **Back to top** buttons retain their section targets
+and keyboard navigation in both panes. Jumps focus the destination heading
+and account for the fixed toolbar. Ordinary notes still use the editable
+document model; Help navigation adds no workspace fields or persistence path.
+
 ## Page icons
 
 Choose **Change icon** in a page's actions, or activate its icon in the Create

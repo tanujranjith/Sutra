@@ -66343,6 +66343,7 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             };
             return {
                 getPage: pageForMirror,
+                isHelpDocument: () => isHelpDocsPage(pageForMirror()),
                 activateComment(id) {
                     setActiveEditorPane(mirror.id === 'editorSecondary' ? 'secondary' : 'primary');
                     focusCommentThread(id);
@@ -70367,6 +70368,13 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 scrollContainer.scrollTop = nextTop;
             }
 
+            // Move keyboard navigation with the reading position, without
+            // letting browser focus scroll the heading behind the toolbar.
+            if (isHelpDocsPage(getPageForEditor(editor))) {
+                targetEl.setAttribute('tabindex', '-1');
+                targetEl.focus({ preventScroll: true });
+            }
+
             return true;
         }
 
@@ -70387,9 +70395,10 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
                 if (tooltip.contains(e.target)) return; // Clicked inside tooltip
 
                 const anchorBtn = e.target && e.target.closest ? e.target.closest('button[data-editor-anchor]') : null;
-                if (anchorBtn && editor.contains(anchorBtn)) {
+                const anchorEditor = anchorBtn && anchorBtn.closest('#editor, #editorSecondary, #editorV2Host, #editorV2SecondaryHost');
+                if (anchorEditor && (anchorEditor === editor || isHelpDocsPage(getPageForEditor(anchorEditor)))) {
                     const targetId = anchorBtn.getAttribute('data-editor-anchor') || '';
-                    if (navigateEditorAnchorTarget(targetId, editor)) {
+                    if (navigateEditorAnchorTarget(targetId, anchorEditor)) {
                         e.preventDefault();
                         e.stopPropagation();
                         tooltip.classList.remove('active');

@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-qa-followups10",
-    "hash": "967ba0671422d93b"
+    "stamp": "20261015-help-navigation11",
+    "hash": "0899f15d1b9dab73"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -256,8 +256,8 @@
     "hash": "7c3eaf564274f6b8"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261015-writing1",
-    "hash": "0e414b7583ad9a79"
+    "stamp": "20261015-help-navigation1",
+    "hash": "d739a04aec04a486"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261015-writing2",
@@ -628,8 +628,8 @@
     "hash": "069cdfa89e887842"
   },
   "styles/features/notes-editor-v2.css": {
-    "stamp": "20261011-student-workflow1",
-    "hash": "b39f182840b58a36"
+    "stamp": "20261015-help-navigation2",
+    "hash": "b6de678e212d2772"
   },
   "styles/features/notes-toolbar.css": {
     "stamp": "20260709-toolbar-fields",

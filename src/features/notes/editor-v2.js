@@ -142,10 +142,24 @@
         });
     }
 
+    function isHelpDocument() {
+        return !!(state.blockBridge && state.blockBridge.isHelpDocument && state.blockBridge.isHelpDocument());
+    }
+
     // Storage/paste HTML → HTML the v2 schema understands losslessly.
     function normalizeLegacyHtml(html) {
         var tpl = parseHtmlToTemplate(html);
         var root = tpl.content;
+        // Generated Help is a protected reference, not an editable note. Reuse
+        // the preserved-node path so its semantic headings and native buttons
+        // survive schema parsing. Input still comes through the core sanitizer.
+        if (isHelpDocument()) {
+            var help = document.createElement('div');
+            help.className = 'sutra-help-document';
+            help.setAttribute('contenteditable', 'false');
+            help.appendChild(root);
+            return help.outerHTML;
+        }
         convertLegacyChecklistsIn(root);
         convertLegacyFontTagsIn(root);
         var out = document.createElement('div');
@@ -1205,6 +1219,7 @@
         }) : null;
         try {
             state.editor = eng.create(host, {
+                editable: !isHelpDocument(),
                 placeholder: state.placeholder,
                 content: Object.prototype.hasOwnProperty.call(options, 'content')
                     ? normalizeLegacyHtml(options.content || '')
@@ -1321,6 +1336,10 @@
         var html = '';
         try { html = state.editor.getHTML(); } catch (e) { return ''; }
         var tpl = parseHtmlToTemplate(html);
+        if (isHelpDocument()) {
+            var help = tpl.content.querySelector('div.sutra-help-document');
+            if (help) return help.innerHTML;
+        }
         convertTaskListsToLegacy(tpl.content);
         var out = document.createElement('div');
         out.appendChild(tpl.content.cloneNode(true));
@@ -2571,7 +2590,7 @@
     }
 
     function insertHtml(html) {
-        if (!state.editor) return false;
+        if (!state.editor || !state.editor.isEditable) return false;
         try {
             state.editor.chain().focus().insertContent(normalizeLegacyHtml(html || ''), { parseOptions: { preserveWhitespace: false } }).run();
         } catch (e) {
@@ -2653,7 +2672,7 @@
     };
 
     function exec(kind, arg) {
-        if (!state.editor) return false;
+        if (!state.editor || !state.editor.isEditable) return false;
         var command = COMMANDS[kind];
         if (!command) return false;
         var ok = false;

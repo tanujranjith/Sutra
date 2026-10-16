@@ -602,6 +602,121 @@ test('legacy anchors, math, and checklists survive a v2 round-trip', async ({ pa
   expect(result.checkedPreserved).toBe(true);
 });
 
+test('generated Help keeps its anchors in Modern Editor while same-title notes stay editable', async ({ page }) => {
+  await openApp(page);
+  await enableEditorV2(page);
+  await openNotesView(page);
+
+  const readCanonicalHelp = () => page.evaluate(() => {
+    const hooks = window.__sutraPublicBetaTestHooks;
+    const help = hooks.getHelpPageForSpace(hooks.getActiveSpaceId());
+    return help && (help.systemRole === 'help-docs' || help.builtInId === 'help-docs')
+      ? { id: help.id, content: help.content }
+      : null;
+  });
+  const help = await readCanonicalHelp();
+  expect(help && help.id).toBeTruthy();
+  await page.evaluate(id => window.loadPage(id), help.id);
+  const pm = page.locator('#editorV2Host .ProseMirror');
+  const helpRoot = pm.locator('.sutra-help-document');
+  await expect(pm).not.toBeEditable();
+  await expect(helpRoot.locator('h1#top')).toContainText('Sutra Help & Docs');
+  await expect(helpRoot.locator('h2#toc')).toContainText('Table of Contents');
+  await expect(helpRoot.locator('h2#student-setup')).toBeAttached();
+  const tocButton = helpRoot.locator('button.help-anchor-btn[data-editor-anchor="student-setup"]');
+  const backButton = helpRoot.locator('#student-setup').locator(
+    'xpath=following-sibling::p[.//button[contains(@class,"help-anchor-top-btn")][@data-editor-anchor="top"]][1]//button[@data-editor-anchor="top"]'
+  );
+  await expect(tocButton).toBeVisible();
+  await expect(backButton).toBeAttached();
+
+  const headingState = targetId => page.evaluate(id => {
+    const heading = document.querySelector('#editorV2Host .ProseMirror .sutra-help-document #' + id);
+    if (!heading) return { top: null, visible: false };
+    const top = heading.getBoundingClientRect().top;
+    const toolbar = document.querySelector('.toolbar-wrapper');
+    const style = toolbar && getComputedStyle(toolbar);
+    const rect = toolbar && toolbar.getBoundingClientRect();
+    const toolbarBottom = rect && style.display !== 'none' && style.visibility !== 'hidden' ? rect.bottom : 0;
+    return { top, visible: top >= toolbarBottom && top < window.innerHeight };
+  }, targetId);
+  const expectFocusedHeadingVisible = async targetId => {
+    const heading = helpRoot.locator('#' + targetId);
+    await expect(heading).toBeFocused();
+    await expect.poll(async () => (await headingState(targetId)).visible).toBe(true);
+  };
+  const activate = async (button, mode) => {
+    if (mode === 'mouse') return button.click();
+    await button.focus();
+    await page.keyboard.press('Enter');
+  };
+  for (const mode of ['mouse', 'keyboard']) {
+    const sectionBefore = (await headingState('student-setup')).top;
+    expect(sectionBefore).toBeGreaterThan(page.viewportSize().height);
+    await activate(tocButton, mode);
+    await expectFocusedHeadingVisible('student-setup');
+    expect((await headingState('student-setup')).top).toBeLessThan(sectionBefore - 100);
+    const topBefore = (await headingState('top')).top;
+    await activate(backButton, mode);
+    await expectFocusedHeadingVisible('top');
+    expect((await headingState('top')).top).toBeGreaterThan(topBefore + 100);
+  }
+
+  const savedHelp = await page.evaluate(async id => {
+    window.SutraNotesEditorV2.flushToMirror();
+    const editorHtml = window.SutraNotesEditorV2.getStorageHtml();
+    await window.saveWorkspaceLocally();
+    const help = window.flowAtelier.pages.find(item => item.id === id);
+    return { editorHtml, content: help && help.content };
+  }, help.id);
+  expect(savedHelp.content).toContain('id="top"');
+  expect(savedHelp.content).toContain('id="toc"');
+  expect(savedHelp.content).toContain('id="student-setup"');
+  expect(savedHelp.content).toContain('data-editor-anchor="student-setup"');
+  expect(savedHelp.editorHtml).toContain('id="student-setup"');
+  expect(savedHelp.editorHtml).not.toContain('sutra-help-document');
+  expect(savedHelp.content).not.toContain('sutra-help-document');
+
+  await page.reload();
+  await page.waitForSelector('#storageOptions', { state: 'attached' });
+  await completeOnboarding(page);
+  await openNotesView(page);
+  const reloadedHelp = await readCanonicalHelp();
+  expect(reloadedHelp && reloadedHelp.id).toBe(help.id);
+  expect(reloadedHelp.content).toContain('id="student-setup"');
+  expect(reloadedHelp.content).not.toContain('sutra-help-document');
+  await page.evaluate(id => window.loadPage(id), help.id);
+  await expect(helpRoot.locator('h1#top')).toBeAttached();
+  await expect(helpRoot.locator('h2#toc')).toBeAttached();
+  await expect(helpRoot.locator('h2#student-setup')).toBeAttached();
+  await expect(tocButton).toBeVisible();
+
+  const ordinary = await page.evaluate(() => {
+    const page = window.__sutraPublicBetaTestHooks.createNoteInActiveSpace(
+      'Help & Docs', '<h2>Ordinary note</h2><p>Start typing here.</p>'
+    );
+    return { id: page.id, title: page.title };
+  });
+  expect(ordinary.id).not.toBe(help.id);
+  expect(ordinary.title).toBe('Help & Docs');
+  await page.evaluate(id => window.loadPage(id), ordinary.id);
+
+  const ordinaryEditor = page.locator('#editorV2Host .ProseMirror');
+  await expect(ordinaryEditor).toContainText('Start typing here.');
+  await expect(ordinaryEditor).toBeEditable();
+  await expect(ordinaryEditor.locator('.sutra-help-document')).toHaveCount(0);
+  await ordinaryEditor.fill('Ordinary note edit sentinel');
+  await expect(ordinaryEditor).toHaveText('Ordinary note edit sentinel');
+  const savedOrdinary = await page.evaluate(async id => {
+    window.SutraNotesEditorV2.flushToMirror();
+    await window.saveWorkspaceLocally();
+    const note = window.flowAtelier.pages.find(item => item.id === id);
+    return note && note.content;
+  }, ordinary.id);
+  expect(savedOrdinary).toContain('Ordinary note edit sentinel');
+  expect(savedOrdinary).not.toContain('sutra-help-document');
+});
+
 test('toolbar globals drive schema commands when v2 is active', async ({ page }) => {
   await openApp(page);
   await enableEditorV2(page);

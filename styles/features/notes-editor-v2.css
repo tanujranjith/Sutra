@@ -808,3 +808,10 @@ body.notes-pages-mode #view-notes .editor-v2-host .notes-page-auto-break-gap {
         --notes-page-auto-gap-height: 40px;
     }
 }
+/* Generated Help retains native navigation inside its read-only atom. */
+.editor-v2-host .sutra-help-document .help-anchor-btn {
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+}
