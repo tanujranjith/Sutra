@@ -143,7 +143,9 @@ function expectPageBoundaries(layout) {
 test('Pages mode paginates long paragraphs and keeps auto gaps out of stored content', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNotes(page);
-  const longText = 'A long paragraph keeps flowing as the page width changes and should never sit in the gray paper gap. '.repeat(220);
+  // HTML parsing normalizes a paragraph's trailing space. Keep the fixture
+  // canonical so the exact-content checks detect missing words or characters.
+  const longText = 'A long paragraph keeps flowing as the page width changes and should never sit in the gray paper gap. '.repeat(220).trim();
   const manualBreak = '<div class="atelier-page-break" data-atelier-block="page-break" contenteditable="false" role="separator" aria-label="Page break"></div>';
   await page.evaluate(({ text, manual }) => {
     window.SutraNotesEditorV2.setContent('<p>Opening notes before a manual break.</p>' + manual + '<p>' + text + '</p>');
@@ -160,7 +162,7 @@ test('Pages mode paginates long paragraphs and keeps auto gaps out of stored con
 
   const initialStorage = await page.evaluate(() => window.SutraNotesEditorV2.getStorageHtml());
   expect(initialStorage).toContain('atelier-page-break');
-  expect(initialStorage).toContain(longText);
+  expect(initialStorage, JSON.stringify({ expectedLength: longText.length, storedTail: initialStorage.slice(-160) })).toContain(longText);
   expect(initialStorage).not.toContain('notes-page-auto-break');
 
   const proseMirror = page.locator('#editorV2Host .ProseMirror');
