@@ -8,8 +8,8 @@
     "hash": "acc7e41455a80765"
   },
   "src/boot/legacy-workspace-migration.js": {
-    "stamp": "20260913-energy-removal-legacy1",
-    "hash": "30298f083707dc90"
+    "stamp": "20261015-boot-cas1",
+    "hash": "199b2dbae7548326"
   },
   "src/boot/startup-intro.js": {
     "stamp": "20260821-skipfallback1",
@@ -44,8 +44,8 @@
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261015-restore-reporting2",
-    "hash": "bd0e9ed966a485e6"
+    "stamp": "20261015-import-save-safety2",
+    "hash": "18b1fa206312b456"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -368,8 +368,8 @@
     "hash": "b2a6953df38f74cb"
   },
   "src/features/workspace/help-docs-refresh.js": {
-    "stamp": "20261015-settings-writing-help2",
-    "hash": "c9632c610ffe767d"
+    "stamp": "20261015-xlsx-help3",
+    "hash": "ff1facf1844be931"
   },
   "src/features/workspace/html-page-transfer-compat.js": {
     "stamp": "20260913-html-transfer2",
@@ -392,8 +392,8 @@
     "hash": "eeadd011283c2ee3"
   },
   "src/features/workspace/office-interoperability.js": {
-    "stamp": "20260822-office4",
-    "hash": "cacfc19acb61fc54"
+    "stamp": "20261015-formula-cache1",
+    "hash": "c020f7e8251404d6"
   },
   "src/features/workspace/pdf-engine.js": {
     "stamp": "20260823-pdf4",
@@ -476,8 +476,8 @@
     "hash": "dc3d5bce423b7532"
   },
   "src/persistence/workspace-coordinator.js": {
-    "stamp": "20260710-coordinator1",
-    "hash": "d6fd15f6450e378b"
+    "stamp": "20261015-boot-cas1",
+    "hash": "f4aad605ec573abb"
   },
   "src/persistence/workspace-db.js": {
     "stamp": "20260818-storage-journal4",

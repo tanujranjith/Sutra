@@ -226,6 +226,13 @@ At a glance (full detail in [`DATA_AND_BACKUPS.md`](../privacy-security/DATA_AND
 - `src/persistence/workspace-db.js` deliberately reuses one IndexedDB connection,
   closes it on `versionchange`, rejects blocked upgrades, and exposes an explicit
   close/reopen seam so future schema upgrades cannot leak connections or hang.
+- The shell loads `workspace-coordinator.js` before `legacy-workspace-migration.js`.
+  Boot recovery/repair takes the shared writer lock before reading and uses
+  atomic `writeIf` for replacement, journaling and the confirmed-root marker.
+  A superseded candidate is discarded. Boot and core share the coordinator's
+  canonical `hashRecord` and document identity; accepted boot writes notify other
+  documents without creating a self-conflict. Storage failures propagate into
+  the normal startup read guard.
 - **One persistence-health pipeline** wraps core saves, localStorage mirrors,
   IndexedDB transactions, attachment cache warming, imports, backups, and
   emergency exports. It records the last confirmed save, classifies quota /

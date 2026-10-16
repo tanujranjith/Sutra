@@ -39,6 +39,38 @@ test('broadcasts commits to other tabs without echoing to the writer', () => {
   first.close(); second.close();
 });
 
+test('implicit coordinator instances in one document share an identity and ignore local commits', () => {
+  FakeChannel.channels.clear();
+  const received = [];
+  const boot = coordinatorApi.create({ BroadcastChannel: FakeChannel });
+  const app = coordinatorApi.create({ BroadcastChannel: FakeChannel, onRemoteCommit: detail => received.push(detail) });
+
+  assert.equal(boot.tabId, app.tabId);
+  boot.publishCommit({ reason: 'boot-workspace-recovery', hash: 'abc' });
+  assert.equal(received.length, 0);
+  assert.equal(app.getState().lastRemoteCommit, null);
+
+  boot.close(); app.close();
+});
+
+test('hashRecord matches the canonical persistence hash for plain workspace records', () => {
+  function canonicalHash(value) {
+    if (value === null || value === undefined) return null;
+    const text = String(JSON.stringify(value) || '');
+    let hash = 2166136261;
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+  }
+
+  const record = { pages: [{ id: '计划-🪷', content: 'a\nb' }], settings: { enabled: false } };
+  assert.equal(coordinatorApi.hashRecord(record), canonicalHash(record));
+  assert.equal(coordinatorApi.hashRecord(null), null);
+  assert.equal(coordinatorApi.hashRecord(undefined), null);
+});
+
 test('uses Web Locks when available', async () => {
   const calls = [];
   const locks = { request: async (name, options, work) => { calls.push({ name, options }); return work(); } };

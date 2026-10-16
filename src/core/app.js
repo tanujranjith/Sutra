@@ -3070,8 +3070,7 @@ function populateProgressDashboard() {
         }
 
         function hashCanonicalWorkspaceRecord(value) {
-            if (value === null || value === undefined) return null;
-            return hashPersistenceString(JSON.stringify(value));
+            return window.SutraWorkspaceCoordinator.hashRecord(value);
         }
 
         function formatByteCount(bytes) {
@@ -63187,8 +63186,11 @@ ${buildPdfExportBodyHtml(title, bodyHtml)}
             const workbook = XLSX.read(arrayBuffer, { type: 'array' });
             const sheetNames = workbook.SheetNames || [];
             if (!sheetNames.length) return '<p>(No sheets found)</p>';
+            const formulaReport = window.SutraOfficeInterop.fillMissingFormulaResults(workbook);
 
             const blocks = [];
+            if (formulaReport.calculated) blocks.push('<p>Missing formula results were calculated locally. Imported notes are a static snapshot; use Sheets to keep formulas editable.</p>');
+            if (formulaReport.unavailable) blocks.push(`<p>${formulaReport.unavailable} formula result(s) could not be calculated. Their formulas are shown instead of blank cells.</p>`);
             sheetNames.slice(0, 8).forEach(sheetName => {
                 const sheet = workbook.Sheets[sheetName];
                 blocks.push(`<h3>${escapeHtml(sheetName)}</h3>`);

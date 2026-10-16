@@ -58,6 +58,15 @@ fixtures by `npm run check:migrations`.
   deliberately emptied and successfully saved workspace is never replaced by
   older data.
   These device-local recovery records are not separate cloud or portable backups.
+- Startup recovery and legacy onboarding repair use the same workspace writer
+  lock and conditional root comparison as foreground saves. A newer root wins:
+  the stale boot candidate is discarded, never retried over the newer data.
+  Accepted repair journals the prior meaningful root; recovery journals the
+  displaced empty root. Both update the confirmation marker atomically and
+  announce the canonical hash to other tabs. Coordinators in one document share
+  an identity, so a boot repair does not flag its own page as another writer.
+  Read/write failures remain visible through the startup safety gate. Genuine
+  stale-tab edits still require recovery or reload before saving.
 
 ### Attachments — binary files (IndexedDB)
 

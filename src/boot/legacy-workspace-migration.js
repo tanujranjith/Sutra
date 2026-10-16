@@ -5,6 +5,11 @@
     'use strict';
 
     if (!global || !global.SutraWorkspaceDB || typeof global.SutraWorkspaceDB.create !== 'function') return;
+    // The boot migration runs before app.js, but after the coordinator script.
+    // It uses the same lock as ordinary root commits and closes this private
+    // coordinator as soon as the one-time migration check finishes.
+    if (!global.SutraWorkspaceCoordinator || typeof global.SutraWorkspaceCoordinator.create !== 'function'
+        || typeof global.SutraWorkspaceCoordinator.hashRecord !== 'function') return;
     // A verified device revocation must survive reload without recreating an
     // empty canonical database. The user must explicitly clear the terminal
     // guard and start fresh before any recovery adapter touches IndexedDB.
@@ -258,47 +263,98 @@
         storeName: STORE_NAME,
         version: CANONICAL_DB_VERSION
     });
-    migrationPromise = Promise.all([
-        migrationAdapter.read(ROOT_KEY),
-        migrationAdapter.read(LAST_MEANINGFUL_KEY),
-        migrationAdapter.read(CONFIRMED_ROOT_KEY)
-    ]).then(async values => {
-        let root = values[0];
+    const migrationCoordinator = global.SutraWorkspaceCoordinator.create({
+        lockName: 'sutra-workspace-write-v1',
+        channelName: 'sutra-workspace-events-v1'
+    });
+    migrationPromise = migrationCoordinator.runExclusive(async () => {
+        const values = await Promise.all([
+            migrationAdapter.read(ROOT_KEY),
+            migrationAdapter.read(LAST_MEANINGFUL_KEY),
+            migrationAdapter.read(CONFIRMED_ROOT_KEY)
+        ]);
+        const observedRoot = values[0];
         const journal = values[1];
         const confirmedRoot = values[2];
-        try {
-            // A matching marker proves the empty/default root was deliberately
-            // accepted by the canonical save path. Do not resurrect older data
-            // over an intentional delete-everything result.
-            if (!hasMeaningfulData(root) && !isConfirmedCanonicalRoot(root, confirmedRoot)) {
-                const recovery = chooseRecoveryCandidate(journal, readLegacyWorkspace());
-                if (recovery) {
-                    // Preserve even the empty/default candidate before replacing it.
-                    // This makes the recovery reversible for diagnostics while the
-                    // richer workspace becomes canonical again.
-                    if (root) await migrationAdapter.write(EMPTY_BEFORE_RECOVERY_KEY, root);
-                    root = recovery.workspace;
-                    await migrationAdapter.write(ROOT_KEY, root);
-                    try {
-                        if (typeof global.SutraReportError === 'function') {
-                            global.SutraReportError('Recovered an empty canonical workspace', {
-                                where: 'legacy-workspace-migration',
-                                source: recovery.source,
-                                score: meaningfulDataScore(root)
-                            }, 'warning');
-                        } else {
-                            console.warn('Recovered an empty canonical workspace from ' + recovery.source + '.');
-                        }
-                    } catch (_) {}
-                }
+        let replacement = observedRoot;
+        let recoverySource = '';
+
+        // A matching marker proves the empty/default root was deliberately
+        // accepted by the canonical save path. Do not resurrect older data
+        // over an intentional delete-everything result.
+        if (!hasMeaningfulData(observedRoot) && !isConfirmedCanonicalRoot(observedRoot, confirmedRoot)) {
+            const recovery = chooseRecoveryCandidate(journal, readLegacyWorkspace());
+            if (recovery) {
+                replacement = recovery.workspace;
+                recoverySource = recovery.source;
             }
-            const healed = healOnboardingState(root);
-            if (healed !== root && healed) await migrationAdapter.write(ROOT_KEY, healed);
-        } finally {
-            try { migrationAdapter.close(); } catch (_) {}
         }
+
+        const healed = healOnboardingState(replacement);
+        if (healed && healed !== replacement) replacement = healed;
+        if (!replacement || replacement === observedRoot) return { written: false, reason: 'unchanged' };
+
+        // A failed comparison means another canonical writer won after our
+        // snapshot. Discard this derived candidate and let app.js hydrate the
+        // winning root; never retry the stale candidate against newer data.
+        const observedRootJson = JSON.stringify(observedRoot);
+        const backupKey = recoverySource ? EMPTY_BEFORE_RECOVERY_KEY : LAST_MEANINGFUL_KEY;
+        const writeAdapter = originalCreate.call(originalApi, {
+            dbName: DB_NAME,
+            storeName: STORE_NAME,
+            version: CANONICAL_DB_VERSION,
+            backupKey: backupKey,
+            shouldBackup(current, _next, key) {
+                if (String(key) !== ROOT_KEY || current === null || current === undefined) return false;
+                return recoverySource
+                    ? true
+                    : hasMeaningfulData(current);
+            },
+            commitKey: CONFIRMED_ROOT_KEY,
+            buildCommit(_current, next, key) {
+                if (String(key) !== ROOT_KEY) return undefined;
+                return { version: 1, meaningful: hasMeaningfulData(next), confirmedAt: new Date().toISOString() };
+            }
+        });
+        let result;
+        try {
+            result = await writeAdapter.writeIf(ROOT_KEY, replacement, current => {
+                return JSON.stringify(current) === observedRootJson;
+            });
+        } finally {
+            try { writeAdapter.close(); } catch (_) {}
+        }
+        if (!result || result.written !== true) {
+            return { written: false, reason: 'superseded' };
+        }
+
+        const hash = global.SutraWorkspaceCoordinator.hashRecord(replacement);
+        migrationCoordinator.publishCommit({
+            reason: recoverySource ? 'boot-workspace-recovery' : 'boot-onboarding-repair',
+            hash: hash,
+            savedAt: new Date().toISOString()
+        });
+
+        if (recoverySource) {
+            try {
+                if (typeof global.SutraReportError === 'function') {
+                    global.SutraReportError('Recovered an empty canonical workspace', {
+                        where: 'legacy-workspace-migration',
+                        source: recoverySource,
+                        score: meaningfulDataScore(replacement)
+                    }, 'warning');
+                } else {
+                    console.warn('Recovered an empty canonical workspace from ' + recoverySource + '.');
+                }
+            } catch (_) {}
+        }
+        return { written: true, hash: hash, source: recoverySource || 'onboarding-repair' };
+    }).finally(() => {
+        try { migrationAdapter.close(); } catch (_) {}
+        try { migrationCoordinator.close(); } catch (_) {}
     }).catch(error => {
         try { console.warn('Legacy workspace migration deferred; canonical startup will report storage errors.', error); } catch (_) {}
+        throw error;
     });
 
     global.SutraWorkspaceDB = {
