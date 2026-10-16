@@ -30,7 +30,7 @@ export default defineConfig({
   // Proven stable at 10/10 with retries=0 locally, so no local retry is needed;
   // CI keeps a single retry only as generic shared-runner infra safety.
   retries: process.env.CI ? 1 : 0,
-  reporter: [['list']],
+  reporter: [['list'], ...(process.env.CI ? [['./scripts/playwright-ci-failure-reporter.mjs']] : [])],
   use: {
     baseURL: `http://127.0.0.1:${playwrightPort}`,
     trace: playwrightTrace,

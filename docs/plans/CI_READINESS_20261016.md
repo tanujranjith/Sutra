@@ -62,6 +62,38 @@ pagination: painted gaps aligned, but 32 text rectangles still intersected them.
 The next CI revision checks that pagination regression before the full editor
 shard; the original no-intersection, boundary, and persistence assertions remain.
 
+## Full compatibility follow-up
+
+The user authorized checklist 45: full browser/device CI, repair of discovered
+failures, small branch commits, and no merge. The initial full run is
+`38980869674` at `ceed5e3`; the earlier normal Chromium run `38945216157` passed
+all static/unit/build/artifact gates and all three Chromium shards.
+
+CI annotations identified Node 20 action runtimes and an upcoming change to the
+`ubuntu-latest` image. Direct action pins were independently checked against
+official immutable manifests and updated to Node 24 versions; runners use
+`ubuntu-24.04`. Desktop Chrome, Firefox, and WebKit each retain full coverage in
+three separate one-worker shards. Responsive projects remain in one complete
+lane. Browser caches remain shared per engine, and failure artifact names now
+include the shard to avoid upload collisions. The workflow guard checks that
+desktop shards and responsive projects are neither lost nor duplicated.
+
+A CI-only supplementary reporter prints bounded assertion details when a test
+fails, rather than waiting for the end of a long compatibility job. The normal
+Playwright summary and retained failure artifacts remain available. No unit or
+browser suite, dependency install, browser download, or deploy build ran locally.
+No production workflow was dispatched and no main merge was performed.
+
+The user also requested a hosting subagent. Read-only Vercel inspection found a
+Ready preview for repository `tanujranjith/Sutra`, branch
+`codex/student-workflow-batch`, and commit `ceed5e3`, at
+`sutra-git-codex-student-workflow-batch-tanuj-ranjith-s-projects.vercel.app`.
+The deployment detail identifies the immutable host
+`sutra-cojvrpqrv-tanuj-ranjith-s-projects.vercel.app`. The parent independently
+verified the source commit after the subagent verified landing-page availability.
+No hosting setting or protection was changed. The precise normal public URL is
+still being clarified; a working preview is not proof of production promotion.
+
 ## Vercel inspection
 
 Read the signed-in dashboard for project `sutra` in `tanuj-ranjith-s-projects`:
