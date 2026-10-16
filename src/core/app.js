@@ -17846,12 +17846,13 @@ function populateProgressDashboard() {
              
             // Handle Enter key to break out of blockquotes and pre blocks
             editor.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                const historyKey = String(e.key || '').toLowerCase();
+                if ((e.ctrlKey || e.metaKey) && historyKey === 'z' && !e.shiftKey) {
                     e.preventDefault();
                     noteUndoManager.undo(editor);
                     return;
                 }
-                if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                if ((e.ctrlKey || e.metaKey) && (historyKey === 'y' || (historyKey === 'z' && e.shiftKey))) {
                     e.preventDefault();
                     noteUndoManager.redo(editor);
                     return;
@@ -34141,12 +34142,13 @@ function buildOnboardingPlanPreview() {
                     noteUndoManager.pushDebounced(secondaryEditor);
                 });
                 secondaryEditor.addEventListener('keydown', (ev) => {
-                    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'z' && !ev.shiftKey) {
+                    const historyKey = String(ev.key || '').toLowerCase();
+                    if ((ev.ctrlKey || ev.metaKey) && historyKey === 'z' && !ev.shiftKey) {
                         ev.preventDefault();
                         noteUndoManager.undo(secondaryEditor);
                         return;
                     }
-                    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'y' || (ev.key === 'z' && ev.shiftKey))) {
+                    if ((ev.ctrlKey || ev.metaKey) && (historyKey === 'y' || (historyKey === 'z' && ev.shiftKey))) {
                         ev.preventDefault();
                         noteUndoManager.redo(secondaryEditor);
                         return;
@@ -39693,8 +39695,14 @@ function buildOnboardingPlanPreview() {
             if (document.documentElement.getAttribute('data-sutra-workspace-locked') === 'true') return false;
             const page = pages.find(p => p.id === (editor.id === 'editorSecondary' ? secondaryPageId : currentPageId));
             if (!page || !canWritePageContent(page) || !text) return false;
+            // Paste is one atomic step in Sutra's classic-editor history, which
+            // owns Ctrl+Z rather than the browser's native execCommand history.
+            noteUndoManager.push(editor);
             const inserted = document.execCommand('insertText', false, String(text).replace(/\r\n?/g, '\n'));
-            if (inserted) savePage();
+            if (inserted) {
+                noteUndoManager.push(editor);
+                savePage();
+            }
             return inserted;
         }
         document.addEventListener('keydown', function(event) {

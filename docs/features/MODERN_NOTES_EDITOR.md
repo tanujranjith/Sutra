@@ -53,6 +53,9 @@ editor. Oversized atomic images, embeds, drawings, and tables remain intact
 and can span sheet intervals; they are never clipped to manufacture a gap.
 The Classic Editor retains authored manual page breaks.
 
+Painted gaps align to the measured sheet boundary after their decorations mount;
+the spacer remains view-only and does not change stored note content.
+
 ## Page tags
 
 Use **Add tag** below the page title in either editor. Enter or leaving the field
@@ -74,6 +77,9 @@ Its table-of-contents and **Back to top** buttons retain their section targets
 and keyboard navigation in both panes. Jumps focus the destination heading
 and account for the fixed toolbar. Ordinary notes still use the editable
 document model; Help navigation adds no workspace fields or persistence path.
+Rendered Help anchor IDs are scoped to their editor host to avoid collisions
+with the hidden Classic mirror or a second pane. Serialization restores the
+canonical Help IDs and targets. Its read-only textbox exposes `aria-readonly`.
 
 ## Page icons
 
@@ -94,6 +100,8 @@ additional clipboard permission. If the clipboard supplies HTML without a text
 format, Sutra extracts text from sanitized, inert markup. Empty paste events
 remain available for the browser's subsequent native input event.
 Ordinary Ctrl/⌘+V keeps its rich-paste behavior.
+Classic plain-text paste is one Undo step, with Ctrl/⌘+Shift+Z available for Redo
+in either note pane.
 
 Icons use the existing `page.icon` field and travel in workspace backups. Help
 pages are generated resources excluded from Sync, so their icon is a local

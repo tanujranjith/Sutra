@@ -5077,17 +5077,22 @@
         if (literalReply) accessOptions.depth = 'minimal';
         if (accessTicket) accessOptions.approvedAreas = (options.approvedAreas || []).concat('notes');
         let ctx = applyRelevantWorkspaceContext(getFlowAssistantContext(accessOptions), userText, accessOptions);
+        const canReadSavedMemory = () => {
+            const privacy = window.SutraAssistantPrivacy;
+            try {
+                return !!(privacy && typeof privacy.canRead === 'function' && privacy.canRead('memory', accessOptions));
+            } catch (error) { return false; }
+        };
         // Product-aware context: attach a SMALL set of relevant saved memories
         // and verified product-knowledge snippets so the model stays accurate
         // and personalized without a giant static prompt. Never dump everything.
         try {
             const mem = memStore();
-            if (ctx.depth !== 'minimal' && mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
+            if (ctx.depth !== 'minimal' && canReadSavedMemory() && mem && typeof mem.buildPromptSnippets === 'function' && getPref('assistant.useMemory', true) !== false) {
                 const snips = mem.buildPromptSnippets(userText, { feature: getActiveViewName() }, { limit: 5 });
                 if (snips && snips.length) {
                     ctx.memory = snips.map(s => s.text);
                     ctx.memoryUsedIds = snips.map(s => s.id);
-                    if (typeof mem.recordUsed === 'function') mem.recordUsed(ctx.memoryUsedIds);
                 }
             }
         } catch (e) { /* memory is best-effort */ }
@@ -5204,7 +5209,9 @@
         const trustedEnrichment = {
             productKnowledge: ctx.productKnowledge,
             contextBudget: ctx.contextBudget,
-            contextSelectionReasons: ctx.contextSelectionReasons
+            contextSelectionReasons: Array.isArray(ctx.contextSelectionReasons)
+                ? ctx.contextSelectionReasons.filter(reason => reason.kind !== 'memory' || canReadSavedMemory())
+                : ctx.contextSelectionReasons
         };
         ctx = filterAssistantContext(ctx, accessOptions);
         Object.keys(trustedEnrichment).forEach(key => {
@@ -5229,6 +5236,11 @@
                 while (ctx[key] && estimateRequest() > inputLimit) {
                     if (Array.isArray(ctx[key]) && ctx[key].length > 1) ctx[key].pop();
                     else delete ctx[key];
+                    if (key === 'memory') {
+                        ctx.memoryUsedIds = (ctx.memoryUsedIds || []).slice(0, (ctx.memory || []).length);
+                        const retainedIds = new Set(ctx.memoryUsedIds);
+                        ctx.contextSelectionReasons = (ctx.contextSelectionReasons || []).filter(reason => reason.kind !== 'memory' || retainedIds.has(reason.id));
+                    }
                     omitted += 1;
                     systemPromptParts = buildSystemPromptParts(ctx, userText);
                 }
@@ -5245,6 +5257,14 @@
             ctx.contextBudget = { ...(ctx.contextBudget || {}), inputLimitTokens: inputLimit, estimatedInputTokens: estimateRequest() };
             systemPromptParts = buildSystemPromptParts(ctx, userText);
         }
+        // Only authorized memories retained after both budget passes can update
+        // durable last-used metadata.
+        try {
+            if (canReadSavedMemory() && Array.isArray(ctx.memoryUsedIds) && ctx.memoryUsedIds.length) {
+                const mem = memStore();
+                if (mem && typeof mem.recordUsed === 'function') mem.recordUsed(ctx.memoryUsedIds);
+            }
+        } catch (error) { /* usage bookkeeping is best-effort */ }
         const systemPrompt = systemPromptParts.static + '\n' + systemPromptParts.dynamic;
         const cap = getVisionCapability();
         const attachments = getAttachments();

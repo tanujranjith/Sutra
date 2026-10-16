@@ -36,16 +36,16 @@
     "hash": "727e24137be57f62"
   },
   "src/config/feature-manifest.js": {
-    "stamp": "20261015-response-contrast12",
-    "hash": "27f7374f88355339"
+    "stamp": "20261016-ci-memory-boundary1",
+    "hash": "13fd49b433d35933"
   },
   "src/config/sutra-runtime-config.js": {
     "stamp": "20260716-sync6",
     "hash": "a295c65af7fc035a"
   },
   "src/core/app.js": {
-    "stamp": "20261016-help-navigation13",
-    "hash": "47ecae6dcfb41310"
+    "stamp": "20261016-ci-classic-undo1",
+    "hash": "d139cb1c241bb24c"
   },
   "src/core/credential-vault-bridge.js": {
     "stamp": "20260831-revoke4",
@@ -196,8 +196,8 @@
     "hash": "044de5389b522e08"
   },
   "src/features/assistant/flow-assistant.js": {
-    "stamp": "20261015-theme-chat5",
-    "hash": "9800654b22267363"
+    "stamp": "20261016-ci-memory-boundary1",
+    "hash": "1c2050412950dae4"
   },
   "src/features/assistant/flow-intelligence.js": {
     "stamp": "20260825-oxremed1",
@@ -256,8 +256,8 @@
     "hash": "7c3eaf564274f6b8"
   },
   "src/features/notes/editor-v2.js": {
-    "stamp": "20261015-help-navigation1",
-    "hash": "d739a04aec04a486"
+    "stamp": "20261016-ci-help-boundaries1",
+    "hash": "8cde90a5e8178522"
   },
   "src/features/notes/inline-ai-assist.js": {
     "stamp": "20261015-writing2",

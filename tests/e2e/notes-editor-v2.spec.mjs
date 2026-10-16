@@ -620,18 +620,28 @@ test('generated Help keeps its anchors in Modern Editor while same-title notes s
   const pm = page.locator('#editorV2Host .ProseMirror');
   const helpRoot = pm.locator('.sutra-help-document');
   await expect(pm).not.toBeEditable();
-  await expect(helpRoot.locator('h1#top')).toContainText('Sutra Help & Docs');
-  await expect(helpRoot.locator('h2#toc')).toContainText('Table of Contents');
-  await expect(helpRoot.locator('h2#student-setup')).toBeAttached();
-  const tocButton = helpRoot.locator('button.help-anchor-btn[data-editor-anchor="student-setup"]');
-  const backButton = helpRoot.locator('#student-setup').locator(
-    'xpath=following-sibling::p[.//button[contains(@class,"help-anchor-top-btn")][@data-editor-anchor="top"]][1]//button[@data-editor-anchor="top"]'
+  await expect(pm).toHaveAttribute('aria-readonly', 'true');
+  await expect(helpRoot.locator('h1[id="editorV2Host--help-top"]')).toContainText('Sutra Help & Docs');
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-toc"]')).toContainText('Table of Contents');
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-student-setup"]')).toBeAttached();
+  const tocButton = helpRoot.locator('button.help-anchor-btn[data-editor-anchor="editorV2Host--help-student-setup"]');
+  const backButton = helpRoot.locator('[id="editorV2Host--help-student-setup"]').locator(
+    'xpath=following-sibling::p[.//button[contains(@class,"help-anchor-top-btn")][@data-editor-anchor="editorV2Host--help-top"]][1]//button[@data-editor-anchor="editorV2Host--help-top"]'
   );
   await expect(tocButton).toBeVisible();
   await expect(backButton).toBeAttached();
 
+  const helpAnchorIds = await page.evaluate(() => {
+    const allIds = Array.from(document.querySelectorAll('[id]')).map(element => element.id);
+    return Array.from(document.querySelectorAll('#editorV2Host .ProseMirror .sutra-help-document [id]'))
+      .map(element => ({ id: element.id, count: allIds.filter(id => id === element.id).length }));
+  });
+  expect(helpAnchorIds.length).toBeGreaterThan(0);
+  expect(helpAnchorIds.every(anchor => anchor.count === 1)).toBe(true);
+
   const headingState = targetId => page.evaluate(id => {
-    const heading = document.querySelector('#editorV2Host .ProseMirror .sutra-help-document #' + id);
+    const heading = Array.from(document.querySelectorAll('#editorV2Host .ProseMirror .sutra-help-document [id]'))
+      .find(element => element.id === id);
     if (!heading) return { top: null, visible: false };
     const top = heading.getBoundingClientRect().top;
     const toolbar = document.querySelector('.toolbar-wrapper');
@@ -641,7 +651,7 @@ test('generated Help keeps its anchors in Modern Editor while same-title notes s
     return { top, visible: top >= toolbarBottom && top < window.innerHeight };
   }, targetId);
   const expectFocusedHeadingVisible = async targetId => {
-    const heading = helpRoot.locator('#' + targetId);
+    const heading = helpRoot.locator('[id="' + targetId + '"]');
     await expect(heading).toBeFocused();
     await expect.poll(async () => (await headingState(targetId)).visible).toBe(true);
   };
@@ -651,15 +661,15 @@ test('generated Help keeps its anchors in Modern Editor while same-title notes s
     await page.keyboard.press('Enter');
   };
   for (const mode of ['mouse', 'keyboard']) {
-    const sectionBefore = (await headingState('student-setup')).top;
+    const sectionBefore = (await headingState('editorV2Host--help-student-setup')).top;
     expect(sectionBefore).toBeGreaterThan(page.viewportSize().height);
     await activate(tocButton, mode);
-    await expectFocusedHeadingVisible('student-setup');
-    expect((await headingState('student-setup')).top).toBeLessThan(sectionBefore - 100);
-    const topBefore = (await headingState('top')).top;
+    await expectFocusedHeadingVisible('editorV2Host--help-student-setup');
+    expect((await headingState('editorV2Host--help-student-setup')).top).toBeLessThan(sectionBefore - 100);
+    const topBefore = (await headingState('editorV2Host--help-top')).top;
     await activate(backButton, mode);
-    await expectFocusedHeadingVisible('top');
-    expect((await headingState('top')).top).toBeGreaterThan(topBefore + 100);
+    await expectFocusedHeadingVisible('editorV2Host--help-top');
+    expect((await headingState('editorV2Host--help-top')).top).toBeGreaterThan(topBefore + 100);
   }
 
   const savedHelp = await page.evaluate(async id => {
@@ -674,6 +684,8 @@ test('generated Help keeps its anchors in Modern Editor while same-title notes s
   expect(savedHelp.content).toContain('id="student-setup"');
   expect(savedHelp.content).toContain('data-editor-anchor="student-setup"');
   expect(savedHelp.editorHtml).toContain('id="student-setup"');
+  expect(savedHelp.content).not.toContain('editorV2Host--help-');
+  expect(savedHelp.editorHtml).not.toContain('editorV2Host--help-');
   expect(savedHelp.editorHtml).not.toContain('sutra-help-document');
   expect(savedHelp.content).not.toContain('sutra-help-document');
 
@@ -686,9 +698,9 @@ test('generated Help keeps its anchors in Modern Editor while same-title notes s
   expect(reloadedHelp.content).toContain('id="student-setup"');
   expect(reloadedHelp.content).not.toContain('sutra-help-document');
   await page.evaluate(id => window.loadPage(id), help.id);
-  await expect(helpRoot.locator('h1#top')).toBeAttached();
-  await expect(helpRoot.locator('h2#toc')).toBeAttached();
-  await expect(helpRoot.locator('h2#student-setup')).toBeAttached();
+  await expect(helpRoot.locator('h1[id="editorV2Host--help-top"]')).toBeAttached();
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-toc"]')).toBeAttached();
+  await expect(helpRoot.locator('h2[id="editorV2Host--help-student-setup"]')).toBeAttached();
   await expect(tocButton).toBeVisible();
 
   const ordinary = await page.evaluate(() => {
@@ -2050,15 +2062,24 @@ test('page-break dividers survive legacy style overrides, themes, reload, and pr
   assertVisibleDividers(await readBreakMetrics());
 
   await page.evaluate(() => window.togglePagesMode());
-  const pageModeMetrics = await page.evaluate(() => Array.from(document.querySelectorAll('#editorV2Host .atelier-page-break')).map((node) => ({
-    height: getComputedStyle(node).height,
-    backgroundColor: getComputedStyle(node).backgroundColor,
-    lineDisplay: getComputedStyle(node, '::after').display,
-    labelDisplay: getComputedStyle(node, '::before').display
-  })));
-  expect(pageModeMetrics.every((metric) => metric.height === '60px')).toBe(true);
-  expect(pageModeMetrics.every((metric) => metric.backgroundColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
-  expect(pageModeMetrics.every((metric) => metric.lineDisplay === 'none' && metric.labelDisplay === 'none')).toBe(true);
+  await expect(page.locator('#editorV2Host [data-notes-auto-page-reason="manual"] .notes-page-auto-break-gap')).toHaveCount(3);
+  const pageModeMetrics = await page.evaluate(() => {
+    const editor = document.querySelector('#editorV2Host .ProseMirror');
+    const pane = document.querySelector('#notesPrimaryPane');
+    const paneRect = pane.getBoundingClientRect();
+    const paneScale = pane.offsetHeight ? paneRect.height / pane.offsetHeight : 1;
+    const manualBreaks = editor.querySelectorAll('.atelier-page-break').length;
+    const manualGaps = Array.from(editor.querySelectorAll('[data-notes-auto-page-reason="manual"] .notes-page-auto-break-gap'))
+      .map(gap => ({
+        height: gap.getBoundingClientRect().height / paneScale,
+        backgroundColor: getComputedStyle(gap).backgroundColor
+      }));
+    return { manualBreaks, manualGaps };
+  });
+  expect(pageModeMetrics.manualBreaks).toBe(3);
+  expect(pageModeMetrics.manualGaps).toHaveLength(3);
+  expect(pageModeMetrics.manualGaps.every(metric => Math.abs(metric.height - 60) < 0.5)).toBe(true);
+  expect(pageModeMetrics.manualGaps.every(metric => metric.backgroundColor !== 'rgba(0, 0, 0, 0)')).toBe(true);
   await page.evaluate(() => window.togglePagesMode());
 
   await page.emulateMedia({ media: 'print' });

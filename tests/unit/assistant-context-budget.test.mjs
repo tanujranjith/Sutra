@@ -62,7 +62,8 @@ function noteRetriever(pages, core = noteCore) {
 function createEnrichment({
   depth = 'minimal', noteSources = [], onNotesRead = () => {}, onMemoryRead = () => {},
   contextOverrides = {}, chatMemoryMode = 'stateless', conversationMessages = [], attachments = [],
-  promptBuilder = buildSystemPromptParts
+  promptBuilder = buildSystemPromptParts, memoryAllowed = true,
+  memoryPrivacy = { canRead: () => memoryAllowed }, memorySnippets = [], onMemoryUsed = () => {}
 } = {}) {
   const context = {
     schema: 'flow-context/1', view: 'today', depth, summary: 'User is on the today view.',
@@ -71,6 +72,7 @@ function createEnrichment({
   };
   const window = {
     SutraAssistantSafety: safety,
+    SutraAssistantPrivacy: memoryPrivacy,
     SutraProductKnowledge: { search: () => [] }
   };
   const enrich = compileFunction('buildRequestEnrichment', [
@@ -86,8 +88,8 @@ function createEnrichment({
     ctx => ctx,
     options => structuredClone({ ...context, depth: options && options.depth || context.depth }),
     () => ({
-      buildPromptSnippets: () => { onMemoryRead(); return []; },
-      recordUsed: () => {}
+      buildPromptSnippets: () => { onMemoryRead(); return memorySnippets; },
+      recordUsed: onMemoryUsed
     }),
     () => 'today',
     (...args) => { onNotesRead(); return { sources: noteSources, evidenceStatus: 'supported', args }; },
@@ -194,6 +196,47 @@ test('Minimal enrichment does not read saved memory or retrieve note excerpts', 
   assert.deepEqual(enrichment.sources, []);
   assert.deepEqual(enrichment.context.retrievedNotes || [], []);
   assert.equal(enrichment.context.notesEvidenceStatus, 'not_requested');
+});
+
+test('denied memory is not read before budgeting or included in selection metadata', () => {
+  let memoryReads = 0;
+  const enrichment = createEnrichment({
+    depth: 'workspace', memoryAllowed: false,
+    onMemoryRead: () => { memoryReads += 1; }
+  })('Help me plan', 'openai');
+  assert.equal(memoryReads, 0);
+  assert.equal(enrichment.context.memory, undefined);
+  assert.equal(enrichment.context.memoryUsedIds, undefined);
+  assert.ok(!(enrichment.context.contextSelectionReasons || []).some(reason => reason.kind === 'memory'));
+});
+
+test('missing or throwing memory permission APIs fail closed before retrieval', () => {
+  for (const memoryPrivacy of [{}, { canRead: () => { throw new Error('policy unavailable'); } }]) {
+    let reads = 0;
+    const enrichment = createEnrichment({
+      depth: 'workspace', memoryPrivacy,
+      onMemoryRead: () => { reads++; }
+    })('Help me plan', 'openai');
+    assert.equal(reads, 0);
+    assert.equal(enrichment.context.memoryUsedIds, undefined);
+    assert.ok(!(enrichment.context.contextSelectionReasons || []).some(reason => reason.kind === 'memory'));
+  }
+});
+
+test('memory usage and source IDs track only evidence retained after serialized pruning', () => {
+  const used = [];
+  const enrichment = createEnrichment({
+    depth: 'workspace',
+    memorySnippets: [{ id: 'memory-large', text: 'saved preference '.repeat(4000) }],
+    onMemoryUsed: ids => used.push(...ids)
+  })('hello', 'openai', { contextLimitTokens: 2200, reserveResponseTokens: 512 });
+  const retained = enrichment.context.memoryUsedIds || [];
+  assert.deepEqual(used, retained);
+  assert.equal(retained.length, (enrichment.context.memory || []).length);
+  if (!retained.length) {
+    assert.ok(!JSON.stringify(enrichment.context).includes('memory-large'));
+    assert.ok(!enrichment.systemPrompt.includes('memory-large'));
+  }
 });
 
 test('literal-only replies skip enrichment unless the request names workspace evidence', () => {

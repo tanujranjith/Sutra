@@ -89,6 +89,11 @@ areas requires Allow for each area; the other reading modes permit ordinary
 areas unless blocked. No workspace access denies every area. These controls use
 the existing canonical permissions and persist with the workspace.
 
+Saved-memory permission is checked before retrieval or usage bookkeeping. Denied
+requests do not read saved memories or update their last-used timestamps, and
+selection metadata excludes their IDs. Authorized usage records only memories
+retained after the final privacy filter and both request-budget passes.
+
 To read a blocked to-do list, choose **Read workspace** and ensure
 **Tasks & schedule** is not blocked. Locked pages still require their separate
 Assistant consent/PIN flow, and sensitive-content preferences remain unchanged.

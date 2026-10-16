@@ -232,17 +232,22 @@ test('Assistant prompt enrichment rechecks memory permission at the final contex
     const secret = 'MEMORY_MUST_REQUIRE_AREA_APPROVAL';
     const priorPermissions = window.SutraAssistantPrivacy.getPermissions();
     const originalMemory = window.SutraAssistantMemory;
+    let memoryReads = 0;
+    const used = [];
     window.SutraAssistantMemory = {
-      buildPromptSnippets: () => [{ id: 'memory-private-1', text: secret }],
-      recordUsed: () => {}
+      buildPromptSnippets: () => { memoryReads++; return [{ id: 'memory-private-1', text: secret }]; },
+      recordUsed: ids => used.push(...ids)
     };
     window.SutraAssistantPrivacy.configure({
       getPermissions: () => ({ mode: 'ask_per_area', areas: { memory: 'ask', notes: 'denied' } })
     });
     try {
       const denied = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', {});
+      const deniedReads = memoryReads;
+      const deniedUsed = used.slice();
       const approved = window.flowAssistant.buildRequestEnrichment('help me plan', 'openai', { approvedAreas: ['memory'] });
       return {
+        deniedReads, deniedUsed,
         deniedPromptLeaks: denied.systemPrompt.includes(secret),
         deniedContextLeaks: JSON.stringify(denied.context).includes(secret),
         deniedMemoryIdLeaks: JSON.stringify(denied.context).includes('memory-private-1'),
@@ -255,6 +260,8 @@ test('Assistant prompt enrichment rechecks memory permission at the final contex
     }
   });
   expect(report.deniedPromptLeaks).toBe(false);
+  expect(report.deniedReads).toBe(0);
+  expect(report.deniedUsed).toEqual([]);
   expect(report.deniedContextLeaks).toBe(false);
   expect(report.deniedMemoryIdLeaks).toBe(false);
   expect(report.approvedPromptIncludes).toBe(true);

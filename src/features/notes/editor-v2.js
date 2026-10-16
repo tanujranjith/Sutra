@@ -146,6 +146,46 @@
         return !!(state.blockBridge && state.blockBridge.isHelpDocument && state.blockBridge.isHelpDocument());
     }
 
+    function helpAnchorPrefix() {
+        var hostId = state.hostEl && state.hostEl.id ? String(state.hostEl.id) : 'sutra-editor-v2';
+        return hostId + '--help-';
+    }
+
+    function transformHelpAnchors(root, restoreStorageIds) {
+        if (!root || !root.querySelectorAll) return;
+        var prefix = helpAnchorPrefix();
+        var idMap = Object.create(null);
+        Array.prototype.forEach.call(root.querySelectorAll('[id]'), function (el) {
+            var id = String(el.getAttribute('id') || '');
+            if (!id) return;
+            var canonicalId = id.indexOf(prefix) === 0 ? id.slice(prefix.length) : id;
+            idMap[canonicalId] = restoreStorageIds ? canonicalId : prefix + canonicalId;
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('[id]'), function (el) {
+            var id = String(el.getAttribute('id') || '');
+            var canonicalId = id.indexOf(prefix) === 0 ? id.slice(prefix.length) : id;
+            if (Object.prototype.hasOwnProperty.call(idMap, canonicalId)) el.setAttribute('id', idMap[canonicalId]);
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('[data-editor-anchor]'), function (el) {
+            var target = String(el.getAttribute('data-editor-anchor') || '');
+            var canonicalTarget = target.indexOf(prefix) === 0 ? target.slice(prefix.length) : target;
+            if (Object.prototype.hasOwnProperty.call(idMap, canonicalTarget)) {
+                el.setAttribute('data-editor-anchor', idMap[canonicalTarget]);
+            }
+        });
+
+        Array.prototype.forEach.call(root.querySelectorAll('a[href^="#"]'), function (el) {
+            var href = String(el.getAttribute('href') || '');
+            var target = href.slice(1);
+            try { target = decodeURIComponent(target); } catch (e) { /* keep the literal fragment */ }
+            var canonicalTarget = target.indexOf(prefix) === 0 ? target.slice(prefix.length) : target;
+            if (!Object.prototype.hasOwnProperty.call(idMap, canonicalTarget)) return;
+            el.setAttribute('href', '#' + encodeURIComponent(idMap[canonicalTarget]));
+        });
+    }
+
     // Storage/paste HTML → HTML the v2 schema understands losslessly.
     function normalizeLegacyHtml(html) {
         var tpl = parseHtmlToTemplate(html);
@@ -158,6 +198,7 @@
             help.className = 'sutra-help-document';
             help.setAttribute('contenteditable', 'false');
             help.appendChild(root);
+            transformHelpAnchors(help, false);
             return help.outerHTML;
         }
         convertLegacyChecklistsIn(root);
@@ -759,7 +800,7 @@
                 var manualTarget = pageBottom + gapHeight + topPadding;
                 var manualHeight = Math.max(0, manualTarget - top);
                 if (manualHeight > 0) {
-                    breaks.push({ pos: event.pos, height: manualHeight, gapOffset: pageBottom - top, reason: 'manual',
+                    breaks.push({ pos: event.pos, height: manualHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, reason: 'manual',
                         marginLeft: event.marginLeft, marginRight: event.marginRight });
                     insertedHeight += manualHeight;
                 }
@@ -777,7 +818,7 @@
             var target = pageBottom + gapHeight + topPadding;
             var spacerHeight = Math.max(0, target - top);
             if (spacerHeight > 0) {
-                breaks.push({ pos: event.pos, height: spacerHeight, gapOffset: pageBottom - top, reason: 'automatic',
+                breaks.push({ pos: event.pos, height: spacerHeight, gapOffset: pageBottom - top, pageBoundary: pageBottom, reason: 'automatic',
                     marginLeft: event.marginLeft, marginRight: event.marginRight });
                 insertedHeight += spacerHeight;
                 pageStart = pageBottom + gapHeight;
@@ -1047,6 +1088,8 @@
                             spacer.className = 'notes-page-auto-break';
                             spacer.setAttribute('data-notes-auto-page-break', 'true');
                             spacer.setAttribute('data-notes-auto-page-reason', entry.reason || 'automatic');
+                            spacer.setAttribute('data-notes-auto-page-target', String(entry.pageBoundary));
+                            spacer.setAttribute('data-notes-auto-page-gap-offset', String(entry.gapOffset));
                             spacer.setAttribute('contenteditable', 'false');
                             spacer.setAttribute('aria-hidden', 'true');
                             var relativeHostScale = metrics.relativeHostScale;
@@ -1060,6 +1103,24 @@
                             if (entry.gapOffset < 0) gap.style.display = 'none';
                             spacer.appendChild(gap);
                             return spacer;
+                        }
+
+                        function alignGapWidgetsToPageBoundaries(root, metrics) {
+                            Array.prototype.forEach.call(root.querySelectorAll('.notes-page-auto-break[data-notes-auto-page-target]'), function (spacer) {
+                                var pageBoundary = Number(spacer.getAttribute('data-notes-auto-page-target'));
+                                var gapOffsetInPlan = Number(spacer.getAttribute('data-notes-auto-page-gap-offset'));
+                                if (gapOffsetInPlan < 0 || !Number.isFinite(pageBoundary)) return;
+                                var gap = spacer && spacer.querySelector('.notes-page-auto-break-gap');
+                                var spacerRect = spacer && spacer.getBoundingClientRect ? spacer.getBoundingClientRect() : null;
+                                if (!gap || !spacerRect || metrics.relativeHostScale <= 0) return;
+                                var spacerTop = paneYFromClientY(spacerRect.top, metrics);
+                                var gapOffset = pageBoundary - spacerTop;
+                                if (!Number.isFinite(gapOffset)) return;
+                                // ProseMirror widgets can sit a few subpixels away from the
+                                // measured text-line coordinate. Align the painted divider to
+                                // the physical sheet edge after the widget enters the DOM.
+                                gap.style.top = (gapOffset / metrics.relativeHostScale) + 'px';
+                            });
                         }
 
                         function measureAndApply(view) {
@@ -1118,6 +1179,7 @@
                                 return Number(value).toFixed(3);
                             }).join(':') + ':' + plan.map(function (entry) {
                                 return entry.pos + ':' + Math.round(entry.height * 10) + ':' + Math.round(entry.gapOffset * 10)
+                                    + ':' + Math.round((entry.pageBoundary || 0) * 10)
                                     + ':' + Math.round((entry.marginLeft || 0) * 10) + ':' + Math.round((entry.marginRight || 0) * 10);
                             }).join('|');
                             plan.forEach(function (entry) {
@@ -1130,6 +1192,7 @@
                                 }));
                             });
                             setDecorations(view, eng.DecorationSet.create(view.state.doc, decorations), nextSignature);
+                            alignGapWidgetsToPageBoundaries(root, metrics);
                         }
 
                         function schedule() {
@@ -1226,6 +1289,7 @@
                     : '',
                 extraExtensions: buildStructuredNodes(eng).concat(buildPreservedNodes(eng), buildCommentExtension(eng), buildPageLayoutExtension(eng), state.authoring ? state.authoring.buildExtensions(eng) : []),
                 editorProps: {
+                    attributes: isHelpDocument() ? { 'aria-readonly': 'true' } : {},
                     transformPastedHTML: stripForeignPasteStyles,
                     handlePaste: handleImagePaste,
                     handleDrop: handleImageDrop,
@@ -1338,7 +1402,10 @@
         var tpl = parseHtmlToTemplate(html);
         if (isHelpDocument()) {
             var help = tpl.content.querySelector('div.sutra-help-document');
-            if (help) return help.innerHTML;
+            if (help) {
+                transformHelpAnchors(help, true);
+                return help.innerHTML;
+            }
         }
         convertTaskListsToLegacy(tpl.content);
         var out = document.createElement('div');
