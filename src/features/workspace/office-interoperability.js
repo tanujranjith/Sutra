@@ -13,6 +13,7 @@
   var MAX_XLSX_ROWS = 20000;
   var MAX_XLSX_COLUMNS = 512;
   var MAX_XLSX_CELLS = 250000;
+  var MAX_XLSX_SHEETS = 32;
   var MAX_PPTX_SLIDES = 300;
   var MAX_PPTX_SHAPES_PER_SLIDE = 2000;
 
@@ -92,20 +93,28 @@
     return { indexes: indexes, preserveImported: false, xml: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="$#,##0.00"/></numFmts><fonts count="' + fonts.length + '">' + fonts.join('') + '</fonts><fills count="' + fills.length + '">' + fills.join('') + '</fills><borders count="' + borders.length + '">' + borders.join('') + '</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' };
   }
 
-  function xlsxCell(cell, address, stylePackage) {
+  function formulaCacheResult(value) {
+    if (value && typeof value === 'object' && value.error) return { type: 'e', value: value.error };
+    if (typeof value === 'boolean') return { type: 'b', value: value ? '1' : '0' };
+    if (typeof value === 'number') return Number.isFinite(value) ? { type: 'n', value: String(value) } : { type: 'e', value: '#NUM!' };
+    if (Array.isArray(value)) return { type: 'e', value: '#VALUE!' };
+    return { type: 'str', value: value == null ? '' : String(value) };
+  }
+
+  function xlsxCell(cell, address, stylePackage, calculatedValue) {
     if (!cell) return '';
     var importedStyle = /^xlsx-(\d+)$/.exec(String(cell.styleId || '')); var styleIndex = stylePackage && stylePackage.indexes && stylePackage.indexes[cell.styleId]; if (styleIndex == null && stylePackage && stylePackage.preserveImported && importedStyle) styleIndex = Number(importedStyle[1]); var styleAttr = styleIndex == null ? '' : ' s="' + styleIndex + '"';
-    if (cell.formula) return '<c r="' + address + '"' + styleAttr + '><f>' + xml(String(cell.formula).replace(/^=/, '')) + '</f></c>';
+    if (cell.formula) { var cached = formulaCacheResult(calculatedValue); return '<c r="' + address + '" t="' + cached.type + '"' + styleAttr + '><f>' + xml(String(cell.formula).replace(/^=/, '')) + '</f><v>' + xml(cached.value) + '</v></c>'; }
     if (typeof cell.value === 'number' && Number.isFinite(cell.value)) return '<c r="' + address + '"' + styleAttr + '><v>' + cell.value + '</v></c>';
     if (typeof cell.value === 'boolean') return '<c r="' + address + '" t="b"' + styleAttr + '><v>' + (cell.value ? 1 : 0) + '</v></c>';
     if (cell.value === '' || cell.value == null) return '';
     return '<c r="' + address + '" t="inlineStr"' + styleAttr + '><is><t xml:space="preserve">' + xml(cell.value) + '</t></is></c>';
   }
 
-  function worksheetXml(sheet, stylePackage) {
+  function worksheetXml(sheet, stylePackage, evaluated) {
     var bounds = usedBounds(sheet); var rowXml = [];
     for (var row = 0; row <= bounds.maxRow; row += 1) {
-      var cells = []; for (var col = 0; col <= bounds.maxCol; col += 1) { var cellXml = xlsxCell(engine().cellAt(sheet, row, col), engine().columnLabel(col) + String(row + 1), stylePackage); if (cellXml) cells.push(cellXml); }
+      var cells = []; for (var col = 0; col <= bounds.maxCol; col += 1) { var cell = engine().cellAt(sheet, row, col); var cellXml = xlsxCell(cell, engine().columnLabel(col) + String(row + 1), stylePackage, cell && cell.formula && evaluated ? evaluated.getValue(sheet, row, col) : undefined); if (cellXml) cells.push(cellXml); }
       var meta = sheet.rows[row] || {}; if (cells.length || meta.hidden || Number(meta.height) !== 28) rowXml.push('<row r="' + (row + 1) + '"' + (meta.hidden ? ' hidden="1"' : '') + (Number(meta.height) !== 28 ? ' ht="' + Number(meta.height || 28) + '" customHeight="1"' : '') + '>' + cells.join('') + '</row>');
     }
     var columns = (sheet.columns || []).map(function (column, index) { if (!column.hidden && Number(column.width) === 120) return ''; return '<col min="' + (index + 1) + '" max="' + (index + 1) + '" width="' + Math.max(4, Number(column.width || 120) / 7) + '" customWidth="1"' + (column.hidden ? ' hidden="1"' : '') + '/>'; }).join('');
@@ -115,14 +124,14 @@
   }
 
   async function exportXlsx(workbook) {
-    var book = engine().normalizeWorkbook(workbook); var Zip = zipApi(); var zip = new Zip(); var count = book.sheets.length;
+    var book = engine().normalizeWorkbook(workbook); var evaluated = engine().evaluate(book); var Zip = zipApi(); var zip = new Zip(); var count = book.sheets.length;
     zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + book.sheets.map(function (_, i) { return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>');
     zip.file('_rels/.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
     var names = Object.keys(book.namedRanges || {}).map(function (name) { return '<definedName name="' + xml(name) + '">' + xml(book.namedRanges[name]) + '</definedName>'; }).join('');
     zip.file('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + book.sheets.map(function (sheet, i) { return '<sheet name="' + xml(sheet.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets>' + (names ? '<definedNames>' + names + '</definedNames>' : '') + '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>');
     zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + book.sheets.map(function (_, i) { return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join('') + '<Relationship Id="rId' + (count + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
     var stylePackage = generatedXlsxStyles(book); zip.file('xl/styles.xml', stylePackage.xml);
-    book.sheets.forEach(function (sheet, i) { zip.file('xl/worksheets/sheet' + (i + 1) + '.xml', worksheetXml(sheet, stylePackage)); });
+    book.sheets.forEach(function (sheet, i) { zip.file('xl/worksheets/sheet' + (i + 1) + '.xml', worksheetXml(sheet, stylePackage, evaluated)); });
     return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
@@ -154,6 +163,167 @@
     if (!result.sheets.length) result.sheets = [engine().createSheet('Sheet1')];
     Array.from(workbookXml.querySelectorAll('definedName')).forEach(function (node) { var name = node.getAttribute('name'); if (name && name.indexOf('_xlnm.') !== 0) result.namedRanges[name] = node.textContent || ''; });
     result.importWarnings = warnings; return { workbook: engine().normalizeWorkbook(result), report: { warnings: warnings, unsupported: warnings.slice() } };
+  }
+
+  function formulaText(cell) { return String(cell && cell.f || '').replace(/^=/, ''); }
+  function hasMissingFormulaResult(cell) { return !!(cell && cell.f && (cell.v === undefined || cell.v === null)); }
+  function showFormulaLiteral(cell) { var value = '=' + formulaText(cell); cell.v = value; cell.t = 's'; cell.w = value; }
+  function parseFormulaReference(value, defaultSheet) {
+    var source = String(value || '').trim().replace(/^=/, ''); var bang = source.lastIndexOf('!'); var sheetName = defaultSheet;
+    if (bang !== -1) {
+      var sheetToken = source.slice(0, bang);
+      if (/\[[^\]]*\]/.test(sheetToken)) return null;
+      if (sheetToken.charAt(0) === "'" && sheetToken.charAt(sheetToken.length - 1) === "'") {
+        if (sheetToken.slice(1, -1).indexOf("''") !== -1) return null;
+        sheetToken = sheetToken.slice(1, -1);
+      }
+      sheetName = sheetToken; source = source.slice(bang + 1);
+    }
+    if (!sheetName) return null;
+    var parts = source.split(':'); if (parts.length > 2) return null;
+    var start = engine().parseA1(parts[0]); var end = parts[1] ? engine().parseA1(parts[1]) : start;
+    if (!start || !end) return null;
+    return { sheetName: sheetName, start: start, end: end, maxRow: Math.max(start.row, end.row), maxCol: Math.max(start.col, end.col) };
+  }
+  function walkFormulaAst(node, visit) {
+    if (!node) return;
+    if (node.type === 'ref' || node.type === 'name') { visit(node); return; }
+    if (node.type === 'call') { (node.args || []).forEach(function (arg) { walkFormulaAst(arg, visit); }); return; }
+    if (node.type === 'unary') { walkFormulaAst(node.value, visit); return; }
+    if (node.type === 'binary') { walkFormulaAst(node.left, visit); walkFormulaAst(node.right, visit); }
+  }
+  function normalizeSheetJsValue(cell) {
+    if (!cell || cell.v === undefined || cell.v === null) return { supported: true, value: '' };
+    var value = cell.v; var type = cell.t;
+    if (type === 'e') {
+      var errorText = typeof cell.w === 'string' ? cell.w : (typeof value === 'string' ? value : '');
+      if (/^#(?:NULL!|DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A|GETTING_DATA|CYCLE!)$/.test(errorText)) return { supported: true, value: { error: errorText } };
+      return { supported: false };
+    }
+    if (type === 'b') {
+      if (value === true || value === 1 || value === '1') return { supported: true, value: true };
+      if (value === false || value === 0 || value === '0') return { supported: true, value: false };
+      return { supported: false };
+    }
+    if (type === 'n' || (!type && typeof value === 'number')) {
+      var numericValue = typeof value === 'number' ? value : Number(value);
+      return Number.isFinite(numericValue) ? { supported: true, value: numericValue } : { supported: false };
+    }
+    if (type === 's' || type === 'str' || type === 'inlineStr' || (!type && typeof value === 'string')) return { supported: true, value: String(value) };
+    if (type === 'z' && value === '') return { supported: true, value: '' };
+    return { supported: false };
+  }
+  function formulaCacheValue(value) {
+    if (value && typeof value === 'object' && value.error) {
+      var errorText = String(value.error);
+      return errorText === '#NAME?' ? null : (/^#(?:NULL!|DIV\/0!|VALUE!|REF!|NUM!|N\/A|GETTING_DATA|CYCLE!)$/.test(errorText) ? { type: 'e', value: errorText } : null);
+    }
+    if (typeof value === 'boolean') return { type: 'b', value: value };
+    if (typeof value === 'number' && Number.isFinite(value)) return { type: 'n', value: value };
+    if (typeof value === 'string') return { type: 'str', value: value };
+    return null;
+  }
+  function fillMissingFormulaResults(parsedWorkbook) {
+    var report = { calculated: 0, unavailable: 0 };
+    if (!parsedWorkbook || typeof parsedWorkbook !== 'object' || !parsedWorkbook.Sheets || typeof parsedWorkbook.Sheets !== 'object') return report;
+    var sheetNames = Array.isArray(parsedWorkbook.SheetNames) ? parsedWorkbook.SheetNames.filter(function (name) { return typeof name === 'string' && name; }) : Object.keys(parsedWorkbook.Sheets).filter(function (name) { return name.charAt(0) !== '!'; });
+    if (!sheetNames.length) return report;
+    var formulaEntries = []; var plans = []; var plansByName = Object.create(null); var totalCells = 0; var unsafe = sheetNames.length > MAX_XLSX_SHEETS; var stopScan = false;
+    var scanNames = sheetNames.slice(0, MAX_XLSX_SHEETS);
+    scanNames.forEach(function (name) {
+      if (stopScan) return;
+      var source = parsedWorkbook.Sheets[name]; if (!source || typeof source !== 'object') { unsafe = true; return; }
+      if (plansByName[name]) { unsafe = true; return; }
+      var plan = { name: name, source: source, maxRow: -1, maxCol: -1, cells: [], sheet: null }; plans.push(plan); plansByName[name] = plan;
+      var refRange = source['!ref'];
+      if (refRange) {
+        var rangeParts = String(refRange).split(':'); var refStart = engine().parseA1(rangeParts[0]); var refEnd = rangeParts[1] ? engine().parseA1(rangeParts[1]) : refStart;
+        if (rangeParts.length > 2 || !refStart || !refEnd || refStart.row >= MAX_XLSX_ROWS || refEnd.row >= MAX_XLSX_ROWS || refStart.col >= MAX_XLSX_COLUMNS || refEnd.col >= MAX_XLSX_COLUMNS) unsafe = true;
+        else { plan.maxRow = Math.max(refStart.row, refEnd.row); plan.maxCol = Math.max(refStart.col, refEnd.col); }
+      }
+      for (var address in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, address) || address.charAt(0) === '!') continue;
+        totalCells += 1;
+        var cell = source[address]; if (!cell || typeof cell !== 'object') continue;
+        var missing = hasMissingFormulaResult(cell); var entry = { plan: plan, address: address, cell: cell, ref: engine().parseA1(address), missing: missing, ast: null, unsupported: false };
+        if (missing) { formulaEntries.push(entry); showFormulaLiteral(cell); }
+        if (totalCells > MAX_XLSX_CELLS) { unsafe = true; stopScan = true; break; }
+        if (entry.ref) { plan.maxRow = Math.max(plan.maxRow, entry.ref.row); plan.maxCol = Math.max(plan.maxCol, entry.ref.col); plan.cells.push(entry); }
+        else if (cell.f) entry.unsupported = true;
+      }
+    });
+    if (sheetNames.length > MAX_XLSX_SHEETS && !stopScan) {
+      for (var extraIndex = MAX_XLSX_SHEETS; extraIndex < sheetNames.length && extraIndex < MAX_XLSX_CELLS; extraIndex += 1) {
+        var extraSheet = parsedWorkbook.Sheets[sheetNames[extraIndex]]; if (!extraSheet || typeof extraSheet !== 'object') continue;
+        for (var extraAddress in extraSheet) {
+          if (!Object.prototype.hasOwnProperty.call(extraSheet, extraAddress) || extraAddress.charAt(0) === '!') continue;
+          totalCells += 1; var extraCell = extraSheet[extraAddress];
+          if (hasMissingFormulaResult(extraCell)) { showFormulaLiteral(extraCell); formulaEntries.push({ cell: extraCell, missing: true }); }
+          if (totalCells > MAX_XLSX_CELLS) { stopScan = true; break; }
+        }
+        if (stopScan) break;
+      }
+    }
+    report.unavailable = formulaEntries.length;
+    if (!formulaEntries.length || unsafe) return report;
+    var globalNames = Object.create(null); var definedNames = parsedWorkbook.Workbook && parsedWorkbook.Workbook.Names;
+    if (Array.isArray(definedNames)) definedNames.forEach(function (record) {
+      if (!record || typeof record.Name !== 'string' || !record.Name || record.Sheet !== undefined && record.Sheet !== null || typeof record.Ref !== 'string') return;
+      var ref = parseFormulaReference(record.Ref, null); if (!ref || ref.sheetName.indexOf("'") !== -1) return;
+      globalNames[record.Name.toLowerCase()] = { reference: String(record.Ref).replace(/^=/, ''), parsed: ref };
+    });
+    var namedRanges = Object.create(null); var formulaWork = 0;
+    formulaEntries.forEach(function (entry) {
+      if (entry.unsupported) return;
+      if (formulaText(entry.cell).length > 10000) { entry.unsupported = true; return; }
+      try { entry.ast = engine().parseFormula(formulaText(entry.cell)); } catch (_) { entry.unsupported = true; return; }
+      walkFormulaAst(entry.ast, function (node) {
+        var reference = node.type === 'ref' ? parseFormulaReference(node.value, entry.plan.name) : null;
+        if (node.type === 'name') {
+          var named = globalNames[String(node.value).toLowerCase()];
+          if (!named) { entry.unsupported = true; return; }
+          namedRanges[node.value] = named.reference; reference = named.parsed;
+        }
+        if (node.type === 'ref' && !reference) { entry.unsupported = true; return; }
+        if (!reference) return;
+        formulaWork += (Math.abs(reference.end.row - reference.start.row) + 1) * (Math.abs(reference.end.col - reference.start.col) + 1);
+        if (formulaWork > MAX_XLSX_CELLS) { unsafe = true; return; }
+        var targetPlan = plansByName[reference.sheetName];
+        if (!targetPlan) {
+          var caseVariant = plans.find(function (item) { return item.name.toLowerCase() === reference.sheetName.toLowerCase(); });
+          if (caseVariant) entry.unsupported = true;
+          return;
+        }
+        if (reference.maxRow >= MAX_XLSX_ROWS || reference.maxCol >= MAX_XLSX_COLUMNS) { unsafe = true; return; }
+        targetPlan.maxRow = Math.max(targetPlan.maxRow, reference.maxRow); targetPlan.maxCol = Math.max(targetPlan.maxCol, reference.maxCol);
+      });
+    });
+    if (unsafe) return report;
+    var area = 0;
+    plans.forEach(function (plan) {
+      var rowCount = Math.min(MAX_XLSX_ROWS, Math.max(200, plan.maxRow + 20)); var columnCount = Math.min(MAX_XLSX_COLUMNS, Math.max(26, plan.maxCol + 8));
+      if (plan.maxRow >= rowCount || plan.maxCol >= columnCount) unsafe = true;
+      plan.rowCount = rowCount; plan.columnCount = columnCount; area += rowCount * columnCount;
+      if (area > MAX_XLSX_CELLS) unsafe = true;
+    });
+    if (unsafe) return report;
+    var book = engine().createWorkbook('Imported workbook'); book.sheets = plans.map(function (plan) { plan.sheet = engine().createSheet(plan.name, { rowCount: plan.rowCount, columnCount: plan.columnCount }); return plan.sheet; }); book.namedRanges = namedRanges;
+    plans.forEach(function (plan) {
+      plan.cells.forEach(function (entry) {
+        var cell = entry.cell; var formula = cell.f ? '=' + formulaText(cell) : ''; var parsed = entry.missing ? { supported: true, value: '' } : normalizeSheetJsValue(cell);
+        if (!parsed.supported) { unsafe = true; return; }
+        engine().setCell(plan.sheet, entry.ref.row, entry.ref.col, { value: entry.missing ? '' : parsed.value, formula: entry.missing ? formula : '' });
+      });
+    });
+    if (unsafe) return report;
+    var evaluated = engine().evaluate(book);
+    formulaEntries.forEach(function (entry) {
+      if (entry.unsupported || !entry.ref) return;
+      var cached = formulaCacheValue(evaluated.getValue(entry.plan.sheet, entry.ref.row, entry.ref.col));
+      if (!cached) return;
+      entry.cell.v = cached.value; entry.cell.t = cached.type; delete entry.cell.w; report.calculated += 1; report.unavailable -= 1;
+    });
+    return report;
   }
 
   var PPTX_WIDTH = 12192000;
@@ -228,6 +398,7 @@
     workbookFromDelimited: workbookFromDelimited,
     exportXlsx: exportXlsx,
     importXlsx: importXlsx,
+    fillMissingFormulaResults: fillMissingFormulaResults,
     exportPptx: exportPptx,
     importPptx: importPptx,
     downloadXlsx: async function (workbook, filename) { var blob = await exportXlsx(workbook); download(blob, safeName(filename, 'workbook') + '.xlsx'); return blob; },

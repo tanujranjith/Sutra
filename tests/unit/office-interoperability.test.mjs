@@ -45,11 +45,133 @@ test('XLSX export creates a standards-shaped local Office package', async () => 
   assert.match(worksheet, /state="frozen"/);
   assert.match(worksheet, /mergeCell ref="A3:B3"/);
   assert.match(worksheet, /<f>B1\*2<\/f>/);
+  assert.match(worksheet, /<f>B1\*2<\/f><v>24<\/v>/);
   assert.match(worksheet, /r="B1" s="1"/);
   const styles = await zip.file('xl/styles.xml').async('text');
   assert.match(styles, /horizontal="center"/);
   assert.match(styles, /FFDBEAFE/);
   assert.match(styles, /numFmtId="164"/);
+});
+
+test('XLSX formula cells include typed cached results and preserve formulas', async () => {
+  const workbook = Sheets.createWorkbook('Cached formula results');
+  const sheet = workbook.sheets[0];
+  Sheets.setCell(sheet, 0, 0, { value: 2 });
+  Sheets.setCell(sheet, 1, 0, { value: 3 });
+  Sheets.setCell(sheet, 2, 0, { formula: '=SUM(A1:A2)' });
+  Sheets.setCell(sheet, 0, 1, { formula: '="Ready & set"' });
+  Sheets.setCell(sheet, 0, 2, { formula: '=A1>0' });
+  Sheets.setCell(sheet, 0, 3, { formula: '=1/0' });
+
+  const blob = await Office.exportXlsx(workbook);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const worksheet = await zip.file('xl/worksheets/sheet1.xml').async('text');
+
+  assert.match(worksheet, /<c r="A3" t="n"><f>SUM\(A1:A2\)<\/f><v>5<\/v><\/c>/);
+  assert.match(worksheet, /<c r="B1" t="str"><f>"Ready &amp; set"<\/f><v>Ready &amp; set<\/v><\/c>/);
+  assert.match(worksheet, /<c r="C1" t="b"><f>A1&gt;0<\/f><v>1<\/v><\/c>/);
+  assert.match(worksheet, /<c r="D1" t="e"><f>1\/0<\/f><v>#DIV\/0!<\/v><\/c>/);
+  assert.equal(Sheets.cellAt(sheet, 2, 0).formula, '=SUM(A1:A2)');
+});
+
+test('XLSX formula caches use the Sheets engine for cross-sheet and named-range references', async () => {
+  const workbook = Sheets.createWorkbook('Connected formula results');
+  const inputs = workbook.sheets[0];
+  inputs.name = 'Inputs';
+  const summary = Sheets.createSheet('Summary');
+  workbook.sheets.push(summary);
+  workbook.namedRanges.BaseValue = "'Inputs'!A1";
+  Sheets.setCell(inputs, 0, 0, { value: 6 });
+  Sheets.setCell(summary, 0, 0, { formula: '=Inputs!A1*2' });
+  Sheets.setCell(summary, 1, 0, { formula: '=BaseValue*3' });
+
+  const blob = await Office.exportXlsx(workbook);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const worksheet = await zip.file('xl/worksheets/sheet2.xml').async('text');
+  const workbookXml = await zip.file('xl/workbook.xml').async('text');
+
+  assert.match(worksheet, /<f>Inputs!A1\*2<\/f><v>12<\/v>/);
+  assert.match(worksheet, /<f>BaseValue\*3<\/f><v>18<\/v>/);
+  assert.match(workbookXml, /<definedName name="BaseValue">'Inputs'!A1<\/definedName>/);
+});
+
+test('SheetJS formula-cache repair fills missing sums and cross-sheet names without replacing supplied caches', () => {
+  const parsed = {
+    SheetNames: ['Inputs', 'Summary'],
+    Sheets: {
+      Inputs: {
+        A1: { t: 'n', v: 6 },
+        A2: { t: 'e', v: 7, w: '#DIV/0!' },
+        '!ref': 'A1:A2'
+      },
+      Summary: {
+        A1: { t: 'n', f: 'SUM(Inputs!A1:A1)' },
+        A2: { t: 'n', f: 'BaseValue*3' },
+        B1: { t: 'n', f: '1+1', v: 0, w: 'stale zero' },
+        B2: { t: 'b', f: 'TRUE', v: false, w: 'stale false' },
+        B3: { t: 'str', f: '"cached"', v: '', w: 'stale string' },
+        C1: { t: 'n', f: 'SUM(Inputs!A2:A2)' },
+        D1: { t: 'n', f: 'SUM(Inputs!A1:A1)+Inputs!B250' },
+        E1: { t: 'str', f: '"ready"' },
+        F1: { t: 'b', f: 'TRUE' },
+        '!ref': 'A1:C1'
+      }
+    },
+    Workbook: { Names: [{ Name: 'BaseValue', Ref: "'Inputs'!$A$1" }] }
+  };
+  const report = Office.fillMissingFormulaResults(parsed);
+
+  assert.deepEqual(report, { calculated: 6, unavailable: 0 });
+  assert.equal(parsed.Sheets.Summary.A1.v, 6);
+  assert.equal(parsed.Sheets.Summary.A1.t, 'n');
+  assert.equal(parsed.Sheets.Summary.A1.f, 'SUM(Inputs!A1:A1)');
+  assert.equal(parsed.Sheets.Summary.A2.v, 18);
+  assert.equal(parsed.Sheets.Summary.C1.v, '#DIV/0!');
+  assert.equal(parsed.Sheets.Summary.C1.t, 'e');
+  assert.equal(parsed.Sheets.Summary.D1.v, 6);
+  assert.equal(parsed.Sheets.Summary.E1.v, 'ready');
+  assert.equal(parsed.Sheets.Summary.E1.t, 'str');
+  assert.equal(parsed.Sheets.Summary.F1.v, true);
+  assert.equal(parsed.Sheets.Summary.F1.t, 'b');
+  assert.deepEqual(parsed.Sheets.Summary.B1, { t: 'n', f: '1+1', v: 0, w: 'stale zero' });
+  assert.deepEqual(parsed.Sheets.Summary.B2, { t: 'b', f: 'TRUE', v: false, w: 'stale false' });
+  assert.deepEqual(parsed.Sheets.Summary.B3, { t: 'str', f: '"cached"', v: '', w: 'stale string' });
+});
+
+test('SheetJS formula-cache repair leaves unsupported results as formula text and reports them', () => {
+  const parsed = {
+    SheetNames: ['Data'],
+    Sheets: { Data: { A1: { t: 'n', f: 'MYSTERY(1)' }, '!ref': 'A1' } }
+  };
+
+  const report = Office.fillMissingFormulaResults(parsed);
+
+  assert.deepEqual(report, { calculated: 0, unavailable: 1 });
+  assert.equal(parsed.Sheets.Data.A1.f, 'MYSTERY(1)');
+  assert.equal(parsed.Sheets.Data.A1.v, '=MYSTERY(1)');
+  assert.equal(parsed.Sheets.Data.A1.t, 's');
+  assert.equal(parsed.Sheets.Data.A1.w, '=MYSTERY(1)');
+});
+
+test('SheetJS formula-cache repair declines unsafe ranges and oversized sheet sets', () => {
+  const hugeRange = {
+    SheetNames: ['Data'],
+    Sheets: { Data: { A1: { t: 'n', f: 'SUM(B1:B2)' }, '!ref': 'A1:XFD1048576' } }
+  };
+  const hugeReport = Office.fillMissingFormulaResults(hugeRange);
+  assert.deepEqual(hugeReport, { calculated: 0, unavailable: 1 });
+  assert.equal(hugeRange.Sheets.Data.A1.v, '=SUM(B1:B2)');
+
+  const manySheets = { SheetNames: [], Sheets: {} };
+  for (let index = 0; index < 33; index += 1) {
+    const name = `Sheet${index + 1}`;
+    manySheets.SheetNames.push(name);
+    manySheets.Sheets[name] = { A1: index === 0 || index === 32 ? { t: 'n', f: '1+1' } : { t: 'n', v: index }, '!ref': 'A1' };
+  }
+  const sheetsReport = Office.fillMissingFormulaResults(manySheets);
+  assert.deepEqual(sheetsReport, { calculated: 0, unavailable: 2 });
+  assert.equal(manySheets.Sheets.Sheet1.A1.v, '=1+1');
+  assert.equal(manySheets.Sheets.Sheet33.A1.v, '=1+1');
 });
 
 test('PPTX export creates a standards-shaped PowerPoint package and losslessly reimports Sutra decks', async () => {
